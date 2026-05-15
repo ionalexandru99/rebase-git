@@ -137,6 +137,28 @@ dist
 !.yarn/sdks
 !.yarn/versions
 
+# Electron build output
+release/
+out/
+
+# Electron-builder artifacts
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.rpm
+*.zip
+*.snap
+*.msi
+*.blockmap
+*.yml
+latest-linux.yml
+latest-mac.yml
+latest.yml
+
+# electron-vite
+.electron-vite/
+
 # Vite files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
