@@ -2,7 +2,6 @@ import { Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { GitStatus } from '../types'
 
 interface StatusPanelProps {
@@ -39,21 +38,13 @@ function FileRow({
       <span
         role="img"
         aria-label={kind}
-        title={kind}
         className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] bg-secondary font-mono text-[10px] font-semibold uppercase tracking-tighter text-muted-foreground"
       >
         {statusGlyph(kind)}
       </span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <code className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-foreground/85">
-            {file}
-          </code>
-        </TooltipTrigger>
-        <TooltipContent side="top" align="start">
-          {file}
-        </TooltipContent>
-      </Tooltip>
+      <code className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-foreground/85">
+        {file}
+      </code>
       <Button
         variant="ghost"
         size="sm"

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { StatusPanel } from '@/components/StatusPanel'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import type { GitStatus } from '@/types'
 
 function renderPanel(props: {
@@ -11,14 +10,12 @@ function renderPanel(props: {
   loading?: boolean
 }) {
   return render(
-    <TooltipProvider>
-      <StatusPanel
-        status={props.status}
-        onStage={props.onStage ?? vi.fn()}
-        onUnstage={props.onUnstage ?? vi.fn()}
-        loading={props.loading ?? false}
-      />
-    </TooltipProvider>
+    <StatusPanel
+      status={props.status}
+      onStage={props.onStage ?? vi.fn()}
+      onUnstage={props.onUnstage ?? vi.fn()}
+      loading={props.loading ?? false}
+    />
   )
 }
 
