@@ -8,5 +8,10 @@
     "strict": true,
     "emitDeclarationOnly": true
   },
-  "include": ["vite.*.config.ts", "vitest.main.config.ts", "electron-builder.config.js", "src/main/**/*"]
+  "include": [
+    "vite.*.config.ts",
+    "vitest.main.config.ts",
+    "electron-builder.config.js",
+    "src/main/**/*"
+  ]
 }

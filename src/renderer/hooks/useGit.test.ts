@@ -26,15 +26,15 @@ describe('useGit', () => {
         current: 'main',
         modified: ['file1.ts'],
         staged: [],
-        not_added: [],
+        not_added: []
       },
       log: {
         all: [
-          { hash: 'abc123', message: 'Initial commit', author_name: 'Test', date: '2024-01-01' },
+          { hash: 'abc123', message: 'Initial commit', author_name: 'Test', date: '2024-01-01' }
         ],
-        total: 1,
+        total: 1
       },
-      branches: { current: 'main', all: ['main'] },
+      branches: { current: 'main', all: ['main'] }
     }
 
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(mockRepoData)
@@ -55,7 +55,7 @@ describe('useGit', () => {
   it('should handle repo open failure', async () => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
       success: false,
-      error: 'Not a git repository',
+      error: 'Not a git repository'
     })
 
     const { result } = renderHook(() => useGit())
@@ -74,7 +74,7 @@ describe('useGit', () => {
       path: '/test/repo',
       status: { current: 'main', modified: [], staged: ['file1.ts'], not_added: [] },
       log: { all: [], total: 0 },
-      branches: { current: 'main', all: ['main'] },
+      branches: { current: 'main', all: ['main'] }
     }
 
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(mockRepoData)

@@ -10,6 +10,8 @@ interface StoreSchema {
     maximized?: boolean
   }
   theme: 'dark' | 'light'
+  workingDirectory: string | null
+  onboardingComplete: boolean
 }
 
 export const store = new Store<StoreSchema>({
@@ -19,7 +21,9 @@ export const store = new Store<StoreSchema>({
       width: 1200,
       height: 800
     },
-    theme: 'dark'
+    theme: 'dark',
+    workingDirectory: null,
+    onboardingComplete: false
   }
 })
 
@@ -32,4 +36,20 @@ export function addRecentRepo(path: string): void {
 
 export function getRecentRepos(): string[] {
   return store.get('recentRepos')
+}
+
+export function getWorkingDirectory(): string | null {
+  return store.get('workingDirectory')
+}
+
+export function setWorkingDirectory(path: string): void {
+  store.set('workingDirectory', path)
+}
+
+export function isOnboardingComplete(): boolean {
+  return store.get('onboardingComplete')
+}
+
+export function setOnboardingComplete(complete: boolean): void {
+  store.set('onboardingComplete', complete)
 }

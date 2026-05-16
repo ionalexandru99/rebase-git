@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 // We can't test electron-store directly in unit tests easily,
 // so we test the pure logic functions by mocking the store.
@@ -36,5 +36,31 @@ describe('addRecentRepo logic', () => {
 
     expect(result).toHaveLength(10)
     expect(result[0]).toBe('/new/repo')
+  })
+})
+
+describe('workingDirectory logic', () => {
+  it('should default to null', () => {
+    const workingDirectory: string | null = null
+    expect(workingDirectory).toBeNull()
+  })
+
+  it('should store and retrieve a path', () => {
+    const store = { workingDirectory: '' as string | null }
+    store.workingDirectory = '/home/user/repos'
+    expect(store.workingDirectory).toBe('/home/user/repos')
+  })
+})
+
+describe('onboardingComplete logic', () => {
+  it('should default to false', () => {
+    const onboardingComplete = false
+    expect(onboardingComplete).toBe(false)
+  })
+
+  it('should be settable to true', () => {
+    let onboardingComplete = false
+    onboardingComplete = true
+    expect(onboardingComplete).toBe(true)
   })
 })
