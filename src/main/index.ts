@@ -137,7 +137,9 @@ interface SerializableBranches {
 // simple-git returns class instances (StatusResult, LogResult, BranchSummary)
 // with getters/methods that cannot be structured-cloned across the IPC bridge.
 // Convert to plain JSON-safe shapes that match the renderer's types.
-function serializeStatus(status: Awaited<ReturnType<ReturnType<typeof simpleGit>['status']>>): SerializableStatus {
+function serializeStatus(
+  status: Awaited<ReturnType<ReturnType<typeof simpleGit>['status']>>
+): SerializableStatus {
   return {
     current: status.current ?? '',
     modified: [...status.modified],
@@ -146,7 +148,9 @@ function serializeStatus(status: Awaited<ReturnType<ReturnType<typeof simpleGit>
   }
 }
 
-function serializeLog(log: Awaited<ReturnType<ReturnType<typeof simpleGit>['log']>>): SerializableLog {
+function serializeLog(
+  log: Awaited<ReturnType<ReturnType<typeof simpleGit>['log']>>
+): SerializableLog {
   return {
     total: log.total,
     all: log.all.map((entry) => ({

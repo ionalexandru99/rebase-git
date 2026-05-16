@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 // We can't test electron-store directly in unit tests easily,
 // so we test the pure logic functions by mocking the store.
