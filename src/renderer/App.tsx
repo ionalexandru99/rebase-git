@@ -414,25 +414,26 @@ function Workspace({
       onSwitchRepo={onSwitchRepo}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
-        {activeView === 'local-changes' ? (
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]">
-            <div className="min-h-0 overflow-hidden">
-              <StatusPanel
-                status={git.status}
-                onStage={git.stageFile}
-                onUnstage={git.unstageFile}
-                loading={git.loading}
-              />
-            </div>
-            <div className="min-h-0 overflow-hidden">
-              <CommitPanel onCommit={git.commit} loading={git.loading} />
-            </div>
+        {/* Always mounted so CommitPanel draft state survives view switches */}
+        <div
+          hidden={activeView !== 'local-changes'}
+          className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]"
+        >
+          <div className="min-h-0 overflow-hidden">
+            <StatusPanel
+              status={git.status}
+              onStage={git.stageFile}
+              onUnstage={git.unstageFile}
+              loading={git.loading}
+            />
           </div>
-        ) : (
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <HistoryPanel log={git.log} loading={git.loading} />
+          <div className="min-h-0 overflow-hidden">
+            <CommitPanel onCommit={git.commit} loading={git.loading} />
           </div>
-        )}
+        </div>
+        <div hidden={activeView !== 'history'} className="min-h-0 flex-1 overflow-hidden">
+          <HistoryPanel log={git.log} loading={git.loading} />
+        </div>
       </div>
       {/* counts kept available for screen readers / future use */}
       <span className="sr-only">

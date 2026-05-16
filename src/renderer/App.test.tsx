@@ -239,18 +239,18 @@ describe('App — workspace (repo open)', () => {
   it('defaults to the history view and swaps to the local-changes view from the sidebar', async () => {
     await renderWithRepo()
 
-    // History is the default view, so the timeline is visible and the staging UI is not.
-    expect(await screen.findByText('Timeline')).toBeInTheDocument()
-    expect(screen.getByText('Initial commit')).toBeInTheDocument()
-    expect(screen.queryByText('Working Directory')).not.toBeInTheDocument()
-    expect(screen.queryByText('Commit')).not.toBeInTheDocument()
+    // History is the default view — timeline visible, staging UI mounted but hidden.
+    expect(await screen.findByText('Timeline')).toBeVisible()
+    expect(screen.getByText('Initial commit')).toBeVisible()
+    expect(screen.getByText('Working Directory')).not.toBeVisible()
+    expect(screen.getByText('Commit')).not.toBeVisible()
 
     // Clicking "Local changes" reveals the staging + commit panels and hides the timeline.
     fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
 
-    expect(await screen.findByText('Working Directory')).toBeInTheDocument()
-    expect(screen.getByText('Commit')).toBeInTheDocument()
-    expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
+    expect(await screen.findByText('Working Directory')).toBeVisible()
+    expect(screen.getByText('Commit')).toBeVisible()
+    expect(screen.getByText('Timeline')).not.toBeVisible()
   })
 
   it('exposes a Switch repository control in the topbar', async () => {
