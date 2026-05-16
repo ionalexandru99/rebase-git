@@ -30,7 +30,14 @@ describe('useGit', () => {
       },
       log: {
         all: [
-          { hash: 'abc123', message: 'Initial commit', author_name: 'Test', date: '2024-01-01' }
+          {
+            hash: 'abc123',
+            message: 'Initial commit',
+            author_name: 'Test',
+            date: '2024-01-01',
+            parents: [],
+            refs: 'HEAD -> main'
+          }
         ],
         total: 1
       },

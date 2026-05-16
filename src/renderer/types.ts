@@ -10,6 +10,8 @@ export interface GitLogEntry {
   message: string
   author_name: string
   date: string
+  parents: string[]
+  refs: string
 }
 
 export interface GitLog {

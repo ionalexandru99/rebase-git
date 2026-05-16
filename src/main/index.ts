@@ -122,11 +122,36 @@ interface SerializableLogEntry {
   message: string
   author_name: string
   date: string
+  parents: string[]
+  refs: string
 }
 
 interface SerializableLog {
   all: SerializableLogEntry[]
   total: number
+}
+
+// Custom log format that includes parent hashes (%P) so the renderer can draw
+// branch/merge topology. `git.log` defaults omit parents.
+const GRAPH_LOG_FORMAT = {
+  hash: '%H',
+  date: '%aI',
+  message: '%s',
+  refs: '%D',
+  body: '',
+  author_name: '%aN',
+  author_email: '%aE',
+  parents: '%P'
+} as const
+
+// Walk only branch refs (local + remote-tracking). Intentionally NOT `--all`:
+// `--all` pulls in stash, notes, dangling commits, and detached HEAD-only
+// commits, which the user has opted out of seeing. `--date-order` keeps rows
+// in time order so the lane layout stays predictable across merges.
+const GRAPH_LOG_FLAGS = {
+  '--branches': null,
+  '--remotes': null,
+  '--date-order': null
 }
 
 interface SerializableBranches {
@@ -153,13 +178,62 @@ function serializeLog(
 ): SerializableLog {
   return {
     total: log.total,
-    all: log.all.map((entry) => ({
-      hash: entry.hash,
-      message: entry.message,
-      author_name: entry.author_name,
-      date: entry.date
-    }))
+    all: log.all.map((entry) => {
+      const raw = entry as typeof entry & { parents?: string; refs?: string }
+      const parents = raw.parents ? raw.parents.split(' ').filter(Boolean) : []
+      return {
+        hash: entry.hash,
+        message: entry.message,
+        author_name: entry.author_name,
+        date: entry.date,
+        parents,
+        refs: raw.refs ?? ''
+      }
+    })
   }
+}
+
+// Stash entries aren't reachable from any branch ref, so `git log --branches
+// --remotes` skips them. Pull them in separately, and keep only the first
+// parent (the commit they were created from) — the other parents are internal
+// wip-on-index / wip-on-untracked commits we don't want cluttering the graph.
+async function getStashEntries(git: ReturnType<typeof simpleGit>): Promise<SerializableLogEntry[]> {
+  try {
+    const raw = await git.raw(['stash', 'list', '--format=%H%x1F%P%x1F%aI%x1F%aN%x1F%s%x1F%gd'])
+    if (!raw.trim()) return []
+    return raw
+      .trim()
+      .split('\n')
+      .map((line): SerializableLogEntry | null => {
+        const [hash, parentsStr, date, author_name, message, gd] = line.split('\x1F')
+        if (!hash) return null
+        const firstParent = (parentsStr ?? '').split(' ').filter(Boolean)[0] ?? ''
+        return {
+          hash,
+          message: message ?? '',
+          author_name: author_name ?? '',
+          date: date ?? '',
+          parents: firstParent ? [firstParent] : [],
+          refs: gd ?? ''
+        }
+      })
+      .filter((e): e is SerializableLogEntry => e !== null)
+  } catch {
+    return []
+  }
+}
+
+function mergeLogWithStashes(
+  log: SerializableLog,
+  stashes: SerializableLogEntry[]
+): SerializableLog {
+  if (stashes.length === 0) return log
+  const seen = new Set(log.all.map((e) => e.hash))
+  const extra = stashes.filter((s) => !seen.has(s.hash))
+  const merged = [...log.all, ...extra].sort((a, b) =>
+    a.date < b.date ? 1 : a.date > b.date ? -1 : 0
+  )
+  return { total: merged.length, all: merged }
 }
 
 function serializeBranches(
@@ -183,16 +257,17 @@ ipcMain.handle('open-repo', async (_, repoPath: string) => {
 
     addRecentRepo(repoPath)
 
-    const [status, log, branches] = await Promise.all([
+    const [status, log, branches, stashes] = await Promise.all([
       git.status(),
-      git.log({ maxCount: 20 }),
-      git.branchLocal()
+      git.log({ maxCount: 200, format: GRAPH_LOG_FORMAT, ...GRAPH_LOG_FLAGS }),
+      git.branchLocal(),
+      getStashEntries(git)
     ])
 
     return {
       success: true,
       status: serializeStatus(status),
-      log: serializeLog(log),
+      log: mergeLogWithStashes(serializeLog(log), stashes),
       branches: serializeBranches(branches),
       path: repoPath
     }
@@ -257,12 +332,15 @@ ipcMain.handle('commit', async (_, repoPath: string, message: string) => {
   }
 })
 
-ipcMain.handle('get-log', async (_, repoPath: string, maxCount = 20) => {
+ipcMain.handle('get-log', async (_, repoPath: string, maxCount = 200) => {
   const git = gitInstances.get(repoPath)
   if (!git) return { success: false, error: 'No repository open' }
   try {
-    const log = await git.log({ maxCount })
-    return { success: true, log: serializeLog(log) }
+    const [log, stashes] = await Promise.all([
+      git.log({ maxCount, format: GRAPH_LOG_FORMAT, ...GRAPH_LOG_FLAGS }),
+      getStashEntries(git)
+    ])
+    return { success: true, log: mergeLogWithStashes(serializeLog(log), stashes) }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }

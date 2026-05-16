@@ -199,7 +199,9 @@ describe('App — workspace (repo open)', () => {
           hash: '1234567abc',
           message: 'Initial commit',
           author_name: 'Jane Doe',
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
+          parents: [],
+          refs: 'HEAD -> feature/ui'
         }
       ],
       total: 1
