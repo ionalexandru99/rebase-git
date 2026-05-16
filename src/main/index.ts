@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
@@ -11,8 +11,17 @@ import { setupContextMenu } from './menu'
 import { addRecentRepo, getRecentRepos, store } from './store'
 import { setupUpdater } from './updater'
 
-const _require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+function resolvePreload(): string {
+  const base = path.join(__dirname, '../preload/index')
+  // electron-vite may output .mjs (ESM) or .js depending on build mode
+  if (fs.existsSync(base + '.mjs')) return base + '.mjs'
+  if (fs.existsSync(base + '.js')) return base + '.js'
+  if (fs.existsSync(base + '.cjs')) return base + '.cjs'
+  // Fallback — will error clearly if missing
+  return base + '.js'
+}
 
 let mainWindow: BrowserWindow | null = null
 let currentGit: ReturnType<typeof simpleGit> | null = null
@@ -33,7 +42,7 @@ function createWindow(): void {
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: resolvePreload(),
       sandbox: false,
       contextIsolation: true
     }

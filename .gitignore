@@ -163,3 +163,14 @@ latest.yml
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Vitest
+*.vitest/
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# Biome
+.biome/

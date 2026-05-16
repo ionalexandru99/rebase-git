@@ -20,6 +20,6 @@
       "@main/*": ["src/main/*"]
     }
   },
-  "include": ["src/renderer/**/*", "src/preload/**/*"],
+  "include": ["src/renderer/**/*", "src/preload/**/*", "src/test/**/*", "vitest.config.ts", "playwright.config.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
