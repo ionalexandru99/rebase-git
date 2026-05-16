@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test'
-import { ElectronApplication, Page, _electron as electron } from 'playwright'
+import { test, expect, _electron as electron } from '@playwright/test'
+import type { ElectronApplication, Page } from 'playwright-core'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
