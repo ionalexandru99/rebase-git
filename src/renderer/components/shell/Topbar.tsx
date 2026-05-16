@@ -27,6 +27,7 @@ export function Topbar({
   const wrapRef = useRef<HTMLSpanElement>(null)
   const textRef = useRef<HTMLSpanElement>(null)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: branch name change must re-trigger DOM measurement
   useEffect(() => {
     const wrap = wrapRef.current
     const text = textRef.current
