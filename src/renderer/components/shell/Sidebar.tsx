@@ -5,10 +5,14 @@ interface SidebarBranch {
   behind?: number
 }
 
+export type SidebarView = 'history' | 'local-changes'
+
 interface SidebarProps {
   branches: SidebarBranch[]
   workingChanges: number
   activeBranch: string
+  activeView: SidebarView
+  onSelectView: (view: SidebarView) => void
   onSelectBranch: (name: string) => void
 }
 
@@ -45,15 +49,33 @@ function SidebarItem({ glyph, name, meta, active, current, ahead, behind, onClic
   )
 }
 
-export function Sidebar({ branches, workingChanges, activeBranch, onSelectBranch }: SidebarProps) {
+export function Sidebar({
+  branches,
+  workingChanges,
+  activeBranch,
+  activeView,
+  onSelectView,
+  onSelectBranch
+}: SidebarProps) {
   return (
     <div className="shell-sidebar">
       <div className="sb-group">
         <div className="sb-head">
           <span>Workspace</span>
         </div>
-        <SidebarItem glyph="◆" name="History" active />
-        <SidebarItem glyph="◇" name="Working copy" meta={workingChanges || ''} />
+        <SidebarItem
+          glyph="◇"
+          name="Local changes"
+          meta={workingChanges || ''}
+          active={activeView === 'local-changes'}
+          onClick={() => onSelectView('local-changes')}
+        />
+        <SidebarItem
+          glyph="◆"
+          name="History"
+          active={activeView === 'history'}
+          onClick={() => onSelectView('history')}
+        />
       </div>
 
       <div className="sb-group">

@@ -236,13 +236,21 @@ describe('App — workspace (repo open)', () => {
     expect(screen.getByText(/4 changes/)).toBeInTheDocument()
   })
 
-  it('renders the working directory and history panels', async () => {
+  it('defaults to the history view and swaps to the local-changes view from the sidebar', async () => {
     await renderWithRepo()
+
+    // History is the default view, so the timeline is visible and the staging UI is not.
+    expect(await screen.findByText('Timeline')).toBeInTheDocument()
+    expect(screen.getByText('Initial commit')).toBeInTheDocument()
+    expect(screen.queryByText('Working Directory')).not.toBeInTheDocument()
+    expect(screen.queryByText('Commit')).not.toBeInTheDocument()
+
+    // Clicking "Local changes" reveals the staging + commit panels and hides the timeline.
+    fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
 
     expect(await screen.findByText('Working Directory')).toBeInTheDocument()
     expect(screen.getByText('Commit')).toBeInTheDocument()
-    expect(screen.getByText('Timeline')).toBeInTheDocument()
-    expect(screen.getByText('Initial commit')).toBeInTheDocument()
+    expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
   })
 
   it('exposes a Switch repository control in the topbar', async () => {
@@ -269,6 +277,8 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(screen.getAllByText('repo').length).toBeGreaterThanOrEqual(1)
     })
+    // Clean badge lives in the StatusPanel, which only renders on the Local changes view.
+    fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
     expect(screen.getAllByText('Clean').length).toBeGreaterThanOrEqual(1)
   })
 
