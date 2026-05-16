@@ -151,7 +151,6 @@ out/
 *.snap
 *.msi
 *.blockmap
-*.yml
 latest-linux.yml
 latest-mac.yml
 latest.yml

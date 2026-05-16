@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { TabBar, type TabDescriptor } from '@/components/TabBar'
 
 const baseTabs: TabDescriptor[] = [
@@ -92,13 +92,7 @@ describe('TabBar', () => {
   it('invokes onNew when the plus button is clicked', () => {
     const onNew = vi.fn()
     render(
-      <TabBar
-        tabs={baseTabs}
-        activeTabId="a"
-        onSelect={vi.fn()}
-        onClose={vi.fn()}
-        onNew={onNew}
-      />
+      <TabBar tabs={baseTabs} activeTabId="a" onSelect={vi.fn()} onClose={vi.fn()} onNew={onNew} />
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))

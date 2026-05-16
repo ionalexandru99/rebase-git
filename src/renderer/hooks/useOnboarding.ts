@@ -35,16 +35,15 @@ export function useOnboarding() {
     window.electronAPI.getOnboardingComplete().then((complete) => {
       setOnboardingCompleteState(complete)
     })
-    Promise.all([
-      window.electronAPI.getWorkspaces(),
-      window.electronAPI.getActiveWorkspace()
-    ]).then(([list, active]) => {
-      const safeList = list ?? []
-      setWorkspaces(safeList)
-      const resolved = active ?? safeList[0] ?? null
-      setActiveWorkspaceState(resolved)
-      if (resolved) scanWorkspace(resolved)
-    })
+    Promise.all([window.electronAPI.getWorkspaces(), window.electronAPI.getActiveWorkspace()]).then(
+      ([list, active]) => {
+        const safeList = list ?? []
+        setWorkspaces(safeList)
+        const resolved = active ?? safeList[0] ?? null
+        setActiveWorkspaceState(resolved)
+        if (resolved) scanWorkspace(resolved)
+      }
+    )
   }, [scanWorkspace])
 
   const completeOnboarding = useCallback(async () => {

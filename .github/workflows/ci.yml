@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Type check & lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint & format check
+        run: pnpm check
+
+  test-unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Renderer tests
+        run: pnpm test:renderer
+
+      - name: Main-process tests
+        run: pnpm test:main
+
+  test-e2e:
+    name: Build, smoke & E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron system libraries
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-0 libxss1 libasound2t64 libnss3 libgbm1 xvfb
+
+      - name: Fix Electron sandbox permissions
+        run: |
+          sandbox=$(find node_modules -name chrome-sandbox -path "*/electron/dist/*" | head -1)
+          sudo chown root:root "$sandbox"
+          sudo chmod 4755 "$sandbox"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Verify build output
+        run: |
+          test -f out/main/index.js
+          preload=$(ls out/preload/index.{js,mjs,cjs} 2>/dev/null | head -1)
+          test -n "$preload" || { echo "Preload bundle not found"; exit 1; }
+          grep -q "electronAPI" "$preload" || { echo "electronAPI missing from preload"; exit 1; }
+
+      - name: Smoke test
+        run: xvfb-run --auto-servernum pnpm test:smoke
+
+      - name: E2E tests
+        run: xvfb-run --auto-servernum pnpm test:e2e
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

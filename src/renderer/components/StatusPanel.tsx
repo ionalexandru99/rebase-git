@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -34,6 +34,7 @@ function FileRow({
   const wrapRef = useRef<HTMLSpanElement>(null)
   const textRef = useRef<HTMLSpanElement>(null)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: file name change must re-trigger DOM measurement
   useEffect(() => {
     const wrap = wrapRef.current
     const text = textRef.current
@@ -61,7 +62,9 @@ function FileRow({
         {statusGlyph(kind)}
       </span>
       <span className="sp-file-wrap font-mono text-[11.5px] text-foreground/85" ref={wrapRef}>
-        <span className="sp-file-text" ref={textRef}>{file}</span>
+        <span className="sp-file-text" ref={textRef}>
+          {file}
+        </span>
       </span>
       <Button
         variant="ghost"
