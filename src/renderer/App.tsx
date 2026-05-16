@@ -1,14 +1,15 @@
+import { Clock, FolderOpen, GitBranch } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Clock, FolderOpen, GitBranch, Repeat } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Toaster } from '@/components/ui/sonner'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import { CommitPanel } from '@/components/CommitPanel'
 import { HistoryPanel } from '@/components/HistoryPanel'
 import { OnboardingScreen } from '@/components/OnboardingScreen'
 import { StatusPanel } from '@/components/StatusPanel'
+import { Shell } from '@/components/shell/Shell'
 import { TabBar, type TabDescriptor } from '@/components/TabBar'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher'
 import { useGit } from '@/hooks/useGit'
 import { useOnboarding } from '@/hooks/useOnboarding'
@@ -33,16 +34,13 @@ function App() {
     window.electronAPI.getRecentRepos().then(setRecentRepos)
   }, [])
 
-  const reportTabState = useCallback(
-    (id: string, title: string, hasRepo: boolean) => {
-      setTabTitles((prev) => {
-        const existing = prev[id]
-        if (existing && existing.title === title && existing.hasRepo === hasRepo) return prev
-        return { ...prev, [id]: { title, hasRepo } }
-      })
-    },
-    []
-  )
+  const reportTabState = useCallback((id: string, title: string, hasRepo: boolean) => {
+    setTabTitles((prev) => {
+      const existing = prev[id]
+      if (existing && existing.title === title && existing.hasRepo === hasRepo) return prev
+      return { ...prev, [id]: { title, hasRepo } }
+    })
+  }, [])
 
   const newTab = useCallback(() => {
     const id = nextTabId()
@@ -351,7 +349,7 @@ function RepoList({ icon, title, repos, onSelect }: RepoListProps) {
               <li key={repo}>
                 <button
                   type="button"
-                  className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-[11px] text-foreground/85 transition-colors hover:bg-accent/60 hover:text-foreground"
+                  className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-[11px] text-foreground/85 transition-colors duration-[60ms] hover:bg-accent hover:text-foreground"
                   onClick={() => onSelect(repo)}
                 >
                   {icon}
@@ -384,63 +382,34 @@ function Workspace({
   onSwitchRepo
 }: WorkspaceProps) {
   const repoName = git.repoPath?.split('/').filter(Boolean).at(-1) ?? 'Repository'
+  const branch = git.currentBranch || 'no-branch'
+
+  const sidebarBranches = useMemo(() => {
+    const all = git.branches?.all ?? (branch ? [branch] : [])
+    return all.map((name) => ({
+      name,
+      current: name === branch,
+      ahead: 0,
+      behind: 0
+    }))
+  }, [git.branches, branch])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Per-tab toolbar — repo context + branch + switch action. */}
-      <div className="flex h-9 shrink-0 items-center justify-between gap-4 border-b border-border bg-card/30 px-3.5">
-        <div className="flex min-w-0 items-baseline gap-2.5">
-          <h2
-            className="truncate text-[13px] font-semibold tracking-tight text-foreground"
-            title={git.repoPath ?? undefined}
-          >
-            {repoName}
-          </h2>
-          <span aria-hidden className="text-muted-foreground/40">
-            ·
-          </span>
-          {totalChanges === 0 ? (
-            <span className="text-[11.5px] font-medium text-primary">Clean</span>
-          ) : (
-            <span className="flex items-baseline gap-2 text-[11.5px]">
-              <span className="text-foreground/90">
-                {totalChanges} change{totalChanges === 1 ? '' : 's'}
-              </span>
-              <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground/70">
-                {modifiedCount}M
-                <span className="mx-1 text-muted-foreground/30">·</span>
-                {stagedCount}A
-                <span className="mx-1 text-muted-foreground/30">·</span>
-                {untrackedCount}?
-              </span>
-            </span>
-          )}
-          <span
-            aria-hidden
-            className="hidden truncate font-mono text-[10.5px] text-muted-foreground/60 sm:inline"
-            title={git.repoPath ?? undefined}
-          >
-            {git.repoPath}
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-            <GitBranch className="h-3 w-3 text-primary" strokeWidth={2} />
-            <span className="text-foreground/85">{git.currentBranch || 'no-branch'}</span>
-          </div>
-          <Button
-            onClick={onSwitchRepo}
-            variant="ghost"
-            size="sm"
-            className="h-6 gap-1 rounded-[5px] px-2 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Repeat className="h-3 w-3" strokeWidth={2} />
-            Switch Repo
-          </Button>
-        </div>
-      </div>
-
-      {/* Two-pane workspace */}
+    <Shell
+      repoName={repoName}
+      repoPath={git.repoPath}
+      branch={branch}
+      branches={sidebarBranches}
+      ahead={0}
+      behind={0}
+      changes={totalChanges}
+      activeBranch={branch}
+      onSelectBranch={() => {
+        /* branch switching not yet wired through useGit */
+      }}
+      onSwitchRepo={onSwitchRepo}
+    >
+      {/* Two-pane workspace inside the shell main area */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden p-2.5 xl:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]">
         <div className="min-h-0 overflow-hidden">
           <StatusPanel
@@ -457,7 +426,11 @@ function Workspace({
           </div>
         </div>
       </div>
-    </div>
+      {/* counts kept available for screen readers / future use */}
+      <span className="sr-only">
+        {modifiedCount} modified, {stagedCount} staged, {untrackedCount} untracked
+      </span>
+    </Shell>
   )
 }
 

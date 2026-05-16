@@ -32,7 +32,10 @@ function FileRow({
   onAction: (file: string) => void
 }) {
   return (
-    <li className="group flex h-7 items-center gap-2 rounded-[4px] px-2 transition-colors hover:bg-accent/60">
+    <li
+      className="group flex h-7 items-center gap-2 rounded-[4px] px-2 transition-colors hover:bg-accent"
+      style={{ transitionDuration: '60ms' }}
+    >
       <span
         role="img"
         aria-label={kind}
@@ -91,7 +94,9 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
       <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="text-[12px] font-semibold text-foreground">Working Directory</h2>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground">
+            Working Directory
+          </h2>
           <span className="truncate text-[11px] text-muted-foreground">{subtitle}</span>
         </div>
         {loading ? (
@@ -120,13 +125,7 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
           ) : (
             <ul className="space-y-px">
               {status.modified.map((f) => (
-                <FileRow
-                  key={f}
-                  file={f}
-                  kind="modified"
-                  actionLabel="Stage"
-                  onAction={onStage}
-                />
+                <FileRow key={f} file={f} kind="modified" actionLabel="Stage" onAction={onStage} />
               ))}
             </ul>
           )}
@@ -154,13 +153,7 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
           ) : (
             <ul className="space-y-px">
               {status.not_added.map((f) => (
-                <FileRow
-                  key={f}
-                  file={f}
-                  kind="untracked"
-                  actionLabel="Stage"
-                  onAction={onStage}
-                />
+                <FileRow key={f} file={f} kind="untracked" actionLabel="Stage" onAction={onStage} />
               ))}
             </ul>
           )}

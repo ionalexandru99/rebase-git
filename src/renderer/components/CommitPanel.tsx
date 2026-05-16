@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 
@@ -26,7 +26,9 @@ export function CommitPanel({ onCommit, loading }: CommitPanelProps) {
   return (
     <section className="flex flex-col overflow-hidden rounded-md border border-border bg-card">
       <header className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
-        <h2 className="text-[12px] font-semibold text-foreground">Commit</h2>
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground">
+          Commit
+        </h2>
         <span
           className={`font-mono text-[10.5px] tabular-nums ${
             subjectWarn ? 'text-primary' : 'text-muted-foreground/60'

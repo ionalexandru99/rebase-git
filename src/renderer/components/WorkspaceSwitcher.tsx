@@ -33,7 +33,7 @@ export function WorkspaceSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Switch workspace"
-        className="group flex h-7 w-full items-center gap-2 rounded-[5px] border border-border bg-card px-2.5 text-left text-[11.5px] text-foreground/85 transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:border-primary/40 focus-visible:outline-none"
+        className="group flex h-7 w-full items-center gap-2 rounded-[5px] border border-border bg-card px-2.5 text-left text-[11.5px] text-foreground/85 transition-colors duration-[60ms] hover:bg-accent hover:text-foreground focus-visible:border-primary/40 focus-visible:outline-none"
       >
         <FolderOpen className="h-3 w-3 shrink-0 text-muted-foreground" strokeWidth={2} />
         <span className="min-w-0 flex-1 truncate font-medium">
@@ -68,9 +68,7 @@ export function WorkspaceSwitcher({
                   className="flex cursor-pointer items-center gap-2 rounded-[3px] px-2 py-1.5 text-[11.5px]"
                 >
                   <Check
-                    className={`h-3 w-3 shrink-0 ${
-                      isActive ? 'text-primary' : 'text-transparent'
-                    }`}
+                    className={`h-3 w-3 shrink-0 ${isActive ? 'text-primary' : 'text-transparent'}`}
                     strokeWidth={2.5}
                   />
                   <div className="flex min-w-0 flex-1 flex-col leading-tight">

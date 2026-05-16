@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 
 function mockBaseAPI(
@@ -225,13 +225,14 @@ describe('App — workspace (repo open)', () => {
   it('renders the repo dashboard with name, branch, and change counts', async () => {
     await renderWithRepo()
 
+    // Repo name lives in both the tab title and the shell topbar.
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'my-app' })).toBeInTheDocument()
+      expect(screen.getAllByText('my-app').length).toBeGreaterThanOrEqual(1)
     })
 
-    // Branch appears in the workspace toolbar.
-    expect(screen.getByText('feature/ui')).toBeInTheDocument()
-    // 1 modified + 2 staged + 1 untracked = 4 changes
+    // Branch chip + statusbar pip both reference the branch.
+    expect(screen.getAllByText('feature/ui').length).toBeGreaterThanOrEqual(1)
+    // 1 modified + 2 staged + 1 untracked = 4 changes — surfaced in the statusbar.
     expect(screen.getByText(/4 changes/)).toBeInTheDocument()
   })
 
@@ -240,14 +241,14 @@ describe('App — workspace (repo open)', () => {
 
     expect(await screen.findByText('Working Directory')).toBeInTheDocument()
     expect(screen.getByText('Commit')).toBeInTheDocument()
-    expect(screen.getByText('Commit History')).toBeInTheDocument()
+    expect(screen.getByText('Timeline')).toBeInTheDocument()
     expect(screen.getByText('Initial commit')).toBeInTheDocument()
   })
 
-  it('shows a "Switch Repo" button on the workspace toolbar', async () => {
+  it('exposes a Switch repository control in the topbar', async () => {
     await renderWithRepo()
 
-    expect(await screen.findByRole('button', { name: /Switch Repo/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Switch repository/i })).toBeInTheDocument()
   })
 
   it('shows the clean badge when no changes are pending', async () => {
@@ -266,7 +267,7 @@ describe('App — workspace (repo open)', () => {
     fireEvent.click(openButton)
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'repo' })).toBeInTheDocument()
+      expect(screen.getAllByText('repo').length).toBeGreaterThanOrEqual(1)
     })
     expect(screen.getAllByText('Clean').length).toBeGreaterThanOrEqual(1)
   })

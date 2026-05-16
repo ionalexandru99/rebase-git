@@ -1,0 +1,304 @@
+/* shell component classes. Theme tokens (--background, --primary,
+   --accent, --fg, etc.) are owned by index.css. */
+
+.shell-app {
+  display: grid;
+  grid-template-rows: var(--shell-topbar-h, 44px) 1fr var(--shell-statusbar-h, 26px);
+  height: 100%;
+  min-height: 0;
+  background: var(--background);
+  color: var(--fg);
+}
+
+.shell-body {
+  display: grid;
+  grid-template-columns: var(--shell-sidebar-w, 244px) 1fr;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* ───────── topbar ───────── */
+.tb {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  user-select: none;
+}
+.tb-repo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 6px;
+  transition: var(--hov-tx);
+  cursor: default;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  min-width: 0;
+}
+.tb-repo:hover {
+  background: var(--accent);
+}
+.tb-repo-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #8eb6d4, #4d7ea3);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: #131a20;
+  flex-shrink: 0;
+}
+.tb-repo-name {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.tb-repo-path {
+  color: var(--fg-muted);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tb-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+.tb-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  transition: var(--hov-tx);
+  appearance: none;
+  cursor: default;
+  color: inherit;
+  flex-shrink: 0;
+}
+.tb-branch:hover {
+  border-color: var(--line-strong);
+  background: var(--popover);
+}
+.tb-branch .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.tb-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg-soft);
+  font-size: 12px;
+}
+.tb-sync .arr {
+  color: var(--primary);
+}
+.tb-spacer {
+  flex: 1;
+}
+.tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.tb-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 5px 10px;
+  border-radius: 6px;
+  color: var(--fg-soft);
+  font-size: 12.5px;
+  cursor: default;
+  transition: var(--hov-tx);
+}
+.tb-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--fg);
+}
+.tb-btn:disabled {
+  opacity: 0.5;
+}
+.tb-btn.primary {
+  color: var(--primary);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.tb-btn.primary:hover:not(:disabled) {
+  background: rgba(122, 166, 200, 0.26);
+  border-color: rgba(122, 166, 200, 0.5);
+}
+
+/* ───────── sidebar ───────── */
+.shell-sidebar {
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 8px 0 14px;
+  min-height: 0;
+}
+.sb-group {
+  padding: 8px 0 4px;
+}
+.sb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.sb-head button {
+  all: unset;
+  cursor: default;
+  color: var(--fg-faint);
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  text-align: center;
+  line-height: 18px;
+}
+.sb-head button:hover {
+  background: var(--accent);
+  color: var(--fg-soft);
+}
+.sb-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  margin: 0 6px;
+  border-radius: 4px;
+  color: var(--fg-soft);
+  font-size: 12.5px;
+  cursor: default;
+  user-select: none;
+  transition: var(--hov-tx);
+  position: relative;
+}
+.sb-item:hover {
+  background: var(--accent);
+  color: var(--fg);
+}
+.sb-item.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+}
+.sb-item.active::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--primary);
+  border-radius: 1px;
+}
+.sb-item .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-item .meta {
+  color: var(--fg-faint);
+  font-size: 11px;
+}
+.sb-item .glyph {
+  color: var(--fg-faint);
+  font-size: 11px;
+  width: 12px;
+  display: inline-block;
+  text-align: center;
+}
+.sb-item.current .name::after {
+  content: "current";
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--primary);
+  border: 1px solid var(--accent-line);
+  border-radius: 3px;
+  padding: 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sb-item .ahead-behind {
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  display: inline-flex;
+  gap: 4px;
+}
+.sb-item .ab-up {
+  color: var(--add);
+}
+.sb-item .ab-dn {
+  color: var(--del);
+}
+
+/* ───────── main pane ───────── */
+.shell-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--background);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ───────── status bar ───────── */
+.shell-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--border);
+  padding: 0 14px;
+  background: var(--background);
+  color: var(--fg-muted);
+  font-size: 11.5px;
+}
+.shell-statusbar .pip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.shell-statusbar .pip .d {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--add);
+}
+.shell-statusbar .pip .d.acc {
+  background: var(--primary);
+}
+.shell-statusbar .spacer {
+  flex: 1;
+}
+
+/* ───────── shared chips/avatar (kept for HistoryPanel head badges) ───────── */
+.shell-avatar {
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}

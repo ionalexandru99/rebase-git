@@ -42,7 +42,7 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarPr
           onClick={onNew}
           aria-label="Open new tab"
           title="New tab (⌘T)"
-          className="no-drag flex h-full w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          className="no-drag flex h-full w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-[60ms] hover:bg-accent hover:text-foreground"
         >
           <Plus className="h-3.5 w-3.5" strokeWidth={2} />
         </button>
@@ -64,8 +64,8 @@ interface TabItemProps {
 function TabItem({ tab, isActive, canClose, onSelect, onClose }: TabItemProps) {
   return (
     <div
-      className={`group relative flex h-full min-w-[120px] max-w-[200px] items-center border-r border-border ${
-        isActive ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-accent/40'
+      className={`group relative flex h-full min-w-[120px] max-w-[200px] items-center border-r border-border transition-colors duration-[60ms] ${
+        isActive ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-accent'
       }`}
     >
       {isActive && (
@@ -89,9 +89,7 @@ function TabItem({ tab, isActive, canClose, onSelect, onClose }: TabItemProps) {
         className="flex min-w-0 flex-1 items-center gap-1.5 border-none bg-transparent px-2.5 py-0 text-left text-[11.5px] transition-colors hover:text-foreground"
       >
         <GitBranch
-          className={`h-3 w-3 shrink-0 ${
-            isActive ? 'text-primary' : 'text-muted-foreground/60'
-          }`}
+          className={`h-3 w-3 shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground/60'}`}
           strokeWidth={2}
         />
         <span className={`truncate ${tab.hasRepo ? 'font-medium' : 'italic'}`}>{tab.title}</span>
@@ -102,7 +100,9 @@ function TabItem({ tab, isActive, canClose, onSelect, onClose }: TabItemProps) {
           onClick={onClose}
           aria-label={`Close tab ${tab.title}`}
           className={`mr-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm transition-all hover:bg-secondary hover:text-foreground ${
-            isActive ? 'text-muted-foreground' : 'text-transparent group-hover:text-muted-foreground'
+            isActive
+              ? 'text-muted-foreground'
+              : 'text-transparent group-hover:text-muted-foreground'
           }`}
         >
           <X className="h-3 w-3" strokeWidth={2.2} />

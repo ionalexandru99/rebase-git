@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react'
-import type { GitLog, GitStatus, RepoData } from '../types'
+import type { GitBranches, GitLog, GitStatus, RepoData } from '../types'
 
 export function useGit() {
   const [repoPath, setRepoPath] = useState<string | null>(null)
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [log, setLog] = useState<GitLog | null>(null)
+  const [branches, setBranches] = useState<GitBranches | null>(null)
   const [currentBranch, setCurrentBranch] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -18,6 +19,7 @@ export function useGit() {
         setRepoPath(result.path)
         setStatus(result.status)
         setLog(result.log)
+        setBranches(result.branches)
         setCurrentBranch(result.status.current)
       } else {
         setError(result.error || 'Failed to open repository')
@@ -39,6 +41,7 @@ export function useGit() {
     setRepoPath(null)
     setStatus(null)
     setLog(null)
+    setBranches(null)
     setCurrentBranch('')
     setError(null)
   }, [repoPath])
@@ -51,6 +54,7 @@ export function useGit() {
       if (result.success) {
         setStatus(result.status)
         setLog(result.log)
+        setBranches(result.branches)
         setCurrentBranch(result.status.current)
       }
     } catch (err) {
@@ -99,6 +103,7 @@ export function useGit() {
     repoPath,
     status,
     log,
+    branches,
     currentBranch,
     loading,
     error,

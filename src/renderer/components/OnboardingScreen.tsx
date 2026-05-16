@@ -43,10 +43,7 @@ export function OnboardingScreen({
           {!workingDirectory ? (
             <div className="p-3.5">
               <div className="mb-3 flex flex-col items-center justify-center rounded-sm border border-dashed border-border px-4 py-7 text-center">
-                <FolderOpen
-                  className="mb-2 h-5 w-5 text-muted-foreground/50"
-                  strokeWidth={1.5}
-                />
+                <FolderOpen className="mb-2 h-5 w-5 text-muted-foreground/50" strokeWidth={1.5} />
                 <p className="text-[12px] text-muted-foreground">No workspace folder selected</p>
               </div>
               <Button
@@ -93,7 +90,7 @@ export function OnboardingScreen({
                           <li key={repo}>
                             <button
                               type="button"
-                              className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-[11px] text-foreground/85 transition-colors hover:bg-accent/60 hover:text-foreground"
+                              className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-[11px] text-foreground/85 transition-colors duration-[60ms] hover:bg-accent hover:text-foreground"
                               onClick={() => onOpenRepo(repo)}
                             >
                               <GitBranch
