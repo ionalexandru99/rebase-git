@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Sidebar } from './Sidebar'
+import { Sidebar, type SidebarView } from './Sidebar'
 import { Statusbar } from './Statusbar'
 import { Topbar } from './Topbar'
 
@@ -12,6 +12,8 @@ interface ShellProps {
   behind: number
   changes: number
   activeBranch: string
+  activeView: SidebarView
+  onSelectView: (view: SidebarView) => void
   onSelectBranch: (name: string) => void
   onSwitchRepo?: () => void
   onFetch?: () => void
@@ -29,6 +31,8 @@ export function Shell({
   behind,
   changes,
   activeBranch,
+  activeView,
+  onSelectView,
   onSelectBranch,
   onSwitchRepo,
   onFetch,
@@ -54,6 +58,8 @@ export function Shell({
           branches={branches}
           workingChanges={changes}
           activeBranch={activeBranch}
+          activeView={activeView}
+          onSelectView={onSelectView}
           onSelectBranch={onSelectBranch}
         />
         <div className="shell-main">{children}</div>

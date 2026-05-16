@@ -5,6 +5,7 @@ import { HistoryPanel } from '@/components/HistoryPanel'
 import { OnboardingScreen } from '@/components/OnboardingScreen'
 import { StatusPanel } from '@/components/StatusPanel'
 import { Shell } from '@/components/shell/Shell'
+import type { SidebarView } from '@/components/shell/Sidebar'
 import { TabBar, type TabDescriptor } from '@/components/TabBar'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -383,6 +384,7 @@ function Workspace({
 }: WorkspaceProps) {
   const repoName = git.repoPath?.split('/').filter(Boolean).at(-1) ?? 'Repository'
   const branch = git.currentBranch || 'no-branch'
+  const [activeView, setActiveView] = useState<SidebarView>('history')
 
   const sidebarBranches = useMemo(() => {
     const all = git.branches?.all ?? (branch ? [branch] : [])
@@ -404,26 +406,33 @@ function Workspace({
       behind={0}
       changes={totalChanges}
       activeBranch={branch}
+      activeView={activeView}
+      onSelectView={setActiveView}
       onSelectBranch={() => {
         /* branch switching not yet wired through useGit */
       }}
       onSwitchRepo={onSwitchRepo}
     >
-      {/* Two-pane workspace inside the shell main area */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden p-2.5 xl:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]">
-        <div className="min-h-0 overflow-hidden">
-          <StatusPanel
-            status={git.status}
-            onStage={git.stageFile}
-            onUnstage={git.unstageFile}
-            loading={git.loading}
-          />
-        </div>
-        <div className="flex min-h-0 flex-col gap-2.5 overflow-hidden">
-          <CommitPanel onCommit={git.commit} loading={git.loading} />
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <HistoryPanel log={git.log} loading={git.loading} />
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
+        {/* Always mounted so CommitPanel draft state survives view switches */}
+        <div
+          hidden={activeView !== 'local-changes'}
+          className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]"
+        >
+          <div className="min-h-0 overflow-hidden">
+            <StatusPanel
+              status={git.status}
+              onStage={git.stageFile}
+              onUnstage={git.unstageFile}
+              loading={git.loading}
+            />
           </div>
+          <div className="min-h-0 overflow-hidden">
+            <CommitPanel onCommit={git.commit} loading={git.loading} />
+          </div>
+        </div>
+        <div hidden={activeView !== 'history'} className="min-h-0 flex-1 overflow-hidden">
+          <HistoryPanel log={git.log} loading={git.loading} />
         </div>
       </div>
       {/* counts kept available for screen readers / future use */}
