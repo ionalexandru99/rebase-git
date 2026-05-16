@@ -97,7 +97,7 @@ jobs:
         run: pnpm build
 
       - name: Smoke test
-        run: pnpm test:smoke
+        run: xvfb-run --auto-servernum pnpm test:smoke
 
       - name: E2E tests
         run: xvfb-run --auto-servernum pnpm test:e2e
