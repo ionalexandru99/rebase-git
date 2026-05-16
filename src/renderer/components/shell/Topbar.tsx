@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+
 interface TopbarProps {
   repoName: string
   repoPath: string | null
@@ -22,6 +24,32 @@ export function Topbar({
   onPush
 }: TopbarProps) {
   const initial = repoName.charAt(0).toUpperCase() || 'R'
+  const wrapRef = useRef<HTMLSpanElement>(null)
+  const textRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const wrap = wrapRef.current
+    const text = textRef.current
+    if (!wrap || !text) return
+
+    function computeOverflow() {
+      if (!wrap || !text) return
+      const overflow = text.scrollWidth - wrap.clientWidth
+      if (overflow > 0) {
+        wrap.style.setProperty('--tb-scroll-dist', `-${overflow}px`)
+        wrap.setAttribute('data-scrollable', '')
+      } else {
+        wrap.style.removeProperty('--tb-scroll-dist')
+        wrap.removeAttribute('data-scrollable')
+      }
+    }
+
+    computeOverflow()
+    const ro = new ResizeObserver(computeOverflow)
+    ro.observe(wrap)
+    return () => ro.disconnect()
+  }, [branch])
+
   return (
     <div className="tb">
       <button
@@ -38,8 +66,10 @@ export function Topbar({
       <div className="tb-divider" />
       <button type="button" className="tb-branch">
         <span className="dot" />
-        <span className="font-mono" style={{ fontSize: 12 }}>
-          {branch}
+        <span className="tb-branch-wrap" ref={wrapRef}>
+          <span className="font-mono tb-branch-text" style={{ fontSize: 12 }} ref={textRef}>
+            {branch}
+          </span>
         </span>
         {ahead > 0 && (
           <span className="tb-sync">

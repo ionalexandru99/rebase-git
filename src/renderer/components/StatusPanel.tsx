@@ -1,8 +1,8 @@
+import { useEffect, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { GitStatus } from '../types'
 
 interface StatusPanelProps {
@@ -31,6 +31,23 @@ function FileRow({
   actionLabel: string
   onAction: (file: string) => void
 }) {
+  const wrapRef = useRef<HTMLSpanElement>(null)
+  const textRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const wrap = wrapRef.current
+    const text = textRef.current
+    if (!wrap || !text) return
+    const overflow = text.scrollWidth - wrap.clientWidth
+    if (overflow > 0) {
+      wrap.style.setProperty('--sp-scroll-dist', `-${overflow}px`)
+      wrap.setAttribute('data-scrollable', '')
+    } else {
+      wrap.style.removeProperty('--sp-scroll-dist')
+      wrap.removeAttribute('data-scrollable')
+    }
+  }, [file])
+
   return (
     <li
       className="group flex h-7 items-center gap-2 rounded-[4px] px-2 transition-colors hover:bg-accent"
@@ -39,21 +56,13 @@ function FileRow({
       <span
         role="img"
         aria-label={kind}
-        title={kind}
         className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] bg-secondary font-mono text-[10px] font-semibold uppercase tracking-tighter text-muted-foreground"
       >
         {statusGlyph(kind)}
       </span>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <code className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-foreground/85">
-            {file}
-          </code>
-        </TooltipTrigger>
-        <TooltipContent side="top" align="start">
-          {file}
-        </TooltipContent>
-      </Tooltip>
+      <span className="sp-file-wrap font-mono text-[11.5px] text-foreground/85" ref={wrapRef}>
+        <span className="sp-file-text" ref={textRef}>{file}</span>
+      </span>
       <Button
         variant="ghost"
         size="sm"

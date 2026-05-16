@@ -85,6 +85,24 @@
   cursor: default;
   color: inherit;
   flex-shrink: 0;
+  max-width: 260px;
+}
+.tb-branch-wrap {
+  overflow: hidden;
+  min-width: 0;
+}
+.tb-branch-text {
+  display: inline-block;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tb-branch-wrap[data-scrollable] .tb-branch-text {
+    animation: tb-branch-scroll 4s ease-in-out 0.8s infinite alternate;
+  }
+}
+@keyframes tb-branch-scroll {
+  0%, 15% { transform: translateX(0) }
+  85%, 100% { transform: translateX(var(--tb-scroll-dist)) }
 }
 .tb-branch:hover {
   border-color: var(--line-strong);
@@ -291,6 +309,26 @@
 }
 .shell-statusbar .spacer {
   flex: 1;
+}
+
+/* ───────── status panel file name scroll ───────── */
+.sp-file-wrap {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+}
+.sp-file-text {
+  display: inline-block;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .group:hover .sp-file-wrap[data-scrollable] .sp-file-text {
+    animation: sp-file-scroll 3s ease-in-out 0.4s infinite alternate;
+  }
+}
+@keyframes sp-file-scroll {
+  0%, 15% { transform: translateX(0) }
+  85%, 100% { transform: translateX(var(--sp-scroll-dist)) }
 }
 
 /* ───────── shared chips/avatar (kept for HistoryPanel head badges) ───────── */
