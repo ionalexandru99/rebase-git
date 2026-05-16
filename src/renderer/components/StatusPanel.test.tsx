@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { StatusPanel } from '@/components/StatusPanel'
 import type { GitStatus } from '@/types'
@@ -108,6 +108,8 @@ describe('StatusPanel', () => {
   })
 
   describe('file name scroll', () => {
+    afterEach(() => vi.restoreAllMocks())
+
     it('does not set data-scrollable when the file name fits', () => {
       // jsdom reports scrollWidth and clientWidth as 0, so overflow is 0
       const { container } = renderPanel({

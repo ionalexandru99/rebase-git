@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { Topbar } from '@/components/shell/Topbar'
 
@@ -98,6 +98,8 @@ describe('Topbar', () => {
   })
 
   describe('branch name scroll', () => {
+    afterEach(() => vi.restoreAllMocks())
+
     it('does not set data-scrollable when the branch name fits', () => {
       // jsdom reports scrollWidth and clientWidth as 0, so overflow is 0
       const { container } = renderTopbar({ branch: 'main' })

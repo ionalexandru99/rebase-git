@@ -31,14 +31,23 @@ export function Topbar({
     const wrap = wrapRef.current
     const text = textRef.current
     if (!wrap || !text) return
-    const overflow = text.scrollWidth - wrap.clientWidth
-    if (overflow > 0) {
-      wrap.style.setProperty('--tb-scroll-dist', `-${overflow}px`)
-      wrap.setAttribute('data-scrollable', '')
-    } else {
-      wrap.style.removeProperty('--tb-scroll-dist')
-      wrap.removeAttribute('data-scrollable')
+
+    function computeOverflow() {
+      if (!wrap || !text) return
+      const overflow = text.scrollWidth - wrap.clientWidth
+      if (overflow > 0) {
+        wrap.style.setProperty('--tb-scroll-dist', `-${overflow}px`)
+        wrap.setAttribute('data-scrollable', '')
+      } else {
+        wrap.style.removeProperty('--tb-scroll-dist')
+        wrap.removeAttribute('data-scrollable')
+      }
     }
+
+    computeOverflow()
+    const ro = new ResizeObserver(computeOverflow)
+    ro.observe(wrap)
+    return () => ro.disconnect()
   }, [branch])
 
   return (
