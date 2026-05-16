@@ -33,20 +33,15 @@ test.describe('Git GUI E2E', () => {
     expect(title).toBeTruthy()
   })
 
-  test('shows the open repository button', async () => {
-    // Wait for the app to render
+  test('shows the onboarding screen on first launch', async () => {
     await page.waitForLoadState('domcontentloaded')
 
-    // The app should show the "Open Repository" button in the welcome screen
-    // (the centered one, not the header button)
-    const welcomeButton = page.getByRole('button', { name: 'Open Repository' }).nth(1)
-    await expect(welcomeButton).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Welcome to Rebase' })).toBeVisible()
   })
 
-  test('shows the welcome message', async () => {
+  test('shows the select working folder button', async () => {
     await page.waitForLoadState('domcontentloaded')
 
-    const welcomeText = page.locator('text=Open a git repository to get started')
-    await expect(welcomeText).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Select Working Folder' })).toBeVisible()
   })
 })
