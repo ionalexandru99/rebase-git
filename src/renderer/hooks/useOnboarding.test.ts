@@ -2,27 +2,39 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useOnboarding } from '@/hooks/useOnboarding'
 
+function defaultMocks(active: string | null = null, workspaces: string[] = []) {
+  vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(false)
+  vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(active)
+  vi.mocked(window.electronAPI.getWorkspaces).mockResolvedValue(workspaces)
+  vi.mocked(window.electronAPI.getActiveWorkspace).mockResolvedValue(active)
+  vi.mocked(window.electronAPI.addWorkspace).mockImplementation(async (p) => [...workspaces, p])
+  vi.mocked(window.electronAPI.removeWorkspace).mockImplementation(async (p) =>
+    workspaces.filter((w) => w !== p)
+  )
+  vi.mocked(window.electronAPI.setActiveWorkspace).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({ success: true, repos: [] })
+}
+
 describe('useOnboarding', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    defaultMocks()
   })
 
-  it('should start with null onboardingComplete and null workingDirectory', () => {
-    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(false)
-    vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(null)
-
+  it('should start with null onboardingComplete and no workspaces', () => {
     const { result } = renderHook(() => useOnboarding())
 
     expect(result.current.onboardingComplete).toBeNull()
     expect(result.current.workingDirectory).toBeNull()
+    expect(result.current.workspaces).toEqual([])
+    expect(result.current.activeWorkspace).toBeNull()
     expect(result.current.loading).toBe(false)
     expect(result.current.error).toBeNull()
     expect(result.current.discoveredRepos).toEqual([])
   })
 
-  it('should load onboarding state on mount', async () => {
-    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(false)
-    vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue('/home/user/repos')
+  it('should load workspaces and the active workspace on mount', async () => {
+    defaultMocks('/home/user/repos', ['/home/user/repos'])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
       success: true,
       repos: ['/home/user/repos/app']
@@ -33,14 +45,15 @@ describe('useOnboarding', () => {
     await waitFor(() => {
       expect(result.current.onboardingComplete).toBe(false)
       expect(result.current.workingDirectory).toBe('/home/user/repos')
+      expect(result.current.activeWorkspace).toBe('/home/user/repos')
+      expect(result.current.workspaces).toEqual(['/home/user/repos'])
       expect(result.current.discoveredRepos).toEqual(['/home/user/repos/app'])
     })
   })
 
   it('should select a working directory and scan for repos', async () => {
-    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(false)
-    vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(null)
     vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/home/user/projects')
+    vi.mocked(window.electronAPI.addWorkspace).mockResolvedValue(['/home/user/projects'])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
       success: true,
       repos: ['/home/user/projects/app', '/home/user/projects/lib']
@@ -56,6 +69,7 @@ describe('useOnboarding', () => {
 
     await waitFor(() => {
       expect(result.current.workingDirectory).toBe('/home/user/projects')
+      expect(result.current.workspaces).toEqual(['/home/user/projects'])
       expect(result.current.discoveredRepos).toEqual([
         '/home/user/projects/app',
         '/home/user/projects/lib'
@@ -63,14 +77,13 @@ describe('useOnboarding', () => {
       expect(result.current.loading).toBe(false)
     })
 
-    expect(window.electronAPI.setWorkingDirectory).toHaveBeenCalledWith('/home/user/projects')
+    expect(window.electronAPI.addWorkspace).toHaveBeenCalledWith('/home/user/projects')
     expect(window.electronAPI.scanForRepos).toHaveBeenCalledWith('/home/user/projects')
   })
 
   it('should handle scan errors', async () => {
-    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(false)
-    vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(null)
     vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/bad/path')
+    vi.mocked(window.electronAPI.addWorkspace).mockResolvedValue(['/bad/path'])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
       success: false,
       error: 'Permission denied'
@@ -91,8 +104,6 @@ describe('useOnboarding', () => {
   })
 
   it('should complete onboarding', async () => {
-    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(false)
-    vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(null)
     vi.mocked(window.electronAPI.setOnboardingComplete).mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useOnboarding())
@@ -111,8 +122,8 @@ describe('useOnboarding', () => {
   })
 
   it('should rescan the working directory', async () => {
+    defaultMocks('/home/user/repos', ['/home/user/repos'])
     vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
-    vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue('/home/user/repos')
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
       success: true,
       repos: ['/home/user/repos/one']
@@ -135,17 +146,102 @@ describe('useOnboarding', () => {
   })
 
   it('should not rescan if no working directory is set', async () => {
-    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
-    vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(null)
-
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
       expect(result.current.workingDirectory).toBeNull()
     })
 
+    vi.mocked(window.electronAPI.scanForRepos).mockClear()
+
     await result.current.rescanWorkingDirectory()
 
     expect(window.electronAPI.scanForRepos).not.toHaveBeenCalled()
+  })
+
+  it('should add a new workspace and switch to it', async () => {
+    defaultMocks('/home/user/personal', ['/home/user/personal'])
+    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
+    vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/home/user/work')
+    vi.mocked(window.electronAPI.addWorkspace).mockResolvedValue([
+      '/home/user/personal',
+      '/home/user/work'
+    ])
+    vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
+      success: true,
+      repos: ['/home/user/work/repo-a']
+    })
+
+    const { result } = renderHook(() => useOnboarding())
+
+    await waitFor(() => {
+      expect(result.current.activeWorkspace).toBe('/home/user/personal')
+    })
+
+    await result.current.addWorkspace()
+
+    await waitFor(() => {
+      expect(result.current.workspaces).toEqual(['/home/user/personal', '/home/user/work'])
+      expect(result.current.activeWorkspace).toBe('/home/user/work')
+      expect(result.current.discoveredRepos).toEqual(['/home/user/work/repo-a'])
+    })
+
+    expect(window.electronAPI.addWorkspace).toHaveBeenCalledWith('/home/user/work')
+  })
+
+  it('should switch to an existing workspace and re-scan', async () => {
+    defaultMocks('/home/user/personal', ['/home/user/personal', '/home/user/work'])
+    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
+    vi.mocked(window.electronAPI.scanForRepos).mockResolvedValueOnce({
+      success: true,
+      repos: ['/home/user/personal/app']
+    })
+
+    const { result } = renderHook(() => useOnboarding())
+
+    await waitFor(() => {
+      expect(result.current.activeWorkspace).toBe('/home/user/personal')
+    })
+
+    vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
+      success: true,
+      repos: ['/home/user/work/job']
+    })
+
+    await result.current.switchWorkspace('/home/user/work')
+
+    await waitFor(() => {
+      expect(result.current.activeWorkspace).toBe('/home/user/work')
+      expect(result.current.discoveredRepos).toEqual(['/home/user/work/job'])
+    })
+
+    expect(window.electronAPI.setActiveWorkspace).toHaveBeenCalledWith('/home/user/work')
+    expect(window.electronAPI.scanForRepos).toHaveBeenLastCalledWith('/home/user/work')
+  })
+
+  it('should remove a workspace and fall back to the first remaining one', async () => {
+    defaultMocks('/home/user/personal', ['/home/user/personal', '/home/user/work'])
+    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
+    vi.mocked(window.electronAPI.removeWorkspace).mockResolvedValue(['/home/user/work'])
+    vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
+      success: true,
+      repos: ['/home/user/work/job']
+    })
+
+    const { result } = renderHook(() => useOnboarding())
+
+    await waitFor(() => {
+      expect(result.current.activeWorkspace).toBe('/home/user/personal')
+    })
+
+    await result.current.removeWorkspace('/home/user/personal')
+
+    await waitFor(() => {
+      expect(result.current.workspaces).toEqual(['/home/user/work'])
+      expect(result.current.activeWorkspace).toBe('/home/user/work')
+      expect(result.current.discoveredRepos).toEqual(['/home/user/work/job'])
+    })
+
+    expect(window.electronAPI.removeWorkspace).toHaveBeenCalledWith('/home/user/personal')
   })
 })

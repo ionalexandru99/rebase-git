@@ -10,6 +10,14 @@ interface StoreSchema {
     maximized?: boolean
   }
   theme: 'dark' | 'light'
+  /** All saved workspace parent folders (each contains one or more git repos). */
+  workspaces: string[]
+  /** Which workspace is currently in focus in the empty-state picker. */
+  activeWorkspace: string | null
+  /**
+   * Legacy single-workspace field. Migrated into `workspaces` on first read.
+   * Kept around so a downgrade doesn't lose data.
+   */
   workingDirectory: string | null
   onboardingComplete: boolean
 }
@@ -22,10 +30,27 @@ export const store = new Store<StoreSchema>({
       height: 800
     },
     theme: 'dark',
+    workspaces: [],
+    activeWorkspace: null,
     workingDirectory: null,
     onboardingComplete: false
   }
 })
+
+/**
+ * Promote the legacy single `workingDirectory` into the `workspaces` array
+ * the first time anyone asks about workspaces. Idempotent.
+ */
+function migrateLegacyWorkingDirectory(): void {
+  const workspaces = store.get('workspaces')
+  if (workspaces.length > 0) return
+  const legacy = store.get('workingDirectory')
+  if (!legacy) return
+  store.set('workspaces', [legacy])
+  if (!store.get('activeWorkspace')) {
+    store.set('activeWorkspace', legacy)
+  }
+}
 
 export function addRecentRepo(path: string): void {
   const recent = store.get('recentRepos')
@@ -38,12 +63,64 @@ export function getRecentRepos(): string[] {
   return store.get('recentRepos')
 }
 
-export function getWorkingDirectory(): string | null {
-  return store.get('workingDirectory')
+export function getWorkspaces(): string[] {
+  migrateLegacyWorkingDirectory()
+  return store.get('workspaces')
 }
 
-export function setWorkingDirectory(path: string): void {
+export function addWorkspace(path: string): string[] {
+  migrateLegacyWorkingDirectory()
+  const workspaces = store.get('workspaces')
+  if (workspaces.includes(path)) {
+    store.set('activeWorkspace', path)
+    store.set('workingDirectory', path)
+    return workspaces
+  }
+  const next = [...workspaces, path]
+  store.set('workspaces', next)
+  store.set('activeWorkspace', path)
   store.set('workingDirectory', path)
+  return next
+}
+
+export function removeWorkspace(path: string): string[] {
+  migrateLegacyWorkingDirectory()
+  const workspaces = store.get('workspaces').filter((w) => w !== path)
+  store.set('workspaces', workspaces)
+  if (store.get('activeWorkspace') === path) {
+    const nextActive = workspaces[0] ?? null
+    store.set('activeWorkspace', nextActive)
+    store.set('workingDirectory', nextActive)
+  }
+  return workspaces
+}
+
+export function getActiveWorkspace(): string | null {
+  migrateLegacyWorkingDirectory()
+  return store.get('activeWorkspace')
+}
+
+export function setActiveWorkspace(path: string | null): void {
+  migrateLegacyWorkingDirectory()
+  store.set('activeWorkspace', path)
+  // Mirror into the legacy field so older code paths still work.
+  store.set('workingDirectory', path)
+}
+
+/**
+ * Legacy single-workspace alias. Returns the active workspace.
+ * Prefer `getActiveWorkspace()` in new code.
+ */
+export function getWorkingDirectory(): string | null {
+  return getActiveWorkspace()
+}
+
+/**
+ * Legacy alias: setting the working directory now also registers it as a
+ * workspace and marks it active.
+ */
+export function setWorkingDirectory(path: string): void {
+  addWorkspace(path)
 }
 
 export function isOnboardingComplete(): boolean {

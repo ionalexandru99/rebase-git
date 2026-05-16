@@ -8,14 +8,24 @@ function mockBaseAPI(
     workingDirectory: string | null
     recentRepos: string[]
     scanRepos: string[]
+    workspaces: string[]
   }> = {}
 ) {
+  const workspaces =
+    overrides.workspaces ?? (overrides.workingDirectory ? [overrides.workingDirectory] : [])
+  const active = overrides.workingDirectory ?? workspaces[0] ?? null
+
   vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(
     overrides.onboardingComplete ?? true
   )
-  vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(
-    overrides.workingDirectory ?? null
+  vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(active)
+  vi.mocked(window.electronAPI.getWorkspaces).mockResolvedValue(workspaces)
+  vi.mocked(window.electronAPI.getActiveWorkspace).mockResolvedValue(active)
+  vi.mocked(window.electronAPI.addWorkspace).mockImplementation(async (p) => [...workspaces, p])
+  vi.mocked(window.electronAPI.removeWorkspace).mockImplementation(async (p) =>
+    workspaces.filter((w) => w !== p)
   )
+  vi.mocked(window.electronAPI.setActiveWorkspace).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getRecentRepos).mockResolvedValue(overrides.recentRepos ?? [])
   vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
     success: true,
@@ -45,18 +55,72 @@ describe('App — onboarding gate', () => {
   })
 })
 
-describe('App — repo picker (no repo open)', () => {
-  it('shows the open-repo empty state with two Open Repository buttons', async () => {
+describe('App — tab shell', () => {
+  it('renders the Rebase brand in the tab bar after onboarding', async () => {
+    mockBaseAPI()
+
+    render(<App />)
+
+    await waitFor(() => {
+      // Brand lives in the TabBar now.
+      expect(screen.getByText('Rebase')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
+  })
+
+  it('starts with a single empty tab that shows the repo picker', async () => {
     mockBaseAPI({ workingDirectory: '/home/user/repos' })
 
     render(<App />)
 
     await waitFor(() => {
       expect(screen.getByText('Open a Repository')).toBeInTheDocument()
-      expect(screen.getAllByRole('button', { name: /Open Repository/i })).toHaveLength(2)
     })
+    // Only one Open Repository CTA now (the in-card one) — the per-tab toolbar
+    // for the empty state has no separate button.
+    expect(screen.getAllByRole('button', { name: /Open Repository/i })).toHaveLength(1)
   })
 
+  it('clicking "New tab" adds a tab and switches to it', async () => {
+    mockBaseAPI()
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /Open new tab/i })
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+  })
+
+  it('closes a tab when its close button is clicked', async () => {
+    mockBaseAPI()
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /Open new tab/i })
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+
+    const closeButtons = screen.getAllByRole('button', { name: /Close tab/i })
+    fireEvent.click(closeButtons[0])
+
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+  })
+
+  it('does not allow closing the last remaining tab', async () => {
+    mockBaseAPI()
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /Open new tab/i })
+    // Only one tab exists, so no close button should be rendered.
+    expect(screen.queryAllByRole('button', { name: /Close tab/i })).toHaveLength(0)
+  })
+})
+
+describe('App — repo picker (no repo open)', () => {
   it('lists workspace repos discovered by scanForRepos', async () => {
     mockBaseAPI({
       workingDirectory: '/home/user/repos',
@@ -150,9 +214,8 @@ describe('App — workspace (repo open)', () => {
 
     render(<App />)
 
-    // Two "Open Repository" buttons exist on the empty state (header + hero) — click either.
-    const buttons = await screen.findAllByRole('button', { name: /Open Repository/i })
-    fireEvent.click(buttons[0])
+    const openButton = await screen.findByRole('button', { name: /Open Repository/i })
+    fireEvent.click(openButton)
 
     await waitFor(() => {
       expect(window.electronAPI.openRepo).toHaveBeenCalled()
@@ -166,8 +229,8 @@ describe('App — workspace (repo open)', () => {
       expect(screen.getByRole('heading', { name: 'my-app' })).toBeInTheDocument()
     })
 
-    // Branch name appears in both the header chip and the dashboard stat card.
-    expect(screen.getAllByText('feature/ui').length).toBeGreaterThanOrEqual(1)
+    // Branch appears in the workspace toolbar.
+    expect(screen.getByText('feature/ui')).toBeInTheDocument()
     // 1 modified + 2 staged + 1 untracked = 4 changes
     expect(screen.getByText(/4 changes/)).toBeInTheDocument()
   })
@@ -181,7 +244,7 @@ describe('App — workspace (repo open)', () => {
     expect(screen.getByText('Initial commit')).toBeInTheDocument()
   })
 
-  it('switches the header CTA to "Switch Repo" once a repo is open', async () => {
+  it('shows a "Switch Repo" button on the workspace toolbar', async () => {
     await renderWithRepo()
 
     expect(await screen.findByRole('button', { name: /Switch Repo/i })).toBeInTheDocument()
@@ -199,13 +262,12 @@ describe('App — workspace (repo open)', () => {
     })
 
     render(<App />)
-    const buttons = await screen.findAllByRole('button', { name: /Open Repository/i })
-    fireEvent.click(buttons[0])
+    const openButton = await screen.findByRole('button', { name: /Open Repository/i })
+    fireEvent.click(openButton)
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'repo' })).toBeInTheDocument()
     })
-    // Clean badge appears in the dashboard once a clean repo is open.
     expect(screen.getAllByText('Clean').length).toBeGreaterThanOrEqual(1)
   })
 
@@ -218,8 +280,8 @@ describe('App — workspace (repo open)', () => {
     })
 
     render(<App />)
-    const buttons = await screen.findAllByRole('button', { name: /Open Repository/i })
-    fireEvent.click(buttons[0])
+    const openButton = await screen.findByRole('button', { name: /Open Repository/i })
+    fireEvent.click(openButton)
 
     await waitFor(() => {
       expect(screen.getByText('Not a git repository')).toBeInTheDocument()

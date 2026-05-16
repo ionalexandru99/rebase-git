@@ -34,6 +34,7 @@ Object.defineProperty(window, 'ResizeObserver', {
 const mockElectronAPI = {
   selectFolder: vi.fn(),
   openRepo: vi.fn(),
+  closeRepo: vi.fn(),
   getStatus: vi.fn(),
   stageFile: vi.fn(),
   unstageFile: vi.fn(),
@@ -44,6 +45,11 @@ const mockElectronAPI = {
   setStoreValue: vi.fn(),
   getWorkingDirectory: vi.fn(),
   setWorkingDirectory: vi.fn(),
+  getWorkspaces: vi.fn(),
+  addWorkspace: vi.fn(),
+  removeWorkspace: vi.fn(),
+  getActiveWorkspace: vi.fn(),
+  setActiveWorkspace: vi.fn(),
   getOnboardingComplete: vi.fn(),
   setOnboardingComplete: vi.fn(),
   scanForRepos: vi.fn()

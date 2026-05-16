@@ -10,9 +10,14 @@ const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperMo
 import { setupContextMenu } from './menu'
 import {
   addRecentRepo,
+  addWorkspace,
+  getActiveWorkspace,
   getRecentRepos,
   getWorkingDirectory,
+  getWorkspaces,
   isOnboardingComplete,
+  removeWorkspace,
+  setActiveWorkspace,
   setOnboardingComplete,
   setWorkingDirectory,
   store
@@ -32,7 +37,20 @@ function resolvePreload(): string {
 }
 
 let mainWindow: BrowserWindow | null = null
-let currentGit: ReturnType<typeof simpleGit> | null = null
+
+// One SimpleGit instance per opened repo path — tabs in the renderer can each
+// hold a different repo, and each operation passes the repoPath so the right
+// instance is used.
+const gitInstances = new Map<string, ReturnType<typeof simpleGit>>()
+
+function getGit(repoPath: string) {
+  let g = gitInstances.get(repoPath)
+  if (!g) {
+    g = simpleGit(repoPath)
+    gitInstances.set(repoPath, g)
+  }
+  return g
+}
 
 function createWindow(): void {
   const mainWindowState = windowStateKeeper({
@@ -151,19 +169,20 @@ function serializeBranches(
 
 ipcMain.handle('open-repo', async (_, repoPath: string) => {
   try {
-    currentGit = simpleGit(repoPath)
-    const isRepo = await currentGit.checkIsRepo()
+    const git = getGit(repoPath)
+    const isRepo = await git.checkIsRepo()
 
     if (!isRepo) {
+      gitInstances.delete(repoPath)
       return { success: false, error: 'Not a git repository' }
     }
 
     addRecentRepo(repoPath)
 
     const [status, log, branches] = await Promise.all([
-      currentGit.status(),
-      currentGit.log({ maxCount: 20 }),
-      currentGit.branchLocal()
+      git.status(),
+      git.log({ maxCount: 20 }),
+      git.branchLocal()
     ])
 
     return {
@@ -178,40 +197,49 @@ ipcMain.handle('open-repo', async (_, repoPath: string) => {
   }
 })
 
-ipcMain.handle('get-status', async () => {
-  if (!currentGit) return { success: false, error: 'No repository open' }
+ipcMain.handle('close-repo', (_, repoPath: string) => {
+  gitInstances.delete(repoPath)
+  return { success: true }
+})
+
+ipcMain.handle('get-status', async (_, repoPath: string) => {
+  const git = gitInstances.get(repoPath)
+  if (!git) return { success: false, error: 'No repository open' }
   try {
-    const status = await currentGit.status()
+    const status = await git.status()
     return { success: true, status: serializeStatus(status) }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 })
 
-ipcMain.handle('stage-file', async (_, file: string) => {
-  if (!currentGit) return { success: false, error: 'No repository open' }
+ipcMain.handle('stage-file', async (_, repoPath: string, file: string) => {
+  const git = gitInstances.get(repoPath)
+  if (!git) return { success: false, error: 'No repository open' }
   try {
-    await currentGit.add(file)
+    await git.add(file)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 })
 
-ipcMain.handle('unstage-file', async (_, file: string) => {
-  if (!currentGit) return { success: false, error: 'No repository open' }
+ipcMain.handle('unstage-file', async (_, repoPath: string, file: string) => {
+  const git = gitInstances.get(repoPath)
+  if (!git) return { success: false, error: 'No repository open' }
   try {
-    await currentGit.reset(['HEAD', file])
+    await git.reset(['HEAD', file])
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 })
 
-ipcMain.handle('commit', async (_, message: string) => {
-  if (!currentGit) return { success: false, error: 'No repository open' }
+ipcMain.handle('commit', async (_, repoPath: string, message: string) => {
+  const git = gitInstances.get(repoPath)
+  if (!git) return { success: false, error: 'No repository open' }
   try {
-    const result = await currentGit.commit(message)
+    const result = await git.commit(message)
     return {
       success: true,
       result: {
@@ -225,10 +253,11 @@ ipcMain.handle('commit', async (_, message: string) => {
   }
 })
 
-ipcMain.handle('get-log', async (_, maxCount = 20) => {
-  if (!currentGit) return { success: false, error: 'No repository open' }
+ipcMain.handle('get-log', async (_, repoPath: string, maxCount = 20) => {
+  const git = gitInstances.get(repoPath)
+  if (!git) return { success: false, error: 'No repository open' }
   try {
-    const log = await currentGit.log({ maxCount })
+    const log = await git.log({ maxCount })
     return { success: true, log: serializeLog(log) }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
@@ -253,6 +282,26 @@ ipcMain.handle('get-working-directory', () => {
 
 ipcMain.handle('set-working-directory', (_, dir: string) => {
   setWorkingDirectory(dir)
+})
+
+ipcMain.handle('get-workspaces', () => {
+  return getWorkspaces()
+})
+
+ipcMain.handle('add-workspace', (_, path: string) => {
+  return addWorkspace(path)
+})
+
+ipcMain.handle('remove-workspace', (_, path: string) => {
+  return removeWorkspace(path)
+})
+
+ipcMain.handle('get-active-workspace', () => {
+  return getActiveWorkspace()
+})
+
+ipcMain.handle('set-active-workspace', (_, path: string | null) => {
+  setActiveWorkspace(path)
 })
 
 ipcMain.handle('get-onboarding-complete', () => {

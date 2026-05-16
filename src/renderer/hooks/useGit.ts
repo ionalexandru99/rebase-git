@@ -29,6 +29,20 @@ export function useGit() {
     }
   }, [])
 
+  const closeRepo = useCallback(async () => {
+    if (!repoPath) return
+    try {
+      await window.electronAPI.closeRepo(repoPath)
+    } catch {
+      // best-effort; nothing else to do if the main process failed to evict
+    }
+    setRepoPath(null)
+    setStatus(null)
+    setLog(null)
+    setCurrentBranch('')
+    setError(null)
+  }, [repoPath])
+
   const refreshRepo = useCallback(async () => {
     if (!repoPath) return
     setLoading(true)
@@ -48,34 +62,37 @@ export function useGit() {
 
   const stageFile = useCallback(
     async (file: string) => {
-      const result = await window.electronAPI.stageFile(file)
+      if (!repoPath) return
+      const result = await window.electronAPI.stageFile(repoPath, file)
       if ((result as { success: boolean }).success) {
         await refreshRepo()
       }
     },
-    [refreshRepo]
+    [repoPath, refreshRepo]
   )
 
   const unstageFile = useCallback(
     async (file: string) => {
-      const result = await window.electronAPI.unstageFile(file)
+      if (!repoPath) return
+      const result = await window.electronAPI.unstageFile(repoPath, file)
       if ((result as { success: boolean }).success) {
         await refreshRepo()
       }
     },
-    [refreshRepo]
+    [repoPath, refreshRepo]
   )
 
   const commit = useCallback(
     async (message: string) => {
-      const result = await window.electronAPI.commit(message)
+      if (!repoPath) return false
+      const result = await window.electronAPI.commit(repoPath, message)
       if ((result as { success: boolean }).success) {
         await refreshRepo()
         return true
       }
       return false
     },
-    [refreshRepo]
+    [repoPath, refreshRepo]
   )
 
   return {
@@ -86,6 +103,7 @@ export function useGit() {
     loading,
     error,
     openRepo,
+    closeRepo,
     refreshRepo,
     stageFile,
     unstageFile,
