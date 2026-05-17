@@ -1,8 +1,9 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
 import type { GitStatus } from '../types'
 
 interface StatusPanelProps {
@@ -33,6 +34,7 @@ function FileRow({
 }) {
   const wrapRef = useRef<HTMLSpanElement>(null)
   const textRef = useRef<HTMLSpanElement>(null)
+  const [scrollDist, setScrollDist] = useState(0)
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: file name change must re-trigger DOM measurement
   useEffect(() => {
@@ -40,14 +42,13 @@ function FileRow({
     const text = textRef.current
     if (!wrap || !text) return
     const overflow = text.scrollWidth - wrap.clientWidth
-    if (overflow > 0) {
-      wrap.style.setProperty('--sp-scroll-dist', `-${overflow}px`)
-      wrap.setAttribute('data-scrollable', '')
-    } else {
-      wrap.style.removeProperty('--sp-scroll-dist')
-      wrap.removeAttribute('data-scrollable')
-    }
+    setScrollDist(overflow > 0 ? overflow : 0)
   }, [file])
+
+  const isScrollable = scrollDist > 0
+  const marqueeStyle: CSSProperties | undefined = isScrollable
+    ? ({ '--marquee-dist': `-${scrollDist}px` } as CSSProperties)
+    : undefined
 
   return (
     <li className="group flex h-7 items-center gap-2 rounded-md px-2 transition-colors duration-75 hover:bg-accent">
@@ -58,8 +59,16 @@ function FileRow({
       >
         {statusGlyph(kind)}
       </span>
-      <span className="sp-file-wrap text-sm text-foreground/85" ref={wrapRef}>
-        <span className="sp-file-text" ref={textRef}>
+      <span className="min-w-0 flex-1 overflow-hidden text-sm text-foreground/85" ref={wrapRef}>
+        <span
+          ref={textRef}
+          data-marquee={isScrollable ? '' : undefined}
+          className={cn(
+            'inline-block whitespace-nowrap',
+            isScrollable && 'motion-safe:group-hover:animate-marquee'
+          )}
+          style={marqueeStyle}
+        >
           {file}
         </span>
       </span>

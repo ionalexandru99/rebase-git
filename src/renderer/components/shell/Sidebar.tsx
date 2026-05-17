@@ -109,7 +109,7 @@ export function Sidebar({
   onSelectBranch
 }: SidebarProps) {
   return (
-    <div className="min-h-0 overflow-y-auto border-r border-border bg-sidebar py-2 pb-3.5">
+    <div className="flex w-61 shrink-0 flex-col overflow-y-auto border-r border-border bg-sidebar py-2 pb-3.5">
       <SidebarGroup label="Workspace">
         <SidebarItem
           glyph="◇"

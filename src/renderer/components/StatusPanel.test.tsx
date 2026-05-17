@@ -107,21 +107,19 @@ describe('StatusPanel', () => {
     expect(screen.getByText('1 pending change')).toBeInTheDocument()
   })
 
-  describe('file name scroll', () => {
+  describe('file name marquee', () => {
     afterEach(() => vi.restoreAllMocks())
 
-    it('does not set data-scrollable when the file name fits', () => {
+    it('does not animate when the file name fits', () => {
       // jsdom reports scrollWidth and clientWidth as 0, so overflow is 0
       const { container } = renderPanel({
         status: { current: 'main', modified: ['short.ts'], staged: [], not_added: [] }
       })
-      const wraps = container.querySelectorAll('.sp-file-wrap')
-      for (const wrap of wraps) {
-        expect(wrap).not.toHaveAttribute('data-scrollable')
-      }
+      const texts = container.querySelectorAll('[data-marquee]')
+      expect(texts.length).toBe(0)
     })
 
-    it('sets data-scrollable and --sp-scroll-dist when the file name overflows', () => {
+    it('animates and sets --marquee-dist when the file name overflows', () => {
       vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(400)
       vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(180)
 
@@ -134,9 +132,10 @@ describe('StatusPanel', () => {
         }
       })
 
-      const wrap = container.querySelector('.sp-file-wrap') as HTMLElement
-      expect(wrap).toHaveAttribute('data-scrollable')
-      expect(wrap.style.getPropertyValue('--sp-scroll-dist')).toBe('-220px')
+      const text = container.querySelector('[data-marquee]') as HTMLElement
+      expect(text).not.toBeNull()
+      expect(text.className).toMatch(/animate-marquee/)
+      expect(text.style.getPropertyValue('--marquee-dist')).toBe('-220px')
     })
   })
 })

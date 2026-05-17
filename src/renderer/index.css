@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./styles/shell.css";
 
 /* Tailwind v4's Vite plugin expands @import "tailwindcss" inline, so any other
    @import here ends up after rules and breaks CSS spec. */
@@ -46,15 +45,36 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --color-git-bg-primary: var(--background);
-  --color-git-bg-secondary: var(--card);
-  --color-git-bg-tertiary: var(--secondary);
-  --color-git-border: var(--border);
-  --color-git-text-primary: var(--foreground);
-  --color-git-text-secondary: var(--muted-foreground);
-  --color-git-accent: var(--primary);
-  --color-git-accent-hover: var(--primary);
-  --color-git-branch: var(--primary);
+  /* Direct mappings for the text rungs + status hues + accent washes that
+     components previously consumed via raw var() — exposing them as Tailwind
+     utilities (text-fg-soft, bg-add, border-accent-line, etc.) avoids
+     scattering `text-[color:var(--…)]` arbitrary tokens. */
+  --color-fg: var(--fg);
+  --color-fg-soft: var(--fg-soft);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-add: var(--add);
+  --color-del: var(--del);
+  --color-merge: var(--merge);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-line-strong: var(--line-strong);
+
+  /* Marquee: overflowing text scrolls left to reveal its tail.
+     Components set --marquee-dist (e.g. `-${overflow}px`) on the animating
+     element. Pair with motion-safe:animate-marquee. */
+  --animate-marquee: marquee 4s ease-in-out 0.8s infinite alternate;
+
+  @keyframes marquee {
+    0%,
+    15% {
+      transform: translateX(0);
+    }
+    85%,
+    100% {
+      transform: translateX(var(--marquee-dist, 0));
+    }
+  }
 }
 
 @layer base {

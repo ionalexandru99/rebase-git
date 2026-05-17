@@ -94,34 +94,41 @@ describe('Topbar', () => {
     expect(onPush).toHaveBeenCalledOnce()
   })
 
-  describe('branch name scroll', () => {
+  describe('branch name marquee', () => {
     afterEach(() => vi.restoreAllMocks())
 
-    it('does not set data-scrollable when the branch name fits', () => {
+    function findMarqueeText(container: HTMLElement) {
+      const text = container.querySelector('[data-marquee-wrap] > span') as HTMLElement | null
+      if (!text) throw new Error('marquee text element not found')
+      return text
+    }
+
+    it('does not animate when the branch name fits', () => {
       // jsdom reports scrollWidth and clientWidth as 0, so overflow is 0
       const { container } = renderTopbar({ branch: 'main' })
-      const wrap = container.querySelector('.tb-branch-wrap')
-      expect(wrap).not.toHaveAttribute('data-scrollable')
+      const text = findMarqueeText(container)
+      expect(text).not.toHaveAttribute('data-marquee')
+      expect(text.className).not.toMatch(/animate-marquee/)
     })
 
-    it('sets data-scrollable and --tb-scroll-dist when the branch name overflows', () => {
+    it('animates and sets --marquee-dist when the branch name overflows', () => {
       vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(300)
       vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(160)
 
       const { container } = renderTopbar({ branch: 'feature/very-long-branch-name' })
-      const wrap = container.querySelector('.tb-branch-wrap') as HTMLElement
+      const text = findMarqueeText(container)
 
-      expect(wrap).toHaveAttribute('data-scrollable')
-      expect(wrap.style.getPropertyValue('--tb-scroll-dist')).toBe('-140px')
+      expect(text).toHaveAttribute('data-marquee')
+      expect(text.className).toMatch(/animate-marquee/)
+      expect(text.style.getPropertyValue('--marquee-dist')).toBe('-140px')
     })
 
-    it('removes data-scrollable when the branch changes to one that fits', () => {
+    it('stops animating when the branch changes to one that fits', () => {
       vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(300)
       vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(160)
 
       const { container, rerender } = renderTopbar({ branch: 'feature/very-long-branch-name' })
-      const wrap = container.querySelector('.tb-branch-wrap') as HTMLElement
-      expect(wrap).toHaveAttribute('data-scrollable')
+      expect(findMarqueeText(container)).toHaveAttribute('data-marquee')
 
       // Restore normal dimensions so the re-rendered branch fits
       vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(40)
@@ -137,7 +144,7 @@ describe('Topbar', () => {
         />
       )
 
-      expect(wrap).not.toHaveAttribute('data-scrollable')
+      expect(findMarqueeText(container)).not.toHaveAttribute('data-marquee')
     })
   })
 })

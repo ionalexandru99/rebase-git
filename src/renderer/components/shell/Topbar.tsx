@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 interface TopbarProps {
   repoName: string
@@ -24,6 +26,7 @@ export function Topbar({
   const initial = repoName.charAt(0).toUpperCase() || 'R'
   const wrapRef = useRef<HTMLSpanElement>(null)
   const textRef = useRef<HTMLSpanElement>(null)
+  const [scrollDist, setScrollDist] = useState(0)
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: branch name change must re-trigger DOM measurement
   useEffect(() => {
@@ -31,71 +34,85 @@ export function Topbar({
     const text = textRef.current
     if (!wrap || !text) return
 
-    function computeOverflow() {
+    function compute() {
       if (!wrap || !text) return
       const overflow = text.scrollWidth - wrap.clientWidth
-      if (overflow > 0) {
-        wrap.style.setProperty('--tb-scroll-dist', `-${overflow}px`)
-        wrap.setAttribute('data-scrollable', '')
-      } else {
-        wrap.style.removeProperty('--tb-scroll-dist')
-        wrap.removeAttribute('data-scrollable')
-      }
+      setScrollDist(overflow > 0 ? overflow : 0)
     }
 
-    computeOverflow()
-    const ro = new ResizeObserver(computeOverflow)
+    compute()
+    const ro = new ResizeObserver(compute)
     ro.observe(wrap)
     return () => ro.disconnect()
   }, [branch])
 
+  const isScrollable = scrollDist > 0
+  const marqueeStyle: CSSProperties | undefined = isScrollable
+    ? ({ '--marquee-dist': `-${scrollDist}px` } as CSSProperties)
+    : undefined
+
   return (
-    <div className="tb">
+    <div className="flex h-11 shrink-0 select-none items-center gap-2.5 px-3.5">
       <div className="flex min-w-0 items-center gap-2 px-2 py-1" title={repoPath ?? undefined}>
-        <div className="tb-repo-icon">{initial}</div>
-        <div className="tb-repo-name">{repoName}</div>
-        {repoPath && <div className="tb-repo-path">{repoPath}</div>}
+        <div className="grid size-5.5 shrink-0 place-items-center rounded-md bg-gradient-to-br from-[#8eb6d4] to-[#4d7ea3] text-xs font-bold text-[#131a20]">
+          {initial}
+        </div>
+        <div className="shrink-0 font-semibold">{repoName}</div>
+        {repoPath && <div className="min-w-0 truncate text-xs text-fg-muted">{repoPath}</div>}
       </div>
-      <div className="tb-divider" />
-      <button type="button" className="tb-branch">
-        <span className="dot" />
-        <span className="tb-branch-wrap" ref={wrapRef}>
-          <span className="tb-branch-text text-xs" ref={textRef}>
+
+      <div aria-hidden className="h-4.5 w-px shrink-0 bg-border" />
+
+      <button
+        type="button"
+        className="inline-flex max-w-65 shrink-0 cursor-default items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground transition-colors duration-75 hover:border-line-strong hover:bg-popover"
+      >
+        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
+        <span ref={wrapRef} data-marquee-wrap className="min-w-0 overflow-hidden">
+          <span
+            ref={textRef}
+            data-marquee={isScrollable ? '' : undefined}
+            className={cn(
+              'inline-block whitespace-nowrap',
+              isScrollable && 'motion-safe:animate-marquee'
+            )}
+            style={marqueeStyle}
+          >
             {branch}
           </span>
         </span>
         {ahead > 0 && (
-          <span className="tb-sync">
-            <span className="arr">↑</span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-fg-soft">
+            <span className="text-primary">↑</span>
             {ahead}
           </span>
         )}
         {behind > 0 && (
-          <span className="tb-sync">
-            <span className="arr" style={{ color: 'var(--del)' }}>
-              ↓
-            </span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-fg-soft">
+            <span className="text-del">↓</span>
             {behind}
           </span>
         )}
-        <span className="text-xs text-[color:var(--fg-faint)]">▾</span>
+        <span className="text-xs text-fg-faint">▾</span>
       </button>
-      <div className="tb-spacer" />
-      <div className="tb-actions">
-        <button type="button" className="tb-btn" onClick={onFetch}>
+
+      <div className="flex-1" />
+
+      <div className="flex shrink-0 items-center gap-0.5">
+        <Button variant="ghost" size="sm" onClick={onFetch}>
           Fetch
-        </button>
-        <button type="button" className="tb-btn" onClick={onPull}>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onPull}>
           Pull
-        </button>
-        <button
-          type="button"
-          className={`tb-btn ${ahead > 0 ? 'primary' : ''}`}
+        </Button>
+        <Button
+          variant={ahead > 0 ? 'default' : 'ghost'}
+          size="sm"
           onClick={onPush}
           disabled={ahead === 0}
         >
           {ahead > 0 ? `Push ${ahead}` : 'Push'}
-        </button>
+        </Button>
       </div>
     </div>
   )
