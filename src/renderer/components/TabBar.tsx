@@ -50,7 +50,7 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarPr
           onClick={onNew}
           aria-label="Open new tab"
           title="New tab (⌘T)"
-          className="no-drag mx-1 mb-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-75 hover:bg-accent hover:text-foreground"
+          className="no-drag mx-1 mb-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <Plus className="size-4" strokeWidth={2} />
         </button>
@@ -78,7 +78,7 @@ function TabItem({ tab, isActive, showLeadingDivider, canClose, onSelect, onClos
   return (
     <div
       className={cn(
-        'group relative flex h-8.5 min-w-40 max-w-60 items-center gap-2 rounded-t-lg pl-3 pr-1.5 transition-colors duration-75',
+        'group relative flex h-8.5 min-w-40 max-w-60 items-center gap-2 rounded-t-lg pl-3 pr-1.5',
         isActive
           ? 'z-10 bg-background text-foreground'
           : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground'
@@ -102,7 +102,7 @@ function TabItem({ tab, isActive, showLeadingDivider, canClose, onSelect, onClos
             onClose()
           }
         }}
-        className="flex min-w-0 flex-1 items-center gap-2 border-none bg-transparent py-0 text-left text-sm transition-colors"
+        className="flex min-w-0 flex-1 items-center gap-2 border-none bg-transparent py-0 text-left text-sm"
       >
         <GitBranch
           className={cn(
@@ -119,7 +119,7 @@ function TabItem({ tab, isActive, showLeadingDivider, canClose, onSelect, onClos
           onClick={onClose}
           aria-label={`Close tab ${tab.title}`}
           className={cn(
-            'inline-flex size-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-secondary hover:text-foreground',
+            'inline-flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-secondary hover:text-foreground',
             isActive
               ? 'text-muted-foreground'
               : 'text-transparent group-hover:text-muted-foreground'

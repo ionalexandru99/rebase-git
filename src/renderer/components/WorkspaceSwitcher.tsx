@@ -33,7 +33,7 @@ export function WorkspaceSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Switch workspace"
-        className="group flex h-8 w-full items-center gap-2 rounded-md border border-border bg-card px-2.5 text-left text-sm text-foreground/85 transition-colors duration-75 hover:bg-accent hover:text-foreground focus-visible:border-primary/40 focus-visible:outline-none"
+        className="group flex h-8 w-full items-center gap-2 rounded-md border border-border bg-card px-2.5 text-left text-sm text-foreground/85 hover:bg-accent hover:text-foreground focus-visible:border-primary/40 focus-visible:outline-none"
       >
         <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={2} />
         <span className="min-w-0 flex-1 truncate font-medium">
@@ -43,7 +43,7 @@ export function WorkspaceSwitcher({
           <span className="truncate text-xs text-muted-foreground/60">{activeWorkspace}</span>
         )}
         <ChevronsUpDown
-          className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground"
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground"
           strokeWidth={2}
         />
       </DropdownMenuTrigger>

@@ -65,7 +65,7 @@ export function Topbar({
 
       <button
         type="button"
-        className="inline-flex max-w-65 shrink-0 cursor-default items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground transition-colors duration-75 hover:border-line-strong hover:bg-popover"
+        className="inline-flex max-w-65 shrink-0 cursor-default items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground hover:border-line-strong hover:bg-popover"
       >
         <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-primary" />
         <span ref={wrapRef} data-marquee-wrap className="min-w-0 overflow-hidden">

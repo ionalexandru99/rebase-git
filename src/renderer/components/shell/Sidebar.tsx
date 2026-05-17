@@ -35,7 +35,7 @@ function SidebarItem({ glyph, name, meta, active, current, ahead, behind, onClic
       type="button"
       onClick={onClick}
       className={cn(
-        'group relative flex w-full cursor-default select-none items-center gap-2 px-3.5 py-1 text-left text-xs transition-colors duration-75',
+        'group relative flex w-full cursor-default select-none items-center gap-2 px-3.5 py-1 text-left text-xs',
         active
           ? 'bg-white/[0.08] text-foreground'
           : 'text-[color:var(--fg-soft)] hover:bg-accent hover:text-foreground'
@@ -89,7 +89,7 @@ function SidebarGroup({
             type="button"
             onClick={action.onClick}
             aria-label={action.ariaLabel}
-            className="inline-flex size-4 cursor-default items-center justify-center rounded-sm text-[color:var(--fg-faint)] transition-colors duration-75 hover:bg-accent hover:text-[color:var(--fg-soft)]"
+            className="inline-flex size-4 cursor-default items-center justify-center rounded-sm text-[color:var(--fg-faint)] hover:bg-accent hover:text-[color:var(--fg-soft)]"
           >
             +
           </button>

@@ -1,15 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { HistoryPanel, layoutCommits, parseRefs } from '@/components/HistoryPanel'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import type { GitLog, GitLogEntry } from '@/types'
 
 function renderPanel(log: GitLog | null, loading = false) {
-  return render(
-    <TooltipProvider>
-      <HistoryPanel log={log} loading={loading} />
-    </TooltipProvider>
-  )
+  return render(<HistoryPanel log={log} loading={loading} />)
 }
 
 function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {

@@ -190,8 +190,7 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
   const deferredFilter = useDeferredValue(filter)
   const commits: GitLogEntry[] = deferredLog?.all ?? []
 
-  const { rows, maxLanes } = useMemo(() => layoutCommits(commits), [commits])
-  const railWidth = Math.max(28, RAIL_PAD * 2 + Math.max(maxLanes - 1, 0) * COL_W)
+  const { rows } = useMemo(() => layoutCommits(commits), [commits])
 
   const visibleSet = useMemo(() => {
     const q = deferredFilter.trim().toLowerCase()
@@ -211,7 +210,6 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
   }, [deferredFilter, commits])
 
   const totalHeight = rows.length * ROW_H
-  const gridTemplate = `${railWidth}px minmax(220px,1fr) 150px 110px 64px`
 
   // Virtualization: track scroll position + viewport height of the list
   // container, and only render rows in [startIdx, endIdx). We initialize
@@ -256,6 +254,27 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
   const startIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN)
   const endIdx = Math.min(rows.length, Math.ceil((scrollTop + viewportH) / ROW_H) + OVERSCAN)
 
+  // Rail width tracks the max lane count *currently in the rendered buffer*.
+  // When you scroll into a complex merge region the graph widens; when you
+  // scroll into linear history it narrows and the subject column reclaims the
+  // space. The buffer includes overscan so the width doesn't jitter on every
+  // row that enters or leaves the strict viewport.
+  const localMaxLanes = useMemo(() => {
+    let max = 0
+    for (let i = startIdx; i < endIdx; i++) {
+      const r = rows[i]
+      if (!r) continue
+      const m = Math.max(r.incoming.length, r.outgoing.length, r.commitLane + 1)
+      if (m > max) max = m
+    }
+    return max
+  }, [rows, startIdx, endIdx])
+  const railWidth = Math.max(28, RAIL_PAD * 2 + Math.max(localMaxLanes - 1, 0) * COL_W)
+  // Subject (column 2) takes the leftover space and has a low min so it can
+  // shrink when the window is narrow. Author/Date/SHA are compact fixed-widths
+  // and truncate gracefully past their bounds.
+  const gridTemplate = `${railWidth}px minmax(100px,1fr) 110px 80px 56px`
+
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card">
       <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
@@ -293,7 +312,7 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
 
       {commits.length > 0 && (
         <div
-          className="grid h-6 shrink-0 items-center gap-3 border-b border-border px-0 text-xs font-semibold uppercase tracking-wider text-[color:var(--fg-faint)]"
+          className="grid h-6 shrink-0 items-center gap-2 border-b border-border px-0 text-xs font-semibold uppercase tracking-wider text-[color:var(--fg-faint)]"
           style={{ gridTemplateColumns: gridTemplate }}
         >
           <span className="pl-3">Graph</span>
@@ -556,7 +575,7 @@ const CommitRow = memo(function CommitRow({
   const refs = parseRefs(c.refs)
   return (
     <li
-      className="absolute inset-x-0 grid items-center gap-3 px-0 hover:bg-accent"
+      className="absolute inset-x-0 grid items-center gap-2 px-0 hover:bg-accent"
       style={{
         top: 0,
         height: ROW_H,
@@ -630,7 +649,7 @@ function SkeletonRows({ gridTemplate, viewportH }: { gridTemplate: string; viewp
         <li
           // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
           key={i}
-          className="grid items-center gap-3 px-0"
+          className="grid items-center gap-2 px-0"
           style={{ height: ROW_H, gridTemplateColumns: gridTemplate }}
         >
           <span aria-hidden className="flex h-full items-center pl-3">

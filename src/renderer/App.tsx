@@ -17,7 +17,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Toaster } from '@/components/ui/sonner'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher'
 import { useGit } from '@/hooks/useGit'
 import { useOnboarding } from '@/hooks/useOnboarding'
@@ -113,7 +112,7 @@ function App() {
 
   if (!onboarding.onboardingComplete) {
     return (
-      <TooltipProvider>
+      <>
         <OnboardingScreen
           workingDirectory={onboarding.workingDirectory}
           discoveredRepos={onboarding.discoveredRepos}
@@ -128,12 +127,12 @@ function App() {
           }}
         />
         <Toaster />
-      </TooltipProvider>
+      </>
     )
   }
 
   return (
-    <TooltipProvider>
+    <>
       <div className="flex h-screen flex-col bg-background text-foreground">
         <TabBar
           tabs={tabDescriptors}
@@ -170,7 +169,7 @@ function App() {
         </div>
       </div>
       <Toaster />
-    </TooltipProvider>
+    </>
   )
 }
 

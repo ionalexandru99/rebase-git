@@ -80,7 +80,7 @@ export function OnboardingScreen({
                           <li key={repo}>
                             <button
                               type="button"
-                              className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-sm text-foreground/85 transition-colors duration-75 hover:bg-accent hover:text-foreground"
+                              className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-sm text-foreground/85 hover:bg-accent hover:text-foreground"
                               onClick={() => onOpenRepo(repo)}
                             >
                               <GitBranch

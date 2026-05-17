@@ -51,7 +51,7 @@ function FileRow({
     : undefined
 
   return (
-    <li className="group flex h-7 items-center gap-2 rounded-md px-2 transition-colors duration-75 hover:bg-accent">
+    <li className="group flex h-7 items-center gap-2 rounded-md px-2 hover:bg-accent">
       <span
         role="img"
         aria-label={kind}
@@ -75,7 +75,7 @@ function FileRow({
       <Button
         variant="ghost"
         size="sm"
-        className="h-5 shrink-0 rounded-sm px-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
+        className="h-5 shrink-0 rounded-sm px-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground opacity-0 hover:bg-secondary hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
         onClick={() => onAction(file)}
       >
         {actionLabel}
