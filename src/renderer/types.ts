@@ -30,5 +30,6 @@ export interface RepoData {
   status: GitStatus
   branches: GitBranches
   remotes: Record<string, string>
+  defaultBranch?: string
   path: string
 }

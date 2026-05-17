@@ -194,49 +194,6 @@ function serializeLog(
   }
 }
 
-// Stash entries aren't reachable from any branch ref, so `git log --branches
-// --remotes` skips them. Pull them in separately, and keep only the first
-// parent (the commit they were created from) — the other parents are internal
-// wip-on-index / wip-on-untracked commits we don't want cluttering the graph.
-async function getStashEntries(git: ReturnType<typeof simpleGit>): Promise<SerializableLogEntry[]> {
-  try {
-    const raw = await git.raw(['stash', 'list', '--format=%H%x1F%P%x1F%aI%x1F%aN%x1F%s%x1F%gd'])
-    if (!raw.trim()) return []
-    return raw
-      .trim()
-      .split('\n')
-      .map((line): SerializableLogEntry | null => {
-        const [hash, parentsStr, date, author_name, message, gd] = line.split('\x1F')
-        if (!hash) return null
-        const firstParent = (parentsStr ?? '').split(' ').filter(Boolean)[0] ?? ''
-        return {
-          hash,
-          message: message ?? '',
-          author_name: author_name ?? '',
-          date: date ?? '',
-          parents: firstParent ? [firstParent] : [],
-          refs: gd ?? ''
-        }
-      })
-      .filter((e): e is SerializableLogEntry => e !== null)
-  } catch {
-    return []
-  }
-}
-
-function mergeLogWithStashes(
-  log: SerializableLog,
-  stashes: SerializableLogEntry[]
-): SerializableLog {
-  if (stashes.length === 0) return log
-  const seen = new Set(log.all.map((e) => e.hash))
-  const extra = stashes.filter((s) => !seen.has(s.hash))
-  const merged = [...log.all, ...extra].sort((a, b) =>
-    a.date < b.date ? 1 : a.date > b.date ? -1 : 0
-  )
-  return { total: merged.length, all: merged }
-}
-
 function serializeBranches(
   branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branchLocal']>>
 ): SerializableBranches {
@@ -256,6 +213,25 @@ function serializeRemotes(
     if (r.refs?.fetch) result[r.name] = r.refs.fetch
   }
   return result
+}
+
+// Resolve the repo's "default branch" — the one the team treats as trunk.
+// `origin/HEAD` is set by `git clone` to point at the remote's HEAD ref, so
+// it's the canonical answer for any cloned repo (handles non-standard names
+// like `dev`, `trunk`, `development` without guessing). Falls back to the
+// locally checked-out branch when there's no origin or no symref.
+async function resolveDefaultBranch(
+  git: ReturnType<typeof simpleGit>,
+  currentLocal: string | undefined
+): Promise<string | undefined> {
+  try {
+    const out = await git.raw(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
+    const name = out.trim()
+    if (name.startsWith('origin/')) return name.slice('origin/'.length)
+  } catch {
+    // origin/HEAD not set (uncommon clone state or no origin remote)
+  }
+  return currentLocal && currentLocal !== 'HEAD' ? currentLocal : undefined
 }
 
 ipcMain.handle('open-repo', async (_, repoPath: string) => {
@@ -278,12 +254,14 @@ ipcMain.handle('open-repo', async (_, repoPath: string) => {
       git.branchLocal(),
       git.getRemotes(true)
     ])
+    const defaultBranch = await resolveDefaultBranch(git, branches.current)
 
     return {
       success: true,
       status: serializeStatus(status),
       branches: serializeBranches(branches),
       remotes: serializeRemotes(remotes),
+      defaultBranch,
       path: repoPath
     }
   } catch (error) {
@@ -359,8 +337,8 @@ ipcMain.handle('get-log', async (_, repoPath: string, maxCount?: number) => {
       ...GRAPH_LOG_FLAGS
     }
     if (typeof maxCount === 'number' && maxCount > 0) logOptions.maxCount = maxCount
-    const [log, stashes] = await Promise.all([git.log(logOptions), getStashEntries(git)])
-    return { success: true, log: mergeLogWithStashes(serializeLog(log), stashes) }
+    const log = await git.log(logOptions)
+    return { success: true, log: serializeLog(log) }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
@@ -503,22 +481,10 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
         return
       }
 
-      // Flush remaining commits, then append stashes, then send the terminal
-      // done marker.
+      // Flush remaining commits, then send the terminal done marker. Stash
+      // entries are intentionally omitted from the graph for now; they'll be
+      // rendered as a separate UI surface later.
       send(false)
-      try {
-        const git = gitInstances.get(repoPath) ?? simpleGit(repoPath)
-        const stashes = await getStashEntries(git)
-        if (stashes.length > 0 && !webContents.isDestroyed()) {
-          webContents.send('log-chunk', {
-            repoPath,
-            commits: stashes,
-            done: false
-          })
-        }
-      } catch {
-        // stashes are best-effort
-      }
       if (!webContents.isDestroyed()) {
         webContents.send('log-chunk', { repoPath, commits: [], done: true })
       }

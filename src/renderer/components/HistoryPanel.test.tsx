@@ -142,6 +142,11 @@ describe('parseRefs', () => {
     const refs = parseRefs('stash@{0}')
     expect(refs).toEqual([{ label: 'stash@{0}', kind: 'stash' }])
   })
+
+  it('drops origin/HEAD symref so it never renders as a pill', () => {
+    const refs = parseRefs('HEAD -> main, origin/main, origin/HEAD', new Set(['origin']))
+    expect(refs).toEqual([{ label: 'main', kind: 'branch' }])
+  })
 })
 
 describe('layoutCommits', () => {
@@ -196,5 +201,37 @@ describe('layoutCommits', () => {
     expect(rows[0].outgoing).toContain('c2')
     expect(rows[0].outgoing).toContain('c3')
     expect(rows[3].outgoing).toEqual([])
+  })
+
+  it('produces the same layout incrementally as in one pass', () => {
+    // Mixed merge + linear topology — exercises lane state hand-off across
+    // the chunk boundary.
+    const all: GitLogEntry[] = [
+      entry({ hash: 'a', parents: ['b', 'c'] }),
+      entry({ hash: 'b', parents: ['d'] }),
+      entry({ hash: 'c', parents: ['d'] }),
+      entry({ hash: 'd', parents: ['e'] }),
+      entry({ hash: 'e', parents: [] })
+    ]
+
+    const full = layoutCommits(all)
+
+    const prefix = all.slice(0, 2)
+    const step1 = layoutCommits(prefix)
+    const step2 = layoutCommits(all, step1)
+
+    expect(step2.maxLanes).toBe(full.maxLanes)
+    expect(step2.rows.map((r) => r.commitLane)).toEqual(full.rows.map((r) => r.commitLane))
+    expect(step2.rows.map((r) => r.outgoing)).toEqual(full.rows.map((r) => r.outgoing))
+    expect(step2.rows.map((r) => r.incoming)).toEqual(full.rows.map((r) => r.incoming))
+  })
+
+  it('rebuilds from scratch when the cached prefix no longer matches', () => {
+    const cached = layoutCommits([entry({ hash: 'x', parents: [] })])
+    // Same length but different first hash → must not reuse the stale prefix.
+    const fresh = layoutCommits([entry({ hash: 'y', parents: [] })], cached)
+
+    expect(fresh.rows).toHaveLength(1)
+    expect(fresh.rows[0].commit.hash).toBe('y')
   })
 })

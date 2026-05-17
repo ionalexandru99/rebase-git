@@ -11,11 +11,9 @@ import {
   useState
 } from 'react'
 import { RemoteProviderIcon } from '@/components/RemoteProviderIcon'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { GitLog, GitLogEntry } from '../types'
 
@@ -23,6 +21,10 @@ interface HistoryPanelProps {
   log: GitLog | null
   loading: boolean
   remotes?: Record<string, string>
+  // Branch name treated as trunk. Resolved by the main process from
+  // `origin/HEAD` (canonical) with a fallback to the locally checked-out
+  // branch — works for repos using `main`, `master`, `dev`, `trunk`, etc.
+  defaultBranch?: string
 }
 
 // Derive layout constants from the current root font size so the row pitch,
@@ -39,9 +41,10 @@ const COL_W = Math.round(ROOT_PX) // 16
 const RAIL_PAD = Math.round(ROOT_PX * 0.875) // 14
 const DOT_R = ROOT_PX * 0.25 // 4
 // Number of rows to render outside the visible window in either direction.
-// Generous enough to swallow fast trackpad / scrollbar-jump scrolls without
-// exposing empty rows before the next frame catches up.
-const OVERSCAN = 60
+// Sized to cover a scrollbar-drag jump of ~9600px (300 × 32) before React
+// commits the next slice. Smaller buffers leave the viewport empty during
+// fast flings; larger buffers cost more mount work per buffer-shift.
+const OVERSCAN = 300
 
 interface ColWidths {
   author: number
@@ -165,7 +168,12 @@ export function parseRefs(refs: string, remoteNames?: Set<string>): ParsedRef[] 
         const first = part.slice(0, part.indexOf('/'))
         const haveRemotes = remoteNames && remoteNames.size > 0
         const isRemote = haveRemotes ? remoteNames.has(first) : first === 'origin'
-        if (isRemote) return { label: part, kind: 'remote' }
+        if (isRemote) {
+          // Drop `<remote>/HEAD` symrefs — they're metadata pointing at the
+          // remote's default branch, not a branch the user wants to see.
+          if (part.slice(first.length + 1) === 'HEAD') return null
+          return { label: part, kind: 'remote' }
+        }
       }
       return { label: part, kind: 'branch' }
     })
@@ -180,19 +188,60 @@ interface RowLayout {
   outgoing: (string | null)[]
 }
 
+export interface LayoutResult {
+  rows: RowLayout[]
+  maxLanes: number
+  // Lane state at the end of the walk. Persisted so a follow-up streaming
+  // chunk can resume without re-walking from the first commit.
+  lanesAfter: (string | null)[]
+  // The exact input array layoutCommits was called with. Used by `prev` to
+  // confirm the new input extends the cached one (same prefix).
+  commits: GitLogEntry[]
+  // Hash that was pre-seeded onto lane 0 (typically the main/master/HEAD
+  // tip). Cache invalidates when this changes between calls.
+  trunkHash?: string
+}
+
 // Compute per-row lane state by walking commits in display order.
 // Each lane "waits" for a specific parent hash. When a commit matches one of
 // the waiting hashes, its dot occupies that lane; otherwise it gets a fresh
 // lane (first null slot, else appended).
-export function layoutCommits(commits: GitLogEntry[]): {
-  rows: RowLayout[]
-  maxLanes: number
-} {
+//
+// Incremental mode: pass the previous result as `prev`. If `commits` extends
+// it (cheap prefix check via first + last cached hashes), the walk resumes
+// from where `prev` ended — useful while the streaming log is still flowing.
+//
+// `trunkHash`: if provided, lane 0 is reserved for this commit so its
+// first-parent trail anchors the leftmost rail regardless of date-order.
+export function layoutCommits(
+  commits: GitLogEntry[],
+  prev?: LayoutResult,
+  trunkHash?: string
+): LayoutResult {
+  let startIdx = 0
   let lanes: (string | null)[] = []
-  const rows: RowLayout[] = []
+  let rows: RowLayout[] = []
   let maxLanes = 0
 
-  for (const c of commits) {
+  if (
+    prev &&
+    prev.trunkHash === trunkHash &&
+    prev.commits.length > 0 &&
+    commits.length >= prev.commits.length &&
+    commits[0]?.hash === prev.commits[0]?.hash &&
+    commits[prev.commits.length - 1]?.hash === prev.commits[prev.commits.length - 1]?.hash
+  ) {
+    startIdx = prev.commits.length
+    lanes = prev.lanesAfter.slice()
+    rows = prev.rows.slice()
+    maxLanes = prev.maxLanes
+  } else if (trunkHash) {
+    lanes = [trunkHash]
+    maxLanes = 1
+  }
+
+  for (let idx = startIdx; idx < commits.length; idx++) {
+    const c = commits[idx]
     const incoming = [...lanes]
 
     let commitLane = lanes.indexOf(c.hash)
@@ -227,7 +276,7 @@ export function layoutCommits(commits: GitLogEntry[]): {
     rows.push({ commit: c, commitLane, incoming, outgoing })
   }
 
-  return { rows, maxLanes }
+  return { rows, maxLanes, lanesAfter: lanes, commits, trunkHash }
 }
 
 // Branch-type pills (HEAD, branch, remote) borrow the commit's lane color so
@@ -261,7 +310,7 @@ function pillStyle(kind: ParsedRef['kind'], laneHex: string): React.CSSPropertie
   return undefined
 }
 
-export function HistoryPanel({ log, loading, remotes = {} }: HistoryPanelProps) {
+export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: HistoryPanelProps) {
   const [filter, setFilter] = useState('')
   // Memoized so CommitRow's memo equality on `remoteNames` stays stable.
   const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
@@ -273,7 +322,36 @@ export function HistoryPanel({ log, loading, remotes = {} }: HistoryPanelProps) 
   const deferredFilter = useDeferredValue(filter)
   const commits: GitLogEntry[] = deferredLog?.all ?? []
 
-  const { rows } = useMemo(() => layoutCommits(commits), [commits])
+  // Resolve the "trunk" commit — the tip of `defaultBranch`. Anchors lane 0
+  // so the team's primary branch (whether `main`, `master`, `dev`, `trunk`,
+  // etc.) sits on the leftmost rail regardless of date order.
+  //
+  // Only decorated commits have a non-empty refs string, so this loop
+  // short-circuits on the vast majority of entries even in a 76k-commit log.
+  const trunkHash = useMemo(() => {
+    if (!defaultBranch) return undefined
+    for (const c of commits) {
+      if (!c.refs) continue
+      if (!c.refs.includes(defaultBranch)) continue
+      const parsed = parseRefs(c.refs, remoteNames)
+      if (parsed.some((r) => r.kind === 'branch' && r.label === defaultBranch)) {
+        return c.hash
+      }
+    }
+    return undefined
+  }, [commits, remoteNames, defaultBranch])
+
+  // Layout cache: streaming log chunks each produce a fresh `commits` array
+  // that extends the previous one. The ref lets layoutCommits walk only the
+  // new tail. Invalidates automatically when commits[0]/last hash diverges
+  // (e.g. repo switch, history rewrite) or when trunkHash changes (e.g. main
+  // ref arrives in a later chunk).
+  const layoutCacheRef = useRef<LayoutResult | null>(null)
+  const { rows } = useMemo(() => {
+    const result = layoutCommits(commits, layoutCacheRef.current ?? undefined, trunkHash)
+    layoutCacheRef.current = result
+    return result
+  }, [commits, trunkHash])
 
   const visibleSet = useMemo(() => {
     const q = deferredFilter.trim().toLowerCase()
@@ -419,157 +497,147 @@ export function HistoryPanel({ log, loading, remotes = {} }: HistoryPanelProps) 
   )
 
   return (
-    <TooltipProvider delayDuration={150}>
-      <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border bg-card">
-        <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b px-3">
-          <div className="flex min-w-0 items-baseline gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
-              Timeline
-            </h2>
-            <span className="truncate text-xs text-muted-foreground">
-              {log?.total
-                ? `${log.total} commit${log.total === 1 ? '' : 's'} · all branches`
-                : 'Repository timeline'}
-            </span>
-          </div>
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border bg-card">
+      <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b px-3">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+            Timeline
+          </h2>
+          <span className="truncate text-xs text-muted-foreground">
+            {log?.total
+              ? `${log.total} commit${log.total === 1 ? '' : 's'} · all branches`
+              : 'Repository timeline'}
+          </span>
+        </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            {commits.length > 0 && (
-              <Input
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="filter commits…"
-                className="h-7 w-40"
-              />
-            )}
-            {loading && (
-              <Badge
-                variant="outline"
-                className="gap-1 border-border bg-transparent font-normal text-muted-foreground"
-              >
-                <Loader2 className="animate-spin" />
-                Loading
-              </Badge>
-            )}
-          </div>
-        </header>
-
-        {commits.length > 0 && (
-          <div
-            className="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-            style={{ gridTemplateColumns: gridTemplate }}
-          >
-            <span aria-hidden />
-            <span className="relative pl-3">
-              Subject
-              <ColResizer onMouseDown={(e) => startBoundaryResize(null, 'author', e)} />
-            </span>
-            <span className="relative">
-              Author
-              <ColResizer onMouseDown={(e) => startBoundaryResize('author', 'date', e)} />
-            </span>
-            <span className="relative">
-              Date
-              <ColResizer onMouseDown={(e) => startBoundaryResize('date', 'sha', e)} />
-            </span>
-            <span className="relative pr-3 text-right">
-              SHA
-              <ColResizer onMouseDown={(e) => startBoundaryResize('sha', null, e)} />
-            </span>
-          </div>
-        )}
-
-        <div
-          ref={scrollRef}
-          onScroll={onScroll}
-          className="min-h-0 flex-1 overflow-auto"
-          data-testid="history-scroll"
-        >
-          {!log || commits.length === 0 ? (
-            loading ? (
-              <SkeletonRows gridTemplate={gridTemplate} viewportH={viewportH} />
-            ) : (
-              <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
-                <div className="mb-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground/60">
-                  <svg
-                    viewBox="0 0 16 16"
-                    className="h-3 w-3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    role="img"
-                  >
-                    <title>commit</title>
-                    <circle cx="8" cy="8" r="2" />
-                    <path d="M0 8h6M10 8h6" />
-                  </svg>
-                </div>
-                <p className="text-sm font-medium text-foreground">No commits yet</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Make your first commit to populate the timeline.
-                </p>
-              </div>
-            )
-          ) : (
-            <div className="relative" style={{ height: totalHeight }}>
-              <svg
-                width={railWidth}
-                height={totalHeight}
-                className="pointer-events-none absolute left-0 top-0"
-                aria-hidden
-              >
-                <title>commit graph</title>
-                {rows.slice(startIdx, endIdx).map((row, idx) => {
-                  const i = startIdx + idx
-                  const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
-                  return <GraphRow key={row.commit.hash} row={row} i={i} dim={dim} />
-                })}
-              </svg>
-
-              <ul className="absolute inset-x-0 top-0">
-                {rows.slice(startIdx, endIdx).map((row, idx) => {
-                  const i = startIdx + idx
-                  const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
-                  return (
-                    <CommitRow
-                      key={row.commit.hash}
-                      row={row}
-                      i={i}
-                      dim={dim}
-                      gridTemplate={gridTemplate}
-                      remotes={remotes}
-                      remoteNames={remoteNames}
-                    />
-                  )
-                })}
-              </ul>
-            </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {commits.length > 0 && (
+            <Input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="filter commits…"
+              className="h-7 w-40"
+            />
+          )}
+          {loading && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-border bg-transparent font-normal text-muted-foreground"
+            >
+              <Loader2 className="animate-spin" />
+              Loading
+            </Badge>
           )}
         </div>
-      </section>
-    </TooltipProvider>
+      </header>
+
+      {commits.length > 0 && (
+        <div
+          className="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+          style={{ gridTemplateColumns: gridTemplate }}
+        >
+          <span aria-hidden />
+          <span className="relative pl-3">
+            Subject
+            <ColResizer onMouseDown={(e) => startBoundaryResize(null, 'author', e)} />
+          </span>
+          <span className="relative">
+            Author
+            <ColResizer onMouseDown={(e) => startBoundaryResize('author', 'date', e)} />
+          </span>
+          <span className="relative">
+            Date
+            <ColResizer onMouseDown={(e) => startBoundaryResize('date', 'sha', e)} />
+          </span>
+          <span className="relative pr-3 text-right">
+            SHA
+            <ColResizer onMouseDown={(e) => startBoundaryResize('sha', null, e)} />
+          </span>
+        </div>
+      )}
+
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="min-h-0 flex-1 overflow-auto"
+        data-testid="history-scroll"
+      >
+        {!log || commits.length === 0 ? (
+          loading ? (
+            <SkeletonRows gridTemplate={gridTemplate} viewportH={viewportH} />
+          ) : (
+            <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
+              <div className="mb-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground/60">
+                <svg
+                  viewBox="0 0 16 16"
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  role="img"
+                >
+                  <title>commit</title>
+                  <circle cx="8" cy="8" r="2" />
+                  <path d="M0 8h6M10 8h6" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-foreground">No commits yet</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Make your first commit to populate the timeline.
+              </p>
+            </div>
+          )
+        ) : (
+          <div
+            className="relative"
+            style={
+              {
+                height: totalHeight,
+                '--row-cols': gridTemplate
+              } as React.CSSProperties
+            }
+          >
+            {/* Sticky fallback that fills the viewport whenever real rows
+                haven't caught up with the scroll position. Zero-height in the
+                normal flow so it doesn't offset row coordinates; its inner
+                absolute child paints over the visible window. */}
+            <div className="pointer-events-none sticky top-0 z-0" style={{ height: 0 }} aria-hidden>
+              <div className="absolute inset-x-0 top-0" style={{ height: viewportH }}>
+                <SkeletonRows gridTemplate={gridTemplate} viewportH={viewportH} />
+              </div>
+            </div>
+            {rows.slice(startIdx, endIdx).map((row, idx) => {
+              const i = startIdx + idx
+              const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
+              return (
+                <CommitRow
+                  key={row.commit.hash}
+                  row={row}
+                  i={i}
+                  dim={dim}
+                  remotes={remotes}
+                  remoteNames={remoteNames}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }
 
 // Per-row SVG graph segment. Memoized so that a scroll-induced re-render of
 // HistoryPanel doesn't reconcile the SVG content for rows whose props haven't
-// changed — which is the case for every row that stays in view across a
-// scroll. The `row` reference is stable across scrolls because `rows` is
-// useMemo'd in HistoryPanel.
-const GraphRow = memo(function GraphRow({
-  row,
-  i,
-  dim
-}: {
-  row: RowLayout
-  i: number
-  dim: boolean
-}) {
-  const rowTop = i * ROW_H
-  const rowMid = rowTop + ROW_H / 2
-  const rowBot = rowTop + ROW_H
+// changed. Each row owns its own <svg> sized to ROW_H — small layers paint
+// cheaply, unlike a single timeline-sized SVG which forces Chromium to manage
+// a huge composited surface.
+const GraphRow = memo(function GraphRow({ row, dim }: { row: RowLayout; dim: boolean }) {
+  const rowTop = 0
+  const rowMid = ROW_H / 2
+  const rowBot = ROW_H
   const dotX = laneX(row.commitLane)
 
   // SVG edges within a row are keyed by their lane index because lanes don't
@@ -713,11 +781,18 @@ const GraphRow = memo(function GraphRow({
   )
 
   return (
-    <g>
+    // biome-ignore lint/a11y/noSvgWithoutTitle: decorative rail; aria-hidden suffices
+    <svg
+      width="100%"
+      height={ROW_H}
+      className="pointer-events-none block"
+      aria-hidden
+      style={{ overflow: 'visible' }}
+    >
       {topEdges}
       {bottomEdges}
       {dot}
-    </g>
+    </svg>
   )
 })
 
@@ -727,34 +802,32 @@ const CommitRow = memo(function CommitRow({
   row,
   i,
   dim,
-  gridTemplate,
   remotes,
   remoteNames
 }: {
   row: RowLayout
   i: number
   dim: boolean
-  gridTemplate: string
   remotes: Record<string, string>
   remoteNames: Set<string>
 }) {
   const c = row.commit
   const isMerge = c.parents.length >= 2
-  const refs = parseRefs(c.refs, remoteNames)
+  const refs = useMemo(() => parseRefs(c.refs, remoteNames), [c.refs, remoteNames])
   const laneHex = laneColor(row.commitLane)
   return (
-    <li
-      className="group/row absolute inset-x-0 grid items-center gap-1 px-0 hover:bg-muted/40"
+    <div
+      className="group/row absolute inset-x-0 z-10 grid items-center gap-1 bg-card px-0 hover:bg-muted/40"
       style={{
         top: 0,
         height: ROW_H,
         transform: `translateY(${i * ROW_H}px)`,
-        gridTemplateColumns: gridTemplate,
+        gridTemplateColumns: 'var(--row-cols)',
         opacity: dim ? 0.35 : 1,
         contain: 'layout paint style'
       }}
     >
-      <span aria-hidden />
+      <GraphRow row={row} dim={dim} />
       <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
         {isMerge && (
           <GitMerge aria-label="merge commit" className="size-3 shrink-0 text-emerald-500" />
@@ -793,11 +866,9 @@ const CommitRow = memo(function CommitRow({
       </span>
 
       <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-        <Avatar className="size-4 shrink-0">
-          <AvatarFallback className="bg-secondary text-[10px] font-semibold text-foreground/80">
-            {initials(c.author_name)}
-          </AvatarFallback>
-        </Avatar>
+        <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground/80">
+          {initials(c.author_name)}
+        </span>
         <span className="min-w-0 truncate">{c.author_name}</span>
       </span>
 
@@ -805,17 +876,10 @@ const CommitRow = memo(function CommitRow({
         {formatCommitDate(c.date)}
       </time>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <code className="cursor-default truncate pr-2 text-right text-xs tabular-nums text-muted-foreground">
-            {c.hash.slice(0, 7)}
-          </code>
-        </TooltipTrigger>
-        <TooltipContent side="left" className="font-mono text-xs">
-          {c.hash}
-        </TooltipContent>
-      </Tooltip>
-    </li>
+      <code className="cursor-default truncate pr-2 text-right text-xs tabular-nums text-muted-foreground">
+        {c.hash.slice(0, 7)}
+      </code>
+    </div>
   )
 })
 

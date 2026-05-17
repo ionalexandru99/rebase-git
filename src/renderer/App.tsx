@@ -531,7 +531,12 @@ function Workspace({
           </div>
         </div>
         <div hidden={activeView !== 'history'} className="min-h-0 flex-1 overflow-hidden">
-          <HistoryPanel log={git.log} loading={git.logLoading} remotes={git.remotes} />
+          <HistoryPanel
+            log={git.log}
+            loading={git.logLoading}
+            remotes={git.remotes}
+            defaultBranch={git.defaultBranch}
+          />
         </div>
       </div>
       {/* counts kept available for screen readers / future use */}
