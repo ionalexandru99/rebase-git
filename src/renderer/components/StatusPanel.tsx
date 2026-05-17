@@ -1,9 +1,7 @@
 import { Loader2 } from 'lucide-react'
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/utils'
 import type { GitStatus } from '../types'
 
 interface StatusPanelProps {
@@ -32,50 +30,18 @@ function FileRow({
   actionLabel: string
   onAction: (file: string) => void
 }) {
-  const wrapRef = useRef<HTMLSpanElement>(null)
-  const textRef = useRef<HTMLSpanElement>(null)
-  const [scrollDist, setScrollDist] = useState(0)
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: file name change must re-trigger DOM measurement
-  useEffect(() => {
-    const wrap = wrapRef.current
-    const text = textRef.current
-    if (!wrap || !text) return
-    const overflow = text.scrollWidth - wrap.clientWidth
-    setScrollDist(overflow > 0 ? overflow : 0)
-  }, [file])
-
-  const isScrollable = scrollDist > 0
-  const marqueeStyle: CSSProperties | undefined = isScrollable
-    ? ({ '--marquee-dist': `-${scrollDist}px` } as CSSProperties)
-    : undefined
-
   return (
     <li className="group flex h-7 items-center gap-2 rounded-md px-2 hover:bg-accent">
-      <span
-        role="img"
-        aria-label={kind}
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-secondary text-xs font-semibold uppercase tracking-tighter text-muted-foreground"
-      >
+      <Badge variant="outline" aria-label={kind} className="px-1.5 font-mono text-xs uppercase">
         {statusGlyph(kind)}
-      </span>
-      <span className="min-w-0 flex-1 overflow-hidden text-sm text-foreground/85" ref={wrapRef}>
-        <span
-          ref={textRef}
-          data-marquee={isScrollable ? '' : undefined}
-          className={cn(
-            'inline-block whitespace-nowrap',
-            isScrollable && 'motion-safe:group-hover:animate-marquee'
-          )}
-          style={marqueeStyle}
-        >
-          {file}
-        </span>
+      </Badge>
+      <span className="min-w-0 flex-1 truncate text-sm" title={file}>
+        {file}
       </span>
       <Button
         variant="ghost"
         size="sm"
-        className="h-5 shrink-0 rounded-sm px-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground opacity-0 hover:bg-secondary hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
+        className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
         onClick={() => onAction(file)}
       >
         {actionLabel}
@@ -90,13 +56,13 @@ function SectionHeading({ label, count }: { label: string; count: number }) {
       <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
-      <span className="text-xs tabular-nums text-muted-foreground/60">{count}</span>
+      <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
     </div>
   )
 }
 
 function EmptyRow({ text }: { text: string }) {
-  return <p className="px-2 py-1.5 text-sm italic text-muted-foreground/60">{text}</p>
+  return <p className="px-2 py-1.5 text-sm italic text-muted-foreground">{text}</p>
 }
 
 export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanelProps) {
@@ -109,29 +75,19 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
       : `${totalChanges} pending change${totalChanges === 1 ? '' : 's'}`
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
-      <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-card">
+      <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b px-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
-            Working Directory
-          </h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider">Working Directory</h2>
           <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
         </div>
         {loading ? (
-          <Badge
-            variant="outline"
-            className="gap-1 border-border bg-transparent font-normal text-muted-foreground"
-          >
+          <Badge variant="outline" className="gap-1">
             <Loader2 className="animate-spin" />
             Loading
           </Badge>
         ) : totalChanges === 0 ? (
-          <Badge
-            variant="outline"
-            className="border-border bg-transparent font-normal text-primary"
-          >
-            Clean
-          </Badge>
+          <Badge variant="secondary">Clean</Badge>
         ) : null}
       </header>
 

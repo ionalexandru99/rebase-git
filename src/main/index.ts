@@ -246,6 +246,18 @@ function serializeBranches(
   }
 }
 
+// Map of remote name → fetch URL. Reading `getRemotes(true)` returns refs
+// with both fetch + push URLs; for provider detection we only need fetch.
+function serializeRemotes(
+  remotes: Array<{ name: string; refs: { fetch: string; push: string } }>
+): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const r of remotes) {
+    if (r.refs?.fetch) result[r.name] = r.refs.fetch
+  }
+  return result
+}
+
 ipcMain.handle('open-repo', async (_, repoPath: string) => {
   try {
     const git = getGit(repoPath)
@@ -261,12 +273,17 @@ ipcMain.handle('open-repo', async (_, repoPath: string) => {
     // Only fetch the cheap things here. The log/stash walk is what makes big
     // repos feel slow on open — the renderer fetches it separately via
     // `get-log` so the UI shows status + branches immediately.
-    const [status, branches] = await Promise.all([git.status(), git.branchLocal()])
+    const [status, branches, remotes] = await Promise.all([
+      git.status(),
+      git.branchLocal(),
+      git.getRemotes(true)
+    ])
 
     return {
       success: true,
       status: serializeStatus(status),
       branches: serializeBranches(branches),
+      remotes: serializeRemotes(remotes),
       path: repoPath
     }
   } catch (error) {

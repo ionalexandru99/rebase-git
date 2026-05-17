@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react'
+import { GitMerge, Loader2 } from 'lucide-react'
 import {
   memo,
   type ReactNode,
@@ -10,13 +10,24 @@ import {
   useRef,
   useState
 } from 'react'
+import { RemoteProviderIcon } from '@/components/RemoteProviderIcon'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 import type { GitLog, GitLogEntry } from '../types'
 
 interface HistoryPanelProps {
   log: GitLog | null
   loading: boolean
+  remotes?: Record<string, string>
 }
 
 // Derive layout constants from the current root font size so the row pitch,
@@ -85,6 +96,15 @@ function laneX(lane: number): number {
   return RAIL_PAD + lane * COL_W
 }
 
+// Remote refs like `origin/feature/x` split into `origin` + `feature/x`. The
+// remote name is rendered as a provider icon (GitHub, GitLab, …) and the tail
+// stays as the branch label.
+function splitRemoteRef(label: string): { remote: string; branch: string } {
+  const slash = label.indexOf('/')
+  if (slash === -1) return { remote: label, branch: '' }
+  return { remote: label.slice(0, slash), branch: label.slice(slash + 1) }
+}
+
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -112,35 +132,49 @@ interface ParsedRef {
   kind: 'head' | 'branch' | 'remote' | 'tag' | 'stash'
 }
 
-// Drops a remote `origin/X` (or any `*/X`) when a local branch `X` is also
-// present on the same commit — they're at the same SHA, so showing both is
-// noise.
+// Drops a remote `<remoteName>/X` when a local branch `X` is also present on
+// the same commit — they point at the same SHA, so showing both is noise.
+// Uses indexOf (first slash) because the local branch part is everything
+// after the remote name, even if the branch itself contains slashes.
 function dedupeRefs(parsed: ParsedRef[]): ParsedRef[] {
   const localNames = new Set(
     parsed.filter((r) => r.kind === 'branch' || r.kind === 'head').map((r) => r.label)
   )
   return parsed.filter((r) => {
     if (r.kind !== 'remote') return true
-    const slash = r.label.lastIndexOf('/')
+    const slash = r.label.indexOf('/')
     const branchName = slash === -1 ? r.label : r.label.slice(slash + 1)
     return !localNames.has(branchName)
   })
 }
 
-export function parseRefs(refs: string): ParsedRef[] {
+export function parseRefs(refs: string, remoteNames?: Set<string>): ParsedRef[] {
   if (!refs) return []
   const parsed = refs
     .split(',')
     .map((raw) => raw.trim())
     .filter(Boolean)
-    .map<ParsedRef>((part) => {
-      if (part.startsWith('HEAD -> ')) return { label: part.slice(8), kind: 'head' }
-      if (part === 'HEAD') return { label: 'HEAD', kind: 'head' }
+    .map<ParsedRef | null>((part) => {
+      // `HEAD -> X` collapses into a plain branch pill — the active branch is
+      // already inferable from the topbar, no need for a separate HEAD chip.
+      // Bare `HEAD` (detached) is dropped entirely.
+      if (part.startsWith('HEAD -> ')) return { label: part.slice(8), kind: 'branch' }
+      if (part === 'HEAD') return null
       if (part.startsWith('tag: ')) return { label: part.slice(5), kind: 'tag' }
       if (/^stash@\{/.test(part)) return { label: part, kind: 'stash' }
-      if (part.includes('/')) return { label: part, kind: 'remote' }
+      // A ref is "remote" iff its first path segment matches a known remote.
+      // If we don't have the remote list yet (tests, initial render), fall
+      // back to first-segment-equals-"origin" — covers the common case
+      // without misclassifying local branches that happen to contain `/`.
+      if (part.includes('/')) {
+        const first = part.slice(0, part.indexOf('/'))
+        const haveRemotes = remoteNames && remoteNames.size > 0
+        const isRemote = haveRemotes ? remoteNames.has(first) : first === 'origin'
+        if (isRemote) return { label: part, kind: 'remote' }
+      }
       return { label: part, kind: 'branch' }
     })
+    .filter((r): r is ParsedRef => r !== null)
   return dedupeRefs(parsed)
 }
 
@@ -201,23 +235,41 @@ export function layoutCommits(commits: GitLogEntry[]): {
   return { rows, maxLanes }
 }
 
+// Branch-type pills (HEAD, branch, remote) borrow the commit's lane color so
+// they visually belong to the lane. The alpha steps differentiate role:
+// HEAD = strongest, branch = medium, remote = outline-only. Tag/stash keep
+// semantic palettes since they aren't part of branch flow.
 function refClass(kind: ParsedRef['kind']): string {
   switch (kind) {
-    case 'head':
-      return 'border-[color:var(--primary)]/40 bg-[color:var(--primary)]/10 text-[color:var(--primary)]'
-    case 'branch':
-      return 'border-border bg-secondary text-foreground/80'
     case 'remote':
-      return 'border-border/60 bg-transparent text-muted-foreground'
+      return 'border-border bg-muted/60 text-muted-foreground'
     case 'tag':
-      return 'border-[color:var(--merge)]/40 bg-[color:var(--merge)]/10 text-[color:var(--merge)]'
+      return 'border-chart-3/50 bg-chart-3/20 text-chart-3'
     case 'stash':
-      return 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+      return 'border-amber-500/50 bg-amber-500/20 text-amber-600 dark:text-amber-400'
+    default:
+      return ''
   }
 }
 
-export function HistoryPanel({ log, loading }: HistoryPanelProps) {
+function pillStyle(kind: ParsedRef['kind'], laneHex: string): React.CSSProperties | undefined {
+  // Only local branch pills borrow the lane color. Remote, tag, and stash
+  // pills keep their neutral / semantic chrome so the visual emphasis stays
+  // on "what's at this commit in MY working copy".
+  if (kind === 'branch') {
+    return {
+      borderColor: `${laneHex}66`,
+      backgroundColor: `${laneHex}1f`,
+      color: laneHex
+    }
+  }
+  return undefined
+}
+
+export function HistoryPanel({ log, loading, remotes = {} }: HistoryPanelProps) {
   const [filter, setFilter] = useState('')
+  // Memoized so CommitRow's memo equality on `remoteNames` stays stable.
+  const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
 
   // Defer the heavy work (layoutCommits + filter walk) so typing in the filter
   // input and arrival of a fresh log don't block paint. React keeps the
@@ -372,8 +424,9 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
   )
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card">
-      <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
+    <TooltipProvider delayDuration={150}>
+      <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border bg-card">
+        <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b px-3">
         <div className="flex min-w-0 items-baseline gap-2">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
             Timeline
@@ -387,11 +440,11 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
 
         <div className="flex shrink-0 items-center gap-2">
           {commits.length > 0 && (
-            <input
+            <Input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="filter commits…"
-              className="h-6 w-40 rounded-md border border-border bg-secondary px-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors duration-75 focus:border-[color:var(--line-strong)]"
+              className="h-7 w-40"
             />
           )}
           {loading && (
@@ -408,35 +461,30 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
 
       {commits.length > 0 && (
         <div
-          className="grid h-6 shrink-0 items-center gap-1 border-b border-border px-0 text-xs font-semibold uppercase tracking-wider text-[color:var(--fg-faint)]"
+          className="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
           style={{ gridTemplateColumns: gridTemplate }}
         >
-          <span className="pl-3">Graph</span>
-          <span className="relative">
+          <span aria-hidden />
+          <span className="relative pl-3">
             Subject
-            {/* Subject|Author boundary. Subject is 1fr → leftCol null. */}
             <ColResizer onMouseDown={(e) => startBoundaryResize(null, 'author', e)} />
           </span>
           <span className="relative">
             Author
-            {/* Author|Date boundary — redistributes between Author and Date. */}
             <ColResizer onMouseDown={(e) => startBoundaryResize('author', 'date', e)} />
           </span>
           <span className="relative">
             Date
-            {/* Date|SHA boundary — redistributes between Date and SHA. */}
             <ColResizer onMouseDown={(e) => startBoundaryResize('date', 'sha', e)} />
           </span>
-          <span className="relative pr-2 text-right">
+          <span className="relative pr-3 text-right">
             SHA
-            {/* SHA right edge → panel edge. SHA grows on rightward drag;
-                Subject (1fr) absorbs from the other side. */}
             <ColResizer onMouseDown={(e) => startBoundaryResize('sha', null, e)} />
           </span>
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto" data-testid="history-scroll">
         {!log || commits.length === 0 ? (
           loading ? (
             <SkeletonRows gridTemplate={gridTemplate} viewportH={viewportH} />
@@ -491,14 +539,17 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
                     i={i}
                     dim={dim}
                     gridTemplate={gridTemplate}
+                    remotes={remotes}
+                    remoteNames={remoteNames}
                   />
                 )
               })}
             </ul>
           </div>
         )}
-      </div>
-    </section>
+        </div>
+      </section>
+    </TooltipProvider>
   )
 }
 
@@ -646,8 +697,8 @@ const GraphRow = memo(function GraphRow({
       cx={dotX}
       cy={rowMid}
       r={4}
-      fill="var(--background)"
-      stroke="var(--merge)"
+      fill="var(--color-background)"
+      stroke="var(--color-chart-3)"
       strokeWidth={1.6}
       opacity={dim ? 0.25 : 0.95}
     />
@@ -676,19 +727,24 @@ const CommitRow = memo(function CommitRow({
   row,
   i,
   dim,
-  gridTemplate
+  gridTemplate,
+  remotes,
+  remoteNames
 }: {
   row: RowLayout
   i: number
   dim: boolean
   gridTemplate: string
+  remotes: Record<string, string>
+  remoteNames: Set<string>
 }) {
   const c = row.commit
   const isMerge = c.parents.length >= 2
-  const refs = parseRefs(c.refs)
+  const refs = parseRefs(c.refs, remoteNames)
+  const laneHex = laneColor(row.commitLane)
   return (
     <li
-      className="absolute inset-x-0 grid items-center gap-1 px-0 hover:bg-accent"
+      className="group/row absolute inset-x-0 grid items-center gap-1 px-0 hover:bg-muted/40"
       style={{
         top: 0,
         height: ROW_H,
@@ -699,40 +755,67 @@ const CommitRow = memo(function CommitRow({
       }}
     >
       <span aria-hidden />
-      <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+      <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
         {isMerge && (
-          <span className="inline-flex h-4 shrink-0 items-center rounded-sm border border-border px-1.5 text-xs text-[color:var(--merge)]">
-            merge
-          </span>
+          <GitMerge aria-label="merge commit" className="size-3 shrink-0 text-emerald-500" />
         )}
-        <span className="min-w-0 truncate">{c.message}</span>
-        {refs.map((r) => (
-          <span
-            key={`${r.kind}:${r.label}`}
-            className={`inline-flex h-4 shrink-0 items-center rounded-sm border px-1.5 text-xs ${refClass(r.kind)}`}
-          >
-            {r.label}
-          </span>
-        ))}
+        {refs.map((r) => {
+          const style = pillStyle(r.kind, laneHex)
+          const base =
+            'h-6 shrink-0 rounded-md border px-2.5 text-xs font-medium tracking-tight'
+          if (r.kind === 'remote') {
+            const { remote, branch } = splitRemoteRef(r.label)
+            return (
+              <Badge
+                key={`${r.kind}:${r.label}`}
+                variant="outline"
+                className={cn(base, 'gap-1.5', refClass(r.kind))}
+                style={style}
+                title={r.label}
+              >
+                <RemoteProviderIcon url={remotes[remote]} className="!size-3.5" />
+                {branch}
+              </Badge>
+            )
+          }
+          return (
+            <Badge
+              key={`${r.kind}:${r.label}`}
+              variant="outline"
+              className={cn(base, refClass(r.kind))}
+              style={style}
+              title={r.label}
+            >
+              {r.label}
+            </Badge>
+          )
+        })}
+        <span className="min-w-0 truncate text-foreground">{c.message}</span>
       </span>
 
       <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-        <span
-          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-foreground/70"
-          aria-hidden
-        >
-          {initials(c.author_name)}
-        </span>
+        <Avatar className="size-4 shrink-0">
+          <AvatarFallback className="bg-secondary text-[10px] font-semibold text-foreground/80">
+            {initials(c.author_name)}
+          </AvatarFallback>
+        </Avatar>
         <span className="min-w-0 truncate">{c.author_name}</span>
       </span>
 
-      <time className="cursor-default truncate text-xs tabular-nums text-muted-foreground/70">
+      <time className="truncate text-xs tabular-nums text-muted-foreground">
         {formatCommitDate(c.date)}
       </time>
 
-      <code className="cursor-default truncate pr-2 text-right text-xs tabular-nums text-muted-foreground/70">
-        {c.hash.slice(0, 7)}
-      </code>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <code className="cursor-default truncate pr-2 text-right text-xs tabular-nums text-muted-foreground">
+            {c.hash.slice(0, 7)}
+          </code>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="font-mono text-xs">
+          {c.hash}
+        </TooltipContent>
+      </Tooltip>
     </li>
   )
 })

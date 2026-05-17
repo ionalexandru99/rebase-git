@@ -412,7 +412,7 @@ function RepoRow({ path, onSelect }: RepoRowProps) {
   return (
     <Button
       variant="ghost"
-      className="h-auto w-full justify-start gap-3 py-2 font-normal"
+      className="h-auto w-full justify-start gap-3 py-2 font-normal transition-none"
       onClick={() => onSelect(path)}
     >
       <Folder className="text-muted-foreground" />
@@ -488,7 +488,7 @@ function Workspace({
           </div>
         </div>
         <div hidden={activeView !== 'history'} className="min-h-0 flex-1 overflow-hidden">
-          <HistoryPanel log={git.log} loading={git.logLoading} />
+          <HistoryPanel log={git.log} loading={git.logLoading} remotes={git.remotes} />
         </div>
       </div>
       {/* counts kept available for screen readers / future use */}

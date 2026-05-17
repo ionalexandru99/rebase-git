@@ -106,10 +106,12 @@ describe('HistoryPanel', () => {
       total: 1
     })
 
-    expect(screen.getByText('origin/feature')).toBeInTheDocument()
+    // Remote refs render with a cloud icon + the branch name minus the remote prefix.
+    expect(screen.getByTitle('origin/feature')).toBeInTheDocument()
+    expect(screen.getByText('feature')).toBeInTheDocument()
   })
 
-  it('marks merge commits (parents.length >= 2) with a merge badge', () => {
+  it('marks merge commits (parents.length >= 2) with a merge indicator', () => {
     renderPanel({
       all: [
         entry({
@@ -121,14 +123,14 @@ describe('HistoryPanel', () => {
       total: 1
     })
 
-    expect(screen.getByText('merge')).toBeInTheDocument()
+    expect(screen.getByLabelText('merge commit')).toBeInTheDocument()
   })
 })
 
 describe('parseRefs', () => {
   it('drops origin/X when local X is on the same commit', () => {
     const refs = parseRefs('HEAD -> main, origin/main')
-    expect(refs).toEqual([{ label: 'main', kind: 'head' }])
+    expect(refs).toEqual([{ label: 'main', kind: 'branch' }])
   })
 
   it('keeps origin/X when no matching local branch is present', () => {

@@ -10,6 +10,7 @@ export function useGit() {
   const [status, setStatus] = useState<GitStatus | null>(null)
   const [log, setLog] = useState<GitLog | null>(null)
   const [branches, setBranches] = useState<GitBranches | null>(null)
+  const [remotes, setRemotes] = useState<Record<string, string>>({})
   const [currentBranch, setCurrentBranch] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [logLoading, setLogLoading] = useState(false)
@@ -71,6 +72,7 @@ export function useGit() {
           setRepoPath(result.path)
           setStatus(result.status)
           setBranches(result.branches)
+          setRemotes(result.remotes ?? {})
           setCurrentBranch(result.status.current)
           // Kick off the streamed log load. The renderer paints status +
           // branches immediately while commits arrive in batches.
@@ -103,6 +105,7 @@ export function useGit() {
     setStatus(null)
     setLog(null)
     setBranches(null)
+    setRemotes({})
     setCurrentBranch('')
     setError(null)
     setLogLoading(false)
@@ -138,6 +141,7 @@ export function useGit() {
       if (result.success) {
         setStatus(result.status)
         setBranches(result.branches)
+        setRemotes(result.remotes ?? {})
         setCurrentBranch(result.status.current)
       }
     } catch (err) {
@@ -194,6 +198,7 @@ export function useGit() {
     status,
     log,
     branches,
+    remotes,
     currentBranch,
     loading,
     logLoading,

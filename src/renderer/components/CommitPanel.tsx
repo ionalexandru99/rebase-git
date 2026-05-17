@@ -24,12 +24,12 @@ export function CommitPanel({ onCommit, loading }: CommitPanelProps) {
   const subjectWarn = subjectLength > MAX_SUBJECT_LENGTH
 
   return (
-    <section className="flex flex-col overflow-hidden rounded-md border border-border bg-card">
-      <header className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">Commit</h2>
+    <section className="flex flex-col overflow-hidden rounded-md border bg-card">
+      <header className="flex h-9 shrink-0 items-center justify-between border-b px-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider">Commit</h2>
         <span
           className={`text-xs tabular-nums ${
-            subjectWarn ? 'text-primary' : 'text-muted-foreground/60'
+            subjectWarn ? 'text-destructive' : 'text-muted-foreground'
           }`}
         >
           {subjectLength}/{MAX_SUBJECT_LENGTH}
@@ -42,18 +42,13 @@ export function CommitPanel({ onCommit, loading }: CommitPanelProps) {
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Summarize the change in one line, then describe details below."
           rows={3}
-          className="min-h-17 resize-none rounded-md border border-border bg-background px-2.5 py-2 text-sm leading-relaxed text-foreground/90 shadow-none placeholder:text-muted-foreground/50 focus-visible:border-primary/40 focus-visible:ring-0"
+          className="resize-none"
         />
         <div className="flex items-center justify-end">
-          <Button
-            size="sm"
-            onClick={handleCommit}
-            disabled={!message.trim() || loading}
-            className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
-          >
+          <Button size="sm" onClick={handleCommit} disabled={!message.trim() || loading}>
             {loading ? (
               <>
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="animate-spin" />
                 Committing...
               </>
             ) : (

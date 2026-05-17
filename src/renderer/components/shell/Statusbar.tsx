@@ -1,3 +1,5 @@
+import { ArrowDown, ArrowUp } from 'lucide-react'
+
 interface StatusbarProps {
   branch: string
   ahead: number
@@ -5,15 +7,6 @@ interface StatusbarProps {
   changes: number
   directionLabel: string
   lastFetch?: string
-}
-
-function Pip({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      {accent && <span aria-hidden className="size-1.5 rounded-full bg-primary" />}
-      {children}
-    </span>
-  )
 }
 
 export function Statusbar({
@@ -25,24 +18,35 @@ export function Statusbar({
   lastFetch
 }: StatusbarProps) {
   return (
-    <div className="flex h-6.5 shrink-0 items-center gap-3.5 border-t border-border bg-background px-3.5 text-xs text-fg-muted">
-      <Pip accent>
-        <span>{branch}</span>
-      </Pip>
-      {ahead > 0 && <Pip>↑ {ahead} to push</Pip>}
-      {behind > 0 && <Pip>↓ {behind} to pull</Pip>}
-      <Pip>
+    <div className="flex h-7 shrink-0 items-center gap-3 border-t bg-background px-3 text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden className="size-1.5 rounded-full bg-primary" />
+        {branch}
+      </span>
+      {ahead > 0 && (
+        <span className="inline-flex items-center gap-1">
+          <ArrowUp className="size-3" />
+          {ahead} to push
+        </span>
+      )}
+      {behind > 0 && (
+        <span className="inline-flex items-center gap-1">
+          <ArrowDown className="size-3" />
+          {behind} to pull
+        </span>
+      )}
+      <span>
         {changes} change{changes === 1 ? '' : 's'}
-      </Pip>
+      </span>
       <span className="flex-1" />
       <span>
         Direction: <span className="text-foreground">{directionLabel}</span>
       </span>
-      <span className="text-fg-faint">·</span>
+      <span>·</span>
       <span>git</span>
       {lastFetch && (
         <>
-          <span className="text-fg-faint">·</span>
+          <span>·</span>
           <span>last fetch {lastFetch}</span>
         </>
       )}

@@ -1,19 +1,22 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Topbar } from '@/components/shell/Topbar'
+import { SidebarProvider } from '@/components/ui/sidebar'
 
 function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
   return render(
-    <Topbar
-      repoName={overrides.repoName ?? 'my-repo'}
-      repoPath={'repoPath' in overrides ? (overrides.repoPath ?? null) : '/home/user/my-repo'}
-      branch={overrides.branch ?? 'main'}
-      ahead={overrides.ahead ?? 0}
-      behind={overrides.behind ?? 0}
-      onFetch={overrides.onFetch}
-      onPull={overrides.onPull}
-      onPush={overrides.onPush}
-    />
+    <SidebarProvider>
+      <Topbar
+        repoName={overrides.repoName ?? 'my-repo'}
+        repoPath={'repoPath' in overrides ? (overrides.repoPath ?? null) : '/home/user/my-repo'}
+        branch={overrides.branch ?? 'main'}
+        ahead={overrides.ahead ?? 0}
+        behind={overrides.behind ?? 0}
+        onFetch={overrides.onFetch}
+        onPull={overrides.onPull}
+        onPush={overrides.onPush}
+      />
+    </SidebarProvider>
   )
 }
 
@@ -41,20 +44,20 @@ describe('Topbar', () => {
 
   it('shows the ahead indicator when ahead > 0', () => {
     renderTopbar({ ahead: 3 })
-    expect(screen.getByText('↑')).toBeInTheDocument()
+    expect(screen.getByLabelText('ahead')).toBeInTheDocument()
     expect(screen.getByText('3')).toBeInTheDocument()
   })
 
   it('shows the behind indicator when behind > 0', () => {
     renderTopbar({ behind: 2 })
-    expect(screen.getByText('↓')).toBeInTheDocument()
+    expect(screen.getByLabelText('behind')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
   })
 
   it('hides sync indicators when both are zero', () => {
     renderTopbar({ ahead: 0, behind: 0 })
-    expect(screen.queryByText('↑')).not.toBeInTheDocument()
-    expect(screen.queryByText('↓')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('ahead')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('behind')).not.toBeInTheDocument()
   })
 
   it('disables the Push button when nothing is ahead', () => {
@@ -94,57 +97,9 @@ describe('Topbar', () => {
     expect(onPush).toHaveBeenCalledOnce()
   })
 
-  describe('branch name marquee', () => {
-    afterEach(() => vi.restoreAllMocks())
-
-    function findMarqueeText(container: HTMLElement) {
-      const text = container.querySelector('[data-marquee-wrap] > span') as HTMLElement | null
-      if (!text) throw new Error('marquee text element not found')
-      return text
-    }
-
-    it('does not animate when the branch name fits', () => {
-      // jsdom reports scrollWidth and clientWidth as 0, so overflow is 0
-      const { container } = renderTopbar({ branch: 'main' })
-      const text = findMarqueeText(container)
-      expect(text).not.toHaveAttribute('data-marquee')
-      expect(text.className).not.toMatch(/animate-marquee/)
-    })
-
-    it('animates and sets --marquee-dist when the branch name overflows', () => {
-      vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(300)
-      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(160)
-
-      const { container } = renderTopbar({ branch: 'feature/very-long-branch-name' })
-      const text = findMarqueeText(container)
-
-      expect(text).toHaveAttribute('data-marquee')
-      expect(text.className).toMatch(/animate-marquee/)
-      expect(text.style.getPropertyValue('--marquee-dist')).toBe('-140px')
-    })
-
-    it('stops animating when the branch changes to one that fits', () => {
-      vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(300)
-      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(160)
-
-      const { container, rerender } = renderTopbar({ branch: 'feature/very-long-branch-name' })
-      expect(findMarqueeText(container)).toHaveAttribute('data-marquee')
-
-      // Restore normal dimensions so the re-rendered branch fits
-      vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(40)
-      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(160)
-
-      rerender(
-        <Topbar
-          repoName="my-repo"
-          repoPath="/home/user/my-repo"
-          branch="main"
-          ahead={0}
-          behind={0}
-        />
-      )
-
-      expect(findMarqueeText(container)).not.toHaveAttribute('data-marquee')
-    })
+  it('truncates long branch names', () => {
+    renderTopbar({ branch: 'feature/very-long-branch-name' })
+    const branchText = screen.getByText('feature/very-long-branch-name')
+    expect(branchText.className).toMatch(/truncate/)
   })
 })
