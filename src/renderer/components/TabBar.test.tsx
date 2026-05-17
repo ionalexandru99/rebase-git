@@ -99,18 +99,22 @@ describe('TabBar', () => {
     expect(onNew).toHaveBeenCalledTimes(1)
   })
 
-  it('hides all close buttons when only one tab is open', () => {
+  it('still renders a close button when only one tab is open', () => {
+    const onClose = vi.fn()
     render(
       <TabBar
         tabs={[{ id: 'only', title: 'My Tab', hasRepo: true }]}
         activeTabId="only"
         onSelect={vi.fn()}
-        onClose={vi.fn()}
+        onClose={onClose}
         onNew={vi.fn()}
       />
     )
 
-    expect(screen.queryAllByRole('button', { name: /Close tab/i })).toHaveLength(0)
+    const closeButtons = screen.getAllByRole('button', { name: /Close tab/i })
+    expect(closeButtons).toHaveLength(1)
+    fireEvent.click(closeButtons[0])
+    expect(onClose).toHaveBeenCalledWith('only')
   })
 
   it('shows the title in italics for tabs without a repo', () => {

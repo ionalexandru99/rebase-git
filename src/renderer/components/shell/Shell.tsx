@@ -60,11 +60,7 @@ export function Shell({
   }
 
   return (
-    <SidebarProvider
-      open={open}
-      onOpenChange={handleOpenChange}
-      className="!min-h-0 h-full"
-    >
+    <SidebarProvider open={open} onOpenChange={handleOpenChange} className="!min-h-0 h-full">
       <AppSidebar
         branches={branches}
         workingChanges={changes}

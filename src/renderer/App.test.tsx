@@ -116,14 +116,84 @@ describe('App — tab shell', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(1)
   })
 
-  it('does not allow closing the last remaining tab', async () => {
+  it('closing the active middle tab selects the right neighbour', async () => {
     mockBaseAPI()
 
     render(<App />)
 
     await screen.findByRole('button', { name: /Open new tab/i })
-    // Only one tab exists, so no close button should be rendered.
-    expect(screen.queryAllByRole('button', { name: /Close tab/i })).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    expect(screen.getAllByRole('tab')).toHaveLength(3)
+
+    // Activate the middle tab and close it.
+    const middleTab = screen.getAllByRole('tab')[1]
+    fireEvent.click(middleTab)
+    expect(middleTab).toHaveAttribute('aria-selected', 'true')
+
+    const closeButtons = screen.getAllByRole('button', { name: /Close tab/i })
+    fireEvent.click(closeButtons[1])
+
+    const tabsAfter = screen.getAllByRole('tab')
+    expect(tabsAfter).toHaveLength(2)
+    // The new right neighbour (formerly index 2) is now at index 1 and active.
+    expect(tabsAfter[1]).toHaveAttribute('aria-selected', 'true')
+    expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('closing the active rightmost tab selects the left neighbour', async () => {
+    mockBaseAPI()
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /Open new tab/i })
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+
+    // The newly-created tab is already active and is the rightmost.
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Close tab/i })[1])
+
+    const tabsAfter = screen.getAllByRole('tab')
+    expect(tabsAfter).toHaveLength(1)
+    expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('closing an inactive tab leaves the current selection alone', async () => {
+    mockBaseAPI()
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /Open new tab/i })
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+
+    // Go back to tab 1 and then close tab 2 (inactive). Tab 1 stays selected.
+    fireEvent.click(screen.getAllByRole('tab')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /Close tab/i })[1])
+
+    const tabsAfter = screen.getAllByRole('tab')
+    expect(tabsAfter).toHaveLength(1)
+    expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('closing the only remaining tab replaces it with a fresh selected tab', async () => {
+    mockBaseAPI()
+
+    render(<App />)
+
+    await screen.findByRole('button', { name: /Open new tab/i })
+    const initialTab = screen.getByRole('tab')
+
+    fireEvent.click(screen.getByRole('button', { name: /Close tab/i }))
+
+    // One tab still exists — a brand-new instance, and it's the active one.
+    const tabsAfter = screen.getAllByRole('tab')
+    expect(tabsAfter).toHaveLength(1)
+    expect(tabsAfter[0]).not.toBe(initialTab)
+    expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'true')
   })
 })
 
@@ -327,6 +397,104 @@ describe('App — workspace (repo open)', () => {
     // Clean badge lives in the StatusPanel, which only renders on the Local changes view.
     fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
     expect(screen.getAllByText('Clean').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('redirects to the existing tab when a third tab tries to open the same repo', async () => {
+    // Two repos live in the workspace; we open A in tab 1, B in tab 2, then
+    // try to open A again from a new tab 3 and expect to land on tab 1
+    // (not on tab 2, which is the closed tab's neighbour).
+    mockBaseAPI({
+      workingDirectory: '/projects',
+      scanRepos: ['/projects/repo-a', '/projects/repo-b']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
+      Promise.resolve({
+        success: true,
+        path,
+        status: { current: 'main', modified: [], staged: [], not_added: [] },
+        branches: { current: 'main', all: ['main'] }
+      })
+    )
+    setupLogStream()
+
+    render(<App />)
+
+    // Tab 1: open repo-a.
+    fireEvent.click(await screen.findByText('/projects/repo-a'))
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/projects/repo-a')
+    })
+
+    // Tab 2: open repo-b.
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+    const repoBMatches = await screen.findAllByText('/projects/repo-b')
+    const repoBPickerRow = repoBMatches
+      .map((el) => el.closest('button'))
+      .find((b): b is HTMLButtonElement => !!b)
+    fireEvent.click(repoBPickerRow as HTMLButtonElement)
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/projects/repo-b')
+    })
+
+    // Tab 3 (empty) — pick repo-a, which already lives in tab 1.
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    expect(screen.getAllByRole('tab')).toHaveLength(3)
+    const repoAMatches = await screen.findAllByText('/projects/repo-a')
+    const repoAPickerRow = repoAMatches
+      .map((el) => el.closest('button'))
+      .find((b): b is HTMLButtonElement => !!b)
+    fireEvent.click(repoAPickerRow as HTMLButtonElement)
+
+    // Tab 3 closes; the active tab is tab 1 (repo-a), not tab 2 (repo-b).
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(2)
+    })
+    const remainingTabs = screen.getAllByRole('tab')
+    expect(remainingTabs[0]).toHaveAttribute('aria-selected', 'true')
+    expect(remainingTabs[0]).toHaveTextContent('repo-a')
+    expect(remainingTabs[1]).toHaveAttribute('aria-selected', 'false')
+    expect(remainingTabs[1]).toHaveTextContent('repo-b')
+    // openRepo was only called for the two distinct repos.
+    expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(2)
+  })
+
+  it('switches to the existing tab instead of loading the repo twice', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/my-app']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
+    setupLogStream()
+
+    render(<App />)
+
+    // Open the repo in tab 1.
+    const firstRow = await screen.findByText('/home/user/projects/my-app')
+    fireEvent.click(firstRow)
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(1)
+    })
+
+    // Open a new (empty) tab. After this, the repo path appears twice in the
+    // DOM: once in tab 1's topbar (hidden) and once in tab 2's picker row.
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+
+    // Click the picker row (the path lives inside a button); pick the second
+    // match so we're clicking the picker, not the topbar text.
+    const matches = await screen.findAllByText('/home/user/projects/my-app')
+    const pickerRow = matches
+      .map((el) => el.closest('button'))
+      .find((b): b is HTMLButtonElement => !!b)
+    expect(pickerRow).toBeTruthy()
+    fireEvent.click(pickerRow as HTMLButtonElement)
+
+    // Duplicate is intercepted: no second openRepo, and the empty tab is closed.
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1)
+    })
+    expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(1)
   })
 
   it('shows a banner when an openRepo error happens', async () => {

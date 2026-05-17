@@ -32,20 +32,17 @@ function App() {
   const onboarding = useOnboarding()
   const [tabs, setTabs] = useState<TabRecord[]>(() => [{ id: nextTabId() }])
   const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0]?.id ?? '')
-  const [tabTitles, setTabTitles] = useState<Record<string, { title: string; hasRepo: boolean }>>(
-    {}
-  )
+  const [tabRepos, setTabRepos] = useState<Record<string, string | null>>({})
   const [recentRepos, setRecentRepos] = useState<string[]>([])
 
   useEffect(() => {
     window.electronAPI.getRecentRepos().then(setRecentRepos)
   }, [])
 
-  const reportTabState = useCallback((id: string, title: string, hasRepo: boolean) => {
-    setTabTitles((prev) => {
-      const existing = prev[id]
-      if (existing && existing.title === title && existing.hasRepo === hasRepo) return prev
-      return { ...prev, [id]: { title, hasRepo } }
+  const reportTabRepo = useCallback((id: string, path: string | null) => {
+    setTabRepos((prev) => {
+      if (prev[id] === path) return prev
+      return { ...prev, [id]: path }
     })
   }, [])
 
@@ -55,23 +52,67 @@ function App() {
     setActiveTabId(id)
   }, [])
 
-  const closeTab = useCallback((id: string) => {
-    setTabs((prev) => {
-      if (prev.length <= 1) return prev
-      const idx = prev.findIndex((t) => t.id === id)
-      const next = prev.filter((t) => t.id !== id)
+  // Note: we deliberately don't call setActiveTabId from inside a setTabs
+  // updater. StrictMode runs updaters twice in dev, and nested setState calls
+  // from those discarded invocations can leave activeTabId out of sync with
+  // the committed tabs array. Reading tabs from state and issuing separate
+  // top-level setState calls keeps the two in lockstep.
+  const closeTab = useCallback(
+    (id: string) => {
+      if (tabs.length <= 1) {
+        // Closing the only tab replaces it with a fresh empty one — the topbar
+        // should never end up with zero tabs.
+        const freshId = nextTabId()
+        setTabs([{ id: freshId }])
+        setActiveTabId(freshId)
+        setTabRepos((prev) => {
+          if (!(id in prev)) return prev
+          const { [id]: _removed, ...rest } = prev
+          return rest
+        })
+        return
+      }
+      const idx = tabs.findIndex((t) => t.id === id)
+      const next = tabs.filter((t) => t.id !== id)
+      setTabs(next)
+      // Functional update so a caller that already queued setActiveTabId to a
+      // specific target (e.g. requestOpenRepo redirecting to an existing tab)
+      // wins — we only auto-pick a neighbor when the closing tab was actually
+      // active at the time this update runs.
       setActiveTabId((current) => {
         if (current !== id) return current
         return next[Math.min(idx, next.length - 1)].id
       })
-      return next
-    })
-    setTabTitles((prev) => {
-      if (!(id in prev)) return prev
-      const { [id]: _removed, ...rest } = prev
-      return rest
-    })
-  }, [])
+      setTabRepos((prev) => {
+        if (!(id in prev)) return prev
+        const { [id]: _removed, ...rest } = prev
+        return rest
+      })
+    },
+    [tabs]
+  )
+
+  // If another tab already holds `path`, switch to it and drop the (empty)
+  // source tab. Self-contained — does not route through closeTab, whose
+  // neighbour-pick logic would otherwise fight with our explicit target.
+  // Returns true when the open was redirected, so the caller can skip its
+  // own load path.
+  const requestOpenRepo = useCallback(
+    (sourceTabId: string, path: string): boolean => {
+      const match = Object.entries(tabRepos).find(([id, p]) => p === path && id !== sourceTabId)
+      if (!match) return false
+      const [existingId] = match
+      setActiveTabId(existingId)
+      setTabs((prev) => prev.filter((t) => t.id !== sourceTabId))
+      setTabRepos((prev) => {
+        if (!(sourceTabId in prev)) return prev
+        const { [sourceTabId]: _removed, ...rest } = prev
+        return rest
+      })
+      return true
+    },
+    [tabRepos]
+  )
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -92,14 +133,11 @@ function App() {
   const tabDescriptors = useMemo<TabDescriptor[]>(
     () =>
       tabs.map((t) => {
-        const meta = tabTitles[t.id]
-        return {
-          id: t.id,
-          title: meta?.title ?? 'New tab',
-          hasRepo: meta?.hasRepo ?? false
-        }
+        const path = tabRepos[t.id] ?? null
+        const title = path ? (path.split('/').filter(Boolean).at(-1) ?? 'New tab') : 'New tab'
+        return { id: t.id, title, hasRepo: Boolean(path) }
       }),
-    [tabs, tabTitles]
+    [tabs, tabRepos]
   )
 
   if (onboarding.onboardingComplete === null) {
@@ -162,7 +200,8 @@ function App() {
                 onSwitchWorkspace={onboarding.switchWorkspace}
                 onAddWorkspace={onboarding.addWorkspace}
                 onRemoveWorkspace={onboarding.removeWorkspace}
-                onReportState={reportTabState}
+                onReportRepo={reportTabRepo}
+                onRequestOpenRepo={requestOpenRepo}
               />
             </div>
           ))}
@@ -182,7 +221,8 @@ interface TabViewProps {
   onSwitchWorkspace: (path: string) => Promise<void>
   onAddWorkspace: () => Promise<unknown>
   onRemoveWorkspace: (path: string) => Promise<void>
-  onReportState: (id: string, title: string, hasRepo: boolean) => void
+  onReportRepo: (id: string, path: string | null) => void
+  onRequestOpenRepo: (sourceTabId: string, path: string) => boolean
 }
 
 function TabView({
@@ -194,7 +234,8 @@ function TabView({
   onSwitchWorkspace,
   onAddWorkspace,
   onRemoveWorkspace,
-  onReportState
+  onReportRepo,
+  onRequestOpenRepo
 }: TabViewProps) {
   const git = useGit()
   const modifiedCount = git.status?.modified.length ?? 0
@@ -202,11 +243,11 @@ function TabView({
   const untrackedCount = git.status?.not_added.length ?? 0
   const totalChanges = modifiedCount + stagedCount + untrackedCount
 
-  // Surface the repo title back to App so the TabBar label stays in sync.
+  // Surface this tab's repo path back to App so the TabBar label stays in sync
+  // and duplicate detection can find it.
   useEffect(() => {
-    const name = git.repoPath?.split('/').filter(Boolean).at(-1) ?? null
-    onReportState(tabId, name ?? 'New tab', Boolean(name))
-  }, [git.repoPath, tabId, onReportState])
+    onReportRepo(tabId, git.repoPath ?? null)
+  }, [git.repoPath, tabId, onReportRepo])
 
   return (
     <>
@@ -228,7 +269,9 @@ function TabView({
           onSwitchWorkspace={onSwitchWorkspace}
           onAddWorkspace={onAddWorkspace}
           onRemoveWorkspace={onRemoveWorkspace}
-          onOpenRepo={(path) => git.openRepo(path)}
+          onOpenRepo={(path) => {
+            if (!onRequestOpenRepo(tabId, path)) git.openRepo(path)
+          }}
         />
       ) : (
         <Workspace

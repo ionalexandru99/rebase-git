@@ -16,16 +16,20 @@ interface TabBarProps {
   onNew: () => void
 }
 
+// Chrome-style tab strip. The visual hierarchy in both themes is:
+//   bar (darkest/most saturated) < hovered inactive < active tab (lightest).
+// In light mode we get this with bg-muted (light grey) under bg-background
+// (white). In dark mode `bg-background` is *darker* than `bg-muted`, so we
+// flip the roles via `dark:` variants — bar becomes bg-background (darkest)
+// and the active tab uses bg-muted (the lighter dark shade).
 export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarProps) {
-  const canClose = tabs.length > 1
-
   return (
-    <div className="drag-region relative flex h-10 shrink-0 items-end border-b bg-muted">
-      <div className="flex shrink-0 items-center gap-2 pb-2 pl-3 pr-4">
+    <div className="drag-region relative flex h-11 shrink-0 items-end bg-muted pl-1 pr-1 dark:bg-background">
+      <div className="flex shrink-0 items-center gap-2 pb-2.5 pl-3 pr-4">
         <span className="text-sm font-semibold tracking-tight">Rebase</span>
       </div>
 
-      <div role="tablist" className="no-drag flex min-w-0 items-end overflow-x-auto">
+      <div role="tablist" className="no-drag flex min-w-0 items-end gap-0.5 overflow-x-auto">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId
           return (
@@ -33,7 +37,6 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarPr
               key={tab.id}
               tab={tab}
               isActive={isActive}
-              canClose={canClose}
               onSelect={() => onSelect(tab.id)}
               onClose={() => onClose(tab.id)}
             />
@@ -46,7 +49,7 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarPr
           size="icon-sm"
           onClick={onNew}
           aria-label="Open new tab"
-          className="no-drag mx-1 mb-1"
+          className="no-drag mx-1 mb-1.5 size-7 rounded-full text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
         >
           <Plus />
         </Button>
@@ -60,19 +63,23 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarPr
 interface TabItemProps {
   tab: TabDescriptor
   isActive: boolean
-  canClose: boolean
   onSelect: () => void
   onClose: () => void
 }
 
-function TabItem({ tab, isActive, canClose, onSelect, onClose }: TabItemProps) {
+function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
   return (
     <div
       className={cn(
-        'group relative flex h-8 min-w-40 max-w-60 items-center gap-2 rounded-t-md border-b-0 pl-3 pr-1',
+        'group relative flex h-9 min-w-44 max-w-64 items-center gap-2 rounded-t-lg pl-3 pr-1.5 transition-colors',
         isActive
-          ? 'z-10 border bg-background text-foreground'
-          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+          ? // Active: lighter than the bar in both modes (bg-background in
+            // light; bg-muted in dark).
+            'z-10 bg-background text-foreground dark:bg-muted'
+          : // Inactive: transparent (matches the bar) until hovered. The
+            // hover uses a neutral foreground overlay so it works in both
+            // themes — lightens in dark, darkens in light.
+            'text-muted-foreground hover:bg-foreground/10 hover:text-foreground'
       )}
     >
       <button
@@ -82,28 +89,35 @@ function TabItem({ tab, isActive, canClose, onSelect, onClose }: TabItemProps) {
         tabIndex={isActive ? 0 : -1}
         onClick={onSelect}
         onAuxClick={(e) => {
-          if (e.button === 1 && canClose) {
+          if (e.button === 1) {
             e.preventDefault()
             onClose()
           }
         }}
         className="flex min-w-0 flex-1 items-center gap-2 border-none bg-transparent py-0 text-left text-sm"
       >
-        <GitBranch className="size-3.5 shrink-0" strokeWidth={2} />
+        <GitBranch
+          className={cn(
+            'size-3.5 shrink-0 transition-colors',
+            isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+          )}
+          strokeWidth={2}
+        />
         <span className={cn('truncate', tab.hasRepo ? 'font-medium' : 'italic')}>{tab.title}</span>
       </button>
-      {canClose && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          onClick={onClose}
-          aria-label={`Close tab ${tab.title}`}
-          className={cn(!isActive && 'opacity-0 group-hover:opacity-100')}
-        >
-          <X />
-        </Button>
-      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        onClick={onClose}
+        aria-label={`Close tab ${tab.title}`}
+        className={cn(
+          'rounded-full hover:bg-foreground/15',
+          !isActive && 'opacity-0 group-hover:opacity-100'
+        )}
+      >
+        <X />
+      </Button>
     </div>
   )
 }
