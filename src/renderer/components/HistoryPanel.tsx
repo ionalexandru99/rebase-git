@@ -602,12 +602,29 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
             {/* Sticky fallback that fills the viewport whenever real rows
                 haven't caught up with the scroll position. Zero-height in the
                 normal flow so it doesn't offset row coordinates; its inner
-                absolute child paints over the visible window. */}
-            <div className="pointer-events-none sticky top-0 z-0" style={{ height: 0 }} aria-hidden>
-              <div className="absolute inset-x-0 top-0" style={{ height: viewportH }}>
-                <SkeletonRows gridTemplate={gridTemplate} viewportH={viewportH} />
-              </div>
-            </div>
+                absolute child paints over the visible window. We clip the
+                child to `totalHeight - scrollTop` so on short histories the
+                skeleton never paints below the last commit (and never
+                inflates scrollHeight past the data). */}
+            {(() => {
+              const visibleBelow = Math.max(0, totalHeight - scrollTop)
+              const overlayH = Math.min(viewportH, visibleBelow)
+              if (overlayH <= 0) return null
+              return (
+                <div
+                  className="pointer-events-none sticky top-0 z-0"
+                  style={{ height: 0 }}
+                  aria-hidden
+                >
+                  <div
+                    className="absolute inset-x-0 top-0 overflow-hidden"
+                    style={{ height: overlayH }}
+                  >
+                    <SkeletonRows gridTemplate={gridTemplate} viewportH={overlayH} />
+                  </div>
+                </div>
+              )
+            })()}
             {rows.slice(startIdx, endIdx).map((row, idx) => {
               const i = startIdx + idx
               const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
@@ -634,7 +651,18 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
 // changed. Each row owns its own <svg> sized to ROW_H — small layers paint
 // cheaply, unlike a single timeline-sized SVG which forces Chromium to manage
 // a huge composited surface.
-const GraphRow = memo(function GraphRow({ row, dim }: { row: RowLayout; dim: boolean }) {
+const GraphRow = memo(function GraphRow({
+  row,
+  dim,
+  isFirst
+}: {
+  row: RowLayout
+  dim: boolean
+  // True for the absolute first row of the timeline (newest commit). Suppresses
+  // the top half of the rail — there are no prior commits feeding into it, so
+  // any pre-seeded lane state (trunk anchor) is synthetic, not a real edge.
+  isFirst: boolean
+}) {
   const rowTop = 0
   const rowMid = ROW_H / 2
   const rowBot = ROW_H
@@ -646,49 +674,51 @@ const GraphRow = memo(function GraphRow({ row, dim }: { row: RowLayout; dim: boo
   const laneKey = (prefix: string, lane: number, h: string | null) =>
     `${prefix}_${row.commit.hash}_${lane}_${h ?? 'n'}`
 
-  const topEdges = row.incoming.map((h, j) => {
-    if (h === null) return null
-    const color = laneColor(j)
-    const opacity = dim ? 0.2 : 0.85
-    if (h === row.commit.hash) {
-      if (j === row.commitLane) {
+  const topEdges = isFirst
+    ? []
+    : row.incoming.map((h, j) => {
+        if (h === null) return null
+        const color = laneColor(j)
+        const opacity = dim ? 0.2 : 0.85
+        if (h === row.commit.hash) {
+          if (j === row.commitLane) {
+            return (
+              <line
+                key={laneKey('t', j, h)}
+                x1={laneX(j)}
+                y1={rowTop}
+                x2={dotX}
+                y2={rowMid}
+                stroke={color}
+                strokeWidth={1.5}
+                opacity={opacity}
+              />
+            )
+          }
+          return (
+            <path
+              key={laneKey('t', j, h)}
+              d={`M${laneX(j)},${rowTop} C${laneX(j)},${rowMid - ROW_H / 4} ${dotX},${rowMid - ROW_H / 4} ${dotX},${rowMid}`}
+              stroke={color}
+              strokeWidth={1.5}
+              fill="none"
+              opacity={opacity}
+            />
+          )
+        }
         return (
           <line
             key={laneKey('t', j, h)}
             x1={laneX(j)}
             y1={rowTop}
-            x2={dotX}
+            x2={laneX(j)}
             y2={rowMid}
             stroke={color}
             strokeWidth={1.5}
             opacity={opacity}
           />
         )
-      }
-      return (
-        <path
-          key={laneKey('t', j, h)}
-          d={`M${laneX(j)},${rowTop} C${laneX(j)},${rowMid - ROW_H / 4} ${dotX},${rowMid - ROW_H / 4} ${dotX},${rowMid}`}
-          stroke={color}
-          strokeWidth={1.5}
-          fill="none"
-          opacity={opacity}
-        />
-      )
-    }
-    return (
-      <line
-        key={laneKey('t', j, h)}
-        x1={laneX(j)}
-        y1={rowTop}
-        x2={laneX(j)}
-        y2={rowMid}
-        stroke={color}
-        strokeWidth={1.5}
-        opacity={opacity}
-      />
-    )
-  })
+      })
 
   const parentSet = new Set(row.commit.parents)
   const opacity = dim ? 0.2 : 0.85
@@ -827,7 +857,7 @@ const CommitRow = memo(function CommitRow({
         contain: 'layout paint style'
       }}
     >
-      <GraphRow row={row} dim={dim} />
+      <GraphRow row={row} dim={dim} isFirst={i === 0} />
       <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
         {isMerge && (
           <GitMerge aria-label="merge commit" className="size-3 shrink-0 text-emerald-500" />

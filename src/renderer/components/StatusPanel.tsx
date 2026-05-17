@@ -2,6 +2,7 @@ import { Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { GitStatus } from '../types'
 
 interface StatusPanelProps {
@@ -66,7 +67,10 @@ function EmptyRow({ text }: { text: string }) {
 }
 
 export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanelProps) {
-  if (!status) return null
+  if (!status) {
+    if (loading) return <StatusPanelSkeleton />
+    return null
+  }
 
   const totalChanges = status.modified.length + status.staged.length + status.not_added.length
   const subtitle =
@@ -133,6 +137,38 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
           )}
         </div>
       </ScrollArea>
+    </section>
+  )
+}
+
+function StatusPanelSkeleton() {
+  return (
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-card">
+      <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b px-3">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider">Working Directory</h2>
+          <Skeleton className="h-3 w-24 rounded" />
+        </div>
+        <Skeleton className="h-5 w-16 rounded" />
+      </header>
+      <div className="flex flex-1 flex-col gap-3 p-3">
+        {(['Modified', 'Staged', 'Untracked'] as const).map((section) => (
+          <div key={section} className="space-y-1.5">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {section}
+              </span>
+              <Skeleton className="h-3 w-4 rounded" />
+            </div>
+            {[0, 1].map((i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5">
+                <Skeleton className="size-3 rounded-sm" />
+                <Skeleton className="h-3 rounded" style={{ width: `${55 + ((i * 19) % 30)}%` }} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
     </section>
   )
 }

@@ -15,8 +15,16 @@ function mockOpenRepoSuccess(
   vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
     success: true,
     path,
-    status,
-    branches: { current: status.current, all: [status.current] }
+    remotes: {},
+    defaultBranch: status.current
+  })
+  vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+    success: true,
+    status
+  })
+  vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+    success: true,
+    branches: { current: status.current, all: [status.current], remotes: [], tags: [] }
   })
 }
 

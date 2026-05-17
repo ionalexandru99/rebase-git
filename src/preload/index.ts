@@ -18,6 +18,7 @@ export interface IElectronAPI {
   selectFolder: () => Promise<string | null>
   openRepo: (path: string) => Promise<unknown>
   closeRepo: (path: string) => Promise<unknown>
+  getBranches: (repoPath: string) => Promise<unknown>
   getStatus: (repoPath: string) => Promise<unknown>
   stageFile: (repoPath: string, file: string) => Promise<unknown>
   unstageFile: (repoPath: string, file: string) => Promise<unknown>
@@ -45,6 +46,7 @@ const api: IElectronAPI = {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   openRepo: (path: string) => ipcRenderer.invoke('open-repo', path),
   closeRepo: (path: string) => ipcRenderer.invoke('close-repo', path),
+  getBranches: (repoPath: string) => ipcRenderer.invoke('get-branches', repoPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke('get-status', repoPath),
   stageFile: (repoPath: string, file: string) => ipcRenderer.invoke('stage-file', repoPath, file),
   unstageFile: (repoPath: string, file: string) =>

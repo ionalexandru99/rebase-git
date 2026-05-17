@@ -158,6 +158,8 @@ const GRAPH_LOG_FLAGS = {
 interface SerializableBranches {
   current: string
   all: string[]
+  remotes: string[]
+  tags: string[]
 }
 
 // simple-git returns class instances (StatusResult, LogResult, BranchSummary)
@@ -194,12 +196,32 @@ function serializeLog(
   }
 }
 
+// `git.branch(['-a'])` returns both local and remote-tracking branches in one
+// shot; remote refs are flagged with a `remotes/` prefix. We split them here
+// so the renderer can list them under separate sidebar groups, and strip the
+// prefix from remote names so they display as `origin/main` rather than
+// `remotes/origin/main`. `HEAD ->` aliases (e.g. `remotes/origin/HEAD ->
+// origin/main`) are dropped — they duplicate the real ref.
 function serializeBranches(
-  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branchLocal']>>
+  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>,
+  tags: Awaited<ReturnType<ReturnType<typeof simpleGit>['tags']>>
 ): SerializableBranches {
+  const local: string[] = []
+  const remotes: string[] = []
+  for (const name of branches.all) {
+    if (name.startsWith('remotes/')) {
+      const stripped = name.slice('remotes/'.length)
+      if (stripped.includes(' -> ')) continue
+      remotes.push(stripped)
+    } else {
+      local.push(name)
+    }
+  }
   return {
     current: branches.current ?? '',
-    all: [...branches.all]
+    all: local,
+    remotes,
+    tags: [...tags.all]
   }
 }
 
@@ -234,6 +256,11 @@ async function resolveDefaultBranch(
   return currentLocal && currentLocal !== 'HEAD' ? currentLocal : undefined
 }
 
+// `open-repo` returns only the cheap "this is a repo, here's where its trunk
+// lives and which remotes it has" envelope. Status, branches, tags, and the
+// log are fetched by the renderer in parallel afterwards so each panel can
+// paint a skeleton until its own data arrives — no waterfall block on the
+// slowest call.
 ipcMain.handle('open-repo', async (_, repoPath: string) => {
   try {
     const git = getGit(repoPath)
@@ -246,24 +273,30 @@ ipcMain.handle('open-repo', async (_, repoPath: string) => {
 
     addRecentRepo(repoPath)
 
-    // Only fetch the cheap things here. The log/stash walk is what makes big
-    // repos feel slow on open — the renderer fetches it separately via
-    // `get-log` so the UI shows status + branches immediately.
-    const [status, branches, remotes] = await Promise.all([
-      git.status(),
-      git.branchLocal(),
-      git.getRemotes(true)
-    ])
-    const defaultBranch = await resolveDefaultBranch(git, branches.current)
+    const remotes = await git.getRemotes(true)
+    // resolveDefaultBranch needs the current local branch name as a fallback;
+    // we don't have a status here so pass undefined and let it fall back to
+    // origin/HEAD only. The renderer can still display "no-branch" until the
+    // status call lands.
+    const defaultBranch = await resolveDefaultBranch(git, undefined)
 
     return {
       success: true,
-      status: serializeStatus(status),
-      branches: serializeBranches(branches),
       remotes: serializeRemotes(remotes),
       defaultBranch,
       path: repoPath
     }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+})
+
+ipcMain.handle('get-branches', async (_, repoPath: string) => {
+  const git = gitInstances.get(repoPath)
+  if (!git) return { success: false, error: 'No repository open' }
+  try {
+    const [branches, tags] = await Promise.all([git.branch(['-a']), git.tags()])
+    return { success: true, branches: serializeBranches(branches, tags) }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
   }

@@ -22,13 +22,16 @@ export interface GitLog {
 export interface GitBranches {
   current: string
   all: string[]
+  remotes: string[]
+  tags: string[]
 }
 
-export interface RepoData {
+// Returned by the `open-repo` IPC. Only the cheap envelope — status and
+// branches arrive separately through `get-status` and `get-branches` so each
+// panel can paint independently.
+export interface RepoOpenResult {
   success: boolean
   error?: string
-  status: GitStatus
-  branches: GitBranches
   remotes: Record<string, string>
   defaultBranch?: string
   path: string

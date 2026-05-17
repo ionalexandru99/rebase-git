@@ -249,30 +249,36 @@ function TabView({
     onReportRepo(tabId, git.repoPath ?? null)
   }, [git.repoPath, tabId, onReportRepo])
 
+  const errorBanner = git.error ? (
+    <div className="shrink-0 border-b px-4 py-2">
+      <Alert variant="destructive" className="border-destructive/30">
+        <AlertCircle />
+        <AlertDescription>{git.error}</AlertDescription>
+      </Alert>
+    </div>
+  ) : null
+
   return (
     <>
-      {git.error && (
-        <div className="shrink-0 border-b px-4 py-2">
-          <Alert variant="destructive" className="border-destructive/30">
-            <AlertCircle />
-            <AlertDescription>{git.error}</AlertDescription>
-          </Alert>
-        </div>
-      )}
-
+      {/* Pre-repo: the picker has no sidebar, so a top-level banner is fine.
+          Inside the workspace, the banner has to live inside SidebarInset
+          (the right panel) — otherwise the fixed shadcn sidebar overlays it. */}
       {!git.repoPath ? (
-        <RepoPicker
-          recentRepos={recentRepos}
-          discoveredRepos={discoveredRepos}
-          workspaces={workspaces}
-          activeWorkspace={activeWorkspace}
-          onSwitchWorkspace={onSwitchWorkspace}
-          onAddWorkspace={onAddWorkspace}
-          onRemoveWorkspace={onRemoveWorkspace}
-          onOpenRepo={(path) => {
-            if (!onRequestOpenRepo(tabId, path)) git.openRepo(path)
-          }}
-        />
+        <>
+          {errorBanner}
+          <RepoPicker
+            recentRepos={recentRepos}
+            discoveredRepos={discoveredRepos}
+            workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
+            onSwitchWorkspace={onSwitchWorkspace}
+            onAddWorkspace={onAddWorkspace}
+            onRemoveWorkspace={onRemoveWorkspace}
+            onOpenRepo={(path) => {
+              if (!onRequestOpenRepo(tabId, path)) git.openRepo(path)
+            }}
+          />
+        </>
       ) : (
         <Workspace
           git={git}
@@ -280,6 +286,7 @@ function TabView({
           stagedCount={stagedCount}
           untrackedCount={untrackedCount}
           totalChanges={totalChanges}
+          errorBanner={errorBanner}
         />
       )}
     </>
@@ -473,6 +480,7 @@ interface WorkspaceProps {
   stagedCount: number
   untrackedCount: number
   totalChanges: number
+  errorBanner: React.ReactNode
 }
 
 function Workspace({
@@ -480,38 +488,38 @@ function Workspace({
   modifiedCount,
   stagedCount,
   untrackedCount,
-  totalChanges
+  totalChanges,
+  errorBanner
 }: WorkspaceProps) {
   const repoName = git.repoPath?.split('/').filter(Boolean).at(-1) ?? 'Repository'
   const branch = git.currentBranch || 'no-branch'
   const [activeView, setActiveView] = useState<SidebarView>('history')
 
-  const sidebarBranches = useMemo(() => {
-    const all = git.branches?.all ?? (branch ? [branch] : [])
-    return all.map((name) => ({
-      name,
-      current: name === branch,
-      ahead: 0,
-      behind: 0
-    }))
-  }, [git.branches, branch])
+  // Returning a fresh `[]` from the `??` fallback on every render would make
+  // RefTreePanel's row useMemo invalidate every parent render — and would also
+  // hide the skeleton path, since a non-empty `[branch]` array makes the panel
+  // think it has real data. useMemo gives us a stable empty array until
+  // git.branches actually arrives.
+  const sidebarLocalBranches = useMemo(() => git.branches?.all ?? [], [git.branches])
+  const sidebarRemoteBranches = useMemo(() => git.branches?.remotes ?? [], [git.branches])
+  const sidebarTags = useMemo(() => git.branches?.tags ?? [], [git.branches])
 
   return (
     <Shell
       repoName={repoName}
       repoPath={git.repoPath}
       branch={branch}
-      branches={sidebarBranches}
+      localBranches={sidebarLocalBranches}
+      remoteBranches={sidebarRemoteBranches}
+      tags={sidebarTags}
+      branchesLoading={git.branchesLoading}
       ahead={0}
       behind={0}
       changes={totalChanges}
-      activeBranch={branch}
       activeView={activeView}
       onSelectView={setActiveView}
-      onSelectBranch={() => {
-        /* branch switching not yet wired through useGit */
-      }}
     >
+      {errorBanner}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
         {/* Always mounted so CommitPanel draft state survives view switches */}
         <div
@@ -523,7 +531,7 @@ function Workspace({
               status={git.status}
               onStage={git.stageFile}
               onUnstage={git.unstageFile}
-              loading={git.loading}
+              loading={git.loading || git.statusLoading}
             />
           </div>
           <div className="min-h-0 overflow-hidden">

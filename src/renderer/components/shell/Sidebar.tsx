@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, FileDiff, GitBranch, History } from 'lucide-react'
+import { FileDiff, History } from 'lucide-react'
 import {
   Sidebar as ShadSidebar,
   SidebarContent,
@@ -9,36 +9,51 @@ import {
   SidebarMenuButton,
   SidebarMenuItem
 } from '@/components/ui/sidebar'
-
-interface SidebarBranch {
-  name: string
-  current: boolean
-  ahead?: number
-  behind?: number
-}
+import { type RefKind, RefTreePanel } from './RefTreePanel'
 
 export type SidebarView = 'history' | 'local-changes'
 
 interface AppSidebarProps {
-  branches: SidebarBranch[]
+  localBranches: string[]
+  remoteBranches: string[]
+  tags: string[]
+  currentBranch: string
+  branchesLoading?: boolean
   workingChanges: number
-  activeBranch: string
   activeView: SidebarView
   onSelectView: (view: SidebarView) => void
-  onSelectBranch: (name: string) => void
+  onSelectRef?: (refKind: RefKind, fullPath: string) => void
+  onResizeStart?: (e: React.MouseEvent) => void
 }
 
 export function AppSidebar({
-  branches,
+  localBranches,
+  remoteBranches,
+  tags,
+  currentBranch,
+  branchesLoading,
   workingChanges,
-  activeBranch,
   activeView,
   onSelectView,
-  onSelectBranch
+  onSelectRef,
+  onResizeStart
 }: AppSidebarProps) {
   return (
     <ShadSidebar className="!top-10 !h-[calc(100svh-2.5rem)]">
-      <SidebarContent>
+      {onResizeStart && (
+        <span
+          onMouseDown={onResizeStart}
+          aria-hidden
+          className="group/sidebar-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+        >
+          <span className="w-px bg-transparent transition-colors group-hover/sidebar-resize:bg-primary/60" />
+        </span>
+      )}
+      {/* SidebarContent normally owns scrolling. We disable it here so the
+          virtualized RefTreePanel can manage its own scroll viewport — nested
+          scroll regions would otherwise fight each other and break the
+          virtualization math. */}
+      <SidebarContent className="!overflow-hidden">
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarMenu>
@@ -64,34 +79,14 @@ export function AppSidebar({
           </SidebarMenu>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Branches</SidebarGroupLabel>
-          <SidebarMenu>
-            {branches.map((b) => (
-              <SidebarMenuItem key={b.name}>
-                <SidebarMenuButton
-                  isActive={b.name === activeBranch}
-                  onClick={() => onSelectBranch(b.name)}
-                >
-                  <GitBranch />
-                  <span className="truncate">{b.name}</span>
-                  {(b.ahead ?? 0) > 0 && (
-                    <span className="ml-auto inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                      <ArrowUp className="size-3" />
-                      {b.ahead}
-                    </span>
-                  )}
-                  {(b.behind ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-                      <ArrowDown className="size-3" />
-                      {b.behind}
-                    </span>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
+        <RefTreePanel
+          localBranches={localBranches}
+          remoteBranches={remoteBranches}
+          tags={tags}
+          currentBranch={currentBranch}
+          loading={branchesLoading}
+          onSelectRef={onSelectRef}
+        />
       </SidebarContent>
     </ShadSidebar>
   )

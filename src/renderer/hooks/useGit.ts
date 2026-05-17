@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { GitBranches, GitLog, GitLogEntry, GitStatus, RepoData } from '../types'
+import type { GitBranches, GitLog, GitLogEntry, GitStatus, RepoOpenResult } from '../types'
 
 type StatusResult = { success: boolean; status?: GitStatus; error?: string }
+type BranchesResult = { success: boolean; branches?: GitBranches; error?: string }
 type OpResult = { success: boolean; error?: string }
 type LogChunk = { repoPath: string; commits: GitLogEntry[]; done: boolean; error?: string }
 
@@ -14,6 +15,8 @@ export function useGit() {
   const [defaultBranch, setDefaultBranch] = useState<string | undefined>(undefined)
   const [currentBranch, setCurrentBranch] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [statusLoading, setStatusLoading] = useState(false)
+  const [branchesLoading, setBranchesLoading] = useState(false)
   const [logLoading, setLogLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -62,28 +65,94 @@ export function useGit() {
     })
   }, [])
 
+  // Open in two phases:
+  // 1. The `open-repo` IPC returns immediately with just the envelope (path,
+  //    remotes, defaultBranch). The renderer can paint the workspace shell
+  //    right away.
+  // 2. Status, branches+tags, and the streamed log all fire in parallel.
+  //    Each panel paints its own skeleton until its data lands; nothing
+  //    waits on the slowest one.
   const openRepo = useCallback(
     async (path: string) => {
       setLoading(true)
+      setStatusLoading(true)
+      setBranchesLoading(true)
       setError(null)
+      setStatus(null)
+      setBranches(null)
       activePathRef.current = path
       try {
-        const result = (await window.electronAPI.openRepo(path)) as RepoData
-        if (result.success) {
-          setRepoPath(result.path)
-          setStatus(result.status)
-          setBranches(result.branches)
-          setRemotes(result.remotes ?? {})
-          setDefaultBranch(result.defaultBranch)
-          setCurrentBranch(result.status.current)
-          // Kick off the streamed log load. The renderer paints status +
-          // branches immediately while commits arrive in batches.
-          startLogStream(result.path)
-        } else {
-          setError(result.error || 'Failed to open repository')
+        const open = (await window.electronAPI.openRepo(path)) as RepoOpenResult
+        if (!open.success) {
+          console.error('[useGit] open-repo failed', { path, error: open.error })
+          setError(open.error || 'Failed to open repository')
+          setStatusLoading(false)
+          setBranchesLoading(false)
+          return
         }
+        // The repo is now mounted on the main side; reveal it to the renderer
+        // before we wait on the heavier follow-up calls.
+        setRepoPath(open.path)
+        setRemotes(open.remotes ?? {})
+        setDefaultBranch(open.defaultBranch)
+
+        // Start streaming the log right away — its skeleton path is already
+        // wired through HistoryPanel.
+        startLogStream(open.path)
+
+        // Status and branches/tags fire concurrently; we don't await both
+        // before resolving so that whichever returns first lights up its
+        // panel without blocking the other.
+        window.electronAPI
+          .getStatus(open.path)
+          .then((res) => {
+            const r = res as StatusResult
+            if (activePathRef.current !== open.path) return
+            if (r.success && r.status) {
+              setStatus(r.status)
+              setCurrentBranch(r.status.current)
+            } else if (r.error) {
+              console.error('[useGit] get-status failed', { path: open.path, error: r.error })
+              setError(r.error)
+            }
+          })
+          .catch((err: unknown) => {
+            if (activePathRef.current !== open.path) return
+            console.error('[useGit] get-status threw', err)
+            setError(err instanceof Error ? err.message : 'Unknown error')
+          })
+          .finally(() => {
+            if (activePathRef.current === open.path) setStatusLoading(false)
+          })
+
+        window.electronAPI
+          .getBranches(open.path)
+          .then((res) => {
+            const r = res as BranchesResult
+            if (activePathRef.current !== open.path) return
+            if (r.success && r.branches) {
+              setBranches(r.branches)
+              // If status hasn't landed yet, seed the current branch from
+              // the branch summary so the sidebar can highlight it.
+              setCurrentBranch((prev) => prev || r.branches?.current || '')
+            } else if (r.error) {
+              console.error('[useGit] get-branches failed', { path: open.path, error: r.error })
+              setError(r.error)
+            }
+          })
+          .catch((err: unknown) => {
+            if (activePathRef.current !== open.path) return
+            console.error('[useGit] get-branches threw', err)
+            setError(err instanceof Error ? err.message : 'Unknown error')
+          })
+          .finally(() => {
+            if (activePathRef.current === open.path) setBranchesLoading(false)
+          })
       } catch (err) {
+        console.error('[useGit] openRepo threw', err)
         setError(err instanceof Error ? err.message : 'Unknown error')
+        setStatusLoading(false)
+        setBranchesLoading(false)
       } finally {
         setLoading(false)
       }
@@ -112,6 +181,8 @@ export function useGit() {
     setCurrentBranch('')
     setError(null)
     setLogLoading(false)
+    setStatusLoading(false)
+    setBranchesLoading(false)
   }, [repoPath])
 
   // Quiet status refresh — no `loading` toggle. Used after stage/unstage/commit
@@ -139,19 +210,31 @@ export function useGit() {
   const refreshRepo = useCallback(async () => {
     if (!repoPath) return
     setLoading(true)
+    setStatusLoading(true)
+    setBranchesLoading(true)
     try {
-      const result = (await window.electronAPI.openRepo(repoPath)) as RepoData
-      if (result.success) {
-        setStatus(result.status)
-        setBranches(result.branches)
-        setRemotes(result.remotes ?? {})
-        setDefaultBranch(result.defaultBranch)
-        setCurrentBranch(result.status.current)
+      const open = (await window.electronAPI.openRepo(repoPath)) as RepoOpenResult
+      if (open.success) {
+        setRemotes(open.remotes ?? {})
+        setDefaultBranch(open.defaultBranch)
+      }
+      const [statusRes, branchesRes] = await Promise.all([
+        window.electronAPI.getStatus(repoPath) as Promise<StatusResult>,
+        window.electronAPI.getBranches(repoPath) as Promise<BranchesResult>
+      ])
+      if (statusRes.success && statusRes.status) {
+        setStatus(statusRes.status)
+        setCurrentBranch(statusRes.status.current)
+      }
+      if (branchesRes.success && branchesRes.branches) {
+        setBranches(branchesRes.branches)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
+      setStatusLoading(false)
+      setBranchesLoading(false)
     }
     startLogStream(repoPath)
   }, [repoPath, startLogStream])
@@ -206,6 +289,8 @@ export function useGit() {
     defaultBranch,
     currentBranch,
     loading,
+    statusLoading,
+    branchesLoading,
     logLoading,
     error,
     openRepo,
