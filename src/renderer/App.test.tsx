@@ -1,6 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setupLogStream } from '@/../test/setup'
 import App from '@/App'
+
+beforeEach(() => {
+  // Every test that mounts App may open a repo and trigger the log stream
+  // subscription; install a default mock so the hook's useEffect resolves.
+  setupLogStream()
+})
 
 function mockBaseAPI(
   overrides: Partial<{
@@ -223,20 +230,15 @@ describe('App — workspace (repo open)', () => {
       staged: ['src/b.ts', 'src/c.ts'],
       not_added: ['new.ts']
     },
-    log: {
-      all: [
-        {
-          hash: '1234567abc',
-          message: 'Initial commit',
-          author_name: 'Jane Doe',
-          date: new Date().toISOString(),
-          parents: [],
-          refs: 'HEAD -> feature/ui'
-        }
-      ],
-      total: 1
-    },
     branches: { current: 'feature/ui', all: ['main', 'feature/ui'] }
+  }
+  const sampleCommit = {
+    hash: '1234567abc',
+    message: 'Initial commit',
+    author_name: 'Jane Doe',
+    date: new Date().toISOString(),
+    parents: [],
+    refs: 'HEAD -> feature/ui'
   }
 
   async function renderWithRepo() {
@@ -245,6 +247,7 @@ describe('App — workspace (repo open)', () => {
       scanRepos: ['/home/user/projects/my-app']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
+    const stream = setupLogStream()
 
     render(<App />)
 
@@ -254,6 +257,13 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/my-app')
     })
+
+    // Push one commit and signal end-of-stream so any "log loaded" UI lights up.
+    stream.fire({
+      repoPath: '/home/user/projects/my-app',
+      commits: [sampleCommit]
+    })
+    stream.fireDone('/home/user/projects/my-app')
   }
 
   it('renders the repo dashboard with name, branch, and change counts', async () => {
@@ -275,7 +285,7 @@ describe('App — workspace (repo open)', () => {
 
     // History is the default view — timeline visible, staging UI mounted but hidden.
     expect(await screen.findByText('Timeline')).toBeVisible()
-    expect(screen.getByText('Initial commit')).toBeVisible()
+    expect(await screen.findByText('Initial commit')).toBeVisible()
     expect(screen.getByText('Working Directory')).not.toBeVisible()
     expect(screen.getByText('Commit')).not.toBeVisible()
 
@@ -303,9 +313,9 @@ describe('App — workspace (repo open)', () => {
       success: true,
       path: '/workspace/repo',
       status: { current: 'main', modified: [], staged: [], not_added: [] },
-      log: { all: [], total: 0 },
       branches: { current: 'main', all: ['main'] }
     })
+    setupLogStream()
 
     render(<App />)
     const repoRow = await screen.findByText('/workspace/repo')

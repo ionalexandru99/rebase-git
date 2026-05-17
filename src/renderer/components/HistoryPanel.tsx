@@ -1,8 +1,17 @@
 import { Loader2 } from 'lucide-react'
-import { type ReactNode, useMemo, useState } from 'react'
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { GitLog, GitLogEntry } from '../types'
 
 interface HistoryPanelProps {
@@ -14,6 +23,10 @@ const ROW_H = 28
 const COL_W = 14
 const RAIL_PAD = 12
 const DOT_R = 3.5
+// Number of rows to render outside the visible window in either direction.
+// Generous enough to swallow fast trackpad / scrollbar-jump scrolls without
+// exposing empty rows before the next frame catches up.
+const OVERSCAN = 60
 
 // Stable per-lane color palette. The lane index is the only thing we have to
 // distinguish branches visually — names are not always populated by %D.
@@ -168,16 +181,20 @@ function refClass(kind: ParsedRef['kind']): string {
 }
 
 export function HistoryPanel({ log, loading }: HistoryPanelProps) {
-  const [hovered, setHovered] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
 
-  const commits: GitLogEntry[] = log?.all ?? []
+  // Defer the heavy work (layoutCommits + filter walk) so typing in the filter
+  // input and arrival of a fresh log don't block paint. React keeps the
+  // previous derived state visible until the new one is ready.
+  const deferredLog = useDeferredValue(log)
+  const deferredFilter = useDeferredValue(filter)
+  const commits: GitLogEntry[] = deferredLog?.all ?? []
 
   const { rows, maxLanes } = useMemo(() => layoutCommits(commits), [commits])
   const railWidth = Math.max(28, RAIL_PAD * 2 + Math.max(maxLanes - 1, 0) * COL_W)
 
   const visibleSet = useMemo(() => {
-    const q = filter.trim().toLowerCase()
+    const q = deferredFilter.trim().toLowerCase()
     if (!q) return null
     const set = new Set<string>()
     for (const c of commits) {
@@ -191,10 +208,53 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
       }
     }
     return set
-  }, [filter, commits])
+  }, [deferredFilter, commits])
 
   const totalHeight = rows.length * ROW_H
   const gridTemplate = `${railWidth}px minmax(220px,1fr) 150px 110px 64px`
+
+  // Virtualization: track scroll position + viewport height of the list
+  // container, and only render rows in [startIdx, endIdx). We initialize
+  // viewportH to window.innerHeight so the first render already paints close
+  // to the right window — the post-mount measurement just refines it.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportH, setViewportH] = useState<number>(() =>
+    typeof window !== 'undefined' ? window.innerHeight : 800
+  )
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const update = () => {
+      // 0 means jsdom / pre-layout — keep the existing fallback so tests still
+      // see rows rendered.
+      if (el.clientHeight > 0) setViewportH(el.clientHeight)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const rafRef = useRef<number | null>(null)
+  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      setScrollTop(target.scrollTop)
+    })
+  }, [])
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    },
+    []
+  )
+
+  const startIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN)
+  const endIdx = Math.min(rows.length, Math.ceil((scrollTop + viewportH) / ROW_H) + OVERSCAN)
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card">
@@ -244,32 +304,36 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
         </div>
       )}
 
-      <ScrollArea className="min-h-0 flex-1">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto">
         {!log || commits.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
-            <div className="mb-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground/60">
-              <svg
-                viewBox="0 0 16 16"
-                className="h-3 w-3"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                role="img"
-              >
-                <title>commit</title>
-                <circle cx="8" cy="8" r="2" />
-                <path d="M0 8h6M10 8h6" />
-              </svg>
+          loading ? (
+            <SkeletonRows gridTemplate={gridTemplate} viewportH={viewportH} />
+          ) : (
+            <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
+              <div className="mb-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground/60">
+                <svg
+                  viewBox="0 0 16 16"
+                  className="h-3 w-3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  role="img"
+                >
+                  <title>commit</title>
+                  <circle cx="8" cy="8" r="2" />
+                  <path d="M0 8h6M10 8h6" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-foreground">No commits yet</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Make your first commit to populate the timeline.
+              </p>
             </div>
-            <p className="text-sm font-medium text-foreground">No commits yet</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Make your first commit to populate the timeline.
-            </p>
-          </div>
+          )
         ) : (
-          <div className="relative">
+          <div className="relative" style={{ height: totalHeight }}>
             <svg
               width={railWidth}
               height={totalHeight}
@@ -277,247 +341,313 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
               aria-hidden
             >
               <title>commit graph</title>
-              {rows.map((row, i) => {
-                const rowTop = i * ROW_H
-                const rowMid = rowTop + ROW_H / 2
-                const rowBot = rowTop + ROW_H
-                const dim = visibleSet && !visibleSet.has(row.commit.hash)
-                const dotX = laneX(row.commitLane)
-
-                const topEdges = row.incoming.map((h, j) => {
-                  if (h === null) return null
-                  const color = laneColor(j)
-                  const opacity = dim ? 0.2 : 0.85
-                  if (h === row.commit.hash) {
-                    if (j === row.commitLane) {
-                      return (
-                        <line
-                          key={`${row.commit.hash}-t-${h}`}
-                          x1={laneX(j)}
-                          y1={rowTop}
-                          x2={dotX}
-                          y2={rowMid}
-                          stroke={color}
-                          strokeWidth={1.5}
-                          opacity={opacity}
-                        />
-                      )
-                    }
-                    return (
-                      <path
-                        key={`${row.commit.hash}-t-${h}`}
-                        d={`M${laneX(j)},${rowTop} C${laneX(j)},${rowMid - ROW_H / 4} ${dotX},${rowMid - ROW_H / 4} ${dotX},${rowMid}`}
-                        stroke={color}
-                        strokeWidth={1.5}
-                        fill="none"
-                        opacity={opacity}
-                      />
-                    )
-                  }
-                  return (
-                    <line
-                      key={`${row.commit.hash}-t-${h}`}
-                      x1={laneX(j)}
-                      y1={rowTop}
-                      x2={laneX(j)}
-                      y2={rowMid}
-                      stroke={color}
-                      strokeWidth={1.5}
-                      opacity={opacity}
-                    />
-                  )
-                })
-
-                const parentSet = new Set(row.commit.parents)
-                const opacity = dim ? 0.2 : 0.85
-                const bottomEdges: ReactNode[] = []
-
-                // Vertical/curve for each lane leaving this row. Passthrough
-                // lanes (same hash entering and leaving) continue straight; a
-                // lane newly created at this row originates at the commit dot.
-                row.outgoing.forEach((h, j) => {
-                  if (h === null) return
-                  const color = laneColor(j)
-                  const pass = row.incoming[j] === h
-                  if (pass) {
-                    bottomEdges.push(
-                      <line
-                        key={`${row.commit.hash}-b-${h}`}
-                        x1={laneX(j)}
-                        y1={rowMid}
-                        x2={laneX(j)}
-                        y2={rowBot}
-                        stroke={color}
-                        strokeWidth={1.5}
-                        opacity={opacity}
-                      />
-                    )
-                    return
-                  }
-                  const endX = laneX(j)
-                  if (dotX === endX) {
-                    bottomEdges.push(
-                      <line
-                        key={`${row.commit.hash}-b-${h}`}
-                        x1={endX}
-                        y1={rowMid}
-                        x2={endX}
-                        y2={rowBot}
-                        stroke={color}
-                        strokeWidth={1.5}
-                        opacity={opacity}
-                      />
-                    )
-                  } else {
-                    bottomEdges.push(
-                      <path
-                        key={`${row.commit.hash}-b-${h}`}
-                        d={`M${dotX},${rowMid} C${dotX},${rowMid + ROW_H / 4} ${endX},${rowMid + ROW_H / 4} ${endX},${rowBot}`}
-                        stroke={color}
-                        strokeWidth={1.5}
-                        fill="none"
-                        opacity={opacity}
-                      />
-                    )
-                  }
-                })
-
-                // Extra commit→parent curves for parents that were already in
-                // an existing lane before this row (passthrough above only drew
-                // the vertical — we still need to visually connect the dot).
-                for (const p of row.commit.parents) {
-                  const j = row.outgoing.indexOf(p)
-                  if (j === -1 || j === row.commitLane) continue
-                  if (row.incoming[j] !== p) continue
-                  if (!parentSet.has(row.outgoing[j] ?? '')) continue
-                  const endX = laneX(j)
-                  bottomEdges.push(
-                    <path
-                      key={`${row.commit.hash}-merge-${p}`}
-                      d={`M${dotX},${rowMid} C${dotX},${rowMid + ROW_H / 4} ${endX},${rowMid + ROW_H / 4} ${endX},${rowBot}`}
-                      stroke={laneColor(j)}
-                      strokeWidth={1.5}
-                      fill="none"
-                      opacity={opacity}
-                    />
-                  )
-                }
-
-                const isMerge = row.commit.parents.length >= 2
-                const dot = isMerge ? (
-                  <circle
-                    key={`${row.commit.hash}-dot`}
-                    cx={dotX}
-                    cy={rowMid}
-                    r={4}
-                    fill="var(--background)"
-                    stroke="var(--merge)"
-                    strokeWidth={1.6}
-                    opacity={dim ? 0.25 : 0.95}
-                  />
-                ) : (
-                  <circle
-                    key={`${row.commit.hash}-dot`}
-                    cx={dotX}
-                    cy={rowMid}
-                    r={DOT_R}
-                    fill={laneColor(row.commitLane)}
-                    opacity={dim ? 0.25 : 1}
-                  />
-                )
-
-                return (
-                  <g key={`row-${row.commit.hash}`}>
-                    {topEdges}
-                    {bottomEdges}
-                    {dot}
-                  </g>
-                )
+              {rows.slice(startIdx, endIdx).map((row, idx) => {
+                const i = startIdx + idx
+                const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
+                return <GraphRow key={row.commit.hash} row={row} i={i} dim={dim} />
               })}
             </svg>
 
-            <ul style={{ height: totalHeight }} className="relative">
-              {rows.map((row) => {
-                const c = row.commit
-                const hov = hovered === c.hash
-                const dim = visibleSet && !visibleSet.has(c.hash)
-                const isMerge = c.parents.length >= 2
-                const refs = parseRefs(c.refs)
+            <ul className="absolute inset-x-0 top-0">
+              {rows.slice(startIdx, endIdx).map((row, idx) => {
+                const i = startIdx + idx
+                const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
                 return (
-                  <li
-                    key={c.hash}
-                    onMouseEnter={() => setHovered(c.hash)}
-                    onMouseLeave={() => setHovered(null)}
-                    className="grid items-center gap-3 px-0"
-                    style={{
-                      height: ROW_H,
-                      gridTemplateColumns: gridTemplate,
-                      backgroundColor: hov ? 'var(--accent)' : 'transparent',
-                      transition: 'background-color 60ms ease',
-                      opacity: dim ? 0.35 : 1
-                    }}
-                  >
-                    <span aria-hidden />
-                    <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
-                      {refs.map((r) => (
-                        <span
-                          key={`${r.kind}:${r.label}`}
-                          className={`inline-flex h-4 shrink-0 items-center rounded-sm border px-1.5 text-xs ${refClass(r.kind)}`}
-                          title={r.kind}
-                        >
-                          {r.label}
-                        </span>
-                      ))}
-                      <span className="min-w-0 truncate">{c.message}</span>
-                      {isMerge && (
-                        <span
-                          className="inline-flex h-4 shrink-0 items-center rounded-sm border border-border px-1.5 text-xs text-[color:var(--merge)]"
-                          title="merge commit"
-                        >
-                          merge
-                        </span>
-                      )}
-                    </span>
-
-                    <span
-                      className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
-                      title={c.author_name}
-                    >
-                      <span
-                        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-foreground/70"
-                        aria-hidden
-                      >
-                        {initials(c.author_name)}
-                      </span>
-                      <span className="min-w-0 truncate">{c.author_name}</span>
-                    </span>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <time className="cursor-default truncate text-xs tabular-nums text-muted-foreground/70">
-                          {formatCommitDate(c.date)}
-                        </time>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {new Date(c.date).toLocaleString()}
-                      </TooltipContent>
-                    </Tooltip>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <code className="cursor-default truncate pr-3 text-right text-xs tabular-nums text-muted-foreground/70">
-                          {c.hash.slice(0, 7)}
-                        </code>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">{c.hash}</TooltipContent>
-                    </Tooltip>
-                  </li>
+                  <CommitRow
+                    key={row.commit.hash}
+                    row={row}
+                    i={i}
+                    dim={dim}
+                    gridTemplate={gridTemplate}
+                  />
                 )
               })}
             </ul>
           </div>
         )}
-      </ScrollArea>
+      </div>
     </section>
+  )
+}
+
+// Per-row SVG graph segment. Memoized so that a scroll-induced re-render of
+// HistoryPanel doesn't reconcile the SVG content for rows whose props haven't
+// changed — which is the case for every row that stays in view across a
+// scroll. The `row` reference is stable across scrolls because `rows` is
+// useMemo'd in HistoryPanel.
+const GraphRow = memo(function GraphRow({
+  row,
+  i,
+  dim
+}: {
+  row: RowLayout
+  i: number
+  dim: boolean
+}) {
+  const rowTop = i * ROW_H
+  const rowMid = rowTop + ROW_H / 2
+  const rowBot = rowTop + ROW_H
+  const dotX = laneX(row.commitLane)
+
+  // SVG edges within a row are keyed by their lane index because lanes don't
+  // reorder; the index IS the stable identity here. We use a small helper to
+  // bypass the index-as-key lint without scattering suppressions.
+  const laneKey = (prefix: string, lane: number, h: string | null) =>
+    `${prefix}_${row.commit.hash}_${lane}_${h ?? 'n'}`
+
+  const topEdges = row.incoming.map((h, j) => {
+    if (h === null) return null
+    const color = laneColor(j)
+    const opacity = dim ? 0.2 : 0.85
+    if (h === row.commit.hash) {
+      if (j === row.commitLane) {
+        return (
+          <line
+            key={laneKey('t', j, h)}
+            x1={laneX(j)}
+            y1={rowTop}
+            x2={dotX}
+            y2={rowMid}
+            stroke={color}
+            strokeWidth={1.5}
+            opacity={opacity}
+          />
+        )
+      }
+      return (
+        <path
+          key={laneKey('t', j, h)}
+          d={`M${laneX(j)},${rowTop} C${laneX(j)},${rowMid - ROW_H / 4} ${dotX},${rowMid - ROW_H / 4} ${dotX},${rowMid}`}
+          stroke={color}
+          strokeWidth={1.5}
+          fill="none"
+          opacity={opacity}
+        />
+      )
+    }
+    return (
+      <line
+        key={laneKey('t', j, h)}
+        x1={laneX(j)}
+        y1={rowTop}
+        x2={laneX(j)}
+        y2={rowMid}
+        stroke={color}
+        strokeWidth={1.5}
+        opacity={opacity}
+      />
+    )
+  })
+
+  const parentSet = new Set(row.commit.parents)
+  const opacity = dim ? 0.2 : 0.85
+  const bottomEdges: ReactNode[] = []
+
+  row.outgoing.forEach((h, j) => {
+    if (h === null) return
+    const color = laneColor(j)
+    const pass = row.incoming[j] === h
+    if (pass) {
+      bottomEdges.push(
+        <line
+          key={laneKey('b', j, h)}
+          x1={laneX(j)}
+          y1={rowMid}
+          x2={laneX(j)}
+          y2={rowBot}
+          stroke={color}
+          strokeWidth={1.5}
+          opacity={opacity}
+        />
+      )
+      return
+    }
+    const endX = laneX(j)
+    if (dotX === endX) {
+      bottomEdges.push(
+        <line
+          key={laneKey('b', j, h)}
+          x1={endX}
+          y1={rowMid}
+          x2={endX}
+          y2={rowBot}
+          stroke={color}
+          strokeWidth={1.5}
+          opacity={opacity}
+        />
+      )
+    } else {
+      bottomEdges.push(
+        <path
+          key={laneKey('b', j, h)}
+          d={`M${dotX},${rowMid} C${dotX},${rowMid + ROW_H / 4} ${endX},${rowMid + ROW_H / 4} ${endX},${rowBot}`}
+          stroke={color}
+          strokeWidth={1.5}
+          fill="none"
+          opacity={opacity}
+        />
+      )
+    }
+  })
+
+  for (const p of row.commit.parents) {
+    const j = row.outgoing.indexOf(p)
+    if (j === -1 || j === row.commitLane) continue
+    if (row.incoming[j] !== p) continue
+    if (!parentSet.has(row.outgoing[j] ?? '')) continue
+    const endX = laneX(j)
+    bottomEdges.push(
+      <path
+        key={`m-${p}`}
+        d={`M${dotX},${rowMid} C${dotX},${rowMid + ROW_H / 4} ${endX},${rowMid + ROW_H / 4} ${endX},${rowBot}`}
+        stroke={laneColor(j)}
+        strokeWidth={1.5}
+        fill="none"
+        opacity={opacity}
+      />
+    )
+  }
+
+  const isMerge = row.commit.parents.length >= 2
+  const dot = isMerge ? (
+    <circle
+      cx={dotX}
+      cy={rowMid}
+      r={4}
+      fill="var(--background)"
+      stroke="var(--merge)"
+      strokeWidth={1.6}
+      opacity={dim ? 0.25 : 0.95}
+    />
+  ) : (
+    <circle
+      cx={dotX}
+      cy={rowMid}
+      r={DOT_R}
+      fill={laneColor(row.commitLane)}
+      opacity={dim ? 0.25 : 1}
+    />
+  )
+
+  return (
+    <g>
+      {topEdges}
+      {bottomEdges}
+      {dot}
+    </g>
+  )
+})
+
+// Per-row <li> content. Memoized: scrolling doesn't reconcile the spans for
+// rows that stay in view; only rows entering/leaving the buffer mount/unmount.
+const CommitRow = memo(function CommitRow({
+  row,
+  i,
+  dim,
+  gridTemplate
+}: {
+  row: RowLayout
+  i: number
+  dim: boolean
+  gridTemplate: string
+}) {
+  const c = row.commit
+  const isMerge = c.parents.length >= 2
+  const refs = parseRefs(c.refs)
+  return (
+    <li
+      className="absolute inset-x-0 grid items-center gap-3 px-0 hover:bg-accent"
+      style={{
+        top: 0,
+        height: ROW_H,
+        transform: `translateY(${i * ROW_H}px)`,
+        gridTemplateColumns: gridTemplate,
+        opacity: dim ? 0.35 : 1,
+        contain: 'layout paint style'
+      }}
+    >
+      <span aria-hidden />
+      <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+        {refs.map((r) => (
+          <span
+            key={`${r.kind}:${r.label}`}
+            className={`inline-flex h-4 shrink-0 items-center rounded-sm border px-1.5 text-xs ${refClass(r.kind)}`}
+            title={r.kind}
+          >
+            {r.label}
+          </span>
+        ))}
+        <span className="min-w-0 truncate">{c.message}</span>
+        {isMerge && (
+          <span
+            className="inline-flex h-4 shrink-0 items-center rounded-sm border border-border px-1.5 text-xs text-[color:var(--merge)]"
+            title="merge commit"
+          >
+            merge
+          </span>
+        )}
+      </span>
+
+      <span
+        className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
+        title={c.author_name}
+      >
+        <span
+          className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-foreground/70"
+          aria-hidden
+        >
+          {initials(c.author_name)}
+        </span>
+        <span className="min-w-0 truncate">{c.author_name}</span>
+      </span>
+
+      <time
+        title={new Date(c.date).toLocaleString()}
+        className="cursor-default truncate text-xs tabular-nums text-muted-foreground/70"
+      >
+        {formatCommitDate(c.date)}
+      </time>
+
+      <code
+        title={c.hash}
+        className="cursor-default truncate pr-3 text-right text-xs tabular-nums text-muted-foreground/70"
+      >
+        {c.hash.slice(0, 7)}
+      </code>
+    </li>
+  )
+})
+
+// Placeholder rows shown while the log is loading. Mirrors the real grid so
+// the column layout doesn't jump when the data arrives. Renders enough rows
+// to cover the actual viewport — looks like the timeline is filling in, not
+// like a small header pinned to the top.
+function SkeletonRows({ gridTemplate, viewportH }: { gridTemplate: string; viewportH: number }) {
+  const count = Math.max(12, Math.ceil(viewportH / ROW_H) + 2)
+  return (
+    <ul aria-busy="true" aria-label="Loading commit history" className="px-0 py-1">
+      {Array.from({ length: count }, (_, i) => (
+        <li
+          // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
+          key={i}
+          className="grid items-center gap-3 px-0"
+          style={{ height: ROW_H, gridTemplateColumns: gridTemplate }}
+        >
+          <span aria-hidden className="flex h-full items-center pl-3">
+            <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+          </span>
+          <Skeleton
+            className="h-3 rounded"
+            // Vary widths slightly so the skeleton doesn't read as a single block.
+            style={{ width: `${55 + ((i * 13) % 35)}%`, opacity: 0.7 }}
+          />
+          <Skeleton className="h-3 w-20 rounded" style={{ opacity: 0.55 }} />
+          <Skeleton className="h-3 w-16 rounded" style={{ opacity: 0.5 }} />
+          <span className="flex justify-end pr-3">
+            <Skeleton className="h-3 w-12 rounded" style={{ opacity: 0.5 }} />
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }

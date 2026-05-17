@@ -40,6 +40,9 @@ const mockElectronAPI = {
   unstageFile: vi.fn(),
   commit: vi.fn(),
   getLog: vi.fn(),
+  startLogStream: vi.fn(),
+  cancelLogStream: vi.fn(),
+  onLogChunk: vi.fn(),
   getRecentRepos: vi.fn(),
   getStoreValue: vi.fn(),
   setStoreValue: vi.fn(),
@@ -59,6 +62,51 @@ Object.defineProperty(window, 'electronAPI', {
   value: mockElectronAPI,
   writable: true
 })
+
+// Test helper: install a log-stream mock that captures the chunk listener and
+// returns a function tests can call to emit chunks. Reset per test via
+// `setupLogStream()`.
+export interface LogStreamHandle {
+  fire: (chunk: {
+    repoPath: string
+    commits: Array<{
+      hash: string
+      message: string
+      author_name: string
+      date: string
+      parents: string[]
+      refs: string
+    }>
+    done?: boolean
+    error?: string
+  }) => void
+  fireDone: (repoPath: string) => void
+}
+
+export function setupLogStream(): LogStreamHandle {
+  const listeners: Array<(chunk: unknown) => void> = []
+  vi.mocked(window.electronAPI.onLogChunk).mockImplementation((cb) => {
+    listeners.push(cb as (chunk: unknown) => void)
+    return () => {
+      const i = listeners.indexOf(cb as (chunk: unknown) => void)
+      if (i !== -1) listeners.splice(i, 1)
+    }
+  })
+  vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ success: true })
+  vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
+  return {
+    fire: (chunk) => {
+      for (const cb of listeners.slice()) {
+        cb({ done: false, ...chunk })
+      }
+    },
+    fireDone: (repoPath) => {
+      for (const cb of listeners.slice()) {
+        cb({ repoPath, commits: [], done: true })
+      }
+    }
+  }
+}
 
 // Reset mocks between tests
 beforeEach(() => {

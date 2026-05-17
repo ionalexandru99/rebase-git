@@ -1,5 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+export interface LogChunkEvent {
+  repoPath: string
+  commits: Array<{
+    hash: string
+    message: string
+    author_name: string
+    date: string
+    parents: string[]
+    refs: string
+  }>
+  done: boolean
+  error?: string
+}
+
 export interface IElectronAPI {
   selectFolder: () => Promise<string | null>
   openRepo: (path: string) => Promise<unknown>
@@ -9,6 +23,9 @@ export interface IElectronAPI {
   unstageFile: (repoPath: string, file: string) => Promise<unknown>
   commit: (repoPath: string, message: string) => Promise<unknown>
   getLog: (repoPath: string, maxCount?: number) => Promise<unknown>
+  startLogStream: (repoPath: string) => Promise<{ success: boolean; error?: string }>
+  cancelLogStream: () => Promise<{ success: boolean }>
+  onLogChunk: (cb: (chunk: LogChunkEvent) => void) => () => void
   getRecentRepos: () => Promise<string[]>
   getStoreValue: (key: string) => Promise<unknown>
   setStoreValue: (key: string, value: unknown) => Promise<void>
@@ -35,6 +52,13 @@ const api: IElectronAPI = {
   commit: (repoPath: string, message: string) => ipcRenderer.invoke('commit', repoPath, message),
   getLog: (repoPath: string, maxCount?: number) =>
     ipcRenderer.invoke('get-log', repoPath, maxCount),
+  startLogStream: (repoPath: string) => ipcRenderer.invoke('start-log-stream', repoPath),
+  cancelLogStream: () => ipcRenderer.invoke('cancel-log-stream'),
+  onLogChunk: (cb: (chunk: LogChunkEvent) => void) => {
+    const handler = (_event: unknown, chunk: LogChunkEvent) => cb(chunk)
+    ipcRenderer.on('log-chunk', handler)
+    return () => ipcRenderer.off('log-chunk', handler)
+  },
   getRecentRepos: () => ipcRenderer.invoke('get-recent-repos'),
   getStoreValue: (key: string) => ipcRenderer.invoke('get-store-value', key),
   setStoreValue: (key: string, value: unknown) => ipcRenderer.invoke('set-store-value', key, value),

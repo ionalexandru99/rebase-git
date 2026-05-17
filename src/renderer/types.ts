@@ -28,7 +28,6 @@ export interface RepoData {
   success: boolean
   error?: string
   status: GitStatus
-  log: GitLog
   branches: GitBranches
   path: string
 }
