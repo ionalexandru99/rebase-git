@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils'
+
 interface SidebarBranch {
   name: string
   current: boolean
@@ -31,21 +33,70 @@ function SidebarItem({ glyph, name, meta, active, current, ahead, behind, onClic
   return (
     <button
       type="button"
-      className={`sb-item ${active ? 'active' : ''} ${current ? 'current' : ''}`}
       onClick={onClick}
+      className={cn(
+        'group relative flex w-full cursor-default select-none items-center gap-2 px-3.5 py-1 text-left text-xs transition-colors duration-75',
+        active
+          ? 'bg-white/[0.08] text-foreground'
+          : 'text-[color:var(--fg-soft)] hover:bg-accent hover:text-foreground'
+      )}
     >
-      {glyph !== undefined && <span className="glyph">{glyph}</span>}
-      <span className="name font-mono" style={{ fontSize: 12 }}>
-        {name}
-      </span>
-      {(ahead || behind) && (
-        <span className="ahead-behind font-mono">
-          {ahead ? <span className="ab-up">↑{ahead}</span> : null}
-          {behind ? <span className="ab-dn">↓{behind}</span> : null}
+      {active && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute left-0 top-1 bottom-1 w-0.5 rounded-[1px] bg-primary"
+        />
+      )}
+      {glyph !== undefined && (
+        <span className="w-3 shrink-0 text-center text-xs text-[color:var(--fg-faint)]">
+          {glyph}
         </span>
       )}
-      {meta !== undefined && meta !== '' && <span className="meta font-mono">{meta}</span>}
+      <span className="min-w-0 flex-1 truncate text-xs">{name}</span>
+      {current && (
+        <span className="rounded-sm border border-[color:var(--accent-line)] px-1 text-[10px] uppercase tracking-wider text-primary">
+          current
+        </span>
+      )}
+      {(ahead || behind) && (
+        <span className="inline-flex shrink-0 items-center gap-1 text-xs text-[color:var(--fg-faint)]">
+          {ahead ? <span className="text-[color:var(--add)]">↑{ahead}</span> : null}
+          {behind ? <span className="text-[color:var(--del)]">↓{behind}</span> : null}
+        </span>
+      )}
+      {meta !== undefined && meta !== '' && (
+        <span className="shrink-0 text-xs text-[color:var(--fg-faint)]">{meta}</span>
+      )}
     </button>
+  )
+}
+
+function SidebarGroup({
+  label,
+  action,
+  children
+}: {
+  label: string
+  action?: { onClick: () => void; ariaLabel: string }
+  children: React.ReactNode
+}) {
+  return (
+    <div className="pb-1 pt-2">
+      <div className="flex items-center justify-between px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <span>{label}</span>
+        {action && (
+          <button
+            type="button"
+            onClick={action.onClick}
+            aria-label={action.ariaLabel}
+            className="inline-flex size-4 cursor-default items-center justify-center rounded-sm text-[color:var(--fg-faint)] transition-colors duration-75 hover:bg-accent hover:text-[color:var(--fg-soft)]"
+          >
+            +
+          </button>
+        )}
+      </div>
+      {children}
+    </div>
   )
 }
 
@@ -58,11 +109,8 @@ export function Sidebar({
   onSelectBranch
 }: SidebarProps) {
   return (
-    <div className="shell-sidebar">
-      <div className="sb-group">
-        <div className="sb-head">
-          <span>Workspace</span>
-        </div>
+    <div className="min-h-0 overflow-y-auto border-r border-border bg-sidebar py-2 pb-3.5">
+      <SidebarGroup label="Workspace">
         <SidebarItem
           glyph="◇"
           name="Local changes"
@@ -76,15 +124,17 @@ export function Sidebar({
           active={activeView === 'history'}
           onClick={() => onSelectView('history')}
         />
-      </div>
+      </SidebarGroup>
 
-      <div className="sb-group">
-        <div className="sb-head">
-          <span>Branches</span>
-          <button type="button" aria-label="New branch">
-            +
-          </button>
-        </div>
+      <SidebarGroup
+        label="Branches"
+        action={{
+          onClick: () => {
+            /* branch creation not yet wired through useGit */
+          },
+          ariaLabel: 'New branch'
+        }}
+      >
         {branches.map((b) => (
           <SidebarItem
             key={b.name}
@@ -97,7 +147,7 @@ export function Sidebar({
             onClick={() => onSelectBranch(b.name)}
           />
         ))}
-      </div>
+      </SidebarGroup>
     </div>
   )
 }

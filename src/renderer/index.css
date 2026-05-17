@@ -132,7 +132,7 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", system-ui, "Helvetica Neue",
     Arial, sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 450;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -155,14 +155,14 @@ textarea {
   height: 100vh;
 }
 
+/* Single-font policy: override the user-agent monospace default on <code>, <pre>,
+   <kbd>, <samp>, <tt> so the entire UI uses the body sans-serif. */
 code,
 pre,
-.font-mono,
-[class*="font-mono"] {
-  font-family:
-    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
-  font-feature-settings: "zero", "ss02";
+kbd,
+samp,
+tt {
+  font-family: inherit;
 }
 
 /* Thin, Notion-style scrollbars. */

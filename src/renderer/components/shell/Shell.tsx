@@ -15,7 +15,6 @@ interface ShellProps {
   activeView: SidebarView
   onSelectView: (view: SidebarView) => void
   onSelectBranch: (name: string) => void
-  onSwitchRepo?: () => void
   onFetch?: () => void
   onPull?: () => void
   onPush?: () => void
@@ -34,7 +33,6 @@ export function Shell({
   activeView,
   onSelectView,
   onSelectBranch,
-  onSwitchRepo,
   onFetch,
   onPull,
   onPush,
@@ -48,7 +46,6 @@ export function Shell({
         branch={branch}
         ahead={ahead}
         behind={behind}
-        onSwitchRepo={onSwitchRepo}
         onFetch={onFetch}
         onPull={onPull}
         onPush={onPush}

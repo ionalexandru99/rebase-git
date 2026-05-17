@@ -26,11 +26,9 @@ export function CommitPanel({ onCommit, loading }: CommitPanelProps) {
   return (
     <section className="flex flex-col overflow-hidden rounded-md border border-border bg-card">
       <header className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground">
-          Commit
-        </h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">Commit</h2>
         <span
-          className={`font-mono text-[10.5px] tabular-nums ${
+          className={`text-xs tabular-nums ${
             subjectWarn ? 'text-primary' : 'text-muted-foreground/60'
           }`}
         >
@@ -44,14 +42,14 @@ export function CommitPanel({ onCommit, loading }: CommitPanelProps) {
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Summarize the change in one line, then describe details below."
           rows={3}
-          className="min-h-[68px] resize-none rounded-[5px] border border-border bg-background px-2.5 py-2 font-mono text-[12px] leading-relaxed text-foreground/90 shadow-none placeholder:text-muted-foreground/50 focus-visible:border-primary/40 focus-visible:ring-0"
+          className="min-h-17 resize-none rounded-md border border-border bg-background px-2.5 py-2 text-sm leading-relaxed text-foreground/90 shadow-none placeholder:text-muted-foreground/50 focus-visible:border-primary/40 focus-visible:ring-0"
         />
         <div className="flex items-center justify-end">
           <Button
             size="sm"
             onClick={handleCommit}
             disabled={!message.trim() || loading}
-            className="h-7 gap-1.5 rounded-[5px] bg-primary px-3 text-[11.5px] font-medium text-primary-foreground hover:bg-primary/90"
+            className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {loading ? (
               <>

@@ -10,7 +10,6 @@ function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
       branch={overrides.branch ?? 'main'}
       ahead={overrides.ahead ?? 0}
       behind={overrides.behind ?? 0}
-      onSwitchRepo={overrides.onSwitchRepo}
       onFetch={overrides.onFetch}
       onPull={overrides.onPull}
       onPush={overrides.onPush}
@@ -69,11 +68,9 @@ describe('Topbar', () => {
     expect(btn).not.toBeDisabled()
   })
 
-  it('fires onSwitchRepo when the repo button is clicked', () => {
-    const onSwitchRepo = vi.fn()
-    renderTopbar({ onSwitchRepo })
-    fireEvent.click(screen.getByRole('button', { name: 'Switch repository' }))
-    expect(onSwitchRepo).toHaveBeenCalledOnce()
+  it('renders the repo chip as a non-interactive display, not a button', () => {
+    renderTopbar({ repoName: 'acme' })
+    expect(screen.queryByRole('button', { name: /repository/i })).not.toBeInTheDocument()
   })
 
   it('fires onFetch when Fetch is clicked', () => {

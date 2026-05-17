@@ -50,18 +50,15 @@ function FileRow({
   }, [file])
 
   return (
-    <li
-      className="group flex h-7 items-center gap-2 rounded-[4px] px-2 transition-colors hover:bg-accent"
-      style={{ transitionDuration: '60ms' }}
-    >
+    <li className="group flex h-7 items-center gap-2 rounded-md px-2 transition-colors duration-75 hover:bg-accent">
       <span
         role="img"
         aria-label={kind}
-        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] bg-secondary font-mono text-[10px] font-semibold uppercase tracking-tighter text-muted-foreground"
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-secondary text-xs font-semibold uppercase tracking-tighter text-muted-foreground"
       >
         {statusGlyph(kind)}
       </span>
-      <span className="sp-file-wrap font-mono text-[11.5px] text-foreground/85" ref={wrapRef}>
+      <span className="sp-file-wrap text-sm text-foreground/85" ref={wrapRef}>
         <span className="sp-file-text" ref={textRef}>
           {file}
         </span>
@@ -69,7 +66,7 @@ function FileRow({
       <Button
         variant="ghost"
         size="sm"
-        className="h-5 shrink-0 rounded-[3px] px-1.5 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
+        className="h-5 shrink-0 rounded-sm px-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground opacity-0 transition-opacity hover:bg-secondary hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
         onClick={() => onAction(file)}
       >
         {actionLabel}
@@ -81,16 +78,16 @@ function FileRow({
 function SectionHeading({ label, count }: { label: string; count: number }) {
   return (
     <div className="mt-3 mb-1 flex items-center justify-between px-2 first:mt-0">
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
-      <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground/60">{count}</span>
+      <span className="text-xs tabular-nums text-muted-foreground/60">{count}</span>
     </div>
   )
 }
 
 function EmptyRow({ text }: { text: string }) {
-  return <p className="px-2 py-1.5 text-[11.5px] italic text-muted-foreground/60">{text}</p>
+  return <p className="px-2 py-1.5 text-sm italic text-muted-foreground/60">{text}</p>
 }
 
 export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanelProps) {
@@ -106,23 +103,23 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
       <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
             Working Directory
           </h2>
-          <span className="truncate text-[11px] text-muted-foreground">{subtitle}</span>
+          <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
         </div>
         {loading ? (
           <Badge
             variant="outline"
-            className="h-5 gap-1 border-border bg-transparent px-1.5 text-[10px] font-normal text-muted-foreground"
+            className="gap-1 border-border bg-transparent font-normal text-muted-foreground"
           >
-            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            <Loader2 className="animate-spin" />
             Loading
           </Badge>
         ) : totalChanges === 0 ? (
           <Badge
             variant="outline"
-            className="h-5 border-border bg-transparent px-1.5 text-[10px] font-normal text-primary"
+            className="border-border bg-transparent font-normal text-primary"
           >
             Clean
           </Badge>

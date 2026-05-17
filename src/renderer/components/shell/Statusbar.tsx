@@ -19,7 +19,7 @@ export function Statusbar({
     <div className="shell-statusbar">
       <span className="pip">
         <span className="d acc" />
-        <span className="font-mono">{branch}</span>
+        <span>{branch}</span>
       </span>
       {ahead > 0 && <span className="pip">↑ {ahead} to push</span>}
       {behind > 0 && <span className="pip">↓ {behind} to pull</span>}
@@ -28,13 +28,13 @@ export function Statusbar({
       </span>
       <span className="spacer" />
       <span>
-        Direction: <span style={{ color: 'var(--fg)' }}>{directionLabel}</span>
+        Direction: <span className="text-foreground">{directionLabel}</span>
       </span>
-      <span style={{ color: 'var(--fg-faint)' }}>·</span>
-      <span className="font-mono">git</span>
+      <span className="text-[color:var(--fg-faint)]">·</span>
+      <span>git</span>
       {lastFetch && (
         <>
-          <span style={{ color: 'var(--fg-faint)' }}>·</span>
+          <span className="text-[color:var(--fg-faint)]">·</span>
           <span>last fetch {lastFetch}</span>
         </>
       )}

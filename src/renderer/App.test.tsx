@@ -74,11 +74,11 @@ describe('App — tab shell', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('Open a Repository')).toBeInTheDocument()
+      expect(screen.getByText('Open a repository')).toBeInTheDocument()
     })
-    // Only one Open Repository CTA now (the in-card one) — the per-tab toolbar
-    // for the empty state has no separate button.
-    expect(screen.getAllByRole('button', { name: /Open Repository/i })).toHaveLength(1)
+    // Search input is the only entry point; repos are picked from workspace/recents.
+    expect(screen.getByRole('searchbox', { name: /Search repositories/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Open from disk/i })).not.toBeInTheDocument()
   })
 
   it('clicking "New tab" adds a tab and switches to it', async () => {
@@ -130,13 +130,16 @@ describe('App — repo picker (no repo open)', () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('Repositories in workspace')).toBeInTheDocument()
+      expect(screen.getByText('Workspace')).toBeInTheDocument()
       expect(screen.getByText('/home/user/repos/my-app')).toBeInTheDocument()
     })
   })
 
-  it('lists recent repos from settings', async () => {
-    mockBaseAPI({ recentRepos: ['/recent/repo'] })
+  it('lists recent repos from settings once a workspace exists', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/repos',
+      recentRepos: ['/recent/repo']
+    })
 
     render(<App />)
 
@@ -146,17 +149,20 @@ describe('App — repo picker (no repo open)', () => {
     })
   })
 
-  it('does not show repo lists when both sources are empty', async () => {
+  it('shows the add-workspace hint when no workspace has been configured', async () => {
     mockBaseAPI()
 
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('Open a Repository')).toBeInTheDocument()
+      expect(screen.getByText('Add a workspace')).toBeInTheDocument()
     })
 
-    expect(screen.queryByText('Repositories in workspace')).not.toBeInTheDocument()
+    // No grouped lists or search bar until a workspace exists — only the add-workspace CTA.
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument()
     expect(screen.queryByText('Recent')).not.toBeInTheDocument()
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Add workspace/i })).toBeInTheDocument()
   })
 
   it('opens a repo when a discovered workspace entry is clicked', async () => {
@@ -180,6 +186,30 @@ describe('App — repo picker (no repo open)', () => {
     await waitFor(() => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/repos/my-app')
     })
+  })
+
+  it('filters both workspace and recent rows as the user types in the search box', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/repos',
+      scanRepos: ['/home/user/repos/my-app', '/home/user/repos/other-thing'],
+      recentRepos: ['/recent/cool-repo', '/recent/something-else']
+    })
+
+    render(<App />)
+
+    await screen.findByText('/home/user/repos/my-app')
+    expect(screen.getByText('/home/user/repos/other-thing')).toBeInTheDocument()
+    expect(screen.getByText('/recent/cool-repo')).toBeInTheDocument()
+    expect(screen.getByText('/recent/something-else')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: /Search repositories/i }), {
+      target: { value: 'cool' }
+    })
+
+    expect(screen.getByText('/recent/cool-repo')).toBeInTheDocument()
+    expect(screen.queryByText('/home/user/repos/my-app')).not.toBeInTheDocument()
+    expect(screen.queryByText('/home/user/repos/other-thing')).not.toBeInTheDocument()
+    expect(screen.queryByText('/recent/something-else')).not.toBeInTheDocument()
   })
 })
 
@@ -210,17 +240,19 @@ describe('App — workspace (repo open)', () => {
   }
 
   async function renderWithRepo() {
-    mockBaseAPI()
-    vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/home/user/projects/my-app')
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/my-app']
+    })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
 
     render(<App />)
 
-    const openButton = await screen.findByRole('button', { name: /Open Repository/i })
-    fireEvent.click(openButton)
+    const repoRow = await screen.findByText('/home/user/projects/my-app')
+    fireEvent.click(repoRow)
 
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalled()
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/my-app')
     })
   }
 
@@ -255,26 +287,29 @@ describe('App — workspace (repo open)', () => {
     expect(screen.getByText('Timeline')).not.toBeVisible()
   })
 
-  it('exposes a Switch repository control in the topbar', async () => {
+  it('does not expose a Close repository control — closing the tab is the only exit', async () => {
     await renderWithRepo()
 
-    expect(await screen.findByRole('button', { name: /Switch repository/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Close repository/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Switch repository/i })).not.toBeInTheDocument()
   })
 
   it('shows the clean badge when no changes are pending', async () => {
-    mockBaseAPI()
-    vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/clean/repo')
+    mockBaseAPI({
+      workingDirectory: '/workspace',
+      scanRepos: ['/workspace/repo']
+    })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
       success: true,
-      path: '/clean/repo',
+      path: '/workspace/repo',
       status: { current: 'main', modified: [], staged: [], not_added: [] },
       log: { all: [], total: 0 },
       branches: { current: 'main', all: ['main'] }
     })
 
     render(<App />)
-    const openButton = await screen.findByRole('button', { name: /Open Repository/i })
-    fireEvent.click(openButton)
+    const repoRow = await screen.findByText('/workspace/repo')
+    fireEvent.click(repoRow)
 
     await waitFor(() => {
       expect(screen.getAllByText('repo').length).toBeGreaterThanOrEqual(1)
@@ -285,16 +320,18 @@ describe('App — workspace (repo open)', () => {
   })
 
   it('shows a banner when an openRepo error happens', async () => {
-    mockBaseAPI()
-    vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/bad/repo')
+    mockBaseAPI({
+      workingDirectory: '/workspace',
+      scanRepos: ['/workspace/bad-repo']
+    })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
       success: false,
       error: 'Not a git repository'
     })
 
     render(<App />)
-    const openButton = await screen.findByRole('button', { name: /Open Repository/i })
-    fireEvent.click(openButton)
+    const repoRow = await screen.findByText('/workspace/bad-repo')
+    fireEvent.click(repoRow)
 
     await waitFor(() => {
       expect(screen.getByText('Not a git repository')).toBeInTheDocument()

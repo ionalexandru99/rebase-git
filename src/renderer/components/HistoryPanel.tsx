@@ -200,10 +200,10 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card">
       <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-foreground">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
             Timeline
           </h2>
-          <span className="truncate text-[11px] text-muted-foreground">
+          <span className="truncate text-xs text-muted-foreground">
             {log?.total
               ? `${log.total} commit${log.total === 1 ? '' : 's'} · all branches`
               : 'Repository timeline'}
@@ -216,16 +216,15 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="filter commits…"
-              className="h-6 w-40 rounded-[6px] border border-border bg-secondary px-2.5 text-[11.5px] text-foreground placeholder:text-muted-foreground/70 transition-colors focus:border-[color:var(--line-strong)]"
-              style={{ transitionDuration: '60ms' }}
+              className="h-6 w-40 rounded-md border border-border bg-secondary px-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 transition-colors duration-75 focus:border-[color:var(--line-strong)]"
             />
           )}
           {loading && (
             <Badge
               variant="outline"
-              className="h-5 gap-1 border-border bg-transparent px-1.5 text-[10px] font-normal text-muted-foreground"
+              className="gap-1 border-border bg-transparent font-normal text-muted-foreground"
             >
-              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+              <Loader2 className="animate-spin" />
               Loading
             </Badge>
           )}
@@ -234,7 +233,7 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
 
       {commits.length > 0 && (
         <div
-          className="grid h-6 shrink-0 items-center gap-3 border-b border-border px-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--fg-faint)]"
+          className="grid h-6 shrink-0 items-center gap-3 border-b border-border px-0 text-xs font-semibold uppercase tracking-wider text-[color:var(--fg-faint)]"
           style={{ gridTemplateColumns: gridTemplate }}
         >
           <span className="pl-3">Graph</span>
@@ -264,8 +263,8 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
                 <path d="M0 8h6M10 8h6" />
               </svg>
             </div>
-            <p className="text-[12px] font-medium text-foreground">No commits yet</p>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="text-sm font-medium text-foreground">No commits yet</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               Make your first commit to populate the timeline.
             </p>
           </div>
@@ -459,11 +458,11 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
                     }}
                   >
                     <span aria-hidden />
-                    <span className="flex min-w-0 items-center gap-2 text-[12.5px] text-foreground">
+                    <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
                       {refs.map((r) => (
                         <span
                           key={`${r.kind}:${r.label}`}
-                          className={`inline-flex h-[16px] shrink-0 items-center rounded-[3px] border px-1.5 font-mono text-[9.5px] ${refClass(r.kind)}`}
+                          className={`inline-flex h-4 shrink-0 items-center rounded-sm border px-1.5 text-xs ${refClass(r.kind)}`}
                           title={r.kind}
                         >
                           {r.label}
@@ -472,7 +471,7 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
                       <span className="min-w-0 truncate">{c.message}</span>
                       {isMerge && (
                         <span
-                          className="inline-flex h-[16px] shrink-0 items-center rounded-[3px] border border-border px-1.5 font-mono text-[9.5px] text-[color:var(--merge)]"
+                          className="inline-flex h-4 shrink-0 items-center rounded-sm border border-border px-1.5 text-xs text-[color:var(--merge)]"
                           title="merge commit"
                         >
                           merge
@@ -481,11 +480,11 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
                     </span>
 
                     <span
-                      className="flex min-w-0 items-center gap-2 text-[11.5px] text-muted-foreground"
+                      className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
                       title={c.author_name}
                     >
                       <span
-                        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-[8.5px] font-semibold text-foreground/70"
+                        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-foreground/70"
                         aria-hidden
                       >
                         {initials(c.author_name)}
@@ -495,7 +494,7 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
 
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <time className="cursor-default truncate font-mono text-[11px] tabular-nums text-muted-foreground/70">
+                        <time className="cursor-default truncate text-xs tabular-nums text-muted-foreground/70">
                           {formatCommitDate(c.date)}
                         </time>
                       </TooltipTrigger>
@@ -506,7 +505,7 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
 
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <code className="cursor-default truncate pr-3 text-right font-mono text-[11px] tabular-nums text-muted-foreground/70">
+                        <code className="cursor-default truncate pr-3 text-right text-xs tabular-nums text-muted-foreground/70">
                           {c.hash.slice(0, 7)}
                         </code>
                       </TooltipTrigger>

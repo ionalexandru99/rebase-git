@@ -1,5 +1,11 @@
-import { Clock, FolderOpen, GitBranch } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertCircle, Folder, FolderPlus, GitBranch, Search } from 'lucide-react'
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
 import { CommitPanel } from '@/components/CommitPanel'
 import { HistoryPanel } from '@/components/HistoryPanel'
 import { OnboardingScreen } from '@/components/OnboardingScreen'
@@ -7,8 +13,9 @@ import { StatusPanel } from '@/components/StatusPanel'
 import { Shell } from '@/components/shell/Shell'
 import type { SidebarView } from '@/components/shell/Sidebar'
 import { TabBar, type TabDescriptor } from '@/components/TabBar'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Input } from '@/components/ui/input'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher'
@@ -99,7 +106,7 @@ function App() {
   if (onboarding.onboardingComplete === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-foreground">
-        <div className="animate-pulse text-[12px] text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-xs text-muted-foreground">Loading...</div>
       </div>
     )
   }
@@ -202,28 +209,19 @@ function TabView({
     onReportState(tabId, name ?? 'New tab', Boolean(name))
   }, [git.repoPath, tabId, onReportState])
 
-  const handleOpenRepo = useCallback(async () => {
-    const path = await window.electronAPI.selectFolder()
-    if (path) await git.openRepo(path)
-  }, [git])
-
-  const handleSwitchRepo = useCallback(async () => {
-    const path = await window.electronAPI.selectFolder()
-    if (!path) return
-    await git.closeRepo()
-    await git.openRepo(path)
-  }, [git])
-
   return (
     <>
       {git.error && (
-        <div className="shrink-0 border-b border-destructive/30 bg-destructive/10 px-4 py-1.5 text-[11.5px] text-destructive">
-          {git.error}
+        <div className="shrink-0 border-b px-4 py-2">
+          <Alert variant="destructive" className="border-destructive/30">
+            <AlertCircle />
+            <AlertDescription>{git.error}</AlertDescription>
+          </Alert>
         </div>
       )}
 
       {!git.repoPath ? (
-        <EmptyState
+        <RepoPicker
           recentRepos={recentRepos}
           discoveredRepos={discoveredRepos}
           workspaces={workspaces}
@@ -232,7 +230,6 @@ function TabView({
           onAddWorkspace={onAddWorkspace}
           onRemoveWorkspace={onRemoveWorkspace}
           onOpenRepo={(path) => git.openRepo(path)}
-          onPickRepo={handleOpenRepo}
         />
       ) : (
         <Workspace
@@ -241,14 +238,13 @@ function TabView({
           stagedCount={stagedCount}
           untrackedCount={untrackedCount}
           totalChanges={totalChanges}
-          onSwitchRepo={handleSwitchRepo}
         />
       )}
     </>
   )
 }
 
-interface EmptyStateProps {
+interface RepoPickerProps {
   recentRepos: string[]
   discoveredRepos: string[]
   workspaces: string[]
@@ -257,10 +253,13 @@ interface EmptyStateProps {
   onAddWorkspace: () => Promise<unknown>
   onRemoveWorkspace: (path: string) => Promise<void>
   onOpenRepo: (path: string) => void
-  onPickRepo: () => void
 }
 
-function EmptyState({
+function repoShortName(path: string): string {
+  return path.split('/').filter(Boolean).at(-1) ?? path
+}
+
+function RepoPicker({
   recentRepos,
   discoveredRepos,
   workspaces,
@@ -268,37 +267,88 @@ function EmptyState({
   onSwitchWorkspace,
   onAddWorkspace,
   onRemoveWorkspace,
-  onOpenRepo,
-  onPickRepo
-}: EmptyStateProps) {
-  return (
-    <div className="flex flex-1 items-center justify-center overflow-hidden p-6">
-      <div className="w-full max-w-md">
-        <div className="mb-5 text-center">
-          <div className="mx-auto mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 ring-1 ring-inset ring-primary/30">
-            <FolderOpen className="h-4 w-4 text-primary" strokeWidth={2} />
+  onOpenRepo
+}: RepoPickerProps) {
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+
+  const filter = (paths: string[]) => (q ? paths.filter((p) => p.toLowerCase().includes(q)) : paths)
+
+  const filteredDiscovered = filter(discoveredRepos)
+  const filteredRecent = filter(recentRepos)
+
+  const hasAnyWorkspace = workspaces.length > 0 || !!activeWorkspace
+
+  if (!hasAnyWorkspace) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+          <div className="rounded-full border bg-muted p-3">
+            <FolderPlus className="size-5 text-muted-foreground" />
           </div>
-          <h2 className="text-[16px] font-semibold tracking-tight text-foreground">
-            Open a Repository
-          </h2>
-          <p className="mx-auto mt-1.5 max-w-xs text-[12px] leading-relaxed text-muted-foreground">
-            Choose a Git repository to start tracking changes, viewing history, and making commits.
-          </p>
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold">Add a workspace</h2>
+            <p className="text-sm text-muted-foreground">
+              Repositories open from a workspace folder. Pick a folder that contains your Git
+              repositories to get started.
+            </p>
+          </div>
+          <Button onClick={() => onAddWorkspace()}>
+            <FolderPlus />
+            Add workspace…
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return
+    const first = filteredRecent[0] ?? filteredDiscovered[0]
+    if (first) onOpenRepo(first)
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10">
+        <div className="flex items-center gap-3">
+          <div className="rounded-md border bg-card p-2">
+            <GitBranch className="size-4 text-muted-foreground" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Open a repository</h2>
+            <p className="text-sm text-muted-foreground">
+              Pick a repository from your workspace or recents.
+            </p>
+          </div>
         </div>
 
-        <Button
-          onClick={onPickRepo}
-          className="mb-5 h-8 w-full gap-1.5 rounded-[5px] bg-primary text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <FolderOpen className="h-3.5 w-3.5" />
-          Open Repository
-        </Button>
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Search repositories…"
+            className="pl-9"
+            aria-label="Search repositories"
+            autoFocus
+          />
+        </div>
 
-        {(workspaces.length > 0 || activeWorkspace) && (
-          <div className="mb-4">
-            <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-              Workspace
-            </h3>
+        <RepoGroup
+          label="Recent"
+          repos={filteredRecent}
+          emptyText={
+            q ? 'No matches' : recentRepos.length === 0 ? 'No recent repositories' : undefined
+          }
+          onSelect={onOpenRepo}
+        />
+
+        <RepoGroup
+          label="Workspace"
+          trailing={
             <WorkspaceSwitcher
               workspaces={workspaces}
               activeWorkspace={activeWorkspace}
@@ -306,62 +356,73 @@ function EmptyState({
               onAdd={onAddWorkspace}
               onRemove={onRemoveWorkspace}
             />
-          </div>
-        )}
-
-        {discoveredRepos.length > 0 && (
-          <RepoList
-            icon={<GitBranch className="h-3 w-3 text-muted-foreground" strokeWidth={2} />}
-            title="Repositories in workspace"
-            repos={discoveredRepos}
-            onSelect={onOpenRepo}
-          />
-        )}
-        {recentRepos.length > 0 && (
-          <RepoList
-            icon={<Clock className="h-3 w-3 text-muted-foreground" strokeWidth={2} />}
-            title="Recent"
-            repos={recentRepos}
-            onSelect={onOpenRepo}
-          />
-        )}
+          }
+          repos={filteredDiscovered}
+          emptyText={
+            q
+              ? 'No matches'
+              : discoveredRepos.length === 0
+                ? 'No repositories detected in this workspace'
+                : undefined
+          }
+          onSelect={onOpenRepo}
+        />
       </div>
     </div>
   )
 }
 
-interface RepoListProps {
-  icon: React.ReactNode
-  title: string
+interface RepoGroupProps {
+  label: string
+  trailing?: React.ReactNode
   repos: string[]
+  emptyText?: string
   onSelect: (path: string) => void
 }
 
-function RepoList({ icon, title, repos, onSelect }: RepoListProps) {
+function RepoGroup({ label, trailing, repos, emptyText, onSelect }: RepoGroupProps) {
   return (
-    <div className="mb-4 last:mb-0">
-      <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-        {title}
-      </h3>
-      <div className="overflow-hidden rounded-sm border border-border bg-card">
-        <ScrollArea className="max-h-40">
-          <ul className="divide-y divide-border/60">
-            {repos.map((repo) => (
-              <li key={repo}>
-                <button
-                  type="button"
-                  className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-[11px] text-foreground/85 transition-colors duration-[60ms] hover:bg-accent hover:text-foreground"
-                  onClick={() => onSelect(repo)}
-                >
-                  {icon}
-                  <span className="truncate font-mono">{repo}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </ScrollArea>
+    <section className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          {label}
+        </h3>
+        {trailing && <div className="min-w-0 max-w-xs">{trailing}</div>}
       </div>
-    </div>
+      {repos.length > 0 ? (
+        <ul className="flex flex-col">
+          {repos.map((repo) => (
+            <li key={repo}>
+              <RepoRow path={repo} onSelect={onSelect} />
+            </li>
+          ))}
+        </ul>
+      ) : emptyText ? (
+        <p className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</p>
+      ) : null}
+    </section>
+  )
+}
+
+interface RepoRowProps {
+  path: string
+  onSelect: (path: string) => void
+}
+
+function RepoRow({ path, onSelect }: RepoRowProps) {
+  return (
+    <Button
+      variant="ghost"
+      className="h-auto w-full justify-start gap-3 py-2 font-normal"
+      onClick={() => onSelect(path)}
+      title={path}
+    >
+      <Folder className="text-muted-foreground" />
+      <span className="font-medium">{repoShortName(path)}</span>
+      <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">
+        {path}
+      </span>
+    </Button>
   )
 }
 
@@ -371,7 +432,6 @@ interface WorkspaceProps {
   stagedCount: number
   untrackedCount: number
   totalChanges: number
-  onSwitchRepo: () => void
 }
 
 function Workspace({
@@ -379,8 +439,7 @@ function Workspace({
   modifiedCount,
   stagedCount,
   untrackedCount,
-  totalChanges,
-  onSwitchRepo
+  totalChanges
 }: WorkspaceProps) {
   const repoName = git.repoPath?.split('/').filter(Boolean).at(-1) ?? 'Repository'
   const branch = git.currentBranch || 'no-branch'
@@ -411,7 +470,6 @@ function Workspace({
       onSelectBranch={() => {
         /* branch switching not yet wired through useGit */
       }}
-      onSwitchRepo={onSwitchRepo}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
         {/* Always mounted so CommitPanel draft state survives view switches */}

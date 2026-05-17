@@ -6,7 +6,6 @@ interface TopbarProps {
   branch: string
   ahead: number
   behind: number
-  onSwitchRepo?: () => void
   onFetch?: () => void
   onPull?: () => void
   onPush?: () => void
@@ -18,7 +17,6 @@ export function Topbar({
   branch,
   ahead,
   behind,
-  onSwitchRepo,
   onFetch,
   onPull,
   onPush
@@ -53,22 +51,16 @@ export function Topbar({
 
   return (
     <div className="tb">
-      <button
-        type="button"
-        className="tb-repo"
-        onClick={onSwitchRepo}
-        title={repoPath ?? undefined}
-        aria-label="Switch repository"
-      >
+      <div className="flex min-w-0 items-center gap-2 px-2 py-1" title={repoPath ?? undefined}>
         <div className="tb-repo-icon">{initial}</div>
         <div className="tb-repo-name">{repoName}</div>
-        {repoPath && <div className="tb-repo-path font-mono">{repoPath}</div>}
-      </button>
+        {repoPath && <div className="tb-repo-path">{repoPath}</div>}
+      </div>
       <div className="tb-divider" />
       <button type="button" className="tb-branch">
         <span className="dot" />
         <span className="tb-branch-wrap" ref={wrapRef}>
-          <span className="font-mono tb-branch-text" style={{ fontSize: 12 }} ref={textRef}>
+          <span className="tb-branch-text text-xs" ref={textRef}>
             {branch}
           </span>
         </span>
@@ -86,7 +78,7 @@ export function Topbar({
             {behind}
           </span>
         )}
-        <span style={{ color: 'var(--fg-faint)', fontSize: 10 }}>▾</span>
+        <span className="text-xs text-[color:var(--fg-faint)]">▾</span>
       </button>
       <div className="tb-spacer" />
       <div className="tb-actions">
