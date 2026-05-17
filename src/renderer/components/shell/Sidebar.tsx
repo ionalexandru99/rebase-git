@@ -16,6 +16,8 @@ interface SidebarProps {
   activeView: SidebarView
   onSelectView: (view: SidebarView) => void
   onSelectBranch: (name: string) => void
+  /** Width in px. If omitted, defaults to the original `w-61`. */
+  width?: number
 }
 
 interface ItemProps {
@@ -106,10 +108,14 @@ export function Sidebar({
   activeBranch,
   activeView,
   onSelectView,
-  onSelectBranch
+  onSelectBranch,
+  width
 }: SidebarProps) {
   return (
-    <div className="flex w-61 shrink-0 flex-col overflow-y-auto border-r border-border bg-sidebar py-2 pb-3.5">
+    <div
+      className="flex shrink-0 flex-col overflow-y-auto border-r border-border bg-sidebar py-2 pb-3.5"
+      style={{ width: width ?? '15.25rem' }}
+    >
       <SidebarGroup label="Workspace">
         <SidebarItem
           glyph="◇"

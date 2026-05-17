@@ -53,7 +53,7 @@ export function Topbar({
 
   return (
     <div className="flex h-11 shrink-0 select-none items-center gap-2.5 px-3.5">
-      <div className="flex min-w-0 items-center gap-2 px-2 py-1" title={repoPath ?? undefined}>
+      <div className="flex min-w-0 items-center gap-2 px-2 py-1">
         <div className="grid size-5.5 shrink-0 place-items-center rounded-md bg-gradient-to-br from-[#8eb6d4] to-[#4d7ea3] text-xs font-bold text-[#131a20]">
           {initial}
         </div>

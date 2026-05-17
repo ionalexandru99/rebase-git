@@ -49,7 +49,6 @@ export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarPr
           type="button"
           onClick={onNew}
           aria-label="Open new tab"
-          title="New tab (⌘T)"
           className="no-drag mx-1 mb-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <Plus className="size-4" strokeWidth={2} />

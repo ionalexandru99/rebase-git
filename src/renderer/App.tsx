@@ -414,7 +414,6 @@ function RepoRow({ path, onSelect }: RepoRowProps) {
       variant="ghost"
       className="h-auto w-full justify-start gap-3 py-2 font-normal"
       onClick={() => onSelect(path)}
-      title={path}
     >
       <Folder className="text-muted-foreground" />
       <span className="font-medium">{repoShortName(path)}</span>
@@ -474,7 +473,7 @@ function Workspace({
         {/* Always mounted so CommitPanel draft state survives view switches */}
         <div
           hidden={activeView !== 'local-changes'}
-          className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]"
+          className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(21rem,0.85fr)_minmax(0,1.15fr)]"
         >
           <div className="min-h-0 overflow-hidden">
             <StatusPanel

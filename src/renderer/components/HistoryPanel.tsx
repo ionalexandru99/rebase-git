@@ -19,14 +19,50 @@ interface HistoryPanelProps {
   loading: boolean
 }
 
-const ROW_H = 28
-const COL_W = 14
-const RAIL_PAD = 12
-const DOT_R = 3.5
+// Derive layout constants from the current root font size so the row pitch,
+// lane spacing, and dot size scale together if the root changes (index.css).
+function getRootFontPx(): number {
+  if (typeof document === 'undefined') return 16
+  const fs = parseFloat(getComputedStyle(document.documentElement).fontSize)
+  return Number.isFinite(fs) && fs > 0 ? fs : 16
+}
+const ROOT_PX = getRootFontPx()
+
+const ROW_H = Math.round(ROOT_PX * 2) // 32 at 16px root
+const COL_W = Math.round(ROOT_PX) // 16
+const RAIL_PAD = Math.round(ROOT_PX * 0.875) // 14
+const DOT_R = ROOT_PX * 0.25 // 4
 // Number of rows to render outside the visible window in either direction.
 // Generous enough to swallow fast trackpad / scrollbar-jump scrolls without
 // exposing empty rows before the next frame catches up.
 const OVERSCAN = 60
+
+interface ColWidths {
+  author: number
+  date: number
+  sha: number
+}
+const COL_DEFAULTS: ColWidths = { author: 14, date: 6, sha: 4.5 }
+const COL_MIN = 3
+const COL_MAX = 40
+const COL_STORE_KEY = 'historyColWidths'
+
+// Best-effort parse of whatever electron-store hands back. Guards against
+// stale/older serialized shapes and bad numbers; missing fields fall back to
+// the default.
+function parseColWidths(v: unknown): ColWidths | null {
+  if (!v || typeof v !== 'object') return null
+  const r = v as Record<string, unknown>
+  const clamp = (n: unknown, fallback: number): number => {
+    if (typeof n !== 'number' || !Number.isFinite(n)) return fallback
+    return Math.max(COL_MIN, Math.min(COL_MAX, n))
+  }
+  return {
+    author: clamp(r.author, COL_DEFAULTS.author),
+    date: clamp(r.date, COL_DEFAULTS.date),
+    sha: clamp(r.sha, COL_DEFAULTS.sha)
+  }
+}
 
 // Stable per-lane color palette. The lane index is the only thing we have to
 // distinguish branches visually — names are not always populated by %D.
@@ -270,10 +306,70 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
     return max
   }, [rows, startIdx, endIdx])
   const railWidth = Math.max(28, RAIL_PAD * 2 + Math.max(localMaxLanes - 1, 0) * COL_W)
-  // Subject (column 2) takes the leftover space and has a low min so it can
-  // shrink when the window is narrow. Author/Date/SHA are compact fixed-widths
-  // and truncate gracefully past their bounds.
-  const gridTemplate = `${railWidth}px minmax(100px,1fr) 110px 80px 56px`
+
+  // User-resizable column widths (in rem). Subject is `1fr` and auto-fills
+  // whatever's left. Drag the handles on the column header to resize. The
+  // last-committed widths are persisted via electron-store; we load them on
+  // mount and write back once at drag end (not every mousemove).
+  const [colWidths, setColWidths] = useState(COL_DEFAULTS)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.resolve(window.electronAPI.getStoreValue(COL_STORE_KEY)).then((v) => {
+      if (cancelled) return
+      const parsed = parseColWidths(v)
+      if (parsed) setColWidths(parsed)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Graph is auto-sized to the visible lane count (left-pinned). Author/Date/
+  // SHA are user-resizable fixed widths pinned to the right. Subject takes
+  // whatever space is left in between — the only flexible column.
+  const gridTemplate = `${railWidth}px minmax(7rem,1fr) ${colWidths.author}rem ${colWidths.date}rem ${colWidths.sha}rem`
+
+  // Resize the boundary between two columns. Drag right: leftCol grows,
+  // rightCol shrinks. Either side may be `null` to model:
+  //   - `leftCol=null` → the flexible Subject (1fr) is to the left.
+  //     Rightward drag still shrinks rightCol; Subject auto-absorbs.
+  //   - `rightCol=null` → the panel edge is to the right (e.g. SHA's right
+  //     edge). Rightward drag grows leftCol; Subject (1fr) absorbs from the
+  //     other side.
+  const startBoundaryResize = useCallback(
+    (leftCol: keyof ColWidths | null, rightCol: keyof ColWidths | null, e: React.MouseEvent) => {
+      e.preventDefault()
+      const startX = e.clientX
+      const startLeft = leftCol ? colWidths[leftCol] : 0
+      const startRight = rightCol ? colWidths[rightCol] : 0
+      let last = { ...colWidths }
+      const onMove = (ev: MouseEvent) => {
+        const deltaRem = (ev.clientX - startX) / ROOT_PX
+        const update: Partial<ColWidths> = {}
+        if (leftCol) {
+          update[leftCol] = Math.max(COL_MIN, Math.min(COL_MAX, startLeft + deltaRem))
+        }
+        if (rightCol) {
+          update[rightCol] = Math.max(COL_MIN, Math.min(COL_MAX, startRight - deltaRem))
+        }
+        last = { ...last, ...update }
+        setColWidths(last)
+      }
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+        window.electronAPI.setStoreValue(COL_STORE_KEY, last)
+      }
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [colWidths]
+  )
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card">
@@ -312,14 +408,31 @@ export function HistoryPanel({ log, loading }: HistoryPanelProps) {
 
       {commits.length > 0 && (
         <div
-          className="grid h-6 shrink-0 items-center gap-2 border-b border-border px-0 text-xs font-semibold uppercase tracking-wider text-[color:var(--fg-faint)]"
+          className="grid h-6 shrink-0 items-center gap-1 border-b border-border px-0 text-xs font-semibold uppercase tracking-wider text-[color:var(--fg-faint)]"
           style={{ gridTemplateColumns: gridTemplate }}
         >
           <span className="pl-3">Graph</span>
-          <span>Subject</span>
-          <span>Author</span>
-          <span>Date</span>
-          <span className="pr-3 text-right">SHA</span>
+          <span className="relative">
+            Subject
+            {/* Subject|Author boundary. Subject is 1fr → leftCol null. */}
+            <ColResizer onMouseDown={(e) => startBoundaryResize(null, 'author', e)} />
+          </span>
+          <span className="relative">
+            Author
+            {/* Author|Date boundary — redistributes between Author and Date. */}
+            <ColResizer onMouseDown={(e) => startBoundaryResize('author', 'date', e)} />
+          </span>
+          <span className="relative">
+            Date
+            {/* Date|SHA boundary — redistributes between Date and SHA. */}
+            <ColResizer onMouseDown={(e) => startBoundaryResize('date', 'sha', e)} />
+          </span>
+          <span className="relative pr-2 text-right">
+            SHA
+            {/* SHA right edge → panel edge. SHA grows on rightward drag;
+                Subject (1fr) absorbs from the other side. */}
+            <ColResizer onMouseDown={(e) => startBoundaryResize('sha', null, e)} />
+          </span>
         </div>
       )}
 
@@ -575,7 +688,7 @@ const CommitRow = memo(function CommitRow({
   const refs = parseRefs(c.refs)
   return (
     <li
-      className="absolute inset-x-0 grid items-center gap-2 px-0 hover:bg-accent"
+      className="absolute inset-x-0 grid items-center gap-1 px-0 hover:bg-accent"
       style={{
         top: 0,
         height: ROW_H,
@@ -587,30 +700,23 @@ const CommitRow = memo(function CommitRow({
     >
       <span aria-hidden />
       <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+        {isMerge && (
+          <span className="inline-flex h-4 shrink-0 items-center rounded-sm border border-border px-1.5 text-xs text-[color:var(--merge)]">
+            merge
+          </span>
+        )}
+        <span className="min-w-0 truncate">{c.message}</span>
         {refs.map((r) => (
           <span
             key={`${r.kind}:${r.label}`}
             className={`inline-flex h-4 shrink-0 items-center rounded-sm border px-1.5 text-xs ${refClass(r.kind)}`}
-            title={r.kind}
           >
             {r.label}
           </span>
         ))}
-        <span className="min-w-0 truncate">{c.message}</span>
-        {isMerge && (
-          <span
-            className="inline-flex h-4 shrink-0 items-center rounded-sm border border-border px-1.5 text-xs text-[color:var(--merge)]"
-            title="merge commit"
-          >
-            merge
-          </span>
-        )}
       </span>
 
-      <span
-        className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
-        title={c.author_name}
-      >
+      <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
         <span
           className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-foreground/70"
           aria-hidden
@@ -620,17 +726,11 @@ const CommitRow = memo(function CommitRow({
         <span className="min-w-0 truncate">{c.author_name}</span>
       </span>
 
-      <time
-        title={new Date(c.date).toLocaleString()}
-        className="cursor-default truncate text-xs tabular-nums text-muted-foreground/70"
-      >
+      <time className="cursor-default truncate text-xs tabular-nums text-muted-foreground/70">
         {formatCommitDate(c.date)}
       </time>
 
-      <code
-        title={c.hash}
-        className="cursor-default truncate pr-3 text-right text-xs tabular-nums text-muted-foreground/70"
-      >
+      <code className="cursor-default truncate pr-2 text-right text-xs tabular-nums text-muted-foreground/70">
         {c.hash.slice(0, 7)}
       </code>
     </li>
@@ -649,7 +749,7 @@ function SkeletonRows({ gridTemplate, viewportH }: { gridTemplate: string; viewp
         <li
           // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
           key={i}
-          className="grid items-center gap-2 px-0"
+          className="grid items-center gap-1 px-0"
           style={{ height: ROW_H, gridTemplateColumns: gridTemplate }}
         >
           <span aria-hidden className="flex h-full items-center pl-3">
@@ -668,5 +768,24 @@ function SkeletonRows({ gridTemplate, viewportH }: { gridTemplate: string; viewp
         </li>
       ))}
     </ul>
+  )
+}
+
+// Thin invisible strip on the right edge of a column header. Cursor changes to
+// col-resize on hover; mousedown begins a drag. Positioned absolute so it sits
+// over the gridtemplate boundary without affecting the header layout.
+// Drag handle for a History column. The hit area is wider than the visible
+// divider so it's easy to grab; the divider itself is always rendered (faint
+// vertical line) so users can see where they can drag, and it brightens on
+// hover.
+function ColResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: mouse-only resize handle; no keyboard equivalent
+    <span
+      onMouseDown={onMouseDown}
+      className="group/resizer absolute -right-1.5 top-0 z-10 flex h-full w-3 cursor-col-resize select-none items-center justify-center"
+    >
+      <span className="block h-3 w-px bg-border group-hover/resizer:h-full group-hover/resizer:w-0.5 group-hover/resizer:bg-primary/70" />
+    </span>
   )
 }

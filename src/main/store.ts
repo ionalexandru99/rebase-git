@@ -20,6 +20,10 @@ interface StoreSchema {
    */
   workingDirectory: string | null
   onboardingComplete: boolean
+  /** Sidebar width in px. User-resizable via the gutter in Shell. */
+  sidebarWidth: number
+  /** History timeline column widths in rem. User-resizable via header handles. */
+  historyColWidths: { author: number; date: number; sha: number }
 }
 
 export const store = new Store<StoreSchema>({
@@ -33,7 +37,9 @@ export const store = new Store<StoreSchema>({
     workspaces: [],
     activeWorkspace: null,
     workingDirectory: null,
-    onboardingComplete: false
+    onboardingComplete: false,
+    sidebarWidth: 244,
+    historyColWidths: { author: 14, date: 6, sha: 4.5 }
   }
 })
 
