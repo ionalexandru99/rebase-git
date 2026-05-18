@@ -31,8 +31,6 @@ function mockOpenRepoSuccess(
 describe('useGit', () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    // The log subscription is installed in a useEffect on mount; every test
-    // that mounts useGit needs the stream mock in place.
     setupLogStream()
   })
 
@@ -63,7 +61,6 @@ describe('useGit', () => {
     })
     expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/test/repo')
 
-    // Stream is in flight — log is empty but logLoading is true.
     await waitFor(() => expect(result.current.logLoading).toBe(true))
 
     stream.fire({
@@ -162,7 +159,6 @@ describe('useGit', () => {
 
     expect(window.electronAPI.stageFile).toHaveBeenCalledWith('/test/repo', 'file1.ts')
     expect(window.electronAPI.getStatus).toHaveBeenCalledWith('/test/repo')
-    // Stage must NOT re-stream the log.
     expect(window.electronAPI.startLogStream).toHaveBeenCalledTimes(1)
 
     await waitFor(() => expect(result.current.status?.staged).toContain('file1.ts'))
@@ -209,7 +205,6 @@ describe('useGit', () => {
     expect(vi.mocked(window.electronAPI.startLogStream).mock.calls.length).toBeGreaterThan(
       streamCallsBeforeCommit
     )
-    // Commit must NOT trigger a full openRepo reload.
     expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(1)
   })
 

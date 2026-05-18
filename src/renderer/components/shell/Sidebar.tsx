@@ -49,10 +49,7 @@ export function AppSidebar({
           <span className="w-px bg-transparent transition-colors group-hover/sidebar-resize:bg-primary/60" />
         </span>
       )}
-      {/* SidebarContent normally owns scrolling. We disable it here so the
-          virtualized RefTreePanel can manage its own scroll viewport — nested
-          scroll regions would otherwise fight each other and break the
-          virtualization math. */}
+
       <SidebarContent className="!overflow-hidden">
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>

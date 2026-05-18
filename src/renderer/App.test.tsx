@@ -4,8 +4,6 @@ import { setupLogStream } from '@/../test/setup'
 import App from '@/App'
 
 beforeEach(() => {
-  // Every test that mounts App may open a repo and trigger the log stream
-  // subscription; install a default mock so the hook's useEffect resolves.
   setupLogStream()
 })
 
@@ -69,7 +67,6 @@ describe('App — tab shell', () => {
     render(<App />)
 
     await waitFor(() => {
-      // Brand lives in the TabBar now.
       expect(screen.getByText('Rebase')).toBeInTheDocument()
     })
     expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
@@ -83,7 +80,6 @@ describe('App — tab shell', () => {
     await waitFor(() => {
       expect(screen.getByText('Open a repository')).toBeInTheDocument()
     })
-    // Search input is the only entry point; repos are picked from workspace/recents.
     expect(screen.getByRole('searchbox', { name: /Search repositories/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Open from disk/i })).not.toBeInTheDocument()
   })
@@ -126,7 +122,6 @@ describe('App — tab shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(screen.getAllByRole('tab')).toHaveLength(3)
 
-    // Activate the middle tab and close it.
     const middleTab = screen.getAllByRole('tab')[1]
     fireEvent.click(middleTab)
     expect(middleTab).toHaveAttribute('aria-selected', 'true')
@@ -136,7 +131,6 @@ describe('App — tab shell', () => {
 
     const tabsAfter = screen.getAllByRole('tab')
     expect(tabsAfter).toHaveLength(2)
-    // The new right neighbour (formerly index 2) is now at index 1 and active.
     expect(tabsAfter[1]).toHaveAttribute('aria-selected', 'true')
     expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'false')
   })
@@ -150,7 +144,6 @@ describe('App — tab shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(screen.getAllByRole('tab')).toHaveLength(2)
 
-    // The newly-created tab is already active and is the rightmost.
     const tabs = screen.getAllByRole('tab')
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true')
 
@@ -170,7 +163,6 @@ describe('App — tab shell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(screen.getAllByRole('tab')).toHaveLength(2)
 
-    // Go back to tab 1 and then close tab 2 (inactive). Tab 1 stays selected.
     fireEvent.click(screen.getAllByRole('tab')[0])
     fireEvent.click(screen.getAllByRole('button', { name: /Close tab/i })[1])
 
@@ -189,7 +181,6 @@ describe('App — tab shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Close tab/i }))
 
-    // One tab still exists — a brand-new instance, and it's the active one.
     const tabsAfter = screen.getAllByRole('tab')
     expect(tabsAfter).toHaveLength(1)
     expect(tabsAfter[0]).not.toBe(initialTab)
@@ -235,7 +226,6 @@ describe('App — repo picker (no repo open)', () => {
       expect(screen.getByText('Add a workspace')).toBeInTheDocument()
     })
 
-    // No grouped lists or search bar until a workspace exists — only the add-workspace CTA.
     expect(screen.queryByText('Workspace')).not.toBeInTheDocument()
     expect(screen.queryByText('Recent')).not.toBeInTheDocument()
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
@@ -345,7 +335,6 @@ describe('App — workspace (repo open)', () => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/my-app')
     })
 
-    // Push one commit and signal end-of-stream so any "log loaded" UI lights up.
     stream.fire({
       repoPath: '/home/user/projects/my-app',
       commits: [sampleCommit]
@@ -356,27 +345,22 @@ describe('App — workspace (repo open)', () => {
   it('renders the repo dashboard with name, branch, and change counts', async () => {
     await renderWithRepo()
 
-    // Repo name lives in both the tab title and the shell topbar.
     await waitFor(() => {
       expect(screen.getAllByText('my-app').length).toBeGreaterThanOrEqual(1)
     })
 
-    // Branch chip + statusbar pip both reference the branch.
     expect(screen.getAllByText('feature/ui').length).toBeGreaterThanOrEqual(1)
-    // 1 modified + 2 staged + 1 untracked = 4 changes — surfaced in the statusbar.
     expect(screen.getByText(/4 changes/)).toBeInTheDocument()
   })
 
   it('defaults to the history view and swaps to the local-changes view from the sidebar', async () => {
     await renderWithRepo()
 
-    // History is the default view — timeline visible, staging UI mounted but hidden.
     expect(await screen.findByText('Timeline')).toBeVisible()
     expect(await screen.findByText('Initial commit')).toBeVisible()
     expect(screen.getByText('Working Directory')).not.toBeVisible()
     expect(screen.getByText('Commit')).not.toBeVisible()
 
-    // Clicking "Local changes" reveals the staging + commit panels and hides the timeline.
     fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
 
     expect(await screen.findByText('Working Directory')).toBeVisible()
@@ -419,15 +403,11 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(screen.getAllByText('repo').length).toBeGreaterThanOrEqual(1)
     })
-    // Clean badge lives in the StatusPanel, which only renders on the Local changes view.
     fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
     expect(screen.getAllByText('Clean').length).toBeGreaterThanOrEqual(1)
   })
 
   it('redirects to the existing tab when a third tab tries to open the same repo', async () => {
-    // Two repos live in the workspace; we open A in tab 1, B in tab 2, then
-    // try to open A again from a new tab 3 and expect to land on tab 1
-    // (not on tab 2, which is the closed tab's neighbour).
     mockBaseAPI({
       workingDirectory: '/projects',
       scanRepos: ['/projects/repo-a', '/projects/repo-b']
@@ -452,13 +432,11 @@ describe('App — workspace (repo open)', () => {
 
     render(<App />)
 
-    // Tab 1: open repo-a.
     fireEvent.click(await screen.findByText('/projects/repo-a'))
     await waitFor(() => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/projects/repo-a')
     })
 
-    // Tab 2: open repo-b.
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(screen.getAllByRole('tab')).toHaveLength(2)
     const repoBMatches = await screen.findAllByText('/projects/repo-b')
@@ -470,7 +448,6 @@ describe('App — workspace (repo open)', () => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/projects/repo-b')
     })
 
-    // Tab 3 (empty) — pick repo-a, which already lives in tab 1.
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(screen.getAllByRole('tab')).toHaveLength(3)
     const repoAMatches = await screen.findAllByText('/projects/repo-a')
@@ -479,7 +456,6 @@ describe('App — workspace (repo open)', () => {
       .find((b): b is HTMLButtonElement => !!b)
     fireEvent.click(repoAPickerRow as HTMLButtonElement)
 
-    // Tab 3 closes; the active tab is tab 1 (repo-a), not tab 2 (repo-b).
     await waitFor(() => {
       expect(screen.getAllByRole('tab')).toHaveLength(2)
     })
@@ -488,7 +464,6 @@ describe('App — workspace (repo open)', () => {
     expect(remainingTabs[0]).toHaveTextContent('repo-a')
     expect(remainingTabs[1]).toHaveAttribute('aria-selected', 'false')
     expect(remainingTabs[1]).toHaveTextContent('repo-b')
-    // openRepo was only called for the two distinct repos.
     expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(2)
   })
 
@@ -502,20 +477,15 @@ describe('App — workspace (repo open)', () => {
 
     render(<App />)
 
-    // Open the repo in tab 1.
     const firstRow = await screen.findByText('/home/user/projects/my-app')
     fireEvent.click(firstRow)
     await waitFor(() => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(1)
     })
 
-    // Open a new (empty) tab. After this, the repo path appears twice in the
-    // DOM: once in tab 1's topbar (hidden) and once in tab 2's picker row.
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(screen.getAllByRole('tab')).toHaveLength(2)
 
-    // Click the picker row (the path lives inside a button); pick the second
-    // match so we're clicking the picker, not the topbar text.
     const matches = await screen.findAllByText('/home/user/projects/my-app')
     const pickerRow = matches
       .map((el) => el.closest('button'))
@@ -523,7 +493,6 @@ describe('App — workspace (repo open)', () => {
     expect(pickerRow).toBeTruthy()
     fireEvent.click(pickerRow as HTMLButtonElement)
 
-    // Duplicate is intercepted: no second openRepo, and the empty tab is closed.
     await waitFor(() => {
       expect(screen.getAllByRole('tab')).toHaveLength(1)
     })

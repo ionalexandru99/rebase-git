@@ -7,8 +7,6 @@ import { Topbar } from './Topbar'
 
 const SIDEBAR_STORE_KEY = 'sidebarOpen'
 const SIDEBAR_WIDTH_STORE_KEY = 'sidebarWidth'
-// Width bounds in px. Min keeps branch names legible; max leaves room for the
-// commit timeline. Default matches shadcn's stock `--sidebar-width` (16rem).
 const SIDEBAR_WIDTH_MIN = 200
 const SIDEBAR_WIDTH_MAX = 520
 const SIDEBAR_WIDTH_DEFAULT = 256
@@ -54,8 +52,6 @@ export function Shell({
 }: ShellProps) {
   const [open, setOpen] = useState(true)
   const [width, setWidth] = useState<number>(SIDEBAR_WIDTH_DEFAULT)
-  // Latest width during a drag — written every mousemove so we can persist the
-  // final value on mouseup without depending on stale React state.
   const dragWidthRef = useRef(width)
 
   useEffect(() => {
@@ -90,9 +86,6 @@ export function Shell({
       dragWidthRef.current = startW
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
-      // Read by the global rule in index.css to disable the shadcn sidebar's
-      // width transition while the user is actively dragging — otherwise the
-      // sidebar lags ~200ms behind the cursor.
       document.body.dataset.sidebarResizing = 'true'
       const onMove = (ev: MouseEvent) => {
         const next = Math.max(

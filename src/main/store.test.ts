@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-// We can't test electron-store directly in unit tests easily,
-// so we test the pure logic functions by mocking the store.
-
 describe('addRecentRepo logic', () => {
   it('should add a repo to the front of the list', () => {
     const recent: string[] = ['/repo/old']

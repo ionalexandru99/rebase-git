@@ -82,7 +82,6 @@ describe('HistoryPanel', () => {
         entry({
           hash: 'aaa',
           message: 'tip commit',
-          // origin/main should be hidden because local main is on the same SHA
           refs: 'HEAD -> main, origin/main, tag: v1.0'
         })
       ],
@@ -106,7 +105,6 @@ describe('HistoryPanel', () => {
       total: 1
     })
 
-    // Remote refs render with a cloud icon + the branch name minus the remote prefix.
     expect(screen.getByTitle('origin/feature')).toBeInTheDocument()
     expect(screen.getByText('feature')).toBeInTheDocument()
   })
@@ -165,9 +163,6 @@ describe('layoutCommits', () => {
   })
 
   it('opens a second lane when a sibling branch tip appears', () => {
-    // c1 (tip of main) -> c3
-    // c2 (tip of feature) -> c3   (older sibling, listed second)
-    // c3 (shared ancestor)
     const commits: GitLogEntry[] = [
       entry({ hash: 'c1', parents: ['c3'] }),
       entry({ hash: 'c2', parents: ['c3'] }),
@@ -179,13 +174,11 @@ describe('layoutCommits', () => {
     expect(maxLanes).toBe(2)
     expect(rows[0].commitLane).toBe(0)
     expect(rows[1].commitLane).toBe(1)
-    // Both lanes collapse into c3's row.
     expect(rows[2].commitLane).toBe(0)
     expect(rows[2].outgoing).toEqual([])
   })
 
   it('handles a merge commit by expanding into two outgoing lanes', () => {
-    // c1 is a merge of c2 and c3
     const commits: GitLogEntry[] = [
       entry({ hash: 'c1', parents: ['c2', 'c3'] }),
       entry({ hash: 'c2', parents: ['c4'] }),
@@ -204,8 +197,6 @@ describe('layoutCommits', () => {
   })
 
   it('produces the same layout incrementally as in one pass', () => {
-    // Mixed merge + linear topology — exercises lane state hand-off across
-    // the chunk boundary.
     const all: GitLogEntry[] = [
       entry({ hash: 'a', parents: ['b', 'c'] }),
       entry({ hash: 'b', parents: ['d'] }),
@@ -228,7 +219,6 @@ describe('layoutCommits', () => {
 
   it('rebuilds from scratch when the cached prefix no longer matches', () => {
     const cached = layoutCommits([entry({ hash: 'x', parents: [] })])
-    // Same length but different first hash → must not reuse the stale prefix.
     const fresh = layoutCommits([entry({ hash: 'y', parents: [] })], cached)
 
     expect(fresh.rows).toHaveLength(1)

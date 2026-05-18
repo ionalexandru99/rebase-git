@@ -11,12 +11,6 @@ import { cn } from '@/lib/utils'
 type Provider = 'github' | 'gitlab' | 'azure' | 'bitbucket' | 'codeberg' | 'gitea' | 'sourcehut'
 type Style = 'color' | 'mono'
 
-// SVGs ship as raw build-asset strings (Vite's `?raw` query). Sources:
-// - color: svgl.app (brand logos with their own fills)
-// - mono: Simple Icons (single-path silhouettes without fills, tinted via
-//   currentColor so they sit naturally inside neutral pills)
-// Add a provider by dropping a .svg into src/renderer/assets/providers/ and
-// adding entries to the three maps below + the matcher in detectProvider.
 const PROVIDERS: Record<Provider, { svg: string; label: string; style: Style }> = {
   github: { svg: githubSvg, label: 'GitHub', style: 'color' },
   gitlab: { svg: gitlabSvg, label: 'GitLab', style: 'color' },
@@ -27,8 +21,6 @@ const PROVIDERS: Record<Provider, { svg: string; label: string; style: Style }> 
   sourcehut: { svg: sourcehutSvg, label: 'sourcehut', style: 'mono' }
 }
 
-// Extract the hostname from any common git URL shape. Returns lowercased host
-// without port, or null if the URL is unparseable.
 export function parseRemoteHost(url: string | undefined): string | null {
   if (!url) return null
   const sshMatch = url.match(/^[\w._-]+@([\w.-]+):/)
@@ -72,8 +64,6 @@ export function RemoteProviderIcon({ url, className }: RemoteProviderIconProps) 
       title={label}
       className={cn(
         'inline-flex shrink-0 [&_svg]:size-full',
-        // Tint monochrome silhouettes to currentColor; leave brand-colored
-        // SVGs alone.
         style === 'mono' && '[&_path]:fill-current',
         className
       )}

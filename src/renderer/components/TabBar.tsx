@@ -16,12 +16,6 @@ interface TabBarProps {
   onNew: () => void
 }
 
-// Chrome-style tab strip. The visual hierarchy in both themes is:
-//   bar (darkest/most saturated) < hovered inactive < active tab (lightest).
-// In light mode we get this with bg-muted (light grey) under bg-background
-// (white). In dark mode `bg-background` is *darker* than `bg-muted`, so we
-// flip the roles via `dark:` variants — bar becomes bg-background (darkest)
-// and the active tab uses bg-muted (the lighter dark shade).
 export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarProps) {
   return (
     <div className="drag-region relative flex h-11 shrink-0 items-end bg-muted pl-1 pr-1 dark:bg-background">
@@ -73,13 +67,8 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
       className={cn(
         'group relative flex h-9 min-w-44 max-w-64 items-center gap-2 rounded-t-lg pl-3 pr-1.5 transition-colors',
         isActive
-          ? // Active: lighter than the bar in both modes (bg-background in
-            // light; bg-muted in dark).
-            'z-10 bg-background text-foreground dark:bg-muted'
-          : // Inactive: transparent (matches the bar) until hovered. The
-            // hover uses a neutral foreground overlay so it works in both
-            // themes — lightens in dark, darkens in light.
-            'text-muted-foreground hover:bg-foreground/10 hover:text-foreground'
+          ? 'z-10 bg-background text-foreground dark:bg-muted'
+          : 'text-muted-foreground hover:bg-foreground/10 hover:text-foreground'
       )}
     >
       <button

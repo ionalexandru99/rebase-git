@@ -26,9 +26,6 @@ export interface GitBranches {
   tags: string[]
 }
 
-// Returned by the `open-repo` IPC. Only the cheap envelope — status and
-// branches arrive separately through `get-status` and `get-branches` so each
-// panel can paint independently.
 export interface RepoOpenResult {
   success: boolean
   error?: string

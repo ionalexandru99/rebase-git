@@ -12,7 +12,6 @@ test.describe('Git GUI E2E', () => {
   let page: Page
 
   test.beforeAll(async () => {
-    // Launch the Electron app
     electronApp = await electron.launch({
       args: [path.join(__dirname, '..', 'out', 'main', 'index.js')],
       env: {

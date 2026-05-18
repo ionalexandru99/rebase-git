@@ -1,9 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { beforeEach, vi } from 'vitest'
 
-// jsdom doesn't implement matchMedia; sonner/next-themes/Radix rely on it.
-// Use a regular function (not vi.fn) so vi.resetAllMocks() in beforeEach
-// doesn't clear the implementation between tests.
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   configurable: true,
@@ -19,7 +16,6 @@ Object.defineProperty(window, 'matchMedia', {
   })
 })
 
-// jsdom doesn't implement ResizeObserver, which Radix primitives need.
 class ResizeObserverMock {
   observe = vi.fn()
   unobserve = vi.fn()
@@ -30,7 +26,6 @@ Object.defineProperty(window, 'ResizeObserver', {
   value: ResizeObserverMock
 })
 
-// Mock the Electron API that is exposed via preload
 const mockElectronAPI = {
   selectFolder: vi.fn(),
   openRepo: vi.fn(),
@@ -64,9 +59,6 @@ Object.defineProperty(window, 'electronAPI', {
   writable: true
 })
 
-// Test helper: install a log-stream mock that captures the chunk listener and
-// returns a function tests can call to emit chunks. Reset per test via
-// `setupLogStream()`.
 export interface LogStreamHandle {
   fire: (chunk: {
     repoPath: string
@@ -109,7 +101,6 @@ export function setupLogStream(): LogStreamHandle {
   }
 }
 
-// Reset mocks between tests
 beforeEach(() => {
   vi.resetAllMocks()
 })

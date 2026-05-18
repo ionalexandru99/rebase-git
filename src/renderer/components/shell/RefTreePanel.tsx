@@ -41,9 +41,6 @@ interface RefEmptyRow {
 interface RefSkeletonRow {
   kind: 'skeleton'
   refKind: RefKind
-  // Stable index inside the section so each placeholder has a unique key and
-  // a deterministic width (different rows get slightly different widths to
-  // look list-ish rather than uniform).
   idx: number
 }
 
@@ -52,21 +49,8 @@ type Row = RefLeafRow | RefFolderRow | RefSectionRow | RefEmptyRow | RefSkeleton
 const ROW_H = 28
 const OVERSCAN = 20
 const INDENT_PX = 12
-// Renamed from the previous `sidebarRefTreeCollapsed` so any previously
-// persisted set (which used "key present = collapsed" semantics for both
-// rows) is ignored on first load — otherwise folders the user had
-// collapsed would re-appear as expanded under the new semantics.
 const TOGGLES_STORE_KEY = 'sidebarRefTreeToggles'
 
-// We persist a single Set of "the user diverged from the default for this
-// key". Defaults differ by row kind:
-//   - sections (key prefix `section:`) default to EXPANDED → key present =
-//     user collapsed it
-//   - folders (key prefix `folder:`) default to COLLAPSED → key present =
-//     user expanded it
-// One set, one toggle action (add if absent, remove if present); the
-// interpretation only flips at read time. Keeps storage simple while letting
-// the two row kinds have opposite defaults.
 function isSectionExpanded(toggles: Set<string>, refKind: RefKind): boolean {
   return !toggles.has(sectionKey(refKind))
 }
@@ -83,10 +67,6 @@ interface RefTreePanelProps {
   onSelectRef?: (refKind: RefKind, fullPath: string) => void
 }
 
-// Memoized so the cascade of repo-open state flips (loading → status arrives
-// → branches arrive → log streams in) doesn't force the tree to re-flatten
-// and the virtualizer to re-slice each time. Props are stabilized by useMemo
-// upstream in App.tsx so memo's shallow equality actually wins.
 export const RefTreePanel = memo(function RefTreePanel({
   localBranches,
   remoteBranches,
@@ -97,10 +77,6 @@ export const RefTreePanel = memo(function RefTreePanel({
 }: RefTreePanelProps) {
   const [toggles, setToggles] = useState<Set<string>>(() => new Set())
 
-  // Persisted globally (not per-repo): the user's tree-state preferences
-  // travel with them — expanding `origin` once means it stays expanded in
-  // any repo with an `origin` remote, and a collapsed `Local branches`
-  // section stays collapsed across repos.
   useEffect(() => {
     let cancelled = false
     Promise.resolve(window.electronAPI.getStoreValue(TOGGLES_STORE_KEY)).then((v) => {
@@ -126,9 +102,6 @@ export const RefTreePanel = memo(function RefTreePanel({
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = []
-    // While the renderer is waiting on `get-branches` and nothing's loaded
-    // yet, render skeleton placeholders under each section header instead
-    // of "No branches" — keeps the sidebar shape stable on repo open.
     const noData = localBranches.length === 0 && remoteBranches.length === 0 && tags.length === 0
     if (loading && noData) {
       pushSkeletonSection(out, 'local', 'Local branches', toggles, 4)
@@ -142,8 +115,6 @@ export const RefTreePanel = memo(function RefTreePanel({
     return out
   }, [localBranches, remoteBranches, tags, currentBranch, toggles, loading])
 
-  // Virtualization — only render rows whose vertical position falls within the
-  // current scroll viewport (± overscan). Pattern mirrors HistoryPanel.
   const scrollRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportH, setViewportH] = useState(400)
@@ -236,9 +207,6 @@ function folderKey(refKind: RefKind, fullPath: string): string {
   return `folder:${refKind}:${fullPath}`
 }
 
-// Tree node type stored during construction: a Map for folders, the original
-// branch string for leaves. Using the original string preserves the exact
-// full path (with all `/` segments) for click handlers.
 type TreeMap = Map<string, TreeMap | string>
 
 function buildSection(
@@ -276,8 +244,6 @@ function buildSection(
       const part = parts[i]
       const isLeaf = i === parts.length - 1
       if (isLeaf) {
-        // Leaf wins over a same-name folder (shouldn't happen for git refs,
-        // since `a` and `a/b` can't coexist as branch names — git forbids it).
         cur.set(part, path)
       } else {
         const next = cur.get(part)
@@ -304,8 +270,6 @@ function walkTree(
   toggles: Set<string>,
   currentBranch: string
 ): void {
-  // Folders first, then leaves; alphabetical within each. Stable, predictable
-  // ordering — matches how IDE file trees present nested branches.
   const entries = [...node.entries()].sort((a, b) => {
     const aIsFolder = a[1] instanceof Map
     const bIsFolder = b[1] instanceof Map
@@ -316,8 +280,6 @@ function walkTree(
   for (const [name, val] of entries) {
     const fullPath = parentPath ? `${parentPath}/${name}` : name
     if (val instanceof Map) {
-      // Folders default COLLAPSED — the toggles set stores the user's
-      // explicit "open this one" choices.
       const expanded = isFolderExpanded(toggles, refKind, fullPath)
       out.push({
         kind: 'folder',
@@ -391,8 +353,6 @@ function RowView({ row, top, loading, onToggleCollapsed, onSelectLeaf }: RowView
   }
 
   if (row.kind === 'skeleton') {
-    // Slightly varied widths give the placeholder list a natural ragged-right
-    // shape — three rows at the same width read as a logo bar, not a list.
     const widths = ['60%', '78%', '52%', '70%']
     const w = widths[row.idx % widths.length]
     return (
@@ -423,9 +383,6 @@ function RowView({ row, top, loading, onToggleCollapsed, onSelectLeaf }: RowView
   }
 
   const Icon = row.refKind === 'tag' ? Tag : row.refKind === 'remote' ? Cloud : GitBranch
-  // Leaves indent past the folder chevron column so their icon column-aligns
-  // with the deepest folder's name column. Tweakable; INDENT_PX matches the
-  // chevron+gap visual width.
   const padLeft = 6 + row.depth * INDENT_PX + 14
   return (
     <button

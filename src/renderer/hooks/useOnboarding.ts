@@ -30,7 +30,6 @@ export function useOnboarding() {
     }
   }, [])
 
-  // Initial load.
   useEffect(() => {
     window.electronAPI.getOnboardingComplete().then((complete) => {
       setOnboardingCompleteState(complete)

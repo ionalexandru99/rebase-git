@@ -52,16 +52,9 @@ function App() {
     setActiveTabId(id)
   }, [])
 
-  // Note: we deliberately don't call setActiveTabId from inside a setTabs
-  // updater. StrictMode runs updaters twice in dev, and nested setState calls
-  // from those discarded invocations can leave activeTabId out of sync with
-  // the committed tabs array. Reading tabs from state and issuing separate
-  // top-level setState calls keeps the two in lockstep.
   const closeTab = useCallback(
     (id: string) => {
       if (tabs.length <= 1) {
-        // Closing the only tab replaces it with a fresh empty one — the topbar
-        // should never end up with zero tabs.
         const freshId = nextTabId()
         setTabs([{ id: freshId }])
         setActiveTabId(freshId)
@@ -75,10 +68,6 @@ function App() {
       const idx = tabs.findIndex((t) => t.id === id)
       const next = tabs.filter((t) => t.id !== id)
       setTabs(next)
-      // Functional update so a caller that already queued setActiveTabId to a
-      // specific target (e.g. requestOpenRepo redirecting to an existing tab)
-      // wins — we only auto-pick a neighbor when the closing tab was actually
-      // active at the time this update runs.
       setActiveTabId((current) => {
         if (current !== id) return current
         return next[Math.min(idx, next.length - 1)].id
@@ -92,11 +81,6 @@ function App() {
     [tabs]
   )
 
-  // If another tab already holds `path`, switch to it and drop the (empty)
-  // source tab. Self-contained — does not route through closeTab, whose
-  // neighbour-pick logic would otherwise fight with our explicit target.
-  // Returns true when the open was redirected, so the caller can skip its
-  // own load path.
   const requestOpenRepo = useCallback(
     (sourceTabId: string, path: string): boolean => {
       const match = Object.entries(tabRepos).find(([id, p]) => p === path && id !== sourceTabId)
@@ -160,7 +144,6 @@ function App() {
           onComplete={onboarding.completeOnboarding}
           onOpenRepo={async (path) => {
             await onboarding.completeOnboarding()
-            // The initial tab will pick this up via its empty state.
             window.electronAPI.openRepo(path)
           }}
         />
@@ -243,8 +226,6 @@ function TabView({
   const untrackedCount = git.status?.not_added.length ?? 0
   const totalChanges = modifiedCount + stagedCount + untrackedCount
 
-  // Surface this tab's repo path back to App so the TabBar label stays in sync
-  // and duplicate detection can find it.
   useEffect(() => {
     onReportRepo(tabId, git.repoPath ?? null)
   }, [git.repoPath, tabId, onReportRepo])
@@ -260,9 +241,6 @@ function TabView({
 
   return (
     <>
-      {/* Pre-repo: the picker has no sidebar, so a top-level banner is fine.
-          Inside the workspace, the banner has to live inside SidebarInset
-          (the right panel) — otherwise the fixed shadcn sidebar overlays it. */}
       {!git.repoPath ? (
         <>
           {errorBanner}
@@ -495,11 +473,6 @@ function Workspace({
   const branch = git.currentBranch || 'no-branch'
   const [activeView, setActiveView] = useState<SidebarView>('history')
 
-  // Returning a fresh `[]` from the `??` fallback on every render would make
-  // RefTreePanel's row useMemo invalidate every parent render — and would also
-  // hide the skeleton path, since a non-empty `[branch]` array makes the panel
-  // think it has real data. useMemo gives us a stable empty array until
-  // git.branches actually arrives.
   const sidebarLocalBranches = useMemo(() => git.branches?.all ?? [], [git.branches])
   const sidebarRemoteBranches = useMemo(() => git.branches?.remotes ?? [], [git.branches])
   const sidebarTags = useMemo(() => git.branches?.tags ?? [], [git.branches])
@@ -521,7 +494,6 @@ function Workspace({
     >
       {errorBanner}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
-        {/* Always mounted so CommitPanel draft state survives view switches */}
         <div
           hidden={activeView !== 'local-changes'}
           className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(21rem,0.85fr)_minmax(0,1.15fr)]"
@@ -547,7 +519,7 @@ function Workspace({
           />
         </div>
       </div>
-      {/* counts kept available for screen readers / future use */}
+
       <span className="sr-only">
         {modifiedCount} modified, {stagedCount} staged, {untrackedCount} untracked
       </span>

@@ -1,7 +1,6 @@
 import { GitMerge, Loader2 } from 'lucide-react'
 import {
   memo,
-  type ReactNode,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -21,14 +20,9 @@ interface HistoryPanelProps {
   log: GitLog | null
   loading: boolean
   remotes?: Record<string, string>
-  // Branch name treated as trunk. Resolved by the main process from
-  // `origin/HEAD` (canonical) with a fallback to the locally checked-out
-  // branch — works for repos using `main`, `master`, `dev`, `trunk`, etc.
   defaultBranch?: string
 }
 
-// Derive layout constants from the current root font size so the row pitch,
-// lane spacing, and dot size scale together if the root changes (index.css).
 function getRootFontPx(): number {
   if (typeof document === 'undefined') return 16
   const fs = parseFloat(getComputedStyle(document.documentElement).fontSize)
@@ -36,14 +30,10 @@ function getRootFontPx(): number {
 }
 const ROOT_PX = getRootFontPx()
 
-const ROW_H = Math.round(ROOT_PX * 2) // 32 at 16px root
-const COL_W = Math.round(ROOT_PX) // 16
-const RAIL_PAD = Math.round(ROOT_PX * 0.875) // 14
-const DOT_R = ROOT_PX * 0.25 // 4
-// Number of rows to render outside the visible window in either direction.
-// Sized to cover a scrollbar-drag jump of ~9600px (300 × 32) before React
-// commits the next slice. Smaller buffers leave the viewport empty during
-// fast flings; larger buffers cost more mount work per buffer-shift.
+const ROW_H = Math.round(ROOT_PX * 2)
+const COL_W = Math.round(ROOT_PX)
+const RAIL_PAD = Math.round(ROOT_PX * 0.875)
+const DOT_R = ROOT_PX * 0.25
 const OVERSCAN = 300
 
 interface ColWidths {
@@ -56,9 +46,6 @@ const COL_MIN = 3
 const COL_MAX = 40
 const COL_STORE_KEY = 'historyColWidths'
 
-// Best-effort parse of whatever electron-store hands back. Guards against
-// stale/older serialized shapes and bad numbers; missing fields fall back to
-// the default.
 function parseColWidths(v: unknown): ColWidths | null {
   if (!v || typeof v !== 'object') return null
   const r = v as Record<string, unknown>
@@ -73,8 +60,6 @@ function parseColWidths(v: unknown): ColWidths | null {
   }
 }
 
-// Stable per-lane color palette. The lane index is the only thing we have to
-// distinguish branches visually — names are not always populated by %D.
 const LANE_PALETTE = [
   '#7c8cff',
   '#5fb4e4',
@@ -94,9 +79,6 @@ function laneX(lane: number): number {
   return RAIL_PAD + lane * COL_W
 }
 
-// Remote refs like `origin/feature/x` split into `origin` + `feature/x`. The
-// remote name is rendered as a provider icon (GitHub, GitLab, …) and the tail
-// stays as the branch label.
 function splitRemoteRef(label: string): { remote: string; branch: string } {
   const slash = label.indexOf('/')
   if (slash === -1) return { remote: label, branch: '' }
@@ -130,10 +112,6 @@ interface ParsedRef {
   kind: 'head' | 'branch' | 'remote' | 'tag' | 'stash'
 }
 
-// Drops a remote `<remoteName>/X` when a local branch `X` is also present on
-// the same commit — they point at the same SHA, so showing both is noise.
-// Uses indexOf (first slash) because the local branch part is everything
-// after the remote name, even if the branch itself contains slashes.
 function dedupeRefs(parsed: ParsedRef[]): ParsedRef[] {
   const localNames = new Set(
     parsed.filter((r) => r.kind === 'branch' || r.kind === 'head').map((r) => r.label)
@@ -153,24 +131,15 @@ export function parseRefs(refs: string, remoteNames?: Set<string>): ParsedRef[] 
     .map((raw) => raw.trim())
     .filter(Boolean)
     .map<ParsedRef | null>((part) => {
-      // `HEAD -> X` collapses into a plain branch pill — the active branch is
-      // already inferable from the topbar, no need for a separate HEAD chip.
-      // Bare `HEAD` (detached) is dropped entirely.
       if (part.startsWith('HEAD -> ')) return { label: part.slice(8), kind: 'branch' }
       if (part === 'HEAD') return null
       if (part.startsWith('tag: ')) return { label: part.slice(5), kind: 'tag' }
       if (/^stash@\{/.test(part)) return { label: part, kind: 'stash' }
-      // A ref is "remote" iff its first path segment matches a known remote.
-      // If we don't have the remote list yet (tests, initial render), fall
-      // back to first-segment-equals-"origin" — covers the common case
-      // without misclassifying local branches that happen to contain `/`.
       if (part.includes('/')) {
         const first = part.slice(0, part.indexOf('/'))
         const haveRemotes = remoteNames && remoteNames.size > 0
         const isRemote = haveRemotes ? remoteNames.has(first) : first === 'origin'
         if (isRemote) {
-          // Drop `<remote>/HEAD` symrefs — they're metadata pointing at the
-          // remote's default branch, not a branch the user wants to see.
           if (part.slice(first.length + 1) === 'HEAD') return null
           return { label: part, kind: 'remote' }
         }
@@ -191,28 +160,12 @@ interface RowLayout {
 export interface LayoutResult {
   rows: RowLayout[]
   maxLanes: number
-  // Lane state at the end of the walk. Persisted so a follow-up streaming
-  // chunk can resume without re-walking from the first commit.
   lanesAfter: (string | null)[]
-  // The exact input array layoutCommits was called with. Used by `prev` to
-  // confirm the new input extends the cached one (same prefix).
   commits: GitLogEntry[]
-  // Hash that was pre-seeded onto lane 0 (typically the main/master/HEAD
-  // tip). Cache invalidates when this changes between calls.
   trunkHash?: string
+  trunkRowIdx: number
 }
 
-// Compute per-row lane state by walking commits in display order.
-// Each lane "waits" for a specific parent hash. When a commit matches one of
-// the waiting hashes, its dot occupies that lane; otherwise it gets a fresh
-// lane (first null slot, else appended).
-//
-// Incremental mode: pass the previous result as `prev`. If `commits` extends
-// it (cheap prefix check via first + last cached hashes), the walk resumes
-// from where `prev` ended — useful while the streaming log is still flowing.
-//
-// `trunkHash`: if provided, lane 0 is reserved for this commit so its
-// first-parent trail anchors the leftmost rail regardless of date-order.
 export function layoutCommits(
   commits: GitLogEntry[],
   prev?: LayoutResult,
@@ -222,6 +175,7 @@ export function layoutCommits(
   let lanes: (string | null)[] = []
   let rows: RowLayout[] = []
   let maxLanes = 0
+  let trunkRowIdx = -1
 
   if (
     prev &&
@@ -235,6 +189,7 @@ export function layoutCommits(
     lanes = prev.lanesAfter.slice()
     rows = prev.rows.slice()
     maxLanes = prev.maxLanes
+    trunkRowIdx = prev.trunkRowIdx
   } else if (trunkHash) {
     lanes = [trunkHash]
     maxLanes = 1
@@ -242,6 +197,9 @@ export function layoutCommits(
 
   for (let idx = startIdx; idx < commits.length; idx++) {
     const c = commits[idx]
+    if (trunkRowIdx === -1 && trunkHash && c.hash === trunkHash) {
+      trunkRowIdx = idx
+    }
     const incoming = [...lanes]
 
     let commitLane = lanes.indexOf(c.hash)
@@ -253,7 +211,6 @@ export function layoutCommits(
       }
     }
 
-    // All lanes waiting for this hash collapse into commitLane.
     lanes = lanes.map((l) => (l === c.hash ? null : l))
 
     for (let pi = 0; pi < c.parents.length; pi++) {
@@ -276,13 +233,9 @@ export function layoutCommits(
     rows.push({ commit: c, commitLane, incoming, outgoing })
   }
 
-  return { rows, maxLanes, lanesAfter: lanes, commits, trunkHash }
+  return { rows, maxLanes, lanesAfter: lanes, commits, trunkHash, trunkRowIdx }
 }
 
-// Branch-type pills (HEAD, branch, remote) borrow the commit's lane color so
-// they visually belong to the lane. The alpha steps differentiate role:
-// HEAD = strongest, branch = medium, remote = outline-only. Tag/stash keep
-// semantic palettes since they aren't part of branch flow.
 function refClass(kind: ParsedRef['kind']): string {
   switch (kind) {
     case 'remote':
@@ -297,9 +250,6 @@ function refClass(kind: ParsedRef['kind']): string {
 }
 
 function pillStyle(kind: ParsedRef['kind'], laneHex: string): React.CSSProperties | undefined {
-  // Only local branch pills borrow the lane color. Remote, tag, and stash
-  // pills keep their neutral / semantic chrome so the visual emphasis stays
-  // on "what's at this commit in MY working copy".
   if (kind === 'branch') {
     return {
       borderColor: `${laneHex}66`,
@@ -312,22 +262,12 @@ function pillStyle(kind: ParsedRef['kind'], laneHex: string): React.CSSPropertie
 
 export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: HistoryPanelProps) {
   const [filter, setFilter] = useState('')
-  // Memoized so CommitRow's memo equality on `remoteNames` stays stable.
   const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
 
-  // Defer the heavy work (layoutCommits + filter walk) so typing in the filter
-  // input and arrival of a fresh log don't block paint. React keeps the
-  // previous derived state visible until the new one is ready.
   const deferredLog = useDeferredValue(log)
   const deferredFilter = useDeferredValue(filter)
   const commits: GitLogEntry[] = deferredLog?.all ?? []
 
-  // Resolve the "trunk" commit — the tip of `defaultBranch`. Anchors lane 0
-  // so the team's primary branch (whether `main`, `master`, `dev`, `trunk`,
-  // etc.) sits on the leftmost rail regardless of date order.
-  //
-  // Only decorated commits have a non-empty refs string, so this loop
-  // short-circuits on the vast majority of entries even in a 76k-commit log.
   const trunkHash = useMemo(() => {
     if (!defaultBranch) return undefined
     for (const c of commits) {
@@ -341,13 +281,8 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
     return undefined
   }, [commits, remoteNames, defaultBranch])
 
-  // Layout cache: streaming log chunks each produce a fresh `commits` array
-  // that extends the previous one. The ref lets layoutCommits walk only the
-  // new tail. Invalidates automatically when commits[0]/last hash diverges
-  // (e.g. repo switch, history rewrite) or when trunkHash changes (e.g. main
-  // ref arrives in a later chunk).
   const layoutCacheRef = useRef<LayoutResult | null>(null)
-  const { rows } = useMemo(() => {
+  const { rows, trunkRowIdx } = useMemo(() => {
     const result = layoutCommits(commits, layoutCacheRef.current ?? undefined, trunkHash)
     layoutCacheRef.current = result
     return result
@@ -372,10 +307,6 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
 
   const totalHeight = rows.length * ROW_H
 
-  // Virtualization: track scroll position + viewport height of the list
-  // container, and only render rows in [startIdx, endIdx). We initialize
-  // viewportH to window.innerHeight so the first render already paints close
-  // to the right window — the post-mount measurement just refines it.
   const scrollRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportH, setViewportH] = useState<number>(() =>
@@ -386,8 +317,6 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
     const el = scrollRef.current
     if (!el) return
     const update = () => {
-      // 0 means jsdom / pre-layout — keep the existing fallback so tests still
-      // see rows rendered.
       if (el.clientHeight > 0) setViewportH(el.clientHeight)
     }
     update()
@@ -396,30 +325,9 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
     return () => ro.disconnect()
   }, [])
 
-  const rafRef = useRef<number | null>(null)
-  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null
-      setScrollTop(target.scrollTop)
-    })
-  }, [])
-  useEffect(
-    () => () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    },
-    []
-  )
-
   const startIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN)
   const endIdx = Math.min(rows.length, Math.ceil((scrollTop + viewportH) / ROW_H) + OVERSCAN)
 
-  // Rail width tracks the max lane count *currently in the rendered buffer*.
-  // When you scroll into a complex merge region the graph widens; when you
-  // scroll into linear history it narrows and the subject column reclaims the
-  // space. The buffer includes overscan so the width doesn't jitter on every
-  // row that enters or leaves the strict viewport.
   const localMaxLanes = useMemo(() => {
     let max = 0
     for (let i = startIdx; i < endIdx; i++) {
@@ -432,10 +340,101 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
   }, [rows, startIdx, endIdx])
   const railWidth = Math.max(28, RAIL_PAD * 2 + Math.max(localMaxLanes - 1, 0) * COL_W)
 
-  // User-resizable column widths (in rem). Subject is `1fr` and auto-fills
-  // whatever's left. Drag the handles on the column header to resize. The
-  // last-committed widths are persisted via electron-store; we load them on
-  // mount and write back once at drag end (not every mousemove).
+  const [themeNonce, setThemeNonce] = useState(0)
+  useEffect(() => {
+    if (typeof MutationObserver === 'undefined') return
+    const mo = new MutationObserver(() => setThemeNonce((n) => n + 1))
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => mo.disconnect()
+  }, [])
+
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  const drawDataRef = useRef({ rows, viewportH, visibleSet, railWidth, trunkRowIdx, trunkHash })
+  drawDataRef.current = { rows, viewportH, visibleSet, railWidth, trunkRowIdx, trunkHash }
+
+  const drawCanvas = useCallback(() => {
+    const canvas = canvasRef.current
+    const scroller = scrollRef.current
+    if (!canvas || !scroller) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const {
+      rows: rs,
+      viewportH: vh,
+      visibleSet: vis,
+      railWidth: rw,
+      trunkRowIdx: trunkIdx,
+      trunkHash: trunk
+    } = drawDataRef.current
+    const liveScrollTop = scroller.scrollTop
+
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
+    const bitmapW = Math.max(1, Math.round(rw * dpr))
+    const bitmapH = Math.max(1, Math.round(vh * dpr))
+    if (canvas.width !== bitmapW) canvas.width = bitmapW
+    if (canvas.height !== bitmapH) canvas.height = bitmapH
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, rw, vh)
+    ctx.lineCap = 'round'
+
+    const bgColor = readCssVar('--color-background', '#ffffff')
+    const mergeColor = readCssVar('--color-chart-3', '#f59e0b')
+
+    const start = Math.max(0, Math.floor(liveScrollTop / ROW_H) - OVERSCAN)
+    const end = Math.min(rs.length, Math.ceil((liveScrollTop + vh) / ROW_H) + OVERSCAN)
+
+    for (let i = start; i < end; i++) {
+      const r = rs[i]
+      if (!r) continue
+      const yTop = i * ROW_H - liveScrollTop
+      if (yTop + ROW_H < 0 || yTop > vh) continue
+      const dim = !!(vis && !vis.has(r.commit.hash))
+
+      let drawRow = r
+      if (trunkIdx >= 0 && trunk && i <= trunkIdx) {
+        const hideTop = r.incoming[0] === trunk
+        const hideBot = i < trunkIdx && r.outgoing[0] === trunk
+        if (hideTop || hideBot) {
+          drawRow = {
+            ...r,
+            incoming: hideTop ? [null, ...r.incoming.slice(1)] : r.incoming,
+            outgoing: hideBot ? [null, ...r.outgoing.slice(1)] : r.outgoing
+          }
+        }
+      }
+
+      drawGraphRow(ctx, drawRow, yTop, i === 0, dim, bgColor, mergeColor)
+    }
+  }, [])
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: themeNonce drives the redraw when CSS vars change even though it isn't read directly
+  useEffect(() => {
+    drawCanvas()
+  }, [rows, viewportH, visibleSet, railWidth, themeNonce, drawCanvas])
+
+  const rafRef = useRef<number | null>(null)
+  const onScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const target = e.currentTarget
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null
+        drawCanvas()
+        setScrollTop(target.scrollTop)
+      })
+    },
+    [drawCanvas]
+  )
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+    },
+    []
+  )
+
   const [colWidths, setColWidths] = useState(COL_DEFAULTS)
 
   useEffect(() => {
@@ -450,18 +449,8 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
     }
   }, [])
 
-  // Graph is auto-sized to the visible lane count (left-pinned). Author/Date/
-  // SHA are user-resizable fixed widths pinned to the right. Subject takes
-  // whatever space is left in between — the only flexible column.
   const gridTemplate = `${railWidth}px minmax(7rem,1fr) ${colWidths.author}rem ${colWidths.date}rem ${colWidths.sha}rem`
 
-  // Resize the boundary between two columns. Drag right: leftCol grows,
-  // rightCol shrinks. Either side may be `null` to model:
-  //   - `leftCol=null` → the flexible Subject (1fr) is to the left.
-  //     Rightward drag still shrinks rightCol; Subject auto-absorbs.
-  //   - `rightCol=null` → the panel edge is to the right (e.g. SHA's right
-  //     edge). Rightward drag grows leftCol; Subject (1fr) absorbs from the
-  //     other side.
   const startBoundaryResize = useCallback(
     (leftCol: keyof ColWidths | null, rightCol: keyof ColWidths | null, e: React.MouseEvent) => {
       e.preventDefault()
@@ -599,13 +588,6 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
               } as React.CSSProperties
             }
           >
-            {/* Sticky fallback that fills the viewport whenever real rows
-                haven't caught up with the scroll position. Zero-height in the
-                normal flow so it doesn't offset row coordinates; its inner
-                absolute child paints over the visible window. We clip the
-                child to `totalHeight - scrollTop` so on short histories the
-                skeleton never paints below the last commit (and never
-                inflates scrollHeight past the data). */}
             {(() => {
               const visibleBelow = Math.max(0, totalHeight - scrollTop)
               const overlayH = Math.min(viewportH, visibleBelow)
@@ -625,6 +607,18 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
                 </div>
               )
             })()}
+
+            <div
+              className="pointer-events-none sticky top-0 z-20"
+              style={{ height: 0 }}
+              aria-hidden
+            >
+              <canvas
+                ref={canvasRef}
+                className="absolute left-0 top-0"
+                style={{ width: railWidth, height: viewportH }}
+              />
+            </div>
             {rows.slice(startIdx, endIdx).map((row, idx) => {
               const i = startIdx + idx
               const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
@@ -646,188 +640,114 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
   )
 }
 
-// Per-row SVG graph segment. Memoized so that a scroll-induced re-render of
-// HistoryPanel doesn't reconcile the SVG content for rows whose props haven't
-// changed. Each row owns its own <svg> sized to ROW_H — small layers paint
-// cheaply, unlike a single timeline-sized SVG which forces Chromium to manage
-// a huge composited surface.
-const GraphRow = memo(function GraphRow({
-  row,
-  dim,
-  isFirst
-}: {
-  row: RowLayout
-  dim: boolean
-  // True for the absolute first row of the timeline (newest commit). Suppresses
-  // the top half of the rail — there are no prior commits feeding into it, so
-  // any pre-seeded lane state (trunk anchor) is synthetic, not a real edge.
-  isFirst: boolean
-}) {
-  const rowTop = 0
-  const rowMid = ROW_H / 2
-  const rowBot = ROW_H
+function readCssVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
+
+function drawGraphRow(
+  ctx: CanvasRenderingContext2D,
+  row: RowLayout,
+  yTop: number,
+  isFirst: boolean,
+  dim: boolean,
+  bgColor: string,
+  mergeColor: string
+): void {
+  const rowMid = yTop + ROW_H / 2
+  const rowBot = yTop + ROW_H
   const dotX = laneX(row.commitLane)
+  const edgeAlpha = dim ? 0.2 : 0.85
 
-  // SVG edges within a row are keyed by their lane index because lanes don't
-  // reorder; the index IS the stable identity here. We use a small helper to
-  // bypass the index-as-key lint without scattering suppressions.
-  const laneKey = (prefix: string, lane: number, h: string | null) =>
-    `${prefix}_${row.commit.hash}_${lane}_${h ?? 'n'}`
+  ctx.lineWidth = 1.5
+  ctx.globalAlpha = edgeAlpha
 
-  const topEdges = isFirst
-    ? []
-    : row.incoming.map((h, j) => {
-        if (h === null) return null
-        const color = laneColor(j)
-        const opacity = dim ? 0.2 : 0.85
-        if (h === row.commit.hash) {
-          if (j === row.commitLane) {
-            return (
-              <line
-                key={laneKey('t', j, h)}
-                x1={laneX(j)}
-                y1={rowTop}
-                x2={dotX}
-                y2={rowMid}
-                stroke={color}
-                strokeWidth={1.5}
-                opacity={opacity}
-              />
-            )
-          }
-          return (
-            <path
-              key={laneKey('t', j, h)}
-              d={`M${laneX(j)},${rowTop} C${laneX(j)},${rowMid - ROW_H / 4} ${dotX},${rowMid - ROW_H / 4} ${dotX},${rowMid}`}
-              stroke={color}
-              strokeWidth={1.5}
-              fill="none"
-              opacity={opacity}
-            />
-          )
+  if (!isFirst) {
+    for (let j = 0; j < row.incoming.length; j++) {
+      const h = row.incoming[j]
+      if (h === null) continue
+      ctx.strokeStyle = laneColor(j)
+      if (h === row.commit.hash) {
+        if (j === row.commitLane) {
+          ctx.beginPath()
+          ctx.moveTo(laneX(j), yTop)
+          ctx.lineTo(dotX, rowMid)
+          ctx.stroke()
+        } else {
+          ctx.beginPath()
+          ctx.moveTo(laneX(j), yTop)
+          ctx.bezierCurveTo(laneX(j), rowMid - ROW_H / 4, dotX, rowMid - ROW_H / 4, dotX, rowMid)
+          ctx.stroke()
         }
-        return (
-          <line
-            key={laneKey('t', j, h)}
-            x1={laneX(j)}
-            y1={rowTop}
-            x2={laneX(j)}
-            y2={rowMid}
-            stroke={color}
-            strokeWidth={1.5}
-            opacity={opacity}
-          />
-        )
-      })
+      } else {
+        ctx.beginPath()
+        ctx.moveTo(laneX(j), yTop)
+        ctx.lineTo(laneX(j), rowMid)
+        ctx.stroke()
+      }
+    }
+  }
 
-  const parentSet = new Set(row.commit.parents)
-  const opacity = dim ? 0.2 : 0.85
-  const bottomEdges: ReactNode[] = []
-
-  row.outgoing.forEach((h, j) => {
-    if (h === null) return
-    const color = laneColor(j)
+  for (let j = 0; j < row.outgoing.length; j++) {
+    const h = row.outgoing[j]
+    if (h === null) continue
+    ctx.strokeStyle = laneColor(j)
     const pass = row.incoming[j] === h
     if (pass) {
-      bottomEdges.push(
-        <line
-          key={laneKey('b', j, h)}
-          x1={laneX(j)}
-          y1={rowMid}
-          x2={laneX(j)}
-          y2={rowBot}
-          stroke={color}
-          strokeWidth={1.5}
-          opacity={opacity}
-        />
-      )
-      return
+      ctx.beginPath()
+      ctx.moveTo(laneX(j), rowMid)
+      ctx.lineTo(laneX(j), rowBot)
+      ctx.stroke()
+      continue
     }
     const endX = laneX(j)
     if (dotX === endX) {
-      bottomEdges.push(
-        <line
-          key={laneKey('b', j, h)}
-          x1={endX}
-          y1={rowMid}
-          x2={endX}
-          y2={rowBot}
-          stroke={color}
-          strokeWidth={1.5}
-          opacity={opacity}
-        />
-      )
+      ctx.beginPath()
+      ctx.moveTo(endX, rowMid)
+      ctx.lineTo(endX, rowBot)
+      ctx.stroke()
     } else {
-      bottomEdges.push(
-        <path
-          key={laneKey('b', j, h)}
-          d={`M${dotX},${rowMid} C${dotX},${rowMid + ROW_H / 4} ${endX},${rowMid + ROW_H / 4} ${endX},${rowBot}`}
-          stroke={color}
-          strokeWidth={1.5}
-          fill="none"
-          opacity={opacity}
-        />
-      )
+      ctx.beginPath()
+      ctx.moveTo(dotX, rowMid)
+      ctx.bezierCurveTo(dotX, rowMid + ROW_H / 4, endX, rowMid + ROW_H / 4, endX, rowBot)
+      ctx.stroke()
     }
-  })
+  }
 
+  const parentSet = new Set(row.commit.parents)
   for (const p of row.commit.parents) {
     const j = row.outgoing.indexOf(p)
     if (j === -1 || j === row.commitLane) continue
     if (row.incoming[j] !== p) continue
     if (!parentSet.has(row.outgoing[j] ?? '')) continue
     const endX = laneX(j)
-    bottomEdges.push(
-      <path
-        key={`m-${p}`}
-        d={`M${dotX},${rowMid} C${dotX},${rowMid + ROW_H / 4} ${endX},${rowMid + ROW_H / 4} ${endX},${rowBot}`}
-        stroke={laneColor(j)}
-        strokeWidth={1.5}
-        fill="none"
-        opacity={opacity}
-      />
-    )
+    ctx.strokeStyle = laneColor(j)
+    ctx.beginPath()
+    ctx.moveTo(dotX, rowMid)
+    ctx.bezierCurveTo(dotX, rowMid + ROW_H / 4, endX, rowMid + ROW_H / 4, endX, rowBot)
+    ctx.stroke()
   }
 
   const isMerge = row.commit.parents.length >= 2
-  const dot = isMerge ? (
-    <circle
-      cx={dotX}
-      cy={rowMid}
-      r={4}
-      fill="var(--color-background)"
-      stroke="var(--color-chart-3)"
-      strokeWidth={1.6}
-      opacity={dim ? 0.25 : 0.95}
-    />
-  ) : (
-    <circle
-      cx={dotX}
-      cy={rowMid}
-      r={DOT_R}
-      fill={laneColor(row.commitLane)}
-      opacity={dim ? 0.25 : 1}
-    />
-  )
+  if (isMerge) {
+    ctx.globalAlpha = dim ? 0.25 : 0.95
+    ctx.beginPath()
+    ctx.arc(dotX, rowMid, 4, 0, Math.PI * 2)
+    ctx.fillStyle = bgColor
+    ctx.fill()
+    ctx.strokeStyle = mergeColor
+    ctx.lineWidth = 1.6
+    ctx.stroke()
+  } else {
+    ctx.globalAlpha = dim ? 0.25 : 1
+    ctx.beginPath()
+    ctx.arc(dotX, rowMid, DOT_R, 0, Math.PI * 2)
+    ctx.fillStyle = laneColor(row.commitLane)
+    ctx.fill()
+  }
+}
 
-  return (
-    // biome-ignore lint/a11y/noSvgWithoutTitle: decorative rail; aria-hidden suffices
-    <svg
-      width="100%"
-      height={ROW_H}
-      className="pointer-events-none block"
-      aria-hidden
-      style={{ overflow: 'visible' }}
-    >
-      {topEdges}
-      {bottomEdges}
-      {dot}
-    </svg>
-  )
-})
-
-// Per-row <li> content. Memoized: scrolling doesn't reconcile the spans for
-// rows that stay in view; only rows entering/leaving the buffer mount/unmount.
 const CommitRow = memo(function CommitRow({
   row,
   i,
@@ -847,7 +767,7 @@ const CommitRow = memo(function CommitRow({
   const laneHex = laneColor(row.commitLane)
   return (
     <div
-      className="group/row absolute inset-x-0 z-10 grid items-center gap-1 bg-card px-0 hover:bg-muted/40"
+      className="group/row absolute inset-x-0 z-10 grid items-center gap-1 bg-card px-0 hover:bg-muted"
       style={{
         top: 0,
         height: ROW_H,
@@ -857,7 +777,7 @@ const CommitRow = memo(function CommitRow({
         contain: 'layout paint style'
       }}
     >
-      <GraphRow row={row} dim={dim} isFirst={i === 0} />
+      <span aria-hidden />
       <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
         {isMerge && (
           <GitMerge aria-label="merge commit" className="size-3 shrink-0 text-emerald-500" />
@@ -913,10 +833,6 @@ const CommitRow = memo(function CommitRow({
   )
 })
 
-// Placeholder rows shown while the log is loading. Mirrors the real grid so
-// the column layout doesn't jump when the data arrives. Renders enough rows
-// to cover the actual viewport — looks like the timeline is filling in, not
-// like a small header pinned to the top.
 function SkeletonRows({ gridTemplate, viewportH }: { gridTemplate: string; viewportH: number }) {
   const count = Math.max(12, Math.ceil(viewportH / ROW_H) + 2)
   return (
@@ -933,7 +849,6 @@ function SkeletonRows({ gridTemplate, viewportH }: { gridTemplate: string; viewp
           </span>
           <Skeleton
             className="h-3 rounded"
-            // Vary widths slightly so the skeleton doesn't read as a single block.
             style={{ width: `${55 + ((i * 13) % 35)}%`, opacity: 0.7 }}
           />
           <Skeleton className="h-3 w-20 rounded" style={{ opacity: 0.55 }} />
@@ -947,13 +862,6 @@ function SkeletonRows({ gridTemplate, viewportH }: { gridTemplate: string; viewp
   )
 }
 
-// Thin invisible strip on the right edge of a column header. Cursor changes to
-// col-resize on hover; mousedown begins a drag. Positioned absolute so it sits
-// over the gridtemplate boundary without affecting the header layout.
-// Drag handle for a History column. The hit area is wider than the visible
-// divider so it's easy to grab; the divider itself is always rendered (faint
-// vertical line) so users can see where they can drag, and it brightens on
-// hover.
 function ColResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: mouse-only resize handle; no keyboard equivalent

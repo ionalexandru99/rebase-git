@@ -29,19 +29,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function resolvePreload(): string {
   const base = path.join(__dirname, '../preload/index')
-  // electron-vite may output .mjs (ESM) or .js depending on build mode
   if (fs.existsSync(`${base}.mjs`)) return `${base}.mjs`
   if (fs.existsSync(`${base}.js`)) return `${base}.js`
   if (fs.existsSync(`${base}.cjs`)) return `${base}.cjs`
-  // Fallback — will error clearly if missing
   return `${base}.js`
 }
 
 let mainWindow: BrowserWindow | null = null
 
-// One SimpleGit instance per opened repo path — tabs in the renderer can each
-// hold a different repo, and each operation passes the repoPath so the right
-// instance is used.
 const gitInstances = new Map<string, ReturnType<typeof simpleGit>>()
 
 function getGit(repoPath: string) {
@@ -102,7 +97,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// IPC Handlers
 ipcMain.handle('select-folder', async () => {
   if (!mainWindow) return null
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -132,8 +126,6 @@ interface SerializableLog {
   total: number
 }
 
-// Custom log format that includes parent hashes (%P) so the renderer can draw
-// branch/merge topology. `git.log` defaults omit parents.
 const GRAPH_LOG_FORMAT = {
   hash: '%H',
   date: '%aI',
@@ -145,10 +137,6 @@ const GRAPH_LOG_FORMAT = {
   parents: '%P'
 } as const
 
-// Walk only branch refs (local + remote-tracking). Intentionally NOT `--all`:
-// `--all` pulls in stash, notes, dangling commits, and detached HEAD-only
-// commits, which the user has opted out of seeing. `--date-order` keeps rows
-// in time order so the lane layout stays predictable across merges.
 const GRAPH_LOG_FLAGS = {
   '--branches': null,
   '--remotes': null,
@@ -162,9 +150,6 @@ interface SerializableBranches {
   tags: string[]
 }
 
-// simple-git returns class instances (StatusResult, LogResult, BranchSummary)
-// with getters/methods that cannot be structured-cloned across the IPC bridge.
-// Convert to plain JSON-safe shapes that match the renderer's types.
 function serializeStatus(
   status: Awaited<ReturnType<ReturnType<typeof simpleGit>['status']>>
 ): SerializableStatus {
@@ -196,12 +181,6 @@ function serializeLog(
   }
 }
 
-// `git.branch(['-a'])` returns both local and remote-tracking branches in one
-// shot; remote refs are flagged with a `remotes/` prefix. We split them here
-// so the renderer can list them under separate sidebar groups, and strip the
-// prefix from remote names so they display as `origin/main` rather than
-// `remotes/origin/main`. `HEAD ->` aliases (e.g. `remotes/origin/HEAD ->
-// origin/main`) are dropped — they duplicate the real ref.
 function serializeBranches(
   branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>,
   tags: Awaited<ReturnType<ReturnType<typeof simpleGit>['tags']>>
@@ -225,8 +204,6 @@ function serializeBranches(
   }
 }
 
-// Map of remote name → fetch URL. Reading `getRemotes(true)` returns refs
-// with both fetch + push URLs; for provider detection we only need fetch.
 function serializeRemotes(
   remotes: Array<{ name: string; refs: { fetch: string; push: string } }>
 ): Record<string, string> {
@@ -237,11 +214,6 @@ function serializeRemotes(
   return result
 }
 
-// Resolve the repo's "default branch" — the one the team treats as trunk.
-// `origin/HEAD` is set by `git clone` to point at the remote's HEAD ref, so
-// it's the canonical answer for any cloned repo (handles non-standard names
-// like `dev`, `trunk`, `development` without guessing). Falls back to the
-// locally checked-out branch when there's no origin or no symref.
 async function resolveDefaultBranch(
   git: ReturnType<typeof simpleGit>,
   currentLocal: string | undefined
@@ -256,11 +228,6 @@ async function resolveDefaultBranch(
   return currentLocal && currentLocal !== 'HEAD' ? currentLocal : undefined
 }
 
-// `open-repo` returns only the cheap "this is a repo, here's where its trunk
-// lives and which remotes it has" envelope. Status, branches, tags, and the
-// log are fetched by the renderer in parallel afterwards so each panel can
-// paint a skeleton until its own data arrives — no waterfall block on the
-// slowest call.
 ipcMain.handle('open-repo', async (_, repoPath: string) => {
   try {
     const git = getGit(repoPath)
@@ -274,10 +241,6 @@ ipcMain.handle('open-repo', async (_, repoPath: string) => {
     addRecentRepo(repoPath)
 
     const remotes = await git.getRemotes(true)
-    // resolveDefaultBranch needs the current local branch name as a fallback;
-    // we don't have a status here so pass undefined and let it fall back to
-    // origin/HEAD only. The renderer can still display "no-branch" until the
-    // status call lands.
     const defaultBranch = await resolveDefaultBranch(git, undefined)
 
     return {
@@ -358,9 +321,6 @@ ipcMain.handle('commit', async (_, repoPath: string, message: string) => {
   }
 })
 
-// `maxCount` is optional — when omitted (or 0), the full history is returned.
-// We previously capped at 200 by default, which silently hid commits on big
-// repos.
 ipcMain.handle('get-log', async (_, repoPath: string, maxCount?: number) => {
   const git = gitInstances.get(repoPath)
   if (!git) return { success: false, error: 'No repository open' }
@@ -377,15 +337,6 @@ ipcMain.handle('get-log', async (_, repoPath: string, maxCount?: number) => {
   }
 })
 
-// Streaming log: spawn `git log` directly, parse its stdout in chunks, and
-// forward small batches of commits to the renderer as they arrive. The
-// renderer never has to deserialize one huge IPC payload, so its main thread
-// stays responsive even on giant repos.
-//
-// Wire format: fields within a commit are separated by 0x1F (US); commits
-// are terminated by 0x00 (NUL), produced by git's `-z` flag (NUL can't go
-// in the spawn args directly — Node forbids it). Both bytes are safe — they
-// can't appear inside any field git produces here.
 const FS_SEP = '\x1F'
 const RS_SEP = '\x00'
 const STREAM_FORMAT = ['%H', '%P', '%aI', '%aN', '%s', '%D'].join(FS_SEP)
@@ -405,8 +356,6 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
   const webContents = event.sender
   const webContentsId = webContents.id
 
-  // Cancel any in-flight stream for this window — switching repos shouldn't
-  // leak old git processes or interleave their chunks.
   killActiveStream(webContentsId)
 
   return new Promise<{ success: boolean; error?: string }>((resolve) => {
@@ -443,7 +392,6 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
 
     const send = (done: boolean) => {
       if (webContents.isDestroyed()) return
-      // Send a chunk if there are commits OR a terminal `done` marker.
       if (batch.length === 0 && !done) return
       webContents.send('log-chunk', {
         repoPath,
@@ -483,7 +431,6 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
     proc.stderr?.setEncoding('utf8')
     proc.stderr?.on('data', (chunk: string) => {
       stderrBuf += chunk
-      // Keep stderr bounded so a chatty git can't grow this unboundedly.
       if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096)
     })
 
@@ -496,8 +443,6 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
     })
 
     proc.on('close', async (code) => {
-      // Was this stream replaced by a newer one? If so, don't send anything —
-      // the new stream owns the channel now.
       if (activeLogStreams.get(webContentsId) !== proc) return
       activeLogStreams.delete(webContentsId)
 
@@ -514,9 +459,6 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
         return
       }
 
-      // Flush remaining commits, then send the terminal done marker. Stash
-      // entries are intentionally omitted from the graph for now; they'll be
-      // rendered as a separate UI surface later.
       send(false)
       if (!webContents.isDestroyed()) {
         webContents.send('log-chunk', { repoPath, commits: [], done: true })

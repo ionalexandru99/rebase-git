@@ -10,19 +10,11 @@ interface StoreSchema {
     maximized?: boolean
   }
   theme: 'dark' | 'light'
-  /** All saved workspace parent folders (each contains one or more git repos). */
   workspaces: string[]
-  /** Which workspace is currently in focus in the empty-state picker. */
   activeWorkspace: string | null
-  /**
-   * Legacy single-workspace field. Migrated into `workspaces` on first read.
-   * Kept around so a downgrade doesn't lose data.
-   */
   workingDirectory: string | null
   onboardingComplete: boolean
-  /** Sidebar width in px. User-resizable via the gutter in Shell. */
   sidebarWidth: number
-  /** History timeline column widths in rem. User-resizable via header handles. */
   historyColWidths: { author: number; date: number; sha: number }
 }
 
@@ -43,10 +35,6 @@ export const store = new Store<StoreSchema>({
   }
 })
 
-/**
- * Promote the legacy single `workingDirectory` into the `workspaces` array
- * the first time anyone asks about workspaces. Idempotent.
- */
 function migrateLegacyWorkingDirectory(): void {
   const workspaces = store.get('workspaces')
   if (workspaces.length > 0) return
@@ -109,22 +97,13 @@ export function getActiveWorkspace(): string | null {
 export function setActiveWorkspace(path: string | null): void {
   migrateLegacyWorkingDirectory()
   store.set('activeWorkspace', path)
-  // Mirror into the legacy field so older code paths still work.
   store.set('workingDirectory', path)
 }
 
-/**
- * Legacy single-workspace alias. Returns the active workspace.
- * Prefer `getActiveWorkspace()` in new code.
- */
 export function getWorkingDirectory(): string | null {
   return getActiveWorkspace()
 }
 
-/**
- * Legacy alias: setting the working directory now also registers it as a
- * workspace and marks it active.
- */
 export function setWorkingDirectory(path: string): void {
   addWorkspace(path)
 }

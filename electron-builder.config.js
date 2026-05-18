@@ -1,6 +1,3 @@
-/**
- * @type {import('electron-builder').Configuration}
- */
 export default {
   appId: 'com.example.git-gui',
   productName: 'Git GUI',
