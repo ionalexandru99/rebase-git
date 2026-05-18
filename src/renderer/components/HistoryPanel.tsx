@@ -20,7 +20,7 @@ interface HistoryPanelProps {
   log: GitLog | null
   loading: boolean
   remotes?: Record<string, string>
-  defaultBranch?: string
+  currentBranch?: string
 }
 
 function getRootFontPx(): number {
@@ -36,29 +36,9 @@ const RAIL_PAD = Math.round(ROOT_PX * 0.875)
 const DOT_R = ROOT_PX * 0.25
 const OVERSCAN = 300
 
-interface ColWidths {
-  author: number
-  date: number
-  sha: number
-}
-const COL_DEFAULTS: ColWidths = { author: 14, date: 6, sha: 4.5 }
-const COL_MIN = 3
-const COL_MAX = 40
-const COL_STORE_KEY = 'historyColWidths'
-
-function parseColWidths(v: unknown): ColWidths | null {
-  if (!v || typeof v !== 'object') return null
-  const r = v as Record<string, unknown>
-  const clamp = (n: unknown, fallback: number): number => {
-    if (typeof n !== 'number' || !Number.isFinite(n)) return fallback
-    return Math.max(COL_MIN, Math.min(COL_MAX, n))
-  }
-  return {
-    author: clamp(r.author, COL_DEFAULTS.author),
-    date: clamp(r.date, COL_DEFAULTS.date),
-    sha: clamp(r.sha, COL_DEFAULTS.sha)
-  }
-}
+const COL_AUTHOR_REM = 12
+const COL_SHA_REM = 4.5
+const COL_DATE_REM = 6.5
 
 const LANE_PALETTE = [
   '#7c8cff',
@@ -77,6 +57,23 @@ function laneColor(lane: number): string {
 
 function laneX(lane: number): number {
   return RAIL_PAD + lane * COL_W
+}
+
+function computeRowRailWidth(row: RowLayout): number {
+  let max = row.commitLane
+  for (let j = row.incoming.length - 1; j > max; j--) {
+    if (row.incoming[j] !== null) {
+      max = j
+      break
+    }
+  }
+  for (let j = row.outgoing.length - 1; j > max; j--) {
+    if (row.outgoing[j] !== null) {
+      max = j
+      break
+    }
+  }
+  return Math.max(28, RAIL_PAD * 2 + max * COL_W)
 }
 
 function splitRemoteRef(label: string): { remote: string; branch: string } {
@@ -162,24 +159,16 @@ export interface LayoutResult {
   maxLanes: number
   lanesAfter: (string | null)[]
   commits: GitLogEntry[]
-  trunkHash?: string
-  trunkRowIdx: number
 }
 
-export function layoutCommits(
-  commits: GitLogEntry[],
-  prev?: LayoutResult,
-  trunkHash?: string
-): LayoutResult {
+export function layoutCommits(commits: GitLogEntry[], prev?: LayoutResult): LayoutResult {
   let startIdx = 0
   let lanes: (string | null)[] = []
   let rows: RowLayout[] = []
   let maxLanes = 0
-  let trunkRowIdx = -1
 
   if (
     prev &&
-    prev.trunkHash === trunkHash &&
     prev.commits.length > 0 &&
     commits.length >= prev.commits.length &&
     commits[0]?.hash === prev.commits[0]?.hash &&
@@ -189,17 +178,10 @@ export function layoutCommits(
     lanes = prev.lanesAfter.slice()
     rows = prev.rows.slice()
     maxLanes = prev.maxLanes
-    trunkRowIdx = prev.trunkRowIdx
-  } else if (trunkHash) {
-    lanes = [trunkHash]
-    maxLanes = 1
   }
 
   for (let idx = startIdx; idx < commits.length; idx++) {
     const c = commits[idx]
-    if (trunkRowIdx === -1 && trunkHash && c.hash === trunkHash) {
-      trunkRowIdx = idx
-    }
     const incoming = [...lanes]
 
     let commitLane = lanes.indexOf(c.hash)
@@ -233,13 +215,11 @@ export function layoutCommits(
     rows.push({ commit: c, commitLane, incoming, outgoing })
   }
 
-  return { rows, maxLanes, lanesAfter: lanes, commits, trunkHash, trunkRowIdx }
+  return { rows, maxLanes, lanesAfter: lanes, commits }
 }
 
 function refClass(kind: ParsedRef['kind']): string {
   switch (kind) {
-    case 'remote':
-      return 'border-border bg-muted/60 text-muted-foreground'
     case 'tag':
       return 'border-chart-3/50 bg-chart-3/20 text-chart-3'
     case 'stash':
@@ -250,7 +230,7 @@ function refClass(kind: ParsedRef['kind']): string {
 }
 
 function pillStyle(kind: ParsedRef['kind'], laneHex: string): React.CSSProperties | undefined {
-  if (kind === 'branch') {
+  if (kind === 'branch' || kind === 'remote') {
     return {
       borderColor: `${laneHex}66`,
       backgroundColor: `${laneHex}1f`,
@@ -260,7 +240,7 @@ function pillStyle(kind: ParsedRef['kind'], laneHex: string): React.CSSPropertie
   return undefined
 }
 
-export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: HistoryPanelProps) {
+export function HistoryPanel({ log, loading, remotes = {}, currentBranch }: HistoryPanelProps) {
   const [filter, setFilter] = useState('')
   const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
 
@@ -268,25 +248,51 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
   const deferredFilter = useDeferredValue(filter)
   const commits: GitLogEntry[] = deferredLog?.all ?? []
 
-  const trunkHash = useMemo(() => {
-    if (!defaultBranch) return undefined
+  const onBranchSet = useMemo(() => {
+    let tip: string | undefined
     for (const c of commits) {
       if (!c.refs) continue
-      if (!c.refs.includes(defaultBranch)) continue
-      const parsed = parseRefs(c.refs, remoteNames)
-      if (parsed.some((r) => r.kind === 'branch' && r.label === defaultBranch)) {
-        return c.hash
+      const hasHead = c.refs.split(',').some((part) => {
+        const t = part.trim()
+        return t === 'HEAD' || t.startsWith('HEAD -> ')
+      })
+      if (hasHead) {
+        tip = c.hash
+        break
       }
     }
-    return undefined
-  }, [commits, remoteNames, defaultBranch])
+    if (!tip && currentBranch) {
+      for (const c of commits) {
+        if (!c.refs) continue
+        const parsed = parseRefs(c.refs, remoteNames)
+        if (parsed.some((r) => r.kind === 'branch' && r.label === currentBranch)) {
+          tip = c.hash
+          break
+        }
+      }
+    }
+    if (!tip) return null
+    const byHash = new Map<string, GitLogEntry>()
+    for (const c of commits) byHash.set(c.hash, c)
+    const set = new Set<string>()
+    const stack = [tip]
+    while (stack.length > 0) {
+      const h = stack.pop() as string
+      if (set.has(h)) continue
+      set.add(h)
+      const c = byHash.get(h)
+      if (!c) continue
+      for (const p of c.parents) stack.push(p)
+    }
+    return set
+  }, [commits, remoteNames, currentBranch])
 
   const layoutCacheRef = useRef<LayoutResult | null>(null)
-  const { rows, trunkRowIdx } = useMemo(() => {
-    const result = layoutCommits(commits, layoutCacheRef.current ?? undefined, trunkHash)
+  const { rows } = useMemo(() => {
+    const result = layoutCommits(commits, layoutCacheRef.current ?? undefined)
     layoutCacheRef.current = result
     return result
-  }, [commits, trunkHash])
+  }, [commits])
 
   const visibleSet = useMemo(() => {
     const q = deferredFilter.trim().toLowerCase()
@@ -350,8 +356,8 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const drawDataRef = useRef({ rows, viewportH, visibleSet, railWidth, trunkRowIdx, trunkHash })
-  drawDataRef.current = { rows, viewportH, visibleSet, railWidth, trunkRowIdx, trunkHash }
+  const drawDataRef = useRef({ rows, viewportH, visibleSet, railWidth })
+  drawDataRef.current = { rows, viewportH, visibleSet, railWidth }
 
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current
@@ -360,14 +366,7 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const {
-      rows: rs,
-      viewportH: vh,
-      visibleSet: vis,
-      railWidth: rw,
-      trunkRowIdx: trunkIdx,
-      trunkHash: trunk
-    } = drawDataRef.current
+    const { rows: rs, viewportH: vh, visibleSet: vis, railWidth: rw } = drawDataRef.current
     const liveScrollTop = scroller.scrollTop
 
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
@@ -392,21 +391,7 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
       const yTop = i * ROW_H - liveScrollTop
       if (yTop + ROW_H < 0 || yTop > vh) continue
       const dim = !!(vis && !vis.has(r.commit.hash))
-
-      let drawRow = r
-      if (trunkIdx >= 0 && trunk && i <= trunkIdx) {
-        const hideTop = r.incoming[0] === trunk
-        const hideBot = i < trunkIdx && r.outgoing[0] === trunk
-        if (hideTop || hideBot) {
-          drawRow = {
-            ...r,
-            incoming: hideTop ? [null, ...r.incoming.slice(1)] : r.incoming,
-            outgoing: hideBot ? [null, ...r.outgoing.slice(1)] : r.outgoing
-          }
-        }
-      }
-
-      drawGraphRow(ctx, drawRow, yTop, i === 0, dim, bgColor, mergeColor)
+      drawGraphRow(ctx, r, yTop, i === 0, dim, bgColor, mergeColor)
     }
   }, [])
 
@@ -435,55 +420,7 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
     []
   )
 
-  const [colWidths, setColWidths] = useState(COL_DEFAULTS)
-
-  useEffect(() => {
-    let cancelled = false
-    Promise.resolve(window.electronAPI.getStoreValue(COL_STORE_KEY)).then((v) => {
-      if (cancelled) return
-      const parsed = parseColWidths(v)
-      if (parsed) setColWidths(parsed)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const gridTemplate = `${railWidth}px minmax(7rem,1fr) ${colWidths.author}rem ${colWidths.date}rem ${colWidths.sha}rem`
-
-  const startBoundaryResize = useCallback(
-    (leftCol: keyof ColWidths | null, rightCol: keyof ColWidths | null, e: React.MouseEvent) => {
-      e.preventDefault()
-      const startX = e.clientX
-      const startLeft = leftCol ? colWidths[leftCol] : 0
-      const startRight = rightCol ? colWidths[rightCol] : 0
-      let last = { ...colWidths }
-      const onMove = (ev: MouseEvent) => {
-        const deltaRem = (ev.clientX - startX) / ROOT_PX
-        const update: Partial<ColWidths> = {}
-        if (leftCol) {
-          update[leftCol] = Math.max(COL_MIN, Math.min(COL_MAX, startLeft + deltaRem))
-        }
-        if (rightCol) {
-          update[rightCol] = Math.max(COL_MIN, Math.min(COL_MAX, startRight - deltaRem))
-        }
-        last = { ...last, ...update }
-        setColWidths(last)
-      }
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove)
-        window.removeEventListener('mouseup', onUp)
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-        window.electronAPI.setStoreValue(COL_STORE_KEY, last)
-      }
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-      window.addEventListener('mousemove', onMove)
-      window.addEventListener('mouseup', onUp)
-    },
-    [colWidths]
-  )
+  const gridTemplate = `minmax(0,1fr) ${COL_AUTHOR_REM}rem ${COL_SHA_REM}rem ${COL_DATE_REM}rem`
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border bg-card">
@@ -525,23 +462,10 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
           className="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
           style={{ gridTemplateColumns: gridTemplate }}
         >
-          <span aria-hidden />
-          <span className="relative pl-3">
-            Subject
-            <ColResizer onMouseDown={(e) => startBoundaryResize(null, 'author', e)} />
-          </span>
-          <span className="relative">
-            Author
-            <ColResizer onMouseDown={(e) => startBoundaryResize('author', 'date', e)} />
-          </span>
-          <span className="relative">
-            Date
-            <ColResizer onMouseDown={(e) => startBoundaryResize('date', 'sha', e)} />
-          </span>
-          <span className="relative pr-3 text-right">
-            SHA
-            <ColResizer onMouseDown={(e) => startBoundaryResize('sha', null, e)} />
-          </span>
+          <span className="pl-3">Subject</span>
+          <span>Author</span>
+          <span>SHA</span>
+          <span className="pr-3 text-right">Date</span>
         </div>
       )}
 
@@ -588,25 +512,26 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
               } as React.CSSProperties
             }
           >
-            {(() => {
-              const visibleBelow = Math.max(0, totalHeight - scrollTop)
-              const overlayH = Math.min(viewportH, visibleBelow)
-              if (overlayH <= 0) return null
-              return (
-                <div
-                  className="pointer-events-none sticky top-0 z-0"
-                  style={{ height: 0 }}
-                  aria-hidden
-                >
+            {loading &&
+              (() => {
+                const visibleBelow = Math.max(0, totalHeight - scrollTop)
+                const overlayH = Math.min(viewportH, visibleBelow)
+                if (overlayH <= 0) return null
+                return (
                   <div
-                    className="absolute inset-x-0 top-0 overflow-hidden"
-                    style={{ height: overlayH }}
+                    className="pointer-events-none sticky top-0 z-0"
+                    style={{ height: 0 }}
+                    aria-hidden
                   >
-                    <SkeletonRows gridTemplate={gridTemplate} viewportH={overlayH} />
+                    <div
+                      className="absolute inset-x-0 top-0 overflow-hidden"
+                      style={{ height: overlayH }}
+                    >
+                      <SkeletonRows gridTemplate={gridTemplate} viewportH={overlayH} />
+                    </div>
                   </div>
-                </div>
-              )
-            })()}
+                )
+              })()}
 
             <div
               className="pointer-events-none sticky top-0 z-20"
@@ -622,12 +547,15 @@ export function HistoryPanel({ log, loading, remotes = {}, defaultBranch }: Hist
             {rows.slice(startIdx, endIdx).map((row, idx) => {
               const i = startIdx + idx
               const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
+              const offBranch = !!(onBranchSet && !onBranchSet.has(row.commit.hash))
               return (
                 <CommitRow
                   key={row.commit.hash}
                   row={row}
                   i={i}
                   dim={dim}
+                  offBranch={offBranch}
+                  rowRailWidth={computeRowRailWidth(row)}
                   remotes={remotes}
                   remoteNames={remoteNames}
                 />
@@ -752,12 +680,16 @@ const CommitRow = memo(function CommitRow({
   row,
   i,
   dim,
+  offBranch,
+  rowRailWidth,
   remotes,
   remoteNames
 }: {
   row: RowLayout
   i: number
   dim: boolean
+  offBranch: boolean
+  rowRailWidth: number
   remotes: Record<string, string>
   remoteNames: Set<string>
 }) {
@@ -765,6 +697,8 @@ const CommitRow = memo(function CommitRow({
   const isMerge = c.parents.length >= 2
   const refs = useMemo(() => parseRefs(c.refs, remoteNames), [c.refs, remoteNames])
   const laneHex = laneColor(row.commitLane)
+  const rowOpacity = dim ? 0.35 : offBranch ? 0.6 : 1
+  const subjectClass = offBranch ? 'text-muted-foreground' : 'text-foreground'
   return (
     <div
       className="group/row absolute inset-x-0 z-10 grid items-center gap-1 bg-card px-0 hover:bg-muted"
@@ -773,12 +707,14 @@ const CommitRow = memo(function CommitRow({
         height: ROW_H,
         transform: `translateY(${i * ROW_H}px)`,
         gridTemplateColumns: 'var(--row-cols)',
-        opacity: dim ? 0.35 : 1,
+        opacity: rowOpacity,
         contain: 'layout paint style'
       }}
     >
-      <span aria-hidden />
-      <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
+      <span
+        className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm"
+        style={{ paddingLeft: rowRailWidth }}
+      >
         {isMerge && (
           <GitMerge aria-label="merge commit" className="size-3 shrink-0 text-emerald-500" />
         )}
@@ -812,7 +748,7 @@ const CommitRow = memo(function CommitRow({
             </Badge>
           )
         })}
-        <span className="min-w-0 truncate text-foreground">{c.message}</span>
+        <span className={cn('min-w-0 truncate', subjectClass)}>{c.message}</span>
       </span>
 
       <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
@@ -822,13 +758,13 @@ const CommitRow = memo(function CommitRow({
         <span className="min-w-0 truncate">{c.author_name}</span>
       </span>
 
-      <time className="truncate text-xs tabular-nums text-muted-foreground">
-        {formatCommitDate(c.date)}
-      </time>
-
-      <code className="cursor-default truncate pr-2 text-right text-xs tabular-nums text-muted-foreground">
+      <code className="cursor-default truncate text-xs tabular-nums text-muted-foreground">
         {c.hash.slice(0, 7)}
       </code>
+
+      <time className="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground">
+        {formatCommitDate(c.date)}
+      </time>
     </div>
   )
 })
@@ -844,32 +780,20 @@ function SkeletonRows({ gridTemplate, viewportH }: { gridTemplate: string; viewp
           className="grid items-center gap-1 px-0"
           style={{ height: ROW_H, gridTemplateColumns: gridTemplate }}
         >
-          <span aria-hidden className="flex h-full items-center pl-3">
-            <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+          <span className="flex h-full items-center gap-2 pl-3">
+            <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/30" />
+            <Skeleton
+              className="h-3 rounded"
+              style={{ width: `${55 + ((i * 13) % 35)}%`, opacity: 0.7 }}
+            />
           </span>
-          <Skeleton
-            className="h-3 rounded"
-            style={{ width: `${55 + ((i * 13) % 35)}%`, opacity: 0.7 }}
-          />
           <Skeleton className="h-3 w-20 rounded" style={{ opacity: 0.55 }} />
-          <Skeleton className="h-3 w-16 rounded" style={{ opacity: 0.5 }} />
+          <Skeleton className="h-3 w-12 rounded" style={{ opacity: 0.5 }} />
           <span className="flex justify-end pr-3">
-            <Skeleton className="h-3 w-12 rounded" style={{ opacity: 0.5 }} />
+            <Skeleton className="h-3 w-16 rounded" style={{ opacity: 0.5 }} />
           </span>
         </li>
       ))}
     </ul>
-  )
-}
-
-function ColResizer({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
-  return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: mouse-only resize handle; no keyboard equivalent
-    <span
-      onMouseDown={onMouseDown}
-      className="group/resizer absolute -right-1.5 top-0 z-10 flex h-full w-3 cursor-col-resize select-none items-center justify-center"
-    >
-      <span className="block h-3 w-px bg-border group-hover/resizer:h-full group-hover/resizer:w-0.5 group-hover/resizer:bg-primary/70" />
-    </span>
   )
 }

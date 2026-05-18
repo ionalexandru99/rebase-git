@@ -515,7 +515,7 @@ function Workspace({
             log={git.log}
             loading={git.logLoading}
             remotes={git.remotes}
-            defaultBranch={git.defaultBranch}
+            currentBranch={git.currentBranch}
           />
         </div>
       </div>
