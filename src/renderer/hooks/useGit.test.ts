@@ -1,7 +1,9 @@
-import { renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupLogStream } from '@/../test/setup'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setupLogStream, setupRepoChanged } from '@/../test/setup'
 import { useGit } from './useGit'
+
+const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 
 function mockOpenRepoSuccess(
   status: { current: string; modified: string[]; staged: string[]; not_added: string[] } = {
@@ -239,5 +241,276 @@ describe('useGit', () => {
     expect(window.electronAPI.unstageFile).not.toHaveBeenCalled()
     expect(window.electronAPI.commit).not.toHaveBeenCalled()
     expect(committed).toBe(false)
+  })
+})
+
+describe('useGit auto-fetch', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    setupLogStream()
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function openAndFlush() {
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      success: true,
+      path: '/test/repo',
+      remotes: {},
+      defaultBranch: 'main'
+    })
+    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+      success: true,
+      status: { current: 'main', modified: [], staged: [], not_added: [] }
+    })
+    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+      success: true,
+      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
+    })
+    const stream = setupLogStream()
+
+    const rendered = renderHook(() => useGit())
+    await act(async () => {
+      await rendered.result.current.openRepo('/test/repo')
+    })
+    await waitFor(() => expect(rendered.result.current.repoPath).toBe('/test/repo'))
+    act(() => stream.fireDone('/test/repo'))
+    await waitFor(() => expect(rendered.result.current.logLoading).toBe(false))
+    vi.mocked(window.electronAPI.getBranches).mockClear()
+    vi.mocked(window.electronAPI.getStatus).mockClear()
+    vi.mocked(window.electronAPI.getLog).mockClear()
+    return rendered
+  }
+
+  it('fires fetchRepo on the interval and silently refreshes branches + log', async () => {
+    const { result } = await openAndFlush()
+
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+      success: true,
+      branches: { current: 'main', all: ['main', 'feature'], remotes: ['origin/main'], tags: [] }
+    })
+    vi.mocked(window.electronAPI.getLog).mockResolvedValue({
+      success: true,
+      log: {
+        all: [
+          {
+            hash: 'new1',
+            message: 'after fetch',
+            author_name: 'A',
+            date: '2024-01-02',
+            parents: [],
+            refs: ''
+          }
+        ],
+        total: 1
+      }
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(AUTO_FETCH_INTERVAL_MS)
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(window.electronAPI.fetchRepo).toHaveBeenCalledWith('/test/repo'))
+    await waitFor(() => {
+      expect(window.electronAPI.getBranches).toHaveBeenCalledWith('/test/repo')
+      expect(window.electronAPI.getLog).toHaveBeenCalledWith('/test/repo')
+    })
+
+    expect(window.electronAPI.getStatus).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(result.current.branches?.all).toContain('feature')
+      expect(result.current.log?.total).toBe(1)
+    })
+    expect(result.current.logLoading).toBe(false)
+  })
+
+  it('does not refresh when fetchRepo reports skipped', async () => {
+    await openAndFlush()
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true, skipped: true })
+
+    await act(async () => {
+      vi.advanceTimersByTime(AUTO_FETCH_INTERVAL_MS)
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(window.electronAPI.fetchRepo).toHaveBeenCalledWith('/test/repo'))
+    expect(window.electronAPI.getBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.getLog).not.toHaveBeenCalled()
+  })
+
+  it('swallows fetchRepo failures without setting error state', async () => {
+    const { result } = await openAndFlush()
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({
+      success: false,
+      error: 'offline'
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(AUTO_FETCH_INTERVAL_MS)
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(window.electronAPI.fetchRepo).toHaveBeenCalledWith('/test/repo'))
+    expect(window.electronAPI.getBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.getLog).not.toHaveBeenCalled()
+    expect(result.current.error).toBeNull()
+  })
+
+  it('fetchNow runs the fetch immediately and resets the auto-fetch timer', async () => {
+    const { result } = await openAndFlush()
+
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+      success: true,
+      branches: { current: 'main', all: ['main', 'feature'], remotes: [], tags: [] }
+    })
+    vi.mocked(window.electronAPI.getLog).mockResolvedValue({
+      success: true,
+      log: { all: [], total: 0 }
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(AUTO_FETCH_INTERVAL_MS - 1000)
+    })
+    expect(window.electronAPI.fetchRepo).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await result.current.fetchNow()
+    })
+    expect(window.electronAPI.fetchRepo).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(window.electronAPI.getBranches).toHaveBeenCalledWith('/test/repo'))
+
+    await act(async () => {
+      vi.advanceTimersByTime(AUTO_FETCH_INTERVAL_MS - 1000)
+    })
+    expect(window.electronAPI.fetchRepo).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(window.electronAPI.fetchRepo).toHaveBeenCalledTimes(2))
+  })
+
+  it('clears the interval when the hook unmounts', async () => {
+    const { unmount } = await openAndFlush()
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    unmount()
+
+    await act(async () => {
+      vi.advanceTimersByTime(AUTO_FETCH_INTERVAL_MS * 3)
+      await Promise.resolve()
+    })
+
+    expect(window.electronAPI.fetchRepo).not.toHaveBeenCalled()
+  })
+})
+
+describe('useGit repo-changed watcher', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    setupLogStream()
+  })
+
+  async function openRepoForWatcher(repoChanged = setupRepoChanged()) {
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      success: true,
+      path: '/test/repo',
+      remotes: {},
+      defaultBranch: 'main'
+    })
+    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+      success: true,
+      status: { current: 'main', modified: [], staged: [], not_added: [] }
+    })
+    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+      success: true,
+      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
+    })
+    const stream = setupLogStream()
+
+    const rendered = renderHook(() => useGit())
+    await act(async () => {
+      await rendered.result.current.openRepo('/test/repo')
+    })
+    await waitFor(() => expect(rendered.result.current.repoPath).toBe('/test/repo'))
+    act(() => stream.fireDone('/test/repo'))
+    await waitFor(() => expect(rendered.result.current.logLoading).toBe(false))
+    vi.mocked(window.electronAPI.getBranches).mockClear()
+    vi.mocked(window.electronAPI.getStatus).mockClear()
+    vi.mocked(window.electronAPI.getLog).mockClear()
+    return { rendered, repoChanged }
+  }
+
+  it('refreshes branches + log on a refs event, updating currentBranch', async () => {
+    const { rendered, repoChanged } = await openRepoForWatcher()
+
+    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+      success: true,
+      branches: { current: 'feature', all: ['main', 'feature'], remotes: [], tags: [] }
+    })
+    vi.mocked(window.electronAPI.getLog).mockResolvedValue({
+      success: true,
+      log: {
+        all: [
+          {
+            hash: 'h1',
+            message: 'on feature',
+            author_name: 'A',
+            date: '2024-01-02',
+            parents: [],
+            refs: ''
+          }
+        ],
+        total: 1
+      }
+    })
+
+    act(() => repoChanged.fire({ repoPath: '/test/repo', kind: 'refs' }))
+
+    await waitFor(() => {
+      expect(window.electronAPI.getBranches).toHaveBeenCalledWith('/test/repo')
+      expect(window.electronAPI.getLog).toHaveBeenCalledWith('/test/repo')
+    })
+    expect(window.electronAPI.getStatus).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(rendered.result.current.currentBranch).toBe('feature')
+      expect(rendered.result.current.branches?.all).toContain('feature')
+      expect(rendered.result.current.log?.total).toBe(1)
+    })
+    expect(rendered.result.current.logLoading).toBe(false)
+  })
+
+  it('refreshes status only on a workingTree event', async () => {
+    const { rendered, repoChanged } = await openRepoForWatcher()
+
+    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+      success: true,
+      status: { current: 'main', modified: ['changed.ts'], staged: [], not_added: [] }
+    })
+
+    act(() => repoChanged.fire({ repoPath: '/test/repo', kind: 'workingTree' }))
+
+    await waitFor(() => expect(window.electronAPI.getStatus).toHaveBeenCalledWith('/test/repo'))
+    expect(window.electronAPI.getBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.getLog).not.toHaveBeenCalled()
+    await waitFor(() => expect(rendered.result.current.status?.modified).toContain('changed.ts'))
+  })
+
+  it('ignores events for an inactive repo path', async () => {
+    const { repoChanged } = await openRepoForWatcher()
+
+    act(() => repoChanged.fire({ repoPath: '/some/other/repo', kind: 'refs' }))
+    act(() => repoChanged.fire({ repoPath: '/some/other/repo', kind: 'workingTree' }))
+
+    expect(window.electronAPI.getBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.getLog).not.toHaveBeenCalled()
+    expect(window.electronAPI.getStatus).not.toHaveBeenCalled()
   })
 })

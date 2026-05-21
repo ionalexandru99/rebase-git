@@ -35,10 +35,12 @@ const mockElectronAPI = {
   stageFile: vi.fn(),
   unstageFile: vi.fn(),
   commit: vi.fn(),
+  fetchRepo: vi.fn(),
   getLog: vi.fn(),
   startLogStream: vi.fn(),
   cancelLogStream: vi.fn(),
   onLogChunk: vi.fn(),
+  onRepoChanged: vi.fn(),
   getRecentRepos: vi.fn(),
   getStoreValue: vi.fn(),
   setStoreValue: vi.fn(),
@@ -97,6 +99,26 @@ export function setupLogStream(): LogStreamHandle {
       for (const cb of listeners.slice()) {
         cb({ repoPath, commits: [], done: true })
       }
+    }
+  }
+}
+
+export interface RepoChangedHandle {
+  fire: (evt: { repoPath: string; kind: 'refs' | 'workingTree' }) => void
+}
+
+export function setupRepoChanged(): RepoChangedHandle {
+  const listeners: Array<(evt: unknown) => void> = []
+  vi.mocked(window.electronAPI.onRepoChanged).mockImplementation((cb) => {
+    listeners.push(cb as (evt: unknown) => void)
+    return () => {
+      const i = listeners.indexOf(cb as (evt: unknown) => void)
+      if (i !== -1) listeners.splice(i, 1)
+    }
+  })
+  return {
+    fire: (evt) => {
+      for (const cb of listeners.slice()) cb(evt)
     }
   }
 }

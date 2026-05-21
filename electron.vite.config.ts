@@ -15,6 +15,15 @@ export default defineConfig({
       alias: {
         '@': path.resolve('src/renderer')
       }
+    },
+    build: {
+      rollupOptions: {
+        onwarn(warning, defaultHandler) {
+          if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return
+          if (warning.code === 'SOURCEMAP_ERROR' && warning.message?.includes('use client')) return
+          defaultHandler(warning)
+        }
+      }
     }
   }
 })
