@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,7 +8,9 @@ import { simpleGit } from 'simple-git'
 
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
+import { tryReserveFetch } from './autoFetch'
 import { setupContextMenu } from './menu'
+import { startWatching, stopWatching } from './repoWatcher'
 import {
   addRecentRepo,
   addWorkspace,
@@ -38,6 +40,7 @@ function resolvePreload(): string {
 let mainWindow: BrowserWindow | null = null
 
 const gitInstances = new Map<string, ReturnType<typeof simpleGit>>()
+const activeFetches = new Map<string, ChildProcess>()
 
 function getGit(repoPath: string) {
   let g = gitInstances.get(repoPath)
@@ -228,7 +231,7 @@ async function resolveDefaultBranch(
   return currentLocal && currentLocal !== 'HEAD' ? currentLocal : undefined
 }
 
-ipcMain.handle('open-repo', async (_, repoPath: string) => {
+ipcMain.handle('open-repo', async (event, repoPath: string) => {
   try {
     const git = getGit(repoPath)
     const isRepo = await git.checkIsRepo()
@@ -242,6 +245,8 @@ ipcMain.handle('open-repo', async (_, repoPath: string) => {
 
     const remotes = await git.getRemotes(true)
     const defaultBranch = await resolveDefaultBranch(git, undefined)
+
+    startWatching(repoPath, event.sender)
 
     return {
       success: true,
@@ -265,9 +270,54 @@ ipcMain.handle('get-branches', async (_, repoPath: string) => {
   }
 })
 
-ipcMain.handle('close-repo', (_, repoPath: string) => {
+ipcMain.handle('close-repo', async (_, repoPath: string) => {
   gitInstances.delete(repoPath)
+  const proc = activeFetches.get(repoPath)
+  if (proc && !proc.killed) proc.kill()
+  activeFetches.delete(repoPath)
+  await stopWatching(repoPath)
   return { success: true }
+})
+
+ipcMain.handle('git-fetch', async (_, repoPath: string) => {
+  if (!gitInstances.has(repoPath)) {
+    return { success: false, error: 'No repository open' }
+  }
+
+  const proc = spawn('git', ['-C', repoPath, 'fetch', '--prune'], {
+    stdio: ['ignore', 'ignore', 'pipe']
+  })
+
+  if (!tryReserveFetch(activeFetches, repoPath, proc)) {
+    if (!proc.killed) proc.kill()
+    return { success: true, skipped: true }
+  }
+
+  return new Promise<{ success: boolean; skipped?: boolean; error?: string }>((resolve) => {
+    let stderrBuf = ''
+    proc.stderr?.setEncoding('utf8')
+    proc.stderr?.on('data', (chunk: string) => {
+      stderrBuf += chunk
+      if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096)
+    })
+
+    proc.on('error', (err) => {
+      if (activeFetches.get(repoPath) === proc) activeFetches.delete(repoPath)
+      resolve({ success: false, error: err.message })
+    })
+
+    proc.on('close', (code) => {
+      if (activeFetches.get(repoPath) === proc) activeFetches.delete(repoPath)
+      if (code === 0) {
+        resolve({ success: true })
+      } else {
+        resolve({
+          success: false,
+          error: stderrBuf.trim() || `git fetch exited with code ${code}`
+        })
+      }
+    })
+  })
 })
 
 ipcMain.handle('get-status', async (_, repoPath: string) => {

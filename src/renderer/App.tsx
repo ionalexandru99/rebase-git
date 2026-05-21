@@ -491,6 +491,7 @@ function Workspace({
       changes={totalChanges}
       activeView={activeView}
       onSelectView={setActiveView}
+      onFetch={git.fetchNow}
     >
       {errorBanner}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">

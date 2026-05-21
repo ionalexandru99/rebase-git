@@ -1,0 +1,91 @@
+import path from 'node:path'
+import chokidar, { type FSWatcher } from 'chokidar'
+import type { WebContents } from 'electron'
+
+export type RepoChangeKind = 'refs' | 'workingTree'
+
+export interface Debouncer<K extends string> {
+  schedule(key: K, fn: () => void): void
+  cancelAll(): void
+}
+
+export function createDebouncer<K extends string>(delayMs: number): Debouncer<K> {
+  const timers = new Map<K, NodeJS.Timeout>()
+  return {
+    schedule(key, fn) {
+      const existing = timers.get(key)
+      if (existing) clearTimeout(existing)
+      const handle = setTimeout(() => {
+        timers.delete(key)
+        fn()
+      }, delayMs)
+      timers.set(key, handle)
+    },
+    cancelAll() {
+      for (const handle of timers.values()) clearTimeout(handle)
+      timers.clear()
+    }
+  }
+}
+
+interface Watcher {
+  refs: FSWatcher
+  workingTree: FSWatcher
+  debouncer: Debouncer<RepoChangeKind>
+}
+
+const watchers = new Map<string, Watcher>()
+const DEBOUNCE_MS = 300
+
+function ignoreWorkingTree(targetPath: string): boolean {
+  const segments = targetPath.split(/[/\\]/)
+  return segments.includes('.git') || segments.includes('node_modules')
+}
+
+export function startWatching(repoPath: string, webContents: WebContents): void {
+  if (watchers.has(repoPath)) return
+
+  const gitDir = path.join(repoPath, '.git')
+  const refsTargets = [
+    path.join(gitDir, 'HEAD'),
+    path.join(gitDir, 'refs'),
+    path.join(gitDir, 'packed-refs')
+  ]
+
+  const debouncer = createDebouncer<RepoChangeKind>(DEBOUNCE_MS)
+
+  const emit = (kind: RepoChangeKind) => {
+    if (webContents.isDestroyed()) return
+    webContents.send('repo-changed', { repoPath, kind })
+  }
+
+  const refs = chokidar.watch(refsTargets, {
+    ignoreInitial: true,
+    persistent: true
+  })
+  refs.on('all', () => debouncer.schedule('refs', () => emit('refs')))
+  refs.on('error', (err) => console.warn('[repoWatcher] refs error', err))
+
+  const workingTree = chokidar.watch(repoPath, {
+    ignored: ignoreWorkingTree,
+    ignoreInitial: true,
+    persistent: true,
+    awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 }
+  })
+  workingTree.on('all', () => debouncer.schedule('workingTree', () => emit('workingTree')))
+  workingTree.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
+
+  watchers.set(repoPath, { refs, workingTree, debouncer })
+}
+
+export async function stopWatching(repoPath: string): Promise<void> {
+  const w = watchers.get(repoPath)
+  if (!w) return
+  watchers.delete(repoPath)
+  w.debouncer.cancelAll()
+  try {
+    await Promise.all([w.refs.close(), w.workingTree.close()])
+  } catch (err) {
+    console.warn('[repoWatcher] close error', err)
+  }
+}
