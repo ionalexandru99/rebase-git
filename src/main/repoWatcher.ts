@@ -32,6 +32,8 @@ interface Watcher {
   refs: FSWatcher
   workingTree: FSWatcher
   debouncer: Debouncer<RepoChangeKind>
+  webContents: WebContents
+  onDestroyed: () => void
 }
 
 const watchers = new Map<string, Watcher>()
@@ -43,7 +45,11 @@ function ignoreWorkingTree(targetPath: string): boolean {
 }
 
 export function startWatching(repoPath: string, webContents: WebContents): void {
-  if (watchers.has(repoPath)) return
+  const existing = watchers.get(repoPath)
+  if (existing) {
+    if (existing.webContents === webContents && !webContents.isDestroyed()) return
+    void stopWatching(repoPath)
+  }
 
   const gitDir = path.join(repoPath, '.git')
   const refsTargets = [
@@ -75,13 +81,19 @@ export function startWatching(repoPath: string, webContents: WebContents): void 
   workingTree.on('all', () => debouncer.schedule('workingTree', () => emit('workingTree')))
   workingTree.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
 
-  watchers.set(repoPath, { refs, workingTree, debouncer })
+  const onDestroyed = () => {
+    void stopWatching(repoPath)
+  }
+  webContents.once('destroyed', onDestroyed)
+
+  watchers.set(repoPath, { refs, workingTree, debouncer, webContents, onDestroyed })
 }
 
 export async function stopWatching(repoPath: string): Promise<void> {
   const w = watchers.get(repoPath)
   if (!w) return
   watchers.delete(repoPath)
+  w.webContents.removeListener('destroyed', w.onDestroyed)
   w.debouncer.cancelAll()
   try {
     await Promise.all([w.refs.close(), w.workingTree.close()])
