@@ -242,6 +242,28 @@ describe('useGit', () => {
     expect(window.electronAPI.commit).not.toHaveBeenCalled()
     expect(committed).toBe(false)
   })
+
+  it('releases the main-side repo when the hook unmounts (tab close)', async () => {
+    mockOpenRepoSuccess()
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
+
+    const { result, unmount } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+    await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
+
+    unmount()
+
+    expect(window.electronAPI.cancelLogStream).toHaveBeenCalled()
+    expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
+  })
+
+  it('does nothing on unmount when no repo was ever opened', () => {
+    const { unmount } = renderHook(() => useGit())
+    unmount()
+    expect(window.electronAPI.closeRepo).not.toHaveBeenCalled()
+    expect(window.electronAPI.cancelLogStream).not.toHaveBeenCalled()
+  })
 })
 
 describe('useGit auto-fetch', () => {

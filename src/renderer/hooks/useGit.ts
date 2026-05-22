@@ -143,6 +143,19 @@ export function useGit() {
     return unsub
   }, [silentRefreshRefs, silentRefreshStatus])
 
+  // Releases the main-side repo (simple-git instance, chokidar watcher,
+  // any active fetch) when this hook unmounts — i.e. when its tab closes.
+  // Reads activePathRef at unmount time so the latest path is always cleaned up.
+  useEffect(() => {
+    return () => {
+      const wasPath = activePathRef.current
+      if (!wasPath) return
+      activePathRef.current = null
+      Promise.resolve(window.electronAPI.cancelLogStream()).catch(() => {})
+      Promise.resolve(window.electronAPI.closeRepo(wasPath)).catch(() => {})
+    }
+  }, [])
+
   const startLogStream = useCallback((path: string) => {
     accumulatedRef.current = []
     setLog({ all: [], total: 0 })
