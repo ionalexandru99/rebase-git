@@ -13,6 +13,7 @@ import {
   BranchesResponse,
   Channel,
   CommitResponse,
+  FetchResponse,
   LogResponse,
   OpenRepoResponse,
   StageResponse,
@@ -308,10 +309,10 @@ ipcMain.handle('close-repo', async (_, repoPath: string) => {
   return { success: true }
 })
 
-ipcMain.handle('git-fetch', async (_, repoPath: string) => {
+ipcMain.handle(Channel.fetchRepo, async (_, repoPath: string) => {
   const key = normalizeRepoPath(repoPath)
   if (!gitInstances.has(key)) {
-    return { success: false, error: 'No repository open' }
+    return encodeOrThrow(FetchResponse, { _tag: 'RepoNotOpen' })
   }
 
   const proc = spawn('git', ['-C', key, 'fetch', '--prune'], {
@@ -320,10 +321,10 @@ ipcMain.handle('git-fetch', async (_, repoPath: string) => {
 
   if (!tryReserveFetch(activeFetches, key, proc)) {
     if (!proc.killed) proc.kill()
-    return { success: true, skipped: true }
+    return encodeOrThrow(FetchResponse, { _tag: 'FetchSkipped' })
   }
 
-  return new Promise<{ success: boolean; skipped?: boolean; error?: string }>((resolve) => {
+  return new Promise<typeof FetchResponse.Encoded>((resolve) => {
     let stderrBuf = ''
     proc.stderr?.setEncoding('utf8')
     proc.stderr?.on('data', (chunk: string) => {
@@ -333,18 +334,20 @@ ipcMain.handle('git-fetch', async (_, repoPath: string) => {
 
     proc.on('error', (err) => {
       if (activeFetches.get(key) === proc) activeFetches.delete(key)
-      resolve({ success: false, error: err.message })
+      resolve(encodeOrThrow(FetchResponse, { _tag: 'GitError', message: err.message }))
     })
 
     proc.on('close', (code) => {
       if (activeFetches.get(key) === proc) activeFetches.delete(key)
       if (code === 0) {
-        resolve({ success: true })
+        resolve(encodeOrThrow(FetchResponse, { _tag: 'Ok' }))
       } else {
-        resolve({
-          success: false,
-          error: stderrBuf.trim() || `git fetch exited with code ${code}`
-        })
+        resolve(
+          encodeOrThrow(FetchResponse, {
+            _tag: 'GitError',
+            message: stderrBuf.trim() || `git fetch exited with code ${code}`
+          })
+        )
       }
     })
   })

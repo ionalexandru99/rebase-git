@@ -2,6 +2,7 @@ import {
   type BranchesResponse,
   Channel,
   type CommitResponse,
+  type FetchResponse,
   type LogResponse,
   type OpenRepoResponse,
   type StageResponse,
@@ -38,7 +39,7 @@ export interface IElectronAPI {
   stageFile: (repoPath: string, file: string) => Promise<StageResponse>
   unstageFile: (repoPath: string, file: string) => Promise<UnstageResponse>
   commit: (repoPath: string, message: string) => Promise<CommitResponse>
-  fetchRepo: (repoPath: string) => Promise<{ success: boolean; skipped?: boolean; error?: string }>
+  fetchRepo: (repoPath: string) => Promise<FetchResponse>
   getLog: (repoPath: string, maxCount?: number) => Promise<LogResponse>
   startLogStream: (repoPath: string) => Promise<{ success: boolean; error?: string }>
   cancelLogStream: () => Promise<{ success: boolean }>
@@ -71,7 +72,7 @@ const api: IElectronAPI = {
     ipcRenderer.invoke(Channel.unstageFile, repoPath, file),
   commit: (repoPath: string, message: string) =>
     ipcRenderer.invoke(Channel.commit, repoPath, message),
-  fetchRepo: (repoPath: string) => ipcRenderer.invoke('git-fetch', repoPath),
+  fetchRepo: (repoPath: string) => ipcRenderer.invoke(Channel.fetchRepo, repoPath),
   getLog: (repoPath: string, maxCount?: number) =>
     ipcRenderer.invoke(Channel.getLog, repoPath, maxCount),
   startLogStream: (repoPath: string) => ipcRenderer.invoke('start-log-stream', repoPath),

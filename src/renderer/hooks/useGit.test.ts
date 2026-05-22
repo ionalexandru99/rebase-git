@@ -381,7 +381,7 @@ describe('useGit auto-fetch', () => {
   it('fires fetchRepo on the interval and silently refreshes branches + log', async () => {
     const { result } = await openAndFlush()
 
-    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ _tag: 'Ok' })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
       _tag: 'Ok',
       branches: { current: 'main', all: ['main', 'feature'], remotes: ['origin/main'], tags: [] }
@@ -425,7 +425,7 @@ describe('useGit auto-fetch', () => {
 
   it('does not refresh when fetchRepo reports skipped', async () => {
     await openAndFlush()
-    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true, skipped: true })
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ _tag: 'FetchSkipped' })
 
     await act(async () => {
       vi.advanceTimersByTime(AUTO_FETCH_INTERVAL_MS)
@@ -440,8 +440,8 @@ describe('useGit auto-fetch', () => {
   it('swallows fetchRepo failures without setting error state', async () => {
     const { result } = await openAndFlush()
     vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({
-      success: false,
-      error: 'offline'
+      _tag: 'GitError',
+      message: 'offline'
     })
 
     await act(async () => {
@@ -458,7 +458,7 @@ describe('useGit auto-fetch', () => {
   it('fetchNow runs the fetch immediately and resets the auto-fetch timer', async () => {
     const { result } = await openAndFlush()
 
-    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ _tag: 'Ok' })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
       _tag: 'Ok',
       branches: { current: 'main', all: ['main', 'feature'], remotes: [], tags: [] }
@@ -493,7 +493,7 @@ describe('useGit auto-fetch', () => {
 
   it('clears the interval when the hook unmounts', async () => {
     const { unmount } = await openAndFlush()
-    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ _tag: 'Ok' })
     unmount()
 
     await act(async () => {

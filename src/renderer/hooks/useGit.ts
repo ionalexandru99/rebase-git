@@ -2,6 +2,7 @@ import { decodeOrThrow } from '@shared/codec'
 import {
   BranchesResponse,
   CommitResponse,
+  FetchResponse,
   LogResponse,
   OpenRepoResponse,
   StageResponse,
@@ -11,7 +12,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '../types'
 
-type FetchResult = { success: boolean; skipped?: boolean; error?: string }
 type LogChunk = { repoPath: string; commits: GitLogEntry[]; done: boolean; error?: string }
 type RepoChangedEvent = { repoPath: string; kind: 'refs' | 'workingTree' }
 
@@ -103,16 +103,16 @@ export function useGit() {
 
   const runFetchAndRefresh = useCallback(
     async (path: string) => {
-      let result: FetchResult
+      let decoded: typeof FetchResponse.Type
       try {
-        result = (await window.electronAPI.fetchRepo(path)) as FetchResult
+        decoded = decodeOrThrow(FetchResponse, await window.electronAPI.fetchRepo(path))
       } catch (err) {
         console.warn('[useGit] fetch failed', err)
         return
       }
       if (activePathRef.current !== path) return
-      if (!result.success || result.skipped) {
-        if (!result.success) console.warn('[useGit] fetch failed', result.error)
+      if (decoded._tag !== 'Ok') {
+        if (decoded._tag === 'GitError') console.warn('[useGit] fetch failed', decoded.message)
         return
       }
       silentRefreshRefs(path)
