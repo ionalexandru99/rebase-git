@@ -73,3 +73,5 @@ Main-process tests run in plain Node and must only cover pure logic (store, seri
 ## Style
 
 Biome enforces: single quotes (JS), double quotes (JSX), no semicolons, 2-space indent, 100-col lines, `useImportType` as error. Run `pnpm check:fix` before committing. shadcn components live in `src/renderer/components/ui/` (style: `new-york`, base color `neutral`, CSS vars enabled).
+
+Use descriptive variable names. Don't use one-letter or terse abbreviations like `r`, `g`, `c`, `ps`, `vh` for things that aren't obvious from context — write `result`, `git`, `commit`, `parents`, `viewportHeight`. The only acceptable short names are well-known conventions: `i`/`j` for loop indices, `e` for event-handler parameters, `_` for an unused parameter, and a one-letter name inside a tiny lambda where the type makes the meaning obvious (e.g. `xs.map((x) => x.id)`). When in doubt, spell it out — a reader who didn't write the code should still be able to tell what each name refers to.
