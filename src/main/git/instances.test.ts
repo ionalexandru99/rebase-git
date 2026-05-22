@@ -6,17 +6,47 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './instances'
 
 describe('normalizeRepoPath', () => {
+  // For these "doesn't exist" cases, realpathSync throws and the function
+  // falls back to path.resolve. Build expectations with path.resolve so the
+  // tests pass on POSIX *and* Windows (where the canonical form is drive-prefixed).
   it('strips trailing slashes', () => {
-    expect(normalizeRepoPath('/tmp/repo/')).toBe('/tmp/repo')
+    const inputPath = path.join(path.sep, 'tmp', 'rebase-nonexistent-repo') + path.sep
+    const expected = path.resolve(path.sep, 'tmp', 'rebase-nonexistent-repo')
+    expect(normalizeRepoPath(inputPath)).toBe(expected)
   })
 
   it('collapses internal . and .. segments', () => {
-    expect(normalizeRepoPath('/tmp/./repo/../repo')).toBe('/tmp/repo')
+    const inputPath = path.join(path.sep, 'tmp', '.', 'rebase-x', '..', 'rebase-x')
+    const expected = path.resolve(path.sep, 'tmp', 'rebase-x')
+    expect(normalizeRepoPath(inputPath)).toBe(expected)
   })
 
   it('is idempotent', () => {
-    const once = normalizeRepoPath('/tmp/repo/')
+    const once = normalizeRepoPath(path.join(path.sep, 'tmp', 'rebase-nonexistent-repo') + path.sep)
     expect(normalizeRepoPath(once)).toBe(once)
+  })
+
+  it('resolves an existing directory through realpath (collapses symlinks)', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-realpath-'))
+    try {
+      const linkPath = path.join(os.tmpdir(), `rebase-realpath-link-${process.pid}`)
+      try {
+        fs.symlinkSync(tmpDir, linkPath, 'dir')
+      } catch {
+        // Symlink creation not supported in this environment (e.g. CI Windows
+        // without admin rights). Skip the symlink check; the realpath path
+        // still gets exercised by the non-symlink branch below.
+        expect(normalizeRepoPath(tmpDir)).toBe(fs.realpathSync.native(tmpDir))
+        return
+      }
+      try {
+        expect(normalizeRepoPath(linkPath)).toBe(normalizeRepoPath(tmpDir))
+      } finally {
+        fs.unlinkSync(linkPath)
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 })
 
@@ -33,17 +63,17 @@ describe('getOrCreateGit + lookupGit', () => {
 
   it('returns the same instance for slash-variant paths', () => {
     const map = new Map<string, SimpleGit>()
-    const a = getOrCreateGit(map, tmpDir)
-    const b = getOrCreateGit(map, `${tmpDir}/`)
-    expect(a).toBe(b)
+    const first = getOrCreateGit(map, tmpDir)
+    const second = getOrCreateGit(map, tmpDir + path.sep)
+    expect(first).toBe(second)
     expect(map.size).toBe(1)
   })
 
   it('lookupGit finds an instance under a non-normalized key', () => {
     const map = new Map<string, SimpleGit>()
     const created = getOrCreateGit(map, tmpDir)
-    expect(lookupGit(map, `${tmpDir}/`)).toBe(created)
-    expect(lookupGit(map, `${tmpDir}/./`)).toBe(created)
+    expect(lookupGit(map, tmpDir + path.sep)).toBe(created)
+    expect(lookupGit(map, path.join(tmpDir, '.') + path.sep)).toBe(created)
   })
 
   it('lookupGit returns undefined for repos not in the map', () => {
