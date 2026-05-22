@@ -127,7 +127,9 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
             Loading
           </Badge>
         ) : status.conflicted.length > 0 ? (
-          <Badge variant="destructive">{status.conflicted.length} conflict</Badge>
+          <Badge variant="destructive">
+            {status.conflicted.length} conflict{status.conflicted.length === 1 ? '' : 's'}
+          </Badge>
         ) : totalChanges === 0 ? (
           <Badge variant="secondary">Clean</Badge>
         ) : null}

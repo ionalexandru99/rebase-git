@@ -66,7 +66,12 @@ describe('StatusPanel', () => {
     expect(screen.getByText('Conflicted')).toBeInTheDocument()
     expect(screen.getByText('merge.ts')).toBeInTheDocument()
     expect(screen.getByText('other.ts')).toBeInTheDocument()
-    expect(screen.getByText(/2 conflict/)).toBeInTheDocument()
+    expect(screen.getByText('2 conflicts')).toBeInTheDocument()
+  })
+
+  it('uses singular copy for a single conflict', () => {
+    renderPanel({ status: emptyStatus({ conflicted: ['merge.ts'] }) })
+    expect(screen.getByText('1 conflict')).toBeInTheDocument()
   })
 
   it('renders deleted files in the Changes section with a D badge', () => {
