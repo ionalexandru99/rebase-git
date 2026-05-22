@@ -147,6 +147,25 @@ describe('useGit', () => {
     expect(window.electronAPI.startLogStream).not.toHaveBeenCalled()
   })
 
+  it('clears the provisional path on open failure so stale events are ignored', async () => {
+    const repoChanged = setupRepoChanged()
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({ _tag: 'NotARepo' })
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/bad/path')
+    await waitFor(() => expect(result.current.error).toBe('Not a git repository'))
+
+    vi.mocked(window.electronAPI.getBranches).mockClear()
+    vi.mocked(window.electronAPI.getLog).mockClear()
+    vi.mocked(window.electronAPI.getStatus).mockClear()
+    act(() => repoChanged.fire({ repoPath: '/bad/path', kind: 'refs' }))
+    act(() => repoChanged.fire({ repoPath: '/bad/path', kind: 'workingTree' }))
+
+    expect(window.electronAPI.getBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.getLog).not.toHaveBeenCalled()
+    expect(window.electronAPI.getStatus).not.toHaveBeenCalled()
+  })
+
   it('stages a file and refreshes status only (no log re-stream)', async () => {
     mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
     vi.mocked(window.electronAPI.stageFile).mockResolvedValue({ _tag: 'Ok' })
@@ -252,6 +271,32 @@ describe('useGit', () => {
     expect(window.electronAPI.unstageFile).not.toHaveBeenCalled()
     expect(window.electronAPI.commit).not.toHaveBeenCalled()
     expect(committed).toBe(false)
+  })
+
+  it('surfaces stageFile IPC rejection into the error banner instead of throwing', async () => {
+    mockOpenRepoSuccess()
+    vi.mocked(window.electronAPI.stageFile).mockRejectedValue(new Error('bridge down'))
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+    await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
+
+    await result.current.stageFile('a.ts')
+    await waitFor(() => expect(result.current.error).toBe('bridge down'))
+  })
+
+  it('surfaces commit IPC rejection into the error banner and returns false', async () => {
+    mockOpenRepoSuccess()
+    vi.mocked(window.electronAPI.commit).mockRejectedValue(new Error('lock file held'))
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+    await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
+
+    const ok = await result.current.commit('msg')
+    expect(ok).toBe(false)
+    await waitFor(() => expect(result.current.error).toBe('lock file held'))
+    expect(result.current.loading).toBe(false)
   })
 
   it('releases the main-side repo when the hook unmounts (tab close)', async () => {

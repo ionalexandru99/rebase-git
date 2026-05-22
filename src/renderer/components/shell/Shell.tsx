@@ -45,14 +45,21 @@ export function Shell({
 
   useEffect(() => {
     let cancelled = false
-    window.electronAPI.getSidebarPrefs().then((res) => {
-      if (cancelled) return
-      const prefs = decodeOrThrow(SidebarPrefs, res)
-      setOpen(prefs.open)
-      const clamped = Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, prefs.width))
-      setWidth(clamped)
-      dragWidthRef.current = clamped
-    })
+    window.electronAPI
+      .getSidebarPrefs()
+      .then((res) => {
+        if (cancelled) return
+        const prefs = decodeOrThrow(SidebarPrefs, res)
+        setOpen(prefs.open)
+        const clamped = Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, prefs.width))
+        setWidth(clamped)
+        dragWidthRef.current = clamped
+      })
+      .catch((err: unknown) => {
+        // Stored shape drifted or IPC failed; fall back to the in-memory
+        // defaults (sidebar open, default width) instead of crashing the shell.
+        console.warn('[Shell] failed to load sidebar prefs', err)
+      })
     return () => {
       cancelled = true
     }

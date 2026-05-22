@@ -200,6 +200,10 @@ export function useGit() {
           const errorMessage =
             decodedOpen._tag === 'NotARepo' ? 'Not a git repository' : decodedOpen.message
           console.error('[useGit] open-repo failed', { path, error: errorMessage })
+          // Provisional path was set above so in-flight chunks could be
+          // filtered; clear it now so stale repo-changed events for the
+          // never-opened path don't trigger refresh work.
+          activePathRef.current = null
           setError(errorMessage)
           setStatusLoading(false)
           setBranchesLoading(false)
@@ -265,6 +269,10 @@ export function useGit() {
           })
       } catch (err) {
         console.error('[useGit] openRepo threw', err)
+        // Same reason as the tagged-failure branch above — drop the
+        // provisional ref so we don't keep handling events for a path
+        // that never finished opening.
+        activePathRef.current = null
         setError(err instanceof Error ? err.message : 'Unknown error')
         setStatusLoading(false)
         setBranchesLoading(false)
@@ -320,14 +328,18 @@ export function useGit() {
   const stageFile = useCallback(
     async (file: string) => {
       if (!repoPath) return
-      const decoded = decodeOrThrow(
-        StageResponse,
-        await window.electronAPI.stageFile(repoPath, file)
-      )
-      if (decoded._tag === 'Ok') {
-        await refreshStatus()
-      } else if (decoded._tag === 'GitError') {
-        setError(decoded.message)
+      try {
+        const decoded = decodeOrThrow(
+          StageResponse,
+          await window.electronAPI.stageFile(repoPath, file)
+        )
+        if (decoded._tag === 'Ok') {
+          await refreshStatus()
+        } else if (decoded._tag === 'GitError') {
+          setError(decoded.message)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
       }
     },
     [repoPath, refreshStatus]
@@ -336,14 +348,18 @@ export function useGit() {
   const unstageFile = useCallback(
     async (file: string) => {
       if (!repoPath) return
-      const decoded = decodeOrThrow(
-        UnstageResponse,
-        await window.electronAPI.unstageFile(repoPath, file)
-      )
-      if (decoded._tag === 'Ok') {
-        await refreshStatus()
-      } else if (decoded._tag === 'GitError') {
-        setError(decoded.message)
+      try {
+        const decoded = decodeOrThrow(
+          UnstageResponse,
+          await window.electronAPI.unstageFile(repoPath, file)
+        )
+        if (decoded._tag === 'Ok') {
+          await refreshStatus()
+        } else if (decoded._tag === 'GitError') {
+          setError(decoded.message)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
       }
     },
     [repoPath, refreshStatus]
@@ -364,6 +380,9 @@ export function useGit() {
           return true
         }
         if (decoded._tag === 'GitError') setError(decoded.message)
+        return false
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
         return false
       } finally {
         setLoading(false)
