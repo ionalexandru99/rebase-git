@@ -2,7 +2,7 @@
 
 This file is the durable record of the multi-phase refactor of Rebase. Companion to `AGENTS.md` (binding rules) and `CLAUDE.md` (operational guidance). Update as work progresses.
 
-**Status:** Phase 1 complete (6 commits, 136 green tests). Phase 2 complete (13 commits, 146 green tests). Phase 3 not yet started.
+**Status:** Phase 1 complete (6 commits, 136 green tests). Phase 2 complete (13 commits, 146 green tests). Phase 3 complete (7 commits, 149 green tests). Phase 4 not yet started.
 
 **Scale target:** Rebase is growing into a *complete* git GUI — diff, blame, interactive rebase, conflict resolution, multi-remote, push/pull, search, history navigation. The architecture choices below are picked for that ceiling, not just the current 6.7K-LOC surface.
 
@@ -41,12 +41,12 @@ Issues identified at the start. Tick = fixed in Phase 1.
 
 **Architecture issues (still pending)**
 - [x] IPC type erosion — preload returns `Promise<unknown>`, renderer casts everywhere (fixed in Phase 2)
-- `src/main/index.ts` is 601 lines, all IPC handlers + serializers + window lifecycle → **Phase 3**
+- [x] `src/main/index.ts` is 601 lines, all IPC handlers + serializers + window lifecycle (split in Phase 3)
 - `useGit` is a 370-line god-hook with 5+ refresh paths racing → **Phase 4**
-- `HistoryPanel.tsx` is 799 lines mixing layout, canvas, ref parsing, virtualisation, theme observer → **Phase 3**
-- `App.tsx` bundles 5 components → **Phase 3**
+- [x] `HistoryPanel.tsx` is 799 lines mixing layout, canvas, ref parsing, virtualisation, theme observer (split in Phase 3)
+- [x] `App.tsx` bundles 5 components (split in Phase 3)
 - [x] Generic `getStoreValue`/`setStoreValue` proxy bypasses the schema (fixed in Phase 2)
-- `useOnboarding.selectWorkingDirectory` ≈ `addWorkspace` (duplicate) → **Phase 3**
+- [x] `useOnboarding.selectWorkingDirectory` ≈ `addWorkspace` (duplicate) (collapsed in Phase 3)
 - Loading-state conflation (one `loading` for openRepo + commit) → **Phase 4**
 - [x] Unused schema keys (`windowState`, `historyColWidths`) (fixed in Phase 2)
 
@@ -116,38 +116,62 @@ The first phase that adds a dependency. Each commit independently green.
 
 ---
 
-## Phase 3 — file-level decomposition (PENDING)
+## Phase 3 — file-level decomposition (DONE)
 
 No new deps. Just splitting the god-files into focused modules.
 
-1. **Split `src/main/index.ts`** (601 lines) into:
-   ```
-   src/main/index.ts                # window lifecycle + IPC registration only
-   src/main/ipc/{repo,status,log,log-stream,fetch,workspace,settings}.ts
-   src/main/git/{serialize,defaultBranch}.ts
-   ```
-   Each `ipc/*.ts` exports `register(): void`.
-2. **Split `HistoryPanel.tsx`** (799 lines):
-   ```
-   src/renderer/lib/git-graph/{layout,refs,canvas}.ts
-   src/renderer/lib/format.ts            # formatCommitDate, initials
-   src/renderer/hooks/useVirtualList.ts  # generic; reused by RefTreePanel
-   src/renderer/hooks/useThemeNonce.ts
-   src/renderer/components/HistoryPanel/{HistoryPanel,CommitRow,CommitGraphCanvas,HistoryHeader,SkeletonRows}.tsx
-   ```
-3. **Migrate `RefTreePanel`** to `useVirtualList` (eliminate duplicated scroll/overscan logic).
-4. **Split `App.tsx`** (531 lines):
-   ```
-   src/renderer/App.tsx                  # top-level only
-   src/renderer/TabView.tsx
-   src/renderer/RepoPicker/{RepoPicker,RepoGroup,RepoRow}.tsx
-   src/renderer/Workspace.tsx
-   src/renderer/hooks/useTabs.ts
-   ```
-5. **Collapse `useOnboarding.selectWorkingDirectory` into `addWorkspace`** (they're 95% identical).
-6. **Hoist `parseRemoteHost` / `detectProvider`** out of `RemoteProviderIcon` into `src/renderer/lib/providers.ts`.
+| Commit | Subject |
+|---|---|
+| `dc3a185` | split main/index.ts into ipc/* and git/* modules |
+| `a763813` | hoist provider helpers into renderer/lib/providers.ts |
+| `1af89b2` | collapse useOnboarding.selectWorkingDirectory into addWorkspace |
+| `c804b93` | split HistoryPanel.tsx into lib/git-graph + hooks + components |
+| `ffed6fa` | migrate RefTreePanel to useVirtualList |
+| `2ecb4d4` | extract ref-tree helpers and row view from RefTreePanel |
+| `ec04c55` | split App.tsx into TabView, RepoPicker, Workspace, useTabs |
 
-**Done when:** no source file (excluding tests and shadcn `ui/` primitives) is over ~250 lines.
+**Tests:** 117 renderer + 32 main = 149 green.
+
+**What landed:**
+
+- `src/main/index.ts` shrinks from 666 to 89 lines and only handles
+  window lifecycle + IPC registration. Handlers move to
+  `src/main/ipc/{repo,status,log,log-stream,fetch,workspace,settings}.ts`,
+  each exporting `register()`. Serializers + `resolveDefaultBranch` move
+  to `src/main/git/{serialize,defaultBranch}.ts`. Shared mutable maps
+  (`gitInstances`, `activeFetches`) live in `src/main/state.ts`.
+- `HistoryPanel.tsx` (799 lines) splits into
+  `src/renderer/lib/git-graph/{layout,refs,canvas}.ts`,
+  `src/renderer/lib/format.ts`,
+  `src/renderer/hooks/{useVirtualList,useThemeNonce}.ts`, and a
+  `src/renderer/components/HistoryPanel/` folder with `HistoryPanel`,
+  `CommitRow`, `CommitGraphCanvas`, `HistoryHeader`, `SkeletonRows`, plus
+  a `selectors.ts` for the on-branch / visible-set computations. The
+  canvas redraw is imperative (via `useImperativeHandle`) so the scroll
+  raf calls it without a state round-trip.
+- `RefTreePanel` is refactored to use `useVirtualList`. The row data
+  model and tree-flattening move into `src/renderer/lib/ref-tree.ts`;
+  the per-row presentational component moves into
+  `src/renderer/components/shell/RefTreeRow.tsx`. The panel itself drops
+  from 389 to 106 lines.
+- `App.tsx` shrinks from 527 to 95 lines. It now only handles the
+  onboarding gate and the tab shell. Per-tab logic lives in
+  `src/renderer/TabView.tsx`; the empty-tab repo picker lives in
+  `src/renderer/RepoPicker/{RepoPicker,RepoGroup,RepoRow}.tsx`; the
+  in-repo dashboard lives in `src/renderer/Workspace.tsx`; the tab list
+  state machine + Cmd+T/Cmd+W shortcuts live in
+  `src/renderer/hooks/useTabs.ts`.
+- `useOnboarding.selectWorkingDirectory` is gone — the onboarding
+  "Select Working Folder" button now calls `addWorkspace`, since the two
+  callbacks were 100% identical.
+- `parseRemoteHost` and `detectProvider` are hoisted into
+  `src/renderer/lib/providers.ts` so they're reusable without dragging
+  in the `RemoteProviderIcon` component.
+
+`useGit.ts` (401 lines) is the only renderer file still over the
+~250-line target; that's Phase 4's job. `StatusPanel.tsx` (261 lines) is
+marginally over but wasn't called out for Phase 3 — leave it for a future
+pass if it needs further breakdown.
 
 ---
 
