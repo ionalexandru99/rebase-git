@@ -315,9 +315,6 @@ describe('useGit', () => {
   })
 
   it('adopts the canonical path returned by open-repo, not the caller input', async () => {
-    // Caller passes a trailing-slash variant; main responds with the normalized form.
-    // Chunks/refresh events arrive keyed on the canonical path, so the hook must
-    // store the canonical path on activePathRef or every comparison drops the data.
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
       _tag: 'Ok',
       result: { path: '/test/repo', remotes: {}, defaultBranch: 'main' }
@@ -336,7 +333,6 @@ describe('useGit', () => {
     await result.current.openRepo('/test/repo/')
     await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
 
-    // A chunk keyed on the canonical path must be accepted, not dropped.
     stream.fire({
       repoPath: '/test/repo',
       commits: [
@@ -352,10 +348,8 @@ describe('useGit', () => {
     })
     await waitFor(() => expect(result.current.log?.total).toBe(1))
 
-    // Status data delivered against the canonical path must also land in state.
     await waitFor(() => expect(result.current.status?.modified).toContain('a.ts'))
 
-    // Cleanup on unmount must also use the canonical path, not the trailing-slash input.
     vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
     vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
     unmount()

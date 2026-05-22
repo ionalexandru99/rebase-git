@@ -251,9 +251,7 @@ async function resolveDefaultBranch(
     const out = await git.raw(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
     const name = out.trim()
     if (name.startsWith('origin/')) return name.slice('origin/'.length)
-  } catch {
-    // origin/HEAD not set (uncommon clone state or no origin remote)
-  }
+  } catch {}
   return currentLocal && currentLocal !== 'HEAD' ? currentLocal : undefined
 }
 
@@ -325,10 +323,6 @@ ipcMain.handle(Channel.fetchRepo, async (_, repoPath: string) => {
 
   const proc = spawn('git', ['-C', key, 'fetch', '--prune'], {
     stdio: ['ignore', 'ignore', 'pipe'],
-    // Without this, a repo that needs credentials would hang the child
-    // forever waiting on a TTY prompt nothing in the GUI can answer.
-    // Setting it to 0 makes git fail fast, and the failure flows through
-    // the GitError branch of FetchResponse to the renderer's banner.
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
   })
 
@@ -658,9 +652,7 @@ ipcMain.handle(Channel.scanForRepos, async (_, dirPath: string) => {
           if (isRepo) {
             repos.push(fullPath)
           }
-        } catch {
-          // Not a git repo, skip
-        }
+        } catch {}
       }
     }
 

@@ -148,9 +148,6 @@ export function useGit() {
     return unsub
   }, [silentRefreshRefs, silentRefreshStatus])
 
-  // Releases the main-side repo (simple-git instance, chokidar watcher,
-  // any active fetch) when this hook unmounts — i.e. when its tab closes.
-  // Reads activePathRef at unmount time so the latest path is always cleaned up.
   useEffect(() => {
     return () => {
       const wasPath = activePathRef.current
@@ -190,9 +187,6 @@ export function useGit() {
       setError(null)
       setStatus(null)
       setBranches(null)
-      // Provisional — main returns the canonical form which overwrites this on success.
-      // Setting it now means stale chunks from a previous repo are ignored while the new
-      // open-repo round-trip is in flight.
       activePathRef.current = path
       try {
         const decodedOpen = decodeOrThrow(OpenRepoResponse, await window.electronAPI.openRepo(path))
@@ -200,9 +194,6 @@ export function useGit() {
           const errorMessage =
             decodedOpen._tag === 'NotARepo' ? 'Not a git repository' : decodedOpen.message
           console.error('[useGit] open-repo failed', { path, error: errorMessage })
-          // Provisional path was set above so in-flight chunks could be
-          // filtered; clear it now so stale repo-changed events for the
-          // never-opened path don't trigger refresh work.
           activePathRef.current = null
           setError(errorMessage)
           setStatusLoading(false)
@@ -210,7 +201,6 @@ export function useGit() {
           return
         }
         const opened = decodedOpen.result
-        // Adopt the canonical path so chunk/refresh path comparisons match what main sends.
         activePathRef.current = opened.path
         setRepoPath(opened.path)
         setRemotes(opened.remotes)
@@ -269,9 +259,6 @@ export function useGit() {
           })
       } catch (err) {
         console.error('[useGit] openRepo threw', err)
-        // Same reason as the tagged-failure branch above — drop the
-        // provisional ref so we don't keep handling events for a path
-        // that never finished opening.
         activePathRef.current = null
         setError(err instanceof Error ? err.message : 'Unknown error')
         setStatusLoading(false)

@@ -6,9 +6,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './instances'
 
 describe('normalizeRepoPath', () => {
-  // For these "doesn't exist" cases, realpathSync throws and the function
-  // falls back to path.resolve. Build expectations with path.resolve so the
-  // tests pass on POSIX *and* Windows (where the canonical form is drive-prefixed).
   it('strips trailing slashes', () => {
     const inputPath = path.join(path.sep, 'tmp', 'rebase-nonexistent-repo') + path.sep
     const expected = path.resolve(path.sep, 'tmp', 'rebase-nonexistent-repo')
@@ -33,9 +30,6 @@ describe('normalizeRepoPath', () => {
       try {
         fs.symlinkSync(tmpDir, linkPath, 'dir')
       } catch {
-        // Symlink creation not supported in this environment (e.g. CI Windows
-        // without admin rights). Skip the symlink check; the realpath path
-        // still gets exercised by the non-symlink branch below.
         expect(normalizeRepoPath(tmpDir)).toBe(fs.realpathSync.native(tmpDir))
         return
       }

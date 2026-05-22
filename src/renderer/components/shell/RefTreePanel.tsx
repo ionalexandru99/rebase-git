@@ -88,8 +88,6 @@ export const RefTreePanel = memo(function RefTreePanel({
         setToggles(new Set(decoded))
       })
       .catch((err: unknown) => {
-        // Stored shape drifted or IPC failed; leave toggles at their default
-        // (all sections expanded) rather than blowing up the sidebar.
         console.warn('[RefTreePanel] failed to load toggles', err)
       })
     return () => {

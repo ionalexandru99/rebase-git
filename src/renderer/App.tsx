@@ -145,9 +145,6 @@ function App() {
           try {
             await window.electronAPI.openRepo(path)
           } catch (error) {
-            // The empty tab the user lands on will let them retry; this catch
-            // just keeps a transient IPC failure from becoming an unhandled
-            // promise rejection.
             console.error('[onboarding] openRepo failed', { path, error })
           }
         }}

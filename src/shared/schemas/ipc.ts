@@ -1,8 +1,6 @@
 import { Schema } from 'effect'
 import { CommitSummary, GitBranches, GitLog, GitStatus, RepoOpenSuccess } from './git'
 
-// IPC channel names. Importing from here on both sides of the bridge guarantees
-// main and renderer never drift on channel strings.
 export const Channel = {
   selectFolder: 'select-folder',
   openRepo: 'open-repo',
@@ -35,8 +33,6 @@ export const Channel = {
   repoChanged: 'repo-changed'
 } as const
 
-// Tagged error variants shared across IPC responses. Main encodes one of
-// these on failure; renderer matches on `_tag` to decide how to react.
 export const RepoNotOpen = Schema.TaggedStruct('RepoNotOpen', {})
 export type RepoNotOpen = typeof RepoNotOpen.Type
 
@@ -51,8 +47,6 @@ export type FetchSkipped = typeof FetchSkipped.Type
 export const NotARepo = Schema.TaggedStruct('NotARepo', {})
 export type NotARepo = typeof NotARepo.Type
 
-// Per-channel response envelopes. Each is `Ok` carrying its payload unioned
-// with the tagged failures it can produce.
 export const StatusResponse = Schema.Union(
   Schema.TaggedStruct('Ok', { status: GitStatus }),
   RepoNotOpen,
@@ -114,8 +108,6 @@ export const ScanForReposResponse = Schema.Union(
 )
 export type ScanForReposResponse = typeof ScanForReposResponse.Type
 
-// Persisted UI preferences. Stored individually under typed accessors —
-// the bridge no longer exposes a generic key/value proxy into electron-store.
 export const SidebarPrefs = Schema.Struct({
   open: Schema.Boolean,
   width: Schema.Number

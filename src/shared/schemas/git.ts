@@ -1,10 +1,5 @@
 import { Schema } from 'effect'
 
-// Schemas declared with Schema.mutable so decoded values have mutable
-// TS types — the renderer accumulates and slices these arrays directly
-// (e.g. log streaming, status sections) and we don't want readonly
-// modifiers leaking into every call site.
-
 export const RenamedFile = Schema.mutable(
   Schema.Struct({
     from: Schema.String,

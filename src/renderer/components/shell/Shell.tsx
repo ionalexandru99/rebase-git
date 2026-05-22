@@ -56,8 +56,6 @@ export function Shell({
         dragWidthRef.current = clamped
       })
       .catch((err: unknown) => {
-        // Stored shape drifted or IPC failed; fall back to the in-memory
-        // defaults (sidebar open, default width) instead of crashing the shell.
         console.warn('[Shell] failed to load sidebar prefs', err)
       })
     return () => {
