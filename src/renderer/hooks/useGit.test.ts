@@ -32,7 +32,7 @@ function mockOpenRepoSuccess(s: GitStatus = status(), path = '/test/repo') {
     status: s
   })
   vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-    success: true,
+    _tag: 'Ok',
     branches: { current: s.current, all: [s.current], remotes: [], tags: [] }
   })
 }
@@ -280,7 +280,7 @@ describe('useGit', () => {
       status: status({ modified: ['a.ts'] })
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     const stream = setupLogStream()
@@ -360,7 +360,7 @@ describe('useGit auto-fetch', () => {
       status: status()
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     const stream = setupLogStream()
@@ -383,7 +383,7 @@ describe('useGit auto-fetch', () => {
 
     vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main', 'feature'], remotes: ['origin/main'], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({
@@ -460,7 +460,7 @@ describe('useGit auto-fetch', () => {
 
     vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main', 'feature'], remotes: [], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({
@@ -523,7 +523,7 @@ describe('useGit repo-changed watcher', () => {
       status: status()
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     const stream = setupLogStream()
@@ -545,7 +545,7 @@ describe('useGit repo-changed watcher', () => {
     const { rendered, repoChanged } = await openRepoForWatcher()
 
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'feature', all: ['main', 'feature'], remotes: [], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({

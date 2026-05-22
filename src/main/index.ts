@@ -9,7 +9,7 @@ import { simpleGit } from 'simple-git'
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
 import { encodeOrThrow } from '@shared/codec'
-import { Channel, StatusResponse } from '@shared/schemas/ipc'
+import { BranchesResponse, Channel, StatusResponse } from '@shared/schemas/ipc'
 import { tryReserveFetch } from './autoFetch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { setupContextMenu } from './menu'
@@ -267,14 +267,20 @@ ipcMain.handle('open-repo', async (event, repoPath: string) => {
   }
 })
 
-ipcMain.handle('get-branches', async (_, repoPath: string) => {
+ipcMain.handle(Channel.getBranches, async (_, repoPath: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(BranchesResponse, { _tag: 'RepoNotOpen' })
   try {
     const [branches, tags] = await Promise.all([git.branch(['-a']), git.tags()])
-    return { success: true, branches: serializeBranches(branches, tags) }
+    return encodeOrThrow(BranchesResponse, {
+      _tag: 'Ok',
+      branches: serializeBranches(branches, tags)
+    })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(BranchesResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 

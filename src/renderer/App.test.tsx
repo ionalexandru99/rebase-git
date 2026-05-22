@@ -257,7 +257,7 @@ describe('App — repo picker (no repo open)', () => {
       }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
 
@@ -317,7 +317,7 @@ describe('App — workspace (repo open)', () => {
     }
   }
   const branchesMock = {
-    success: true,
+    _tag: 'Ok' as const,
     branches: { current: 'feature/ui', all: ['main', 'feature/ui'], remotes: [], tags: [] }
   }
   const sampleCommit = {
@@ -413,7 +413,7 @@ describe('App — workspace (repo open)', () => {
       }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     setupLogStream()
@@ -456,7 +456,7 @@ describe('App — workspace (repo open)', () => {
       }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     setupLogStream()

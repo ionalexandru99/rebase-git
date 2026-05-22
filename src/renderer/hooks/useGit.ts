@@ -1,9 +1,8 @@
 import { decodeOrThrow } from '@shared/codec'
-import { StatusResponse } from '@shared/schemas/ipc'
+import { BranchesResponse, StatusResponse } from '@shared/schemas/ipc'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus, RepoOpenResult } from '../types'
 
-type BranchesResult = { success: boolean; branches?: GitBranches; error?: string }
 type OpResult = { success: boolean; error?: string }
 type LogResult = { success: boolean; log?: GitLog; error?: string }
 type FetchResult = { success: boolean; skipped?: boolean; error?: string }
@@ -34,11 +33,11 @@ export function useGit() {
     window.electronAPI
       .getBranches(path)
       .then((res) => {
-        const r = res as BranchesResult
+        const decoded = decodeOrThrow(BranchesResponse, res)
         if (activePathRef.current !== path) return
-        if (r.success && r.branches) {
-          setBranches(r.branches)
-          if (r.branches.current) setCurrentBranch(r.branches.current)
+        if (decoded._tag === 'Ok') {
+          setBranches(decoded.branches)
+          if (decoded.branches.current) setCurrentBranch(decoded.branches.current)
         }
       })
       .catch((err: unknown) => {
@@ -225,14 +224,17 @@ export function useGit() {
         window.electronAPI
           .getBranches(open.path)
           .then((res) => {
-            const r = res as BranchesResult
+            const decoded = decodeOrThrow(BranchesResponse, res)
             if (activePathRef.current !== open.path) return
-            if (r.success && r.branches) {
-              setBranches(r.branches)
-              setCurrentBranch((prev) => prev || r.branches?.current || '')
-            } else if (r.error) {
-              console.error('[useGit] get-branches failed', { path: open.path, error: r.error })
-              setError(r.error)
+            if (decoded._tag === 'Ok') {
+              setBranches(decoded.branches)
+              setCurrentBranch((prev) => prev || decoded.branches.current || '')
+            } else if (decoded._tag === 'GitError') {
+              console.error('[useGit] get-branches failed', {
+                path: open.path,
+                error: decoded.message
+              })
+              setError(decoded.message)
             }
           })
           .catch((err: unknown) => {
