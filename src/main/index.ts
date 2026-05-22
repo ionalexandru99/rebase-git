@@ -14,7 +14,9 @@ import {
   Channel,
   LogResponse,
   OpenRepoResponse,
-  StatusResponse
+  StageResponse,
+  StatusResponse,
+  UnstageResponse
 } from '@shared/schemas/ipc'
 import { tryReserveFetch } from './autoFetch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
@@ -361,25 +363,31 @@ ipcMain.handle(Channel.getStatus, async (_, repoPath: string) => {
   }
 })
 
-ipcMain.handle('stage-file', async (_, repoPath: string, file: string) => {
+ipcMain.handle(Channel.stageFile, async (_, repoPath: string, file: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(StageResponse, { _tag: 'RepoNotOpen' })
   try {
     await git.add(file)
-    return { success: true }
+    return encodeOrThrow(StageResponse, { _tag: 'Ok' })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(StageResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 
-ipcMain.handle('unstage-file', async (_, repoPath: string, file: string) => {
+ipcMain.handle(Channel.unstageFile, async (_, repoPath: string, file: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(UnstageResponse, { _tag: 'RepoNotOpen' })
   try {
     await git.reset(['HEAD', file])
-    return { success: true }
+    return encodeOrThrow(UnstageResponse, { _tag: 'Ok' })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(UnstageResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 

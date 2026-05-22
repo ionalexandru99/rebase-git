@@ -3,7 +3,9 @@ import {
   Channel,
   type LogResponse,
   type OpenRepoResponse,
-  type StatusResponse
+  type StageResponse,
+  type StatusResponse,
+  type UnstageResponse
 } from '@shared/schemas/ipc'
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -32,8 +34,8 @@ export interface IElectronAPI {
   closeRepo: (path: string) => Promise<unknown>
   getBranches: (repoPath: string) => Promise<BranchesResponse>
   getStatus: (repoPath: string) => Promise<StatusResponse>
-  stageFile: (repoPath: string, file: string) => Promise<unknown>
-  unstageFile: (repoPath: string, file: string) => Promise<unknown>
+  stageFile: (repoPath: string, file: string) => Promise<StageResponse>
+  unstageFile: (repoPath: string, file: string) => Promise<UnstageResponse>
   commit: (repoPath: string, message: string) => Promise<unknown>
   fetchRepo: (repoPath: string) => Promise<{ success: boolean; skipped?: boolean; error?: string }>
   getLog: (repoPath: string, maxCount?: number) => Promise<LogResponse>
@@ -62,9 +64,10 @@ const api: IElectronAPI = {
   closeRepo: (path: string) => ipcRenderer.invoke('close-repo', path),
   getBranches: (repoPath: string) => ipcRenderer.invoke(Channel.getBranches, repoPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke(Channel.getStatus, repoPath),
-  stageFile: (repoPath: string, file: string) => ipcRenderer.invoke('stage-file', repoPath, file),
+  stageFile: (repoPath: string, file: string) =>
+    ipcRenderer.invoke(Channel.stageFile, repoPath, file),
   unstageFile: (repoPath: string, file: string) =>
-    ipcRenderer.invoke('unstage-file', repoPath, file),
+    ipcRenderer.invoke(Channel.unstageFile, repoPath, file),
   commit: (repoPath: string, message: string) => ipcRenderer.invoke('commit', repoPath, message),
   fetchRepo: (repoPath: string) => ipcRenderer.invoke('git-fetch', repoPath),
   getLog: (repoPath: string, maxCount?: number) =>

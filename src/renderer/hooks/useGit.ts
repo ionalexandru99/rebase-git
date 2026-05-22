@@ -3,7 +3,9 @@ import {
   BranchesResponse,
   LogResponse,
   OpenRepoResponse,
-  StatusResponse
+  StageResponse,
+  StatusResponse,
+  UnstageResponse
 } from '@shared/schemas/ipc'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '../types'
@@ -309,9 +311,14 @@ export function useGit() {
   const stageFile = useCallback(
     async (file: string) => {
       if (!repoPath) return
-      const result = (await window.electronAPI.stageFile(repoPath, file)) as OpResult
-      if (result.success) {
+      const decoded = decodeOrThrow(
+        StageResponse,
+        await window.electronAPI.stageFile(repoPath, file)
+      )
+      if (decoded._tag === 'Ok') {
         await refreshStatus()
+      } else if (decoded._tag === 'GitError') {
+        setError(decoded.message)
       }
     },
     [repoPath, refreshStatus]
@@ -320,9 +327,14 @@ export function useGit() {
   const unstageFile = useCallback(
     async (file: string) => {
       if (!repoPath) return
-      const result = (await window.electronAPI.unstageFile(repoPath, file)) as OpResult
-      if (result.success) {
+      const decoded = decodeOrThrow(
+        UnstageResponse,
+        await window.electronAPI.unstageFile(repoPath, file)
+      )
+      if (decoded._tag === 'Ok') {
         await refreshStatus()
+      } else if (decoded._tag === 'GitError') {
+        setError(decoded.message)
       }
     },
     [repoPath, refreshStatus]

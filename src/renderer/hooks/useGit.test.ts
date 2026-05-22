@@ -149,7 +149,7 @@ describe('useGit', () => {
 
   it('stages a file and refreshes status only (no log re-stream)', async () => {
     mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
-    vi.mocked(window.electronAPI.stageFile).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.stageFile).mockResolvedValue({ _tag: 'Ok' })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       _tag: 'Ok',
       status: status({ staged: ['file1.ts'] })
@@ -172,7 +172,7 @@ describe('useGit', () => {
 
   it('unstages a file and refreshes status only', async () => {
     mockOpenRepoSuccess(status({ staged: ['file1.ts'] }))
-    vi.mocked(window.electronAPI.unstageFile).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.unstageFile).mockResolvedValue({ _tag: 'Ok' })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       _tag: 'Ok',
       status: status({ modified: ['file1.ts'] })
