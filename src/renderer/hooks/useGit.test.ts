@@ -1,32 +1,39 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setupLogStream, setupRepoChanged } from '@/../test/setup'
+import type { GitStatus } from '@/types'
 import { useGit } from './useGit'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 
-function mockOpenRepoSuccess(
-  status: { current: string; modified: string[]; staged: string[]; not_added: string[] } = {
+function status(overrides: Partial<GitStatus> = {}): GitStatus {
+  return {
     current: 'main',
     modified: [],
     staged: [],
-    not_added: []
-  },
-  path = '/test/repo'
-) {
+    not_added: [],
+    conflicted: [],
+    deleted: [],
+    created: [],
+    renamed: [],
+    ...overrides
+  }
+}
+
+function mockOpenRepoSuccess(s: GitStatus = status(), path = '/test/repo') {
   vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
     success: true,
     path,
     remotes: {},
-    defaultBranch: status.current
+    defaultBranch: s.current
   })
   vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
     success: true,
-    status
+    status: s
   })
   vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
     success: true,
-    branches: { current: status.current, all: [status.current], remotes: [], tags: [] }
+    branches: { current: s.current, all: [s.current], remotes: [], tags: [] }
   })
 }
 
@@ -49,7 +56,7 @@ describe('useGit', () => {
   })
 
   it('opens a repo and streams commits in chunks', async () => {
-    mockOpenRepoSuccess({ current: 'main', modified: ['file1.ts'], staged: [], not_added: [] })
+    mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
     const stream = setupLogStream()
 
     const { result } = renderHook(() => useGit())
@@ -101,7 +108,7 @@ describe('useGit', () => {
   })
 
   it('ignores chunks that arrive for an inactive repo path', async () => {
-    mockOpenRepoSuccess({ current: 'main', modified: [], staged: [], not_added: [] })
+    mockOpenRepoSuccess(status())
     const stream = setupLogStream()
 
     const { result } = renderHook(() => useGit())
@@ -144,11 +151,11 @@ describe('useGit', () => {
   })
 
   it('stages a file and refreshes status only (no log re-stream)', async () => {
-    mockOpenRepoSuccess({ current: 'main', modified: ['file1.ts'], staged: [], not_added: [] })
+    mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
     vi.mocked(window.electronAPI.stageFile).mockResolvedValue({ success: true })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: [], staged: ['file1.ts'], not_added: [] }
+      status: status({ staged: ['file1.ts'] })
     })
 
     const { result } = renderHook(() => useGit())
@@ -167,11 +174,11 @@ describe('useGit', () => {
   })
 
   it('unstages a file and refreshes status only', async () => {
-    mockOpenRepoSuccess({ current: 'main', modified: [], staged: ['file1.ts'], not_added: [] })
+    mockOpenRepoSuccess(status({ staged: ['file1.ts'] }))
     vi.mocked(window.electronAPI.unstageFile).mockResolvedValue({ success: true })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: ['file1.ts'], staged: [], not_added: [] }
+      status: status({ modified: ['file1.ts'] })
     })
 
     const { result } = renderHook(() => useGit())
@@ -186,11 +193,11 @@ describe('useGit', () => {
   })
 
   it('commits and re-streams the log', async () => {
-    mockOpenRepoSuccess({ current: 'main', modified: [], staged: ['a.ts'], not_added: [] })
+    mockOpenRepoSuccess(status({ staged: ['a.ts'] }))
     vi.mocked(window.electronAPI.commit).mockResolvedValue({ success: true })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: [], staged: [], not_added: [] }
+      status: status()
     })
 
     const { result } = renderHook(() => useGit())
@@ -286,7 +293,7 @@ describe('useGit auto-fetch', () => {
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: [], staged: [], not_added: [] }
+      status: status()
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
       success: true,
@@ -449,7 +456,7 @@ describe('useGit repo-changed watcher', () => {
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: [], staged: [], not_added: [] }
+      status: status()
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
       success: true,
@@ -514,7 +521,7 @@ describe('useGit repo-changed watcher', () => {
 
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: ['changed.ts'], staged: [], not_added: [] }
+      status: status({ modified: ['changed.ts'] })
     })
 
     act(() => repoChanged.fire({ repoPath: '/test/repo', kind: 'workingTree' }))

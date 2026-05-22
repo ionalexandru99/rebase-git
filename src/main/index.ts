@@ -100,11 +100,20 @@ ipcMain.handle('select-folder', async () => {
   return result.canceled ? null : result.filePaths[0]
 })
 
+interface RenamedFile {
+  from: string
+  to: string
+}
+
 interface SerializableStatus {
   current: string
   modified: string[]
   staged: string[]
   not_added: string[]
+  conflicted: string[]
+  deleted: string[]
+  created: string[]
+  renamed: RenamedFile[]
 }
 
 interface SerializableLogEntry {
@@ -152,7 +161,11 @@ function serializeStatus(
     current: status.current ?? '',
     modified: [...status.modified],
     staged: [...status.staged],
-    not_added: [...status.not_added]
+    not_added: [...status.not_added],
+    conflicted: [...status.conflicted],
+    deleted: [...status.deleted],
+    created: [...status.created],
+    renamed: status.renamed.map((r) => ({ from: r.from, to: r.to }))
   }
 }
 

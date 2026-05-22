@@ -245,7 +245,16 @@ describe('App — repo picker (no repo open)', () => {
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: [], staged: [], not_added: [] }
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
       success: true,
@@ -300,7 +309,11 @@ describe('App — workspace (repo open)', () => {
       current: 'feature/ui',
       modified: ['src/a.ts'],
       staged: ['src/b.ts', 'src/c.ts'],
-      not_added: ['new.ts']
+      not_added: ['new.ts'],
+      conflicted: [],
+      deleted: [],
+      created: [],
+      renamed: []
     }
   }
   const branchesMock = {
@@ -388,7 +401,16 @@ describe('App — workspace (repo open)', () => {
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: [], staged: [], not_added: [] }
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
       success: true,
@@ -422,7 +444,16 @@ describe('App — workspace (repo open)', () => {
     )
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       success: true,
-      status: { current: 'main', modified: [], staged: [], not_added: [] }
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
       success: true,

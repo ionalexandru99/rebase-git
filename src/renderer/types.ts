@@ -1,8 +1,17 @@
+export interface RenamedFile {
+  from: string
+  to: string
+}
+
 export interface GitStatus {
+  current: string
   modified: string[]
   staged: string[]
   not_added: string[]
-  current: string
+  conflicted: string[]
+  deleted: string[]
+  created: string[]
+  renamed: RenamedFile[]
 }
 
 export interface GitLogEntry {
