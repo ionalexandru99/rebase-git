@@ -33,7 +33,7 @@ function mockBaseAPI(
   vi.mocked(window.electronAPI.setActiveWorkspace).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getRecentRepos).mockResolvedValue(overrides.recentRepos ?? [])
   vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-    success: true,
+    _tag: 'Ok',
     repos: overrides.scanRepos ?? []
   })
 }

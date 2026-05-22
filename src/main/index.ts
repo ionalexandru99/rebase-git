@@ -18,6 +18,7 @@ import {
   FetchResponse,
   LogResponse,
   OpenRepoResponse,
+  ScanForReposResponse,
   StageResponse,
   StartLogStreamResponse,
   StatusResponse,
@@ -302,7 +303,7 @@ ipcMain.handle(Channel.getBranches, async (_, repoPath: string) => {
   }
 })
 
-ipcMain.handle('close-repo', async (_, repoPath: string) => {
+ipcMain.handle(Channel.closeRepo, async (_, repoPath: string) => {
   const key = normalizeRepoPath(repoPath)
   gitInstances.delete(key)
   const proc = activeFetches.get(key)
@@ -624,7 +625,7 @@ ipcMain.handle('set-onboarding-complete', (_, complete: boolean) => {
   setOnboardingComplete(complete)
 })
 
-ipcMain.handle('scan-for-repos', async (_, dirPath: string) => {
+ipcMain.handle(Channel.scanForRepos, async (_, dirPath: string) => {
   try {
     const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
     const repos: string[] = []
@@ -644,11 +645,11 @@ ipcMain.handle('scan-for-repos', async (_, dirPath: string) => {
       }
     }
 
-    return { success: true, repos }
+    return encodeOrThrow(ScanForReposResponse, { _tag: 'Ok', repos })
   } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error)
-    }
+    return encodeOrThrow(ScanForReposResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })

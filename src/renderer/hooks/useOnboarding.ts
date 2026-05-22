@@ -1,3 +1,5 @@
+import { decodeOrThrow } from '@shared/codec'
+import { ScanForReposResponse } from '@shared/schemas/ipc'
 import { useCallback, useEffect, useState } from 'react'
 
 export function useOnboarding() {
@@ -16,12 +18,15 @@ export function useOnboarding() {
     setLoading(true)
     setError(null)
     try {
-      const result = await window.electronAPI.scanForRepos(path)
-      if (result.success && result.repos) {
-        setDiscoveredRepos(result.repos)
-      } else if (!result.success) {
+      const decoded = decodeOrThrow(
+        ScanForReposResponse,
+        await window.electronAPI.scanForRepos(path)
+      )
+      if (decoded._tag === 'Ok') {
+        setDiscoveredRepos([...decoded.repos])
+      } else {
         setDiscoveredRepos([])
-        setError(result.error || 'Failed to scan for repositories')
+        setError(decoded.message || 'Failed to scan for repositories')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')

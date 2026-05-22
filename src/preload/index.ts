@@ -7,6 +7,7 @@ import {
   type FetchResponse,
   type LogResponse,
   type OpenRepoResponse,
+  type ScanForReposResponse,
   type StageResponse,
   type StartLogStreamResponse,
   type StatusResponse,
@@ -44,13 +45,13 @@ export interface IElectronAPI {
   setActiveWorkspace: (path: string | null) => Promise<void>
   getOnboardingComplete: () => Promise<boolean>
   setOnboardingComplete: (complete: boolean) => Promise<void>
-  scanForRepos: (dirPath: string) => Promise<{ success: boolean; repos?: string[]; error?: string }>
+  scanForRepos: (dirPath: string) => Promise<ScanForReposResponse>
 }
 
 const api: IElectronAPI = {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   openRepo: (path: string) => ipcRenderer.invoke(Channel.openRepo, path),
-  closeRepo: (path: string) => ipcRenderer.invoke('close-repo', path),
+  closeRepo: (path: string) => ipcRenderer.invoke(Channel.closeRepo, path),
   getBranches: (repoPath: string) => ipcRenderer.invoke(Channel.getBranches, repoPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke(Channel.getStatus, repoPath),
   stageFile: (repoPath: string, file: string) =>
@@ -87,7 +88,7 @@ const api: IElectronAPI = {
   getOnboardingComplete: () => ipcRenderer.invoke('get-onboarding-complete'),
   setOnboardingComplete: (complete: boolean) =>
     ipcRenderer.invoke('set-onboarding-complete', complete),
-  scanForRepos: (dirPath: string) => ipcRenderer.invoke('scan-for-repos', dirPath)
+  scanForRepos: (dirPath: string) => ipcRenderer.invoke(Channel.scanForRepos, dirPath)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

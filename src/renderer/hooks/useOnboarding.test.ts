@@ -12,7 +12,7 @@ function defaultMocks(active: string | null = null, workspaces: string[] = []) {
     workspaces.filter((w) => w !== p)
   )
   vi.mocked(window.electronAPI.setActiveWorkspace).mockResolvedValue(undefined)
-  vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({ success: true, repos: [] })
+  vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({ _tag: 'Ok', repos: [] })
 }
 
 describe('useOnboarding', () => {
@@ -36,7 +36,7 @@ describe('useOnboarding', () => {
   it('should load workspaces and the active workspace on mount', async () => {
     defaultMocks('/home/user/repos', ['/home/user/repos'])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       repos: ['/home/user/repos/app']
     })
 
@@ -55,7 +55,7 @@ describe('useOnboarding', () => {
     vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/home/user/projects')
     vi.mocked(window.electronAPI.addWorkspace).mockResolvedValue(['/home/user/projects'])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       repos: ['/home/user/projects/app', '/home/user/projects/lib']
     })
 
@@ -85,8 +85,8 @@ describe('useOnboarding', () => {
     vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/bad/path')
     vi.mocked(window.electronAPI.addWorkspace).mockResolvedValue(['/bad/path'])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-      success: false,
-      error: 'Permission denied'
+      _tag: 'GitError',
+      message: 'Permission denied'
     })
 
     const { result } = renderHook(() => useOnboarding())
@@ -125,7 +125,7 @@ describe('useOnboarding', () => {
     defaultMocks('/home/user/repos', ['/home/user/repos'])
     vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       repos: ['/home/user/repos/one']
     })
 
@@ -168,7 +168,7 @@ describe('useOnboarding', () => {
       '/home/user/work'
     ])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       repos: ['/home/user/work/repo-a']
     })
 
@@ -193,7 +193,7 @@ describe('useOnboarding', () => {
     defaultMocks('/home/user/personal', ['/home/user/personal', '/home/user/work'])
     vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValueOnce({
-      success: true,
+      _tag: 'Ok',
       repos: ['/home/user/personal/app']
     })
 
@@ -204,7 +204,7 @@ describe('useOnboarding', () => {
     })
 
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       repos: ['/home/user/work/job']
     })
 
@@ -224,7 +224,7 @@ describe('useOnboarding', () => {
     vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
     vi.mocked(window.electronAPI.removeWorkspace).mockResolvedValue(['/home/user/work'])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       repos: ['/home/user/work/job']
     })
 
