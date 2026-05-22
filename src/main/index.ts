@@ -9,14 +9,17 @@ import { simpleGit } from 'simple-git'
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
 import { encodeOrThrow } from '@shared/codec'
+import type { LogChunk } from '@shared/schemas/git'
 import {
   BranchesResponse,
+  CancelLogStreamResponse,
   Channel,
   CommitResponse,
   FetchResponse,
   LogResponse,
   OpenRepoResponse,
   StageResponse,
+  StartLogStreamResponse,
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
@@ -450,24 +453,24 @@ function killActiveStream(webContentsId: number) {
   activeLogStreams.delete(webContentsId)
 }
 
-ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
+ipcMain.handle(Channel.startLogStream, async (event, repoPath: string) => {
   const key = normalizeRepoPath(repoPath)
   const webContents = event.sender
   const webContentsId = webContents.id
 
   killActiveStream(webContentsId)
 
-  return new Promise<{ success: boolean; error?: string }>((resolve) => {
+  return new Promise<typeof StartLogStreamResponse.Encoded>((resolve) => {
     let resolved = false
     const finishOk = () => {
       if (resolved) return
       resolved = true
-      resolve({ success: true })
+      resolve(encodeOrThrow(StartLogStreamResponse, { _tag: 'Ok' }))
     }
     const finishErr = (message: string) => {
       if (resolved) return
       resolved = true
-      resolve({ success: false, error: message })
+      resolve(encodeOrThrow(StartLogStreamResponse, { _tag: 'GitError', message }))
     }
 
     const proc = spawn(
@@ -492,11 +495,8 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
     const send = (done: boolean) => {
       if (webContents.isDestroyed()) return
       if (batch.length === 0 && !done) return
-      webContents.send('log-chunk', {
-        repoPath: key,
-        commits: batch,
-        done
-      })
+      const chunk: LogChunk = { repoPath: key, commits: batch, done }
+      webContents.send(Channel.logChunk, chunk)
       batch = []
     }
 
@@ -536,12 +536,13 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
     proc.on('error', (err) => {
       activeLogStreams.delete(webContentsId)
       if (!webContents.isDestroyed()) {
-        webContents.send('log-chunk', {
+        const chunk: LogChunk = {
           repoPath: key,
           commits: [],
           done: true,
           error: err.message
-        })
+        }
+        webContents.send(Channel.logChunk, chunk)
       }
       finishErr(err.message)
     })
@@ -551,30 +552,28 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
       activeLogStreams.delete(webContentsId)
 
       if (code !== 0 && code !== null) {
+        const message = stderrBuf.trim() || `git log exited with code ${code}`
         if (!webContents.isDestroyed()) {
-          webContents.send('log-chunk', {
-            repoPath: key,
-            commits: [],
-            done: true,
-            error: stderrBuf.trim() || `git log exited with code ${code}`
-          })
+          const chunk: LogChunk = { repoPath: key, commits: [], done: true, error: message }
+          webContents.send(Channel.logChunk, chunk)
         }
-        finishErr(stderrBuf.trim() || `git log exited with code ${code}`)
+        finishErr(message)
         return
       }
 
       send(false)
       if (!webContents.isDestroyed()) {
-        webContents.send('log-chunk', { repoPath: key, commits: [], done: true })
+        const chunk: LogChunk = { repoPath: key, commits: [], done: true }
+        webContents.send(Channel.logChunk, chunk)
       }
       finishOk()
     })
   })
 })
 
-ipcMain.handle('cancel-log-stream', (event) => {
+ipcMain.handle(Channel.cancelLogStream, (event) => {
   killActiveStream(event.sender.id)
-  return { success: true }
+  return encodeOrThrow(CancelLogStreamResponse, {})
 })
 
 ipcMain.handle('get-recent-repos', () => {

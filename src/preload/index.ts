@@ -1,34 +1,21 @@
+import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import {
   type BranchesResponse,
+  type CancelLogStreamResponse,
   Channel,
   type CommitResponse,
   type FetchResponse,
   type LogResponse,
   type OpenRepoResponse,
   type StageResponse,
+  type StartLogStreamResponse,
   type StatusResponse,
   type UnstageResponse
 } from '@shared/schemas/ipc'
 import { contextBridge, ipcRenderer } from 'electron'
 
-export interface LogChunkEvent {
-  repoPath: string
-  commits: Array<{
-    hash: string
-    message: string
-    author_name: string
-    date: string
-    parents: string[]
-    refs: string
-  }>
-  done: boolean
-  error?: string
-}
-
-export type RepoChangedEvent = {
-  repoPath: string
-  kind: 'refs' | 'workingTree'
-}
+export type LogChunkEvent = LogChunk
+export type { RepoChangedEvent }
 
 export interface IElectronAPI {
   selectFolder: () => Promise<string | null>
@@ -41,9 +28,9 @@ export interface IElectronAPI {
   commit: (repoPath: string, message: string) => Promise<CommitResponse>
   fetchRepo: (repoPath: string) => Promise<FetchResponse>
   getLog: (repoPath: string, maxCount?: number) => Promise<LogResponse>
-  startLogStream: (repoPath: string) => Promise<{ success: boolean; error?: string }>
-  cancelLogStream: () => Promise<{ success: boolean }>
-  onLogChunk: (cb: (chunk: LogChunkEvent) => void) => () => void
+  startLogStream: (repoPath: string) => Promise<StartLogStreamResponse>
+  cancelLogStream: () => Promise<CancelLogStreamResponse>
+  onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => () => void
   getRecentRepos: () => Promise<string[]>
   getStoreValue: (key: string) => Promise<unknown>
@@ -75,17 +62,17 @@ const api: IElectronAPI = {
   fetchRepo: (repoPath: string) => ipcRenderer.invoke(Channel.fetchRepo, repoPath),
   getLog: (repoPath: string, maxCount?: number) =>
     ipcRenderer.invoke(Channel.getLog, repoPath, maxCount),
-  startLogStream: (repoPath: string) => ipcRenderer.invoke('start-log-stream', repoPath),
-  cancelLogStream: () => ipcRenderer.invoke('cancel-log-stream'),
-  onLogChunk: (cb: (chunk: LogChunkEvent) => void) => {
-    const handler = (_event: unknown, chunk: LogChunkEvent) => cb(chunk)
-    ipcRenderer.on('log-chunk', handler)
-    return () => ipcRenderer.off('log-chunk', handler)
+  startLogStream: (repoPath: string) => ipcRenderer.invoke(Channel.startLogStream, repoPath),
+  cancelLogStream: () => ipcRenderer.invoke(Channel.cancelLogStream),
+  onLogChunk: (cb: (chunk: LogChunk) => void) => {
+    const handler = (_event: unknown, chunk: LogChunk) => cb(chunk)
+    ipcRenderer.on(Channel.logChunk, handler)
+    return () => ipcRenderer.off(Channel.logChunk, handler)
   },
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => {
     const handler = (_event: unknown, evt: RepoChangedEvent) => cb(evt)
-    ipcRenderer.on('repo-changed', handler)
-    return () => ipcRenderer.off('repo-changed', handler)
+    ipcRenderer.on(Channel.repoChanged, handler)
+    return () => ipcRenderer.off(Channel.repoChanged, handler)
   },
   getRecentRepos: () => ipcRenderer.invoke('get-recent-repos'),
   getStoreValue: (key: string) => ipcRenderer.invoke('get-store-value', key),

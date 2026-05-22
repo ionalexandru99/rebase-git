@@ -87,8 +87,8 @@ export function setupLogStream(): LogStreamHandle {
       if (i !== -1) listeners.splice(i, 1)
     }
   })
-  vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ success: true })
-  vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
+  vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
+  vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
   return {
     fire: (chunk) => {
       for (const cb of listeners.slice()) {

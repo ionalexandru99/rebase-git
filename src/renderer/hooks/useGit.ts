@@ -1,4 +1,5 @@
 import { decodeOrThrow } from '@shared/codec'
+import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import {
   BranchesResponse,
   CommitResponse,
@@ -6,14 +7,12 @@ import {
   LogResponse,
   OpenRepoResponse,
   StageResponse,
+  StartLogStreamResponse,
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '../types'
-
-type LogChunk = { repoPath: string; commits: GitLogEntry[]; done: boolean; error?: string }
-type RepoChangedEvent = { repoPath: string; kind: 'refs' | 'workingTree' }
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 
@@ -166,11 +165,21 @@ export function useGit() {
     accumulatedRef.current = []
     setLog({ all: [], total: 0 })
     setLogLoading(true)
-    window.electronAPI.startLogStream(path).catch((err: unknown) => {
-      if (activePathRef.current !== path) return
-      setError(err instanceof Error ? err.message : 'Unknown error')
-      setLogLoading(false)
-    })
+    window.electronAPI
+      .startLogStream(path)
+      .then((res) => {
+        const decoded = decodeOrThrow(StartLogStreamResponse, res)
+        if (activePathRef.current !== path) return
+        if (decoded._tag === 'GitError') {
+          setError(decoded.message)
+          setLogLoading(false)
+        }
+      })
+      .catch((err: unknown) => {
+        if (activePathRef.current !== path) return
+        setError(err instanceof Error ? err.message : 'Unknown error')
+        setLogLoading(false)
+      })
   }, [])
 
   const openRepo = useCallback(
