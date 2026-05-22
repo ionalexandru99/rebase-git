@@ -315,7 +315,6 @@ ipcMain.handle(Channel.closeRepo, async (_, repoPath: string) => {
   if (proc && !proc.killed) proc.kill()
   activeFetches.delete(key)
   await stopWatching(key)
-  return { success: true }
 })
 
 ipcMain.handle(Channel.fetchRepo, async (_, repoPath: string) => {

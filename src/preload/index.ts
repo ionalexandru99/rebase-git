@@ -23,7 +23,7 @@ export type { RepoChangedEvent }
 export interface IElectronAPI {
   selectFolder: () => Promise<string | null>
   openRepo: (path: string) => Promise<OpenRepoResponse>
-  closeRepo: (path: string) => Promise<unknown>
+  closeRepo: (path: string) => Promise<void>
   getBranches: (repoPath: string) => Promise<BranchesResponse>
   getStatus: (repoPath: string) => Promise<StatusResponse>
   stageFile: (repoPath: string, file: string) => Promise<StageResponse>

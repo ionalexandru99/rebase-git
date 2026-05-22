@@ -223,7 +223,7 @@ describe('useGit', () => {
 
   it('closeRepo evicts the repo on the main side, cancels the stream, and clears state', async () => {
     mockOpenRepoSuccess()
-    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useGit())
     await result.current.openRepo('/test/repo')
@@ -256,7 +256,7 @@ describe('useGit', () => {
 
   it('releases the main-side repo when the hook unmounts (tab close)', async () => {
     mockOpenRepoSuccess()
-    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
     vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
 
     const { result, unmount } = renderHook(() => useGit())
@@ -311,7 +311,7 @@ describe('useGit', () => {
     await waitFor(() => expect(result.current.status?.modified).toContain('a.ts'))
 
     // Cleanup on unmount must also use the canonical path, not the trailing-slash input.
-    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
     vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
     unmount()
     expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
