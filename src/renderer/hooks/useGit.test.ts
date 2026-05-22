@@ -265,6 +265,56 @@ describe('useGit', () => {
     expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
   })
 
+  it('adopts the canonical path returned by open-repo, not the caller input', async () => {
+    // Caller passes a trailing-slash variant; main responds with the normalized form.
+    // Chunks/refresh events arrive keyed on the canonical path, so the hook must
+    // store the canonical path on activePathRef or every comparison drops the data.
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      success: true,
+      path: '/test/repo',
+      remotes: {},
+      defaultBranch: 'main'
+    })
+    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+      success: true,
+      status: status({ modified: ['a.ts'] })
+    })
+    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+      success: true,
+      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
+    })
+    const stream = setupLogStream()
+
+    const { result, unmount } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo/')
+    await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
+
+    // A chunk keyed on the canonical path must be accepted, not dropped.
+    stream.fire({
+      repoPath: '/test/repo',
+      commits: [
+        {
+          hash: 'abc',
+          message: 'm',
+          author_name: 'A',
+          date: '2024-01-01',
+          parents: [],
+          refs: ''
+        }
+      ]
+    })
+    await waitFor(() => expect(result.current.log?.total).toBe(1))
+
+    // Status data delivered against the canonical path must also land in state.
+    await waitFor(() => expect(result.current.status?.modified).toContain('a.ts'))
+
+    // Cleanup on unmount must also use the canonical path, not the trailing-slash input.
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
+    unmount()
+    expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
+  })
+
   it('does nothing on unmount when no repo was ever opened', () => {
     const { unmount } = renderHook(() => useGit())
     unmount()

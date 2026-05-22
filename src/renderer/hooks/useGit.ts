@@ -175,6 +175,9 @@ export function useGit() {
       setError(null)
       setStatus(null)
       setBranches(null)
+      // Provisional — main returns the canonical form which overwrites this on success.
+      // Setting it now means stale chunks from a previous repo are ignored while the new
+      // open-repo round-trip is in flight.
       activePathRef.current = path
       try {
         const open = (await window.electronAPI.openRepo(path)) as RepoOpenResult
@@ -185,6 +188,8 @@ export function useGit() {
           setBranchesLoading(false)
           return
         }
+        // Adopt the canonical path so chunk/refresh path comparisons match what main sends.
+        activePathRef.current = open.path
         setRepoPath(open.path)
         setRemotes(open.remotes ?? {})
         setDefaultBranch(open.defaultBranch)
