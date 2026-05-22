@@ -16,7 +16,6 @@ import { TabBar, type TabDescriptor } from '@/components/TabBar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Toaster } from '@/components/ui/sonner'
 import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher'
 import { useGit } from '@/hooks/useGit'
 import { useOnboarding } from '@/hooks/useOnboarding'
@@ -134,64 +133,58 @@ function App() {
 
   if (!onboarding.onboardingComplete) {
     return (
-      <>
-        <OnboardingScreen
-          workingDirectory={onboarding.workingDirectory}
-          discoveredRepos={onboarding.discoveredRepos}
-          loading={onboarding.loading}
-          error={onboarding.error}
-          onSelectDirectory={onboarding.selectWorkingDirectory}
-          onComplete={onboarding.completeOnboarding}
-          onOpenRepo={async (path) => {
-            await onboarding.completeOnboarding()
-            window.electronAPI.openRepo(path)
-          }}
-        />
-        <Toaster />
-      </>
+      <OnboardingScreen
+        workingDirectory={onboarding.workingDirectory}
+        discoveredRepos={onboarding.discoveredRepos}
+        loading={onboarding.loading}
+        error={onboarding.error}
+        onSelectDirectory={onboarding.selectWorkingDirectory}
+        onComplete={onboarding.completeOnboarding}
+        onOpenRepo={async (path) => {
+          await onboarding.completeOnboarding()
+          window.electronAPI.openRepo(path)
+        }}
+      />
     )
   }
 
   return (
-    <>
-      <div className="flex h-screen flex-col bg-background text-foreground">
-        <TabBar
-          tabs={tabDescriptors}
-          activeTabId={activeTabId}
-          onSelect={setActiveTabId}
-          onClose={closeTab}
-          onNew={newTab}
-        />
+    <div className="flex h-screen flex-col bg-background text-foreground">
+      <TabBar
+        tabs={tabDescriptors}
+        activeTabId={activeTabId}
+        onSelect={setActiveTabId}
+        onClose={closeTab}
+        onNew={newTab}
+      />
 
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={
-                tab.id === activeTabId
-                  ? 'flex min-h-0 flex-1 flex-col'
-                  : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
-              }
-              aria-hidden={tab.id !== activeTabId}
-            >
-              <TabView
-                tabId={tab.id}
-                recentRepos={recentRepos}
-                discoveredRepos={onboarding.discoveredRepos}
-                workspaces={onboarding.workspaces}
-                activeWorkspace={onboarding.activeWorkspace}
-                onSwitchWorkspace={onboarding.switchWorkspace}
-                onAddWorkspace={onboarding.addWorkspace}
-                onRemoveWorkspace={onboarding.removeWorkspace}
-                onReportRepo={reportTabRepo}
-                onRequestOpenRepo={requestOpenRepo}
-              />
-            </div>
-          ))}
-        </div>
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        {tabs.map((tab) => (
+          <div
+            key={tab.id}
+            className={
+              tab.id === activeTabId
+                ? 'flex min-h-0 flex-1 flex-col'
+                : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
+            }
+            aria-hidden={tab.id !== activeTabId}
+          >
+            <TabView
+              tabId={tab.id}
+              recentRepos={recentRepos}
+              discoveredRepos={onboarding.discoveredRepos}
+              workspaces={onboarding.workspaces}
+              activeWorkspace={onboarding.activeWorkspace}
+              onSwitchWorkspace={onboarding.switchWorkspace}
+              onAddWorkspace={onboarding.addWorkspace}
+              onRemoveWorkspace={onboarding.removeWorkspace}
+              onReportRepo={reportTabRepo}
+              onRequestOpenRepo={requestOpenRepo}
+            />
+          </div>
+        ))}
       </div>
-      <Toaster />
-    </>
+    </div>
   )
 }
 
@@ -486,8 +479,6 @@ function Workspace({
       remoteBranches={sidebarRemoteBranches}
       tags={sidebarTags}
       branchesLoading={git.branchesLoading}
-      ahead={0}
-      behind={0}
       changes={totalChanges}
       activeView={activeView}
       onSelectView={setActiveView}
