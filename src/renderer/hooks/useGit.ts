@@ -1,7 +1,8 @@
+import { decodeOrThrow } from '@shared/codec'
+import { StatusResponse } from '@shared/schemas/ipc'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus, RepoOpenResult } from '../types'
 
-type StatusResult = { success: boolean; status?: GitStatus; error?: string }
 type BranchesResult = { success: boolean; branches?: GitBranches; error?: string }
 type OpResult = { success: boolean; error?: string }
 type LogResult = { success: boolean; log?: GitLog; error?: string }
@@ -63,11 +64,11 @@ export function useGit() {
     window.electronAPI
       .getStatus(path)
       .then((res) => {
-        const r = res as StatusResult
+        const decoded = decodeOrThrow(StatusResponse, res)
         if (activePathRef.current !== path) return
-        if (r.success && r.status) {
-          setStatus(r.status)
-          setCurrentBranch(r.status.current)
+        if (decoded._tag === 'Ok') {
+          setStatus(decoded.status)
+          setCurrentBranch(decoded.status.current)
         }
       })
       .catch((err: unknown) => {
@@ -199,14 +200,17 @@ export function useGit() {
         window.electronAPI
           .getStatus(open.path)
           .then((res) => {
-            const r = res as StatusResult
+            const decoded = decodeOrThrow(StatusResponse, res)
             if (activePathRef.current !== open.path) return
-            if (r.success && r.status) {
-              setStatus(r.status)
-              setCurrentBranch(r.status.current)
-            } else if (r.error) {
-              console.error('[useGit] get-status failed', { path: open.path, error: r.error })
-              setError(r.error)
+            if (decoded._tag === 'Ok') {
+              setStatus(decoded.status)
+              setCurrentBranch(decoded.status.current)
+            } else if (decoded._tag === 'GitError') {
+              console.error('[useGit] get-status failed', {
+                path: open.path,
+                error: decoded.message
+              })
+              setError(decoded.message)
             }
           })
           .catch((err: unknown) => {
@@ -276,10 +280,12 @@ export function useGit() {
   const refreshStatus = useCallback(async () => {
     if (!repoPath) return
     try {
-      const result = (await window.electronAPI.getStatus(repoPath)) as StatusResult
-      if (result.success && result.status) {
-        setStatus(result.status)
-        setCurrentBranch(result.status.current)
+      const decoded = decodeOrThrow(StatusResponse, await window.electronAPI.getStatus(repoPath))
+      if (decoded._tag === 'Ok') {
+        setStatus(decoded.status)
+        setCurrentBranch(decoded.status.current)
+      } else if (decoded._tag === 'GitError') {
+        setError(decoded.message)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')

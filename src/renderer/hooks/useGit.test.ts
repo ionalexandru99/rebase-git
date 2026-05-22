@@ -28,7 +28,7 @@ function mockOpenRepoSuccess(s: GitStatus = status(), path = '/test/repo') {
     defaultBranch: s.current
   })
   vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-    success: true,
+    _tag: 'Ok',
     status: s
   })
   vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
@@ -154,7 +154,7 @@ describe('useGit', () => {
     mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
     vi.mocked(window.electronAPI.stageFile).mockResolvedValue({ success: true })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status({ staged: ['file1.ts'] })
     })
 
@@ -177,7 +177,7 @@ describe('useGit', () => {
     mockOpenRepoSuccess(status({ staged: ['file1.ts'] }))
     vi.mocked(window.electronAPI.unstageFile).mockResolvedValue({ success: true })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status({ modified: ['file1.ts'] })
     })
 
@@ -196,7 +196,7 @@ describe('useGit', () => {
     mockOpenRepoSuccess(status({ staged: ['a.ts'] }))
     vi.mocked(window.electronAPI.commit).mockResolvedValue({ success: true })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status()
     })
 
@@ -276,7 +276,7 @@ describe('useGit', () => {
       defaultBranch: 'main'
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status({ modified: ['a.ts'] })
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
@@ -321,6 +321,20 @@ describe('useGit', () => {
     expect(window.electronAPI.closeRepo).not.toHaveBeenCalled()
     expect(window.electronAPI.cancelLogStream).not.toHaveBeenCalled()
   })
+
+  it('surfaces a GitError returned by get-status as an error banner', async () => {
+    mockOpenRepoSuccess()
+    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+      _tag: 'GitError',
+      message: 'index.lock exists'
+    })
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+
+    await waitFor(() => expect(result.current.error).toBe('index.lock exists'))
+    expect(result.current.status).toBeNull()
+  })
 })
 
 describe('useGit auto-fetch', () => {
@@ -342,7 +356,7 @@ describe('useGit auto-fetch', () => {
       defaultBranch: 'main'
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status()
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
@@ -505,7 +519,7 @@ describe('useGit repo-changed watcher', () => {
       defaultBranch: 'main'
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status()
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
@@ -570,7 +584,7 @@ describe('useGit repo-changed watcher', () => {
     const { rendered, repoChanged } = await openRepoForWatcher()
 
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status({ modified: ['changed.ts'] })
     })
 

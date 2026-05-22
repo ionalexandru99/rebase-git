@@ -244,7 +244,7 @@ describe('App — repo picker (no repo open)', () => {
       defaultBranch: 'main'
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: {
         current: 'main',
         modified: [],
@@ -304,7 +304,7 @@ describe('App — workspace (repo open)', () => {
     defaultBranch: 'feature/ui'
   }
   const statusMock = {
-    success: true,
+    _tag: 'Ok' as const,
     status: {
       current: 'feature/ui',
       modified: ['src/a.ts'],
@@ -400,7 +400,7 @@ describe('App — workspace (repo open)', () => {
       defaultBranch: 'main'
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: {
         current: 'main',
         modified: [],
@@ -443,7 +443,7 @@ describe('App — workspace (repo open)', () => {
       })
     )
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: {
         current: 'main',
         modified: [],

@@ -1,3 +1,4 @@
+import { Channel, type StatusResponse } from '@shared/schemas/ipc'
 import { contextBridge, ipcRenderer } from 'electron'
 
 export interface LogChunkEvent {
@@ -24,7 +25,7 @@ export interface IElectronAPI {
   openRepo: (path: string) => Promise<unknown>
   closeRepo: (path: string) => Promise<unknown>
   getBranches: (repoPath: string) => Promise<unknown>
-  getStatus: (repoPath: string) => Promise<unknown>
+  getStatus: (repoPath: string) => Promise<StatusResponse>
   stageFile: (repoPath: string, file: string) => Promise<unknown>
   unstageFile: (repoPath: string, file: string) => Promise<unknown>
   commit: (repoPath: string, message: string) => Promise<unknown>
@@ -54,7 +55,7 @@ const api: IElectronAPI = {
   openRepo: (path: string) => ipcRenderer.invoke('open-repo', path),
   closeRepo: (path: string) => ipcRenderer.invoke('close-repo', path),
   getBranches: (repoPath: string) => ipcRenderer.invoke('get-branches', repoPath),
-  getStatus: (repoPath: string) => ipcRenderer.invoke('get-status', repoPath),
+  getStatus: (repoPath: string) => ipcRenderer.invoke(Channel.getStatus, repoPath),
   stageFile: (repoPath: string, file: string) => ipcRenderer.invoke('stage-file', repoPath, file),
   unstageFile: (repoPath: string, file: string) =>
     ipcRenderer.invoke('unstage-file', repoPath, file),

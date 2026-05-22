@@ -8,6 +8,8 @@ import { simpleGit } from 'simple-git'
 
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
+import { encodeOrThrow } from '@shared/codec'
+import { Channel, StatusResponse } from '@shared/schemas/ipc'
 import { tryReserveFetch } from './autoFetch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { setupContextMenu } from './menu'
@@ -328,14 +330,17 @@ ipcMain.handle('git-fetch', async (_, repoPath: string) => {
   })
 })
 
-ipcMain.handle('get-status', async (_, repoPath: string) => {
+ipcMain.handle(Channel.getStatus, async (_, repoPath: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(StatusResponse, { _tag: 'RepoNotOpen' })
   try {
     const status = await git.status()
-    return { success: true, status: serializeStatus(status) }
+    return encodeOrThrow(StatusResponse, { _tag: 'Ok', status: serializeStatus(status) })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(StatusResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 

@@ -1,44 +1,16 @@
-export interface RenamedFile {
-  from: string
-  to: string
-}
+// Renderer-facing type aliases. The source-of-truth schemas live in
+// src/shared/schemas/git.ts and are validated at every IPC boundary.
+export type {
+  GitBranches,
+  GitLog,
+  GitLogEntry,
+  GitStatus,
+  RenamedFile,
+  RepoOpenSuccess
+} from '@shared/schemas/git'
 
-export interface GitStatus {
-  current: string
-  modified: string[]
-  staged: string[]
-  not_added: string[]
-  conflicted: string[]
-  deleted: string[]
-  created: string[]
-  renamed: RenamedFile[]
-}
-
-export interface GitLogEntry {
-  hash: string
-  message: string
-  author_name: string
-  date: string
-  parents: string[]
-  refs: string
-}
-
-export interface GitLog {
-  all: GitLogEntry[]
-  total: number
-}
-
-export interface GitBranches {
-  current: string
-  all: string[]
-  remotes: string[]
-  tags: string[]
-}
-
-export interface RepoOpenResult {
-  success: boolean
-  error?: string
-  remotes: Record<string, string>
-  defaultBranch?: string
-  path: string
-}
+// Transitional shape for the open-repo handler — still uses the legacy
+// success/error ADT. Replaced by OpenRepoResponse from @shared/schemas/ipc
+// once that handler is ported.
+import type { RepoOpenSuccess } from '@shared/schemas/git'
+export type RepoOpenResult = RepoOpenSuccess & { success: boolean; error?: string }
