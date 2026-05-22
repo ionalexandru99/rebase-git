@@ -1,3 +1,5 @@
+import { decodeOrThrow } from '@shared/codec'
+import { RefTreeToggles } from '@shared/schemas/ipc'
 import { ChevronDown, ChevronRight, Cloud, GitBranch, Tag } from 'lucide-react'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -49,7 +51,6 @@ type Row = RefLeafRow | RefFolderRow | RefSectionRow | RefEmptyRow | RefSkeleton
 const ROW_H = 28
 const OVERSCAN = 20
 const INDENT_PX = 12
-const TOGGLES_STORE_KEY = 'sidebarRefTreeToggles'
 
 function isSectionExpanded(toggles: Set<string>, refKind: RefKind): boolean {
   return !toggles.has(sectionKey(refKind))
@@ -79,11 +80,10 @@ export const RefTreePanel = memo(function RefTreePanel({
 
   useEffect(() => {
     let cancelled = false
-    Promise.resolve(window.electronAPI.getStoreValue(TOGGLES_STORE_KEY)).then((v) => {
+    window.electronAPI.getRefTreeToggles().then((res) => {
       if (cancelled) return
-      if (Array.isArray(v)) {
-        setToggles(new Set(v.filter((x): x is string => typeof x === 'string')))
-      }
+      const decoded = decodeOrThrow(RefTreeToggles, res)
+      setToggles(new Set(decoded))
     })
     return () => {
       cancelled = true
@@ -95,7 +95,7 @@ export const RefTreePanel = memo(function RefTreePanel({
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
-      window.electronAPI.setStoreValue(TOGGLES_STORE_KEY, [...next])
+      window.electronAPI.setRefTreeToggles([...next])
       return next
     })
   }, [])

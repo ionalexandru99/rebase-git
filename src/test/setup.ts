@@ -42,8 +42,10 @@ const mockElectronAPI = {
   onLogChunk: vi.fn(),
   onRepoChanged: vi.fn(),
   getRecentRepos: vi.fn(),
-  getStoreValue: vi.fn(),
-  setStoreValue: vi.fn(),
+  getSidebarPrefs: vi.fn(),
+  setSidebarPrefs: vi.fn(),
+  getRefTreeToggles: vi.fn(),
+  setRefTreeToggles: vi.fn(),
   getWorkingDirectory: vi.fn(),
   setWorkingDirectory: vi.fn(),
   getWorkspaces: vi.fn(),
@@ -125,4 +127,8 @@ export function setupRepoChanged(): RepoChangedHandle {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  // Components render the sidebar shell on mount and call these unconditionally;
+  // give them a sane default so tests don't have to wire them up by hand.
+  vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
+  vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
 })

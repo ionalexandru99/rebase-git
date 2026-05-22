@@ -8,7 +8,7 @@ import { simpleGit } from 'simple-git'
 
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
-import { encodeOrThrow } from '@shared/codec'
+import { decodeOrThrow, encodeOrThrow } from '@shared/codec'
 import type { LogChunk } from '@shared/schemas/git'
 import {
   BranchesResponse,
@@ -18,7 +18,9 @@ import {
   FetchResponse,
   LogResponse,
   OpenRepoResponse,
+  RefTreeToggles,
   ScanForReposResponse,
+  SidebarPrefs,
   StageResponse,
   StartLogStreamResponse,
   StatusResponse,
@@ -33,14 +35,17 @@ import {
   addWorkspace,
   getActiveWorkspace,
   getRecentRepos,
+  getRefTreeToggles,
+  getSidebarPrefs,
   getWorkingDirectory,
   getWorkspaces,
   isOnboardingComplete,
   removeWorkspace,
   setActiveWorkspace,
   setOnboardingComplete,
-  setWorkingDirectory,
-  store
+  setRefTreeToggles,
+  setSidebarPrefs,
+  setWorkingDirectory
 } from './store'
 import { setupUpdater } from './updater'
 
@@ -581,12 +586,22 @@ ipcMain.handle('get-recent-repos', () => {
   return getRecentRepos()
 })
 
-ipcMain.handle('get-store-value', (_, key: string) => {
-  return store.get(key as never)
+ipcMain.handle(Channel.getSidebarPrefs, () => {
+  return encodeOrThrow(SidebarPrefs, getSidebarPrefs())
 })
 
-ipcMain.handle('set-store-value', (_, key: string, value: unknown) => {
-  store.set(key as never, value as never)
+ipcMain.handle(Channel.setSidebarPrefs, (_, payload: unknown) => {
+  const decoded = decodeOrThrow(SidebarPrefs, payload)
+  setSidebarPrefs(decoded)
+})
+
+ipcMain.handle(Channel.getRefTreeToggles, () => {
+  return encodeOrThrow(RefTreeToggles, getRefTreeToggles())
+})
+
+ipcMain.handle(Channel.setRefTreeToggles, (_, payload: unknown) => {
+  const decoded = decodeOrThrow(RefTreeToggles, payload)
+  setRefTreeToggles([...decoded])
 })
 
 ipcMain.handle('get-working-directory', () => {

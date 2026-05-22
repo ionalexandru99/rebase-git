@@ -2,36 +2,29 @@ import Store from 'electron-store'
 
 interface StoreSchema {
   recentRepos: string[]
-  windowState: {
-    width: number
-    height: number
-    x?: number
-    y?: number
-    maximized?: boolean
-  }
   theme: 'dark' | 'light'
   workspaces: string[]
   activeWorkspace: string | null
   workingDirectory: string | null
   onboardingComplete: boolean
+  sidebarOpen: boolean
   sidebarWidth: number
-  historyColWidths: { author: number; date: number; sha: number }
+  sidebarRefTreeToggles: string[]
 }
+
+const SIDEBAR_WIDTH_DEFAULT = 244
 
 export const store = new Store<StoreSchema>({
   defaults: {
     recentRepos: [],
-    windowState: {
-      width: 1200,
-      height: 800
-    },
     theme: 'dark',
     workspaces: [],
     activeWorkspace: null,
     workingDirectory: null,
     onboardingComplete: false,
-    sidebarWidth: 244,
-    historyColWidths: { author: 14, date: 6, sha: 4.5 }
+    sidebarOpen: true,
+    sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
+    sidebarRefTreeToggles: []
   }
 })
 
@@ -114,4 +107,29 @@ export function isOnboardingComplete(): boolean {
 
 export function setOnboardingComplete(complete: boolean): void {
   store.set('onboardingComplete', complete)
+}
+
+export interface SidebarPrefs {
+  open: boolean
+  width: number
+}
+
+export function getSidebarPrefs(): SidebarPrefs {
+  return {
+    open: store.get('sidebarOpen'),
+    width: store.get('sidebarWidth')
+  }
+}
+
+export function setSidebarPrefs(prefs: SidebarPrefs): void {
+  store.set('sidebarOpen', prefs.open)
+  store.set('sidebarWidth', prefs.width)
+}
+
+export function getRefTreeToggles(): string[] {
+  return store.get('sidebarRefTreeToggles')
+}
+
+export function setRefTreeToggles(toggles: string[]): void {
+  store.set('sidebarRefTreeToggles', toggles)
 }

@@ -7,7 +7,9 @@ import {
   type FetchResponse,
   type LogResponse,
   type OpenRepoResponse,
+  type RefTreeToggles,
   type ScanForReposResponse,
+  type SidebarPrefs,
   type StageResponse,
   type StartLogStreamResponse,
   type StatusResponse,
@@ -34,8 +36,10 @@ export interface IElectronAPI {
   onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => () => void
   getRecentRepos: () => Promise<string[]>
-  getStoreValue: (key: string) => Promise<unknown>
-  setStoreValue: (key: string, value: unknown) => Promise<void>
+  getSidebarPrefs: () => Promise<SidebarPrefs>
+  setSidebarPrefs: (prefs: SidebarPrefs) => Promise<void>
+  getRefTreeToggles: () => Promise<RefTreeToggles>
+  setRefTreeToggles: (toggles: RefTreeToggles) => Promise<void>
   getWorkingDirectory: () => Promise<string | null>
   setWorkingDirectory: (dir: string) => Promise<void>
   getWorkspaces: () => Promise<string[]>
@@ -76,8 +80,11 @@ const api: IElectronAPI = {
     return () => ipcRenderer.off(Channel.repoChanged, handler)
   },
   getRecentRepos: () => ipcRenderer.invoke('get-recent-repos'),
-  getStoreValue: (key: string) => ipcRenderer.invoke('get-store-value', key),
-  setStoreValue: (key: string, value: unknown) => ipcRenderer.invoke('set-store-value', key, value),
+  getSidebarPrefs: () => ipcRenderer.invoke(Channel.getSidebarPrefs),
+  setSidebarPrefs: (prefs: SidebarPrefs) => ipcRenderer.invoke(Channel.setSidebarPrefs, prefs),
+  getRefTreeToggles: () => ipcRenderer.invoke(Channel.getRefTreeToggles),
+  setRefTreeToggles: (toggles: RefTreeToggles) =>
+    ipcRenderer.invoke(Channel.setRefTreeToggles, toggles),
   getWorkingDirectory: () => ipcRenderer.invoke('get-working-directory'),
   setWorkingDirectory: (dir: string) => ipcRenderer.invoke('set-working-directory', dir),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),
