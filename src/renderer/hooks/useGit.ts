@@ -1,6 +1,7 @@
 import { decodeOrThrow } from '@shared/codec'
 import {
   BranchesResponse,
+  CommitResponse,
   LogResponse,
   OpenRepoResponse,
   StageResponse,
@@ -10,7 +11,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '../types'
 
-type OpResult = { success: boolean; error?: string }
 type FetchResult = { success: boolean; skipped?: boolean; error?: string }
 type LogChunk = { repoPath: string; commits: GitLogEntry[]; done: boolean; error?: string }
 type RepoChangedEvent = { repoPath: string; kind: 'refs' | 'workingTree' }
@@ -345,12 +345,16 @@ export function useGit() {
       if (!repoPath) return false
       setLoading(true)
       try {
-        const result = (await window.electronAPI.commit(repoPath, message)) as OpResult
-        if (result.success) {
+        const decoded = decodeOrThrow(
+          CommitResponse,
+          await window.electronAPI.commit(repoPath, message)
+        )
+        if (decoded._tag === 'Ok') {
           await refreshStatus()
           await refreshLog()
           return true
         }
+        if (decoded._tag === 'GitError') setError(decoded.message)
         return false
       } finally {
         setLoading(false)

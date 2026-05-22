@@ -12,6 +12,7 @@ import { encodeOrThrow } from '@shared/codec'
 import {
   BranchesResponse,
   Channel,
+  CommitResponse,
   LogResponse,
   OpenRepoResponse,
   StageResponse,
@@ -391,21 +392,24 @@ ipcMain.handle(Channel.unstageFile, async (_, repoPath: string, file: string) =>
   }
 })
 
-ipcMain.handle('commit', async (_, repoPath: string, message: string) => {
+ipcMain.handle(Channel.commit, async (_, repoPath: string, message: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(CommitResponse, { _tag: 'RepoNotOpen' })
   try {
     const result = await git.commit(message)
-    return {
-      success: true,
+    return encodeOrThrow(CommitResponse, {
+      _tag: 'Ok',
       result: {
         commit: result.commit,
         branch: result.branch,
         summary: { ...result.summary }
       }
-    }
+    })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(CommitResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 

@@ -191,7 +191,14 @@ describe('useGit', () => {
 
   it('commits and re-streams the log', async () => {
     mockOpenRepoSuccess(status({ staged: ['a.ts'] }))
-    vi.mocked(window.electronAPI.commit).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.commit).mockResolvedValue({
+      _tag: 'Ok',
+      result: {
+        commit: 'abc',
+        branch: 'main',
+        summary: { changes: 0, insertions: 0, deletions: 0 }
+      }
+    })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       _tag: 'Ok',
       status: status()
