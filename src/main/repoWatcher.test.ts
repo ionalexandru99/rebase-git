@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDebouncer } from './repoWatcher'
+import { createDebouncer, ignoreWorkingTree } from './repoWatcher'
 
 describe('createDebouncer', () => {
   beforeEach(() => {
@@ -60,5 +60,39 @@ describe('createDebouncer', () => {
 
     expect(refsFn).not.toHaveBeenCalled()
     expect(treeFn).not.toHaveBeenCalled()
+  })
+})
+
+describe('ignoreWorkingTree', () => {
+  it('ignores the .git directory', () => {
+    expect(ignoreWorkingTree('/repo/.git/HEAD')).toBe(true)
+  })
+
+  it('ignores common build-output dirs at any depth', () => {
+    expect(ignoreWorkingTree('/repo/node_modules/foo/index.js')).toBe(true)
+    expect(ignoreWorkingTree('/repo/target/debug/main')).toBe(true)
+    expect(ignoreWorkingTree('/repo/packages/app/dist/bundle.js')).toBe(true)
+    expect(ignoreWorkingTree('/repo/out/main/index.js')).toBe(true)
+    expect(ignoreWorkingTree('/repo/.next/cache/foo')).toBe(true)
+    expect(ignoreWorkingTree('/repo/.turbo/run.log')).toBe(true)
+    expect(ignoreWorkingTree('/repo/coverage/lcov-report/index.html')).toBe(true)
+    expect(ignoreWorkingTree('/repo/playwright-report/index.html')).toBe(true)
+    expect(ignoreWorkingTree('/repo/test-results/results.xml')).toBe(true)
+  })
+
+  it('does not ignore source files', () => {
+    expect(ignoreWorkingTree('/repo/src/main.ts')).toBe(false)
+    expect(ignoreWorkingTree('/repo/README.md')).toBe(false)
+    expect(ignoreWorkingTree('/repo/package.json')).toBe(false)
+  })
+
+  it('does not ignore files whose name merely contains an ignored token', () => {
+    expect(ignoreWorkingTree('/repo/src/build-config.ts')).toBe(false)
+    expect(ignoreWorkingTree('/repo/dist-info.md')).toBe(false)
+  })
+
+  it('handles Windows-style separators', () => {
+    expect(ignoreWorkingTree('C:\\repo\\node_modules\\foo')).toBe(true)
+    expect(ignoreWorkingTree('C:\\repo\\src\\main.ts')).toBe(false)
   })
 })
