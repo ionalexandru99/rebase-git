@@ -65,10 +65,13 @@ export const IGNORED_DIRS = new Set([
   '__pycache__'
 ])
 
+// Names are matched case-insensitively so we cover case-insensitive filesystems
+// (default macOS, Windows) where 'Node_Modules' and 'node_modules' resolve to
+// the same directory but would otherwise miss the deny-list.
 export function ignoreWorkingTree(targetPath: string): boolean {
   const segments = targetPath.split(/[/\\]/)
   for (const segment of segments) {
-    if (IGNORED_DIRS.has(segment)) return true
+    if (IGNORED_DIRS.has(segment.toLowerCase())) return true
   }
   return false
 }

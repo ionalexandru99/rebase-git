@@ -95,4 +95,11 @@ describe('ignoreWorkingTree', () => {
     expect(ignoreWorkingTree('C:\\repo\\node_modules\\foo')).toBe(true)
     expect(ignoreWorkingTree('C:\\repo\\src\\main.ts')).toBe(false)
   })
+
+  it('matches case-insensitively for case-insensitive filesystems', () => {
+    expect(ignoreWorkingTree('/repo/Node_Modules/foo')).toBe(true)
+    expect(ignoreWorkingTree('/repo/NODE_MODULES/foo')).toBe(true)
+    expect(ignoreWorkingTree('/repo/.GIT/HEAD')).toBe(true)
+    expect(ignoreWorkingTree('/repo/Target/release/bin')).toBe(true)
+  })
 })
