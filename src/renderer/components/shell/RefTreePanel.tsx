@@ -1,8 +1,9 @@
 import { decodeOrThrow } from '@shared/codec'
 import { RefTreeToggles } from '@shared/schemas/ipc'
 import { ChevronDown, ChevronRight, Cloud, GitBranch, Tag } from 'lucide-react'
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useVirtualList } from '@/hooks/useVirtualList'
 import { cn } from '@/lib/utils'
 
 export type RefKind = 'local' | 'remote' | 'tag'
@@ -120,41 +121,12 @@ export const RefTreePanel = memo(function RefTreePanel({
     return out
   }, [localBranches, remoteBranches, tags, currentBranch, toggles, loading])
 
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  const [viewportH, setViewportH] = useState(400)
-
-  useLayoutEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const update = () => {
-      if (el.clientHeight > 0) setViewportH(el.clientHeight)
-    }
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  const rafRef = useRef<number | null>(null)
-  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null
-      setScrollTop(target.scrollTop)
-    })
-  }, [])
-  useEffect(
-    () => () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    },
-    []
-  )
-
-  const totalHeight = rows.length * ROW_H
-  const startIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN)
-  const endIdx = Math.min(rows.length, Math.ceil((scrollTop + viewportH) / ROW_H) + OVERSCAN)
+  const { scrollRef, onScroll, startIndex, endIndex, totalHeight } = useVirtualList({
+    rowCount: rows.length,
+    rowHeight: ROW_H,
+    overscan: OVERSCAN,
+    initialViewportHeight: 400
+  })
 
   return (
     <div
@@ -164,8 +136,8 @@ export const RefTreePanel = memo(function RefTreePanel({
       data-testid="ref-tree-scroll"
     >
       <div className="relative" style={{ height: totalHeight }}>
-        {rows.slice(startIdx, endIdx).map((row, idx) => {
-          const i = startIdx + idx
+        {rows.slice(startIndex, endIndex).map((row, idx) => {
+          const i = startIndex + idx
           return (
             <RowView
               key={rowKey(row)}
