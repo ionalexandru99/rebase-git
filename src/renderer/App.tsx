@@ -138,7 +138,7 @@ function App() {
         discoveredRepos={onboarding.discoveredRepos}
         loading={onboarding.loading}
         error={onboarding.error}
-        onSelectDirectory={onboarding.selectWorkingDirectory}
+        onSelectDirectory={onboarding.addWorkspace}
         onComplete={onboarding.completeOnboarding}
         onOpenRepo={async (path) => {
           await onboarding.completeOnboarding()
