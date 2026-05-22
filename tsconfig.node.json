@@ -1,17 +1,21 @@
 {
   "compilerOptions": {
-    "composite": true,
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "strict": true,
-    "emitDeclarationOnly": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/shared/*"]
+    }
   },
   "include": [
     "vite.*.config.ts",
     "vitest.main.config.ts",
     "electron-builder.config.js",
-    "src/main/**/*"
+    "src/main/**/*",
+    "src/shared/**/*"
   ]
 }

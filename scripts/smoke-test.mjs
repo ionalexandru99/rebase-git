@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const rootDir = resolve(__dirname, '..')
 
-// Try to find electron binary in various locations
 async function findElectron() {
   const candidates = [
     resolve(rootDir, 'node_modules/.bin/electron'),
@@ -24,7 +23,6 @@ async function findElectron() {
     }
   }
 
-  // Fallback: try npx
   return 'npx'
 }
 

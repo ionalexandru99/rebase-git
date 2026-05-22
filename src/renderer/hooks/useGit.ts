@@ -1,13 +1,18 @@
+import { decodeOrThrow } from '@shared/codec'
+import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
+import {
+  BranchesResponse,
+  CommitResponse,
+  FetchResponse,
+  LogResponse,
+  OpenRepoResponse,
+  StageResponse,
+  StartLogStreamResponse,
+  StatusResponse,
+  UnstageResponse
+} from '@shared/schemas/ipc'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { GitBranches, GitLog, GitLogEntry, GitStatus, RepoOpenResult } from '../types'
-
-type StatusResult = { success: boolean; status?: GitStatus; error?: string }
-type BranchesResult = { success: boolean; branches?: GitBranches; error?: string }
-type OpResult = { success: boolean; error?: string }
-type LogResult = { success: boolean; log?: GitLog; error?: string }
-type FetchResult = { success: boolean; skipped?: boolean; error?: string }
-type LogChunk = { repoPath: string; commits: GitLogEntry[]; done: boolean; error?: string }
-type RepoChangedEvent = { repoPath: string; kind: 'refs' | 'workingTree' }
+import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '../types'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 
@@ -33,11 +38,11 @@ export function useGit() {
     window.electronAPI
       .getBranches(path)
       .then((res) => {
-        const r = res as BranchesResult
+        const decoded = decodeOrThrow(BranchesResponse, res)
         if (activePathRef.current !== path) return
-        if (r.success && r.branches) {
-          setBranches(r.branches)
-          if (r.branches.current) setCurrentBranch(r.branches.current)
+        if (decoded._tag === 'Ok') {
+          setBranches(decoded.branches)
+          if (decoded.branches.current) setCurrentBranch(decoded.branches.current)
         }
       })
       .catch((err: unknown) => {
@@ -47,11 +52,11 @@ export function useGit() {
     window.electronAPI
       .getLog(path)
       .then((res) => {
-        const r = res as LogResult
+        const decoded = decodeOrThrow(LogResponse, res)
         if (activePathRef.current !== path) return
-        if (r.success && r.log) {
-          accumulatedRef.current = r.log.all.slice()
-          setLog(r.log)
+        if (decoded._tag === 'Ok') {
+          accumulatedRef.current = decoded.log.all.slice()
+          setLog(decoded.log)
         }
       })
       .catch((err: unknown) => {
@@ -63,11 +68,11 @@ export function useGit() {
     window.electronAPI
       .getStatus(path)
       .then((res) => {
-        const r = res as StatusResult
+        const decoded = decodeOrThrow(StatusResponse, res)
         if (activePathRef.current !== path) return
-        if (r.success && r.status) {
-          setStatus(r.status)
-          setCurrentBranch(r.status.current)
+        if (decoded._tag === 'Ok') {
+          setStatus(decoded.status)
+          setCurrentBranch(decoded.status.current)
         }
       })
       .catch((err: unknown) => {
@@ -97,16 +102,16 @@ export function useGit() {
 
   const runFetchAndRefresh = useCallback(
     async (path: string) => {
-      let result: FetchResult
+      let decoded: typeof FetchResponse.Type
       try {
-        result = (await window.electronAPI.fetchRepo(path)) as FetchResult
+        decoded = decodeOrThrow(FetchResponse, await window.electronAPI.fetchRepo(path))
       } catch (err) {
         console.warn('[useGit] fetch failed', err)
         return
       }
       if (activePathRef.current !== path) return
-      if (!result.success || result.skipped) {
-        if (!result.success) console.warn('[useGit] fetch failed', result.error)
+      if (decoded._tag !== 'Ok') {
+        if (decoded._tag === 'GitError') console.warn('[useGit] fetch failed', decoded.message)
         return
       }
       silentRefreshRefs(path)
@@ -143,9 +148,6 @@ export function useGit() {
     return unsub
   }, [silentRefreshRefs, silentRefreshStatus])
 
-  // Releases the main-side repo (simple-git instance, chokidar watcher,
-  // any active fetch) when this hook unmounts — i.e. when its tab closes.
-  // Reads activePathRef at unmount time so the latest path is always cleaned up.
   useEffect(() => {
     return () => {
       const wasPath = activePathRef.current
@@ -160,11 +162,21 @@ export function useGit() {
     accumulatedRef.current = []
     setLog({ all: [], total: 0 })
     setLogLoading(true)
-    window.electronAPI.startLogStream(path).catch((err: unknown) => {
-      if (activePathRef.current !== path) return
-      setError(err instanceof Error ? err.message : 'Unknown error')
-      setLogLoading(false)
-    })
+    window.electronAPI
+      .startLogStream(path)
+      .then((res) => {
+        const decoded = decodeOrThrow(StartLogStreamResponse, res)
+        if (activePathRef.current !== path) return
+        if (decoded._tag === 'GitError') {
+          setError(decoded.message)
+          setLogLoading(false)
+        }
+      })
+      .catch((err: unknown) => {
+        if (activePathRef.current !== path) return
+        setError(err instanceof Error ? err.message : 'Unknown error')
+        setLogLoading(false)
+      })
   }, [])
 
   const openRepo = useCallback(
@@ -175,72 +187,79 @@ export function useGit() {
       setError(null)
       setStatus(null)
       setBranches(null)
-      // Provisional — main returns the canonical form which overwrites this on success.
-      // Setting it now means stale chunks from a previous repo are ignored while the new
-      // open-repo round-trip is in flight.
       activePathRef.current = path
       try {
-        const open = (await window.electronAPI.openRepo(path)) as RepoOpenResult
-        if (!open.success) {
-          console.error('[useGit] open-repo failed', { path, error: open.error })
-          setError(open.error || 'Failed to open repository')
+        const decodedOpen = decodeOrThrow(OpenRepoResponse, await window.electronAPI.openRepo(path))
+        if (decodedOpen._tag !== 'Ok') {
+          const errorMessage =
+            decodedOpen._tag === 'NotARepo' ? 'Not a git repository' : decodedOpen.message
+          console.error('[useGit] open-repo failed', { path, error: errorMessage })
+          activePathRef.current = null
+          setError(errorMessage)
           setStatusLoading(false)
           setBranchesLoading(false)
           return
         }
-        // Adopt the canonical path so chunk/refresh path comparisons match what main sends.
-        activePathRef.current = open.path
-        setRepoPath(open.path)
-        setRemotes(open.remotes ?? {})
-        setDefaultBranch(open.defaultBranch)
+        const opened = decodedOpen.result
+        activePathRef.current = opened.path
+        setRepoPath(opened.path)
+        setRemotes(opened.remotes)
+        setDefaultBranch(opened.defaultBranch)
 
-        startLogStream(open.path)
+        startLogStream(opened.path)
 
         window.electronAPI
-          .getStatus(open.path)
+          .getStatus(opened.path)
           .then((res) => {
-            const r = res as StatusResult
-            if (activePathRef.current !== open.path) return
-            if (r.success && r.status) {
-              setStatus(r.status)
-              setCurrentBranch(r.status.current)
-            } else if (r.error) {
-              console.error('[useGit] get-status failed', { path: open.path, error: r.error })
-              setError(r.error)
+            const decoded = decodeOrThrow(StatusResponse, res)
+            if (activePathRef.current !== opened.path) return
+            if (decoded._tag === 'Ok') {
+              setStatus(decoded.status)
+              setCurrentBranch(decoded.status.current)
+            } else if (decoded._tag === 'GitError') {
+              console.error('[useGit] get-status failed', {
+                path: opened.path,
+                error: decoded.message
+              })
+              setError(decoded.message)
             }
           })
           .catch((err: unknown) => {
-            if (activePathRef.current !== open.path) return
+            if (activePathRef.current !== opened.path) return
             console.error('[useGit] get-status threw', err)
             setError(err instanceof Error ? err.message : 'Unknown error')
           })
           .finally(() => {
-            if (activePathRef.current === open.path) setStatusLoading(false)
+            if (activePathRef.current === opened.path) setStatusLoading(false)
           })
 
         window.electronAPI
-          .getBranches(open.path)
+          .getBranches(opened.path)
           .then((res) => {
-            const r = res as BranchesResult
-            if (activePathRef.current !== open.path) return
-            if (r.success && r.branches) {
-              setBranches(r.branches)
-              setCurrentBranch((prev) => prev || r.branches?.current || '')
-            } else if (r.error) {
-              console.error('[useGit] get-branches failed', { path: open.path, error: r.error })
-              setError(r.error)
+            const decoded = decodeOrThrow(BranchesResponse, res)
+            if (activePathRef.current !== opened.path) return
+            if (decoded._tag === 'Ok') {
+              setBranches(decoded.branches)
+              setCurrentBranch((prev) => prev || decoded.branches.current || '')
+            } else if (decoded._tag === 'GitError') {
+              console.error('[useGit] get-branches failed', {
+                path: opened.path,
+                error: decoded.message
+              })
+              setError(decoded.message)
             }
           })
           .catch((err: unknown) => {
-            if (activePathRef.current !== open.path) return
+            if (activePathRef.current !== opened.path) return
             console.error('[useGit] get-branches threw', err)
             setError(err instanceof Error ? err.message : 'Unknown error')
           })
           .finally(() => {
-            if (activePathRef.current === open.path) setBranchesLoading(false)
+            if (activePathRef.current === opened.path) setBranchesLoading(false)
           })
       } catch (err) {
         console.error('[useGit] openRepo threw', err)
+        activePathRef.current = null
         setError(err instanceof Error ? err.message : 'Unknown error')
         setStatusLoading(false)
         setBranchesLoading(false)
@@ -276,10 +295,12 @@ export function useGit() {
   const refreshStatus = useCallback(async () => {
     if (!repoPath) return
     try {
-      const result = (await window.electronAPI.getStatus(repoPath)) as StatusResult
-      if (result.success && result.status) {
-        setStatus(result.status)
-        setCurrentBranch(result.status.current)
+      const decoded = decodeOrThrow(StatusResponse, await window.electronAPI.getStatus(repoPath))
+      if (decoded._tag === 'Ok') {
+        setStatus(decoded.status)
+        setCurrentBranch(decoded.status.current)
+      } else if (decoded._tag === 'GitError') {
+        setError(decoded.message)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -294,9 +315,18 @@ export function useGit() {
   const stageFile = useCallback(
     async (file: string) => {
       if (!repoPath) return
-      const result = (await window.electronAPI.stageFile(repoPath, file)) as OpResult
-      if (result.success) {
-        await refreshStatus()
+      try {
+        const decoded = decodeOrThrow(
+          StageResponse,
+          await window.electronAPI.stageFile(repoPath, file)
+        )
+        if (decoded._tag === 'Ok') {
+          await refreshStatus()
+        } else if (decoded._tag === 'GitError') {
+          setError(decoded.message)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
       }
     },
     [repoPath, refreshStatus]
@@ -305,9 +335,18 @@ export function useGit() {
   const unstageFile = useCallback(
     async (file: string) => {
       if (!repoPath) return
-      const result = (await window.electronAPI.unstageFile(repoPath, file)) as OpResult
-      if (result.success) {
-        await refreshStatus()
+      try {
+        const decoded = decodeOrThrow(
+          UnstageResponse,
+          await window.electronAPI.unstageFile(repoPath, file)
+        )
+        if (decoded._tag === 'Ok') {
+          await refreshStatus()
+        } else if (decoded._tag === 'GitError') {
+          setError(decoded.message)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
       }
     },
     [repoPath, refreshStatus]
@@ -318,12 +357,19 @@ export function useGit() {
       if (!repoPath) return false
       setLoading(true)
       try {
-        const result = (await window.electronAPI.commit(repoPath, message)) as OpResult
-        if (result.success) {
+        const decoded = decodeOrThrow(
+          CommitResponse,
+          await window.electronAPI.commit(repoPath, message)
+        )
+        if (decoded._tag === 'Ok') {
           await refreshStatus()
           await refreshLog()
           return true
         }
+        if (decoded._tag === 'GitError') setError(decoded.message)
+        return false
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error')
         return false
       } finally {
         setLoading(false)

@@ -42,8 +42,10 @@ const mockElectronAPI = {
   onLogChunk: vi.fn(),
   onRepoChanged: vi.fn(),
   getRecentRepos: vi.fn(),
-  getStoreValue: vi.fn(),
-  setStoreValue: vi.fn(),
+  getSidebarPrefs: vi.fn(),
+  setSidebarPrefs: vi.fn(),
+  getRefTreeToggles: vi.fn(),
+  setRefTreeToggles: vi.fn(),
   getWorkingDirectory: vi.fn(),
   setWorkingDirectory: vi.fn(),
   getWorkspaces: vi.fn(),
@@ -87,8 +89,8 @@ export function setupLogStream(): LogStreamHandle {
       if (i !== -1) listeners.splice(i, 1)
     }
   })
-  vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ success: true })
-  vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
+  vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
+  vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
   return {
     fire: (chunk) => {
       for (const cb of listeners.slice()) {
@@ -125,4 +127,6 @@ export function setupRepoChanged(): RepoChangedHandle {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
+  vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
 })

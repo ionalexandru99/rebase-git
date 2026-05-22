@@ -2,7 +2,7 @@
 
 This file is the durable record of the multi-phase refactor of Rebase. Companion to `AGENTS.md` (binding rules) and `CLAUDE.md` (operational guidance). Update as work progresses.
 
-**Status:** Phase 1 complete (6 commits, 136 green tests). Phase 2 not yet started.
+**Status:** Phase 1 complete (6 commits, 136 green tests). Phase 2 complete (13 commits, 146 green tests). Phase 3 not yet started.
 
 **Scale target:** Rebase is growing into a *complete* git GUI — diff, blame, interactive rebase, conflict resolution, multi-remote, push/pull, search, history navigation. The architecture choices below are picked for that ceiling, not just the current 6.7K-LOC surface.
 
@@ -40,15 +40,15 @@ Issues identified at the start. Tick = fixed in Phase 1.
 - [x] `gitInstances` keyed by raw path string (normalized `dd67809`)
 
 **Architecture issues (still pending)**
-- IPC type erosion — preload returns `Promise<unknown>`, renderer casts everywhere → **Phase 2**
+- [x] IPC type erosion — preload returns `Promise<unknown>`, renderer casts everywhere (fixed in Phase 2)
 - `src/main/index.ts` is 601 lines, all IPC handlers + serializers + window lifecycle → **Phase 3**
 - `useGit` is a 370-line god-hook with 5+ refresh paths racing → **Phase 4**
 - `HistoryPanel.tsx` is 799 lines mixing layout, canvas, ref parsing, virtualisation, theme observer → **Phase 3**
 - `App.tsx` bundles 5 components → **Phase 3**
-- Generic `getStoreValue`/`setStoreValue` proxy bypasses the schema → **Phase 2**
+- [x] Generic `getStoreValue`/`setStoreValue` proxy bypasses the schema (fixed in Phase 2)
 - `useOnboarding.selectWorkingDirectory` ≈ `addWorkspace` (duplicate) → **Phase 3**
 - Loading-state conflation (one `loading` for openRepo + commit) → **Phase 4**
-- Unused schema keys (`windowState`, `historyColWidths`) → **Phase 2**
+- [x] Unused schema keys (`windowState`, `historyColWidths`) (fixed in Phase 2)
 
 ---
 
@@ -69,22 +69,50 @@ Library-agnostic bug fixes. One commit per defect. All green.
 
 ---
 
-## Phase 2 — Effect introduction + IPC type tightening (PENDING)
+## Phase 2 — Effect introduction + IPC type tightening (DONE)
 
 The first phase that adds a dependency. Each commit independently green.
 
-1. **Add `effect` + `@effect-rx/rx-react` deps** at exact pinned versions (per AGENTS.md).
-2. **Create `src/shared/schemas/`** with `git.ts` (GitStatus, GitLogEntry, GitBranches, RepoOpenResult) and `ipc.ts` (channel name constants + per-channel request/response schemas). No Electron imports — both sides depend on it.
-3. **Port `get-status` end-to-end as the pilot**:
-   - Main: `serializeStatus` runs the `Schema.encodeSync` on its way out.
-   - Preload: type the channel precisely, drop `Promise<unknown>`.
-   - Renderer: replace the `as StatusResult` cast in `useGit` with `Schema.decodeUnknownSync` at the boundary.
-   - Tagged errors (`RepoNotOpen`, `GitError`) replace the `{ success, error }` ADT for this handler.
-4. **Repeat for `get-branches`, `open-repo`, `get-log`, `stage-file`, `unstage-file`, `commit`, `git-fetch`, `start-log-stream`, `cancel-log-stream`, `scan-for-repos`**. One commit per handler keeps blast radius small.
-5. **Replace the generic `getStoreValue`/`setStoreValue` proxy** with typed accessors per persisted UI pref (`getSidebarPrefs`, `setSidebarPrefs`, `getRefTreeToggles`, `setRefTreeToggles`). Remove unused `windowState` and `historyColWidths` from the store schema. Add the previously off-schema keys (`sidebarOpen`, `sidebarRefTreeToggles`).
-6. **Add a renderer-side `decodeOrThrow` helper** that wraps every IPC response — so drift between main's serializer and renderer's expectations crashes in dev immediately, not silently at render time.
+| Commit | Subject |
+|---|---|
+| `743b124` | add effect and @effect-rx/rx-react at exact pinned versions |
+| `f0d3986` | introduce src/shared schemas + decodeOrThrow |
+| `23e04d1` | port get-status to schema-encoded tagged responses |
+| `121a339` | port get-branches to schema-encoded tagged responses |
+| `bea4362` | port open-repo to schema-encoded tagged responses |
+| `e3caf5a` | port get-log to schema-encoded tagged responses |
+| `73a6988` | port stage-file and unstage-file to schema-encoded tagged responses |
+| `350a058` | port commit to schema-encoded tagged responses |
+| `0478fcb` | port git-fetch to schema-encoded tagged responses |
+| `1159c26` | port log streaming + cancel + log-chunk event to shared schemas |
+| `88fafba` | port scan-for-repos and close-repo to shared channel constants |
+| `d52f87d` | replace generic store proxy with typed accessors |
+| `e79fa18` | tighten close-repo type: Promise<void> instead of Promise<unknown> |
 
-**Done when:** zero `as ResultXxx` casts in `src/renderer/`, every preload method is precisely typed, schemas live in `src/shared/`, and the renderer / main both reference the same Schema constants.
+**Tests:** 114 renderer + 32 main = 146 green.
+
+**What landed:**
+
+- `effect@3.21.2` and `@effect-rx/rx-react@0.42.4` (exact pinned). The Rx package is in
+  place ahead of Phase 4 — Phase 2 only depends on `effect/Schema`.
+- `src/shared/schemas/git.ts` holds the schema-derived domain types
+  (`GitStatus`, `GitLog`, `GitBranches`, `RepoOpenSuccess`, `CommitSummary`,
+  `LogChunk`, `RepoChangedEvent`). All arrays use `Schema.mutable` to keep
+  callers compatible with the existing renderer code.
+- `src/shared/schemas/ipc.ts` holds channel-name constants and per-channel
+  response envelopes. Failures are tagged unions of `RepoNotOpen`, `NotARepo`,
+  `FetchSkipped`, and `GitError`.
+- `src/shared/codec.ts` exports `decodeOrThrow` / `encodeOrThrow`.
+- Every renderer-touching IPC handler now encodes through its Schema on main
+  and decodes via `decodeOrThrow` on the renderer.
+- Preload methods are precisely typed (no more `Promise<unknown>` for
+  RPC-style channels).
+- `getStoreValue` / `setStoreValue` are gone. Persisted UI prefs go through
+  `getSidebarPrefs` / `setSidebarPrefs` / `getRefTreeToggles` /
+  `setRefTreeToggles`. The store schema drops `windowState` (managed by
+  electron-window-state) and `historyColWidths` (unused).
+- `@shared/*` path alias added to tsconfig (renderer + node), vite, and both
+  vitest configs.
 
 ---
 

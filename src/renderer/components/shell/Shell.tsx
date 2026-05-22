@@ -1,11 +1,11 @@
+import { decodeOrThrow } from '@shared/codec'
+import { SidebarPrefs } from '@shared/schemas/ipc'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AppSidebar, type SidebarView } from './Sidebar'
 import { Statusbar } from './Statusbar'
 import { Topbar } from './Topbar'
 
-const SIDEBAR_STORE_KEY = 'sidebarOpen'
-const SIDEBAR_WIDTH_STORE_KEY = 'sidebarWidth'
 const SIDEBAR_WIDTH_MIN = 200
 const SIDEBAR_WIDTH_MAX = 520
 const SIDEBAR_WIDTH_DEFAULT = 256
@@ -45,26 +45,31 @@ export function Shell({
 
   useEffect(() => {
     let cancelled = false
-    Promise.resolve(window.electronAPI.getStoreValue(SIDEBAR_STORE_KEY)).then((v) => {
-      if (cancelled) return
-      if (typeof v === 'boolean') setOpen(v)
-    })
-    Promise.resolve(window.electronAPI.getStoreValue(SIDEBAR_WIDTH_STORE_KEY)).then((v) => {
-      if (cancelled) return
-      if (typeof v === 'number' && Number.isFinite(v)) {
-        const clamped = Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, v))
+    window.electronAPI
+      .getSidebarPrefs()
+      .then((res) => {
+        if (cancelled) return
+        const prefs = decodeOrThrow(SidebarPrefs, res)
+        setOpen(prefs.open)
+        const clamped = Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, prefs.width))
         setWidth(clamped)
         dragWidthRef.current = clamped
-      }
-    })
+      })
+      .catch((err: unknown) => {
+        console.warn('[Shell] failed to load sidebar prefs', err)
+      })
     return () => {
       cancelled = true
     }
   }, [])
 
+  const persistPrefs = useCallback((nextOpen: boolean, nextWidth: number) => {
+    window.electronAPI.setSidebarPrefs({ open: nextOpen, width: nextWidth })
+  }, [])
+
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
-    window.electronAPI.setStoreValue(SIDEBAR_STORE_KEY, next)
+    persistPrefs(next, dragWidthRef.current)
   }
 
   const handleResizeStart = useCallback(
@@ -90,12 +95,12 @@ export function Shell({
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
         delete document.body.dataset.sidebarResizing
-        window.electronAPI.setStoreValue(SIDEBAR_WIDTH_STORE_KEY, dragWidthRef.current)
+        persistPrefs(open, dragWidthRef.current)
       }
       window.addEventListener('mousemove', onMove)
       window.addEventListener('mouseup', onUp)
     },
-    [width]
+    [width, open, persistPrefs]
   )
 
   return (

@@ -41,11 +41,13 @@
     "audit:fix": "pnpm audit fix"
   },
   "dependencies": {
+    "@effect-rx/rx-react": "0.42.4",
     "@radix-ui/react-slot": "1.2.4",
     "chokidar": "4.0.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
+    "effect": "3.21.2",
     "electron-context-menu": "4.1.2",
     "electron-log": "5.3.0",
     "electron-store": "10.0.0",

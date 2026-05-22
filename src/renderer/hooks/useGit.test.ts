@@ -22,17 +22,15 @@ function status(overrides: Partial<GitStatus> = {}): GitStatus {
 
 function mockOpenRepoSuccess(s: GitStatus = status(), path = '/test/repo') {
   vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    success: true,
-    path,
-    remotes: {},
-    defaultBranch: s.current
+    _tag: 'Ok',
+    result: { path, remotes: {}, defaultBranch: s.current }
   })
   vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-    success: true,
+    _tag: 'Ok',
     status: s
   })
   vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-    success: true,
+    _tag: 'Ok',
     branches: { current: s.current, all: [s.current], remotes: [], tags: [] }
   })
 }
@@ -134,8 +132,7 @@ describe('useGit', () => {
 
   it('should handle repo open failure and not start a stream', async () => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: false,
-      error: 'Not a git repository'
+      _tag: 'NotARepo'
     })
 
     const { result } = renderHook(() => useGit())
@@ -150,11 +147,30 @@ describe('useGit', () => {
     expect(window.electronAPI.startLogStream).not.toHaveBeenCalled()
   })
 
+  it('clears the provisional path on open failure so stale events are ignored', async () => {
+    const repoChanged = setupRepoChanged()
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({ _tag: 'NotARepo' })
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/bad/path')
+    await waitFor(() => expect(result.current.error).toBe('Not a git repository'))
+
+    vi.mocked(window.electronAPI.getBranches).mockClear()
+    vi.mocked(window.electronAPI.getLog).mockClear()
+    vi.mocked(window.electronAPI.getStatus).mockClear()
+    act(() => repoChanged.fire({ repoPath: '/bad/path', kind: 'refs' }))
+    act(() => repoChanged.fire({ repoPath: '/bad/path', kind: 'workingTree' }))
+
+    expect(window.electronAPI.getBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.getLog).not.toHaveBeenCalled()
+    expect(window.electronAPI.getStatus).not.toHaveBeenCalled()
+  })
+
   it('stages a file and refreshes status only (no log re-stream)', async () => {
     mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
-    vi.mocked(window.electronAPI.stageFile).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.stageFile).mockResolvedValue({ _tag: 'Ok' })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status({ staged: ['file1.ts'] })
     })
 
@@ -175,9 +191,9 @@ describe('useGit', () => {
 
   it('unstages a file and refreshes status only', async () => {
     mockOpenRepoSuccess(status({ staged: ['file1.ts'] }))
-    vi.mocked(window.electronAPI.unstageFile).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.unstageFile).mockResolvedValue({ _tag: 'Ok' })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status({ modified: ['file1.ts'] })
     })
 
@@ -194,9 +210,16 @@ describe('useGit', () => {
 
   it('commits and re-streams the log', async () => {
     mockOpenRepoSuccess(status({ staged: ['a.ts'] }))
-    vi.mocked(window.electronAPI.commit).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.commit).mockResolvedValue({
+      _tag: 'Ok',
+      result: {
+        commit: 'abc',
+        branch: 'main',
+        summary: { changes: 0, insertions: 0, deletions: 0 }
+      }
+    })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status()
     })
 
@@ -219,7 +242,7 @@ describe('useGit', () => {
 
   it('closeRepo evicts the repo on the main side, cancels the stream, and clears state', async () => {
     mockOpenRepoSuccess()
-    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
 
     const { result } = renderHook(() => useGit())
     await result.current.openRepo('/test/repo')
@@ -250,9 +273,35 @@ describe('useGit', () => {
     expect(committed).toBe(false)
   })
 
+  it('surfaces stageFile IPC rejection into the error banner instead of throwing', async () => {
+    mockOpenRepoSuccess()
+    vi.mocked(window.electronAPI.stageFile).mockRejectedValue(new Error('bridge down'))
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+    await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
+
+    await result.current.stageFile('a.ts')
+    await waitFor(() => expect(result.current.error).toBe('bridge down'))
+  })
+
+  it('surfaces commit IPC rejection into the error banner and returns false', async () => {
+    mockOpenRepoSuccess()
+    vi.mocked(window.electronAPI.commit).mockRejectedValue(new Error('lock file held'))
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+    await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
+
+    const ok = await result.current.commit('msg')
+    expect(ok).toBe(false)
+    await waitFor(() => expect(result.current.error).toBe('lock file held'))
+    expect(result.current.loading).toBe(false)
+  })
+
   it('releases the main-side repo when the hook unmounts (tab close)', async () => {
     mockOpenRepoSuccess()
-    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
     vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
 
     const { result, unmount } = renderHook(() => useGit())
@@ -266,21 +315,16 @@ describe('useGit', () => {
   })
 
   it('adopts the canonical path returned by open-repo, not the caller input', async () => {
-    // Caller passes a trailing-slash variant; main responds with the normalized form.
-    // Chunks/refresh events arrive keyed on the canonical path, so the hook must
-    // store the canonical path on activePathRef or every comparison drops the data.
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/test/repo',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/test/repo', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status({ modified: ['a.ts'] })
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     const stream = setupLogStream()
@@ -289,7 +333,6 @@ describe('useGit', () => {
     await result.current.openRepo('/test/repo/')
     await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
 
-    // A chunk keyed on the canonical path must be accepted, not dropped.
     stream.fire({
       repoPath: '/test/repo',
       commits: [
@@ -305,11 +348,9 @@ describe('useGit', () => {
     })
     await waitFor(() => expect(result.current.log?.total).toBe(1))
 
-    // Status data delivered against the canonical path must also land in state.
     await waitFor(() => expect(result.current.status?.modified).toContain('a.ts'))
 
-    // Cleanup on unmount must also use the canonical path, not the trailing-slash input.
-    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
     vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({ success: true })
     unmount()
     expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
@@ -320,6 +361,20 @@ describe('useGit', () => {
     unmount()
     expect(window.electronAPI.closeRepo).not.toHaveBeenCalled()
     expect(window.electronAPI.cancelLogStream).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a GitError returned by get-status as an error banner', async () => {
+    mockOpenRepoSuccess()
+    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+      _tag: 'GitError',
+      message: 'index.lock exists'
+    })
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+
+    await waitFor(() => expect(result.current.error).toBe('index.lock exists'))
+    expect(result.current.status).toBeNull()
   })
 })
 
@@ -336,17 +391,15 @@ describe('useGit auto-fetch', () => {
 
   async function openAndFlush() {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/test/repo',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/test/repo', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status()
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     const stream = setupLogStream()
@@ -367,13 +420,13 @@ describe('useGit auto-fetch', () => {
   it('fires fetchRepo on the interval and silently refreshes branches + log', async () => {
     const { result } = await openAndFlush()
 
-    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ _tag: 'Ok' })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main', 'feature'], remotes: ['origin/main'], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       log: {
         all: [
           {
@@ -411,7 +464,7 @@ describe('useGit auto-fetch', () => {
 
   it('does not refresh when fetchRepo reports skipped', async () => {
     await openAndFlush()
-    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true, skipped: true })
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ _tag: 'FetchSkipped' })
 
     await act(async () => {
       vi.advanceTimersByTime(AUTO_FETCH_INTERVAL_MS)
@@ -426,8 +479,8 @@ describe('useGit auto-fetch', () => {
   it('swallows fetchRepo failures without setting error state', async () => {
     const { result } = await openAndFlush()
     vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({
-      success: false,
-      error: 'offline'
+      _tag: 'GitError',
+      message: 'offline'
     })
 
     await act(async () => {
@@ -444,13 +497,13 @@ describe('useGit auto-fetch', () => {
   it('fetchNow runs the fetch immediately and resets the auto-fetch timer', async () => {
     const { result } = await openAndFlush()
 
-    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ _tag: 'Ok' })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main', 'feature'], remotes: [], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       log: { all: [], total: 0 }
     })
 
@@ -479,7 +532,7 @@ describe('useGit auto-fetch', () => {
 
   it('clears the interval when the hook unmounts', async () => {
     const { unmount } = await openAndFlush()
-    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ success: true })
+    vi.mocked(window.electronAPI.fetchRepo).mockResolvedValue({ _tag: 'Ok' })
     unmount()
 
     await act(async () => {
@@ -499,17 +552,15 @@ describe('useGit repo-changed watcher', () => {
 
   async function openRepoForWatcher(repoChanged = setupRepoChanged()) {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/test/repo',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/test/repo', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status()
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     const stream = setupLogStream()
@@ -531,11 +582,11 @@ describe('useGit repo-changed watcher', () => {
     const { rendered, repoChanged } = await openRepoForWatcher()
 
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'feature', all: ['main', 'feature'], remotes: [], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       log: {
         all: [
           {
@@ -570,7 +621,7 @@ describe('useGit repo-changed watcher', () => {
     const { rendered, repoChanged } = await openRepoForWatcher()
 
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: status({ modified: ['changed.ts'] })
     })
 

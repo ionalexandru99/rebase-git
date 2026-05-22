@@ -33,7 +33,7 @@ function mockBaseAPI(
   vi.mocked(window.electronAPI.setActiveWorkspace).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getRecentRepos).mockResolvedValue(overrides.recentRepos ?? [])
   vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
-    success: true,
+    _tag: 'Ok',
     repos: overrides.scanRepos ?? []
   })
 }
@@ -238,13 +238,11 @@ describe('App — repo picker (no repo open)', () => {
       scanRepos: ['/home/user/repos/my-app']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/home/user/repos/my-app',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/home/user/repos/my-app', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: {
         current: 'main',
         modified: [],
@@ -257,7 +255,7 @@ describe('App — repo picker (no repo open)', () => {
       }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
 
@@ -298,13 +296,15 @@ describe('App — repo picker (no repo open)', () => {
 
 describe('App — workspace (repo open)', () => {
   const openRepoMock = {
-    success: true,
-    path: '/home/user/projects/my-app',
-    remotes: {},
-    defaultBranch: 'feature/ui'
+    _tag: 'Ok' as const,
+    result: {
+      path: '/home/user/projects/my-app',
+      remotes: {},
+      defaultBranch: 'feature/ui'
+    }
   }
   const statusMock = {
-    success: true,
+    _tag: 'Ok' as const,
     status: {
       current: 'feature/ui',
       modified: ['src/a.ts'],
@@ -317,7 +317,7 @@ describe('App — workspace (repo open)', () => {
     }
   }
   const branchesMock = {
-    success: true,
+    _tag: 'Ok' as const,
     branches: { current: 'feature/ui', all: ['main', 'feature/ui'], remotes: [], tags: [] }
   }
   const sampleCommit = {
@@ -394,13 +394,11 @@ describe('App — workspace (repo open)', () => {
       scanRepos: ['/workspace/repo']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/workspace/repo',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/workspace/repo', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: {
         current: 'main',
         modified: [],
@@ -413,7 +411,7 @@ describe('App — workspace (repo open)', () => {
       }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     setupLogStream()
@@ -436,14 +434,12 @@ describe('App — workspace (repo open)', () => {
     })
     vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
       Promise.resolve({
-        success: true,
-        path,
-        remotes: {},
-        defaultBranch: 'main'
+        _tag: 'Ok',
+        result: { path, remotes: {}, defaultBranch: 'main' }
       })
     )
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       status: {
         current: 'main',
         modified: [],
@@ -456,7 +452,7 @@ describe('App — workspace (repo open)', () => {
       }
     })
     vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
     setupLogStream()
@@ -536,8 +532,7 @@ describe('App — workspace (repo open)', () => {
       scanRepos: ['/workspace/bad-repo']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: false,
-      error: 'Not a git repository'
+      _tag: 'NotARepo'
     })
 
     render(<App />)

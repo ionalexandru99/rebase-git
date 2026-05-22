@@ -1,42 +1,45 @@
+import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
+import {
+  type BranchesResponse,
+  type CancelLogStreamResponse,
+  Channel,
+  type CommitResponse,
+  type FetchResponse,
+  type LogResponse,
+  type OpenRepoResponse,
+  type RefTreeToggles,
+  type ScanForReposResponse,
+  type SidebarPrefs,
+  type StageResponse,
+  type StartLogStreamResponse,
+  type StatusResponse,
+  type UnstageResponse
+} from '@shared/schemas/ipc'
 import { contextBridge, ipcRenderer } from 'electron'
 
-export interface LogChunkEvent {
-  repoPath: string
-  commits: Array<{
-    hash: string
-    message: string
-    author_name: string
-    date: string
-    parents: string[]
-    refs: string
-  }>
-  done: boolean
-  error?: string
-}
-
-export type RepoChangedEvent = {
-  repoPath: string
-  kind: 'refs' | 'workingTree'
-}
+export type LogChunkEvent = LogChunk
+export type { RepoChangedEvent }
 
 export interface IElectronAPI {
   selectFolder: () => Promise<string | null>
-  openRepo: (path: string) => Promise<unknown>
-  closeRepo: (path: string) => Promise<unknown>
-  getBranches: (repoPath: string) => Promise<unknown>
-  getStatus: (repoPath: string) => Promise<unknown>
-  stageFile: (repoPath: string, file: string) => Promise<unknown>
-  unstageFile: (repoPath: string, file: string) => Promise<unknown>
-  commit: (repoPath: string, message: string) => Promise<unknown>
-  fetchRepo: (repoPath: string) => Promise<{ success: boolean; skipped?: boolean; error?: string }>
-  getLog: (repoPath: string, maxCount?: number) => Promise<unknown>
-  startLogStream: (repoPath: string) => Promise<{ success: boolean; error?: string }>
-  cancelLogStream: () => Promise<{ success: boolean }>
-  onLogChunk: (cb: (chunk: LogChunkEvent) => void) => () => void
+  openRepo: (path: string) => Promise<OpenRepoResponse>
+  closeRepo: (path: string) => Promise<void>
+  getBranches: (repoPath: string) => Promise<BranchesResponse>
+  getStatus: (repoPath: string) => Promise<StatusResponse>
+  stageFile: (repoPath: string, file: string) => Promise<StageResponse>
+  unstageFile: (repoPath: string, file: string) => Promise<UnstageResponse>
+  commit: (repoPath: string, message: string) => Promise<CommitResponse>
+  fetchRepo: (repoPath: string) => Promise<FetchResponse>
+  getLog: (repoPath: string, maxCount?: number) => Promise<LogResponse>
+  startLogStream: (repoPath: string) => Promise<StartLogStreamResponse>
+  cancelLogStream: () => Promise<CancelLogStreamResponse>
+  onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => () => void
   getRecentRepos: () => Promise<string[]>
-  getStoreValue: (key: string) => Promise<unknown>
-  setStoreValue: (key: string, value: unknown) => Promise<void>
+  getSidebarPrefs: () => Promise<SidebarPrefs>
+  setSidebarPrefs: (prefs: SidebarPrefs) => Promise<void>
+  getRefTreeToggles: () => Promise<RefTreeToggles>
+  setRefTreeToggles: (toggles: RefTreeToggles) => Promise<void>
   getWorkingDirectory: () => Promise<string | null>
   setWorkingDirectory: (dir: string) => Promise<void>
   getWorkspaces: () => Promise<string[]>
@@ -46,37 +49,42 @@ export interface IElectronAPI {
   setActiveWorkspace: (path: string | null) => Promise<void>
   getOnboardingComplete: () => Promise<boolean>
   setOnboardingComplete: (complete: boolean) => Promise<void>
-  scanForRepos: (dirPath: string) => Promise<{ success: boolean; repos?: string[]; error?: string }>
+  scanForRepos: (dirPath: string) => Promise<ScanForReposResponse>
 }
 
 const api: IElectronAPI = {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
-  openRepo: (path: string) => ipcRenderer.invoke('open-repo', path),
-  closeRepo: (path: string) => ipcRenderer.invoke('close-repo', path),
-  getBranches: (repoPath: string) => ipcRenderer.invoke('get-branches', repoPath),
-  getStatus: (repoPath: string) => ipcRenderer.invoke('get-status', repoPath),
-  stageFile: (repoPath: string, file: string) => ipcRenderer.invoke('stage-file', repoPath, file),
+  openRepo: (path: string) => ipcRenderer.invoke(Channel.openRepo, path),
+  closeRepo: (path: string) => ipcRenderer.invoke(Channel.closeRepo, path),
+  getBranches: (repoPath: string) => ipcRenderer.invoke(Channel.getBranches, repoPath),
+  getStatus: (repoPath: string) => ipcRenderer.invoke(Channel.getStatus, repoPath),
+  stageFile: (repoPath: string, file: string) =>
+    ipcRenderer.invoke(Channel.stageFile, repoPath, file),
   unstageFile: (repoPath: string, file: string) =>
-    ipcRenderer.invoke('unstage-file', repoPath, file),
-  commit: (repoPath: string, message: string) => ipcRenderer.invoke('commit', repoPath, message),
-  fetchRepo: (repoPath: string) => ipcRenderer.invoke('git-fetch', repoPath),
+    ipcRenderer.invoke(Channel.unstageFile, repoPath, file),
+  commit: (repoPath: string, message: string) =>
+    ipcRenderer.invoke(Channel.commit, repoPath, message),
+  fetchRepo: (repoPath: string) => ipcRenderer.invoke(Channel.fetchRepo, repoPath),
   getLog: (repoPath: string, maxCount?: number) =>
-    ipcRenderer.invoke('get-log', repoPath, maxCount),
-  startLogStream: (repoPath: string) => ipcRenderer.invoke('start-log-stream', repoPath),
-  cancelLogStream: () => ipcRenderer.invoke('cancel-log-stream'),
-  onLogChunk: (cb: (chunk: LogChunkEvent) => void) => {
-    const handler = (_event: unknown, chunk: LogChunkEvent) => cb(chunk)
-    ipcRenderer.on('log-chunk', handler)
-    return () => ipcRenderer.off('log-chunk', handler)
+    ipcRenderer.invoke(Channel.getLog, repoPath, maxCount),
+  startLogStream: (repoPath: string) => ipcRenderer.invoke(Channel.startLogStream, repoPath),
+  cancelLogStream: () => ipcRenderer.invoke(Channel.cancelLogStream),
+  onLogChunk: (cb: (chunk: LogChunk) => void) => {
+    const handler = (_event: unknown, chunk: LogChunk) => cb(chunk)
+    ipcRenderer.on(Channel.logChunk, handler)
+    return () => ipcRenderer.off(Channel.logChunk, handler)
   },
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => {
     const handler = (_event: unknown, evt: RepoChangedEvent) => cb(evt)
-    ipcRenderer.on('repo-changed', handler)
-    return () => ipcRenderer.off('repo-changed', handler)
+    ipcRenderer.on(Channel.repoChanged, handler)
+    return () => ipcRenderer.off(Channel.repoChanged, handler)
   },
   getRecentRepos: () => ipcRenderer.invoke('get-recent-repos'),
-  getStoreValue: (key: string) => ipcRenderer.invoke('get-store-value', key),
-  setStoreValue: (key: string, value: unknown) => ipcRenderer.invoke('set-store-value', key, value),
+  getSidebarPrefs: () => ipcRenderer.invoke(Channel.getSidebarPrefs),
+  setSidebarPrefs: (prefs: SidebarPrefs) => ipcRenderer.invoke(Channel.setSidebarPrefs, prefs),
+  getRefTreeToggles: () => ipcRenderer.invoke(Channel.getRefTreeToggles),
+  setRefTreeToggles: (toggles: RefTreeToggles) =>
+    ipcRenderer.invoke(Channel.setRefTreeToggles, toggles),
   getWorkingDirectory: () => ipcRenderer.invoke('get-working-directory'),
   setWorkingDirectory: (dir: string) => ipcRenderer.invoke('set-working-directory', dir),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),
@@ -87,7 +95,7 @@ const api: IElectronAPI = {
   getOnboardingComplete: () => ipcRenderer.invoke('get-onboarding-complete'),
   setOnboardingComplete: (complete: boolean) =>
     ipcRenderer.invoke('set-onboarding-complete', complete),
-  scanForRepos: (dirPath: string) => ipcRenderer.invoke('scan-for-repos', dirPath)
+  scanForRepos: (dirPath: string) => ipcRenderer.invoke(Channel.scanForRepos, dirPath)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

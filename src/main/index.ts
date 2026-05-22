@@ -8,6 +8,24 @@ import { simpleGit } from 'simple-git'
 
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
+import { decodeOrThrow, encodeOrThrow } from '@shared/codec'
+import type { LogChunk } from '@shared/schemas/git'
+import {
+  BranchesResponse,
+  CancelLogStreamResponse,
+  Channel,
+  CommitResponse,
+  FetchResponse,
+  LogResponse,
+  OpenRepoResponse,
+  RefTreeToggles,
+  ScanForReposResponse,
+  SidebarPrefs,
+  StageResponse,
+  StartLogStreamResponse,
+  StatusResponse,
+  UnstageResponse
+} from '@shared/schemas/ipc'
 import { tryReserveFetch } from './autoFetch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { setupContextMenu } from './menu'
@@ -17,14 +35,17 @@ import {
   addWorkspace,
   getActiveWorkspace,
   getRecentRepos,
+  getRefTreeToggles,
+  getSidebarPrefs,
   getWorkingDirectory,
   getWorkspaces,
   isOnboardingComplete,
   removeWorkspace,
   setActiveWorkspace,
   setOnboardingComplete,
-  setWorkingDirectory,
-  store
+  setRefTreeToggles,
+  setSidebarPrefs,
+  setWorkingDirectory
 } from './store'
 import { setupUpdater } from './updater'
 
@@ -230,13 +251,11 @@ async function resolveDefaultBranch(
     const out = await git.raw(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
     const name = out.trim()
     if (name.startsWith('origin/')) return name.slice('origin/'.length)
-  } catch {
-    // origin/HEAD not set (uncommon clone state or no origin remote)
-  }
+  } catch {}
   return currentLocal && currentLocal !== 'HEAD' ? currentLocal : undefined
 }
 
-ipcMain.handle('open-repo', async (event, repoPath: string) => {
+ipcMain.handle(Channel.openRepo, async (event, repoPath: string) => {
   const key = normalizeRepoPath(repoPath)
   try {
     const git = getOrCreateGit(gitInstances, key)
@@ -244,7 +263,7 @@ ipcMain.handle('open-repo', async (event, repoPath: string) => {
 
     if (!isRepo) {
       gitInstances.delete(key)
-      return { success: false, error: 'Not a git repository' }
+      return encodeOrThrow(OpenRepoResponse, { _tag: 'NotARepo' })
     }
 
     addRecentRepo(key)
@@ -254,54 +273,65 @@ ipcMain.handle('open-repo', async (event, repoPath: string) => {
 
     startWatching(key, event.sender)
 
-    return {
-      success: true,
-      remotes: serializeRemotes(remotes),
-      defaultBranch,
-      path: key
-    }
+    return encodeOrThrow(OpenRepoResponse, {
+      _tag: 'Ok',
+      result: {
+        remotes: serializeRemotes(remotes),
+        defaultBranch,
+        path: key
+      }
+    })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(OpenRepoResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 
-ipcMain.handle('get-branches', async (_, repoPath: string) => {
+ipcMain.handle(Channel.getBranches, async (_, repoPath: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(BranchesResponse, { _tag: 'RepoNotOpen' })
   try {
     const [branches, tags] = await Promise.all([git.branch(['-a']), git.tags()])
-    return { success: true, branches: serializeBranches(branches, tags) }
+    return encodeOrThrow(BranchesResponse, {
+      _tag: 'Ok',
+      branches: serializeBranches(branches, tags)
+    })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(BranchesResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 
-ipcMain.handle('close-repo', async (_, repoPath: string) => {
+ipcMain.handle(Channel.closeRepo, async (_, repoPath: string) => {
   const key = normalizeRepoPath(repoPath)
   gitInstances.delete(key)
   const proc = activeFetches.get(key)
   if (proc && !proc.killed) proc.kill()
   activeFetches.delete(key)
   await stopWatching(key)
-  return { success: true }
 })
 
-ipcMain.handle('git-fetch', async (_, repoPath: string) => {
+ipcMain.handle(Channel.fetchRepo, async (_, repoPath: string) => {
   const key = normalizeRepoPath(repoPath)
   if (!gitInstances.has(key)) {
-    return { success: false, error: 'No repository open' }
+    return encodeOrThrow(FetchResponse, { _tag: 'RepoNotOpen' })
   }
 
   const proc = spawn('git', ['-C', key, 'fetch', '--prune'], {
-    stdio: ['ignore', 'ignore', 'pipe']
+    stdio: ['ignore', 'ignore', 'pipe'],
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
   })
 
   if (!tryReserveFetch(activeFetches, key, proc)) {
     if (!proc.killed) proc.kill()
-    return { success: true, skipped: true }
+    return encodeOrThrow(FetchResponse, { _tag: 'FetchSkipped' })
   }
 
-  return new Promise<{ success: boolean; skipped?: boolean; error?: string }>((resolve) => {
+  return new Promise<typeof FetchResponse.Encoded>((resolve) => {
     let stderrBuf = ''
     proc.stderr?.setEncoding('utf8')
     proc.stderr?.on('data', (chunk: string) => {
@@ -311,77 +341,91 @@ ipcMain.handle('git-fetch', async (_, repoPath: string) => {
 
     proc.on('error', (err) => {
       if (activeFetches.get(key) === proc) activeFetches.delete(key)
-      resolve({ success: false, error: err.message })
+      resolve(encodeOrThrow(FetchResponse, { _tag: 'GitError', message: err.message }))
     })
 
     proc.on('close', (code) => {
       if (activeFetches.get(key) === proc) activeFetches.delete(key)
       if (code === 0) {
-        resolve({ success: true })
+        resolve(encodeOrThrow(FetchResponse, { _tag: 'Ok' }))
       } else {
-        resolve({
-          success: false,
-          error: stderrBuf.trim() || `git fetch exited with code ${code}`
-        })
+        resolve(
+          encodeOrThrow(FetchResponse, {
+            _tag: 'GitError',
+            message: stderrBuf.trim() || `git fetch exited with code ${code}`
+          })
+        )
       }
     })
   })
 })
 
-ipcMain.handle('get-status', async (_, repoPath: string) => {
+ipcMain.handle(Channel.getStatus, async (_, repoPath: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(StatusResponse, { _tag: 'RepoNotOpen' })
   try {
     const status = await git.status()
-    return { success: true, status: serializeStatus(status) }
+    return encodeOrThrow(StatusResponse, { _tag: 'Ok', status: serializeStatus(status) })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(StatusResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 
-ipcMain.handle('stage-file', async (_, repoPath: string, file: string) => {
+ipcMain.handle(Channel.stageFile, async (_, repoPath: string, file: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(StageResponse, { _tag: 'RepoNotOpen' })
   try {
     await git.add(file)
-    return { success: true }
+    return encodeOrThrow(StageResponse, { _tag: 'Ok' })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(StageResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 
-ipcMain.handle('unstage-file', async (_, repoPath: string, file: string) => {
+ipcMain.handle(Channel.unstageFile, async (_, repoPath: string, file: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(UnstageResponse, { _tag: 'RepoNotOpen' })
   try {
     await git.reset(['HEAD', file])
-    return { success: true }
+    return encodeOrThrow(UnstageResponse, { _tag: 'Ok' })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(UnstageResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 
-ipcMain.handle('commit', async (_, repoPath: string, message: string) => {
+ipcMain.handle(Channel.commit, async (_, repoPath: string, message: string) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(CommitResponse, { _tag: 'RepoNotOpen' })
   try {
     const result = await git.commit(message)
-    return {
-      success: true,
+    return encodeOrThrow(CommitResponse, {
+      _tag: 'Ok',
       result: {
         commit: result.commit,
         branch: result.branch,
         summary: { ...result.summary }
       }
-    }
+    })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(CommitResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 
-ipcMain.handle('get-log', async (_, repoPath: string, maxCount?: number) => {
+ipcMain.handle(Channel.getLog, async (_, repoPath: string, maxCount?: number) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(LogResponse, { _tag: 'RepoNotOpen' })
   try {
     const logOptions: Record<string, unknown> = {
       format: GRAPH_LOG_FORMAT,
@@ -389,9 +433,12 @@ ipcMain.handle('get-log', async (_, repoPath: string, maxCount?: number) => {
     }
     if (typeof maxCount === 'number' && maxCount > 0) logOptions.maxCount = maxCount
     const log = await git.log(logOptions)
-    return { success: true, log: serializeLog(log) }
+    return encodeOrThrow(LogResponse, { _tag: 'Ok', log: serializeLog(log) })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(LogResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 
@@ -410,24 +457,24 @@ function killActiveStream(webContentsId: number) {
   activeLogStreams.delete(webContentsId)
 }
 
-ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
+ipcMain.handle(Channel.startLogStream, async (event, repoPath: string) => {
   const key = normalizeRepoPath(repoPath)
   const webContents = event.sender
   const webContentsId = webContents.id
 
   killActiveStream(webContentsId)
 
-  return new Promise<{ success: boolean; error?: string }>((resolve) => {
+  return new Promise<typeof StartLogStreamResponse.Encoded>((resolve) => {
     let resolved = false
     const finishOk = () => {
       if (resolved) return
       resolved = true
-      resolve({ success: true })
+      resolve(encodeOrThrow(StartLogStreamResponse, { _tag: 'Ok' }))
     }
     const finishErr = (message: string) => {
       if (resolved) return
       resolved = true
-      resolve({ success: false, error: message })
+      resolve(encodeOrThrow(StartLogStreamResponse, { _tag: 'GitError', message }))
     }
 
     const proc = spawn(
@@ -452,11 +499,8 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
     const send = (done: boolean) => {
       if (webContents.isDestroyed()) return
       if (batch.length === 0 && !done) return
-      webContents.send('log-chunk', {
-        repoPath: key,
-        commits: batch,
-        done
-      })
+      const chunk: LogChunk = { repoPath: key, commits: batch, done }
+      webContents.send(Channel.logChunk, chunk)
       batch = []
     }
 
@@ -496,12 +540,13 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
     proc.on('error', (err) => {
       activeLogStreams.delete(webContentsId)
       if (!webContents.isDestroyed()) {
-        webContents.send('log-chunk', {
+        const chunk: LogChunk = {
           repoPath: key,
           commits: [],
           done: true,
           error: err.message
-        })
+        }
+        webContents.send(Channel.logChunk, chunk)
       }
       finishErr(err.message)
     })
@@ -511,42 +556,50 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
       activeLogStreams.delete(webContentsId)
 
       if (code !== 0 && code !== null) {
+        const message = stderrBuf.trim() || `git log exited with code ${code}`
         if (!webContents.isDestroyed()) {
-          webContents.send('log-chunk', {
-            repoPath: key,
-            commits: [],
-            done: true,
-            error: stderrBuf.trim() || `git log exited with code ${code}`
-          })
+          const chunk: LogChunk = { repoPath: key, commits: [], done: true, error: message }
+          webContents.send(Channel.logChunk, chunk)
         }
-        finishErr(stderrBuf.trim() || `git log exited with code ${code}`)
+        finishErr(message)
         return
       }
 
       send(false)
       if (!webContents.isDestroyed()) {
-        webContents.send('log-chunk', { repoPath: key, commits: [], done: true })
+        const chunk: LogChunk = { repoPath: key, commits: [], done: true }
+        webContents.send(Channel.logChunk, chunk)
       }
       finishOk()
     })
   })
 })
 
-ipcMain.handle('cancel-log-stream', (event) => {
+ipcMain.handle(Channel.cancelLogStream, (event) => {
   killActiveStream(event.sender.id)
-  return { success: true }
+  return encodeOrThrow(CancelLogStreamResponse, {})
 })
 
 ipcMain.handle('get-recent-repos', () => {
   return getRecentRepos()
 })
 
-ipcMain.handle('get-store-value', (_, key: string) => {
-  return store.get(key as never)
+ipcMain.handle(Channel.getSidebarPrefs, () => {
+  return encodeOrThrow(SidebarPrefs, getSidebarPrefs())
 })
 
-ipcMain.handle('set-store-value', (_, key: string, value: unknown) => {
-  store.set(key as never, value as never)
+ipcMain.handle(Channel.setSidebarPrefs, (_, payload: unknown) => {
+  const decoded = decodeOrThrow(SidebarPrefs, payload)
+  setSidebarPrefs(decoded)
+})
+
+ipcMain.handle(Channel.getRefTreeToggles, () => {
+  return encodeOrThrow(RefTreeToggles, getRefTreeToggles())
+})
+
+ipcMain.handle(Channel.setRefTreeToggles, (_, payload: unknown) => {
+  const decoded = decodeOrThrow(RefTreeToggles, payload)
+  setRefTreeToggles([...decoded])
 })
 
 ipcMain.handle('get-working-directory', () => {
@@ -585,7 +638,7 @@ ipcMain.handle('set-onboarding-complete', (_, complete: boolean) => {
   setOnboardingComplete(complete)
 })
 
-ipcMain.handle('scan-for-repos', async (_, dirPath: string) => {
+ipcMain.handle(Channel.scanForRepos, async (_, dirPath: string) => {
   try {
     const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
     const repos: string[] = []
@@ -599,17 +652,15 @@ ipcMain.handle('scan-for-repos', async (_, dirPath: string) => {
           if (isRepo) {
             repos.push(fullPath)
           }
-        } catch {
-          // Not a git repo, skip
-        }
+        } catch {}
       }
     }
 
-    return { success: true, repos }
+    return encodeOrThrow(ScanForReposResponse, { _tag: 'Ok', repos })
   } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error)
-    }
+    return encodeOrThrow(ScanForReposResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })

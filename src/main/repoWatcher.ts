@@ -39,11 +39,6 @@ interface Watcher {
 const watchers = new Map<string, Watcher>()
 const DEBOUNCE_MS = 300
 
-// Conservative deny-list of directories that are almost universally generated
-// or vendor-owned, so chokidar doesn't pump events for build artefacts. A
-// proper gitignore-aware predicate (driven by `git ls-files`) is tracked
-// separately; this is enough to keep the watcher quiet for the common cases
-// (Node, Rust, Java, Next.js, Turbo, Gradle, test reports, etc.).
 export const IGNORED_DIRS = new Set([
   '.git',
   'node_modules',
@@ -65,9 +60,6 @@ export const IGNORED_DIRS = new Set([
   '__pycache__'
 ])
 
-// Names are matched case-insensitively so we cover case-insensitive filesystems
-// (default macOS, Windows) where 'Node_Modules' and 'node_modules' resolve to
-// the same directory but would otherwise miss the deny-list.
 export function ignoreWorkingTree(targetPath: string): boolean {
   const segments = targetPath.split(/[/\\]/)
   for (const segment of segments) {
