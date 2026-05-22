@@ -143,6 +143,19 @@ export function useGit() {
     return unsub
   }, [silentRefreshRefs, silentRefreshStatus])
 
+  // Releases the main-side repo (simple-git instance, chokidar watcher,
+  // any active fetch) when this hook unmounts — i.e. when its tab closes.
+  // Reads activePathRef at unmount time so the latest path is always cleaned up.
+  useEffect(() => {
+    return () => {
+      const wasPath = activePathRef.current
+      if (!wasPath) return
+      activePathRef.current = null
+      Promise.resolve(window.electronAPI.cancelLogStream()).catch(() => {})
+      Promise.resolve(window.electronAPI.closeRepo(wasPath)).catch(() => {})
+    }
+  }, [])
+
   const startLogStream = useCallback((path: string) => {
     accumulatedRef.current = []
     setLog({ all: [], total: 0 })
@@ -162,6 +175,9 @@ export function useGit() {
       setError(null)
       setStatus(null)
       setBranches(null)
+      // Provisional — main returns the canonical form which overwrites this on success.
+      // Setting it now means stale chunks from a previous repo are ignored while the new
+      // open-repo round-trip is in flight.
       activePathRef.current = path
       try {
         const open = (await window.electronAPI.openRepo(path)) as RepoOpenResult
@@ -172,6 +188,8 @@ export function useGit() {
           setBranchesLoading(false)
           return
         }
+        // Adopt the canonical path so chunk/refresh path comparisons match what main sends.
+        activePathRef.current = open.path
         setRepoPath(open.path)
         setRemotes(open.remotes ?? {})
         setDefaultBranch(open.defaultBranch)
@@ -273,38 +291,6 @@ export function useGit() {
     startLogStream(repoPath)
   }, [repoPath, startLogStream])
 
-  const refreshRepo = useCallback(async () => {
-    if (!repoPath) return
-    setLoading(true)
-    setStatusLoading(true)
-    setBranchesLoading(true)
-    try {
-      const open = (await window.electronAPI.openRepo(repoPath)) as RepoOpenResult
-      if (open.success) {
-        setRemotes(open.remotes ?? {})
-        setDefaultBranch(open.defaultBranch)
-      }
-      const [statusRes, branchesRes] = await Promise.all([
-        window.electronAPI.getStatus(repoPath) as Promise<StatusResult>,
-        window.electronAPI.getBranches(repoPath) as Promise<BranchesResult>
-      ])
-      if (statusRes.success && statusRes.status) {
-        setStatus(statusRes.status)
-        setCurrentBranch(statusRes.status.current)
-      }
-      if (branchesRes.success && branchesRes.branches) {
-        setBranches(branchesRes.branches)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setLoading(false)
-      setStatusLoading(false)
-      setBranchesLoading(false)
-    }
-    startLogStream(repoPath)
-  }, [repoPath, startLogStream])
-
   const stageFile = useCallback(
     async (file: string) => {
       if (!repoPath) return
@@ -361,7 +347,6 @@ export function useGit() {
     error,
     openRepo,
     closeRepo,
-    refreshRepo,
     stageFile,
     unstageFile,
     commit,

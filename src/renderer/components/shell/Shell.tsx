@@ -1,6 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import type { RefKind } from './RefTreePanel'
 import { AppSidebar, type SidebarView } from './Sidebar'
 import { Statusbar } from './Statusbar'
 import { Topbar } from './Topbar'
@@ -19,15 +18,10 @@ interface ShellProps {
   remoteBranches: string[]
   tags: string[]
   branchesLoading?: boolean
-  ahead: number
-  behind: number
   changes: number
   activeView: SidebarView
   onSelectView: (view: SidebarView) => void
-  onSelectRef?: (refKind: RefKind, fullPath: string) => void
   onFetch?: () => void
-  onPull?: () => void
-  onPush?: () => void
   children: ReactNode
 }
 
@@ -39,15 +33,10 @@ export function Shell({
   remoteBranches,
   tags,
   branchesLoading = false,
-  ahead,
-  behind,
   changes,
   activeView,
   onSelectView,
-  onSelectRef,
   onFetch,
-  onPull,
-  onPush,
   children
 }: ShellProps) {
   const [open, setOpen] = useState(true)
@@ -125,28 +114,12 @@ export function Shell({
         workingChanges={changes}
         activeView={activeView}
         onSelectView={onSelectView}
-        onSelectRef={onSelectRef}
         onResizeStart={handleResizeStart}
       />
       <SidebarInset className="flex min-h-0 flex-col">
-        <Topbar
-          repoName={repoName}
-          repoPath={repoPath}
-          branch={branch}
-          ahead={ahead}
-          behind={behind}
-          onFetch={onFetch}
-          onPull={onPull}
-          onPush={onPush}
-        />
+        <Topbar repoName={repoName} repoPath={repoPath} branch={branch} onFetch={onFetch} />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t">{children}</div>
-        <Statusbar
-          branch={branch}
-          ahead={ahead}
-          behind={behind}
-          changes={changes}
-          directionLabel="History"
-        />
+        <Statusbar branch={branch} changes={changes} directionLabel="History" />
       </SidebarInset>
     </SidebarProvider>
   )

@@ -9,7 +9,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem
 } from '@/components/ui/sidebar'
-import { type RefKind, RefTreePanel } from './RefTreePanel'
+import { RefTreePanel } from './RefTreePanel'
 
 export type SidebarView = 'history' | 'local-changes'
 
@@ -22,7 +22,6 @@ interface AppSidebarProps {
   workingChanges: number
   activeView: SidebarView
   onSelectView: (view: SidebarView) => void
-  onSelectRef?: (refKind: RefKind, fullPath: string) => void
   onResizeStart?: (e: React.MouseEvent) => void
 }
 
@@ -35,7 +34,6 @@ export function AppSidebar({
   workingChanges,
   activeView,
   onSelectView,
-  onSelectRef,
   onResizeStart
 }: AppSidebarProps) {
   return (
@@ -82,7 +80,6 @@ export function AppSidebar({
           tags={tags}
           currentBranch={currentBranch}
           loading={branchesLoading}
-          onSelectRef={onSelectRef}
         />
       </SidebarContent>
     </ShadSidebar>

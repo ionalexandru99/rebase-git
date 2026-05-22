@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { GitStatus } from '../types'
+import type { GitStatus, RenamedFile } from '../types'
 
 interface StatusPanelProps {
   status: GitStatus | null
@@ -12,12 +12,20 @@ interface StatusPanelProps {
   loading: boolean
 }
 
-type StatusKind = 'modified' | 'staged' | 'untracked'
+type StatusKind = 'modified' | 'staged' | 'untracked' | 'conflicted' | 'deleted' | 'created'
 
 function statusGlyph(kind: StatusKind): string {
   if (kind === 'modified') return 'M'
   if (kind === 'staged') return 'A'
-  return '?'
+  if (kind === 'untracked') return '?'
+  if (kind === 'conflicted') return '!'
+  if (kind === 'deleted') return 'D'
+  return 'A'
+}
+
+function statusBadgeClass(kind: StatusKind): string {
+  if (kind === 'conflicted') return 'border-destructive/40 bg-destructive/10 text-destructive'
+  return ''
 }
 
 function FileRow({
@@ -28,25 +36,45 @@ function FileRow({
 }: {
   file: string
   kind: StatusKind
-  actionLabel: string
-  onAction: (file: string) => void
+  actionLabel?: string
+  onAction?: (file: string) => void
 }) {
   return (
     <li className="group flex h-7 items-center gap-2 rounded-md px-2 hover:bg-accent">
-      <Badge variant="outline" aria-label={kind} className="px-1.5 font-mono text-xs uppercase">
+      <Badge
+        variant="outline"
+        aria-label={kind}
+        className={`px-1.5 font-mono text-xs uppercase ${statusBadgeClass(kind)}`}
+      >
         {statusGlyph(kind)}
       </Badge>
       <span className="min-w-0 flex-1 truncate text-sm" title={file}>
         {file}
       </span>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-        onClick={() => onAction(file)}
-      >
-        {actionLabel}
-      </Button>
+      {actionLabel && onAction ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+          onClick={() => onAction(file)}
+        >
+          {actionLabel}
+        </Button>
+      ) : null}
+    </li>
+  )
+}
+
+function RenamedRow({ entry }: { entry: RenamedFile }) {
+  const label = `${entry.from} → ${entry.to}`
+  return (
+    <li className="flex h-7 items-center gap-2 rounded-md px-2 hover:bg-accent">
+      <Badge variant="outline" aria-label="renamed" className="px-1.5 font-mono text-xs uppercase">
+        R
+      </Badge>
+      <span className="min-w-0 flex-1 truncate text-sm" title={label}>
+        {label}
+      </span>
     </li>
   )
 }
@@ -72,7 +100,15 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
     return null
   }
 
-  const totalChanges = status.modified.length + status.staged.length + status.not_added.length
+  const totalChanges =
+    status.modified.length +
+    status.staged.length +
+    status.not_added.length +
+    status.conflicted.length +
+    status.deleted.length +
+    status.created.length +
+    status.renamed.length
+
   const subtitle =
     totalChanges === 0
       ? 'Clean working tree'
@@ -90,6 +126,10 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
             <Loader2 className="animate-spin" />
             Loading
           </Badge>
+        ) : status.conflicted.length > 0 ? (
+          <Badge variant="destructive">
+            {status.conflicted.length} conflict{status.conflicted.length === 1 ? '' : 's'}
+          </Badge>
         ) : totalChanges === 0 ? (
           <Badge variant="secondary">Clean</Badge>
         ) : null}
@@ -97,30 +137,71 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
 
       <ScrollArea className="flex-1">
         <div className="px-1.5 pb-3 pt-2">
-          <SectionHeading label="Modified" count={status.modified.length} />
-          {status.modified.length === 0 ? (
-            <EmptyRow text="No modified files" />
-          ) : (
-            <ul className="space-y-px">
-              {status.modified.map((f) => (
-                <FileRow key={f} file={f} kind="modified" actionLabel="Stage" onAction={onStage} />
-              ))}
-            </ul>
+          {status.conflicted.length > 0 && (
+            <>
+              <SectionHeading label="Conflicted" count={status.conflicted.length} />
+              <ul className="space-y-px">
+                {status.conflicted.map((f) => (
+                  <FileRow key={f} file={f} kind="conflicted" />
+                ))}
+              </ul>
+            </>
           )}
 
-          <SectionHeading label="Staged" count={status.staged.length} />
-          {status.staged.length === 0 ? (
+          <SectionHeading label="Staged" count={status.staged.length + status.created.length} />
+          {status.staged.length === 0 && status.created.length === 0 ? (
             <EmptyRow text="No staged files" />
           ) : (
             <ul className="space-y-px">
               {status.staged.map((f) => (
                 <FileRow
-                  key={f}
+                  key={`s:${f}`}
                   file={f}
                   kind="staged"
                   actionLabel="Unstage"
                   onAction={onUnstage}
                 />
+              ))}
+              {status.created.map((f) => (
+                <FileRow
+                  key={`c:${f}`}
+                  file={f}
+                  kind="created"
+                  actionLabel="Unstage"
+                  onAction={onUnstage}
+                />
+              ))}
+            </ul>
+          )}
+
+          <SectionHeading
+            label="Changes"
+            count={status.modified.length + status.deleted.length + status.renamed.length}
+          />
+          {status.modified.length + status.deleted.length + status.renamed.length === 0 ? (
+            <EmptyRow text="No working-tree changes" />
+          ) : (
+            <ul className="space-y-px">
+              {status.modified.map((f) => (
+                <FileRow
+                  key={`m:${f}`}
+                  file={f}
+                  kind="modified"
+                  actionLabel="Stage"
+                  onAction={onStage}
+                />
+              ))}
+              {status.deleted.map((f) => (
+                <FileRow
+                  key={`d:${f}`}
+                  file={f}
+                  kind="deleted"
+                  actionLabel="Stage"
+                  onAction={onStage}
+                />
+              ))}
+              {status.renamed.map((entry) => (
+                <RenamedRow key={`r:${entry.from}->${entry.to}`} entry={entry} />
               ))}
             </ul>
           )}
@@ -131,7 +212,13 @@ export function StatusPanel({ status, onStage, onUnstage, loading }: StatusPanel
           ) : (
             <ul className="space-y-px">
               {status.not_added.map((f) => (
-                <FileRow key={f} file={f} kind="untracked" actionLabel="Stage" onAction={onStage} />
+                <FileRow
+                  key={`u:${f}`}
+                  file={f}
+                  kind="untracked"
+                  actionLabel="Stage"
+                  onAction={onStage}
+                />
               ))}
             </ul>
           )}
@@ -152,7 +239,7 @@ function StatusPanelSkeleton() {
         <Skeleton className="h-5 w-16 rounded" />
       </header>
       <div className="flex flex-1 flex-col gap-3 p-3">
-        {(['Modified', 'Staged', 'Untracked'] as const).map((section) => (
+        {(['Staged', 'Changes', 'Untracked'] as const).map((section) => (
           <div key={section} className="space-y-1.5">
             <div className="flex items-center justify-between px-1">
               <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
