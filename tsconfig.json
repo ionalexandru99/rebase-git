@@ -17,15 +17,16 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/renderer/*"],
-      "@main/*": ["src/main/*"]
+      "@main/*": ["src/main/*"],
+      "@shared/*": ["src/shared/*"]
     }
   },
   "include": [
     "src/renderer/**/*",
     "src/preload/**/*",
+    "src/shared/**/*",
     "src/test/**/*",
     "vitest.config.ts",
     "playwright.config.ts"
-  ],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  ]
 }

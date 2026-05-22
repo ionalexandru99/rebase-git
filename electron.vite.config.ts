@@ -2,18 +2,29 @@ import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
+const sharedAlias = {
+  '@shared': path.resolve('src/shared')
+}
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: sharedAlias
+    }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: sharedAlias
+    }
   },
   renderer: {
     plugins: [tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve('src/renderer')
+        '@': path.resolve('src/renderer'),
+        ...sharedAlias
       }
     },
     build: {
