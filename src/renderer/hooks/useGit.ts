@@ -1,10 +1,14 @@
 import { decodeOrThrow } from '@shared/codec'
-import { BranchesResponse, OpenRepoResponse, StatusResponse } from '@shared/schemas/ipc'
+import {
+  BranchesResponse,
+  LogResponse,
+  OpenRepoResponse,
+  StatusResponse
+} from '@shared/schemas/ipc'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '../types'
 
 type OpResult = { success: boolean; error?: string }
-type LogResult = { success: boolean; log?: GitLog; error?: string }
 type FetchResult = { success: boolean; skipped?: boolean; error?: string }
 type LogChunk = { repoPath: string; commits: GitLogEntry[]; done: boolean; error?: string }
 type RepoChangedEvent = { repoPath: string; kind: 'refs' | 'workingTree' }
@@ -47,11 +51,11 @@ export function useGit() {
     window.electronAPI
       .getLog(path)
       .then((res) => {
-        const r = res as LogResult
+        const decoded = decodeOrThrow(LogResponse, res)
         if (activePathRef.current !== path) return
-        if (r.success && r.log) {
-          accumulatedRef.current = r.log.all.slice()
-          setLog(r.log)
+        if (decoded._tag === 'Ok') {
+          accumulatedRef.current = decoded.log.all.slice()
+          setLog(decoded.log)
         }
       })
       .catch((err: unknown) => {

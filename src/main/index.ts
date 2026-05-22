@@ -9,7 +9,13 @@ import { simpleGit } from 'simple-git'
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
 import { encodeOrThrow } from '@shared/codec'
-import { BranchesResponse, Channel, OpenRepoResponse, StatusResponse } from '@shared/schemas/ipc'
+import {
+  BranchesResponse,
+  Channel,
+  LogResponse,
+  OpenRepoResponse,
+  StatusResponse
+} from '@shared/schemas/ipc'
 import { tryReserveFetch } from './autoFetch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { setupContextMenu } from './menu'
@@ -395,9 +401,9 @@ ipcMain.handle('commit', async (_, repoPath: string, message: string) => {
   }
 })
 
-ipcMain.handle('get-log', async (_, repoPath: string, maxCount?: number) => {
+ipcMain.handle(Channel.getLog, async (_, repoPath: string, maxCount?: number) => {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return { success: false, error: 'No repository open' }
+  if (!git) return encodeOrThrow(LogResponse, { _tag: 'RepoNotOpen' })
   try {
     const logOptions: Record<string, unknown> = {
       format: GRAPH_LOG_FORMAT,
@@ -405,9 +411,12 @@ ipcMain.handle('get-log', async (_, repoPath: string, maxCount?: number) => {
     }
     if (typeof maxCount === 'number' && maxCount > 0) logOptions.maxCount = maxCount
     const log = await git.log(logOptions)
-    return { success: true, log: serializeLog(log) }
+    return encodeOrThrow(LogResponse, { _tag: 'Ok', log: serializeLog(log) })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(LogResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 

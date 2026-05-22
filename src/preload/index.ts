@@ -1,6 +1,7 @@
 import {
   type BranchesResponse,
   Channel,
+  type LogResponse,
   type OpenRepoResponse,
   type StatusResponse
 } from '@shared/schemas/ipc'
@@ -35,7 +36,7 @@ export interface IElectronAPI {
   unstageFile: (repoPath: string, file: string) => Promise<unknown>
   commit: (repoPath: string, message: string) => Promise<unknown>
   fetchRepo: (repoPath: string) => Promise<{ success: boolean; skipped?: boolean; error?: string }>
-  getLog: (repoPath: string, maxCount?: number) => Promise<unknown>
+  getLog: (repoPath: string, maxCount?: number) => Promise<LogResponse>
   startLogStream: (repoPath: string) => Promise<{ success: boolean; error?: string }>
   cancelLogStream: () => Promise<{ success: boolean }>
   onLogChunk: (cb: (chunk: LogChunkEvent) => void) => () => void
@@ -67,7 +68,7 @@ const api: IElectronAPI = {
   commit: (repoPath: string, message: string) => ipcRenderer.invoke('commit', repoPath, message),
   fetchRepo: (repoPath: string) => ipcRenderer.invoke('git-fetch', repoPath),
   getLog: (repoPath: string, maxCount?: number) =>
-    ipcRenderer.invoke('get-log', repoPath, maxCount),
+    ipcRenderer.invoke(Channel.getLog, repoPath, maxCount),
   startLogStream: (repoPath: string) => ipcRenderer.invoke('start-log-stream', repoPath),
   cancelLogStream: () => ipcRenderer.invoke('cancel-log-stream'),
   onLogChunk: (cb: (chunk: LogChunkEvent) => void) => {

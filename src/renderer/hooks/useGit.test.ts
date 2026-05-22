@@ -380,7 +380,7 @@ describe('useGit auto-fetch', () => {
       branches: { current: 'main', all: ['main', 'feature'], remotes: ['origin/main'], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       log: {
         all: [
           {
@@ -457,7 +457,7 @@ describe('useGit auto-fetch', () => {
       branches: { current: 'main', all: ['main', 'feature'], remotes: [], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       log: { all: [], total: 0 }
     })
 
@@ -540,7 +540,7 @@ describe('useGit repo-changed watcher', () => {
       branches: { current: 'feature', all: ['main', 'feature'], remotes: [], tags: [] }
     })
     vi.mocked(window.electronAPI.getLog).mockResolvedValue({
-      success: true,
+      _tag: 'Ok',
       log: {
         all: [
           {
