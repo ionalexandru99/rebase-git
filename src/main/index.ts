@@ -9,6 +9,7 @@ import { simpleGit } from 'simple-git'
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
 import { tryReserveFetch } from './autoFetch'
+import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { setupContextMenu } from './menu'
 import { startWatching, stopWatching } from './repoWatcher'
 import {
@@ -41,15 +42,6 @@ let mainWindow: BrowserWindow | null = null
 
 const gitInstances = new Map<string, ReturnType<typeof simpleGit>>()
 const activeFetches = new Map<string, ChildProcess>()
-
-function getGit(repoPath: string) {
-  let g = gitInstances.get(repoPath)
-  if (!g) {
-    g = simpleGit(repoPath)
-    gitInstances.set(repoPath, g)
-  }
-  return g
-}
 
 function createWindow(): void {
   const mainWindowState = windowStateKeeper({
@@ -232,27 +224,28 @@ async function resolveDefaultBranch(
 }
 
 ipcMain.handle('open-repo', async (event, repoPath: string) => {
+  const key = normalizeRepoPath(repoPath)
   try {
-    const git = getGit(repoPath)
+    const git = getOrCreateGit(gitInstances, key)
     const isRepo = await git.checkIsRepo()
 
     if (!isRepo) {
-      gitInstances.delete(repoPath)
+      gitInstances.delete(key)
       return { success: false, error: 'Not a git repository' }
     }
 
-    addRecentRepo(repoPath)
+    addRecentRepo(key)
 
     const remotes = await git.getRemotes(true)
     const defaultBranch = await resolveDefaultBranch(git, undefined)
 
-    startWatching(repoPath, event.sender)
+    startWatching(key, event.sender)
 
     return {
       success: true,
       remotes: serializeRemotes(remotes),
       defaultBranch,
-      path: repoPath
+      path: key
     }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) }
@@ -260,7 +253,7 @@ ipcMain.handle('open-repo', async (event, repoPath: string) => {
 })
 
 ipcMain.handle('get-branches', async (_, repoPath: string) => {
-  const git = gitInstances.get(repoPath)
+  const git = lookupGit(gitInstances, repoPath)
   if (!git) return { success: false, error: 'No repository open' }
   try {
     const [branches, tags] = await Promise.all([git.branch(['-a']), git.tags()])
@@ -271,24 +264,26 @@ ipcMain.handle('get-branches', async (_, repoPath: string) => {
 })
 
 ipcMain.handle('close-repo', async (_, repoPath: string) => {
-  gitInstances.delete(repoPath)
-  const proc = activeFetches.get(repoPath)
+  const key = normalizeRepoPath(repoPath)
+  gitInstances.delete(key)
+  const proc = activeFetches.get(key)
   if (proc && !proc.killed) proc.kill()
-  activeFetches.delete(repoPath)
-  await stopWatching(repoPath)
+  activeFetches.delete(key)
+  await stopWatching(key)
   return { success: true }
 })
 
 ipcMain.handle('git-fetch', async (_, repoPath: string) => {
-  if (!gitInstances.has(repoPath)) {
+  const key = normalizeRepoPath(repoPath)
+  if (!gitInstances.has(key)) {
     return { success: false, error: 'No repository open' }
   }
 
-  const proc = spawn('git', ['-C', repoPath, 'fetch', '--prune'], {
+  const proc = spawn('git', ['-C', key, 'fetch', '--prune'], {
     stdio: ['ignore', 'ignore', 'pipe']
   })
 
-  if (!tryReserveFetch(activeFetches, repoPath, proc)) {
+  if (!tryReserveFetch(activeFetches, key, proc)) {
     if (!proc.killed) proc.kill()
     return { success: true, skipped: true }
   }
@@ -302,12 +297,12 @@ ipcMain.handle('git-fetch', async (_, repoPath: string) => {
     })
 
     proc.on('error', (err) => {
-      if (activeFetches.get(repoPath) === proc) activeFetches.delete(repoPath)
+      if (activeFetches.get(key) === proc) activeFetches.delete(key)
       resolve({ success: false, error: err.message })
     })
 
     proc.on('close', (code) => {
-      if (activeFetches.get(repoPath) === proc) activeFetches.delete(repoPath)
+      if (activeFetches.get(key) === proc) activeFetches.delete(key)
       if (code === 0) {
         resolve({ success: true })
       } else {
@@ -321,7 +316,7 @@ ipcMain.handle('git-fetch', async (_, repoPath: string) => {
 })
 
 ipcMain.handle('get-status', async (_, repoPath: string) => {
-  const git = gitInstances.get(repoPath)
+  const git = lookupGit(gitInstances, repoPath)
   if (!git) return { success: false, error: 'No repository open' }
   try {
     const status = await git.status()
@@ -332,7 +327,7 @@ ipcMain.handle('get-status', async (_, repoPath: string) => {
 })
 
 ipcMain.handle('stage-file', async (_, repoPath: string, file: string) => {
-  const git = gitInstances.get(repoPath)
+  const git = lookupGit(gitInstances, repoPath)
   if (!git) return { success: false, error: 'No repository open' }
   try {
     await git.add(file)
@@ -343,7 +338,7 @@ ipcMain.handle('stage-file', async (_, repoPath: string, file: string) => {
 })
 
 ipcMain.handle('unstage-file', async (_, repoPath: string, file: string) => {
-  const git = gitInstances.get(repoPath)
+  const git = lookupGit(gitInstances, repoPath)
   if (!git) return { success: false, error: 'No repository open' }
   try {
     await git.reset(['HEAD', file])
@@ -354,7 +349,7 @@ ipcMain.handle('unstage-file', async (_, repoPath: string, file: string) => {
 })
 
 ipcMain.handle('commit', async (_, repoPath: string, message: string) => {
-  const git = gitInstances.get(repoPath)
+  const git = lookupGit(gitInstances, repoPath)
   if (!git) return { success: false, error: 'No repository open' }
   try {
     const result = await git.commit(message)
@@ -372,7 +367,7 @@ ipcMain.handle('commit', async (_, repoPath: string, message: string) => {
 })
 
 ipcMain.handle('get-log', async (_, repoPath: string, maxCount?: number) => {
-  const git = gitInstances.get(repoPath)
+  const git = lookupGit(gitInstances, repoPath)
   if (!git) return { success: false, error: 'No repository open' }
   try {
     const logOptions: Record<string, unknown> = {
@@ -403,6 +398,7 @@ function killActiveStream(webContentsId: number) {
 }
 
 ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
+  const key = normalizeRepoPath(repoPath)
   const webContents = event.sender
   const webContentsId = webContents.id
 
@@ -425,7 +421,7 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
       'git',
       [
         '-C',
-        repoPath,
+        key,
         'log',
         '-z',
         '--branches',
@@ -444,7 +440,7 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
       if (webContents.isDestroyed()) return
       if (batch.length === 0 && !done) return
       webContents.send('log-chunk', {
-        repoPath,
+        repoPath: key,
         commits: batch,
         done
       })
@@ -487,7 +483,12 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
     proc.on('error', (err) => {
       activeLogStreams.delete(webContentsId)
       if (!webContents.isDestroyed()) {
-        webContents.send('log-chunk', { repoPath, commits: [], done: true, error: err.message })
+        webContents.send('log-chunk', {
+          repoPath: key,
+          commits: [],
+          done: true,
+          error: err.message
+        })
       }
       finishErr(err.message)
     })
@@ -499,7 +500,7 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
       if (code !== 0 && code !== null) {
         if (!webContents.isDestroyed()) {
           webContents.send('log-chunk', {
-            repoPath,
+            repoPath: key,
             commits: [],
             done: true,
             error: stderrBuf.trim() || `git log exited with code ${code}`
@@ -511,7 +512,7 @@ ipcMain.handle('start-log-stream', async (event, repoPath: string) => {
 
       send(false)
       if (!webContents.isDestroyed()) {
-        webContents.send('log-chunk', { repoPath, commits: [], done: true })
+        webContents.send('log-chunk', { repoPath: key, commits: [], done: true })
       }
       finishOk()
     })
