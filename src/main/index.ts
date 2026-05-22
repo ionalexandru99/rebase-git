@@ -9,7 +9,7 @@ import { simpleGit } from 'simple-git'
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
 import { encodeOrThrow } from '@shared/codec'
-import { BranchesResponse, Channel, StatusResponse } from '@shared/schemas/ipc'
+import { BranchesResponse, Channel, OpenRepoResponse, StatusResponse } from '@shared/schemas/ipc'
 import { tryReserveFetch } from './autoFetch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { setupContextMenu } from './menu'
@@ -238,7 +238,7 @@ async function resolveDefaultBranch(
   return currentLocal && currentLocal !== 'HEAD' ? currentLocal : undefined
 }
 
-ipcMain.handle('open-repo', async (event, repoPath: string) => {
+ipcMain.handle(Channel.openRepo, async (event, repoPath: string) => {
   const key = normalizeRepoPath(repoPath)
   try {
     const git = getOrCreateGit(gitInstances, key)
@@ -246,7 +246,7 @@ ipcMain.handle('open-repo', async (event, repoPath: string) => {
 
     if (!isRepo) {
       gitInstances.delete(key)
-      return { success: false, error: 'Not a git repository' }
+      return encodeOrThrow(OpenRepoResponse, { _tag: 'NotARepo' })
     }
 
     addRecentRepo(key)
@@ -256,14 +256,19 @@ ipcMain.handle('open-repo', async (event, repoPath: string) => {
 
     startWatching(key, event.sender)
 
-    return {
-      success: true,
-      remotes: serializeRemotes(remotes),
-      defaultBranch,
-      path: key
-    }
+    return encodeOrThrow(OpenRepoResponse, {
+      _tag: 'Ok',
+      result: {
+        remotes: serializeRemotes(remotes),
+        defaultBranch,
+        path: key
+      }
+    })
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
+    return encodeOrThrow(OpenRepoResponse, {
+      _tag: 'GitError',
+      message: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 

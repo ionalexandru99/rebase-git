@@ -1,7 +1,7 @@
 import { decodeOrThrow } from '@shared/codec'
-import { BranchesResponse, StatusResponse } from '@shared/schemas/ipc'
+import { BranchesResponse, OpenRepoResponse, StatusResponse } from '@shared/schemas/ipc'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { GitBranches, GitLog, GitLogEntry, GitStatus, RepoOpenResult } from '../types'
+import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '../types'
 
 type OpResult = { success: boolean; error?: string }
 type LogResult = { success: boolean; log?: GitLog; error?: string }
@@ -180,70 +180,73 @@ export function useGit() {
       // open-repo round-trip is in flight.
       activePathRef.current = path
       try {
-        const open = (await window.electronAPI.openRepo(path)) as RepoOpenResult
-        if (!open.success) {
-          console.error('[useGit] open-repo failed', { path, error: open.error })
-          setError(open.error || 'Failed to open repository')
+        const decodedOpen = decodeOrThrow(OpenRepoResponse, await window.electronAPI.openRepo(path))
+        if (decodedOpen._tag !== 'Ok') {
+          const errorMessage =
+            decodedOpen._tag === 'NotARepo' ? 'Not a git repository' : decodedOpen.message
+          console.error('[useGit] open-repo failed', { path, error: errorMessage })
+          setError(errorMessage)
           setStatusLoading(false)
           setBranchesLoading(false)
           return
         }
+        const opened = decodedOpen.result
         // Adopt the canonical path so chunk/refresh path comparisons match what main sends.
-        activePathRef.current = open.path
-        setRepoPath(open.path)
-        setRemotes(open.remotes ?? {})
-        setDefaultBranch(open.defaultBranch)
+        activePathRef.current = opened.path
+        setRepoPath(opened.path)
+        setRemotes(opened.remotes)
+        setDefaultBranch(opened.defaultBranch)
 
-        startLogStream(open.path)
+        startLogStream(opened.path)
 
         window.electronAPI
-          .getStatus(open.path)
+          .getStatus(opened.path)
           .then((res) => {
             const decoded = decodeOrThrow(StatusResponse, res)
-            if (activePathRef.current !== open.path) return
+            if (activePathRef.current !== opened.path) return
             if (decoded._tag === 'Ok') {
               setStatus(decoded.status)
               setCurrentBranch(decoded.status.current)
             } else if (decoded._tag === 'GitError') {
               console.error('[useGit] get-status failed', {
-                path: open.path,
+                path: opened.path,
                 error: decoded.message
               })
               setError(decoded.message)
             }
           })
           .catch((err: unknown) => {
-            if (activePathRef.current !== open.path) return
+            if (activePathRef.current !== opened.path) return
             console.error('[useGit] get-status threw', err)
             setError(err instanceof Error ? err.message : 'Unknown error')
           })
           .finally(() => {
-            if (activePathRef.current === open.path) setStatusLoading(false)
+            if (activePathRef.current === opened.path) setStatusLoading(false)
           })
 
         window.electronAPI
-          .getBranches(open.path)
+          .getBranches(opened.path)
           .then((res) => {
             const decoded = decodeOrThrow(BranchesResponse, res)
-            if (activePathRef.current !== open.path) return
+            if (activePathRef.current !== opened.path) return
             if (decoded._tag === 'Ok') {
               setBranches(decoded.branches)
               setCurrentBranch((prev) => prev || decoded.branches.current || '')
             } else if (decoded._tag === 'GitError') {
               console.error('[useGit] get-branches failed', {
-                path: open.path,
+                path: opened.path,
                 error: decoded.message
               })
               setError(decoded.message)
             }
           })
           .catch((err: unknown) => {
-            if (activePathRef.current !== open.path) return
+            if (activePathRef.current !== opened.path) return
             console.error('[useGit] get-branches threw', err)
             setError(err instanceof Error ? err.message : 'Unknown error')
           })
           .finally(() => {
-            if (activePathRef.current === open.path) setBranchesLoading(false)
+            if (activePathRef.current === opened.path) setBranchesLoading(false)
           })
       } catch (err) {
         console.error('[useGit] openRepo threw', err)

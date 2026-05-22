@@ -22,10 +22,8 @@ function status(overrides: Partial<GitStatus> = {}): GitStatus {
 
 function mockOpenRepoSuccess(s: GitStatus = status(), path = '/test/repo') {
   vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    success: true,
-    path,
-    remotes: {},
-    defaultBranch: s.current
+    _tag: 'Ok',
+    result: { path, remotes: {}, defaultBranch: s.current }
   })
   vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
     _tag: 'Ok',
@@ -134,8 +132,7 @@ describe('useGit', () => {
 
   it('should handle repo open failure and not start a stream', async () => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: false,
-      error: 'Not a git repository'
+      _tag: 'NotARepo'
     })
 
     const { result } = renderHook(() => useGit())
@@ -270,10 +267,8 @@ describe('useGit', () => {
     // Chunks/refresh events arrive keyed on the canonical path, so the hook must
     // store the canonical path on activePathRef or every comparison drops the data.
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/test/repo',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/test/repo', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       _tag: 'Ok',
@@ -350,10 +345,8 @@ describe('useGit auto-fetch', () => {
 
   async function openAndFlush() {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/test/repo',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/test/repo', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       _tag: 'Ok',
@@ -513,10 +506,8 @@ describe('useGit repo-changed watcher', () => {
 
   async function openRepoForWatcher(repoChanged = setupRepoChanged()) {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/test/repo',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/test/repo', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       _tag: 'Ok',

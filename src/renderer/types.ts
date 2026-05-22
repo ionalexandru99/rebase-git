@@ -8,9 +8,3 @@ export type {
   RenamedFile,
   RepoOpenSuccess
 } from '@shared/schemas/git'
-
-// Transitional shape for the open-repo handler — still uses the legacy
-// success/error ADT. Replaced by OpenRepoResponse from @shared/schemas/ipc
-// once that handler is ported.
-import type { RepoOpenSuccess } from '@shared/schemas/git'
-export type RepoOpenResult = RepoOpenSuccess & { success: boolean; error?: string }

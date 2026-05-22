@@ -238,10 +238,8 @@ describe('App — repo picker (no repo open)', () => {
       scanRepos: ['/home/user/repos/my-app']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/home/user/repos/my-app',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/home/user/repos/my-app', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       _tag: 'Ok',
@@ -298,10 +296,12 @@ describe('App — repo picker (no repo open)', () => {
 
 describe('App — workspace (repo open)', () => {
   const openRepoMock = {
-    success: true,
-    path: '/home/user/projects/my-app',
-    remotes: {},
-    defaultBranch: 'feature/ui'
+    _tag: 'Ok' as const,
+    result: {
+      path: '/home/user/projects/my-app',
+      remotes: {},
+      defaultBranch: 'feature/ui'
+    }
   }
   const statusMock = {
     _tag: 'Ok' as const,
@@ -394,10 +394,8 @@ describe('App — workspace (repo open)', () => {
       scanRepos: ['/workspace/repo']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: true,
-      path: '/workspace/repo',
-      remotes: {},
-      defaultBranch: 'main'
+      _tag: 'Ok',
+      result: { path: '/workspace/repo', remotes: {}, defaultBranch: 'main' }
     })
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
       _tag: 'Ok',
@@ -436,10 +434,8 @@ describe('App — workspace (repo open)', () => {
     })
     vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
       Promise.resolve({
-        success: true,
-        path,
-        remotes: {},
-        defaultBranch: 'main'
+        _tag: 'Ok',
+        result: { path, remotes: {}, defaultBranch: 'main' }
       })
     )
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
@@ -536,8 +532,7 @@ describe('App — workspace (repo open)', () => {
       scanRepos: ['/workspace/bad-repo']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      success: false,
-      error: 'Not a git repository'
+      _tag: 'NotARepo'
     })
 
     render(<App />)

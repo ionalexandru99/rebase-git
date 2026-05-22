@@ -1,4 +1,9 @@
-import { type BranchesResponse, Channel, type StatusResponse } from '@shared/schemas/ipc'
+import {
+  type BranchesResponse,
+  Channel,
+  type OpenRepoResponse,
+  type StatusResponse
+} from '@shared/schemas/ipc'
 import { contextBridge, ipcRenderer } from 'electron'
 
 export interface LogChunkEvent {
@@ -22,7 +27,7 @@ export type RepoChangedEvent = {
 
 export interface IElectronAPI {
   selectFolder: () => Promise<string | null>
-  openRepo: (path: string) => Promise<unknown>
+  openRepo: (path: string) => Promise<OpenRepoResponse>
   closeRepo: (path: string) => Promise<unknown>
   getBranches: (repoPath: string) => Promise<BranchesResponse>
   getStatus: (repoPath: string) => Promise<StatusResponse>
@@ -52,7 +57,7 @@ export interface IElectronAPI {
 
 const api: IElectronAPI = {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
-  openRepo: (path: string) => ipcRenderer.invoke('open-repo', path),
+  openRepo: (path: string) => ipcRenderer.invoke(Channel.openRepo, path),
   closeRepo: (path: string) => ipcRenderer.invoke('close-repo', path),
   getBranches: (repoPath: string) => ipcRenderer.invoke(Channel.getBranches, repoPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke(Channel.getStatus, repoPath),
