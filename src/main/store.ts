@@ -10,6 +10,8 @@ interface StoreSchema {
   sidebarOpen: boolean
   sidebarWidth: number
   sidebarRefTreeToggles: string[]
+  persistedTabRepoPaths: (string | null)[]
+  persistedActiveTabIndex: number
 }
 
 const SIDEBAR_WIDTH_DEFAULT = 244
@@ -24,7 +26,9 @@ export const store = new Store<StoreSchema>({
     onboardingComplete: false,
     sidebarOpen: true,
     sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
-    sidebarRefTreeToggles: []
+    sidebarRefTreeToggles: [],
+    persistedTabRepoPaths: [null],
+    persistedActiveTabIndex: 0
   }
 })
 
@@ -132,4 +136,26 @@ export function getRefTreeToggles(): string[] {
 
 export function setRefTreeToggles(toggles: string[]): void {
   store.set('sidebarRefTreeToggles', toggles)
+}
+
+export interface PersistedTabState {
+  tabs: (string | null)[]
+  activeIndex: number
+}
+
+export function getPersistedTabs(): PersistedTabState {
+  const tabs = store.get('persistedTabRepoPaths')
+  const activeIndex = store.get('persistedActiveTabIndex')
+  if (tabs.length === 0) {
+    return { tabs: [null], activeIndex: 0 }
+  }
+  const clampedIndex = Math.max(0, Math.min(activeIndex, tabs.length - 1))
+  return { tabs, activeIndex: clampedIndex }
+}
+
+export function setPersistedTabs(state: PersistedTabState): void {
+  const tabs = state.tabs.length === 0 ? [null] : state.tabs
+  const clampedIndex = Math.max(0, Math.min(state.activeIndex, tabs.length - 1))
+  store.set('persistedTabRepoPaths', tabs)
+  store.set('persistedActiveTabIndex', clampedIndex)
 }

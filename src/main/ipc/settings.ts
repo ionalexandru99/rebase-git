@@ -1,7 +1,14 @@
 import { decodeOrThrow, encodeOrThrow } from '@shared/codec'
-import { Channel, RefTreeToggles, SidebarPrefs } from '@shared/schemas/ipc'
+import { Channel, PersistedTabs, RefTreeToggles, SidebarPrefs } from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
-import { getRefTreeToggles, getSidebarPrefs, setRefTreeToggles, setSidebarPrefs } from '../store'
+import {
+  getPersistedTabs,
+  getRefTreeToggles,
+  getSidebarPrefs,
+  setPersistedTabs,
+  setRefTreeToggles,
+  setSidebarPrefs
+} from '../store'
 
 export function register(): void {
   ipcMain.handle(Channel.getSidebarPrefs, () => encodeOrThrow(SidebarPrefs, getSidebarPrefs()))
@@ -16,5 +23,11 @@ export function register(): void {
   ipcMain.handle(Channel.setRefTreeToggles, (_, payload: unknown) => {
     const decoded = decodeOrThrow(RefTreeToggles, payload)
     setRefTreeToggles([...decoded])
+  })
+
+  ipcMain.handle(Channel.getPersistedTabs, () => encodeOrThrow(PersistedTabs, getPersistedTabs()))
+  ipcMain.handle(Channel.setPersistedTabs, (_, payload: unknown) => {
+    const decoded = decodeOrThrow(PersistedTabs, payload)
+    setPersistedTabs({ tabs: [...decoded.tabs], activeIndex: decoded.activeIndex })
   })
 }

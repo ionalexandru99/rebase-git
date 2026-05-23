@@ -1,5 +1,5 @@
 import { AlertCircle } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useGit } from '@/hooks/useGit'
 import { RepoPicker } from '@/RepoPicker'
@@ -7,6 +7,7 @@ import { Workspace } from '@/Workspace'
 
 interface TabViewProps {
   tabId: string
+  initialRepoPath?: string | null
   recentRepos: string[]
   discoveredRepos: string[]
   workspaces: string[]
@@ -20,6 +21,7 @@ interface TabViewProps {
 
 export function TabView({
   tabId,
+  initialRepoPath,
   recentRepos,
   discoveredRepos,
   workspaces,
@@ -35,6 +37,13 @@ export function TabView({
   const stagedCount = git.status?.staged.length ?? 0
   const untrackedCount = git.status?.not_added.length ?? 0
   const totalChanges = modifiedCount + stagedCount + untrackedCount
+
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    if (initialRepoPath) git.openRepo(initialRepoPath)
+  }, [initialRepoPath, git.openRepo])
 
   useEffect(() => {
     onReportRepo(tabId, git.repoPath ?? null)

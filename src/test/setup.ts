@@ -46,6 +46,8 @@ const mockElectronAPI = {
   setSidebarPrefs: vi.fn(),
   getRefTreeToggles: vi.fn(),
   setRefTreeToggles: vi.fn(),
+  getPersistedTabs: vi.fn(),
+  setPersistedTabs: vi.fn(),
   getWorkingDirectory: vi.fn(),
   setWorkingDirectory: vi.fn(),
   getWorkspaces: vi.fn(),
@@ -129,4 +131,9 @@ beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
+  vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({
+    tabs: [null],
+    activeIndex: 0
+  })
+  vi.mocked(window.electronAPI.setPersistedTabs).mockResolvedValue(undefined)
 })

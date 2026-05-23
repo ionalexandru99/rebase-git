@@ -1,3 +1,4 @@
+import type { PersistedTabs } from '@shared/schemas/ipc'
 import { useEffect, useState } from 'react'
 import { OnboardingScreen } from '@/components/OnboardingScreen'
 import { TabBar } from '@/components/TabBar'
@@ -7,23 +8,15 @@ import { TabView } from '@/TabView'
 
 function App() {
   const onboarding = useOnboarding()
-  const {
-    tabs,
-    activeTabId,
-    setActiveTabId,
-    tabDescriptors,
-    newTab,
-    closeTab,
-    reportTabRepo,
-    requestOpenRepo
-  } = useTabs()
-  const [recentRepos, setRecentRepos] = useState<string[]>([])
+  const [persistedTabs, setPersistedTabs] = useState<PersistedTabs | null>(null)
 
   useEffect(() => {
-    window.electronAPI.getRecentRepos().then(setRecentRepos)
+    window.electronAPI.getPersistedTabs().then((state) => {
+      setPersistedTabs({ tabs: [...state.tabs], activeIndex: state.activeIndex })
+    })
   }, [])
 
-  if (onboarding.onboardingComplete === null) {
+  if (onboarding.onboardingComplete === null || persistedTabs === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-foreground">
         <div className="animate-pulse text-xs text-muted-foreground">Loading...</div>
@@ -52,6 +45,39 @@ function App() {
     )
   }
 
+  return <TabsShell persisted={persistedTabs} onboarding={onboarding} />
+}
+
+interface TabsShellProps {
+  persisted: PersistedTabs
+  onboarding: ReturnType<typeof useOnboarding>
+}
+
+function TabsShell({ persisted, onboarding }: TabsShellProps) {
+  const {
+    tabs,
+    activeTabId,
+    setActiveTabId,
+    tabDescriptors,
+    newTab,
+    closeTab,
+    reportTabRepo,
+    requestOpenRepo,
+    persistedSnapshot,
+    initialRepoPath
+  } = useTabs(persisted)
+  const [recentRepos, setRecentRepos] = useState<string[]>([])
+
+  useEffect(() => {
+    window.electronAPI.getRecentRepos().then(setRecentRepos)
+  }, [])
+
+  useEffect(() => {
+    window.electronAPI.setPersistedTabs(persistedSnapshot).catch((error: unknown) => {
+      console.warn('[app] failed to persist tab state', error)
+    })
+  }, [persistedSnapshot])
+
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <TabBar
@@ -75,6 +101,7 @@ function App() {
           >
             <TabView
               tabId={tab.id}
+              initialRepoPath={initialRepoPath(tab.id)}
               recentRepos={recentRepos}
               discoveredRepos={onboarding.discoveredRepos}
               workspaces={onboarding.workspaces}

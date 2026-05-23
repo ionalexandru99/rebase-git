@@ -294,6 +294,83 @@ describe('App — repo picker (no repo open)', () => {
   })
 })
 
+describe('App — persisted tabs', () => {
+  it('reopens persisted repos on boot', async () => {
+    mockBaseAPI({ workingDirectory: '/home/user/projects' })
+    vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({
+      tabs: ['/home/user/projects/restored'],
+      activeIndex: 0
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/home/user/projects/restored', remotes: {}, defaultBranch: 'main' }
+    })
+    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
+    })
+    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+      _tag: 'Ok',
+      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
+    })
+    setupLogStream()
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/restored')
+    })
+  })
+
+  it('persists the current tab state when a tab opens a repo', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/my-app']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/home/user/projects/my-app', remotes: {}, defaultBranch: 'main' }
+    })
+    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
+    })
+    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+      _tag: 'Ok',
+      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
+    })
+    setupLogStream()
+
+    render(<App />)
+    fireEvent.click(await screen.findByText('/home/user/projects/my-app'))
+
+    await waitFor(() => {
+      const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
+      expect(
+        setCalls.some(([state]) => state.tabs.includes('/home/user/projects/my-app'))
+      ).toBe(true)
+    })
+  })
+})
+
 describe('App — workspace (repo open)', () => {
   const openRepoMock = {
     _tag: 'Ok' as const,
