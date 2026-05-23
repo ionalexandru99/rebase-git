@@ -19,6 +19,7 @@ pnpm package[:mac|:win|:linux]   # electron-builder
 pnpm typecheck            # tsc --noEmit
 pnpm check                # biome format + lint check
 pnpm check:fix            # auto-fix biome issues
+pnpm hooks:install        # idempotent — points git at .githooks/ (also runs via `prepare` on `pnpm install`)
 
 # Four test layers — pick the one that matches the change:
 pnpm test:renderer        # vitest, jsdom, src/renderer/**/*.test.{ts,tsx}
@@ -35,6 +36,10 @@ pnpm playwright test e2e/app-launches.spec.ts
 ```
 
 Smoke tests require a build first; they execute `out/main/index.js` and only check that startup didn't print fatal errors — they don't drive the UI. E2E launches the real Electron binary via Playwright, so use it for flows that span main and renderer (IPC contracts, full integration).
+
+### Git hooks
+
+A `pre-push` hook in `.githooks/pre-push` runs `pnpm typecheck` and `pnpm check` and aborts the push on any failure. `pnpm install` auto-runs `prepare`, which calls `git config core.hooksPath .githooks`, so a fresh clone is wired up after the first install. Run `pnpm hooks:install` manually if you skipped install scripts.
 
 ## Architecture
 

@@ -5,10 +5,10 @@ import { deriveLocalShortName } from '../git/checkout'
 import { resolveDefaultBranch } from '../git/defaultBranch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from '../git/instances'
 import { serializeBranches, serializeRemotes } from '../git/serialize'
+import { parseAheadBehind } from '../git/tracking'
 import { startWatching, stopWatching } from '../repoWatcher'
 import { activeFetches, gitInstances, releaseFetchSemaphore } from '../state'
 import { addRecentRepo } from '../store'
-import { parseAheadBehind } from '../git/tracking'
 
 export function register(): void {
   ipcMain.handle(Channel.openRepo, async (event, repoPath: string) => {
