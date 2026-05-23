@@ -39,7 +39,7 @@ export interface IElectronAPI {
   fetchRepo: (repoPath: string) => Promise<FetchResponse>
   getLog: (repoPath: string, maxCount?: number) => Promise<LogResponse>
   startLogStream: (repoPath: string) => Promise<StartLogStreamResponse>
-  cancelLogStream: () => Promise<CancelLogStreamResponse>
+  cancelLogStream: (repoPath?: string) => Promise<CancelLogStreamResponse>
   onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => () => void
   getRecentRepos: () => Promise<string[]>
@@ -79,7 +79,8 @@ const api: IElectronAPI = {
   getLog: (repoPath: string, maxCount?: number) =>
     ipcRenderer.invoke(Channel.getLog, repoPath, maxCount),
   startLogStream: (repoPath: string) => ipcRenderer.invoke(Channel.startLogStream, repoPath),
-  cancelLogStream: () => ipcRenderer.invoke(Channel.cancelLogStream),
+  cancelLogStream: (repoPath?: string) =>
+    ipcRenderer.invoke(Channel.cancelLogStream, repoPath ?? ''),
   onLogChunk: (cb: (chunk: LogChunk) => void) => {
     const handler = (_event: unknown, chunk: LogChunk) => cb(chunk)
     ipcRenderer.on(Channel.logChunk, handler)

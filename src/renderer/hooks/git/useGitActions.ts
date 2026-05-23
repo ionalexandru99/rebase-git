@@ -46,7 +46,7 @@ export function useGitActions({
     const path = repoPathRef.current
     if (path) {
       try {
-        await window.electronAPI.cancelLogStream().catch(() => {})
+        await window.electronAPI.cancelLogStream(path).catch(() => {})
         await window.electronAPI.closeRepo(path)
       } catch {}
     }
@@ -58,7 +58,7 @@ export function useGitActions({
       const path = repoPathRef.current
       interruptOpen()
       if (!path) return
-      Promise.resolve(window.electronAPI.cancelLogStream()).catch(() => {})
+      Promise.resolve(window.electronAPI.cancelLogStream(path)).catch(() => {})
       Promise.resolve(window.electronAPI.closeRepo(path)).catch(() => {})
     }
   }, [interruptOpen, repoPathRef])

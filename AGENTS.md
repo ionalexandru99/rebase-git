@@ -15,6 +15,8 @@ This app must feel fast. Users open repos, stage files, and commit hundreds of t
 - **Keep bundle size small.** Don't pull in heavy dependencies unless they're essential.
 - **Profile before optimizing, but don't write slow code.** Avoid unnecessary re-renders in React. Use `useMemo` and `useCallback` where it matters, but not everywhere.
 - **Git operations are blocking by nature.** Keep the UI responsive with clear loading states. Don't freeze the renderer.
+- **No comments unless absolutely necessary.** Default to writing none. Only add one when the WHY is non-obvious: a hidden constraint, a subtle invariant, a workaround for a specific bug, behavior that would surprise a reader. If removing the comment wouldn't confuse a future reader, don't write it. Don't explain WHAT the code does — well-named identifiers do that. Don't reference the current task, fix, or callers ("used by X", "added for the Y flow", "handles the case from issue #123") — those belong in the PR description and rot as the codebase evolves.
+- **Each tab is its own world.** The renderer runs N tabs that may hold different repos. Every main-process resource that streams or mutates state must be keyed in a way that lets two tabs coexist without one starving or cancelling the other (e.g. `Map<\`${webContentsId}:${repoPath}\`, …>`, not `Map<webContentsId, …>`).
 
 ### 2. Tests Are Always Required
 
