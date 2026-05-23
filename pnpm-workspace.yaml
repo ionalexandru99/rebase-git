@@ -2,8 +2,10 @@ packages:
   - "."
 
 allowBuilds:
-  electron: false
+  '@tailwindcss/oxide': true
+  electron: true
   electron-winstaller: false
   esbuild: false
+  msgpackr-extract: false
 
 minimumReleaseAge: 10080

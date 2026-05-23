@@ -55,7 +55,9 @@ async function runSmokeTest() {
     output += chunk.toString()
   })
 
+  let timedOut = false
   const timeout = setTimeout(() => {
+    timedOut = true
     console.log('Smoke test timeout reached (10s), killing process...')
     child.kill()
   }, 10_000)
@@ -83,7 +85,7 @@ async function runSmokeTest() {
         }
         console.error('\n--- Full output ---\n' + output)
         reject(new Error('Smoke test failed'))
-      } else if (code !== null && code !== 0) {
+      } else if (!timedOut && code !== null && code !== 0) {
         console.error(`\nDesktop exited with code ${code}`)
         console.error('\n--- Full output ---\n' + output)
         reject(new Error(`Smoke test exited with code ${code}`))
