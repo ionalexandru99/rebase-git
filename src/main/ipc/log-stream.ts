@@ -96,6 +96,8 @@ export function register(): void {
       const mapKey = streamKey(webContentsId, key)
       activeLogStreams.set(mapKey, { proc, finishOk, webContentsId, repoPath: key })
 
+      finishOk()
+
       let buffer = ''
       let batch: SerializableLogEntry[] = []
 

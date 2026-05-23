@@ -6,7 +6,7 @@ import { resolveDefaultBranch } from '../git/defaultBranch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from '../git/instances'
 import { serializeBranches, serializeRemotes } from '../git/serialize'
 import { startWatching, stopWatching } from '../repoWatcher'
-import { activeFetches, gitInstances } from '../state'
+import { activeFetches, gitInstances, releaseFetchSemaphore } from '../state'
 import { addRecentRepo } from '../store'
 
 export function register(): void {
@@ -50,6 +50,7 @@ export function register(): void {
     const proc = activeFetches.get(key)
     if (proc && !proc.killed) proc.kill()
     activeFetches.delete(key)
+    releaseFetchSemaphore(key)
     await stopWatching(key)
   })
 

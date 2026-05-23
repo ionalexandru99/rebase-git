@@ -14,3 +14,11 @@ export function fetchSemaphoreFor(repoPath: string): Effect.Semaphore {
   }
   return semaphore
 }
+
+export function releaseFetchSemaphore(repoPath: string): boolean {
+  return fetchSemaphores.delete(repoPath)
+}
+
+export function fetchSemaphoreSize(): number {
+  return fetchSemaphores.size
+}

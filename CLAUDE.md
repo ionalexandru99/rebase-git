@@ -80,4 +80,11 @@ Default to writing **no comments**. Only add one when the WHY is non-obvious —
 
 ### Per-tab isolation in main
 
-The renderer runs N tabs sharing one `webContents`. Any main-process resource that holds in-flight state for a repo (log streams, watchers, fetch processes, future diff/blame streams) must be keyed by **both** `webContentsId` and `repoPath` — never by `webContentsId` alone. Otherwise one tab's IPC kills another tab's work and the affected tab's loading state gets stuck. `gitInstances` and `activeFetches` are keyed by `repoPath` (safe to share); `activeLogStreams` is keyed by `${webContentsId}:${repoPath}` for the same reason. Follow this pattern when introducing new per-repo streams.
+The renderer runs N tabs sharing one `webContents`, with an enforced invariant of **at most one tab per repo** — `useTabs.requestOpenRepo` (`src/renderer/hooks/useTabs.ts:84`) routes any attempt to open an already-open repo to the existing tab and discards the new one. So `repoPath` is effectively the per-tab key in main.
+
+Two consequences:
+
+- `gitInstances` and `activeFetches` are keyed by `repoPath`; that's already per-tab by the invariant, no refcount needed.
+- Resources that can outlive a single repo session — log streams that need cancellation by tab, multi-window state — should still be keyed by `${webContentsId}:${repoPath}` (see `activeLogStreams` in `src/main/ipc/log-stream.ts`). Never key by `webContentsId` alone: a different-repo IPC from the same window would otherwise cancel the in-flight work of another tab and leave its loading state stuck.
+
+When introducing a new per-repo resource in main, pick the narrower of the two keying strategies that still routes correctly. Don't add same-repo refcount/sharing logic — that case is unreachable.

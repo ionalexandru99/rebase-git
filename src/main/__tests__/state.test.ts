@@ -1,6 +1,6 @@
 import { Deferred, Effect, Option } from 'effect'
 import { describe, expect, it } from 'vitest'
-import { fetchSemaphoreFor } from '../state'
+import { fetchSemaphoreFor, fetchSemaphoreSize, releaseFetchSemaphore } from '../state'
 
 describe('fetchSemaphoreFor', () => {
   it('returns the same semaphore for the same repo path', () => {
@@ -54,5 +54,28 @@ describe('fetchSemaphoreFor', () => {
       semaphore.withPermitsIfAvailable(1)(Effect.succeed('after'))
     )
     expect(Option.isSome(after)).toBe(true)
+  })
+})
+
+describe('releaseFetchSemaphore', () => {
+  it('removes the entry so it does not grow unbounded across repo open/close cycles', () => {
+    fetchSemaphoreFor('/test/repo-leak-1')
+    fetchSemaphoreFor('/test/repo-leak-2')
+    const before = fetchSemaphoreSize()
+
+    expect(releaseFetchSemaphore('/test/repo-leak-1')).toBe(true)
+
+    expect(fetchSemaphoreSize()).toBe(before - 1)
+  })
+
+  it('returns false when the entry does not exist', () => {
+    expect(releaseFetchSemaphore('/test/never-created')).toBe(false)
+  })
+
+  it('produces a fresh semaphore on the next call after release', () => {
+    const first = fetchSemaphoreFor('/test/repo-fresh')
+    releaseFetchSemaphore('/test/repo-fresh')
+    const second = fetchSemaphoreFor('/test/repo-fresh')
+    expect(second).not.toBe(first)
   })
 })
