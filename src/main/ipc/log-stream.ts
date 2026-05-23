@@ -11,14 +11,21 @@ const RS_SEP = '\x00'
 const STREAM_FORMAT = ['%H', '%P', '%aI', '%aN', '%s', '%D'].join(FS_SEP)
 const STREAM_BATCH_SIZE = 500
 
-const activeLogStreams = new Map<number, ReturnType<typeof spawn>>()
+interface ActiveStream {
+  proc: ReturnType<typeof spawn>
+  finishOk: () => void
+}
+
+const activeLogStreams = new Map<number, ActiveStream>()
 
 function killActiveStream(webContentsId: number): void {
   const existing = activeLogStreams.get(webContentsId)
-  if (existing && !existing.killed) {
-    existing.kill()
-  }
+  if (!existing) return
   activeLogStreams.delete(webContentsId)
+  if (!existing.proc.killed) existing.proc.kill()
+  // Resolve the previous IPC reply so electron doesn't log
+  // "Error invoking remote method 'start-log-stream': reply was never sent".
+  existing.finishOk()
 }
 
 export function register(): void {
@@ -56,7 +63,7 @@ export function register(): void {
         ],
         { stdio: ['ignore', 'pipe', 'pipe'] }
       )
-      activeLogStreams.set(webContentsId, proc)
+      activeLogStreams.set(webContentsId, { proc, finishOk })
 
       let buffer = ''
       let batch: SerializableLogEntry[] = []
@@ -103,6 +110,11 @@ export function register(): void {
       })
 
       proc.on('error', (err) => {
+        const current = activeLogStreams.get(webContentsId)
+        if (current?.proc !== proc) {
+          // killActiveStream already resolved the reply; nothing more to do.
+          return
+        }
         activeLogStreams.delete(webContentsId)
         if (!webContents.isDestroyed()) {
           const chunk: LogChunk = {
@@ -117,7 +129,13 @@ export function register(): void {
       })
 
       proc.on('close', (code) => {
-        if (activeLogStreams.get(webContentsId) !== proc) return
+        const current = activeLogStreams.get(webContentsId)
+        if (current?.proc !== proc) {
+          // killActiveStream already resolved the reply; do not emit a stale
+          // done chunk that would flip the renderer's logLoading off for the
+          // new stream.
+          return
+        }
         activeLogStreams.delete(webContentsId)
 
         if (code !== 0 && code !== null) {
