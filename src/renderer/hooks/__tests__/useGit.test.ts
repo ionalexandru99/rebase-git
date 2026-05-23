@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setupLogStream, setupRepoChanged } from '@/../test/setup'
 import type { GitStatus } from '@/types'
-import { useGit } from './useGit'
+import { useGit } from '../useGit'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 

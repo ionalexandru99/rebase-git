@@ -1,6 +1,6 @@
 import { Effect, Fiber, Queue } from 'effect'
 import { describe, expect, it, vi } from 'vitest'
-import { ignoreWorkingTree, startDebouncedDrain } from './repoWatcher'
+import { ignoreWorkingTree, startDebouncedDrain } from '../repoWatcher'
 
 async function tick(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms))

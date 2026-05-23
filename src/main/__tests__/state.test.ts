@@ -1,6 +1,6 @@
 import { Deferred, Effect, Option } from 'effect'
 import { describe, expect, it } from 'vitest'
-import { fetchSemaphoreFor } from './state'
+import { fetchSemaphoreFor } from '../state'
 
 describe('fetchSemaphoreFor', () => {
   it('returns the same semaphore for the same repo path', () => {

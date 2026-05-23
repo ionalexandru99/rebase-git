@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { useTabs } from './useTabs'
+import { useTabs } from '../useTabs'
 
 function dispatchKey(init: KeyboardEventInit & { key: string }) {
   window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...init }))
