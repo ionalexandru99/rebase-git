@@ -58,4 +58,24 @@ describe('RefTreeRow leaf', () => {
     fireEvent.click(screen.getByText('Checkout'))
     expect(onCheckoutLeaf).toHaveBeenCalledWith('remote', 'origin/main')
   })
+
+  it('shows ahead/behind badges when tracking data is present', () => {
+    renderRow(leaf({ ahead: 2, behind: 1 }))
+    const ahead = screen.getByTestId('ref-ahead')
+    const behind = screen.getByTestId('ref-behind')
+    expect(ahead).toHaveTextContent('2')
+    expect(behind).toHaveTextContent('1')
+  })
+
+  it('hides the ahead badge when only behind has a count, and vice versa', () => {
+    renderRow(leaf({ ahead: 0, behind: 3 }))
+    expect(screen.queryByTestId('ref-ahead')).not.toBeInTheDocument()
+    expect(screen.getByTestId('ref-behind')).toHaveTextContent('3')
+  })
+
+  it('renders no tracking badges when the branch is in sync', () => {
+    renderRow(leaf())
+    expect(screen.queryByTestId('ref-ahead')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('ref-behind')).not.toBeInTheDocument()
+  })
 })

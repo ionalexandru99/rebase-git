@@ -1,4 +1,13 @@
-import { Check, ChevronDown, ChevronRight, Cloud, GitBranch, Tag } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Cloud,
+  GitBranch,
+  Tag
+} from 'lucide-react'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -104,6 +113,8 @@ export function RefTreeRow({
   const padLeft = 6 + row.depth * REF_TREE_INDENT_PX + 14
   const refKind = row.refKind
   const fullPath = row.fullPath
+  const ahead = row.ahead ?? 0
+  const behind = row.behind ?? 0
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -128,7 +139,27 @@ export function RefTreeRow({
             />
           )}
           <Icon className="size-3.5 shrink-0 opacity-70" />
-          <span className="truncate">{row.name}</span>
+          <span className="min-w-0 truncate text-left">{row.name}</span>
+          {ahead > 0 && (
+            <span
+              data-testid="ref-ahead"
+              className="flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-emerald-500"
+              title={`${ahead} commit${ahead === 1 ? '' : 's'} to push`}
+            >
+              <ArrowUp className="size-3" />
+              {ahead}
+            </span>
+          )}
+          {behind > 0 && (
+            <span
+              data-testid="ref-behind"
+              className="flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-rose-500"
+              title={`${behind} commit${behind === 1 ? '' : 's'} to pull`}
+            >
+              <ArrowDown className="size-3" />
+              {behind}
+            </span>
+          )}
           {row.isCurrent && (
             <Check
               aria-hidden

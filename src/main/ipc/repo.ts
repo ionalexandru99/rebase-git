@@ -8,6 +8,7 @@ import { serializeBranches, serializeRemotes } from '../git/serialize'
 import { startWatching, stopWatching } from '../repoWatcher'
 import { activeFetches, gitInstances, releaseFetchSemaphore } from '../state'
 import { addRecentRepo } from '../store'
+import { parseAheadBehind } from '../git/tracking'
 
 export function register(): void {
   ipcMain.handle(Channel.openRepo, async (event, repoPath: string) => {
@@ -58,10 +59,15 @@ export function register(): void {
     const git = lookupGit(gitInstances, repoPath)
     if (!git) return encodeOrThrow(BranchesResponse, { _tag: 'RepoNotOpen' })
     try {
-      const [branches, tags] = await Promise.all([git.branch(['-a']), git.tags()])
+      const [branches, tags, trackingRaw] = await Promise.all([
+        git.branch(['-a']),
+        git.tags(),
+        git.raw(['for-each-ref', 'refs/heads', '--format=%(refname:short)|%(upstream:track)'])
+      ])
+      const tracking = parseAheadBehind(trackingRaw)
       return encodeOrThrow(BranchesResponse, {
         _tag: 'Ok',
-        branches: serializeBranches(branches, tags)
+        branches: serializeBranches(branches, tags, tracking)
       })
     } catch (error) {
       return encodeOrThrow(BranchesResponse, {

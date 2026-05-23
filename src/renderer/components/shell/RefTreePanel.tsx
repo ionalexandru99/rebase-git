@@ -3,6 +3,7 @@ import { RefTreeToggles } from '@shared/schemas/ipc'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { useVirtualList } from '@/hooks/useVirtualList'
 import {
+  type BranchTracking,
   buildRefTreeRows,
   REF_TREE_OVERSCAN,
   REF_TREE_ROW_HEIGHT,
@@ -19,6 +20,7 @@ interface RefTreePanelProps {
   tags: string[]
   currentBranch: string
   loading?: boolean
+  tracking?: Record<string, BranchTracking>
   onSelectRef?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
 }
@@ -29,6 +31,7 @@ export const RefTreePanel = memo(function RefTreePanel({
   tags,
   currentBranch,
   loading = false,
+  tracking,
   onSelectRef,
   onCheckoutRef
 }: RefTreePanelProps) {
@@ -69,9 +72,10 @@ export const RefTreePanel = memo(function RefTreePanel({
         tags,
         toggles,
         currentBranch,
-        loading
+        loading,
+        tracking
       }),
-    [localBranches, remoteBranches, tags, currentBranch, toggles, loading]
+    [localBranches, remoteBranches, tags, currentBranch, toggles, loading, tracking]
   )
 
   const { scrollRef, onScroll, startIndex, endIndex, totalHeight } = useVirtualList({

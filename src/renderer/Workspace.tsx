@@ -32,6 +32,7 @@ export function Workspace({
   const sidebarLocalBranches = useMemo(() => git.branches?.all ?? [], [git.branches])
   const sidebarRemoteBranches = useMemo(() => git.branches?.remotes ?? [], [git.branches])
   const sidebarTags = useMemo(() => git.branches?.tags ?? [], [git.branches])
+  const sidebarTracking = useMemo(() => git.branches?.tracking, [git.branches])
 
   const repoPath = git.repoPath
   const handleCheckoutRef = useCallback(
@@ -63,6 +64,7 @@ export function Workspace({
       onSelectView={setActiveView}
       onFetch={git.fetchNow}
       onCheckoutRef={handleCheckoutRef}
+      tracking={sidebarTracking}
     >
       {errorBanner}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">

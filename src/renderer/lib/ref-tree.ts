@@ -1,5 +1,10 @@
 export type RefKind = 'local' | 'remote' | 'tag'
 
+export interface BranchTracking {
+  ahead: number
+  behind: number
+}
+
 export interface RefLeafRow {
   kind: 'leaf'
   refKind: RefKind
@@ -7,6 +12,8 @@ export interface RefLeafRow {
   name: string
   depth: number
   isCurrent: boolean
+  ahead?: number
+  behind?: number
 }
 
 export interface RefFolderRow {
@@ -46,7 +53,7 @@ export const REF_TREE_OVERSCAN = 20
 export const REF_TREE_INDENT_PX = 12
 
 export function sectionKey(refKind: RefKind): string {
-  return `section:${refKind}`
+  return refKind === 'local' ? `section:${refKind}` : `section:${refKind}:expanded`
 }
 
 export function folderKey(refKind: RefKind, fullPath: string): string {
@@ -54,7 +61,8 @@ export function folderKey(refKind: RefKind, fullPath: string): string {
 }
 
 function isSectionExpanded(toggles: Set<string>, refKind: RefKind): boolean {
-  return !toggles.has(sectionKey(refKind))
+  const hasToggle = toggles.has(sectionKey(refKind))
+  return refKind === 'local' ? !hasToggle : hasToggle
 }
 
 function isFolderExpanded(toggles: Set<string>, refKind: RefKind, fullPath: string): boolean {
@@ -75,6 +83,7 @@ interface BuildRowsOptions {
   toggles: Set<string>
   currentBranch: string
   loading: boolean
+  tracking?: Record<string, BranchTracking>
 }
 
 export function buildRefTreeRows({
@@ -83,7 +92,8 @@ export function buildRefTreeRows({
   tags,
   toggles,
   currentBranch,
-  loading
+  loading,
+  tracking
 }: BuildRowsOptions): RefRow[] {
   const out: RefRow[] = []
   const noData = localBranches.length === 0 && remoteBranches.length === 0 && tags.length === 0
@@ -93,7 +103,7 @@ export function buildRefTreeRows({
     pushSkeletonSection(out, 'tag', 'Tags', toggles, 2)
     return out
   }
-  buildSection(out, 'local', 'Local branches', localBranches, toggles, currentBranch)
+  buildSection(out, 'local', 'Local branches', localBranches, toggles, currentBranch, tracking)
   buildSection(out, 'remote', 'Remote branches', remoteBranches, toggles, currentBranch)
   buildSection(out, 'tag', 'Tags', tags, toggles, currentBranch)
   return out
@@ -122,7 +132,8 @@ function buildSection(
   label: string,
   paths: string[],
   toggles: Set<string>,
-  currentBranch: string
+  currentBranch: string,
+  tracking?: Record<string, BranchTracking>
 ): void {
   const sectionExpanded = isSectionExpanded(toggles, refKind)
   out.push({
@@ -165,7 +176,7 @@ function buildSection(
     }
   }
 
-  walkTree(out, root, refKind, 1, '', toggles, currentBranch)
+  walkTree(out, root, refKind, 1, '', toggles, currentBranch, tracking)
 }
 
 function walkTree(
@@ -175,7 +186,8 @@ function walkTree(
   depth: number,
   parentPath: string,
   toggles: Set<string>,
-  currentBranch: string
+  currentBranch: string,
+  tracking?: Record<string, BranchTracking>
 ): void {
   const entries = [...node.entries()].sort((a, b) => {
     const aIsFolder = a[1] instanceof Map
@@ -198,16 +210,19 @@ function walkTree(
         childCount: value.size
       })
       if (expanded) {
-        walkTree(out, value, refKind, depth + 1, fullPath, toggles, currentBranch)
+        walkTree(out, value, refKind, depth + 1, fullPath, toggles, currentBranch, tracking)
       }
     } else {
+      const trackingEntry = refKind === 'local' ? tracking?.[value] : undefined
       out.push({
         kind: 'leaf',
         refKind,
         fullPath: value,
         name,
         depth,
-        isCurrent: refKind === 'local' && value === currentBranch
+        isCurrent: refKind === 'local' && value === currentBranch,
+        ahead: trackingEntry?.ahead,
+        behind: trackingEntry?.behind
       })
     }
   }
