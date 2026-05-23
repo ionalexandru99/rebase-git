@@ -31,6 +31,7 @@ export const Channel = {
   setRefTreeToggles: 'set-ref-tree-toggles',
   getPersistedTabs: 'get-persisted-tabs',
   setPersistedTabs: 'set-persisted-tabs',
+  checkoutRef: 'checkout-ref',
   logChunk: 'log-chunk',
   repoChanged: 'repo-changed'
 } as const
@@ -109,6 +110,16 @@ export const ScanForReposResponse = Schema.Union(
   GitError
 )
 export type ScanForReposResponse = typeof ScanForReposResponse.Type
+
+export const RefKindSchema = Schema.Literal('local', 'remote', 'tag')
+export type RefKindSchema = typeof RefKindSchema.Type
+
+export const CheckoutResponse = Schema.Union(
+  Schema.TaggedStruct('Ok', { checkedOut: Schema.String }),
+  RepoNotOpen,
+  GitError
+)
+export type CheckoutResponse = typeof CheckoutResponse.Type
 
 export const SidebarPrefs = Schema.Struct({
   open: Schema.Boolean,

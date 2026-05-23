@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { CommitPanel } from '@/components/CommitPanel'
 import { HistoryPanel } from '@/components/HistoryPanel'
 import { StatusPanel } from '@/components/StatusPanel'
 import { Shell } from '@/components/shell/Shell'
 import type { SidebarView } from '@/components/shell/Sidebar'
 import type { useGit } from '@/hooks/useGit'
+import type { RefKind } from '@/lib/ref-tree'
 
 interface WorkspaceProps {
   git: ReturnType<typeof useGit>
@@ -31,6 +33,22 @@ export function Workspace({
   const sidebarRemoteBranches = useMemo(() => git.branches?.remotes ?? [], [git.branches])
   const sidebarTags = useMemo(() => git.branches?.tags ?? [], [git.branches])
 
+  const repoPath = git.repoPath
+  const handleCheckoutRef = useCallback(
+    async (refKind: RefKind, fullPath: string) => {
+      if (!repoPath) return
+      const result = await window.electronAPI.checkoutRef(repoPath, refKind, fullPath)
+      if (result._tag === 'Ok') {
+        toast.success(`Switched to ${result.checkedOut}`)
+      } else if (result._tag === 'GitError') {
+        toast.error('Checkout failed', { description: result.message })
+      } else {
+        toast.error('Repository is not open')
+      }
+    },
+    [repoPath]
+  )
+
   return (
     <Shell
       repoName={repoName}
@@ -44,6 +62,7 @@ export function Workspace({
       activeView={activeView}
       onSelectView={setActiveView}
       onFetch={git.fetchNow}
+      onCheckoutRef={handleCheckoutRef}
     >
       {errorBanner}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">

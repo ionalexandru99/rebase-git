@@ -2,6 +2,7 @@ import type { PersistedTabs } from '@shared/schemas/ipc'
 import { useEffect, useState } from 'react'
 import { OnboardingScreen } from '@/components/OnboardingScreen'
 import { TabBar } from '@/components/TabBar'
+import { Toaster } from '@/components/ui/sonner'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useTabs } from '@/hooks/useTabs'
 import { TabView } from '@/TabView'
@@ -86,6 +87,7 @@ function TabsShell({ persisted, onboarding }: TabsShellProps) {
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
+      <Toaster richColors position="bottom-right" />
       <TabBar
         tabs={tabDescriptors}
         activeTabId={activeTabId}

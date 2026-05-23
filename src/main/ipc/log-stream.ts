@@ -14,6 +14,7 @@ const STREAM_BATCH_SIZE = 500
 interface ActiveStream {
   proc: ReturnType<typeof spawn>
   finishOk: () => void
+  repoPath: string
 }
 
 const activeLogStreams = new Map<number, ActiveStream>()
@@ -34,6 +35,14 @@ export function register(): void {
     const webContents = event.sender
     const webContentsId = webContents.id
 
+    const existing = activeLogStreams.get(webContentsId)
+    if (existing && existing.repoPath !== key && !webContents.isDestroyed()) {
+      // The previous stream was for a different repo (e.g. another tab in the
+      // same window). Emit a synthetic done so that tab's listener clears its
+      // logLoading state — without it the spinner is stuck forever.
+      const orphanDone: LogChunk = { repoPath: existing.repoPath, commits: [], done: true }
+      webContents.send(Channel.logChunk, orphanDone)
+    }
     killActiveStream(webContentsId)
 
     return new Promise<typeof StartLogStreamResponse.Encoded>((resolve) => {
@@ -63,7 +72,7 @@ export function register(): void {
         ],
         { stdio: ['ignore', 'pipe', 'pipe'] }
       )
-      activeLogStreams.set(webContentsId, { proc, finishOk })
+      activeLogStreams.set(webContentsId, { proc, finishOk, repoPath: key })
 
       let buffer = ''
       let batch: SerializableLogEntry[] = []

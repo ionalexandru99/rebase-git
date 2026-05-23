@@ -20,6 +20,7 @@ interface RefTreePanelProps {
   currentBranch: string
   loading?: boolean
   onSelectRef?: (refKind: RefKind, fullPath: string) => void
+  onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
 }
 
 export const RefTreePanel = memo(function RefTreePanel({
@@ -28,7 +29,8 @@ export const RefTreePanel = memo(function RefTreePanel({
   tags,
   currentBranch,
   loading = false,
-  onSelectRef
+  onSelectRef,
+  onCheckoutRef
 }: RefTreePanelProps) {
   const [toggles, setToggles] = useState<Set<string>>(() => new Set())
 
@@ -97,6 +99,7 @@ export const RefTreePanel = memo(function RefTreePanel({
               loading={loading}
               onToggleCollapsed={toggle}
               onSelectLeaf={onSelectRef}
+              onCheckoutLeaf={onCheckoutRef}
             />
           )
         })}

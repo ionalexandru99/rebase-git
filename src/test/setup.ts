@@ -31,6 +31,7 @@ const mockElectronAPI = {
   openRepo: vi.fn(),
   closeRepo: vi.fn(),
   getBranches: vi.fn(),
+  checkoutRef: vi.fn(),
   getStatus: vi.fn(),
   stageFile: vi.fn(),
   unstageFile: vi.fn(),
