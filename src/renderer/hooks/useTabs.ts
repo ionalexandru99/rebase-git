@@ -74,10 +74,32 @@ export function useTabs() {
     [tabRepos]
   )
 
+  const cycleTab = useCallback(
+    (direction: 1 | -1) => {
+      if (tabs.length <= 1) return
+      const idx = tabs.findIndex((tab) => tab.id === activeTabId)
+      if (idx === -1) return
+      const nextIdx = (idx + direction + tabs.length) % tabs.length
+      setActiveTabId(tabs[nextIdx].id)
+    },
+    [activeTabId, tabs]
+  )
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey
       if (!mod) return
+      if (event.shiftKey && event.key === ']') {
+        event.preventDefault()
+        cycleTab(1)
+        return
+      }
+      if (event.shiftKey && event.key === '[') {
+        event.preventDefault()
+        cycleTab(-1)
+        return
+      }
+      if (event.shiftKey) return
       if (event.key === 't') {
         event.preventDefault()
         newTab()
@@ -88,7 +110,7 @@ export function useTabs() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [activeTabId, closeTab, newTab])
+  }, [activeTabId, closeTab, newTab, cycleTab])
 
   const tabDescriptors = useMemo<TabDescriptor[]>(
     () =>
