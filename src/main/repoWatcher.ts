@@ -1,37 +1,17 @@
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
+import { Effect, Fiber, Queue, Stream } from 'effect'
 import type { WebContents } from 'electron'
 
 export type RepoChangeKind = 'refs' | 'workingTree'
 
-export interface Debouncer<K extends string> {
-  schedule(key: K, fn: () => void): void
-  cancelAll(): void
-}
-
-export function createDebouncer<K extends string>(delayMs: number): Debouncer<K> {
-  const timers = new Map<K, NodeJS.Timeout>()
-  return {
-    schedule(key, fn) {
-      const existing = timers.get(key)
-      if (existing) clearTimeout(existing)
-      const handle = setTimeout(() => {
-        timers.delete(key)
-        fn()
-      }, delayMs)
-      timers.set(key, handle)
-    },
-    cancelAll() {
-      for (const handle of timers.values()) clearTimeout(handle)
-      timers.clear()
-    }
-  }
-}
-
 interface Watcher {
   refs: FSWatcher
   workingTree: FSWatcher
-  debouncer: Debouncer<RepoChangeKind>
+  refsQueue: Queue.Queue<void>
+  workingTreeQueue: Queue.Queue<void>
+  refsFiber: Fiber.RuntimeFiber<void, never>
+  workingTreeFiber: Fiber.RuntimeFiber<void, never>
   webContents: WebContents
   onDestroyed: () => void
 }
@@ -68,6 +48,20 @@ export function ignoreWorkingTree(targetPath: string): boolean {
   return false
 }
 
+export function startDebouncedDrain(
+  queue: Queue.Queue<void>,
+  delayMs: number,
+  onFire: () => void
+): Fiber.RuntimeFiber<void, never> {
+  return Effect.runFork(
+    Stream.fromQueue(queue).pipe(
+      Stream.debounce(delayMs),
+      Stream.runForEach(() => Effect.sync(onFire)),
+      Effect.catchAllCause(() => Effect.void)
+    )
+  )
+}
+
 export function startWatching(repoPath: string, webContents: WebContents): void {
   const existing = watchers.get(repoPath)
   if (existing) {
@@ -82,7 +76,8 @@ export function startWatching(repoPath: string, webContents: WebContents): void 
     path.join(gitDir, 'packed-refs')
   ]
 
-  const debouncer = createDebouncer<RepoChangeKind>(DEBOUNCE_MS)
+  const refsQueue = Effect.runSync(Queue.unbounded<void>())
+  const workingTreeQueue = Effect.runSync(Queue.unbounded<void>())
 
   const emit = (kind: RepoChangeKind) => {
     if (webContents.isDestroyed()) return
@@ -93,7 +88,9 @@ export function startWatching(repoPath: string, webContents: WebContents): void 
     ignoreInitial: true,
     persistent: true
   })
-  refs.on('all', () => debouncer.schedule('refs', () => emit('refs')))
+  refs.on('all', () => {
+    Effect.runSync(Queue.offer(refsQueue, undefined))
+  })
   refs.on('error', (err) => console.warn('[repoWatcher] refs error', err))
 
   const workingTree = chokidar.watch(repoPath, {
@@ -102,15 +99,31 @@ export function startWatching(repoPath: string, webContents: WebContents): void 
     persistent: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 }
   })
-  workingTree.on('all', () => debouncer.schedule('workingTree', () => emit('workingTree')))
+  workingTree.on('all', () => {
+    Effect.runSync(Queue.offer(workingTreeQueue, undefined))
+  })
   workingTree.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
+
+  const refsFiber = startDebouncedDrain(refsQueue, DEBOUNCE_MS, () => emit('refs'))
+  const workingTreeFiber = startDebouncedDrain(workingTreeQueue, DEBOUNCE_MS, () =>
+    emit('workingTree')
+  )
 
   const onDestroyed = () => {
     void stopWatching(repoPath)
   }
   webContents.once('destroyed', onDestroyed)
 
-  watchers.set(repoPath, { refs, workingTree, debouncer, webContents, onDestroyed })
+  watchers.set(repoPath, {
+    refs,
+    workingTree,
+    refsQueue,
+    workingTreeQueue,
+    refsFiber,
+    workingTreeFiber,
+    webContents,
+    onDestroyed
+  })
 }
 
 export async function stopWatching(repoPath: string): Promise<void> {
@@ -118,7 +131,17 @@ export async function stopWatching(repoPath: string): Promise<void> {
   if (!w) return
   watchers.delete(repoPath)
   w.webContents.removeListener('destroyed', w.onDestroyed)
-  w.debouncer.cancelAll()
+  await Effect.runPromise(
+    Effect.all(
+      [
+        Fiber.interrupt(w.refsFiber),
+        Fiber.interrupt(w.workingTreeFiber),
+        Queue.shutdown(w.refsQueue),
+        Queue.shutdown(w.workingTreeQueue)
+      ],
+      { discard: true }
+    )
+  )
   try {
     await Promise.all([w.refs.close(), w.workingTree.close()])
   } catch (err) {
