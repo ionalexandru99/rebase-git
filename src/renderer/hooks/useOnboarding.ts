@@ -55,24 +55,6 @@ export function useOnboarding() {
     setOnboardingCompleteState(true)
   }, [])
 
-  const selectWorkingDirectory = useCallback(async () => {
-    setError(null)
-    const path = await window.electronAPI.selectFolder()
-    if (!path) return null
-    setLoading(true)
-    try {
-      const list = await window.electronAPI.addWorkspace(path)
-      setWorkspaces(list ?? [path])
-      setActiveWorkspaceState(path)
-      await scanWorkspace(path)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setLoading(false)
-    }
-    return path
-  }, [scanWorkspace])
-
   const rescanWorkingDirectory = useCallback(async () => {
     if (!activeWorkspace) return
     await scanWorkspace(activeWorkspace)
@@ -136,7 +118,6 @@ export function useOnboarding() {
     loading,
     error,
     completeOnboarding,
-    selectWorkingDirectory,
     rescanWorkingDirectory,
     addWorkspace,
     removeWorkspace,

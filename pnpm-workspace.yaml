@@ -1,7 +1,9 @@
 packages:
-  - '.'
+  - "."
 
 allowBuilds:
   electron: false
   electron-winstaller: false
   esbuild: false
+
+minimumReleaseAge: 10080

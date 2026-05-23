@@ -51,7 +51,7 @@ describe('useOnboarding', () => {
     })
   })
 
-  it('should select a working directory and scan for repos', async () => {
+  it('should add the first workspace and scan for repos', async () => {
     vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/home/user/projects')
     vi.mocked(window.electronAPI.addWorkspace).mockResolvedValue(['/home/user/projects'])
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
@@ -65,7 +65,7 @@ describe('useOnboarding', () => {
       expect(result.current.onboardingComplete).toBe(false)
     })
 
-    await result.current.selectWorkingDirectory()
+    await result.current.addWorkspace()
 
     await waitFor(() => {
       expect(result.current.workingDirectory).toBe('/home/user/projects')
@@ -95,7 +95,7 @@ describe('useOnboarding', () => {
       expect(result.current.onboardingComplete).toBe(false)
     })
 
-    await result.current.selectWorkingDirectory()
+    await result.current.addWorkspace()
 
     await waitFor(() => {
       expect(result.current.error).toBe('Permission denied')

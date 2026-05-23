@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { HistoryPanel, layoutCommits, parseRefs } from '@/components/HistoryPanel'
+import { HistoryPanel } from '@/components/HistoryPanel'
+import { layoutCommits } from '@/lib/git-graph/layout'
+import { parseRefs } from '@/lib/git-graph/refs'
 import type { GitLog, GitLogEntry } from '@/types'
 
 function renderPanel(log: GitLog | null, loading = false) {

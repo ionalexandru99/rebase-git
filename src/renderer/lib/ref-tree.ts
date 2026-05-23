@@ -1,0 +1,214 @@
+export type RefKind = 'local' | 'remote' | 'tag'
+
+export interface RefLeafRow {
+  kind: 'leaf'
+  refKind: RefKind
+  fullPath: string
+  name: string
+  depth: number
+  isCurrent: boolean
+}
+
+export interface RefFolderRow {
+  kind: 'folder'
+  refKind: RefKind
+  fullPath: string
+  name: string
+  depth: number
+  expanded: boolean
+  childCount: number
+}
+
+export interface RefSectionRow {
+  kind: 'section'
+  refKind: RefKind
+  label: string
+  count: number
+  expanded: boolean
+}
+
+export interface RefEmptyRow {
+  kind: 'empty'
+  refKind: RefKind
+  label: string
+}
+
+export interface RefSkeletonRow {
+  kind: 'skeleton'
+  refKind: RefKind
+  idx: number
+}
+
+export type RefRow = RefLeafRow | RefFolderRow | RefSectionRow | RefEmptyRow | RefSkeletonRow
+
+export const REF_TREE_ROW_HEIGHT = 28
+export const REF_TREE_OVERSCAN = 20
+export const REF_TREE_INDENT_PX = 12
+
+export function sectionKey(refKind: RefKind): string {
+  return `section:${refKind}`
+}
+
+export function folderKey(refKind: RefKind, fullPath: string): string {
+  return `folder:${refKind}:${fullPath}`
+}
+
+function isSectionExpanded(toggles: Set<string>, refKind: RefKind): boolean {
+  return !toggles.has(sectionKey(refKind))
+}
+
+function isFolderExpanded(toggles: Set<string>, refKind: RefKind, fullPath: string): boolean {
+  return toggles.has(folderKey(refKind, fullPath))
+}
+
+export function rowKey(row: RefRow): string {
+  if (row.kind === 'section') return `s:${row.refKind}`
+  if (row.kind === 'empty') return `e:${row.refKind}`
+  if (row.kind === 'skeleton') return `sk:${row.refKind}:${row.idx}`
+  return `${row.refKind}:${row.kind}:${row.fullPath}`
+}
+
+interface BuildRowsOptions {
+  localBranches: string[]
+  remoteBranches: string[]
+  tags: string[]
+  toggles: Set<string>
+  currentBranch: string
+  loading: boolean
+}
+
+export function buildRefTreeRows({
+  localBranches,
+  remoteBranches,
+  tags,
+  toggles,
+  currentBranch,
+  loading
+}: BuildRowsOptions): RefRow[] {
+  const out: RefRow[] = []
+  const noData = localBranches.length === 0 && remoteBranches.length === 0 && tags.length === 0
+  if (loading && noData) {
+    pushSkeletonSection(out, 'local', 'Local branches', toggles, 4)
+    pushSkeletonSection(out, 'remote', 'Remote branches', toggles, 3)
+    pushSkeletonSection(out, 'tag', 'Tags', toggles, 2)
+    return out
+  }
+  buildSection(out, 'local', 'Local branches', localBranches, toggles, currentBranch)
+  buildSection(out, 'remote', 'Remote branches', remoteBranches, toggles, currentBranch)
+  buildSection(out, 'tag', 'Tags', tags, toggles, currentBranch)
+  return out
+}
+
+function pushSkeletonSection(
+  out: RefRow[],
+  refKind: RefKind,
+  label: string,
+  toggles: Set<string>,
+  count: number
+): void {
+  const expanded = isSectionExpanded(toggles, refKind)
+  out.push({ kind: 'section', refKind, label, count: 0, expanded })
+  if (!expanded) return
+  for (let i = 0; i < count; i++) {
+    out.push({ kind: 'skeleton', refKind, idx: i })
+  }
+}
+
+type TreeMap = Map<string, TreeMap | string>
+
+function buildSection(
+  out: RefRow[],
+  refKind: RefKind,
+  label: string,
+  paths: string[],
+  toggles: Set<string>,
+  currentBranch: string
+): void {
+  const sectionExpanded = isSectionExpanded(toggles, refKind)
+  out.push({
+    kind: 'section',
+    refKind,
+    label,
+    count: paths.length,
+    expanded: sectionExpanded
+  })
+  if (!sectionExpanded) return
+  if (paths.length === 0) {
+    out.push({
+      kind: 'empty',
+      refKind,
+      label: refKind === 'tag' ? 'No tags' : `No ${refKind} branches`
+    })
+    return
+  }
+
+  const root: TreeMap = new Map()
+  for (const path of paths) {
+    const parts = path.split('/').filter(Boolean)
+    if (parts.length === 0) continue
+    let cursor = root
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      const isLeaf = i === parts.length - 1
+      if (isLeaf) {
+        cursor.set(part, path)
+      } else {
+        const next = cursor.get(part)
+        if (next instanceof Map) {
+          cursor = next
+        } else {
+          const fresh = new Map<string, TreeMap | string>()
+          cursor.set(part, fresh)
+          cursor = fresh
+        }
+      }
+    }
+  }
+
+  walkTree(out, root, refKind, 1, '', toggles, currentBranch)
+}
+
+function walkTree(
+  out: RefRow[],
+  node: TreeMap,
+  refKind: RefKind,
+  depth: number,
+  parentPath: string,
+  toggles: Set<string>,
+  currentBranch: string
+): void {
+  const entries = [...node.entries()].sort((a, b) => {
+    const aIsFolder = a[1] instanceof Map
+    const bIsFolder = b[1] instanceof Map
+    if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1
+    return a[0].localeCompare(b[0])
+  })
+
+  for (const [name, value] of entries) {
+    const fullPath = parentPath ? `${parentPath}/${name}` : name
+    if (value instanceof Map) {
+      const expanded = isFolderExpanded(toggles, refKind, fullPath)
+      out.push({
+        kind: 'folder',
+        refKind,
+        fullPath,
+        name,
+        depth,
+        expanded,
+        childCount: value.size
+      })
+      if (expanded) {
+        walkTree(out, value, refKind, depth + 1, fullPath, toggles, currentBranch)
+      }
+    } else {
+      out.push({
+        kind: 'leaf',
+        refKind,
+        fullPath: value,
+        name,
+        depth,
+        isCurrent: refKind === 'local' && value === currentBranch
+      })
+    }
+  }
+}

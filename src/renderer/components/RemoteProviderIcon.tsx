@@ -6,9 +6,9 @@ import giteaSvg from '@/assets/providers/gitea.svg?raw'
 import githubSvg from '@/assets/providers/github.svg?raw'
 import gitlabSvg from '@/assets/providers/gitlab.svg?raw'
 import sourcehutSvg from '@/assets/providers/sourcehut.svg?raw'
+import { detectProvider, type Provider } from '@/lib/providers'
 import { cn } from '@/lib/utils'
 
-type Provider = 'github' | 'gitlab' | 'azure' | 'bitbucket' | 'codeberg' | 'gitea' | 'sourcehut'
 type Style = 'color' | 'mono'
 
 const PROVIDERS: Record<Provider, { svg: string; label: string; style: Style }> = {
@@ -19,31 +19,6 @@ const PROVIDERS: Record<Provider, { svg: string; label: string; style: Style }> 
   codeberg: { svg: codebergSvg, label: 'Codeberg', style: 'mono' },
   gitea: { svg: giteaSvg, label: 'Gitea', style: 'mono' },
   sourcehut: { svg: sourcehutSvg, label: 'sourcehut', style: 'mono' }
-}
-
-export function parseRemoteHost(url: string | undefined): string | null {
-  if (!url) return null
-  const sshMatch = url.match(/^[\w._-]+@([\w.-]+):/)
-  if (sshMatch) return sshMatch[1].toLowerCase()
-  try {
-    const u = new URL(url)
-    return u.hostname.toLowerCase()
-  } catch {
-    return null
-  }
-}
-
-export function detectProvider(url: string | undefined): Provider | null {
-  const host = parseRemoteHost(url)
-  if (!host) return null
-  if (host === 'github.com' || host.endsWith('.github.com')) return 'github'
-  if (host === 'gitlab.com' || host.includes('gitlab')) return 'gitlab'
-  if (host === 'bitbucket.org' || host.includes('bitbucket')) return 'bitbucket'
-  if (host === 'dev.azure.com' || host.endsWith('.visualstudio.com')) return 'azure'
-  if (host === 'codeberg.org') return 'codeberg'
-  if (host.endsWith('git.sr.ht') || host === 'sr.ht') return 'sourcehut'
-  if (host.includes('gitea')) return 'gitea'
-  return null
 }
 
 interface RemoteProviderIconProps {
