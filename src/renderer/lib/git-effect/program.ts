@@ -174,12 +174,15 @@ export const openLifecycle = (
       setters.setOpening(false)
     })
 
-    yield* restartLogStream(opened.path, setters)
+    yield* Effect.all(
+      [
+        restartLogStream(opened.path, setters),
+        loadStatus(opened.path, setters),
+        loadBranches(opened.path, setters)
+      ],
+      { concurrency: 'unbounded' }
+    )
     yield* Deferred.succeed(initialOpenReady, undefined)
-
-    yield* Effect.all([loadStatus(opened.path, setters), loadBranches(opened.path, setters)], {
-      concurrency: 'unbounded'
-    })
   }).pipe(
     Effect.catchAll((error) =>
       Effect.sync(() => {

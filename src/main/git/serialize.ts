@@ -30,11 +30,17 @@ export interface SerializableLog {
   total: number
 }
 
+export interface BranchTracking {
+  ahead: number
+  behind: number
+}
+
 export interface SerializableBranches {
   current: string
   all: string[]
   remotes: string[]
   tags: string[]
+  tracking?: Record<string, BranchTracking>
 }
 
 export const GRAPH_LOG_FORMAT = {
@@ -91,7 +97,8 @@ export function serializeLog(
 
 export function serializeBranches(
   branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>,
-  tags: Awaited<ReturnType<ReturnType<typeof simpleGit>['tags']>>
+  tags: Awaited<ReturnType<ReturnType<typeof simpleGit>['tags']>>,
+  tracking?: Record<string, BranchTracking>
 ): SerializableBranches {
   const local: string[] = []
   const remotes: string[] = []
@@ -108,7 +115,8 @@ export function serializeBranches(
     current: branches.current ?? '',
     all: local,
     remotes,
-    tags: [...tags.all]
+    tags: [...tags.all],
+    tracking
   }
 }
 

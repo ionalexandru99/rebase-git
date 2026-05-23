@@ -19,6 +19,7 @@ pnpm package[:mac|:win|:linux]   # electron-builder
 pnpm typecheck            # tsc --noEmit
 pnpm check                # biome format + lint check
 pnpm check:fix            # auto-fix biome issues
+pnpm hooks:install        # idempotent — points git at .githooks/ (also runs via `prepare` on `pnpm install`)
 
 # Four test layers — pick the one that matches the change:
 pnpm test:renderer        # vitest, jsdom, src/renderer/**/*.test.{ts,tsx}
@@ -35,6 +36,10 @@ pnpm playwright test e2e/app-launches.spec.ts
 ```
 
 Smoke tests require a build first; they execute `out/main/index.js` and only check that startup didn't print fatal errors — they don't drive the UI. E2E launches the real Electron binary via Playwright, so use it for flows that span main and renderer (IPC contracts, full integration).
+
+### Git hooks
+
+A `pre-push` hook in `.githooks/pre-push` runs `pnpm typecheck` and `pnpm check` and aborts the push on any failure. `pnpm install` auto-runs `prepare`, which calls `git config core.hooksPath .githooks`, so a fresh clone is wired up after the first install. Run `pnpm hooks:install` manually if you skipped install scripts.
 
 ## Architecture
 
@@ -75,3 +80,16 @@ Main-process tests run in plain Node and must only cover pure logic (store, seri
 Biome enforces: single quotes (JS), double quotes (JSX), no semicolons, 2-space indent, 100-col lines, `useImportType` as error. Run `pnpm check:fix` before committing. shadcn components live in `src/renderer/components/ui/` (style: `new-york`, base color `neutral`, CSS vars enabled).
 
 Use descriptive variable names. Don't use one-letter or terse abbreviations like `r`, `g`, `c`, `ps`, `vh` for things that aren't obvious from context — write `result`, `git`, `commit`, `parents`, `viewportHeight`. The only acceptable short names are well-known conventions: `i`/`j` for loop indices, `e` for event-handler parameters, `_` for an unused parameter, and a one-letter name inside a tiny lambda where the type makes the meaning obvious (e.g. `xs.map((x) => x.id)`). When in doubt, spell it out — a reader who didn't write the code should still be able to tell what each name refers to.
+
+Default to writing **no comments**. Only add one when the WHY is non-obvious — a hidden constraint, a subtle invariant, a workaround for a specific bug, behavior that would surprise a reader. If removing the comment wouldn't confuse a future reader, don't write it. Don't explain WHAT the code does (well-named identifiers do that) and don't reference the current task, fix, PR, or callers — that rots as the codebase evolves. Same rule for docstrings: keep them to one short line, never multi-paragraph.
+
+### Per-tab isolation in main
+
+The renderer runs N tabs sharing one `webContents`, with an enforced invariant of **at most one tab per repo** — `useTabs.requestOpenRepo` (`src/renderer/hooks/useTabs.ts:84`) routes any attempt to open an already-open repo to the existing tab and discards the new one. So `repoPath` is effectively the per-tab key in main.
+
+Two consequences:
+
+- `gitInstances` and `activeFetches` are keyed by `repoPath`; that's already per-tab by the invariant, no refcount needed.
+- Resources that can outlive a single repo session — log streams that need cancellation by tab, multi-window state — should still be keyed by `${webContentsId}:${repoPath}` (see `activeLogStreams` in `src/main/ipc/log-stream.ts`). Never key by `webContentsId` alone: a different-repo IPC from the same window would otherwise cancel the in-flight work of another tab and leave its loading state stuck.
+
+When introducing a new per-repo resource in main, pick the narrower of the two keying strategies that still routes correctly. Don't add same-repo refcount/sharing logic — that case is unreachable.

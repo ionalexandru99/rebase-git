@@ -53,6 +53,30 @@ describe('useGit', () => {
     expect(result.current.error).toBeNull()
   })
 
+  it('loads status and branches concurrently with the log stream IPC', async () => {
+    mockOpenRepoSuccess()
+
+    let resolveStartLogStream: (response: { _tag: 'Ok' }) => void = () => {}
+    vi.mocked(window.electronAPI.startLogStream).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStartLogStream = resolve
+        })
+    )
+
+    const { result } = renderHook(() => useGit())
+    const openPromise = result.current.openRepo('/test/repo')
+
+    await waitFor(() => {
+      expect(window.electronAPI.getStatus).toHaveBeenCalledWith('/test/repo')
+      expect(window.electronAPI.getBranches).toHaveBeenCalledWith('/test/repo')
+    })
+    expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/test/repo')
+
+    resolveStartLogStream({ _tag: 'Ok' })
+    await openPromise
+  })
+
   it('opens a repo and streams commits in chunks', async () => {
     mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
     const stream = setupLogStream()
@@ -250,7 +274,7 @@ describe('useGit', () => {
 
     await result.current.closeRepo()
 
-    expect(window.electronAPI.cancelLogStream).toHaveBeenCalled()
+    expect(window.electronAPI.cancelLogStream).toHaveBeenCalledWith('/test/repo')
     expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
     await waitFor(() => {
       expect(result.current.repoPath).toBeNull()
@@ -310,7 +334,7 @@ describe('useGit', () => {
 
     unmount()
 
-    expect(window.electronAPI.cancelLogStream).toHaveBeenCalled()
+    expect(window.electronAPI.cancelLogStream).toHaveBeenCalledWith('/test/repo')
     expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
   })
 

@@ -2,6 +2,7 @@ import { decodeOrThrow } from '@shared/codec'
 import { SidebarPrefs } from '@shared/schemas/ipc'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import type { BranchTracking, RefKind } from '@/lib/ref-tree'
 import { AppSidebar, type SidebarView } from './Sidebar'
 import { Statusbar } from './Statusbar'
 import { Topbar } from './Topbar'
@@ -20,8 +21,10 @@ interface ShellProps {
   branchesLoading?: boolean
   changes: number
   activeView: SidebarView
+  tracking?: Record<string, BranchTracking>
   onSelectView: (view: SidebarView) => void
   onFetch?: () => void
+  onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
   children: ReactNode
 }
 
@@ -35,8 +38,10 @@ export function Shell({
   branchesLoading = false,
   changes,
   activeView,
+  tracking,
   onSelectView,
   onFetch,
+  onCheckoutRef,
   children
 }: ShellProps) {
   const [open, setOpen] = useState(true)
@@ -118,8 +123,10 @@ export function Shell({
         branchesLoading={branchesLoading}
         workingChanges={changes}
         activeView={activeView}
+        tracking={tracking}
         onSelectView={onSelectView}
         onResizeStart={handleResizeStart}
+        onCheckoutRef={onCheckoutRef}
       />
       <SidebarInset className="flex min-h-0 flex-col">
         <Topbar repoName={repoName} repoPath={repoPath} branch={branch} onFetch={onFetch} />

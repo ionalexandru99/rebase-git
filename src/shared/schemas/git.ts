@@ -42,12 +42,21 @@ export const GitLog = Schema.mutable(
 )
 export type GitLog = typeof GitLog.Type
 
+export const BranchTracking = Schema.Struct({
+  ahead: Schema.Number,
+  behind: Schema.Number
+})
+export type BranchTracking = typeof BranchTracking.Type
+
 export const GitBranches = Schema.mutable(
   Schema.Struct({
     current: Schema.String,
     all: Schema.mutable(Schema.Array(Schema.String)),
     remotes: Schema.mutable(Schema.Array(Schema.String)),
-    tags: Schema.mutable(Schema.Array(Schema.String))
+    tags: Schema.mutable(Schema.Array(Schema.String)),
+    tracking: Schema.optional(
+      Schema.mutable(Schema.Record({ key: Schema.String, value: BranchTracking }))
+    )
   })
 )
 export type GitBranches = typeof GitBranches.Type

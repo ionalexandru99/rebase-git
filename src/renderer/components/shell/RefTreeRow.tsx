@@ -1,4 +1,19 @@
-import { ChevronDown, ChevronRight, Cloud, GitBranch, Tag } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Cloud,
+  GitBranch,
+  Tag
+} from 'lucide-react'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   folderKey,
@@ -16,6 +31,7 @@ interface RefTreeRowProps {
   loading: boolean
   onToggleCollapsed: (key: string) => void
   onSelectLeaf?: (refKind: RefKind, fullPath: string) => void
+  onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
 }
 
 export function RefTreeRow({
@@ -23,7 +39,8 @@ export function RefTreeRow({
   top,
   loading,
   onToggleCollapsed,
-  onSelectLeaf
+  onSelectLeaf,
+  onCheckoutLeaf
 }: RefTreeRowProps) {
   const baseStyle: React.CSSProperties = {
     top: 0,
@@ -94,22 +111,70 @@ export function RefTreeRow({
 
   const Icon = row.refKind === 'tag' ? Tag : row.refKind === 'remote' ? Cloud : GitBranch
   const padLeft = 6 + row.depth * REF_TREE_INDENT_PX + 14
+  const refKind = row.refKind
+  const fullPath = row.fullPath
+  const ahead = row.ahead ?? 0
+  const behind = row.behind ?? 0
   return (
-    <button
-      type="button"
-      onClick={() => onSelectLeaf?.(row.refKind, row.fullPath)}
-      className={cn(
-        'absolute inset-x-0 flex items-center gap-1.5 rounded-sm pr-2 text-sm hover:bg-sidebar-accent/60',
-        row.isCurrent
-          ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-          : 'text-foreground/90'
-      )}
-      style={{ ...baseStyle, paddingLeft: padLeft }}
-      title={row.fullPath}
-    >
-      <Icon className="size-3.5 shrink-0 opacity-70" />
-      <span className="truncate">{row.name}</span>
-    </button>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={() => onSelectLeaf?.(refKind, fullPath)}
+          onDoubleClick={() => onCheckoutLeaf?.(refKind, fullPath)}
+          className={cn(
+            'absolute inset-x-0 flex items-center gap-1.5 rounded-sm pr-2 text-sm hover:bg-sidebar-accent/60',
+            row.isCurrent
+              ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+              : 'text-foreground/90'
+          )}
+          style={{ ...baseStyle, paddingLeft: padLeft }}
+          title={fullPath}
+        >
+          {row.isCurrent && (
+            <span
+              aria-hidden
+              data-testid="current-ref-bar"
+              className="pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-sm bg-sidebar-primary"
+            />
+          )}
+          <Icon className="size-3.5 shrink-0 opacity-70" />
+          <span className="min-w-0 truncate text-left">{row.name}</span>
+          {ahead > 0 && (
+            <span
+              data-testid="ref-ahead"
+              className="flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-emerald-500"
+              title={`${ahead} commit${ahead === 1 ? '' : 's'} to push`}
+            >
+              <ArrowUp className="size-3" />
+              {ahead}
+            </span>
+          )}
+          {behind > 0 && (
+            <span
+              data-testid="ref-behind"
+              className="flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-rose-500"
+              title={`${behind} commit${behind === 1 ? '' : 's'} to pull`}
+            >
+              <ArrowDown className="size-3" />
+              {behind}
+            </span>
+          )}
+          {row.isCurrent && (
+            <Check
+              aria-hidden
+              data-testid="current-ref-check"
+              className="ml-auto size-3.5 shrink-0 text-sidebar-primary"
+            />
+          )}
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onCheckoutLeaf?.(refKind, fullPath)}>
+          Checkout
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 

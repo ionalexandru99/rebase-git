@@ -33,7 +33,9 @@
     "test:smoke": "node scripts/smoke-test.mjs",
     "test:ci": "vitest run && vitest run --config vitest.main.config.ts && playwright test",
     "audit": "pnpm audit --audit-level moderate",
-    "audit:fix": "pnpm audit fix"
+    "audit:fix": "pnpm audit fix",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@effect-rx/rx-react": "0.42.4",

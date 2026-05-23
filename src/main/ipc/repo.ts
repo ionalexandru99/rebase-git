@@ -1,11 +1,13 @@
 import { encodeOrThrow } from '@shared/codec'
-import { BranchesResponse, Channel, OpenRepoResponse } from '@shared/schemas/ipc'
+import { BranchesResponse, Channel, CheckoutResponse, OpenRepoResponse } from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
+import { deriveLocalShortName } from '../git/checkout'
 import { resolveDefaultBranch } from '../git/defaultBranch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from '../git/instances'
 import { serializeBranches, serializeRemotes } from '../git/serialize'
+import { parseAheadBehind } from '../git/tracking'
 import { startWatching, stopWatching } from '../repoWatcher'
-import { activeFetches, gitInstances } from '../state'
+import { activeFetches, gitInstances, releaseFetchSemaphore } from '../state'
 import { addRecentRepo } from '../store'
 
 export function register(): void {
@@ -49,6 +51,7 @@ export function register(): void {
     const proc = activeFetches.get(key)
     if (proc && !proc.killed) proc.kill()
     activeFetches.delete(key)
+    releaseFetchSemaphore(key)
     await stopWatching(key)
   })
 
@@ -56,10 +59,15 @@ export function register(): void {
     const git = lookupGit(gitInstances, repoPath)
     if (!git) return encodeOrThrow(BranchesResponse, { _tag: 'RepoNotOpen' })
     try {
-      const [branches, tags] = await Promise.all([git.branch(['-a']), git.tags()])
+      const [branches, tags, trackingRaw] = await Promise.all([
+        git.branch(['-a']),
+        git.tags(),
+        git.raw(['for-each-ref', 'refs/heads', '--format=%(refname:short)|%(upstream:track)'])
+      ])
+      const tracking = parseAheadBehind(trackingRaw)
       return encodeOrThrow(BranchesResponse, {
         _tag: 'Ok',
-        branches: serializeBranches(branches, tags)
+        branches: serializeBranches(branches, tags, tracking)
       })
     } catch (error) {
       return encodeOrThrow(BranchesResponse, {
@@ -68,4 +76,46 @@ export function register(): void {
       })
     }
   })
+
+  ipcMain.handle(
+    Channel.checkoutRef,
+    async (_, repoPath: string, refKind: 'local' | 'remote' | 'tag', fullPath: string) => {
+      const git = lookupGit(gitInstances, repoPath)
+      if (!git) return encodeOrThrow(CheckoutResponse, { _tag: 'RepoNotOpen' })
+      try {
+        let checkedOut: string
+        if (refKind === 'remote') {
+          const shortName = deriveLocalShortName(fullPath)
+          const existing = await git.branch(['--list', shortName])
+          if (existing.all.length > 0) {
+            const upstreamRaw = await git.raw([
+              'for-each-ref',
+              `refs/heads/${shortName}`,
+              '--format=%(upstream:short)'
+            ])
+            const upstream = upstreamRaw.trim()
+            if (upstream !== fullPath) {
+              return encodeOrThrow(CheckoutResponse, {
+                _tag: 'GitError',
+                message: `Local branch '${shortName}' tracks ${upstream || 'no remote'}, not ${fullPath}. Resolve manually.`
+              })
+            }
+            await git.checkout([shortName])
+          } else {
+            await git.checkout(['--track', fullPath])
+          }
+          checkedOut = shortName
+        } else {
+          await git.checkout([fullPath])
+          checkedOut = fullPath
+        }
+        return encodeOrThrow(CheckoutResponse, { _tag: 'Ok', checkedOut })
+      } catch (error) {
+        return encodeOrThrow(CheckoutResponse, {
+          _tag: 'GitError',
+          message: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+  )
 }

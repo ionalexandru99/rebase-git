@@ -3,6 +3,7 @@ import {
   type BranchesResponse,
   type CancelLogStreamResponse,
   Channel,
+  type CheckoutResponse,
   type CommitResponse,
   type FetchResponse,
   type LogResponse,
@@ -26,6 +27,11 @@ export interface IElectronAPI {
   openRepo: (path: string) => Promise<OpenRepoResponse>
   closeRepo: (path: string) => Promise<void>
   getBranches: (repoPath: string) => Promise<BranchesResponse>
+  checkoutRef: (
+    repoPath: string,
+    refKind: 'local' | 'remote' | 'tag',
+    fullPath: string
+  ) => Promise<CheckoutResponse>
   getStatus: (repoPath: string) => Promise<StatusResponse>
   stageFile: (repoPath: string, file: string) => Promise<StageResponse>
   unstageFile: (repoPath: string, file: string) => Promise<UnstageResponse>
@@ -33,7 +39,7 @@ export interface IElectronAPI {
   fetchRepo: (repoPath: string) => Promise<FetchResponse>
   getLog: (repoPath: string, maxCount?: number) => Promise<LogResponse>
   startLogStream: (repoPath: string) => Promise<StartLogStreamResponse>
-  cancelLogStream: () => Promise<CancelLogStreamResponse>
+  cancelLogStream: (repoPath?: string) => Promise<CancelLogStreamResponse>
   onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => () => void
   getRecentRepos: () => Promise<string[]>
@@ -60,6 +66,8 @@ const api: IElectronAPI = {
   openRepo: (path: string) => ipcRenderer.invoke(Channel.openRepo, path),
   closeRepo: (path: string) => ipcRenderer.invoke(Channel.closeRepo, path),
   getBranches: (repoPath: string) => ipcRenderer.invoke(Channel.getBranches, repoPath),
+  checkoutRef: (repoPath: string, refKind: 'local' | 'remote' | 'tag', fullPath: string) =>
+    ipcRenderer.invoke(Channel.checkoutRef, repoPath, refKind, fullPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke(Channel.getStatus, repoPath),
   stageFile: (repoPath: string, file: string) =>
     ipcRenderer.invoke(Channel.stageFile, repoPath, file),
@@ -71,7 +79,8 @@ const api: IElectronAPI = {
   getLog: (repoPath: string, maxCount?: number) =>
     ipcRenderer.invoke(Channel.getLog, repoPath, maxCount),
   startLogStream: (repoPath: string) => ipcRenderer.invoke(Channel.startLogStream, repoPath),
-  cancelLogStream: () => ipcRenderer.invoke(Channel.cancelLogStream),
+  cancelLogStream: (repoPath?: string) =>
+    ipcRenderer.invoke(Channel.cancelLogStream, repoPath ?? ''),
   onLogChunk: (cb: (chunk: LogChunk) => void) => {
     const handler = (_event: unknown, chunk: LogChunk) => cb(chunk)
     ipcRenderer.on(Channel.logChunk, handler)

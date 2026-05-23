@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { encodeOrThrow } from '@shared/codec'
 import type { LogChunk } from '@shared/schemas/git'
 import { CancelLogStreamResponse, Channel, StartLogStreamResponse } from '@shared/schemas/ipc'
-import { ipcMain } from 'electron'
+import { ipcMain, webContents as webContentsApi } from 'electron'
 import { normalizeRepoPath } from '../git/instances'
 import type { SerializableLogEntry } from '../git/serialize'
 
@@ -14,18 +14,47 @@ const STREAM_BATCH_SIZE = 500
 interface ActiveStream {
   proc: ReturnType<typeof spawn>
   finishOk: () => void
+  webContentsId: number
+  repoPath: string
 }
 
-const activeLogStreams = new Map<number, ActiveStream>()
+const activeLogStreams = new Map<string, ActiveStream>()
+const webContentsCleanupBound = new Set<number>()
 
-function killActiveStream(webContentsId: number): void {
-  const existing = activeLogStreams.get(webContentsId)
+function streamKey(webContentsId: number, repoPath: string): string {
+  return `${webContentsId}:${repoPath}`
+}
+
+function killActiveStream(webContentsId: number, repoPath: string): void {
+  const key = streamKey(webContentsId, repoPath)
+  const existing = activeLogStreams.get(key)
   if (!existing) return
-  activeLogStreams.delete(webContentsId)
+  activeLogStreams.delete(key)
   if (!existing.proc.killed) existing.proc.kill()
-  // Resolve the previous IPC reply so electron doesn't log
-  // "Error invoking remote method 'start-log-stream': reply was never sent".
   existing.finishOk()
+}
+
+function killAllStreamsForWebContents(webContentsId: number): void {
+  for (const [key, stream] of activeLogStreams) {
+    if (stream.webContentsId !== webContentsId) continue
+    activeLogStreams.delete(key)
+    if (!stream.proc.killed) stream.proc.kill()
+    stream.finishOk()
+  }
+}
+
+function bindWebContentsCleanup(webContentsId: number): void {
+  if (webContentsCleanupBound.has(webContentsId)) return
+  webContentsCleanupBound.add(webContentsId)
+  const contents = webContentsApi.fromId(webContentsId)
+  if (!contents) {
+    webContentsCleanupBound.delete(webContentsId)
+    return
+  }
+  contents.once('destroyed', () => {
+    killAllStreamsForWebContents(webContentsId)
+    webContentsCleanupBound.delete(webContentsId)
+  })
 }
 
 export function register(): void {
@@ -34,7 +63,8 @@ export function register(): void {
     const webContents = event.sender
     const webContentsId = webContents.id
 
-    killActiveStream(webContentsId)
+    killActiveStream(webContentsId, key)
+    bindWebContentsCleanup(webContentsId)
 
     return new Promise<typeof StartLogStreamResponse.Encoded>((resolve) => {
       let resolved = false
@@ -63,7 +93,10 @@ export function register(): void {
         ],
         { stdio: ['ignore', 'pipe', 'pipe'] }
       )
-      activeLogStreams.set(webContentsId, { proc, finishOk })
+      const mapKey = streamKey(webContentsId, key)
+      activeLogStreams.set(mapKey, { proc, finishOk, webContentsId, repoPath: key })
+
+      finishOk()
 
       let buffer = ''
       let batch: SerializableLogEntry[] = []
@@ -110,12 +143,9 @@ export function register(): void {
       })
 
       proc.on('error', (err) => {
-        const current = activeLogStreams.get(webContentsId)
-        if (current?.proc !== proc) {
-          // killActiveStream already resolved the reply; nothing more to do.
-          return
-        }
-        activeLogStreams.delete(webContentsId)
+        const current = activeLogStreams.get(mapKey)
+        if (current?.proc !== proc) return
+        activeLogStreams.delete(mapKey)
         if (!webContents.isDestroyed()) {
           const chunk: LogChunk = {
             repoPath: key,
@@ -129,14 +159,9 @@ export function register(): void {
       })
 
       proc.on('close', (code) => {
-        const current = activeLogStreams.get(webContentsId)
-        if (current?.proc !== proc) {
-          // killActiveStream already resolved the reply; do not emit a stale
-          // done chunk that would flip the renderer's logLoading off for the
-          // new stream.
-          return
-        }
-        activeLogStreams.delete(webContentsId)
+        const current = activeLogStreams.get(mapKey)
+        if (current?.proc !== proc) return
+        activeLogStreams.delete(mapKey)
 
         if (code !== 0 && code !== null) {
           const message = stderrBuf.trim() || `git log exited with code ${code}`
@@ -158,8 +183,12 @@ export function register(): void {
     })
   })
 
-  ipcMain.handle(Channel.cancelLogStream, (event) => {
-    killActiveStream(event.sender.id)
+  ipcMain.handle(Channel.cancelLogStream, (event, repoPath: string) => {
+    if (repoPath) {
+      killActiveStream(event.sender.id, normalizeRepoPath(repoPath))
+    } else {
+      killAllStreamsForWebContents(event.sender.id)
+    }
     return encodeOrThrow(CancelLogStreamResponse, {})
   })
 }
