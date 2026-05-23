@@ -29,8 +29,8 @@ pnpm test                 # alias for test:renderer
 pnpm test:ci              # renderer + main + e2e
 
 # Single test
-pnpm vitest run src/renderer/components/CommitPanel.test.tsx
-pnpm vitest run --config vitest.main.config.ts src/main/store.test.ts
+pnpm vitest run src/renderer/components/__tests__/CommitPanel.test.tsx
+pnpm vitest run --config vitest.main.config.ts src/main/__tests__/store.test.ts
 pnpm playwright test e2e/app-launches.spec.ts
 ```
 

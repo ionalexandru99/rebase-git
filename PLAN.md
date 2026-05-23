@@ -2,7 +2,7 @@
 
 This file is the durable record of the multi-phase refactor of Rebase. Companion to `AGENTS.md` (binding rules) and `CLAUDE.md` (operational guidance). Update as work progresses.
 
-**Status:** Phase 1 complete (6 commits, 136 green tests). Phase 2 complete (13 commits, 146 green tests). Phase 3 complete (7 commits, 149 green tests). Phase 4 not yet started.
+**Status:** Phase 1 complete (6 commits, 136 green tests). Phase 2 complete (13 commits, 146 green tests). Phase 3 complete (7 commits, 149 green tests). Phase 4 complete (5 commits, 161 green tests).
 
 **Scale target:** Rebase is growing into a *complete* git GUI — diff, blame, interactive rebase, conflict resolution, multi-remote, push/pull, search, history navigation. The architecture choices below are picked for that ceiling, not just the current 6.7K-LOC surface.
 
@@ -42,12 +42,12 @@ Issues identified at the start. Tick = fixed in Phase 1.
 **Architecture issues (still pending)**
 - [x] IPC type erosion — preload returns `Promise<unknown>`, renderer casts everywhere (fixed in Phase 2)
 - [x] `src/main/index.ts` is 601 lines, all IPC handlers + serializers + window lifecycle (split in Phase 3)
-- `useGit` is a 370-line god-hook with 5+ refresh paths racing → **Phase 4**
+- [x] `useGit` is a 370-line god-hook with 5+ refresh paths racing (split into Effect-based slices in Phase 4)
 - [x] `HistoryPanel.tsx` is 799 lines mixing layout, canvas, ref parsing, virtualisation, theme observer (split in Phase 3)
 - [x] `App.tsx` bundles 5 components (split in Phase 3)
 - [x] Generic `getStoreValue`/`setStoreValue` proxy bypasses the schema (fixed in Phase 2)
 - [x] `useOnboarding.selectWorkingDirectory` ≈ `addWorkspace` (duplicate) (collapsed in Phase 3)
-- Loading-state conflation (one `loading` for openRepo + commit) → **Phase 4**
+- [x] Loading-state conflation (one `loading` for openRepo + commit) (split in Phase 4)
 - [x] Unused schema keys (`windowState`, `historyColWidths`) (fixed in Phase 2)
 
 ---
@@ -175,19 +175,64 @@ pass if it needs further breakdown.
 
 ---
 
-## Phase 4 — state architecture with Effect (PENDING, biggest)
+## Phase 4 — state architecture with Effect (DONE)
 
 Replace `useGit` and the imperative refresh dance with composed Effect-driven slices.
 
-1. **Move per-tab state to Effect + Rx**: split `useGit` into independent slices (`repo`, `status`, `branches`, `log`, `watcher`, `autoFetch`) each backed by an Rx atom or SubscriptionRef. The `useGit(repoPath)` facade just composes them.
-2. **Rewrite the log stream as `Stream<Commit>`** end-to-end: main produces it, renderer consumes via `Stream.runForEach` into the log slice. Cancellation is structural (fiber interrupt on tab switch), not a manual `cancelLogStream` IPC.
-3. **Replace hand-rolled primitives** in main: `createDebouncer` → `Stream.debounce`, `tryReserveFetch` → `Semaphore`. Delete those files.
-4. **Per-tab store instances** via React context. Each tab's slices are isolated; no more module-level `tabRepos` bookkeeping in `App.tsx`.
-5. **Separate loading states**: `opening` vs `committing` vs per-domain `*Loading`. The current single `loading` boolean is overloaded.
-6. **Persist tabs across app restarts** (common feature for multi-repo GUIs). Save `{ tabs, activeTabId, tabRepos }` to electron-store; restore on boot.
-7. **Add tab keyboard nav**: Cmd+Shift+] / Cmd+Shift+[ for next/prev tab.
+| Commit | Subject |
+|---|---|
+| `db8a353` | add Cmd+Shift+]/[ keyboard nav to cycle tabs |
+| `cb1c93c` | replace hand-rolled debouncer with Stream.debounce in repoWatcher |
+| `3f5df8b` | replace tryReserveFetch with effect Semaphore in fetch IPC |
+| `e4915c6` | persist tabs across app restarts |
+| `631f896` | move useGit internals to Effect with structural cancellation |
 
-**Done when:** `src/renderer/hooks/useGit.ts` is under ~80 lines and there are no manual `activePathRef.current` race guards.
+**Tests:** 129 renderer + 32 main = 161 green.
+
+**What landed:**
+
+- `src/renderer/hooks/useGit.ts` drops from 401 to 21 lines. The hook
+  composes four small slice hooks in `src/renderer/hooks/git/`:
+  `useGitState` (the 13 useState fields plus a setter bundle and a
+  reset), `useGitListeners` (chunk + repo-changed subscriptions,
+  routed by `repoPathRef`), `useGitActions` (openRepo, closeRepo,
+  stage, unstage, commit, fetchNow), and `useAutoFetch` (the
+  5-minute setInterval). The Effect lifecycle program lives in
+  `src/renderer/lib/git-effect/{api,program,types}.ts`.
+- `openRepo` interrupts the previous lifecycle fiber and forks a new
+  one (`Effect.runFork(openLifecycle(...))`). A Deferred signals the
+  caller once the initial open IPC has resolved and the log stream
+  has been restarted, so `await openRepo()` still returns with
+  `repoPath` set. All in-flight IPC, status/branches fetches, and
+  setter calls are interrupted structurally on the next openRepo or
+  closeRepo — no more `activePathRef.current` race guards.
+- Loading state is split: `opening` vs `committing` vs per-domain
+  `statusLoading` / `branchesLoading` / `logLoading`. The legacy
+  `loading` is preserved as `opening || committing` for callers that
+  still want a single flag.
+- `src/main/repoWatcher.ts` replaces the hand-rolled `createDebouncer`
+  with a per-key effect Queue piped through `Stream.debounce`. Each
+  watcher carries two queues + two fibers; `stopWatching` interrupts
+  the fibers and shuts the queues down. `autoFetch.ts` is gone:
+  `src/main/ipc/fetch.ts` now uses `Effect.unsafeMakeSemaphore(1)`
+  per repo via `withPermitsIfAvailable`, so the per-repo
+  reservation no longer spawns a process just to kill it.
+- Tabs persist across restarts via a new `PersistedTabs` schema and
+  IPC channels (`get-persisted-tabs` / `set-persisted-tabs`). `App`
+  gates the tab shell on both onboarding and the persisted-tabs
+  fetch; `useTabs` takes an initial snapshot, generates fresh ids,
+  and exposes `initialRepoPath(id)` so `TabView` can auto-open a
+  restored repo on mount. `useTabs.persistedSnapshot` is saved on
+  every change.
+- `useTabs` gains Cmd+Shift+] / Cmd+Shift+[ to cycle tabs with
+  wrap-around. Existing Cmd+T / Cmd+W stay inert when Shift is held
+  so the chord doesn't collide.
+
+**Deferred from the original phase 4 list:** the slices use plain
+`useState` rather than `Rx.family` atoms, and `tabRepos` bookkeeping
+still lives in `useTabs` (it's no longer in `App.tsx` directly). The
+Rx atom migration can be picked up if we need cross-tab atom access
+for new features.
 
 ---
 

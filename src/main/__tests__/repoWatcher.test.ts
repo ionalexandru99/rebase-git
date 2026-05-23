@@ -1,67 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDebouncer, ignoreWorkingTree } from './repoWatcher'
+import { Effect, Fiber, Queue } from 'effect'
+import { describe, expect, it, vi } from 'vitest'
+import { ignoreWorkingTree, startDebouncedDrain } from '../repoWatcher'
 
-describe('createDebouncer', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('fires the callback once after the delay', () => {
-    const debouncer = createDebouncer<'refs'>(100)
-    const fn = vi.fn()
-
-    debouncer.schedule('refs', fn)
-    expect(fn).not.toHaveBeenCalled()
-
-    vi.advanceTimersByTime(100)
-    expect(fn).toHaveBeenCalledTimes(1)
-  })
-
-  it('coalesces rapid schedules for the same key into a single fire', () => {
-    const debouncer = createDebouncer<'refs'>(100)
-    const fn = vi.fn()
-
-    debouncer.schedule('refs', fn)
-    vi.advanceTimersByTime(50)
-    debouncer.schedule('refs', fn)
-    vi.advanceTimersByTime(50)
-    debouncer.schedule('refs', fn)
-    vi.advanceTimersByTime(100)
-
-    expect(fn).toHaveBeenCalledTimes(1)
-  })
-
-  it('fires independently per key', () => {
-    const debouncer = createDebouncer<'refs' | 'workingTree'>(100)
-    const refsFn = vi.fn()
-    const treeFn = vi.fn()
-
-    debouncer.schedule('refs', refsFn)
-    debouncer.schedule('workingTree', treeFn)
-    vi.advanceTimersByTime(100)
-
-    expect(refsFn).toHaveBeenCalledTimes(1)
-    expect(treeFn).toHaveBeenCalledTimes(1)
-  })
-
-  it('cancelAll prevents pending callbacks from firing', () => {
-    const debouncer = createDebouncer<'refs' | 'workingTree'>(100)
-    const refsFn = vi.fn()
-    const treeFn = vi.fn()
-
-    debouncer.schedule('refs', refsFn)
-    debouncer.schedule('workingTree', treeFn)
-    debouncer.cancelAll()
-    vi.advanceTimersByTime(500)
-
-    expect(refsFn).not.toHaveBeenCalled()
-    expect(treeFn).not.toHaveBeenCalled()
-  })
-})
+async function tick(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 describe('ignoreWorkingTree', () => {
   it('ignores the .git directory', () => {
@@ -101,5 +44,54 @@ describe('ignoreWorkingTree', () => {
     expect(ignoreWorkingTree('/repo/NODE_MODULES/foo')).toBe(true)
     expect(ignoreWorkingTree('/repo/.GIT/HEAD')).toBe(true)
     expect(ignoreWorkingTree('/repo/Target/release/bin')).toBe(true)
+  })
+})
+
+describe('startDebouncedDrain', () => {
+  it('fires once after the queue goes idle', async () => {
+    const queue = Effect.runSync(Queue.unbounded<void>())
+    const onFire = vi.fn()
+    const fiber = startDebouncedDrain(queue, 30, onFire)
+
+    Effect.runSync(Queue.offer(queue, undefined))
+    Effect.runSync(Queue.offer(queue, undefined))
+    Effect.runSync(Queue.offer(queue, undefined))
+
+    expect(onFire).not.toHaveBeenCalled()
+    await tick(80)
+    expect(onFire).toHaveBeenCalledTimes(1)
+
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    Effect.runSync(Queue.shutdown(queue))
+  })
+
+  it('fires again after another idle period', async () => {
+    const queue = Effect.runSync(Queue.unbounded<void>())
+    const onFire = vi.fn()
+    const fiber = startDebouncedDrain(queue, 30, onFire)
+
+    Effect.runSync(Queue.offer(queue, undefined))
+    await tick(80)
+    expect(onFire).toHaveBeenCalledTimes(1)
+
+    Effect.runSync(Queue.offer(queue, undefined))
+    await tick(80)
+    expect(onFire).toHaveBeenCalledTimes(2)
+
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    Effect.runSync(Queue.shutdown(queue))
+  })
+
+  it('stops firing after the fiber is interrupted', async () => {
+    const queue = Effect.runSync(Queue.unbounded<void>())
+    const onFire = vi.fn()
+    const fiber = startDebouncedDrain(queue, 30, onFire)
+
+    await Effect.runPromise(Fiber.interrupt(fiber))
+    Effect.runSync(Queue.offer(queue, undefined))
+    await tick(80)
+
+    expect(onFire).not.toHaveBeenCalled()
+    Effect.runSync(Queue.shutdown(queue))
   })
 })

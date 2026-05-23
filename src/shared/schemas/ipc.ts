@@ -29,6 +29,8 @@ export const Channel = {
   setSidebarPrefs: 'set-sidebar-prefs',
   getRefTreeToggles: 'get-ref-tree-toggles',
   setRefTreeToggles: 'set-ref-tree-toggles',
+  getPersistedTabs: 'get-persisted-tabs',
+  setPersistedTabs: 'set-persisted-tabs',
   logChunk: 'log-chunk',
   repoChanged: 'repo-changed'
 } as const
@@ -116,3 +118,11 @@ export type SidebarPrefs = typeof SidebarPrefs.Type
 
 export const RefTreeToggles = Schema.Array(Schema.String)
 export type RefTreeToggles = typeof RefTreeToggles.Type
+
+export const PersistedTabs = Schema.mutable(
+  Schema.Struct({
+    tabs: Schema.mutable(Schema.Array(Schema.NullOr(Schema.String))),
+    activeIndex: Schema.Number
+  })
+)
+export type PersistedTabs = typeof PersistedTabs.Type

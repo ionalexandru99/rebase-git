@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { SimpleGit } from 'simple-git'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { getOrCreateGit, lookupGit, normalizeRepoPath } from './instances'
+import { getOrCreateGit, lookupGit, normalizeRepoPath } from '../instances'
 
 describe('normalizeRepoPath', () => {
   it('strips trailing slashes', () => {

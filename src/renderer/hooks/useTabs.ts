@@ -1,17 +1,43 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TabDescriptor } from '@/components/TabBar'
 
 interface TabRecord {
   id: string
 }
 
+export interface PersistedTabState {
+  tabs: (string | null)[]
+  activeIndex: number
+}
+
 let tabSeq = 0
 const nextTabId = () => `tab-${++tabSeq}-${Date.now()}`
 
-export function useTabs() {
-  const [tabs, setTabs] = useState<TabRecord[]>(() => [{ id: nextTabId() }])
-  const [activeTabId, setActiveTabId] = useState<string>(() => tabs[0]?.id ?? '')
-  const [tabRepos, setTabRepos] = useState<Record<string, string | null>>({})
+function hydrateFromPersisted(persisted: PersistedTabState | undefined): {
+  tabs: TabRecord[]
+  activeTabId: string
+  tabRepos: Record<string, string | null>
+} {
+  const sourcePaths =
+    persisted && persisted.tabs.length > 0 ? persisted.tabs : ([null] as (string | null)[])
+  const tabs = sourcePaths.map(() => ({ id: nextTabId() }))
+  const tabRepos: Record<string, string | null> = {}
+  for (let i = 0; i < tabs.length; i++) {
+    tabRepos[tabs[i].id] = sourcePaths[i]
+  }
+  const activeIdx =
+    persisted && persisted.activeIndex >= 0 && persisted.activeIndex < tabs.length
+      ? persisted.activeIndex
+      : 0
+  return { tabs, activeTabId: tabs[activeIdx].id, tabRepos }
+}
+
+export function useTabs(persisted?: PersistedTabState) {
+  const initial = useRef<ReturnType<typeof hydrateFromPersisted> | null>(null)
+  if (initial.current === null) initial.current = hydrateFromPersisted(persisted)
+  const [tabs, setTabs] = useState<TabRecord[]>(initial.current.tabs)
+  const [activeTabId, setActiveTabId] = useState<string>(initial.current.activeTabId)
+  const [tabRepos, setTabRepos] = useState<Record<string, string | null>>(initial.current.tabRepos)
 
   const reportTabRepo = useCallback((id: string, path: string | null) => {
     setTabRepos((prev) => {
@@ -74,10 +100,32 @@ export function useTabs() {
     [tabRepos]
   )
 
+  const cycleTab = useCallback(
+    (direction: 1 | -1) => {
+      if (tabs.length <= 1) return
+      const idx = tabs.findIndex((tab) => tab.id === activeTabId)
+      if (idx === -1) return
+      const nextIdx = (idx + direction + tabs.length) % tabs.length
+      setActiveTabId(tabs[nextIdx].id)
+    },
+    [activeTabId, tabs]
+  )
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey
       if (!mod) return
+      if (event.shiftKey && event.code === 'BracketRight') {
+        event.preventDefault()
+        cycleTab(1)
+        return
+      }
+      if (event.shiftKey && event.code === 'BracketLeft') {
+        event.preventDefault()
+        cycleTab(-1)
+        return
+      }
+      if (event.shiftKey) return
       if (event.key === 't') {
         event.preventDefault()
         newTab()
@@ -88,7 +136,7 @@ export function useTabs() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [activeTabId, closeTab, newTab])
+  }, [activeTabId, closeTab, newTab, cycleTab])
 
   const tabDescriptors = useMemo<TabDescriptor[]>(
     () =>
@@ -100,6 +148,20 @@ export function useTabs() {
     [tabs, tabRepos]
   )
 
+  const persistedSnapshot = useMemo<PersistedTabState>(() => {
+    const paths = tabs.map((tab) => tabRepos[tab.id] ?? null)
+    const activeIndex = Math.max(
+      0,
+      tabs.findIndex((tab) => tab.id === activeTabId)
+    )
+    return { tabs: paths, activeIndex }
+  }, [tabs, tabRepos, activeTabId])
+
+  const initialRepoPath = useCallback(
+    (id: string): string | null => initial.current?.tabRepos[id] ?? null,
+    []
+  )
+
   return {
     tabs,
     activeTabId,
@@ -108,6 +170,8 @@ export function useTabs() {
     newTab,
     closeTab,
     reportTabRepo,
-    requestOpenRepo
+    requestOpenRepo,
+    persistedSnapshot,
+    initialRepoPath
   }
 }

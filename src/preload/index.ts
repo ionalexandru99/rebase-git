@@ -7,6 +7,7 @@ import {
   type FetchResponse,
   type LogResponse,
   type OpenRepoResponse,
+  type PersistedTabs,
   type RefTreeToggles,
   type ScanForReposResponse,
   type SidebarPrefs,
@@ -40,6 +41,8 @@ export interface IElectronAPI {
   setSidebarPrefs: (prefs: SidebarPrefs) => Promise<void>
   getRefTreeToggles: () => Promise<RefTreeToggles>
   setRefTreeToggles: (toggles: RefTreeToggles) => Promise<void>
+  getPersistedTabs: () => Promise<PersistedTabs>
+  setPersistedTabs: (state: PersistedTabs) => Promise<void>
   getWorkingDirectory: () => Promise<string | null>
   setWorkingDirectory: (dir: string) => Promise<void>
   getWorkspaces: () => Promise<string[]>
@@ -85,6 +88,8 @@ const api: IElectronAPI = {
   getRefTreeToggles: () => ipcRenderer.invoke(Channel.getRefTreeToggles),
   setRefTreeToggles: (toggles: RefTreeToggles) =>
     ipcRenderer.invoke(Channel.setRefTreeToggles, toggles),
+  getPersistedTabs: () => ipcRenderer.invoke(Channel.getPersistedTabs),
+  setPersistedTabs: (state: PersistedTabs) => ipcRenderer.invoke(Channel.setPersistedTabs, state),
   getWorkingDirectory: () => ipcRenderer.invoke('get-working-directory'),
   setWorkingDirectory: (dir: string) => ipcRenderer.invoke('set-working-directory', dir),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),

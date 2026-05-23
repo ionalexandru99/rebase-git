@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
-import { decodeOrThrow, encodeOrThrow } from './codec'
+import { decodeOrThrow, encodeOrThrow } from '../codec'
 
 const Person = Schema.Struct({
   name: Schema.String,
