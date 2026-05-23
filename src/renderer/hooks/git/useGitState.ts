@@ -94,6 +94,7 @@ export function useGitState() {
     setStatusLoading(false)
     setBranchesLoading(false)
     setOpening(false)
+    setCommitting(false)
   }
 
   return { state, setters, accumulatedRef, repoPathRef, reset }

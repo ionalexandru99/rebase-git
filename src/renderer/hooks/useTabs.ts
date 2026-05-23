@@ -115,12 +115,12 @@ export function useTabs(persisted?: PersistedTabState) {
     function onKey(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey
       if (!mod) return
-      if (event.shiftKey && event.key === ']') {
+      if (event.shiftKey && event.code === 'BracketRight') {
         event.preventDefault()
         cycleTab(1)
         return
       }
-      if (event.shiftKey && event.key === '[') {
+      if (event.shiftKey && event.code === 'BracketLeft') {
         event.preventDefault()
         cycleTab(-1)
         return

@@ -11,9 +11,15 @@ function App() {
   const [persistedTabs, setPersistedTabs] = useState<PersistedTabs | null>(null)
 
   useEffect(() => {
-    window.electronAPI.getPersistedTabs().then((state) => {
-      setPersistedTabs({ tabs: [...state.tabs], activeIndex: state.activeIndex })
-    })
+    window.electronAPI
+      .getPersistedTabs()
+      .then((state) => {
+        setPersistedTabs({ tabs: [...state.tabs], activeIndex: state.activeIndex })
+      })
+      .catch((error: unknown) => {
+        console.error('[app] failed to load persisted tabs', error)
+        setPersistedTabs({ tabs: [], activeIndex: 0 })
+      })
   }, [])
 
   if (onboarding.onboardingComplete === null || persistedTabs === null) {

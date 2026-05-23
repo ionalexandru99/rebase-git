@@ -35,13 +35,13 @@ describe('useTabs keyboard nav', () => {
     const [first, second, third] = result.current.tabs
     act(() => result.current.setActiveTabId(first.id))
 
-    act(() => dispatchKey({ key: ']', metaKey: true, shiftKey: true }))
+    act(() => dispatchKey({ key: ']', code: 'BracketRight', metaKey: true, shiftKey: true }))
     expect(result.current.activeTabId).toBe(second.id)
 
-    act(() => dispatchKey({ key: ']', metaKey: true, shiftKey: true }))
+    act(() => dispatchKey({ key: ']', code: 'BracketRight', metaKey: true, shiftKey: true }))
     expect(result.current.activeTabId).toBe(third.id)
 
-    act(() => dispatchKey({ key: ']', metaKey: true, shiftKey: true }))
+    act(() => dispatchKey({ key: ']', code: 'BracketRight', metaKey: true, shiftKey: true }))
     expect(result.current.activeTabId).toBe(first.id)
   })
 
@@ -53,7 +53,7 @@ describe('useTabs keyboard nav', () => {
     const [first, , third] = result.current.tabs
     act(() => result.current.setActiveTabId(first.id))
 
-    act(() => dispatchKey({ key: '[', metaKey: true, shiftKey: true }))
+    act(() => dispatchKey({ key: '[', code: 'BracketLeft', metaKey: true, shiftKey: true }))
     expect(result.current.activeTabId).toBe(third.id)
   })
 
@@ -61,8 +61,8 @@ describe('useTabs keyboard nav', () => {
     const { result } = renderHook(() => useTabs())
     const onlyTabId = result.current.activeTabId
 
-    act(() => dispatchKey({ key: ']', metaKey: true, shiftKey: true }))
-    act(() => dispatchKey({ key: '[', metaKey: true, shiftKey: true }))
+    act(() => dispatchKey({ key: ']', code: 'BracketRight', metaKey: true, shiftKey: true }))
+    act(() => dispatchKey({ key: '[', code: 'BracketLeft', metaKey: true, shiftKey: true }))
 
     expect(result.current.activeTabId).toBe(onlyTabId)
     expect(result.current.tabs).toHaveLength(1)
@@ -71,6 +71,7 @@ describe('useTabs keyboard nav', () => {
   it('shift+t / shift+w do not trigger new/close', () => {
     const { result } = renderHook(() => useTabs())
     act(() => dispatchKey({ key: 't', metaKey: true, shiftKey: true }))
+    act(() => dispatchKey({ key: 'w', metaKey: true, shiftKey: true }))
     expect(result.current.tabs).toHaveLength(1)
   })
 })
