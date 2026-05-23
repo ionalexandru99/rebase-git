@@ -225,9 +225,7 @@ export const stageProgram = (path: string, file: string, setters: GitSetters) =>
     } else if (response._tag === 'GitError') {
       yield* Effect.sync(() => setters.setError(response.message))
     }
-  }).pipe(
-    Effect.catchAll((error) => Effect.sync(() => setters.setError(formatCause(error))))
-  )
+  }).pipe(Effect.catchAll((error) => Effect.sync(() => setters.setError(formatCause(error)))))
 
 export const unstageProgram = (path: string, file: string, setters: GitSetters) =>
   Effect.gen(function* () {
@@ -237,6 +235,4 @@ export const unstageProgram = (path: string, file: string, setters: GitSetters) 
     } else if (response._tag === 'GitError') {
       yield* Effect.sync(() => setters.setError(response.message))
     }
-  }).pipe(
-    Effect.catchAll((error) => Effect.sync(() => setters.setError(formatCause(error))))
-  )
+  }).pipe(Effect.catchAll((error) => Effect.sync(() => setters.setError(formatCause(error)))))

@@ -364,9 +364,9 @@ describe('App — persisted tabs', () => {
 
     await waitFor(() => {
       const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
-      expect(
-        setCalls.some(([state]) => state.tabs.includes('/home/user/projects/my-app'))
-      ).toBe(true)
+      expect(setCalls.some(([state]) => state.tabs.includes('/home/user/projects/my-app'))).toBe(
+        true
+      )
     })
   })
 })

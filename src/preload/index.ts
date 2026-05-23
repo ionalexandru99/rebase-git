@@ -89,8 +89,7 @@ const api: IElectronAPI = {
   setRefTreeToggles: (toggles: RefTreeToggles) =>
     ipcRenderer.invoke(Channel.setRefTreeToggles, toggles),
   getPersistedTabs: () => ipcRenderer.invoke(Channel.getPersistedTabs),
-  setPersistedTabs: (state: PersistedTabs) =>
-    ipcRenderer.invoke(Channel.setPersistedTabs, state),
+  setPersistedTabs: (state: PersistedTabs) => ipcRenderer.invoke(Channel.setPersistedTabs, state),
   getWorkingDirectory: () => ipcRenderer.invoke('get-working-directory'),
   setWorkingDirectory: (dir: string) => ipcRenderer.invoke('set-working-directory', dir),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),

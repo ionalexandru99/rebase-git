@@ -16,9 +16,7 @@ describe('fetchSemaphoreFor', () => {
     const held = await Effect.runPromise(Deferred.make<void>())
     const acquired = await Effect.runPromise(Deferred.make<void>())
     const aHeld = Effect.runPromise(
-      a.withPermits(1)(
-        Effect.zipRight(Deferred.succeed(acquired, undefined), Deferred.await(held))
-      )
+      a.withPermits(1)(Effect.zipRight(Deferred.succeed(acquired, undefined), Deferred.await(held)))
     )
     await Effect.runPromise(Deferred.await(acquired))
 
