@@ -274,7 +274,7 @@ describe('useGit', () => {
 
     await result.current.closeRepo()
 
-    expect(window.electronAPI.cancelLogStream).toHaveBeenCalled()
+    expect(window.electronAPI.cancelLogStream).toHaveBeenCalledWith('/test/repo')
     expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
     await waitFor(() => {
       expect(result.current.repoPath).toBeNull()
@@ -334,7 +334,7 @@ describe('useGit', () => {
 
     unmount()
 
-    expect(window.electronAPI.cancelLogStream).toHaveBeenCalled()
+    expect(window.electronAPI.cancelLogStream).toHaveBeenCalledWith('/test/repo')
     expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/test/repo')
   })
 

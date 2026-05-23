@@ -87,8 +87,23 @@ export function register(): void {
         if (refKind === 'remote') {
           const shortName = deriveLocalShortName(fullPath)
           const existing = await git.branch(['--list', shortName])
-          if (existing.all.length > 0) await git.checkout([shortName])
-          else await git.checkout(['--track', fullPath])
+          if (existing.all.length > 0) {
+            const upstreamRaw = await git.raw([
+              'for-each-ref',
+              `refs/heads/${shortName}`,
+              '--format=%(upstream:short)'
+            ])
+            const upstream = upstreamRaw.trim()
+            if (upstream !== fullPath) {
+              return encodeOrThrow(CheckoutResponse, {
+                _tag: 'GitError',
+                message: `Local branch '${shortName}' tracks ${upstream || 'no remote'}, not ${fullPath}. Resolve manually.`
+              })
+            }
+            await git.checkout([shortName])
+          } else {
+            await git.checkout(['--track', fullPath])
+          }
           checkedOut = shortName
         } else {
           await git.checkout([fullPath])

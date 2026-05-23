@@ -37,14 +37,23 @@ export function Workspace({
   const repoPath = git.repoPath
   const handleCheckoutRef = useCallback(
     async (refKind: RefKind, fullPath: string) => {
-      if (!repoPath) return
-      const result = await window.electronAPI.checkoutRef(repoPath, refKind, fullPath)
-      if (result._tag === 'Ok') {
-        toast.success(`Switched to ${result.checkedOut}`)
-      } else if (result._tag === 'GitError') {
-        toast.error('Checkout failed', { description: result.message })
-      } else {
+      if (!repoPath) {
         toast.error('Repository is not open')
+        return
+      }
+      try {
+        const result = await window.electronAPI.checkoutRef(repoPath, refKind, fullPath)
+        if (result._tag === 'Ok') {
+          toast.success(`Switched to ${result.checkedOut}`)
+        } else if (result._tag === 'GitError') {
+          toast.error('Checkout failed', { description: result.message })
+        } else {
+          toast.error('Repository is not open')
+        }
+      } catch (error) {
+        toast.error('Checkout failed', {
+          description: error instanceof Error ? error.message : String(error)
+        })
       }
     },
     [repoPath]
