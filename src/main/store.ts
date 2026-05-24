@@ -101,14 +101,6 @@ export function setActiveWorkspace(path: string | null): void {
   store.set('workingDirectory', path)
 }
 
-export function getWorkingDirectory(): string | null {
-  return getActiveWorkspace()
-}
-
-export function setWorkingDirectory(path: string): void {
-  addWorkspace(path)
-}
-
 export function isOnboardingComplete(): boolean {
   return store.get('onboardingComplete')
 }

@@ -6,12 +6,9 @@ import windowStateKeeperModule from 'electron-window-state'
 
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
 
-import * as fetchIpc from './ipc/fetch'
-import * as logIpc from './ipc/log'
 import * as logStreamIpc from './ipc/log-stream'
 import * as repoIpc from './ipc/repo'
 import * as settingsIpc from './ipc/settings'
-import * as statusIpc from './ipc/status'
 import * as workspaceIpc from './ipc/workspace'
 import { setupContextMenu } from './menu'
 import { wireProcessRecovery, wireWindowRecovery } from './recovery'
@@ -83,10 +80,7 @@ function createWindow(): void {
 
 function registerIpcHandlers(): void {
   repoIpc.register()
-  statusIpc.register()
-  logIpc.register()
   logStreamIpc.register()
-  fetchIpc.register()
   workspaceIpc.register(() => mainWindow)
   settingsIpc.register()
 }

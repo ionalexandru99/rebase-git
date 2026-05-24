@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupLogStream } from '@/../test/setup'
+import { setupLogStream, sidecarMock } from '@/../test/setup'
 import App from '@/App'
 
 beforeEach(() => {
@@ -23,7 +23,6 @@ function mockBaseAPI(
   vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(
     overrides.onboardingComplete ?? true
   )
-  vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(active)
   vi.mocked(window.electronAPI.getWorkspaces).mockResolvedValue(workspaces)
   vi.mocked(window.electronAPI.getActiveWorkspace).mockResolvedValue(active)
   vi.mocked(window.electronAPI.addWorkspace).mockImplementation(async (p) => [...workspaces, p])
@@ -41,7 +40,6 @@ function mockBaseAPI(
 describe('App — onboarding gate', () => {
   it('shows a loading state while checking onboarding status', () => {
     vi.mocked(window.electronAPI.getOnboardingComplete).mockReturnValue(new Promise(() => {}))
-    vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(null)
     vi.mocked(window.electronAPI.getRecentRepos).mockResolvedValue([])
 
     render(<App />)
@@ -241,7 +239,7 @@ describe('App — repo picker (no repo open)', () => {
       _tag: 'Ok',
       result: { path: '/home/user/repos/my-app', remotes: {}, defaultBranch: 'main' }
     })
-    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
       _tag: 'Ok',
       status: {
         current: 'main',
@@ -254,7 +252,7 @@ describe('App — repo picker (no repo open)', () => {
         renamed: []
       }
     })
-    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
       _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
@@ -305,7 +303,7 @@ describe('App — persisted tabs', () => {
       _tag: 'Ok',
       result: { path: '/home/user/projects/restored', remotes: {}, defaultBranch: 'main' }
     })
-    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
       _tag: 'Ok',
       status: {
         current: 'main',
@@ -318,7 +316,7 @@ describe('App — persisted tabs', () => {
         renamed: []
       }
     })
-    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
       _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
@@ -340,7 +338,7 @@ describe('App — persisted tabs', () => {
       _tag: 'Ok',
       result: { path: '/home/user/projects/my-app', remotes: {}, defaultBranch: 'main' }
     })
-    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
       _tag: 'Ok',
       status: {
         current: 'main',
@@ -353,7 +351,7 @@ describe('App — persisted tabs', () => {
         renamed: []
       }
     })
-    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
       _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
@@ -412,8 +410,8 @@ describe('App — workspace (repo open)', () => {
       scanRepos: ['/home/user/projects/my-app']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
-    vi.mocked(window.electronAPI.getStatus).mockResolvedValue(statusMock)
-    vi.mocked(window.electronAPI.getBranches).mockResolvedValue(branchesMock)
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue(statusMock)
+    vi.mocked(sidecarMock.getBranches).mockResolvedValue(branchesMock)
     const stream = setupLogStream()
 
     render(<App />)
@@ -474,7 +472,7 @@ describe('App — workspace (repo open)', () => {
       _tag: 'Ok',
       result: { path: '/workspace/repo', remotes: {}, defaultBranch: 'main' }
     })
-    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
       _tag: 'Ok',
       status: {
         current: 'main',
@@ -487,7 +485,7 @@ describe('App — workspace (repo open)', () => {
         renamed: []
       }
     })
-    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
       _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
@@ -515,7 +513,7 @@ describe('App — workspace (repo open)', () => {
         result: { path, remotes: {}, defaultBranch: 'main' }
       })
     )
-    vi.mocked(window.electronAPI.getStatus).mockResolvedValue({
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
       _tag: 'Ok',
       status: {
         current: 'main',
@@ -528,7 +526,7 @@ describe('App — workspace (repo open)', () => {
         renamed: []
       }
     })
-    vi.mocked(window.electronAPI.getBranches).mockResolvedValue({
+    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
       _tag: 'Ok',
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })

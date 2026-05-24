@@ -6,13 +6,11 @@ import {
   addWorkspace,
   getActiveWorkspace,
   getRecentRepos,
-  getWorkingDirectory,
   getWorkspaces,
   isOnboardingComplete,
   removeWorkspace,
   setActiveWorkspace,
-  setOnboardingComplete,
-  setWorkingDirectory
+  setOnboardingComplete
 } from '../store'
 
 export function register(getMainWindow: () => BrowserWindow | null): void {
@@ -24,9 +22,6 @@ export function register(getMainWindow: () => BrowserWindow | null): void {
   })
 
   ipcMain.handle('get-recent-repos', () => getRecentRepos())
-
-  ipcMain.handle('get-working-directory', () => getWorkingDirectory())
-  ipcMain.handle('set-working-directory', (_, dir: string) => setWorkingDirectory(dir))
 
   ipcMain.handle('get-workspaces', () => getWorkspaces())
   ipcMain.handle('add-workspace', (_, workspacePath: string) => addWorkspace(workspacePath))

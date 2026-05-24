@@ -4,7 +4,6 @@ import { useOnboarding } from '@/hooks/useOnboarding'
 
 function defaultMocks(active: string | null = null, workspaces: string[] = []) {
   vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(false)
-  vi.mocked(window.electronAPI.getWorkingDirectory).mockResolvedValue(active)
   vi.mocked(window.electronAPI.getWorkspaces).mockResolvedValue(workspaces)
   vi.mocked(window.electronAPI.getActiveWorkspace).mockResolvedValue(active)
   vi.mocked(window.electronAPI.addWorkspace).mockImplementation(async (p) => [...workspaces, p])

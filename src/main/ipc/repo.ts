@@ -1,10 +1,5 @@
 import { normalizeRepoPath } from '@shared/repo-path'
-import {
-  type BranchesResponse,
-  Channel,
-  type CheckoutResponse,
-  type OpenRepoResponse
-} from '@shared/schemas/ipc'
+import { Channel, type CheckoutResponse, type OpenRepoResponse } from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
 import { SidecarOp } from '../../sidecar/protocol'
 import { startWatching, stopWatching } from '../repoWatcher'
@@ -25,10 +20,6 @@ export function register(): void {
     await sidecarRequest(SidecarOp.closeRepo, { repoPath })
     await stopWatching(normalizeRepoPath(repoPath))
   })
-
-  ipcMain.handle(Channel.getBranches, (_, repoPath: string) =>
-    sidecarRequest<BranchesResponse>(SidecarOp.getBranches, { repoPath })
-  )
 
   ipcMain.handle(
     Channel.checkoutRef,
