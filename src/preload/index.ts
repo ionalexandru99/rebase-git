@@ -59,6 +59,7 @@ export interface IElectronAPI {
   getOnboardingComplete: () => Promise<boolean>
   setOnboardingComplete: (complete: boolean) => Promise<void>
   scanForRepos: (dirPath: string) => Promise<ScanForReposResponse>
+  getSidecarConfig: () => Promise<{ baseUrl: string; token: string }>
 }
 
 const api: IElectronAPI = {
@@ -109,7 +110,8 @@ const api: IElectronAPI = {
   getOnboardingComplete: () => ipcRenderer.invoke('get-onboarding-complete'),
   setOnboardingComplete: (complete: boolean) =>
     ipcRenderer.invoke('set-onboarding-complete', complete),
-  scanForRepos: (dirPath: string) => ipcRenderer.invoke(Channel.scanForRepos, dirPath)
+  scanForRepos: (dirPath: string) => ipcRenderer.invoke(Channel.scanForRepos, dirPath),
+  getSidecarConfig: () => ipcRenderer.invoke(Channel.getSidecarConfig)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

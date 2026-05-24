@@ -1,6 +1,6 @@
 import type { Server } from 'node:http'
-import { createSidecarServer } from './server'
 import type { SidecarCommand, SidecarMessage, SidecarStartMessage } from './protocol'
+import { createSidecarServer } from './server'
 
 const parentPort = process.parentPort
 let server: Server | undefined

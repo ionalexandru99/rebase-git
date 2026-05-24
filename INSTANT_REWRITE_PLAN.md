@@ -236,6 +236,29 @@ for `git-client` decode paths with a mocked `HttpClient`. Existing hook tests ad
 **DoD:** Renderer talks to the sidecar via Effect `HttpClient`; `@effect-rx` fully gone;
 all renderer tests green.
 
+**As-built (2026-05-24):** Added `@effect/platform@0.96.1` + `@effect/platform-browser@0.76.0`
+(exact). `src/renderer/lib/git-client.ts` is the `GitClient` Effect service (`Context.Tag`)
+wrapping `@effect/platform` `HttpClient` (`FetchHttpClient.layer`); `SidecarConfig` is a tag
+fed by `SidecarConfigFromIpc` (one `get-sidecar-config` IPC at boot — new `Channel`,
+preload method, `getSidecarConfig()` in `src/main/sidecar.ts`, handler in `ipc/settings.ts`).
+`src/renderer/lib/runtime.ts` exposes `makeRuntime(layer)` + a memoized `runtime`
+`ManagedRuntime` over `GitClientLive ⊕ FetchHttpClient ⊕ SidecarConfigFromIpc`. The git-effect
+`api.ts` read/mutation ops (`get-status`/`get-branches`/`get-log`/`stage-file`/`unstage-file`/
+`commit`/`fetch-repo`) now POST **directly to the sidecar** via `GitClient`, dropping the
+main IPC-proxy hop; hooks run programs through `runtime.run*`.
+
+**Deliberate deviation:** `openRepo`/`closeRepo` and `startLogStream`/`cancelLogStream` stay
+on IPC — `open`/`close` trigger main-side side effects (`addRecentRepo` + chokidar
+`startWatching`/`stopWatching`, which need `webContents`), and the log stream lives in main
+(PR 3). Migrating those needs a main-side notify channel; deferred (revisit in PR 5/7). The
+now-unused IPC proxies for the migrated ops are left in place for PR 7 cleanup; the
+open-repo→status→branches E2E still exercises them. `checkoutRef`/`scanForRepos` also still
+go through IPC. Tests: existing `useGit` suite kept intact by globally mocking `@/lib/runtime`
+to a test runtime whose `GitClient.request` routes each op back to the same `window.electronAPI`
+mocks; new `runtime.test.ts` + `git-client.test.ts` (real `FetchHttpClient` + stubbed `fetch`);
+new E2E asserts the renderer fetches the config and reaches the loopback sidecar with the
+bearer token (401 on a wrong token).
+
 ### PR 5 — Effect-based client cache (kill redundant fetches)
 **Branch:** `feat/instant-05-cache`
 **Goal:** Tab switches and window refocus are instant — served from cache, revalidated in

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { encodeOrThrow } from '@shared/codec'
-import type { GitLogEntry, LogChunk } from '@shared/schemas/git'
 import { normalizeRepoPath } from '@shared/repo-path'
+import type { GitLogEntry, LogChunk } from '@shared/schemas/git'
 import { CancelLogStreamResponse, Channel, StartLogStreamResponse } from '@shared/schemas/ipc'
 import { ipcMain, webContents as webContentsApi } from 'electron'
 

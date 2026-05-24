@@ -8,6 +8,7 @@ import {
   unstageProgram
 } from '@/lib/git-effect/program'
 import type { GitSetters } from '@/lib/git-effect/types'
+import { runtime } from '@/lib/runtime'
 
 export interface UseGitActionsArgs {
   setters: GitSetters
@@ -34,7 +35,7 @@ export function useGitActions({
     async (path: string) => {
       interruptOpen()
       const ready = await Effect.runPromise(Deferred.make<void>())
-      const fiber = Effect.runFork(openLifecycle(path, setters, ready))
+      const fiber = runtime.runFork(openLifecycle(path, setters, ready))
       openFiberRef.current = fiber
       await Effect.runPromise(Deferred.await(ready))
     },
@@ -67,7 +68,7 @@ export function useGitActions({
     async (file: string) => {
       const path = repoPathRef.current
       if (!path) return
-      await Effect.runPromise(stageProgram(path, file, setters))
+      await runtime.runPromise(stageProgram(path, file, setters))
     },
     [setters, repoPathRef]
   )
@@ -76,7 +77,7 @@ export function useGitActions({
     async (file: string) => {
       const path = repoPathRef.current
       if (!path) return
-      await Effect.runPromise(unstageProgram(path, file, setters))
+      await runtime.runPromise(unstageProgram(path, file, setters))
     },
     [setters, repoPathRef]
   )
@@ -85,7 +86,7 @@ export function useGitActions({
     async (message: string): Promise<boolean> => {
       const path = repoPathRef.current
       if (!path) return false
-      return Effect.runPromise(commitProgram(path, message, setters))
+      return runtime.runPromise(commitProgram(path, message, setters))
     },
     [setters, repoPathRef]
   )
@@ -94,7 +95,7 @@ export function useGitActions({
     const path = repoPathRef.current
     if (!path) return
     bumpFetchResetKey()
-    await Effect.runPromise(runFetchAndRefresh(path, setters))
+    await runtime.runPromise(runFetchAndRefresh(path, setters))
   }, [setters, repoPathRef, bumpFetchResetKey])
 
   return { openRepo, closeRepo, stageFile, unstageFile, commit, fetchNow }

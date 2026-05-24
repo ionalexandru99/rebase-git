@@ -115,7 +115,15 @@ async function ensureSidecar(): Promise<Sidecar> {
   return startSidecar()
 }
 
-export async function sidecarRequest<T>(op: SidecarOpName, body: Record<string, unknown>): Promise<T> {
+export async function getSidecarConfig(): Promise<{ baseUrl: string; token: string }> {
+  const { baseUrl, token } = await ensureSidecar()
+  return { baseUrl, token }
+}
+
+export async function sidecarRequest<T>(
+  op: SidecarOpName,
+  body: Record<string, unknown>
+): Promise<T> {
   const { baseUrl, token } = await ensureSidecar()
   const response = await fetch(`${baseUrl}/op/${op}`, {
     method: 'POST',

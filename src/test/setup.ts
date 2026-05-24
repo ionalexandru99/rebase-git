@@ -1,6 +1,48 @@
 import '@testing-library/jest-dom/vitest'
 import { beforeEach, vi } from 'vitest'
 
+vi.mock('@/lib/runtime', async () => {
+  const { Effect, Layer, ManagedRuntime } = await import('effect')
+  const { GitClient } = await import('@/lib/git-client')
+
+  const dispatch = (op: string, body: Record<string, unknown>): Promise<unknown> => {
+    const api = window.electronAPI
+    const repoPath = body.repoPath as string
+    switch (op) {
+      case 'get-status':
+        return api.getStatus(repoPath)
+      case 'get-branches':
+        return api.getBranches(repoPath)
+      case 'get-log':
+        return api.getLog(repoPath)
+      case 'stage-file':
+        return api.stageFile(repoPath, body.file as string)
+      case 'unstage-file':
+        return api.unstageFile(repoPath, body.file as string)
+      case 'commit':
+        return api.commit(repoPath, body.message as string)
+      case 'fetch-repo':
+        return api.fetchRepo(repoPath)
+      default:
+        return Promise.reject(new Error(`unhandled sidecar op in test: ${op}`))
+    }
+  }
+
+  const TestGitClient = Layer.succeed(GitClient, {
+    request: (op, body) =>
+      Effect.tryPromise({
+        try: () => dispatch(op, body),
+        catch: (error) => (error instanceof Error ? error : new Error(String(error)))
+      })
+  })
+
+  return {
+    makeRuntime: <ROut, E>(layer: Layer.Layer<ROut, E>) => ManagedRuntime.make(layer),
+    runtime: ManagedRuntime.make(TestGitClient),
+    GitClient
+  }
+})
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   configurable: true,
@@ -58,7 +100,8 @@ const mockElectronAPI = {
   setActiveWorkspace: vi.fn(),
   getOnboardingComplete: vi.fn(),
   setOnboardingComplete: vi.fn(),
-  scanForRepos: vi.fn()
+  scanForRepos: vi.fn(),
+  getSidecarConfig: vi.fn()
 }
 
 Object.defineProperty(window, 'electronAPI', {

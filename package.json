@@ -38,6 +38,8 @@
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
+    "@effect/platform": "0.96.1",
+    "@effect/platform-browser": "0.76.0",
     "@radix-ui/react-slot": "1.2.4",
     "chokidar": "4.0.3",
     "class-variance-authority": "0.7.1",

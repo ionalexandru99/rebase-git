@@ -95,4 +95,42 @@ test.describe('Git GUI E2E', () => {
       fs.rmSync(repo, { recursive: true, force: true })
     }
   })
+
+  test('renderer reaches the sidecar directly using the handed-out config', async () => {
+    const repo = createFixtureRepo()
+    try {
+      const result = await page.evaluate(async (repoPath) => {
+        const api = (
+          window as unknown as { electronAPI: Record<string, (...args: unknown[]) => Promise<unknown>> }
+        ).electronAPI
+        await api.openRepo(repoPath)
+        const config = (await api.getSidecarConfig()) as { baseUrl: string; token: string }
+        const response = await fetch(`${config.baseUrl}/op/get-status`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${config.token}` },
+          body: JSON.stringify({ repoPath })
+        })
+        const unauthorized = await fetch(`${config.baseUrl}/op/get-status`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: 'Bearer wrong' },
+          body: JSON.stringify({ repoPath })
+        })
+        return {
+          hasBaseUrl: config.baseUrl.startsWith('http://127.0.0.1:'),
+          hasToken: config.token.length > 0,
+          status: response.status,
+          body: (await response.json()) as { _tag: string },
+          unauthorizedStatus: unauthorized.status
+        }
+      }, repo)
+
+      expect(result.hasBaseUrl).toBe(true)
+      expect(result.hasToken).toBe(true)
+      expect(result.status).toBe(200)
+      expect(result.body._tag).toBe('Ok')
+      expect(result.unauthorizedStatus).toBe(401)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
 })

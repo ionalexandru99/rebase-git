@@ -1,7 +1,7 @@
-import { Effect } from 'effect'
 import { useEffect } from 'react'
 import { runFetchAndRefresh } from '@/lib/git-effect/program'
 import type { GitSetters } from '@/lib/git-effect/types'
+import { runtime } from '@/lib/runtime'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 
@@ -15,7 +15,7 @@ export function useAutoFetch(
     if (!repoPath) return
     const path = repoPath
     const handle = window.setInterval(() => {
-      Effect.runFork(runFetchAndRefresh(path, setters))
+      runtime.runFork(runFetchAndRefresh(path, setters))
     }, AUTO_FETCH_INTERVAL_MS)
     return () => window.clearInterval(handle)
   }, [repoPath, setters, fetchResetKey])

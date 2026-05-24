@@ -6,7 +6,7 @@
     <title>Rebase</title>
     <script>
       // Keep colors in sync with src/main/theme.ts — runs before the bundle to avoid a flash.
-      ;(function () {
+      ;(() => {
         var theme = 'dark'
         try {
           if (localStorage.getItem('theme') === 'light') theme = 'light'

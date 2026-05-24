@@ -1,7 +1,7 @@
-import { Effect } from 'effect'
 import { type MutableRefObject, useEffect } from 'react'
 import { silentRefreshRefs, silentRefreshStatus } from '@/lib/git-effect/program'
 import type { GitSetters } from '@/lib/git-effect/types'
+import { runtime } from '@/lib/runtime'
 
 export function useGitListeners(setters: GitSetters, repoPathRef: MutableRefObject<string | null>) {
   useEffect(() => {
@@ -17,7 +17,7 @@ export function useGitListeners(setters: GitSetters, repoPathRef: MutableRefObje
         event.kind === 'refs'
           ? silentRefreshRefs(event.repoPath, setters)
           : silentRefreshStatus(event.repoPath, setters)
-      Effect.runFork(refresh)
+      runtime.runFork(refresh)
     })
     return () => {
       unsubLog?.()

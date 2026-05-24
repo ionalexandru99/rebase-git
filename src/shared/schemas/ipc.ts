@@ -32,6 +32,7 @@ export const Channel = {
   getPersistedTabs: 'get-persisted-tabs',
   setPersistedTabs: 'set-persisted-tabs',
   checkoutRef: 'checkout-ref',
+  getSidecarConfig: 'get-sidecar-config',
   logChunk: 'log-chunk',
   repoChanged: 'repo-changed'
 } as const

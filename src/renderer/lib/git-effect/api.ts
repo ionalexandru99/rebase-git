@@ -10,10 +10,17 @@ import {
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
-import { Effect } from 'effect'
+import { Effect, type Schema } from 'effect'
+import { GitClient } from '@/lib/git-client'
 
 const decodeIPCError = (error: unknown): Error =>
   error instanceof Error ? error : new Error(String(error))
+
+const sidecarOp = <A, I>(op: string, body: Record<string, unknown>, schema: Schema.Schema<A, I>) =>
+  GitClient.pipe(
+    Effect.flatMap((git) => git.request(op, body)),
+    Effect.map((response) => decodeOrThrow(schema, response))
+  )
 
 export const openRepo = (path: string) =>
   Effect.tryPromise({
@@ -21,50 +28,28 @@ export const openRepo = (path: string) =>
     catch: decodeIPCError
   }).pipe(Effect.map((response) => decodeOrThrow(OpenRepoResponse, response)))
 
-export const getStatus = (path: string) =>
-  Effect.tryPromise({
-    try: () => window.electronAPI.getStatus(path),
-    catch: decodeIPCError
-  }).pipe(Effect.map((response) => decodeOrThrow(StatusResponse, response)))
-
-export const getBranches = (path: string) =>
-  Effect.tryPromise({
-    try: () => window.electronAPI.getBranches(path),
-    catch: decodeIPCError
-  }).pipe(Effect.map((response) => decodeOrThrow(BranchesResponse, response)))
-
-export const getLog = (path: string) =>
-  Effect.tryPromise({
-    try: () => window.electronAPI.getLog(path),
-    catch: decodeIPCError
-  }).pipe(Effect.map((response) => decodeOrThrow(LogResponse, response)))
-
 export const startLogStream = (path: string) =>
   Effect.tryPromise({
     try: () => window.electronAPI.startLogStream(path),
     catch: decodeIPCError
   }).pipe(Effect.map((response) => decodeOrThrow(StartLogStreamResponse, response)))
 
+export const getStatus = (path: string) =>
+  sidecarOp('get-status', { repoPath: path }, StatusResponse)
+
+export const getBranches = (path: string) =>
+  sidecarOp('get-branches', { repoPath: path }, BranchesResponse)
+
+export const getLog = (path: string) => sidecarOp('get-log', { repoPath: path }, LogResponse)
+
 export const stageFile = (path: string, file: string) =>
-  Effect.tryPromise({
-    try: () => window.electronAPI.stageFile(path, file),
-    catch: decodeIPCError
-  }).pipe(Effect.map((response) => decodeOrThrow(StageResponse, response)))
+  sidecarOp('stage-file', { repoPath: path, file }, StageResponse)
 
 export const unstageFile = (path: string, file: string) =>
-  Effect.tryPromise({
-    try: () => window.electronAPI.unstageFile(path, file),
-    catch: decodeIPCError
-  }).pipe(Effect.map((response) => decodeOrThrow(UnstageResponse, response)))
+  sidecarOp('unstage-file', { repoPath: path, file }, UnstageResponse)
 
 export const commit = (path: string, message: string) =>
-  Effect.tryPromise({
-    try: () => window.electronAPI.commit(path, message),
-    catch: decodeIPCError
-  }).pipe(Effect.map((response) => decodeOrThrow(CommitResponse, response)))
+  sidecarOp('commit', { repoPath: path, message }, CommitResponse)
 
 export const fetchRepo = (path: string) =>
-  Effect.tryPromise({
-    try: () => window.electronAPI.fetchRepo(path),
-    catch: decodeIPCError
-  }).pipe(Effect.map((response) => decodeOrThrow(FetchResponse, response)))
+  sidecarOp('fetch-repo', { repoPath: path }, FetchResponse)
