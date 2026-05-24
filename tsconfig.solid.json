@@ -4,6 +4,6 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js"
   },
-  "include": ["src/renderer/solid/**/*"],
+  "include": ["src/renderer/solid/**/*", "src/preload/**/*", "src/shared/**/*"],
   "exclude": []
 }
