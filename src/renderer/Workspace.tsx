@@ -1,12 +1,11 @@
-import { useCallback, useMemo, useState } from 'react'
-import { toast } from 'sonner'
+import { useMemo, useState } from 'react'
 import { CommitPanel } from '@/components/CommitPanel'
 import { HistoryPanel } from '@/components/HistoryPanel'
 import { StatusPanel } from '@/components/StatusPanel'
 import { Shell } from '@/components/shell/Shell'
 import type { SidebarView } from '@/components/shell/Sidebar'
+import { useCheckoutRef } from '@/hooks/git/useCheckoutRef'
 import type { useGit } from '@/hooks/useGit'
-import type { RefKind } from '@/lib/ref-tree'
 
 interface WorkspaceProps {
   git: ReturnType<typeof useGit>
@@ -34,30 +33,7 @@ export function Workspace({
   const sidebarTags = useMemo(() => git.branches?.tags ?? [], [git.branches])
   const sidebarTracking = useMemo(() => git.branches?.tracking, [git.branches])
 
-  const repoPath = git.repoPath
-  const handleCheckoutRef = useCallback(
-    async (refKind: RefKind, fullPath: string) => {
-      if (!repoPath) {
-        toast.error('Repository is not open')
-        return
-      }
-      try {
-        const result = await window.electronAPI.checkoutRef(repoPath, refKind, fullPath)
-        if (result._tag === 'Ok') {
-          toast.success(`Switched to ${result.checkedOut}`)
-        } else if (result._tag === 'GitError') {
-          toast.error('Checkout failed', { description: result.message })
-        } else {
-          toast.error('Repository is not open')
-        }
-      } catch (error) {
-        toast.error('Checkout failed', {
-          description: error instanceof Error ? error.message : String(error)
-        })
-      }
-    },
-    [repoPath]
-  )
+  const handleCheckoutRef = useCheckoutRef(git.repoPath)
 
   return (
     <Shell

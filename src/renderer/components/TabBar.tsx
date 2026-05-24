@@ -19,38 +19,46 @@ interface TabBarProps {
 export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarProps) {
   return (
     <div className="drag-region relative flex h-11 shrink-0 items-end bg-muted pl-1 pr-1 dark:bg-background">
-      <div className="flex shrink-0 items-center gap-2 pb-2.5 pl-3 pr-4">
-        <span className="text-sm font-semibold tracking-tight">Rebase</span>
-      </div>
+      <BrandTitle />
 
       <div role="tablist" className="no-drag flex min-w-0 items-end gap-0.5 overflow-x-auto">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId
-          return (
-            <TabItem
-              key={tab.id}
-              tab={tab}
-              isActive={isActive}
-              onSelect={() => onSelect(tab.id)}
-              onClose={() => onClose(tab.id)}
-            />
-          )
-        })}
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onNew}
-          aria-label="Open new tab"
-          className="no-drag mx-1 mb-1.5 size-7 rounded-full text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
-        >
-          <Plus />
-        </Button>
+        {tabs.map((tab) => (
+          <TabItem
+            key={tab.id}
+            tab={tab}
+            isActive={tab.id === activeTabId}
+            onSelect={() => onSelect(tab.id)}
+            onClose={() => onClose(tab.id)}
+          />
+        ))}
+        <NewTabButton onClick={onNew} />
       </div>
 
       <div className="drag-region min-w-4 flex-1" />
     </div>
+  )
+}
+
+function BrandTitle() {
+  return (
+    <div className="flex shrink-0 items-center gap-2 pb-2.5 pl-3 pr-4">
+      <span className="text-sm font-semibold tracking-tight">Rebase</span>
+    </div>
+  )
+}
+
+function NewTabButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      onClick={onClick}
+      aria-label="Open new tab"
+      className="no-drag mx-1 mb-1.5 size-7 rounded-full text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+    >
+      <Plus />
+    </Button>
   )
 }
 
