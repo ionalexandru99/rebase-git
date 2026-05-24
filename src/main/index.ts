@@ -14,6 +14,7 @@ import * as settingsIpc from './ipc/settings'
 import * as statusIpc from './ipc/status'
 import * as workspaceIpc from './ipc/workspace'
 import { setupContextMenu } from './menu'
+import { wireProcessRecovery, wireWindowRecovery } from './recovery'
 import { killSidecar, startSidecar } from './sidecar'
 import { getTheme } from './store'
 import { resolveBackgroundColor } from './theme'
@@ -57,6 +58,7 @@ function createWindow(): void {
   mainWindow = win
 
   mainWindowState.manage(win)
+  wireWindowRecovery(win)
 
   let shown = false
   const showOnce = (): void => {
@@ -94,6 +96,7 @@ app.whenReady().then(() => {
     console.error('[main] sidecar failed to start', error)
   })
   registerIpcHandlers()
+  wireProcessRecovery()
   createWindow()
   setupUpdater()
   setupContextMenu()
