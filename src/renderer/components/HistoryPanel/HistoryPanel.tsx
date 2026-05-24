@@ -1,4 +1,7 @@
+import { GitCommitHorizontal } from 'lucide-react'
 import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Panel } from '@/components/ui/panel'
 import { useThemeNonce } from '@/hooks/useThemeNonce'
 import { useVirtualList } from '@/hooks/useVirtualList'
 import {
@@ -82,7 +85,7 @@ export function HistoryPanel({ log, loading, remotes = {}, currentBranch }: Hist
   const gridTemplate = `minmax(0,1fr) ${COL_AUTHOR_REM}rem ${COL_SHA_REM}rem ${COL_DATE_REM}rem`
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border bg-card">
+    <Panel className="h-full">
       <HistoryHeader
         total={log?.total}
         loading={loading}
@@ -113,7 +116,7 @@ export function HistoryPanel({ log, loading, remotes = {}, currentBranch }: Hist
           loading ? (
             <SkeletonRows gridTemplate={gridTemplate} viewportHeight={viewportHeight} />
           ) : (
-            <EmptyState />
+            <HistoryEmptyState />
           )
         ) : (
           <div
@@ -164,7 +167,7 @@ export function HistoryPanel({ log, loading, remotes = {}, currentBranch }: Hist
           </div>
         )}
       </div>
-    </section>
+    </Panel>
   )
 }
 
@@ -191,29 +194,13 @@ function LoadingOverlay({
   )
 }
 
-function EmptyState() {
+function HistoryEmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
-      <div className="mb-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground/60">
-        <svg
-          viewBox="0 0 16 16"
-          className="h-3 w-3"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          role="img"
-        >
-          <title>commit</title>
-          <circle cx="8" cy="8" r="2" />
-          <path d="M0 8h6M10 8h6" />
-        </svg>
-      </div>
-      <p className="text-sm font-medium text-foreground">No commits yet</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Make your first commit to populate the timeline.
-      </p>
-    </div>
+    <EmptyState
+      size="sm"
+      icon={GitCommitHorizontal}
+      title="No commits yet"
+      description="Make your first commit to populate the timeline."
+    />
   )
 }

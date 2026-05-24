@@ -1,7 +1,8 @@
 import { decodeOrThrow } from '@shared/codec'
 import { SidebarPrefs } from '@shared/schemas/ipc'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback } from 'react'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { useDraggableWidth } from '@/hooks/useDraggableWidth'
 import type { BranchTracking, RefKind } from '@/lib/ref-tree'
 import { AppSidebar, type SidebarView } from './Sidebar'
 import { Statusbar } from './Statusbar'
@@ -28,6 +29,15 @@ interface ShellProps {
   children: ReactNode
 }
 
+const loadSidebarPrefs = () => window.electronAPI.getSidebarPrefs()
+const saveSidebarPrefs = (state: { open: boolean; width: number }) =>
+  window.electronAPI.setSidebarPrefs(state)
+const decodeSidebarPrefs = (raw: { open: boolean; width: number }) =>
+  decodeOrThrow(SidebarPrefs, raw)
+const logSidebarPrefsError = (err: unknown) => {
+  console.warn('[Shell] failed to load sidebar prefs', err)
+}
+
 export function Shell({
   repoName,
   repoPath,
@@ -44,73 +54,21 @@ export function Shell({
   onCheckoutRef,
   children
 }: ShellProps) {
-  const [open, setOpen] = useState(true)
-  const [width, setWidth] = useState<number>(SIDEBAR_WIDTH_DEFAULT)
-  const dragWidthRef = useRef(width)
+  const { width, isOpen, setOpen, onResizeStart } = useDraggableWidth({
+    min: SIDEBAR_WIDTH_MIN,
+    max: SIDEBAR_WIDTH_MAX,
+    defaultWidth: SIDEBAR_WIDTH_DEFAULT,
+    load: loadSidebarPrefs,
+    save: saveSidebarPrefs,
+    decode: decodeSidebarPrefs,
+    onLoadError: logSidebarPrefsError
+  })
 
-  useEffect(() => {
-    let cancelled = false
-    window.electronAPI
-      .getSidebarPrefs()
-      .then((res) => {
-        if (cancelled) return
-        const prefs = decodeOrThrow(SidebarPrefs, res)
-        setOpen(prefs.open)
-        const clamped = Math.max(SIDEBAR_WIDTH_MIN, Math.min(SIDEBAR_WIDTH_MAX, prefs.width))
-        setWidth(clamped)
-        dragWidthRef.current = clamped
-      })
-      .catch((err: unknown) => {
-        console.warn('[Shell] failed to load sidebar prefs', err)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const persistPrefs = useCallback((nextOpen: boolean, nextWidth: number) => {
-    window.electronAPI.setSidebarPrefs({ open: nextOpen, width: nextWidth })
-  }, [])
-
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next)
-    persistPrefs(next, dragWidthRef.current)
-  }
-
-  const handleResizeStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault()
-      const startX = e.clientX
-      const startW = width
-      dragWidthRef.current = startW
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-      document.body.dataset.sidebarResizing = 'true'
-      const onMove = (ev: MouseEvent) => {
-        const next = Math.max(
-          SIDEBAR_WIDTH_MIN,
-          Math.min(SIDEBAR_WIDTH_MAX, startW + (ev.clientX - startX))
-        )
-        dragWidthRef.current = next
-        setWidth(next)
-      }
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove)
-        window.removeEventListener('mouseup', onUp)
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-        delete document.body.dataset.sidebarResizing
-        persistPrefs(open, dragWidthRef.current)
-      }
-      window.addEventListener('mousemove', onMove)
-      window.addEventListener('mouseup', onUp)
-    },
-    [width, open, persistPrefs]
-  )
+  const handleOpenChange = useCallback((next: boolean) => setOpen(next), [setOpen])
 
   return (
     <SidebarProvider
-      open={open}
+      open={isOpen}
       onOpenChange={handleOpenChange}
       className="!min-h-0 h-full"
       style={{ '--sidebar-width': `${width}px` } as React.CSSProperties}
@@ -125,7 +83,7 @@ export function Shell({
         activeView={activeView}
         tracking={tracking}
         onSelectView={onSelectView}
-        onResizeStart={handleResizeStart}
+        onResizeStart={onResizeStart}
         onCheckoutRef={onCheckoutRef}
       />
       <SidebarInset className="flex min-h-0 flex-col">

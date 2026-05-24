@@ -1,6 +1,12 @@
-import { Loader2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { LoadingBadge } from '@/components/ui/loading-badge'
+import {
+  PanelActions,
+  PanelHeader,
+  PanelHeaderGroup,
+  PanelSubtitle,
+  PanelTitle
+} from '@/components/ui/panel'
 
 interface HistoryHeaderProps {
   total?: number
@@ -18,17 +24,17 @@ export function HistoryHeader({
   showFilter
 }: HistoryHeaderProps) {
   return (
-    <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b px-3">
-      <div className="flex min-w-0 items-baseline gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">Timeline</h2>
-        <span className="truncate text-xs text-muted-foreground">
+    <PanelHeader className="gap-3">
+      <PanelHeaderGroup>
+        <PanelTitle className="text-foreground">Timeline</PanelTitle>
+        <PanelSubtitle>
           {total
             ? `${total} commit${total === 1 ? '' : 's'} · all branches`
             : 'Repository timeline'}
-        </span>
-      </div>
+        </PanelSubtitle>
+      </PanelHeaderGroup>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <PanelActions>
         {showFilter && (
           <Input
             value={filter}
@@ -37,16 +43,8 @@ export function HistoryHeader({
             className="h-7 w-40"
           />
         )}
-        {loading && (
-          <Badge
-            variant="outline"
-            className="gap-1 border-border bg-transparent font-normal text-muted-foreground"
-          >
-            <Loader2 className="animate-spin" />
-            Loading
-          </Badge>
-        )}
-      </div>
-    </header>
+        {loading && <LoadingBadge />}
+      </PanelActions>
+    </PanelHeader>
   )
 }

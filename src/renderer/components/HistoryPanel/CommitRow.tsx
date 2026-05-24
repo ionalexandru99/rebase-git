@@ -1,12 +1,11 @@
 import { GitMerge } from 'lucide-react'
 import { memo, useMemo } from 'react'
-import { RemoteProviderIcon } from '@/components/RemoteProviderIcon'
-import { Badge } from '@/components/ui/badge'
 import { formatCommitDate, initials } from '@/lib/format'
 import { laneColor, ROW_H } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
-import { parseRefs, pillStyle, refClass, splitRemoteRef } from '@/lib/git-graph/refs'
+import { parseRefs } from '@/lib/git-graph/refs'
 import { cn } from '@/lib/utils'
+import { RefBadge } from './RefBadge'
 
 interface CommitRowProps {
   row: RowLayout
@@ -53,36 +52,14 @@ export const CommitRow = memo(function CommitRow({
         {isMerge && (
           <GitMerge aria-label="merge commit" className="size-3 shrink-0 text-emerald-500" />
         )}
-        {refs.map((ref) => {
-          const style = pillStyle(ref.kind, laneHex)
-          const base = 'h-6 shrink-0 rounded-md border px-2.5 text-xs font-medium tracking-tight'
-          if (ref.kind === 'remote') {
-            const { remote, branch } = splitRemoteRef(ref.label)
-            return (
-              <Badge
-                key={`${ref.kind}:${ref.label}`}
-                variant="outline"
-                className={cn(base, 'gap-1.5', refClass(ref.kind))}
-                style={style}
-                title={ref.label}
-              >
-                <RemoteProviderIcon url={remotes[remote]} className="!size-3.5" />
-                {branch}
-              </Badge>
-            )
-          }
-          return (
-            <Badge
-              key={`${ref.kind}:${ref.label}`}
-              variant="outline"
-              className={cn(base, refClass(ref.kind))}
-              style={style}
-              title={ref.label}
-            >
-              {ref.label}
-            </Badge>
-          )
-        })}
+        {refs.map((ref) => (
+          <RefBadge
+            key={`${ref.kind}:${ref.label}`}
+            ref={ref}
+            laneHex={laneHex}
+            remotes={remotes}
+          />
+        ))}
         <span className={cn('min-w-0 truncate', subjectClass)}>{commit.message}</span>
       </span>
 

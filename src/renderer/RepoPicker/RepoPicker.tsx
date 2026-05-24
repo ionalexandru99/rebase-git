@@ -1,6 +1,7 @@
 import { FolderPlus, GitBranch, Search } from 'lucide-react'
 import { type KeyboardEvent as ReactKeyboardEvent, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher'
 import { RepoGroup } from './RepoGroup'
@@ -40,22 +41,18 @@ export function RepoPicker({
   if (!hasAnyWorkspace) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-        <div className="flex max-w-sm flex-col items-center gap-4 text-center">
-          <div className="rounded-full border bg-muted p-3">
-            <FolderPlus className="size-5 text-muted-foreground" />
-          </div>
-          <div className="space-y-1">
-            <h2 className="text-base font-semibold">Add a workspace</h2>
-            <p className="text-sm text-muted-foreground">
-              Repositories open from a workspace folder. Pick a folder that contains your Git
-              repositories to get started.
-            </p>
-          </div>
-          <Button onClick={() => onAddWorkspace()}>
-            <FolderPlus />
-            Add workspace…
-          </Button>
-        </div>
+        <EmptyState
+          size="lg"
+          icon={FolderPlus}
+          title="Add a workspace"
+          description="Repositories open from a workspace folder. Pick a folder that contains your Git repositories to get started."
+          action={
+            <Button onClick={() => onAddWorkspace()}>
+              <FolderPlus />
+              Add workspace…
+            </Button>
+          }
+        />
       </div>
     )
   }
