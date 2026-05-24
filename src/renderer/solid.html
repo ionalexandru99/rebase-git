@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rebase</title>
+    <script>
+      // Keep colors in sync with src/main/theme.ts — runs before the bundle to avoid a flash.
+      ;(() => {
+        var theme = 'dark'
+        try {
+          if (localStorage.getItem('theme') === 'light') theme = 'light'
+        } catch (e) {}
+        var root = document.documentElement
+        root.classList.toggle('dark', theme === 'dark')
+        root.style.backgroundColor = theme === 'light' ? '#ffffff' : '#0a0a0a'
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./solid/main.tsx"></script>
+  </body>
+</html>

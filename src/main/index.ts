@@ -67,10 +67,11 @@ function createWindow(): void {
   win.webContents.once('did-finish-load', showOnce)
   setTimeout(showOnce, 4000)
 
+  const rendererPage = process.env.RENDERER === 'solid' ? 'solid.html' : 'index.html'
   if (process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(process.env.ELECTRON_RENDERER_URL)
+    win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/${rendererPage}`)
   } else {
-    win.loadFile(path.join(__dirname, '../renderer/index.html'))
+    win.loadFile(path.join(__dirname, `../renderer/${rendererPage}`))
   }
 
   win.on('closed', () => {

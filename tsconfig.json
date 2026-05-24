@@ -28,5 +28,6 @@
     "src/test/**/*",
     "vitest.config.ts",
     "playwright.config.ts"
-  ]
+  ],
+  "exclude": ["src/renderer/solid"]
 }
