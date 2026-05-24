@@ -1,7 +1,7 @@
 {
-  "name": "git-gui",
+  "name": "rebase",
   "version": "1.0.0",
-  "description": "A Git GUI built with Electron + React + TypeScript",
+  "description": "A fast desktop Git GUI built with Electron + TypeScript",
   "main": "./out/main/index.js",
   "author": "",
   "license": "MIT",
@@ -38,7 +38,6 @@
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
-    "@effect-rx/rx-react": "0.42.4",
     "@radix-ui/react-slot": "1.2.4",
     "chokidar": "4.0.3",
     "class-variance-authority": "0.7.1",

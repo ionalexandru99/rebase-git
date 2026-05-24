@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Rebase** — a desktop Git GUI built with Electron 41 + React 19 + TypeScript + Tailwind 4 (shadcn/ui new-york style). `simple-git` drives all Git operations from the main process. `pnpm` is the package manager.
+**Rebase** — a desktop Git GUI built with Electron 41 + TypeScript + Tailwind 4. `pnpm` is the package manager.
 
-`AGENTS.md` contains the binding rules: lightweight & performant, tests required for every behaviour change, exact dependency versions (no `^`/`~`), restricted postinstall scripts (`pnpm.onlyBuiltDependencies`).
+> **Mid-rewrite.** Rebase is migrating to a "feels instant" architecture: Git work moves into a forked HTTP **sidecar** (so the main thread never blocks), the UI talks to it through an **Effect** domain layer (`Schema`/`HttpClient`/`ManagedRuntime`), and the renderer is moving **React 19 → SolidJS** (UI layer only — the Effect/sidecar core is framework-agnostic). The authoritative, PR-by-PR roadmap is **`INSTANT_REWRITE_PLAN.md`** — read it before making architectural changes. Until each slice lands, parts of the codebase still reflect the legacy model (React, `simple-git` on the main process).
+
+`AGENTS.md` contains the binding rules: main thread never blocks on Git, tests required for every behaviour change, exact dependency versions (no `^`/`~`), restricted postinstall scripts (`pnpm.onlyBuiltDependencies`).
 
 ## Commands
 
