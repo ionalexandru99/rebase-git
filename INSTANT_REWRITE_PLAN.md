@@ -363,6 +363,25 @@ dangling imports. Full `test:ci` green.
 **DoD:** Unresponsive renderer offers recovery; `knip`/`tsc` report no dead exports;
 bundle shrinks.
 
+**As-built (2026-05-24) — two commits.** *Reliability* (`recovery.ts` + pure
+`recovery-decision.ts`, wired in `index.ts`): on `unresponsive`, sample `app.getAppMetrics()`
+on an interval (CPU/pid per process) and show a **Keep Waiting / Reload / Export Logs… / Quit**
+dialog (Export opens the `electron-log` file in the OS file manager); on `responsive`, stop the
+sampler and log the hang duration; `render-process-gone` logs + offers reload on a crash;
+`child-process-gone` logs (covers the sidecar). JS-call-stack sampling via the inspector was
+**not** done — `getAppMetrics` is the stable, no-debugger equivalent; deeper stack capture is a
+follow-up if needed. The response→action mapping + crash-prompt predicate are pure and unit-tested.
+*Cleanup:* `src/main/git/*` and `state.ts` were already gone (PR 3); deleted the now-dead IPC
+proxies PR 4 superseded — `ipc/status.ts`, `ipc/log.ts`, `ipc/fetch.ts`, the `getBranches`
+handler in `ipc/repo.ts`, and the `getWorkingDirectory`/`setWorkingDirectory` aliases +
+handlers — plus their preload methods and `Channel` entries (net −117 lines). The
+sidecar-migrated ops (status/branches/log/stage/unstage/commit/fetch) had been **load-bearing
+for the renderer test harness** (the GitClient mock routed through `window.electronAPI.*`); the
+harness now mocks the sidecar layer directly via an exported `sidecarMock`, and the redundant
+IPC-based open-repo E2E folded into the direct-sidecar test (now also asserts branches + 401).
+`useVirtualList.ts` kept (see PR 6). No new native build deps, so `onlyBuiltDependencies`
+unchanged. No `knip` in the toolchain; relied on `tsc` + biome + full suite for dead-ref proof.
+
 > **── SHIP LINE ──** After PR 7, the app is feels-instant on React. Measure real perf
 > before committing to PR 8. If Solid's marginal gain isn't worth the churn, stop here.
 
@@ -397,21 +416,27 @@ Full `test:ci` green on the branch before merge.
 smaller; no re-render tax on git updates.
 
 ## 6. What gets deleted (running list)
-- `@effect-rx/rx-react` (unused) — PR 0.
-- Main-process git modules once relocated to the sidecar — PR 7.
-- `gitInstances` from `src/main/state.ts` (moves to sidecar) — PR 3/7.
-- Hand-rolled serialize helpers superseded by Schema-over-HTTP — PR 7.
-- `useVirtualList.ts` if `@tanstack/react-virtual` replaces it — PR 6.
+- ✅ `@effect-rx/rx-react` (unused) — PR 0 (done).
+- ✅ Main-process git modules relocated to the sidecar (`src/main/git/*`) — PR 3 (done; moved
+  via `git mv`).
+- ✅ `gitInstances` / `src/main/state.ts` (moved to `src/sidecar/state.ts`) — PR 3 (done).
+- ✅ Serialize helpers — moved to `src/sidecar/git/serialize.ts` with the git logic; the wire
+  format is the shared Effect `Schema`s — PR 3 (done).
+- ✅ Dead IPC proxies superseded by direct sidecar calls (`ipc/status|log|fetch.ts`, `getBranches`
+  handler, `get/setWorkingDirectory` aliases + handlers, their preload methods + `Channel`
+  entries) — PR 7 (done, −117 lines).
+- ❌ `useVirtualList.ts` — **kept** (`@tanstack/react-virtual` not adopted; bespoke hook already
+  virtualizes and is canvas-coupled) — PR 6.
 - React + ReactDOM + `@vitejs/plugin-react` + `@testing-library/react` + `next-themes`
-  + all React `.tsx` — PR 8 cutover.
+  + all React `.tsx` — PR 8 cutover (pending).
 
 ## 7. Dependency ledger (exact versions, decided at add-time)
 | PR | Add | Remove |
 |---|---|---|
-| 0 | — | `@effect-rx/rx-react` |
-| 3 | `@effect/platform`, `@effect/platform-node` | — |
-| 4 | `@effect/platform-browser` | — |
-| 6 | `@tanstack/react-virtual`, `fuzzysort` | (`useVirtualList.ts`) |
+| 0 | — | `@effect-rx/rx-react` ✅ |
+| 3 | — (used Node's `node:http`, no new dep) | — |
+| 4 | `@effect/platform@0.96.1`, `@effect/platform-browser@0.76.0` ✅ | — |
+| 6 | `fuzzysort@3.1.0` ✅ (`@tanstack/react-virtual` **not** added) | — |
 | 8 | `solid-js`, `vite-plugin-solid`, `@kobalte/core`, `solid-sonner`, `lucide-solid`, `corvu`, `@solidjs/testing-library` | `react`, `react-dom`, `@vitejs/plugin-react`, `@testing-library/react`, `next-themes`, `radix-ui`, `@radix-ui/react-slot`, `cmdk`, `react-resizable-panels`, `lucide-react` |
 
 ## 8. Sequencing & parallelism
