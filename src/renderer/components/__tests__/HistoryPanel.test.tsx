@@ -111,6 +111,19 @@ describe('HistoryPanel', () => {
     expect(screen.getByText('feature')).toBeInTheDocument()
   })
 
+  it('virtualizes a large history, mounting only a small window of rows', () => {
+    const all: GitLogEntry[] = Array.from({ length: 10_000 }, (_unused, i) =>
+      entry({ hash: `hash${i}`, message: `commit-${i}` })
+    )
+    renderPanel({ all, total: all.length })
+
+    const rendered = screen.queryAllByText(/^commit-\d+$/)
+    expect(rendered.length).toBeGreaterThan(0)
+    expect(rendered.length).toBeLessThan(1000)
+    expect(screen.getByText('commit-0')).toBeInTheDocument()
+    expect(screen.queryByText('commit-9999')).not.toBeInTheDocument()
+  })
+
   it('marks merge commits (parents.length >= 2) with a merge indicator', () => {
     renderPanel({
       all: [

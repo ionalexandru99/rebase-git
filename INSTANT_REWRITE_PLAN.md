@@ -323,6 +323,26 @@ nav must still work with windowed rows.
 DOM rows. E2E: scroll a large history, search the palette.
 **DoD:** 10k-commit history scrolls at 60fps; palette filter is instant on 1k+ items.
 
+**As-built (2026-05-24) — scope corrected (again).** Audit found the virtualization mostly
+already exists and is well-tuned: `HistoryPanel` and `shell/RefTreePanel` already use the
+bespoke `useVirtualList` (fixed-height windowing + rAF scroll throttling), and HistoryPanel's
+hook is **tightly coupled to the canvas commit graph** (`onScrollFrame` → redraw, `scrollTop`/
+`viewportHeight`/windowed `localMaxLanes`). Swapping it for `@tanstack/react-virtual` would be
+pure churn against working code with real regression risk and **no gain** (both do fixed-height
+windowing) — so per the plan's own "keep `useVirtualList` if it outperforms" clause, it's kept
+and **`@tanstack/react-virtual` was NOT added**. The `cmdk` palette (`components/ui/command.tsx`)
+is **unused** (imported nowhere), so there's no palette to wire fuzzy search into.
+**What shipped:** added `fuzzysort@3.1.0` (exact) + a small `src/renderer/lib/fuzzy.ts`
+(`fuzzyFilter` for string lists, `fuzzyMatchSet` for keyed objects). Replaced the substring
+filters in **`HistoryPanel`** (commit search across message/hash/author/refs → ranked,
+typo-tolerant match set for dimming) and **`RepoPicker`** (recent + discovered repo search →
+ranked, so Enter opens the best match, not just the first substring hit).
+**Deferred:** `StatusPanel` file list is not virtualized, but it's grouped and a
+thousands-of-changed-files working tree is rare; left for a later pass if profiling flags it.
+**Tests:** `fuzzy.test.ts` (filter/empty/ranking + keyed match set across keys) and a
+HistoryPanel test asserting a 10k-commit log mounts a bounded window (far-end row absent).
+No E2E palette test (no palette).
+
 ### PR 7 — Reliability: unresponsive sampler + recovery + cleanup
 **Branch:** `feat/instant-07-recovery-cleanup`
 **Goal:** Match opencode's resilience; remove everything the rewrite orphaned.

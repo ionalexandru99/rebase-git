@@ -1,3 +1,4 @@
+import { fuzzyMatchSet } from '@/lib/fuzzy'
 import { parseRefs } from '@/lib/git-graph/refs'
 import type { GitLogEntry } from '@/types'
 
@@ -46,18 +47,10 @@ export function computeOnBranchSet(
 }
 
 export function computeVisibleSet(filter: string, commits: GitLogEntry[]): Set<string> | null {
-  const query = filter.trim().toLowerCase()
-  if (!query) return null
-  const matches = new Set<string>()
-  for (const commit of commits) {
-    if (
-      commit.message.toLowerCase().includes(query) ||
-      commit.hash.toLowerCase().includes(query) ||
-      commit.author_name.toLowerCase().includes(query) ||
-      commit.refs.toLowerCase().includes(query)
-    ) {
-      matches.add(commit.hash)
-    }
-  }
-  return matches
+  return fuzzyMatchSet(
+    filter,
+    commits,
+    ['message', 'hash', 'author_name', 'refs'],
+    (commit) => commit.hash
+  )
 }

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher'
+import { fuzzyFilter } from '@/lib/fuzzy'
 import { RepoGroup } from './RepoGroup'
 
 interface RepoPickerProps {
@@ -28,13 +29,10 @@ export function RepoPicker({
   onOpenRepo
 }: RepoPickerProps) {
   const [query, setQuery] = useState('')
-  const normalisedQuery = query.trim().toLowerCase()
+  const hasQuery = query.trim().length > 0
 
-  const filter = (paths: string[]) =>
-    normalisedQuery ? paths.filter((path) => path.toLowerCase().includes(normalisedQuery)) : paths
-
-  const filteredDiscovered = filter(discoveredRepos)
-  const filteredRecent = filter(recentRepos)
+  const filteredDiscovered = fuzzyFilter(query, discoveredRepos)
+  const filteredRecent = fuzzyFilter(query, recentRepos)
 
   const hasAnyWorkspace = workspaces.length > 0 || !!activeWorkspace
 
@@ -96,7 +94,7 @@ export function RepoPicker({
           label="Recent"
           repos={filteredRecent}
           emptyText={
-            normalisedQuery
+            hasQuery
               ? 'No matches'
               : recentRepos.length === 0
                 ? 'No recent repositories'
@@ -118,7 +116,7 @@ export function RepoPicker({
           }
           repos={filteredDiscovered}
           emptyText={
-            normalisedQuery
+            hasQuery
               ? 'No matches'
               : discoveredRepos.length === 0
                 ? 'No repositories detected in this workspace'
