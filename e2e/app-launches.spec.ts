@@ -32,6 +32,19 @@ test.describe('Git GUI E2E', () => {
     expect(title).toBeTruthy()
   })
 
+  test('window becomes visible after ready-to-show', async () => {
+    await expect
+      .poll(
+        () =>
+          electronApp.evaluate(({ BrowserWindow }) => {
+            const win = BrowserWindow.getAllWindows()[0]
+            return win ? win.isVisible() : false
+          }),
+        { timeout: 10_000 }
+      )
+      .toBe(true)
+  })
+
   test('shows the onboarding screen on first launch', async () => {
     await page.waitForLoadState('domcontentloaded')
 

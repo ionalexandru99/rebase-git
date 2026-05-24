@@ -43,6 +43,10 @@ function migrateLegacyWorkingDirectory(): void {
   }
 }
 
+export function getTheme(): 'dark' | 'light' {
+  return store.get('theme')
+}
+
 export function addRecentRepo(path: string): void {
   const recent = store.get('recentRepos')
   const filtered = recent.filter((r) => r !== path)
