@@ -1,9 +1,7 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { encodeOrThrow } from '@shared/codec'
-import { Channel, ScanForReposResponse } from '@shared/schemas/ipc'
+import { Channel, type ScanForReposResponse } from '@shared/schemas/ipc'
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
-import { simpleGit } from 'simple-git'
+import { SidecarOp } from '../../sidecar/protocol'
+import { sidecarRequest } from '../sidecar'
 import {
   addWorkspace,
   getActiveWorkspace,
@@ -44,30 +42,7 @@ export function register(getMainWindow: () => BrowserWindow | null): void {
     setOnboardingComplete(complete)
   )
 
-  ipcMain.handle(Channel.scanForRepos, async (_, dirPath: string) => {
-    try {
-      const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
-      const repos: string[] = []
-
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const fullPath = path.join(dirPath, entry.name)
-          try {
-            const git = simpleGit(fullPath)
-            const isRepo = await git.checkIsRepo()
-            if (isRepo) {
-              repos.push(fullPath)
-            }
-          } catch {}
-        }
-      }
-
-      return encodeOrThrow(ScanForReposResponse, { _tag: 'Ok', repos })
-    } catch (error) {
-      return encodeOrThrow(ScanForReposResponse, {
-        _tag: 'GitError',
-        message: error instanceof Error ? error.message : String(error)
-      })
-    }
-  })
+  ipcMain.handle(Channel.scanForRepos, (_, dirPath: string) =>
+    sidecarRequest<ScanForReposResponse>(SidecarOp.scanForRepos, { dirPath })
+  )
 }

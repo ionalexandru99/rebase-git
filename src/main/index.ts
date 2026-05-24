@@ -14,6 +14,7 @@ import * as settingsIpc from './ipc/settings'
 import * as statusIpc from './ipc/status'
 import * as workspaceIpc from './ipc/workspace'
 import { setupContextMenu } from './menu'
+import { killSidecar, startSidecar } from './sidecar'
 import { getTheme } from './store'
 import { resolveBackgroundColor } from './theme'
 import { setupUpdater } from './updater'
@@ -89,6 +90,9 @@ function registerIpcHandlers(): void {
 }
 
 app.whenReady().then(() => {
+  startSidecar().catch((error: unknown) => {
+    console.error('[main] sidecar failed to start', error)
+  })
   registerIpcHandlers()
   createWindow()
   setupUpdater()
@@ -102,3 +106,13 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+app.on('before-quit', () => {
+  void killSidecar()
+})
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    void killSidecar().finally(() => app.exit(0))
+  })
+}

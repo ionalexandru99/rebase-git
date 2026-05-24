@@ -131,8 +131,13 @@ and window is visible (extend `e2e/app-launches.spec.ts`). Smoke: startup clean.
 **DoD:** No visible white/blank frame on cold start on macOS + Linux. Theme matches last
 session immediately.
 
-### PR 2 — Real splash window
-**Branch:** `feat/instant-02-splash`
+### PR 2 — Real splash window — **FOLDED INTO PR 3**
+> Resequenced 2026-05-24: a splash has nothing to report until the sidecar boot
+> (PR 3) gives it real `init-step` progress. Building it standalone would mean
+> throwaway synthetic steps. The splash window + `init-step` IPC now ship inside PR 3,
+> wired to the actual sidecar spawn/health-check lifecycle.
+
+**Branch:** `feat/instant-02-splash` (unused)
 **Goal:** A lightweight splash `BrowserWindow` shown immediately on slow cold starts (first
 launch, large-repo restore, future sidecar boot), closed when the main window is ready.
 
@@ -179,6 +184,21 @@ E2E: forced-slow-start shows splash then main. Smoke: two-input build succeeds.
   proxies that forward to the sidecar over HTTP and return the same Schema-encoded shapes.
   → renderer is untouched in this PR; it's a pure backend swap. This is the safety valve:
   if the sidecar misbehaves we can revert just this PR.
+
+**As-built (2026-05-24):** sidecar HTTP server uses Node's built-in `node:http` (zero
+new deps, zero bundling risk) with the existing git logic moved **verbatim** and the
+shared Effect `Schema`s as the wire format. Bearer-token auth on loopback. Request/response
+ops moved: open/close/branches/status/stage/unstage/commit/log/checkout/fetch/scan, plus
+`gitInstances` + fetch semaphores. **`log-stream` and `repoWatcher` stay in main** — they
+use `spawn`/chokidar (already async, don't block) and `repoWatcher` needs `webContents`;
+`openRepo`/`closeRepo` proxies keep the watcher in main. Moving streaming into the sidecar
+(SSE forwarding) is deferred to a later PR. The renderer is untouched (still IPC); main
+handlers are thin proxies. The Effect HttpClient + renderer-direct calls come in PR 4.
+
+**Splash NOT built here.** PR 1 already eliminated the flash (`show:false` +
+`backgroundColor` + theme preload) and the sidecar boots in <1s, so a splash window would be
+speculative complexity with no slow-boot phase to cover. Dropped unless a genuinely slow
+startup (large migration, remote scan) appears.
 
 **Risks (highest-risk PR in the train):**
 - Port races / EADDRINUSE → allocate-then-immediately-pass-fd pattern, retry.

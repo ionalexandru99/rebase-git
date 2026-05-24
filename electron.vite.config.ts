@@ -11,6 +11,14 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: sharedAlias
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          index: path.resolve('src/main/index.ts'),
+          sidecar: path.resolve('src/sidecar/index.ts')
+        }
+      }
     }
   },
   preload: {

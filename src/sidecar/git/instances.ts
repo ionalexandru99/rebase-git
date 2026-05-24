@@ -1,14 +1,7 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import { normalizeRepoPath } from '@shared/repo-path'
 import { type SimpleGit, simpleGit } from 'simple-git'
 
-export function normalizeRepoPath(repoPath: string): string {
-  try {
-    return fs.realpathSync.native(repoPath)
-  } catch {
-    return path.resolve(repoPath)
-  }
-}
+export { normalizeRepoPath }
 
 export function getOrCreateGit(map: Map<string, SimpleGit>, repoPath: string): SimpleGit {
   const key = normalizeRepoPath(repoPath)
