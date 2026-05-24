@@ -18,22 +18,23 @@ afterEach(() => {
 describe('GitClient', () => {
   it('posts to /op/<name> with bearer auth and returns the parsed JSON body', async () => {
     const payload = { _tag: 'Ok', status: { current: 'main' } }
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = vi.fn((_url: string | URL, _init?: RequestInit) =>
+      Promise.resolve(
         new Response(JSON.stringify(payload), {
           status: 200,
           headers: { 'content-type': 'application/json' }
         })
+      )
     )
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await run('get-status', { repoPath: '/repo' })
 
     expect(result).toEqual(payload)
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const [url, init] = fetchMock.mock.calls[0]
     expect(String(url)).toBe('http://sidecar.test/op/get-status')
-    expect(init.method).toBe('POST')
-    expect(new Headers(init.headers).get('authorization')).toBe('Bearer secret')
+    expect(init?.method).toBe('POST')
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer secret')
   })
 
   it('fails in the typed error channel when the transport rejects', async () => {

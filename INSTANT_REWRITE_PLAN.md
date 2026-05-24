@@ -281,6 +281,31 @@ clock + fake stream). renderer unit for optimistic stage→commit rollback on er
 **DoD:** Switching between two open-repo tabs shows data instantly (cache hit) and
 revalidates silently; profiling shows no git call on pure tab switch.
 
+**As-built (2026-05-24) — scope corrected.** The premise above was wrong for the current
+code: `App.tsx` keeps **every tab mounted** (inactive ones hidden via CSS), so each tab's
+`useGit` stays alive and **tab switches already do zero refetch** — the headline DoD was
+already satisfied, and there's no refetch-on-focus either. The real remaining redundant fetch
+is **opening a repo cold** (close→reopen, opening a recent repo in a fresh tab, app restart
+re-opening persisted tabs). PR 5 was rescoped (confirmed with the user) to an SWR snapshot
+cache targeting that:
+- New `src/renderer/lib/git-cache.ts` — module-level Effect `SubscriptionRef<Map<repoPath,
+  RepoSnapshot>>` (status/branches/log/currentBranch/remotes/defaultBranch). Effect + sync
+  read/write helpers; `snapshotChanges` stream exposed for future reactive consumers.
+- `openLifecycle` seeds the UI **instantly** from the snapshot on a cache hit (no spinners,
+  no log-stream reset), resolves `ready` immediately, then revalidates in the background
+  (`loadStatus` + `loadBranches` + atomic `getLog` — **not** the stream, to avoid a history
+  flash). Cold opens (cache miss) keep the original spinner + streaming path.
+- Write-through on every fetch (`loadStatus`/`loadBranches`/`silentRefresh*`/`refreshLog`)
+  and on each streamed log chunk (`useGitState.appendLogChunk` → `writeSnapshotSync`).
+- **Optimistic** stage/unstage: apply locally + write-through, then reconcile via
+  `silentRefreshStatus` on Ok, **roll back** (restore prior status) + surface error on failure.
+**Deviation from the plan text:** **LRU cap (8 repos)** instead of evict-on-tab-close — evicting
+on close would make close→reopen a cache *miss*, defeating the only real win; the LRU bounds
+memory while keeping recently-closed repos instant. `useTabs` untouched. No fake clock needed
+(no time-based staleness yet). Tests: `git-cache.test.ts` (miss/merge/evict/LRU-cap/LRU-recency)
++ `useGit` reopen-seeds-without-re-streaming + optimistic-stage-rollback. Cross-test isolation
+via `clearAllSnapshots()` in the global `beforeEach`.
+
 ### PR 6 — Virtualize lists + fast fuzzy search
 **Branch:** `feat/instant-06-virtual-fuzzy`
 **Goal:** Long history/file lists render only visible rows; pickers filter instantly.

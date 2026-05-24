@@ -387,6 +387,80 @@ describe('useGit', () => {
     expect(window.electronAPI.cancelLogStream).not.toHaveBeenCalled()
   })
 
+  it('reopening a cached repo seeds instantly and revalidates without re-streaming the log', async () => {
+    mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
+    const stream = setupLogStream()
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+    await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
+
+    stream.fire({
+      repoPath: '/test/repo',
+      commits: [{ hash: 'a', message: 'm', author_name: 'A', date: 'd', parents: [], refs: '' }]
+    })
+    await waitFor(() => expect(result.current.log?.total).toBe(1))
+    stream.fireDone('/test/repo')
+
+    expect(window.electronAPI.startLogStream).toHaveBeenCalledTimes(1)
+
+    await result.current.closeRepo()
+    await waitFor(() => expect(result.current.repoPath).toBeNull())
+
+    vi.mocked(window.electronAPI.getLog).mockResolvedValue({
+      _tag: 'Ok',
+      log: {
+        all: [{ hash: 'a', message: 'm', author_name: 'A', date: 'd', parents: [], refs: '' }],
+        total: 1
+      }
+    })
+
+    await result.current.openRepo('/test/repo')
+    await waitFor(() => expect(result.current.repoPath).toBe('/test/repo'))
+
+    expect(result.current.status?.modified).toContain('file1.ts')
+    expect(result.current.logLoading).toBe(false)
+    expect(window.electronAPI.startLogStream).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(window.electronAPI.getLog).toHaveBeenCalledWith('/test/repo'))
+    await waitFor(() => expect(result.current.log?.total).toBe(1))
+  })
+
+  it('optimistically stages a file and rolls back when the sidecar rejects', async () => {
+    mockOpenRepoSuccess(status({ modified: ['file1.ts'] }))
+    setupLogStream()
+
+    const { result } = renderHook(() => useGit())
+    await result.current.openRepo('/test/repo')
+    await waitFor(() => expect(result.current.status?.modified).toContain('file1.ts'))
+
+    let rejectStage: (error: Error) => void = () => {}
+    vi.mocked(window.electronAPI.stageFile).mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStage = reject
+        })
+    )
+
+    let stagePromise: Promise<void> = Promise.resolve()
+    act(() => {
+      stagePromise = result.current.stageFile('file1.ts')
+    })
+
+    await waitFor(() => expect(result.current.status?.staged).toContain('file1.ts'))
+    expect(result.current.status?.modified).not.toContain('file1.ts')
+
+    await act(async () => {
+      rejectStage(new Error('lock held'))
+      await stagePromise
+    })
+
+    await waitFor(() => {
+      expect(result.current.status?.modified).toContain('file1.ts')
+      expect(result.current.status?.staged).not.toContain('file1.ts')
+      expect(result.current.error).toBe('lock held')
+    })
+  })
+
   it('surfaces a GitError returned by get-status as an error banner', async () => {
     mockOpenRepoSuccess()
     vi.mocked(window.electronAPI.getStatus).mockResolvedValue({

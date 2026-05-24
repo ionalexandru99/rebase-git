@@ -1,5 +1,7 @@
 import '@testing-library/jest-dom/vitest'
+import type { Layer } from 'effect'
 import { beforeEach, vi } from 'vitest'
+import { clearAllSnapshots } from '@/lib/git-cache'
 
 vi.mock('@/lib/runtime', async () => {
   const { Effect, Layer, ManagedRuntime } = await import('effect')
@@ -173,6 +175,7 @@ export function setupRepoChanged(): RepoChangedHandle {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  clearAllSnapshots()
   vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
   vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { writeSnapshotSync } from '@/lib/git-cache'
 import type { GitSetters } from '@/lib/git-effect/types'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 
@@ -49,7 +50,10 @@ export function useGitState() {
       appendLogChunk: (commits) => {
         const buffer = accumulatedRef.current
         for (const commit of commits) buffer.push(commit)
-        setLog({ all: buffer.slice(), total: buffer.length })
+        const log = { all: buffer.slice(), total: buffer.length }
+        setLog(log)
+        const path = repoPathRef.current
+        if (path) writeSnapshotSync(path, { log })
       },
       resetLog: () => {
         accumulatedRef.current = []
