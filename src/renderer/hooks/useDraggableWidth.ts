@@ -10,9 +10,10 @@ interface UseDraggableWidthOptions {
   max: number
   defaultWidth: number
   load?: () => Promise<PaneState>
-  save?: (state: PaneState) => void
+  save?: (state: PaneState) => void | Promise<void>
   decode?: (raw: PaneState) => PaneState
   onLoadError?: (error: unknown) => void
+  onSaveError?: (error: unknown) => void
 }
 
 interface UseDraggableWidthResult {
@@ -22,6 +23,10 @@ interface UseDraggableWidthResult {
   onResizeStart: (event: React.MouseEvent) => void
 }
 
+function defaultSaveError(error: unknown) {
+  console.warn('[useDraggableWidth] save failed', error)
+}
+
 export function useDraggableWidth({
   min,
   max,
@@ -29,11 +34,13 @@ export function useDraggableWidth({
   load,
   save,
   decode,
-  onLoadError
+  onLoadError,
+  onSaveError = defaultSaveError
 }: UseDraggableWidthOptions): UseDraggableWidthResult {
   const [isOpen, setIsOpen] = useState(true)
   const [width, setWidth] = useState(defaultWidth)
   const dragWidthRef = useRef(defaultWidth)
+  const dragTeardownRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (!load) return
@@ -56,11 +63,21 @@ export function useDraggableWidth({
     }
   }, [load, decode, min, max, onLoadError])
 
+  useEffect(
+    () => () => {
+      dragTeardownRef.current?.()
+    },
+    []
+  )
+
   const persist = useCallback(
     (nextOpen: boolean, nextWidth: number) => {
-      save?.({ open: nextOpen, width: nextWidth })
+      const result = save?.({ open: nextOpen, width: nextWidth })
+      if (result && typeof (result as Promise<void>).catch === 'function') {
+        ;(result as Promise<void>).catch(onSaveError)
+      }
     },
-    [save]
+    [save, onSaveError]
   )
 
   const setOpen = useCallback(
@@ -80,21 +97,27 @@ export function useDraggableWidth({
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
       document.body.dataset.sidebarResizing = 'true'
+
       const onMove = (ev: MouseEvent) => {
         const next = Math.max(min, Math.min(max, startWidth + (ev.clientX - startX)))
         dragWidthRef.current = next
         setWidth(next)
       }
-      const onUp = () => {
+
+      const finalize = () => {
+        if (!dragTeardownRef.current) return
         window.removeEventListener('mousemove', onMove)
-        window.removeEventListener('mouseup', onUp)
+        window.removeEventListener('mouseup', finalize)
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
         delete document.body.dataset.sidebarResizing
+        dragTeardownRef.current = null
         persist(isOpen, dragWidthRef.current)
       }
+
+      dragTeardownRef.current = finalize
       window.addEventListener('mousemove', onMove)
-      window.addEventListener('mouseup', onUp)
+      window.addEventListener('mouseup', finalize)
     },
     [width, isOpen, persist, min, max]
   )

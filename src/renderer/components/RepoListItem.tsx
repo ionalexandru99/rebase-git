@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 function repoShortName(path: string): string {
-  return path.split('/').filter(Boolean).at(-1) ?? path
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 }
 
 type RepoListItemVariant = 'compact' | 'comfortable'

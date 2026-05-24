@@ -78,7 +78,7 @@ function PanelBody({ className, scroll = false, children, ...props }: PanelBodyP
     return (
       <ScrollArea
         data-slot="panel-body"
-        className={cn('flex-1', className)}
+        className={cn('flex-1 min-h-0', className)}
         {...(props as React.ComponentProps<typeof ScrollArea>)}
       >
         {children}
