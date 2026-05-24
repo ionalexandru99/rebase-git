@@ -101,4 +101,27 @@ describe('sidecar server', () => {
     const response = await call('nope', { repoPath })
     expect(response.status).toBe(404)
   })
+
+  it('answers CORS preflight without auth and advertises the request headers', async () => {
+    const response = await fetch(`${baseUrl}/op/get-branches`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://localhost:5173',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization, content-type, b3, traceparent',
+        'access-control-request-private-network': 'true'
+      }
+    })
+    expect(response.status).toBe(204)
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
+    const allowHeaders = response.headers.get('access-control-allow-headers') ?? ''
+    expect(allowHeaders).toContain('authorization')
+    expect(allowHeaders).toContain('traceparent')
+    expect(response.headers.get('access-control-allow-private-network')).toBe('true')
+  })
+
+  it('includes the allow-origin header on op responses so the renderer can read them', async () => {
+    const response = await call('get-branches', { repoPath })
+    expect(response.headers.get('access-control-allow-origin')).toBe('*')
+  })
 })

@@ -64,14 +64,33 @@ function readBody(req: IncomingMessage): Promise<Body> {
   })
 }
 
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET, POST, OPTIONS',
+  'access-control-allow-headers': 'authorization, content-type',
+  'access-control-max-age': '86400'
+} as const
+
 function sendJson(res: ServerResponse, status: number, payload: unknown): void {
   const data = JSON.stringify(payload)
-  res.writeHead(status, { 'content-type': 'application/json' })
+  res.writeHead(status, { 'content-type': 'application/json', ...CORS_HEADERS })
   res.end(data)
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse, token: string): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost')
+
+  if (req.method === 'OPTIONS') {
+    const requestedHeaders = req.headers['access-control-request-headers']
+    res.writeHead(204, {
+      ...CORS_HEADERS,
+      'access-control-allow-headers':
+        requestedHeaders ?? CORS_HEADERS['access-control-allow-headers'],
+      'access-control-allow-private-network': 'true'
+    })
+    res.end()
+    return
+  }
 
   if (url.pathname === '/health' && req.method === 'GET') {
     sendJson(res, 200, { ok: true })
