@@ -1,14 +1,13 @@
+import fs from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import path from 'node:path'
 import { encodeOrThrow } from '@shared/codec'
 import { ScanForReposResponse } from '@shared/schemas/ipc'
+import { simpleGit } from 'simple-git'
 import * as operations from './operations'
-import {
-  resolveExistingDirectory,
-  resolveExistingRepoRoot,
-  resolveRepoRelativeFile
-} from './path-guards'
+import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 import { SidecarOp } from './protocol'
-import { listGitReposInDirectory } from './scan-repos'
+import { storeValidatedScanRoot, takeValidatedScanRoot } from './scan-root-registry'
 
 type Body = Record<string, unknown>
 
@@ -19,6 +18,73 @@ const str = (body: Body, key: string): string => {
 
 function safeRepoPath(body: Body): string | null {
   return resolveExistingRepoRoot(str(body, 'repoPath'))
+}
+
+const invalidScanDirectoryResponse = (): typeof ScanForReposResponse.Encoded =>
+  encodeOrThrow(ScanForReposResponse, {
+    _tag: 'GitError',
+    message: 'invalid directory path'
+  })
+
+async function scanForReposSafely(
+  requestedDirPath: string
+): Promise<typeof ScanForReposResponse.Encoded> {
+  if (!requestedDirPath || requestedDirPath.includes('\0')) {
+    return invalidScanDirectoryResponse()
+  }
+  if (!path.isAbsolute(requestedDirPath)) {
+    return invalidScanDirectoryResponse()
+  }
+  if (requestedDirPath.split(/[/\\]/).includes('..')) {
+    return invalidScanDirectoryResponse()
+  }
+
+  let scanRoot: string
+  try {
+    scanRoot = fs.realpathSync.native(path.resolve(requestedDirPath))
+    if (!fs.statSync(scanRoot).isDirectory()) {
+      return invalidScanDirectoryResponse()
+    }
+  } catch {
+    return invalidScanDirectoryResponse()
+  }
+
+  const resolvedPath = path.resolve(requestedDirPath)
+  const scanRootPrefix = scanRoot.endsWith(path.sep) ? scanRoot : `${scanRoot}${path.sep}`
+  if (resolvedPath !== scanRoot && !resolvedPath.startsWith(scanRootPrefix)) {
+    return invalidScanDirectoryResponse()
+  }
+
+  const scanRootId = storeValidatedScanRoot(scanRoot)
+  const trustedScanRoot = takeValidatedScanRoot(scanRootId)
+  if (!trustedScanRoot) {
+    return invalidScanDirectoryResponse()
+  }
+
+  const trustedPrefix = trustedScanRoot.endsWith(path.sep)
+    ? trustedScanRoot
+    : `${trustedScanRoot}${path.sep}`
+
+  try {
+    const entries = await fs.promises.readdir(trustedScanRoot, { withFileTypes: true })
+    const repos: string[] = []
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const childName = path.basename(entry.name)
+      if (childName !== entry.name) continue
+      const childPath = path.join(trustedScanRoot, childName)
+      if (!childPath.startsWith(trustedPrefix)) continue
+      try {
+        const git = simpleGit(childPath)
+        const isRepo = await git.checkIsRepo()
+        if (isRepo) repos.push(childPath)
+      } catch {}
+    }
+    return encodeOrThrow(ScanForReposResponse, { _tag: 'Ok', repos })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return encodeOrThrow(ScanForReposResponse, { _tag: 'GitError', message })
+  }
 }
 
 async function dispatch(op: string, body: Body): Promise<unknown> {
@@ -83,16 +149,6 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
         body.refKind as 'local' | 'remote' | 'tag',
         str(body, 'fullPath')
       )
-    }
-    case SidecarOp.scanForRepos: {
-      const scanRoot = resolveExistingDirectory(str(body, 'dirPath'))
-      if (!scanRoot) {
-        return encodeOrThrow(ScanForReposResponse, {
-          _tag: 'GitError',
-          message: 'invalid directory path'
-        })
-      }
-      return listGitReposInDirectory(scanRoot)
     }
     default:
       return undefined
@@ -164,7 +220,13 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
 
   try {
     const body = await readBody(req)
-    const result = await dispatch(match[1], body)
+    const operation = match[1]
+    if (operation === SidecarOp.scanForRepos) {
+      const result = await scanForReposSafely(str(body, 'dirPath'))
+      sendJson(res, 200, result)
+      return
+    }
+    const result = await dispatch(operation, body)
     if (result === undefined) {
       sendJson(res, 404, { error: `unknown op: ${match[1]}` })
       return
