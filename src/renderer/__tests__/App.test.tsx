@@ -540,6 +540,7 @@ describe('App — workspace (repo open)', () => {
     fireEvent.click(await screen.findByText('/projects/repo-a'))
     await waitFor(() => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/projects/repo-a')
+      expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('repo-a')
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
@@ -555,10 +556,11 @@ describe('App — workspace (repo open)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(screen.getAllByRole('tab')).toHaveLength(3)
-    const repoAMatches = await screen.findAllByText('/projects/repo-a')
-    const repoAPickerRow = repoAMatches
+    const repoAPickerRow = (await screen.findAllByText('/projects/repo-a'))
       .map((el) => el.closest('button'))
-      .find((b): b is HTMLButtonElement => !!b)
+      .filter((b): b is HTMLButtonElement => !!b)
+      .at(-1)
+    expect(repoAPickerRow).toBeTruthy()
     fireEvent.click(repoAPickerRow as HTMLButtonElement)
 
     await waitFor(() => {

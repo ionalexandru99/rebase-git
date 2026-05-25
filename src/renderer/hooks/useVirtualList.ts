@@ -26,6 +26,7 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
 
   let resizeObserver: ResizeObserver | undefined
   const setScrollRef = (element: HTMLDivElement) => {
+    resizeObserver?.disconnect()
     const update = () => {
       if (element.clientHeight > 0) setViewportHeight(element.clientHeight)
     }

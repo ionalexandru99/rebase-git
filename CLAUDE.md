@@ -45,19 +45,22 @@ A `pre-push` hook in `.githooks/pre-push` runs `pnpm typecheck` and `pnpm check`
 
 ## Architecture
 
-Three processes, hard boundary between them:
+Four processes, hard boundary between them:
 
-- `src/main/` — Node/Electron. Owns Git logic, IPC handlers, `electron-store` persistence, window state, updater, context menu.
-- `src/preload/` — single `index.ts` that exposes a typed `window.electronAPI` via `contextBridge`. Context isolation is enabled; the renderer has no Node access.
-- `src/renderer/` — React. Talks to main exclusively through `window.electronAPI`. Vite alias `@` → `src/renderer`.
+- `src/main/` — Node/Electron. Owns window lifecycle, dialogs, `electron-store` persistence, deep links, updater/menu, and sidecar spawn/health/kill. **No Git logic.**
+- `src/sidecar/` — forked `utilityProcess` HTTP server on loopback; owns all `simple-git` work. See `INSTANT_REWRITE_PLAN.md` for the PR-by-PR rollout.
+- `src/preload/` — typed `window.electronAPI` bridge for OS/window concerns and sidecar bootstrap config (`getSidecarConfig`). Context isolation is enabled; the renderer has no Node access.
+- `src/renderer/` — SolidJS UI (migration in progress) using an Effect `ManagedRuntime` + `@effect/platform` HTTP client for Git/domain operations. Vite alias `@` → `src/renderer`.
+
+Before changing architecture, read **`INSTANT_REWRITE_PLAN.md`** and **`AGENTS.md`** (tests, exact dependency versions, `pnpm.onlyBuiltDependencies`).
 
 ### Multi-tab, multi-repo model
 
-The renderer supports N tabs, each independently holding a different repo. To match this, `src/main/index.ts` keeps a `Map<repoPath, SimpleGit>` and every IPC handler takes a `repoPath` argument to route to the right instance — there is no implicit "current repo" on the main side. When adding a new git operation, follow the same pattern: handler signature `(_, repoPath, ...args)`, look up via `gitInstances.get(repoPath)`, return `{ success: false, error }` if missing.
+The renderer supports N tabs, each independently holding a different repo. Git operations go through the Effect domain layer to the sidecar with a `repoPath` on every call — there is no implicit "current repo" on the main or sidecar side. Main-process IPC that remains (open/close repo, log stream, workspaces, settings) still takes `repoPath` where relevant.
 
-### IPC serialization
+### Git responses
 
-`simple-git` returns class instances (`StatusResult`, `LogResult`, `BranchSummary`) with getters that **cannot** be structured-cloned across the IPC bridge. The main process has `serializeStatus` / `serializeLog` / `serializeBranches` helpers that convert these to plain JSON-safe shapes matching `src/renderer/types.ts`. Any new git result that crosses IPC must be serialized the same way — don't return raw `simple-git` objects.
+The sidecar returns Schema-encoded JSON (`{ _tag: 'Ok' | 'GitError' | 'RepoNotOpen', ... }`). The renderer decodes these via Effect `Schema` — don't assume legacy `{ success: boolean }` shapes for new code.
 
 ### Workspaces
 

@@ -18,6 +18,16 @@ export interface PersistedTabState {
 let tabSeq = 0
 const nextTabId = () => `tab-${++tabSeq}-${Date.now()}`
 
+const repoPathKey = (repoPath: string): string =>
+  repoPath
+    .replace(/[/\\]+$/, '')
+    .split(/[/\\]/)
+    .filter(Boolean)
+    .join('/')
+
+const sameRepoPath = (left: string, right: string): boolean =>
+  repoPathKey(left) === repoPathKey(right)
+
 function hydrateFromPersisted(persisted: PersistedTabState | undefined): {
   tabs: TabRecord[]
   activeTabId: string
@@ -97,7 +107,7 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
 
   const requestOpenRepo = (sourceTabId: string, path: string): boolean => {
     const match = Object.entries(tabRepos()).find(
-      ([id, recorded]) => recorded === path && id !== sourceTabId
+      ([id, recorded]) => recorded !== null && sameRepoPath(recorded, path) && id !== sourceTabId
     )
     if (!match) return false
     const [existingId] = match

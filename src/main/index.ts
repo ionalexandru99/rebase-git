@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import windowStateKeeperModule from 'electron-window-state'
 
 const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
@@ -85,10 +85,15 @@ function registerIpcHandlers(): void {
   settingsIpc.register()
 }
 
-app.whenReady().then(() => {
-  startSidecar().catch((error: unknown) => {
+app.whenReady().then(async () => {
+  try {
+    await startSidecar()
+  } catch (error: unknown) {
     console.error('[main] sidecar failed to start', error)
-  })
+    dialog.showErrorBox('Rebase', 'Git sidecar failed to start. The app will exit.')
+    app.quit()
+    return
+  }
   registerIpcHandlers()
   wireProcessRecovery()
   createWindow()

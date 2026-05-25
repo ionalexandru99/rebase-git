@@ -62,6 +62,7 @@ export function createGitStore() {
 
   let logBuffer: GitLogEntry[] = []
   let openFiber: Fiber.RuntimeFiber<void, never> | null = null
+  let openEpoch = 0
 
   const setters: GitSetters = {
     setRepoPath: (path) => setState('repoPath', path),
@@ -94,21 +95,26 @@ export function createGitStore() {
     setState({ ...initialState })
   }
 
-  const interruptOpen = () => {
+  const interruptOpen = async () => {
     const fiber = openFiber
     openFiber = null
-    if (fiber) Effect.runFork(Fiber.interrupt(fiber))
+    if (fiber) await Effect.runPromise(Fiber.interrupt(fiber))
   }
 
   const openRepo = async (path: string) => {
-    interruptOpen()
+    const epoch = ++openEpoch
+    await interruptOpen()
+    if (epoch !== openEpoch) return
+
     const ready = await Effect.runPromise(Deferred.make<void>())
-    openFiber = runtime.runFork(openLifecycle(path, setters, ready))
+    const fiber = runtime.runFork(openLifecycle(path, setters, ready))
+    openFiber = fiber
     await Effect.runPromise(Deferred.await(ready))
+    if (epoch !== openEpoch) return
   }
 
   const closeRepo = async () => {
-    interruptOpen()
+    await interruptOpen()
     const path = state.repoPath
     if (path) {
       try {

@@ -19,7 +19,7 @@ export default function App() {
       })
       .catch((error: unknown) => {
         console.error('[app] failed to load persisted tabs', error)
-        setPersistedTabs({ tabs: [], activeIndex: 0 })
+        setPersistedTabs({ tabs: [null], activeIndex: 0 })
       })
   })
 
@@ -80,7 +80,13 @@ function TabsShell(props: TabsShellProps) {
   const [recentRepos, setRecentRepos] = createSignal<string[]>([])
 
   onMount(() => {
-    window.electronAPI.getRecentRepos().then(setRecentRepos)
+    window.electronAPI
+      .getRecentRepos()
+      .then(setRecentRepos)
+      .catch((error: unknown) => {
+        console.error('[app] failed to load recent repos', error)
+        setRecentRepos([])
+      })
   })
 
   createEffect(() => {

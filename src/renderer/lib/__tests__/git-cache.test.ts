@@ -1,6 +1,7 @@
 import { Effect } from 'effect'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  clearAllSnapshots,
   evictSnapshot,
   readSnapshot,
   readSnapshotSync,
@@ -11,6 +12,9 @@ import {
 const run = <A>(effect: Effect.Effect<A>): Promise<A> => Effect.runPromise(effect)
 
 describe('git-cache', () => {
+  beforeEach(() => {
+    clearAllSnapshots()
+  })
   it('returns undefined for a repo that was never cached', async () => {
     expect(await run(readSnapshot('/missing'))).toBeUndefined()
   })

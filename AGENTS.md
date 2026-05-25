@@ -63,7 +63,7 @@ All dependencies in `package.json` must use exact versions — **no `^` or `~` p
 - When adding a dependency, specify the exact version: `pnpm add package@1.2.3`
 - When updating, explicitly review the changelog and bump the exact version in `package.json`
 - Lockfiles (`pnpm-lock.yaml`) are required in the repo
-- **Postinstall scripts are restricted** via `pnpm.onlyBuiltDependencies` in `package.json`. Only explicitly listed packages (e.g., `electron`) can run install scripts. All others are blocked.
+- **Postinstall scripts are restricted** via `allowBuilds` in `pnpm-workspace.yaml` (pnpm 11+). Only explicitly allowed packages (e.g., `electron`) can run install scripts. All others are blocked.
 
 ## Tech Stack
 

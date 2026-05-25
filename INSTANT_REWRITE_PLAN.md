@@ -42,13 +42,13 @@ This plan ports all of it, in mergeable slices.
 ## 2. Architecture: before → after
 
 **Before**
-```
+```text
 renderer (React) ──IPC invoke──> main process ──simple-git──> git (BLOCKS main thread)
                   <─structured clone (hand-serialized class instances)─
 ```
 
 **After (PR 7 end state, still React)**
-```
+```text
 renderer (React)
   └─ Effect ManagedRuntime
        └─ HttpClient (Effect/platform) ──HTTP──> sidecar (utilityProcess)
@@ -431,6 +431,7 @@ smaller; no re-render tax on git updates.
   + all React `.tsx` — PR 8 cutover (pending).
 
 ## 7. Dependency ledger (exact versions, decided at add-time)
+
 | PR | Add | Remove |
 |---|---|---|
 | 0 | — | `@effect-rx/rx-react` ✅ |

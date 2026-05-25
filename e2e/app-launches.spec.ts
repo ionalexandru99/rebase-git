@@ -119,6 +119,16 @@ test.describe('Git GUI E2E', () => {
       expect(result.currentBranch).toBe('main')
       expect(result.unauthorizedStatus).toBe(401)
     } finally {
+      await page
+        .evaluate(async (repoPath) => {
+          const api = (
+            window as unknown as {
+              electronAPI?: { closeRepo?: (path: string) => Promise<unknown> }
+            }
+          ).electronAPI
+          await api?.closeRepo?.(repoPath)
+        }, repo)
+        .catch(() => {})
       fs.rmSync(repo, { recursive: true, force: true })
     }
   })

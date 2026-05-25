@@ -51,16 +51,26 @@ export function useOnboarding(): OnboardingStore {
   }
 
   onMount(() => {
-    window.electronAPI.getOnboardingComplete().then(setOnboardingComplete)
-    Promise.all([window.electronAPI.getWorkspaces(), window.electronAPI.getActiveWorkspace()]).then(
-      ([list, active]) => {
+    window.electronAPI
+      .getOnboardingComplete()
+      .then(setOnboardingComplete)
+      .catch((error: unknown) => {
+        console.error('[onboarding] failed to load onboarding state', error)
+        setOnboardingComplete(false)
+      })
+    Promise.all([window.electronAPI.getWorkspaces(), window.electronAPI.getActiveWorkspace()])
+      .then(([list, active]) => {
         const safeList = list ?? []
         setWorkspaces(safeList)
         const resolved = active ?? safeList[0] ?? null
         setActiveWorkspace(resolved)
         if (resolved) scanWorkspace(resolved)
-      }
-    )
+      })
+      .catch((error: unknown) => {
+        console.error('[onboarding] failed to load workspaces', error)
+        setWorkspaces([])
+        setActiveWorkspace(null)
+      })
   })
 
   const completeOnboarding = async () => {

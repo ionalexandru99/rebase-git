@@ -327,8 +327,11 @@ const optimisticProgram = <Response extends { readonly _tag: string }>(
 
     if (response._tag === 'Ok') {
       yield* silentRefreshStatus(path, setters)
-    } else if (response._tag === 'GitError') {
-      const message = (response as { message: string }).message
+    } else {
+      const message =
+        'message' in response && typeof response.message === 'string'
+          ? response.message
+          : response._tag
       yield* rollback
       yield* Effect.sync(() => setters.setError(message))
     }
