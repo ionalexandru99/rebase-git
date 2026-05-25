@@ -45,7 +45,9 @@ export function CommitRow(props: CommitRowProps) {
           <GitMergeIcon aria-label="merge commit" class="size-3 shrink-0 text-emerald-500" />
         </Show>
         <For each={refs()}>
-          {(ref) => <RefBadge ref={ref} laneHex={laneHex()} remotes={props.remotes} />}
+          {(parsedRef) => (
+            <RefBadge parsedRef={parsedRef} laneHex={laneHex()} remotes={props.remotes} />
+          )}
         </For>
         <span class={cn('min-w-0 truncate', subjectClass())}>{commit().message}</span>
       </span>

@@ -18,35 +18,35 @@ function pillStyle(kind: ParsedRef['kind'], laneHex: string): JSX.CSSProperties 
 }
 
 interface RefBadgeProps {
-  ref: ParsedRef
+  parsedRef: ParsedRef
   laneHex: string
   remotes: Record<string, string>
 }
 
 export function RefBadge(props: RefBadgeProps) {
-  const style = () => pillStyle(props.ref.kind, props.laneHex)
+  const style = () => pillStyle(props.parsedRef.kind, props.laneHex)
   return (
     <Show
-      when={props.ref.kind === 'remote'}
+      when={props.parsedRef.kind === 'remote'}
       fallback={
         <Badge
           variant="outline"
-          class={cn(BASE_CLASS, refClass(props.ref.kind))}
+          class={cn(BASE_CLASS, refClass(props.parsedRef.kind))}
           style={style()}
-          title={props.ref.label}
+          title={props.parsedRef.label}
         >
-          {props.ref.label}
+          {props.parsedRef.label}
         </Badge>
       }
     >
       {(() => {
-        const split = () => splitRemoteRef(props.ref.label)
+        const split = () => splitRemoteRef(props.parsedRef.label)
         return (
           <Badge
             variant="outline"
-            class={cn(BASE_CLASS, 'gap-1.5', refClass(props.ref.kind))}
+            class={cn(BASE_CLASS, 'gap-1.5', refClass(props.parsedRef.kind))}
             style={style()}
-            title={props.ref.label}
+            title={props.parsedRef.label}
           >
             <RemoteProviderIcon url={props.remotes[split().remote]} class="!size-3.5" />
             {split().branch}
