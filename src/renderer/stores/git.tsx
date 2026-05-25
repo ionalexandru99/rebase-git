@@ -344,11 +344,25 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         }
         setState({ statusLoading: false, branchesLoading: false, logLoading: false })
         void (async () => {
-          await Promise.all([
+          const refreshLabels = [
+            'refreshStatus',
+            'refreshBranchesOnly',
+            'refreshLogLimited'
+          ] as const
+          const refreshResults = await Promise.allSettled([
             refreshStatus(opened.path),
             refreshBranchesOnly(opened.path),
             refreshLogLimited(opened.path)
           ])
+          for (let i = 0; i < refreshResults.length; i++) {
+            const result = refreshResults[i]
+            if (result?.status === 'rejected') {
+              console.error(
+                `[git] ${refreshLabels[i]} failed for ${opened.path}:`,
+                formatCause(result.reason)
+              )
+            }
+          }
           if (generation === openGeneration && state.repoPath === opened.path) {
             await restartLogStream(opened.path)
           }
