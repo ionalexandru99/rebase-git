@@ -72,8 +72,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
     const list = commits()
     if (
       layoutCache &&
-      (list.length < layoutCache.commits.length ||
-        list[0]?.hash !== layoutCache.commits[0]?.hash)
+      (list.length < layoutCache.commits.length || list[0]?.hash !== layoutCache.commits[0]?.hash)
     ) {
       layoutCache = null
     }

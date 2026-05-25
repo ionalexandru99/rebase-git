@@ -65,7 +65,9 @@ describe('RefTreeRow leaf', () => {
 
   it('opens a context menu with Checkout that fires onCheckoutLeaf', async () => {
     const onCheckoutLeaf = vi.fn()
-    renderRow(leaf({ refKind: 'remote', fullPath: 'origin/main', name: 'main' }), { onCheckoutLeaf })
+    renderRow(leaf({ refKind: 'remote', fullPath: 'origin/main', name: 'main' }), {
+      onCheckoutLeaf
+    })
     fireEvent.contextMenu(screen.getByTitle('origin/main'))
     const item = await screen.findByRole('menuitem', { name: 'Checkout' })
     fireEvent.pointerDown(item)

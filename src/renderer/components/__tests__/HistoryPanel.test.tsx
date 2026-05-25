@@ -1,8 +1,8 @@
 import { render, screen } from '@solidjs/testing-library'
 import { describe, expect, it } from 'vitest'
+import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import { layoutCommits } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
-import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import type { GitLog, GitLogEntry } from '@/types'
 import { HistoryPanel } from '../HistoryPanel'
 

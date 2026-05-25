@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GitLogEntry } from '@/types'
-import {
-  computeBranchFilterSet,
-  expandFilterRefs,
-  findRefTip,
-  refFilterKey
-} from '../selectors'
+import { computeBranchFilterSet, expandFilterRefs, findRefTip, refFilterKey } from '../selectors'
 
 function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {
   return {
@@ -93,10 +88,7 @@ describe('computeBranchFilterSet', () => {
       entry({ hash: 'b1', refs: 'beta', parents: ['shared'] }),
       entry({ hash: 'shared', refs: '', parents: [] })
     ]
-    const selected = new Set([
-      refFilterKey('local', 'alpha'),
-      refFilterKey('local', 'beta')
-    ])
+    const selected = new Set([refFilterKey('local', 'alpha'), refFilterKey('local', 'beta')])
     const result = computeBranchFilterSet(commits, selected, [], remoteNames)
     expect(result).toEqual(new Set(['a1', 'b1', 'shared']))
   })
