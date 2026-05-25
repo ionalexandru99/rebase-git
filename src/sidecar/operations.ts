@@ -1,6 +1,4 @@
 import { spawn } from 'node:child_process'
-import fs from 'node:fs'
-import path from 'node:path'
 import { encodeOrThrow } from '@shared/codec'
 import {
   BranchesResponse,
@@ -9,13 +7,11 @@ import {
   FetchResponse,
   LogResponse,
   OpenRepoResponse,
-  ScanForReposResponse,
   StageResponse,
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
 import { Effect, Option } from 'effect'
-import { simpleGit } from 'simple-git'
 import { deriveLocalShortName } from './git/checkout'
 import { resolveDefaultBranch } from './git/defaultBranch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
@@ -32,6 +28,25 @@ import { activeFetches, fetchSemaphoreFor, gitInstances, releaseFetchSemaphore }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+const INVALID_REPO_PATH = 'invalid repository path'
+
+export function openRepoRejected(
+  message: string = INVALID_REPO_PATH
+): typeof OpenRepoResponse.Encoded {
+  return encodeOrThrow(OpenRepoResponse, { _tag: 'GitError', message })
+}
+
+export const invalidRepoPath = {
+  branches: () => encodeOrThrow(BranchesResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  checkout: () => encodeOrThrow(CheckoutResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  commit: () => encodeOrThrow(CommitResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  fetch: () => encodeOrThrow(FetchResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  log: () => encodeOrThrow(LogResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  stage: () => encodeOrThrow(StageResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  status: () => encodeOrThrow(StatusResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  unstage: () => encodeOrThrow(UnstageResponse, { _tag: 'GitError', message: INVALID_REPO_PATH })
 }
 
 export async function openRepo(repoPath: string): Promise<typeof OpenRepoResponse.Encoded> {
@@ -250,32 +265,4 @@ export async function fetchRepo(repoPath: string): Promise<typeof FetchResponse.
     return encodeOrThrow(FetchResponse, { _tag: 'FetchSkipped' })
   }
   return result.value
-}
-
-export async function scanForRepos(
-  scanRoot: string | null
-): Promise<typeof ScanForReposResponse.Encoded> {
-  if (!scanRoot) {
-    return encodeOrThrow(ScanForReposResponse, {
-      _tag: 'GitError',
-      message: 'invalid directory path'
-    })
-  }
-  try {
-    const entries = await fs.promises.readdir(scanRoot, { withFileTypes: true })
-    const repos: string[] = []
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const fullPath = path.join(scanRoot, entry.name)
-        try {
-          const git = simpleGit(fullPath)
-          const isRepo = await git.checkIsRepo()
-          if (isRepo) repos.push(fullPath)
-        } catch {}
-      }
-    }
-    return encodeOrThrow(ScanForReposResponse, { _tag: 'Ok', repos })
-  } catch (error) {
-    return encodeOrThrow(ScanForReposResponse, { _tag: 'GitError', message: errorMessage(error) })
-  }
 }

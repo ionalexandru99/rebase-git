@@ -1,7 +1,14 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { resolveScanDirectory } from '@shared/repo-path'
+import { encodeOrThrow } from '@shared/codec'
+import { ScanForReposResponse } from '@shared/schemas/ipc'
 import * as operations from './operations'
+import {
+  resolveExistingDirectory,
+  resolveExistingRepoRoot,
+  resolveRepoRelativeFile
+} from './path-guards'
 import { SidecarOp } from './protocol'
+import { listGitReposInDirectory } from './scan-repos'
 
 type Body = Record<string, unknown>
 
@@ -10,38 +17,82 @@ const str = (body: Body, key: string): string => {
   return typeof value === 'string' ? value : ''
 }
 
+function safeRepoPath(body: Body): string | null {
+  return resolveExistingRepoRoot(str(body, 'repoPath'))
+}
+
 async function dispatch(op: string, body: Body): Promise<unknown> {
   switch (op) {
-    case SidecarOp.openRepo:
-      return operations.openRepo(str(body, 'repoPath'))
-    case SidecarOp.closeRepo:
-      return operations.closeRepo(str(body, 'repoPath'))
-    case SidecarOp.getBranches:
-      return operations.getBranches(str(body, 'repoPath'))
-    case SidecarOp.getStatus:
-      return operations.getStatus(str(body, 'repoPath'))
-    case SidecarOp.stageFile:
-      return operations.stageFile(str(body, 'repoPath'), str(body, 'file'))
-    case SidecarOp.unstageFile:
-      return operations.unstageFile(str(body, 'repoPath'), str(body, 'file'))
-    case SidecarOp.commit:
-      return operations.commit(str(body, 'repoPath'), str(body, 'message'))
-    case SidecarOp.fetchRepo:
-      return operations.fetchRepo(str(body, 'repoPath'))
-    case SidecarOp.getLog:
+    case SidecarOp.openRepo: {
+      const repoPath = resolveExistingRepoRoot(str(body, 'repoPath'))
+      if (!repoPath) return operations.openRepoRejected()
+      return operations.openRepo(repoPath)
+    }
+    case SidecarOp.closeRepo: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return {}
+      return operations.closeRepo(repoPath)
+    }
+    case SidecarOp.getBranches: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return operations.invalidRepoPath.branches()
+      return operations.getBranches(repoPath)
+    }
+    case SidecarOp.getStatus: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return operations.invalidRepoPath.status()
+      return operations.getStatus(repoPath)
+    }
+    case SidecarOp.stageFile: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return operations.invalidRepoPath.stage()
+      const file = resolveRepoRelativeFile(repoPath, str(body, 'file'))
+      if (!file) return operations.invalidRepoPath.stage()
+      return operations.stageFile(repoPath, file)
+    }
+    case SidecarOp.unstageFile: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return operations.invalidRepoPath.unstage()
+      const file = resolveRepoRelativeFile(repoPath, str(body, 'file'))
+      if (!file) return operations.invalidRepoPath.unstage()
+      return operations.unstageFile(repoPath, file)
+    }
+    case SidecarOp.commit: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return operations.invalidRepoPath.commit()
+      return operations.commit(repoPath, str(body, 'message'))
+    }
+    case SidecarOp.fetchRepo: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return operations.invalidRepoPath.fetch()
+      return operations.fetchRepo(repoPath)
+    }
+    case SidecarOp.getLog: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return operations.invalidRepoPath.log()
       return operations.getLog(
-        str(body, 'repoPath'),
+        repoPath,
         typeof body.maxCount === 'number' ? body.maxCount : undefined
       )
-    case SidecarOp.checkoutRef:
+    }
+    case SidecarOp.checkoutRef: {
+      const repoPath = safeRepoPath(body)
+      if (!repoPath) return operations.invalidRepoPath.checkout()
       return operations.checkoutRef(
-        str(body, 'repoPath'),
+        repoPath,
         body.refKind as 'local' | 'remote' | 'tag',
         str(body, 'fullPath')
       )
+    }
     case SidecarOp.scanForRepos: {
-      const scanRoot = resolveScanDirectory(str(body, 'dirPath'))
-      return operations.scanForRepos(scanRoot)
+      const scanRoot = resolveExistingDirectory(str(body, 'dirPath'))
+      if (!scanRoot) {
+        return encodeOrThrow(ScanForReposResponse, {
+          _tag: 'GitError',
+          message: 'invalid directory path'
+        })
+      }
+      return listGitReposInDirectory(scanRoot)
     }
     default:
       return undefined
