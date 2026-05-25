@@ -69,4 +69,8 @@ describe('assertPathWithinDirectory', () => {
     expect(assertPathWithinDirectory('/repo', '/repo/src/main.ts')).toBe(true)
     expect(assertPathWithinDirectory('/repo', '/reposibling')).toBe(false)
   })
+
+  it('rejects traversal segments after normalization', () => {
+    expect(assertPathWithinDirectory('/repo', '/repo/../etc')).toBe(false)
+  })
 })

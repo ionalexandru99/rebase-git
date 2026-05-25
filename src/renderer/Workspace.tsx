@@ -5,6 +5,7 @@ import { StatusPanel } from './components/StatusPanel'
 import { Shell } from './components/shell/Shell'
 import type { SidebarView } from './components/shell/Sidebar'
 import { useCheckoutRef } from './hooks/git/useCheckoutRef'
+import { repoDisplayName } from './lib/repoDisplayName'
 import type { GitStore } from './stores/git'
 
 interface WorkspaceProps {
@@ -18,7 +19,7 @@ interface WorkspaceProps {
 
 export function Workspace(props: WorkspaceProps) {
   const git = props.git
-  const repoName = () => git.state.repoPath?.split('/').filter(Boolean).at(-1) ?? 'Repository'
+  const repoName = () => repoDisplayName(git.state.repoPath)
   const branch = () => git.state.currentBranch || 'no-branch'
   const [activeView, setActiveView] = createSignal<SidebarView>('history')
 

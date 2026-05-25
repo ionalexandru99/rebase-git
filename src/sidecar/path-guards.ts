@@ -16,8 +16,10 @@ export function isSafeAbsolutePathInput(inputPath: string): boolean {
 }
 
 export function assertPathWithinDirectory(directoryPath: string, candidatePath: string): boolean {
-  const root = directoryRoot(directoryPath)
-  return candidatePath === directoryPath || candidatePath.startsWith(root)
+  const resolvedDirectory = path.resolve(directoryPath)
+  const resolvedCandidate = path.resolve(candidatePath)
+  const root = directoryRoot(resolvedDirectory)
+  return resolvedCandidate === resolvedDirectory || resolvedCandidate.startsWith(root)
 }
 
 export function resolveExistingDirectory(inputPath: string): string | null {

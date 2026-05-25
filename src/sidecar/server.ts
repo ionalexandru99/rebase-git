@@ -11,13 +11,25 @@ import { storeValidatedScanRoot, takeValidatedScanRoot } from './scan-root-regis
 
 type Body = Record<string, unknown>
 
-const str = (body: Body, key: string): string => {
-  const value = body[key]
-  return typeof value === 'string' ? value : ''
+const MAX_BODY_BYTES = 1024 * 1024
+const BAD_REQUEST = Symbol('bad-request')
+
+class BodyTooLargeError extends Error {
+  override readonly name = 'BodyTooLargeError'
 }
 
-function safeRepoPath(body: Body): string | null {
-  return resolveExistingRepoRoot(str(body, 'repoPath'))
+const requiredString = (body: Body, key: string): string | null => {
+  const value = body[key]
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed
+}
+
+function safeRepoPath(body: Body): string | null | typeof BAD_REQUEST {
+  const raw = requiredString(body, 'repoPath')
+  if (!raw) return BAD_REQUEST
+  return resolveExistingRepoRoot(raw)
 }
 
 const invalidScanDirectoryResponse = (): typeof ScanForReposResponse.Encoded =>
@@ -90,51 +102,67 @@ async function scanForReposSafely(
 async function dispatch(op: string, body: Body): Promise<unknown> {
   switch (op) {
     case SidecarOp.openRepo: {
-      const repoPath = resolveExistingRepoRoot(str(body, 'repoPath'))
+      const raw = requiredString(body, 'repoPath')
+      if (!raw) return BAD_REQUEST
+      const repoPath = resolveExistingRepoRoot(raw)
       if (!repoPath) return operations.openRepoRejected()
       return operations.openRepo(repoPath)
     }
     case SidecarOp.closeRepo: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return {}
       return operations.closeRepo(repoPath)
     }
     case SidecarOp.getBranches: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return operations.invalidRepoPath.branches()
       return operations.getBranches(repoPath)
     }
     case SidecarOp.getStatus: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return operations.invalidRepoPath.status()
       return operations.getStatus(repoPath)
     }
     case SidecarOp.stageFile: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return operations.invalidRepoPath.stage()
-      const file = resolveRepoRelativeFile(repoPath, str(body, 'file'))
-      if (!file) return operations.invalidRepoPath.stage()
-      return operations.stageFile(repoPath, file)
+      const file = requiredString(body, 'file')
+      if (!file) return BAD_REQUEST
+      const relative = resolveRepoRelativeFile(repoPath, file)
+      if (!relative) return operations.invalidRepoPath.stage()
+      return operations.stageFile(repoPath, relative)
     }
     case SidecarOp.unstageFile: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return operations.invalidRepoPath.unstage()
-      const file = resolveRepoRelativeFile(repoPath, str(body, 'file'))
-      if (!file) return operations.invalidRepoPath.unstage()
-      return operations.unstageFile(repoPath, file)
+      const file = requiredString(body, 'file')
+      if (!file) return BAD_REQUEST
+      const relative = resolveRepoRelativeFile(repoPath, file)
+      if (!relative) return operations.invalidRepoPath.unstage()
+      return operations.unstageFile(repoPath, relative)
     }
     case SidecarOp.commit: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return operations.invalidRepoPath.commit()
-      return operations.commit(repoPath, str(body, 'message'))
+      const message = requiredString(body, 'message')
+      if (!message) return BAD_REQUEST
+      return operations.commit(repoPath, message)
     }
     case SidecarOp.fetchRepo: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return operations.invalidRepoPath.fetch()
       return operations.fetchRepo(repoPath)
     }
     case SidecarOp.getLog: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return operations.invalidRepoPath.log()
       return operations.getLog(
         repoPath,
@@ -143,12 +171,11 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
     }
     case SidecarOp.checkoutRef: {
       const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) return BAD_REQUEST
       if (!repoPath) return operations.invalidRepoPath.checkout()
-      return operations.checkoutRef(
-        repoPath,
-        body.refKind as 'local' | 'remote' | 'tag',
-        str(body, 'fullPath')
-      )
+      const fullPath = requiredString(body, 'fullPath')
+      if (!fullPath) return BAD_REQUEST
+      return operations.checkoutRef(repoPath, body.refKind as 'local' | 'remote' | 'tag', fullPath)
     }
     default:
       return undefined
@@ -157,12 +184,19 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
 
 function readBody(req: IncomingMessage): Promise<Body> {
   return new Promise((resolve, reject) => {
-    let raw = ''
-    req.setEncoding('utf8')
-    req.on('data', (chunk: string) => {
-      raw += chunk
+    const chunks: Buffer[] = []
+    let total = 0
+    req.on('data', (chunk: Buffer) => {
+      total += chunk.length
+      if (total > MAX_BODY_BYTES) {
+        req.pause()
+        reject(new BodyTooLargeError())
+        return
+      }
+      chunks.push(chunk)
     })
     req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8')
       if (!raw) return resolve({})
       try {
         resolve(JSON.parse(raw) as Body)
@@ -222,17 +256,30 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
     const body = await readBody(req)
     const operation = match[1]
     if (operation === SidecarOp.scanForRepos) {
-      const result = await scanForReposSafely(str(body, 'dirPath'))
+      const dirPath = requiredString(body, 'dirPath')
+      if (!dirPath) {
+        sendJson(res, 400, { error: 'bad request' })
+        return
+      }
+      const result = await scanForReposSafely(dirPath)
       sendJson(res, 200, result)
       return
     }
     const result = await dispatch(operation, body)
+    if (result === BAD_REQUEST) {
+      sendJson(res, 400, { error: 'bad request' })
+      return
+    }
     if (result === undefined) {
       sendJson(res, 404, { error: `unknown op: ${match[1]}` })
       return
     }
     sendJson(res, 200, result)
-  } catch {
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) {
+      sendJson(res, 413, { error: 'payload too large' })
+      return
+    }
     sendJson(res, 500, { error: 'internal error' })
   }
 }

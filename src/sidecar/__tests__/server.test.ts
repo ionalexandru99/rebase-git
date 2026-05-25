@@ -102,6 +102,26 @@ describe('sidecar server', () => {
     expect(response.status).toBe(404)
   })
 
+  it('returns 400 when required string fields are missing', async () => {
+    const status = await call('get-status', {})
+    expect(status.status).toBe(400)
+    expect(await status.json()).toEqual({ error: 'bad request' })
+
+    const scan = await call('scan-for-repos', {})
+    expect(scan.status).toBe(400)
+    expect(await scan.json()).toEqual({ error: 'bad request' })
+  })
+
+  it('returns 413 when the request body exceeds the size limit', async () => {
+    const response = await fetch(`${baseUrl}/op/get-status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: `{"repoPath":${JSON.stringify('x'.repeat(1024 * 1024 + 1))}}`
+    })
+    expect(response.status).toBe(413)
+    expect(await response.json()).toEqual({ error: 'payload too large' })
+  })
+
   it('rejects scan-for-repos paths with parent traversal', async () => {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-scan-server-'))
     try {
