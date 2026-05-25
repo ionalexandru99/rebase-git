@@ -2,11 +2,27 @@ import { render, screen } from '@solidjs/testing-library'
 import { describe, expect, it } from 'vitest'
 import { layoutCommits } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
+import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import type { GitLog, GitLogEntry } from '@/types'
 import { HistoryPanel } from '../HistoryPanel'
 
-function renderPanel(log: GitLog | null, loading = false) {
-  return render(() => <HistoryPanel log={log} loading={loading} />)
+interface PanelOptions {
+  loading?: boolean
+  branchFilterActive?: boolean
+  selectedBranchRefs?: ReadonlySet<string>
+  remoteBranches?: string[]
+}
+
+function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
+  return render(() => (
+    <HistoryPanel
+      log={log}
+      loading={options.loading ?? false}
+      branchFilterActive={options.branchFilterActive}
+      selectedBranchRefs={options.selectedBranchRefs}
+      remoteBranches={options.remoteBranches}
+    />
+  ))
 }
 
 function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {
@@ -73,7 +89,7 @@ describe('HistoryPanel', () => {
   })
 
   it('shows the loading badge', () => {
-    renderPanel({ all: [], total: 0 }, true)
+    renderPanel({ all: [], total: 0 }, { loading: true })
 
     expect(screen.getByText('Loading')).toBeInTheDocument()
   })
@@ -137,6 +153,29 @@ describe('HistoryPanel', () => {
     })
 
     expect(screen.getByLabelText('merge commit')).toBeInTheDocument()
+  })
+
+  it('hides commits outside the selected branch filter', () => {
+    renderPanel(
+      {
+        all: [
+          entry({ hash: 'f1', message: 'feature tip', refs: 'feature', parents: ['base'] }),
+          entry({ hash: 'm1', message: 'main tip', refs: 'main', parents: ['base'] }),
+          entry({ hash: 'base', message: 'shared base', parents: [] })
+        ],
+        total: 3
+      },
+      {
+        branchFilterActive: true,
+        selectedBranchRefs: new Set([refFilterKey('local', 'feature')]),
+        remoteBranches: []
+      }
+    )
+
+    expect(screen.getByText('2 commits · filtered')).toBeInTheDocument()
+    expect(screen.getByText('feature tip')).toBeInTheDocument()
+    expect(screen.getByText('shared base')).toBeInTheDocument()
+    expect(screen.queryByText('main tip')).not.toBeInTheDocument()
   })
 })
 

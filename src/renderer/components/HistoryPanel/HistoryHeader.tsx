@@ -5,10 +5,26 @@ import { PanelActions, PanelHeader, PanelHeaderGroup, PanelSubtitle, PanelTitle 
 
 interface HistoryHeaderProps {
   total?: number
+  visibleTotal?: number
   loading: boolean
   filter: string
   onFilterChange: (value: string) => void
   showFilter: boolean
+  branchFilterActive?: boolean
+  selectedBranchCount?: number
+}
+
+function subtitle(props: HistoryHeaderProps): string {
+  const visible = props.visibleTotal ?? props.total
+  if (!visible && !props.total) {
+    return 'Repository timeline'
+  }
+  const count = visible ?? 0
+  const commitLabel = `${count} commit${count === 1 ? '' : 's'}`
+  if (props.branchFilterActive && (props.selectedBranchCount ?? 0) > 0) {
+    return `${commitLabel} · filtered`
+  }
+  return `${commitLabel} · all branches`
 }
 
 export function HistoryHeader(props: HistoryHeaderProps) {
@@ -16,11 +32,7 @@ export function HistoryHeader(props: HistoryHeaderProps) {
     <PanelHeader class="gap-3">
       <PanelHeaderGroup>
         <PanelTitle class="text-foreground">Timeline</PanelTitle>
-        <PanelSubtitle>
-          {props.total
-            ? `${props.total} commit${props.total === 1 ? '' : 's'} · all branches`
-            : 'Repository timeline'}
-        </PanelSubtitle>
+        <PanelSubtitle>{subtitle(props)}</PanelSubtitle>
       </PanelHeaderGroup>
 
       <PanelActions>

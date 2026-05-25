@@ -20,7 +20,10 @@ interface RefTreePanelProps {
   currentBranch: string
   loading?: boolean
   tracking?: Record<string, BranchTracking>
+  filterActive?: boolean
+  selectedFilterRefs?: ReadonlySet<string>
   onSelectRef?: (refKind: RefKind, fullPath: string) => void
+  onToggleFilterRef?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
 }
 
@@ -92,8 +95,11 @@ export function RefTreePanel(props: RefTreePanelProps) {
               row={rows()[virtualItem.index]}
               top={virtualItem.start}
               loading={props.loading ?? false}
+              filterActive={props.filterActive}
+              selectedFilterRefs={props.selectedFilterRefs}
               onToggleCollapsed={toggle}
               onSelectLeaf={props.onSelectRef}
+              onToggleFilterRef={props.onToggleFilterRef}
               onCheckoutLeaf={props.onCheckoutRef}
             />
           )}
