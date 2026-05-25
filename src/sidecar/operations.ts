@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { encodeOrThrow } from '@shared/codec'
+import { resolveScanDirectory } from '@shared/repo-path'
 import {
   BranchesResponse,
   CheckoutResponse,
@@ -253,12 +254,19 @@ export async function fetchRepo(repoPath: string): Promise<typeof FetchResponse.
 }
 
 export async function scanForRepos(dirPath: string): Promise<typeof ScanForReposResponse.Encoded> {
+  const scanRoot = resolveScanDirectory(dirPath)
+  if (!scanRoot) {
+    return encodeOrThrow(ScanForReposResponse, {
+      _tag: 'GitError',
+      message: 'invalid directory path'
+    })
+  }
   try {
-    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true })
+    const entries = await fs.promises.readdir(scanRoot, { withFileTypes: true })
     const repos: string[] = []
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        const fullPath = path.join(dirPath, entry.name)
+        const fullPath = path.join(scanRoot, entry.name)
         try {
           const git = simpleGit(fullPath)
           const isRepo = await git.checkIsRepo()

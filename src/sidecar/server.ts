@@ -116,8 +116,8 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
       return
     }
     sendJson(res, 200, result)
-  } catch (error) {
-    sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) })
+  } catch {
+    sendJson(res, 500, { error: 'internal error' })
   }
 }
 

@@ -102,6 +102,29 @@ describe('sidecar server', () => {
     expect(response.status).toBe(404)
   })
 
+  it('rejects scan-for-repos paths with parent traversal', async () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-scan-server-'))
+    try {
+      const traversal = path.join(parent, '..', path.basename(parent), '..', 'etc')
+      const response = await call('scan-for-repos', { dirPath: traversal })
+      const body = await response.json()
+      expect(body._tag).toBe('GitError')
+      expect(body.message).toBe('invalid directory path')
+    } finally {
+      fs.rmSync(parent, { recursive: true, force: true })
+    }
+  })
+
+  it('returns a generic error body without leaking exception details', async () => {
+    const response = await fetch(`${baseUrl}/op/get-status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: '{not json'
+    })
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'internal error' })
+  })
+
   it('answers CORS preflight without auth and advertises the request headers', async () => {
     const response = await fetch(`${baseUrl}/op/get-branches`, {
       method: 'OPTIONS',
