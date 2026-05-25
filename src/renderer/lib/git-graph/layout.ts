@@ -50,17 +50,24 @@ export function layoutCommits(commits: GitLogEntry[], prev?: LayoutResult): Layo
 
     for (let parentIdx = 0; parentIdx < commit.parents.length; parentIdx++) {
       const parent = commit.parents[parentIdx]
-      if (lanes.includes(parent)) continue
+      if (lanes.includes(parent)) {
+        continue
+      }
       if (parentIdx === 0 && (lanes[commitLane] === null || lanes[commitLane] === undefined)) {
         lanes[commitLane] = parent
         continue
       }
       const slot = lanes.indexOf(null)
-      if (slot !== -1) lanes[slot] = parent
-      else lanes.push(parent)
+      if (slot !== -1) {
+        lanes[slot] = parent
+      } else {
+        lanes.push(parent)
+      }
     }
 
-    while (lanes.length > 0 && lanes[lanes.length - 1] === null) lanes.pop()
+    while (lanes.length > 0 && lanes[lanes.length - 1] === null) {
+      lanes.pop()
+    }
 
     const outgoing = [...lanes]
     maxLanes = Math.max(maxLanes, incoming.length, outgoing.length, commitLane + 1)

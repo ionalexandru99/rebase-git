@@ -1,5 +1,5 @@
-import { decodeOrThrow } from '@shared/codec'
-import { SidebarPrefs } from '@shared/schemas/ipc'
+import { parseOrThrow } from '@shared/codec'
+import { SidebarPrefsSchema } from '@shared/schemas/ipc'
 import type { JSX } from 'solid-js'
 import type { BranchTracking, RefKind } from '@/lib/ref-tree'
 import { useDraggableWidth } from '../../hooks/useDraggableWidth'
@@ -33,7 +33,7 @@ const loadSidebarPrefs = () => window.electronAPI.getSidebarPrefs()
 const saveSidebarPrefs = (state: { open: boolean; width: number }) =>
   window.electronAPI.setSidebarPrefs(state)
 const decodeSidebarPrefs = (raw: { open: boolean; width: number }) =>
-  decodeOrThrow(SidebarPrefs, raw)
+  parseOrThrow(SidebarPrefsSchema, raw)
 const logSidebarPrefsError = (err: unknown) => {
   console.warn('[Shell] failed to load sidebar prefs', err)
 }

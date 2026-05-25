@@ -32,7 +32,8 @@
         "noConsole": "off"
       },
       "style": {
-        "useImportType": "error"
+        "useImportType": "error",
+        "useBlockStatements": "error"
       }
     }
   },

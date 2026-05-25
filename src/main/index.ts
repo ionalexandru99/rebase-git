@@ -21,9 +21,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function resolvePreload(): string {
   const base = path.join(__dirname, '../preload/index')
-  if (fs.existsSync(`${base}.mjs`)) return `${base}.mjs`
-  if (fs.existsSync(`${base}.js`)) return `${base}.js`
-  if (fs.existsSync(`${base}.cjs`)) return `${base}.cjs`
+  if (fs.existsSync(`${base}.mjs`)) {
+    return `${base}.mjs`
+  }
+  if (fs.existsSync(`${base}.js`)) {
+    return `${base}.js`
+  }
+  if (fs.existsSync(`${base}.cjs`)) {
+    return `${base}.cjs`
+  }
   return `${base}.js`
 }
 
@@ -59,7 +65,9 @@ function createWindow(): void {
 
   let shown = false
   const showOnce = (): void => {
-    if (shown || win.isDestroyed()) return
+    if (shown || win.isDestroyed()) {
+      return
+    }
     shown = true
     win.show()
   }
@@ -101,12 +109,16 @@ app.whenReady().then(async () => {
   setupContextMenu()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    }
   })
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
 })
 
 app.on('before-quit', () => {

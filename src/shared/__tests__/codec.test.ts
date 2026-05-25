@@ -1,34 +1,34 @@
-import { Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
-import { decodeOrThrow, encodeOrThrow } from '../codec'
+import { z } from 'zod'
+import { parseOrThrow } from '../codec'
 
-const Person = Schema.Struct({
-  name: Schema.String,
-  age: Schema.Number
+const PersonSchema = z.object({
+  name: z.string(),
+  age: z.number()
 })
 
-describe('decodeOrThrow', () => {
-  it('returns the decoded value when the payload matches the schema', () => {
-    const result = decodeOrThrow(Person, { name: 'Ada', age: 36 })
+describe('parseOrThrow', () => {
+  it('returns the parsed value when the payload matches the schema', () => {
+    const result = parseOrThrow(PersonSchema, { name: 'Ada', age: 36 })
     expect(result).toEqual({ name: 'Ada', age: 36 })
   })
 
+  it('validates outbound values the same as inbound', () => {
+    const person = { name: 'Ada', age: 36 }
+    expect(parseOrThrow(PersonSchema, person)).toEqual(person)
+  })
+
   it('throws when a required field is missing', () => {
-    expect(() => decodeOrThrow(Person, { name: 'Ada' })).toThrow(/schema decode/)
+    expect(() => parseOrThrow(PersonSchema, { name: 'Ada' })).toThrow(/schema validation/)
   })
 
   it('throws when a field has the wrong type', () => {
-    expect(() => decodeOrThrow(Person, { name: 'Ada', age: 'old' })).toThrow(/schema decode/)
+    expect(() => parseOrThrow(PersonSchema, { name: 'Ada', age: 'old' })).toThrow(
+      /schema validation/
+    )
   })
 
   it('throws on a non-object payload', () => {
-    expect(() => decodeOrThrow(Person, 'not-an-object')).toThrow(/schema decode/)
-  })
-})
-
-describe('encodeOrThrow', () => {
-  it('round-trips a valid value', () => {
-    const decoded = decodeOrThrow(Person, { name: 'Ada', age: 36 })
-    expect(encodeOrThrow(Person, decoded)).toEqual({ name: 'Ada', age: 36 })
+    expect(() => parseOrThrow(PersonSchema, 'not-an-object')).toThrow(/schema validation/)
   })
 })

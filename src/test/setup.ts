@@ -8,9 +8,8 @@ import type {
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
-import type { Layer } from 'effect'
 import { beforeEach, vi } from 'vitest'
-import { clearAllSnapshots } from '@/lib/git-cache'
+import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 
 export const sidecarMock = {
   getStatus: vi.fn<(repoPath: string) => Promise<StatusResponse>>(),
@@ -23,45 +22,48 @@ export const sidecarMock = {
 }
 ;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
 
-vi.mock('@/lib/runtime', async () => {
-  const { Effect, Layer, ManagedRuntime } = await import('effect')
-  const { GitClient } = await import('@/lib/git-client')
-
-  const dispatch = (op: string, body: Record<string, unknown>): Promise<unknown> => {
-    const mock = (globalThis as Record<string, unknown>).__sidecarMock as typeof sidecarMock
-    const repoPath = body.repoPath as string
-    switch (op) {
-      case 'get-status':
-        return mock.getStatus(repoPath)
-      case 'get-branches':
-        return mock.getBranches(repoPath)
-      case 'get-log':
-        return mock.getLog(repoPath)
-      case 'stage-file':
-        return mock.stageFile(repoPath, body.file as string)
-      case 'unstage-file':
-        return mock.unstageFile(repoPath, body.file as string)
-      case 'commit':
-        return mock.commit(repoPath, body.message as string)
-      case 'fetch-repo':
-        return mock.fetchRepo(repoPath)
-      default:
-        return Promise.reject(new Error(`unhandled sidecar op in test: ${op}`))
-    }
-  }
-
-  const TestGitClient = Layer.succeed(GitClient, {
-    request: (op, body) =>
-      Effect.tryPromise({
-        try: () => dispatch(op, body),
-        catch: (error) => (error instanceof Error ? error : new Error(String(error)))
-      })
-  })
+vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/sidecar-fetch')>()
 
   return {
-    makeRuntime: <ROut, E>(layer: Layer.Layer<ROut, E>) => ManagedRuntime.make(layer),
-    runtime: ManagedRuntime.make(TestGitClient),
-    GitClient
+    ...actual,
+    sidecarFetch: vi.fn(
+      async (
+        op: string,
+        body: Record<string, unknown>,
+        schema: { parse: (v: unknown) => unknown }
+      ) => {
+        const mock = (globalThis as Record<string, unknown>).__sidecarMock as typeof sidecarMock
+        const repoPath = body.repoPath as string
+        let payload: unknown
+        switch (op) {
+          case 'get-status':
+            payload = await mock.getStatus(repoPath)
+            break
+          case 'get-branches':
+            payload = await mock.getBranches(repoPath)
+            break
+          case 'get-log':
+            payload = await mock.getLog(repoPath)
+            break
+          case 'stage-file':
+            payload = await mock.stageFile(repoPath, body.file as string)
+            break
+          case 'unstage-file':
+            payload = await mock.unstageFile(repoPath, body.file as string)
+            break
+          case 'commit':
+            payload = await mock.commit(repoPath, body.message as string)
+            break
+          case 'fetch-repo':
+            payload = await mock.fetchRepo(repoPath)
+            break
+          default:
+            throw new Error(`unhandled sidecar op in test: ${op}`)
+        }
+        return schema.parse(payload)
+      }
+    )
   }
 })
 
@@ -81,7 +83,23 @@ Object.defineProperty(window, 'matchMedia', {
 })
 
 class ResizeObserverMock {
-  observe = vi.fn()
+  private callback: ResizeObserverCallback
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback
+  }
+
+  observe = vi.fn((element: Element) => {
+    this.callback(
+      [
+        {
+          target: element,
+          contentRect: { height: 800, width: 400 } as DOMRectReadOnly
+        } as ResizeObserverEntry
+      ],
+      this as unknown as ResizeObserver
+    )
+  })
   unobserve = vi.fn()
   disconnect = vi.fn()
 }
@@ -144,21 +162,23 @@ export function setupLogStream(): LogStreamHandle {
   vi.mocked(window.electronAPI.onLogChunk).mockImplementation((cb) => {
     listeners.push(cb as (chunk: unknown) => void)
     return () => {
-      const i = listeners.indexOf(cb as (chunk: unknown) => void)
-      if (i !== -1) listeners.splice(i, 1)
+      const index = listeners.indexOf(cb as (chunk: unknown) => void)
+      if (index !== -1) {
+        listeners.splice(index, 1)
+      }
     }
   })
   vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
   vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
   return {
     fire: (chunk) => {
-      for (const cb of listeners.slice()) {
-        cb({ done: false, ...chunk })
+      for (const callback of listeners.slice()) {
+        callback({ done: false, ...chunk })
       }
     },
     fireDone: (repoPath) => {
-      for (const cb of listeners.slice()) {
-        cb({ repoPath, commits: [], done: true })
+      for (const callback of listeners.slice()) {
+        callback({ repoPath, commits: [], done: true })
       }
     }
   }
@@ -173,13 +193,17 @@ export function setupRepoChanged(): RepoChangedHandle {
   vi.mocked(window.electronAPI.onRepoChanged).mockImplementation((cb) => {
     listeners.push(cb as (evt: unknown) => void)
     return () => {
-      const i = listeners.indexOf(cb as (evt: unknown) => void)
-      if (i !== -1) listeners.splice(i, 1)
+      const index = listeners.indexOf(cb as (evt: unknown) => void)
+      if (index !== -1) {
+        listeners.splice(index, 1)
+      }
     }
   })
   return {
     fire: (evt) => {
-      for (const cb of listeners.slice()) cb(evt)
+      for (const callback of listeners.slice()) {
+        callback(evt)
+      }
     }
   }
 }
@@ -194,4 +218,8 @@ beforeEach(() => {
     activeIndex: 0
   })
   vi.mocked(window.electronAPI.setPersistedTabs).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.getSidecarConfig).mockResolvedValue({
+    baseUrl: 'http://127.0.0.1:9',
+    token: 'test-token'
+  })
 })

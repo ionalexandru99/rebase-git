@@ -38,6 +38,9 @@ function stop(): void {
 
 parentPort.on('message', (event: { data: SidecarCommand }) => {
   const command = event.data
-  if (command.type === 'start') start(command)
-  else if (command.type === 'stop') stop()
+  if (command.type === 'start') {
+    start(command)
+  } else if (command.type === 'stop') {
+    stop()
+  }
 })

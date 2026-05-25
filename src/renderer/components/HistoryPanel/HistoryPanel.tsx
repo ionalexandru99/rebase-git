@@ -9,8 +9,8 @@ import {
 } from '@/lib/git-graph/canvas'
 import { type LayoutResult, layoutCommits } from '@/lib/git-graph/layout'
 import type { GitLog, GitLogEntry } from '@/types'
+import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
 import { useThemeNonce } from '../../hooks/useThemeNonce'
-import { useVirtualList } from '../../hooks/useVirtualList'
 import { EmptyState } from '../ui/empty-state'
 import { Panel } from '../ui/panel'
 import { CommitGraphCanvas } from './CommitGraphCanvas'
@@ -52,12 +52,20 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const visibleSet = createMemo(() => computeVisibleSet(filter(), commits()))
 
   const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>()
-  const { setScrollRef, onScroll, viewportHeight, startIndex, endIndex, totalHeight, scrollTop } =
-    useVirtualList({
-      rowCount: () => rows().length,
-      rowHeight: ROW_H,
-      overscan: OVERSCAN
-    })
+  const {
+    setScrollRef,
+    onScroll,
+    viewportHeight,
+    virtualItems,
+    startIndex,
+    endIndex,
+    totalHeight,
+    scrollTop
+  } = useFixedVirtualizer({
+    count: () => rows().length,
+    rowHeight: ROW_H,
+    overscan: OVERSCAN
+  })
   const attachScroll = (element: HTMLDivElement) => {
     setScrollEl(element)
     setScrollRef(element)
@@ -68,9 +76,13 @@ export function HistoryPanel(props: HistoryPanelProps) {
     const currentRows = rows()
     for (let i = startIndex(); i < endIndex(); i++) {
       const row = currentRows[i]
-      if (!row) continue
+      if (!row) {
+        continue
+      }
       const candidate = Math.max(row.incoming.length, row.outgoing.length, row.commitLane + 1)
-      if (candidate > max) max = candidate
+      if (candidate > max) {
+        max = candidate
+      }
     }
     return max
   })
@@ -81,7 +93,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
 
   const gridTemplate = `minmax(0,1fr) ${COL_AUTHOR_REM}rem ${COL_SHA_REM}rem ${COL_DATE_REM}rem`
 
-  const visibleRows = createMemo(() => rows().slice(startIndex(), endIndex()))
+  const visibleVirtualItems = createMemo(() => virtualItems())
 
   return (
     <Panel class="h-full">
@@ -108,7 +120,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
       <div
         ref={attachScroll}
         onScroll={onScroll}
-        class="min-h-0 flex-1 overflow-auto"
+        class="min-h-0 min-h-[480px] flex-1 overflow-auto"
         data-testid="history-scroll"
       >
         <Show
@@ -140,20 +152,31 @@ export function HistoryPanel(props: HistoryPanelProps) {
               railWidth={railWidth()}
               themeNonce={themeNonce()}
               scrollTop={scrollTop()}
+              startIndex={startIndex()}
+              endIndex={endIndex()}
             />
 
-            <For each={visibleRows()}>
-              {(row, idx) => (
-                <CommitRow
-                  row={row}
-                  index={startIndex() + idx()}
-                  dim={!!(visibleSet() && !visibleSet()?.has(row.commit.hash))}
-                  offBranch={!!(onBranchSet() && !onBranchSet()?.has(row.commit.hash))}
-                  rowRailWidth={computeRowRailWidth(row)}
-                  remotes={remotes()}
-                  remoteNames={remoteNames()}
-                />
-              )}
+            <For each={visibleVirtualItems()}>
+              {(virtualItem) => {
+                const row = () => rows()[virtualItem.index]
+                return (
+                  <Show when={row()}>
+                    {(layoutRow) => (
+                      <CommitRow
+                        row={layoutRow()}
+                        top={virtualItem.start}
+                        dim={!!(visibleSet() && !visibleSet()?.has(layoutRow().commit.hash))}
+                        offBranch={
+                          !!(onBranchSet() && !onBranchSet()?.has(layoutRow().commit.hash))
+                        }
+                        rowRailWidth={computeRowRailWidth(layoutRow())}
+                        remotes={remotes()}
+                        remoteNames={remoteNames()}
+                      />
+                    )}
+                  </Show>
+                )
+              }}
             </For>
           </div>
         </Show>

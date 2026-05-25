@@ -68,7 +68,9 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
 
   const reportTabRepo = (id: string, path: string | null) => {
     setTabRepos((prev) => {
-      if (prev[id] === path) return prev
+      if (prev[id] === path) {
+        return prev
+      }
       return { ...prev, [id]: path }
     })
   }
@@ -86,7 +88,9 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
       setTabs([{ id: freshId }])
       setActiveTabId(freshId)
       setTabRepos((prev) => {
-        if (!(id in prev)) return prev
+        if (!(id in prev)) {
+          return prev
+        }
         const { [id]: _removed, ...rest } = prev
         return rest
       })
@@ -99,7 +103,9 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
       setActiveTabId(next[Math.min(idx, next.length - 1)].id)
     }
     setTabRepos((prev) => {
-      if (!(id in prev)) return prev
+      if (!(id in prev)) {
+        return prev
+      }
       const { [id]: _removed, ...rest } = prev
       return rest
     })
@@ -109,12 +115,16 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
     const match = Object.entries(tabRepos()).find(
       ([id, recorded]) => recorded !== null && sameRepoPath(recorded, path) && id !== sourceTabId
     )
-    if (!match) return false
+    if (!match) {
+      return false
+    }
     const [existingId] = match
     setActiveTabId(existingId)
     setTabs((prev) => prev.filter((tab) => tab.id !== sourceTabId))
     setTabRepos((prev) => {
-      if (!(sourceTabId in prev)) return prev
+      if (!(sourceTabId in prev)) {
+        return prev
+      }
       const { [sourceTabId]: _removed, ...rest } = prev
       return rest
     })
@@ -123,9 +133,13 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
 
   const cycleTab = (direction: 1 | -1) => {
     const current = tabs()
-    if (current.length <= 1) return
+    if (current.length <= 1) {
+      return
+    }
     const idx = current.findIndex((tab) => tab.id === activeTabId())
-    if (idx === -1) return
+    if (idx === -1) {
+      return
+    }
     const nextIdx = (idx + direction + current.length) % current.length
     setActiveTabId(current[nextIdx].id)
   }
@@ -133,7 +147,9 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   onMount(() => {
     function onKey(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey
-      if (!mod) return
+      if (!mod) {
+        return
+      }
       if (event.shiftKey && event.code === 'BracketRight') {
         event.preventDefault()
         cycleTab(1)
@@ -144,7 +160,9 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
         cycleTab(-1)
         return
       }
-      if (event.shiftKey) return
+      if (event.shiftKey) {
+        return
+      }
       if (event.key === 't') {
         event.preventDefault()
         newTab()

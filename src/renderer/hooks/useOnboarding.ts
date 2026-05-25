@@ -1,5 +1,5 @@
-import { decodeOrThrow } from '@shared/codec'
-import { ScanForReposResponse } from '@shared/schemas/ipc'
+import { parseOrThrow } from '@shared/codec'
+import { ScanForReposResponseSchema } from '@shared/schemas/ipc'
 import { type Accessor, createSignal, onMount } from 'solid-js'
 
 export interface OnboardingStore {
@@ -33,8 +33,8 @@ export function useOnboarding(): OnboardingStore {
     setLoading(true)
     setError(null)
     try {
-      const decoded = decodeOrThrow(
-        ScanForReposResponse,
+      const decoded = parseOrThrow(
+        ScanForReposResponseSchema,
         await window.electronAPI.scanForRepos(path)
       )
       if (decoded._tag === 'Ok') {
@@ -64,7 +64,9 @@ export function useOnboarding(): OnboardingStore {
         setWorkspaces(safeList)
         const resolved = active ?? safeList[0] ?? null
         setActiveWorkspace(resolved)
-        if (resolved) scanWorkspace(resolved)
+        if (resolved) {
+          scanWorkspace(resolved)
+        }
       })
       .catch((error: unknown) => {
         console.error('[onboarding] failed to load workspaces', error)
@@ -80,14 +82,18 @@ export function useOnboarding(): OnboardingStore {
 
   const rescanWorkingDirectory = async () => {
     const active = activeWorkspace()
-    if (!active) return
+    if (!active) {
+      return
+    }
     await scanWorkspace(active)
   }
 
   const addWorkspace = async (): Promise<string | null> => {
     setError(null)
     const path = await window.electronAPI.selectFolder()
-    if (!path) return null
+    if (!path) {
+      return null
+    }
     setLoading(true)
     try {
       const list = await window.electronAPI.addWorkspace(path)
@@ -120,7 +126,9 @@ export function useOnboarding(): OnboardingStore {
   }
 
   const switchWorkspace = async (path: string) => {
-    if (path === activeWorkspace()) return
+    if (path === activeWorkspace()) {
+      return
+    }
     setError(null)
     setActiveWorkspace(path)
     await window.electronAPI.setActiveWorkspace(path)

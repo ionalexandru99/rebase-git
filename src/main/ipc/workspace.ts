@@ -16,7 +16,9 @@ import {
 export function register(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle('select-folder', async () => {
     const win = getMainWindow()
-    if (!win) return null
+    if (!win) {
+      return null
+    }
     const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
     return result.canceled ? null : result.filePaths[0]
   })

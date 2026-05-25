@@ -34,9 +34,13 @@ export const store = new Store<StoreSchema>({
 
 function migrateLegacyWorkingDirectory(): void {
   const workspaces = store.get('workspaces')
-  if (workspaces.length > 0) return
+  if (workspaces.length > 0) {
+    return
+  }
   const legacy = store.get('workingDirectory')
-  if (!legacy) return
+  if (!legacy) {
+    return
+  }
   store.set('workspaces', [legacy])
   if (!store.get('activeWorkspace')) {
     store.set('activeWorkspace', legacy)

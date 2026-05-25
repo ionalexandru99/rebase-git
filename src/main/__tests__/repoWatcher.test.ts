@@ -1,10 +1,5 @@
-import { Effect, Fiber, Queue } from 'effect'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ignoreWorkingTree, startDebouncedDrain } from '../repoWatcher'
-
-async function tick(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 describe('ignoreWorkingTree', () => {
   it('ignores the .git directory', () => {
@@ -48,50 +43,53 @@ describe('ignoreWorkingTree', () => {
 })
 
 describe('startDebouncedDrain', () => {
-  it('fires once after the queue goes idle', async () => {
-    const queue = Effect.runSync(Queue.unbounded<void>())
-    const onFire = vi.fn()
-    const fiber = startDebouncedDrain(queue, 30, onFire)
-
-    Effect.runSync(Queue.offer(queue, undefined))
-    Effect.runSync(Queue.offer(queue, undefined))
-    Effect.runSync(Queue.offer(queue, undefined))
-
-    expect(onFire).not.toHaveBeenCalled()
-    await tick(80)
-    expect(onFire).toHaveBeenCalledTimes(1)
-
-    await Effect.runPromise(Fiber.interrupt(fiber))
-    Effect.runSync(Queue.shutdown(queue))
+  beforeEach(() => {
+    vi.useFakeTimers()
   })
 
-  it('fires again after another idle period', async () => {
-    const queue = Effect.runSync(Queue.unbounded<void>())
-    const onFire = vi.fn()
-    const fiber = startDebouncedDrain(queue, 30, onFire)
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
-    Effect.runSync(Queue.offer(queue, undefined))
-    await tick(80)
+  it('fires once after events go idle', () => {
+    const onFire = vi.fn()
+    const drain = startDebouncedDrain(30, onFire)
+
+    drain.push()
+    drain.push()
+    drain.push()
+
+    expect(onFire).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(80)
     expect(onFire).toHaveBeenCalledTimes(1)
 
-    Effect.runSync(Queue.offer(queue, undefined))
-    await tick(80)
+    drain.stop()
+  })
+
+  it('fires again after another idle period', () => {
+    const onFire = vi.fn()
+    const drain = startDebouncedDrain(30, onFire)
+
+    drain.push()
+    vi.advanceTimersByTime(80)
+    expect(onFire).toHaveBeenCalledTimes(1)
+
+    drain.push()
+    vi.advanceTimersByTime(80)
     expect(onFire).toHaveBeenCalledTimes(2)
 
-    await Effect.runPromise(Fiber.interrupt(fiber))
-    Effect.runSync(Queue.shutdown(queue))
+    drain.stop()
   })
 
-  it('stops firing after the fiber is interrupted', async () => {
-    const queue = Effect.runSync(Queue.unbounded<void>())
+  it('stops firing after stop is called', () => {
     const onFire = vi.fn()
-    const fiber = startDebouncedDrain(queue, 30, onFire)
+    const drain = startDebouncedDrain(30, onFire)
 
-    await Effect.runPromise(Fiber.interrupt(fiber))
-    Effect.runSync(Queue.offer(queue, undefined))
-    await tick(80)
+    drain.stop()
+    drain.push()
+    vi.advanceTimersByTime(80)
 
     expect(onFire).not.toHaveBeenCalled()
-    Effect.runSync(Queue.shutdown(queue))
   })
 })

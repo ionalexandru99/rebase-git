@@ -105,7 +105,9 @@ export function serializeBranches(
   for (const name of branches.all) {
     if (name.startsWith('remotes/')) {
       const stripped = name.slice('remotes/'.length)
-      if (stripped.includes(' -> ')) continue
+      if (stripped.includes(' -> ')) {
+        continue
+      }
       remotes.push(stripped)
     } else {
       local.push(name)
@@ -125,7 +127,9 @@ export function serializeRemotes(
 ): Record<string, string> {
   const result: Record<string, string> = {}
   for (const remote of remotes) {
-    if (remote.refs?.fetch) result[remote.name] = remote.refs.fetch
+    if (remote.refs?.fetch) {
+      result[remote.name] = remote.refs.fetch
+    }
   }
   return result
 }

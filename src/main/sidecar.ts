@@ -47,7 +47,9 @@ async function checkHealth(baseUrl: string): Promise<boolean> {
 async function waitForHealth(baseUrl: string): Promise<void> {
   const deadline = Date.now() + START_TIMEOUT_MS
   while (Date.now() < deadline) {
-    if (await checkHealth(baseUrl)) return
+    if (await checkHealth(baseUrl)) {
+      return
+    }
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   throw new Error('sidecar health check timed out')
@@ -93,7 +95,9 @@ async function spawn(): Promise<Sidecar> {
 }
 
 export function startSidecar(): Promise<Sidecar> {
-  if (startup) return startup
+  if (startup) {
+    return startup
+  }
   startup = spawn().then((started) => {
     sidecar = started
     started.child.once('exit', () => {
@@ -111,7 +115,9 @@ export function startSidecar(): Promise<Sidecar> {
 }
 
 async function ensureSidecar(): Promise<Sidecar> {
-  if (sidecar) return sidecar
+  if (sidecar) {
+    return sidecar
+  }
   return startSidecar()
 }
 
@@ -140,11 +146,15 @@ export async function killSidecar(): Promise<void> {
   const current = sidecar
   sidecar = null
   startup = null
-  if (!current) return
+  if (!current) {
+    return
+  }
   await new Promise<void>((resolve) => {
     let settled = false
     const done = () => {
-      if (settled) return
+      if (settled) {
+        return
+      }
       settled = true
       resolve()
     }

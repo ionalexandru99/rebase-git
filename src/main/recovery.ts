@@ -63,8 +63,12 @@ export function wireWindowRecovery(win: BrowserWindow): void {
   let promptOpen = false
 
   win.on('unresponsive', () => {
-    if (!sampler) sampler = startUnresponsiveSampler()
-    if (promptOpen) return
+    if (!sampler) {
+      sampler = startUnresponsiveSampler()
+    }
+    if (promptOpen) {
+      return
+    }
     promptOpen = true
     void promptRecovery(win).finally(() => {
       promptOpen = false
@@ -78,7 +82,9 @@ export function wireWindowRecovery(win: BrowserWindow): void {
 
   win.webContents.on('render-process-gone', (_event, details) => {
     log.error('[recovery] render process gone', details)
-    if (!shouldPromptOnRenderGone(details.reason) || win.isDestroyed()) return
+    if (!shouldPromptOnRenderGone(details.reason) || win.isDestroyed()) {
+      return
+    }
     void dialog
       .showMessageBox(win, {
         type: 'error',
@@ -90,8 +96,11 @@ export function wireWindowRecovery(win: BrowserWindow): void {
         detail: `Reason: ${details.reason}. Reload to recover your session.`
       })
       .then(({ response }) => {
-        if (response === 0 && !win.isDestroyed()) win.reload()
-        else app.quit()
+        if (response === 0 && !win.isDestroyed()) {
+          win.reload()
+        } else {
+          app.quit()
+        }
       })
   })
 }

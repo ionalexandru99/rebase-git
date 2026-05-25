@@ -6,7 +6,9 @@ const DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
 
 export function formatCommitDate(date: string): string {
   const t = new Date(date).getTime()
-  if (Number.isNaN(t)) return ''
+  if (Number.isNaN(t)) {
+    return ''
+  }
   return DATE_FORMATTER.format(t)
 }
 

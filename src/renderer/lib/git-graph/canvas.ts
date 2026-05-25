@@ -1,7 +1,9 @@
 import type { RowLayout } from './layout'
 
 function getRootFontPx(): number {
-  if (typeof document === 'undefined') return 16
+  if (typeof document === 'undefined') {
+    return 16
+  }
   const px = parseFloat(getComputedStyle(document.documentElement).fontSize)
   return Number.isFinite(px) && px > 0 ? px : 16
 }
@@ -11,7 +13,10 @@ export const ROW_H = Math.round(ROOT_PX * 2)
 export const COL_W = Math.round(ROOT_PX)
 export const RAIL_PAD = Math.round(ROOT_PX * 0.875)
 export const DOT_R = ROOT_PX * 0.25
-export const OVERSCAN = 300
+
+import { HISTORY_OVERSCAN } from '@/lib/virtual-config'
+
+export const OVERSCAN = HISTORY_OVERSCAN
 
 export const LANE_PALETTE = [
   '#7c8cff',
@@ -50,7 +55,9 @@ export function computeRowRailWidth(row: RowLayout): number {
 }
 
 export function readCssVar(name: string, fallback: string): string {
-  if (typeof document === 'undefined') return fallback
+  if (typeof document === 'undefined') {
+    return fallback
+  }
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
   return value || fallback
 }
@@ -75,7 +82,9 @@ export function drawGraphRow(
   if (!isFirst) {
     for (let j = 0; j < row.incoming.length; j++) {
       const hash = row.incoming[j]
-      if (hash === null) continue
+      if (hash === null) {
+        continue
+      }
       ctx.strokeStyle = laneColor(j)
       if (hash === row.commit.hash) {
         if (j === row.commitLane) {
@@ -100,7 +109,9 @@ export function drawGraphRow(
 
   for (let j = 0; j < row.outgoing.length; j++) {
     const hash = row.outgoing[j]
-    if (hash === null) continue
+    if (hash === null) {
+      continue
+    }
     ctx.strokeStyle = laneColor(j)
     const passThrough = row.incoming[j] === hash
     if (passThrough) {
@@ -127,9 +138,15 @@ export function drawGraphRow(
   const parentSet = new Set(row.commit.parents)
   for (const parent of row.commit.parents) {
     const j = row.outgoing.indexOf(parent)
-    if (j === -1 || j === row.commitLane) continue
-    if (row.incoming[j] !== parent) continue
-    if (!parentSet.has(row.outgoing[j] ?? '')) continue
+    if (j === -1 || j === row.commitLane) {
+      continue
+    }
+    if (row.incoming[j] !== parent) {
+      continue
+    }
+    if (!parentSet.has(row.outgoing[j] ?? '')) {
+      continue
+    }
     const endX = laneX(j)
     ctx.strokeStyle = laneColor(j)
     ctx.beginPath()

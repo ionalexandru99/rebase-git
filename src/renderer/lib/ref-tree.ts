@@ -49,7 +49,10 @@ export interface RefSkeletonRow {
 export type RefRow = RefLeafRow | RefFolderRow | RefSectionRow | RefEmptyRow | RefSkeletonRow
 
 export const REF_TREE_ROW_HEIGHT = 28
-export const REF_TREE_OVERSCAN = 20
+
+import { REF_TREE_OVERSCAN as REF_TREE_OVERSCAN_VALUE } from '@/lib/virtual-config'
+
+export const REF_TREE_OVERSCAN = REF_TREE_OVERSCAN_VALUE
 export const REF_TREE_INDENT_PX = 12
 
 export function sectionKey(refKind: RefKind): string {
@@ -70,9 +73,15 @@ function isFolderExpanded(toggles: Set<string>, refKind: RefKind, fullPath: stri
 }
 
 export function rowKey(row: RefRow): string {
-  if (row.kind === 'section') return `s:${row.refKind}`
-  if (row.kind === 'empty') return `e:${row.refKind}`
-  if (row.kind === 'skeleton') return `sk:${row.refKind}:${row.idx}`
+  if (row.kind === 'section') {
+    return `s:${row.refKind}`
+  }
+  if (row.kind === 'empty') {
+    return `e:${row.refKind}`
+  }
+  if (row.kind === 'skeleton') {
+    return `sk:${row.refKind}:${row.idx}`
+  }
   return `${row.refKind}:${row.kind}:${row.fullPath}`
 }
 
@@ -118,7 +127,9 @@ function pushSkeletonSection(
 ): void {
   const expanded = isSectionExpanded(toggles, refKind)
   out.push({ kind: 'section', refKind, label, count: 0, expanded })
-  if (!expanded) return
+  if (!expanded) {
+    return
+  }
   for (let i = 0; i < count; i++) {
     out.push({ kind: 'skeleton', refKind, idx: i })
   }
@@ -143,7 +154,9 @@ function buildSection(
     count: paths.length,
     expanded: sectionExpanded
   })
-  if (!sectionExpanded) return
+  if (!sectionExpanded) {
+    return
+  }
   if (paths.length === 0) {
     out.push({
       kind: 'empty',
@@ -156,7 +169,9 @@ function buildSection(
   const root: TreeMap = new Map()
   for (const path of paths) {
     const parts = path.split('/').filter(Boolean)
-    if (parts.length === 0) continue
+    if (parts.length === 0) {
+      continue
+    }
     let cursor = root
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]
@@ -192,7 +207,9 @@ function walkTree(
   const entries = [...node.entries()].sort((a, b) => {
     const aIsFolder = a[1] instanceof Map
     const bIsFolder = b[1] instanceof Map
-    if (aIsFolder !== bIsFolder) return aIsFolder ? -1 : 1
+    if (aIsFolder !== bIsFolder) {
+      return aIsFolder ? -1 : 1
+    }
     return a[0].localeCompare(b[0])
   })
 

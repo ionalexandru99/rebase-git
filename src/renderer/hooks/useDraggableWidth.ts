@@ -38,11 +38,15 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
   let dragTeardown: (() => void) | null = null
 
   onMount(() => {
-    if (!load) return
+    if (!load) {
+      return
+    }
     let cancelled = false
     load()
       .then((raw) => {
-        if (cancelled) return
+        if (cancelled) {
+          return
+        }
         const decoded = decode ? decode(raw) : raw
         const clamped = Math.max(min, Math.min(max, decoded.width))
         setIsOpen(decoded.open)
@@ -50,7 +54,9 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
         dragWidth = clamped
       })
       .catch((error: unknown) => {
-        if (cancelled) return
+        if (cancelled) {
+          return
+        }
         onLoadError?.(error)
       })
     onCleanup(() => {
@@ -88,7 +94,9 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     }
 
     const finalize = () => {
-      if (!dragTeardown) return
+      if (!dragTeardown) {
+        return
+      }
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', finalize)
       document.body.style.cursor = ''

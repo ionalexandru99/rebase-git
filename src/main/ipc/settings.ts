@@ -1,5 +1,10 @@
-import { decodeOrThrow, encodeOrThrow } from '@shared/codec'
-import { Channel, PersistedTabs, RefTreeToggles, SidebarPrefs } from '@shared/schemas/ipc'
+import { parseOrThrow } from '@shared/codec'
+import {
+  Channel,
+  PersistedTabsSchema,
+  RefTreeTogglesSchema,
+  SidebarPrefsSchema
+} from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
 import { getSidecarConfig } from '../sidecar'
 import {
@@ -14,23 +19,25 @@ import {
 export function register(): void {
   ipcMain.handle(Channel.getSidecarConfig, () => getSidecarConfig())
 
-  ipcMain.handle(Channel.getSidebarPrefs, () => encodeOrThrow(SidebarPrefs, getSidebarPrefs()))
+  ipcMain.handle(Channel.getSidebarPrefs, () => parseOrThrow(SidebarPrefsSchema, getSidebarPrefs()))
   ipcMain.handle(Channel.setSidebarPrefs, (_, payload: unknown) => {
-    const decoded = decodeOrThrow(SidebarPrefs, payload)
+    const decoded = parseOrThrow(SidebarPrefsSchema, payload)
     setSidebarPrefs(decoded)
   })
 
   ipcMain.handle(Channel.getRefTreeToggles, () =>
-    encodeOrThrow(RefTreeToggles, getRefTreeToggles())
+    parseOrThrow(RefTreeTogglesSchema, getRefTreeToggles())
   )
   ipcMain.handle(Channel.setRefTreeToggles, (_, payload: unknown) => {
-    const decoded = decodeOrThrow(RefTreeToggles, payload)
+    const decoded = parseOrThrow(RefTreeTogglesSchema, payload)
     setRefTreeToggles([...decoded])
   })
 
-  ipcMain.handle(Channel.getPersistedTabs, () => encodeOrThrow(PersistedTabs, getPersistedTabs()))
+  ipcMain.handle(Channel.getPersistedTabs, () =>
+    parseOrThrow(PersistedTabsSchema, getPersistedTabs())
+  )
   ipcMain.handle(Channel.setPersistedTabs, (_, payload: unknown) => {
-    const decoded = decodeOrThrow(PersistedTabs, payload)
+    const decoded = parseOrThrow(PersistedTabsSchema, payload)
     setPersistedTabs({ tabs: [...decoded.tabs], activeIndex: decoded.activeIndex })
   })
 }

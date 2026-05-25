@@ -1,5 +1,5 @@
-import { decodeOrThrow } from '@shared/codec'
-import { RefTreeToggles } from '@shared/schemas/ipc'
+import { parseOrThrow } from '@shared/codec'
+import { RefTreeTogglesSchema } from '@shared/schemas/ipc'
 import { createMemo, createSignal, For, onCleanup, onMount } from 'solid-js'
 import {
   type BranchTracking,
@@ -8,7 +8,7 @@ import {
   REF_TREE_ROW_HEIGHT,
   type RefKind
 } from '@/lib/ref-tree'
-import { useVirtualList } from '../../hooks/useVirtualList'
+import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
 import { RefTreeRow } from './RefTreeRow'
 
 export type { RefKind } from '@/lib/ref-tree'
@@ -32,8 +32,10 @@ export function RefTreePanel(props: RefTreePanelProps) {
     window.electronAPI
       .getRefTreeToggles()
       .then((res) => {
-        if (cancelled) return
-        const decoded = decodeOrThrow(RefTreeToggles, res)
+        if (cancelled) {
+          return
+        }
+        const decoded = parseOrThrow(RefTreeTogglesSchema, res)
         setToggles(new Set(decoded))
       })
       .catch((err: unknown) => {
@@ -47,8 +49,11 @@ export function RefTreePanel(props: RefTreePanelProps) {
   const toggle = (key: string) => {
     setToggles((prev) => {
       const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
       window.electronAPI.setRefTreeToggles([...next])
       return next
     })
@@ -66,14 +71,12 @@ export function RefTreePanel(props: RefTreePanelProps) {
     })
   )
 
-  const { setScrollRef, onScroll, startIndex, endIndex, totalHeight } = useVirtualList({
-    rowCount: () => rows().length,
+  const { setScrollRef, onScroll, virtualItems, totalHeight } = useFixedVirtualizer({
+    count: () => rows().length,
     rowHeight: REF_TREE_ROW_HEIGHT,
     overscan: REF_TREE_OVERSCAN,
     initialViewportHeight: 400
   })
-
-  const visibleRows = createMemo(() => rows().slice(startIndex(), endIndex()))
 
   return (
     <div
@@ -83,11 +86,11 @@ export function RefTreePanel(props: RefTreePanelProps) {
       data-testid="ref-tree-scroll"
     >
       <div class="relative" style={{ height: `${totalHeight()}px` }}>
-        <For each={visibleRows()}>
-          {(row, idx) => (
+        <For each={virtualItems()}>
+          {(virtualItem) => (
             <RefTreeRow
-              row={row}
-              top={(startIndex() + idx()) * REF_TREE_ROW_HEIGHT}
+              row={rows()[virtualItem.index]}
+              top={virtualItem.start}
               loading={props.loading ?? false}
               onToggleCollapsed={toggle}
               onSelectLeaf={props.onSelectRef}

@@ -9,7 +9,9 @@ export function computeOnBranchSet(
 ): Set<string> | null {
   let tip: string | undefined
   for (const commit of commits) {
-    if (!commit.refs) continue
+    if (!commit.refs) {
+      continue
+    }
     const hasHead = commit.refs.split(',').some((part) => {
       const trimmed = part.trim()
       return trimmed === 'HEAD' || trimmed.startsWith('HEAD -> ')
@@ -21,7 +23,9 @@ export function computeOnBranchSet(
   }
   if (!tip && currentBranch) {
     for (const commit of commits) {
-      if (!commit.refs) continue
+      if (!commit.refs) {
+        continue
+      }
       const parsed = parseRefs(commit.refs, remoteNames)
       if (parsed.some((ref) => ref.kind === 'branch' && ref.label === currentBranch)) {
         tip = commit.hash
@@ -29,19 +33,29 @@ export function computeOnBranchSet(
       }
     }
   }
-  if (!tip) return null
+  if (!tip) {
+    return null
+  }
 
   const byHash = new Map<string, GitLogEntry>()
-  for (const commit of commits) byHash.set(commit.hash, commit)
+  for (const commit of commits) {
+    byHash.set(commit.hash, commit)
+  }
   const reachable = new Set<string>()
   const stack = [tip]
   while (stack.length > 0) {
     const hash = stack.pop() as string
-    if (reachable.has(hash)) continue
+    if (reachable.has(hash)) {
+      continue
+    }
     reachable.add(hash)
     const commit = byHash.get(hash)
-    if (!commit) continue
-    for (const parent of commit.parents) stack.push(parent)
+    if (!commit) {
+      continue
+    }
+    for (const parent of commit.parents) {
+      stack.push(parent)
+    }
   }
   return reachable
 }
