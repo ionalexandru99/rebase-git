@@ -90,8 +90,11 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   let logFlushRaf: number | null = null
   let openGeneration = 0
 
-  const flushLogToStore = () => {
+  const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
     logFlushRaf = null
+    if (expectedGen !== openGeneration || expectedPath !== state.repoPath) {
+      return
+    }
     const log: GitLog = { all: logBuffer, total: logBuffer.length }
     setState('log', log)
     const path = state.repoPath
@@ -105,7 +108,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     if (logFlushRaf !== null) {
       return
     }
-    logFlushRaf = requestAnimationFrame(flushLogToStore)
+    const expectedGen = openGeneration
+    const expectedPath = state.repoPath
+    logFlushRaf = requestAnimationFrame(() => flushLogToStore(expectedGen, expectedPath))
   }
 
   const reset = () => {
@@ -246,15 +251,19 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }
 
   const refreshLogLimited = async (path: string) => {
+    const expectedGen = openGeneration
     const response = await sidecarFetch(
       'get-log',
       { repoPath: path, maxCount: LOG_REFRESH_MAX_COUNT },
       LogResponseSchema
     )
+    if (expectedGen !== openGeneration || state.repoPath !== path) {
+      return
+    }
     if (response._tag === 'Ok') {
       logBuffer = [...response.log.all]
       writeSnapshot(path, { log: response.log })
-      flushLogToStore()
+      flushLogToStore(expectedGen, path)
     }
   }
 
@@ -334,11 +343,16 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
           setState('log', cached.log)
         }
         setState({ statusLoading: false, branchesLoading: false, logLoading: false })
-        void Promise.all([
-          refreshStatus(opened.path),
-          refreshBranchesOnly(opened.path),
-          refreshLogLimited(opened.path)
-        ])
+        void (async () => {
+          await Promise.all([
+            refreshStatus(opened.path),
+            refreshBranchesOnly(opened.path),
+            refreshLogLimited(opened.path)
+          ])
+          if (generation === openGeneration && state.repoPath === opened.path) {
+            await restartLogStream(opened.path)
+          }
+        })()
         return
       }
 

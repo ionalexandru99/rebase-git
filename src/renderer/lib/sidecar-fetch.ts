@@ -12,7 +12,10 @@ let configPromise: Promise<SidecarConfig> | null = null
 
 async function getSidecarConfig(): Promise<SidecarConfig> {
   if (!configPromise) {
-    configPromise = window.electronAPI.getSidecarConfig()
+    configPromise = window.electronAPI.getSidecarConfig().catch((error: unknown) => {
+      configPromise = null
+      throw error
+    })
   }
   return configPromise
 }

@@ -1,16 +1,16 @@
 import { render } from '@solidjs/testing-library'
 import type { JSX } from 'solid-js'
 import App from '@/App'
-import { QueryProvider } from '@/providers/QueryProvider'
+import { createQueryClient, QueryProvider } from '@/providers/QueryProvider'
 
 export function renderApp() {
   return render(() => (
-    <QueryProvider>
+    <QueryProvider client={createQueryClient()}>
       <App />
     </QueryProvider>
   ))
 }
 
 export function renderWithQuery(ui: () => JSX.Element) {
-  return render(() => <QueryProvider>{ui()}</QueryProvider>)
+  return render(() => <QueryProvider client={createQueryClient()}>{ui()}</QueryProvider>)
 }

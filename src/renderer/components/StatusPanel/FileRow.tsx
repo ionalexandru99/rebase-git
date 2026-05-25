@@ -13,7 +13,7 @@ interface FileRowProps {
 export function FileRow(props: FileRowProps) {
   const label = () => props.display ?? props.file
   return (
-    <li class="group flex h-7 items-center gap-2 rounded-md px-2 hover:bg-accent">
+    <div class="group flex h-7 items-center gap-2 rounded-md px-2 hover:bg-accent">
       <StatusBadge kind={props.kind} />
       <span class="min-w-0 flex-1 truncate text-sm" title={label()}>
         {label()}
@@ -28,6 +28,6 @@ export function FileRow(props: FileRowProps) {
           {props.actionLabel}
         </Button>
       </Show>
-    </li>
+    </div>
   )
 }

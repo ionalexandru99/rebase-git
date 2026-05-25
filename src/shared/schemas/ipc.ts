@@ -106,7 +106,7 @@ export const ScanForReposResponseSchema = z.discriminatedUnion('_tag', [
 export type ScanForReposResponse = z.infer<typeof ScanForReposResponseSchema>
 
 export const RefKindSchema = z.enum(['local', 'remote', 'tag'])
-export type RefKindSchema = z.infer<typeof RefKindSchema>
+export type RefKind = z.infer<typeof RefKindSchema>
 
 export const CheckoutResponseSchema = z.discriminatedUnion('_tag', [
   z.object({ _tag: z.literal('Ok'), checkedOut: z.string() }),

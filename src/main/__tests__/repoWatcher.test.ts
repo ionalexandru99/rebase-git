@@ -1,9 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ignoreWorkingTree, startDebouncedDrain } from '../repoWatcher'
-
-async function tick(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 describe('ignoreWorkingTree', () => {
   it('ignores the .git directory', () => {
@@ -47,7 +43,16 @@ describe('ignoreWorkingTree', () => {
 })
 
 describe('startDebouncedDrain', () => {
-  it('fires once after events go idle', async () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('fires once after events go idle', () => {
     const onFire = vi.fn()
     const drain = startDebouncedDrain(30, onFire)
 
@@ -56,34 +61,34 @@ describe('startDebouncedDrain', () => {
     drain.push()
 
     expect(onFire).not.toHaveBeenCalled()
-    await tick(80)
+    vi.advanceTimersByTime(80)
     expect(onFire).toHaveBeenCalledTimes(1)
 
     drain.stop()
   })
 
-  it('fires again after another idle period', async () => {
+  it('fires again after another idle period', () => {
     const onFire = vi.fn()
     const drain = startDebouncedDrain(30, onFire)
 
     drain.push()
-    await tick(80)
+    vi.advanceTimersByTime(80)
     expect(onFire).toHaveBeenCalledTimes(1)
 
     drain.push()
-    await tick(80)
+    vi.advanceTimersByTime(80)
     expect(onFire).toHaveBeenCalledTimes(2)
 
     drain.stop()
   })
 
-  it('stops firing after stop is called', async () => {
+  it('stops firing after stop is called', () => {
     const onFire = vi.fn()
     const drain = startDebouncedDrain(30, onFire)
 
     drain.stop()
     drain.push()
-    await tick(80)
+    vi.advanceTimersByTime(80)
 
     expect(onFire).not.toHaveBeenCalled()
   })

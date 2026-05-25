@@ -20,7 +20,7 @@ import {
   type UnstageResponse,
   UnstageResponseSchema
 } from '@shared/schemas/ipc'
-import { fetchSemaphoreFor } from './fetch-semaphore'
+import { fetchSemaphoreFor, releaseFetchSemaphore } from './fetch-semaphore'
 import { deriveLocalShortName } from './git/checkout'
 import { resolveDefaultBranch } from './git/defaultBranch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'

@@ -19,8 +19,8 @@ function StatusVirtualRow(props: {
 }) {
   if (props.row.kind === 'section') {
     return (
-      <div
-        class="absolute inset-x-0 px-1.5"
+      <li
+        class="absolute inset-x-0 list-none px-1.5"
         style={{
           top: '0',
           height: `${STATUS_FILE_ROW_HEIGHT}px`,
@@ -33,13 +33,13 @@ function StatusVirtualRow(props: {
           </span>
           <span class="text-xs tabular-nums text-muted-foreground">{props.row.count}</span>
         </div>
-      </div>
+      </li>
     )
   }
 
   return (
-    <div
-      class="absolute inset-x-0"
+    <li
+      class="absolute inset-x-0 list-none"
       style={{
         top: '0',
         height: `${STATUS_FILE_ROW_HEIGHT}px`,
@@ -53,7 +53,7 @@ function StatusVirtualRow(props: {
         actionLabel={props.row.actionLabel}
         onAction={props.row.actionLabel === 'Unstage' ? props.onUnstage : props.onStage}
       />
-    </div>
+    </li>
   )
 }
 
@@ -73,7 +73,7 @@ export function VirtualFileList(props: VirtualFileListProps) {
       class="min-h-0 min-h-[480px] flex-1 overflow-auto px-1.5 pb-3 pt-2"
       data-testid="status-file-scroll"
     >
-      <div class="relative" style={{ height: `${totalHeight()}px` }}>
+      <ul class="relative m-0 list-none p-0" style={{ height: `${totalHeight()}px` }}>
         <For each={virtualItems()}>
           {(virtualItem) => {
             const row = rows()[virtualItem.index]
@@ -90,7 +90,7 @@ export function VirtualFileList(props: VirtualFileListProps) {
             )
           }}
         </For>
-      </div>
+      </ul>
     </div>
   )
 }
