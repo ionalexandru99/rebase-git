@@ -1,16 +1,31 @@
 import { decodeOrThrow } from '@shared/codec'
 import { ScanForReposResponse } from '@shared/schemas/ipc'
-import { useCallback, useEffect, useState } from 'react'
+import { type Accessor, createSignal, onMount } from 'solid-js'
 
-export function useOnboarding() {
-  const [onboardingComplete, setOnboardingCompleteState] = useState<boolean | null>(null)
-  const [workspaces, setWorkspaces] = useState<string[]>([])
-  const [activeWorkspace, setActiveWorkspaceState] = useState<string | null>(null)
-  const [discoveredRepos, setDiscoveredRepos] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export interface OnboardingStore {
+  onboardingComplete: Accessor<boolean | null>
+  workingDirectory: Accessor<string | null>
+  workspaces: Accessor<string[]>
+  activeWorkspace: Accessor<string | null>
+  discoveredRepos: Accessor<string[]>
+  loading: Accessor<boolean>
+  error: Accessor<string | null>
+  completeOnboarding: () => Promise<void>
+  rescanWorkingDirectory: () => Promise<void>
+  addWorkspace: () => Promise<string | null>
+  removeWorkspace: (path: string) => Promise<void>
+  switchWorkspace: (path: string) => Promise<void>
+}
 
-  const scanWorkspace = useCallback(async (path: string | null) => {
+export function useOnboarding(): OnboardingStore {
+  const [onboardingComplete, setOnboardingComplete] = createSignal<boolean | null>(null)
+  const [workspaces, setWorkspaces] = createSignal<string[]>([])
+  const [activeWorkspace, setActiveWorkspace] = createSignal<string | null>(null)
+  const [discoveredRepos, setDiscoveredRepos] = createSignal<string[]>([])
+  const [loading, setLoading] = createSignal(false)
+  const [error, setError] = createSignal<string | null>(null)
+
+  const scanWorkspace = async (path: string | null) => {
     if (!path) {
       setDiscoveredRepos([])
       return
@@ -33,34 +48,43 @@ export function useOnboarding() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
-  useEffect(() => {
-    window.electronAPI.getOnboardingComplete().then((complete) => {
-      setOnboardingCompleteState(complete)
-    })
-    Promise.all([window.electronAPI.getWorkspaces(), window.electronAPI.getActiveWorkspace()]).then(
-      ([list, active]) => {
+  onMount(() => {
+    window.electronAPI
+      .getOnboardingComplete()
+      .then(setOnboardingComplete)
+      .catch((error: unknown) => {
+        console.error('[onboarding] failed to load onboarding state', error)
+        setOnboardingComplete(false)
+      })
+    Promise.all([window.electronAPI.getWorkspaces(), window.electronAPI.getActiveWorkspace()])
+      .then(([list, active]) => {
         const safeList = list ?? []
         setWorkspaces(safeList)
         const resolved = active ?? safeList[0] ?? null
-        setActiveWorkspaceState(resolved)
+        setActiveWorkspace(resolved)
         if (resolved) scanWorkspace(resolved)
-      }
-    )
-  }, [scanWorkspace])
+      })
+      .catch((error: unknown) => {
+        console.error('[onboarding] failed to load workspaces', error)
+        setWorkspaces([])
+        setActiveWorkspace(null)
+      })
+  })
 
-  const completeOnboarding = useCallback(async () => {
+  const completeOnboarding = async () => {
     await window.electronAPI.setOnboardingComplete(true)
-    setOnboardingCompleteState(true)
-  }, [])
+    setOnboardingComplete(true)
+  }
 
-  const rescanWorkingDirectory = useCallback(async () => {
-    if (!activeWorkspace) return
-    await scanWorkspace(activeWorkspace)
-  }, [activeWorkspace, scanWorkspace])
+  const rescanWorkingDirectory = async () => {
+    const active = activeWorkspace()
+    if (!active) return
+    await scanWorkspace(active)
+  }
 
-  const addWorkspace = useCallback(async () => {
+  const addWorkspace = async (): Promise<string | null> => {
     setError(null)
     const path = await window.electronAPI.selectFolder()
     if (!path) return null
@@ -68,7 +92,7 @@ export function useOnboarding() {
     try {
       const list = await window.electronAPI.addWorkspace(path)
       setWorkspaces(list ?? [path])
-      setActiveWorkspaceState(path)
+      setActiveWorkspace(path)
       await scanWorkspace(path)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -76,38 +100,32 @@ export function useOnboarding() {
       setLoading(false)
     }
     return path
-  }, [scanWorkspace])
+  }
 
-  const removeWorkspace = useCallback(
-    async (path: string) => {
-      setError(null)
-      try {
-        const list = await window.electronAPI.removeWorkspace(path)
-        const safeList = list ?? []
-        setWorkspaces(safeList)
-        if (activeWorkspace === path) {
-          const next = safeList[0] ?? null
-          setActiveWorkspaceState(next)
-          await window.electronAPI.setActiveWorkspace(next)
-          await scanWorkspace(next)
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error')
+  const removeWorkspace = async (path: string) => {
+    setError(null)
+    try {
+      const list = await window.electronAPI.removeWorkspace(path)
+      const safeList = list ?? []
+      setWorkspaces(safeList)
+      if (activeWorkspace() === path) {
+        const next = safeList[0] ?? null
+        setActiveWorkspace(next)
+        await window.electronAPI.setActiveWorkspace(next)
+        await scanWorkspace(next)
       }
-    },
-    [activeWorkspace, scanWorkspace]
-  )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
 
-  const switchWorkspace = useCallback(
-    async (path: string) => {
-      if (path === activeWorkspace) return
-      setError(null)
-      setActiveWorkspaceState(path)
-      await window.electronAPI.setActiveWorkspace(path)
-      await scanWorkspace(path)
-    },
-    [activeWorkspace, scanWorkspace]
-  )
+  const switchWorkspace = async (path: string) => {
+    if (path === activeWorkspace()) return
+    setError(null)
+    setActiveWorkspace(path)
+    await window.electronAPI.setActiveWorkspace(path)
+    await scanWorkspace(path)
+  }
 
   return {
     onboardingComplete,

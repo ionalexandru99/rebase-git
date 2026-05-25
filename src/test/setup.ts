@@ -1,5 +1,69 @@
 import '@testing-library/jest-dom/vitest'
+import type {
+  BranchesResponse,
+  CommitResponse,
+  FetchResponse,
+  LogResponse,
+  StageResponse,
+  StatusResponse,
+  UnstageResponse
+} from '@shared/schemas/ipc'
+import type { Layer } from 'effect'
 import { beforeEach, vi } from 'vitest'
+import { clearAllSnapshots } from '@/lib/git-cache'
+
+export const sidecarMock = {
+  getStatus: vi.fn<(repoPath: string) => Promise<StatusResponse>>(),
+  getBranches: vi.fn<(repoPath: string) => Promise<BranchesResponse>>(),
+  getLog: vi.fn<(repoPath: string) => Promise<LogResponse>>(),
+  stageFile: vi.fn<(repoPath: string, file: string) => Promise<StageResponse>>(),
+  unstageFile: vi.fn<(repoPath: string, file: string) => Promise<UnstageResponse>>(),
+  commit: vi.fn<(repoPath: string, message: string) => Promise<CommitResponse>>(),
+  fetchRepo: vi.fn<(repoPath: string) => Promise<FetchResponse>>()
+}
+;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
+
+vi.mock('@/lib/runtime', async () => {
+  const { Effect, Layer, ManagedRuntime } = await import('effect')
+  const { GitClient } = await import('@/lib/git-client')
+
+  const dispatch = (op: string, body: Record<string, unknown>): Promise<unknown> => {
+    const mock = (globalThis as Record<string, unknown>).__sidecarMock as typeof sidecarMock
+    const repoPath = body.repoPath as string
+    switch (op) {
+      case 'get-status':
+        return mock.getStatus(repoPath)
+      case 'get-branches':
+        return mock.getBranches(repoPath)
+      case 'get-log':
+        return mock.getLog(repoPath)
+      case 'stage-file':
+        return mock.stageFile(repoPath, body.file as string)
+      case 'unstage-file':
+        return mock.unstageFile(repoPath, body.file as string)
+      case 'commit':
+        return mock.commit(repoPath, body.message as string)
+      case 'fetch-repo':
+        return mock.fetchRepo(repoPath)
+      default:
+        return Promise.reject(new Error(`unhandled sidecar op in test: ${op}`))
+    }
+  }
+
+  const TestGitClient = Layer.succeed(GitClient, {
+    request: (op, body) =>
+      Effect.tryPromise({
+        try: () => dispatch(op, body),
+        catch: (error) => (error instanceof Error ? error : new Error(String(error)))
+      })
+  })
+
+  return {
+    makeRuntime: <ROut, E>(layer: Layer.Layer<ROut, E>) => ManagedRuntime.make(layer),
+    runtime: ManagedRuntime.make(TestGitClient),
+    GitClient
+  }
+})
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -30,14 +94,7 @@ const mockElectronAPI = {
   selectFolder: vi.fn(),
   openRepo: vi.fn(),
   closeRepo: vi.fn(),
-  getBranches: vi.fn(),
   checkoutRef: vi.fn(),
-  getStatus: vi.fn(),
-  stageFile: vi.fn(),
-  unstageFile: vi.fn(),
-  commit: vi.fn(),
-  fetchRepo: vi.fn(),
-  getLog: vi.fn(),
   startLogStream: vi.fn(),
   cancelLogStream: vi.fn(),
   onLogChunk: vi.fn(),
@@ -49,8 +106,6 @@ const mockElectronAPI = {
   setRefTreeToggles: vi.fn(),
   getPersistedTabs: vi.fn(),
   setPersistedTabs: vi.fn(),
-  getWorkingDirectory: vi.fn(),
-  setWorkingDirectory: vi.fn(),
   getWorkspaces: vi.fn(),
   addWorkspace: vi.fn(),
   removeWorkspace: vi.fn(),
@@ -58,7 +113,8 @@ const mockElectronAPI = {
   setActiveWorkspace: vi.fn(),
   getOnboardingComplete: vi.fn(),
   setOnboardingComplete: vi.fn(),
-  scanForRepos: vi.fn()
+  scanForRepos: vi.fn(),
+  getSidecarConfig: vi.fn()
 }
 
 Object.defineProperty(window, 'electronAPI', {
@@ -130,6 +186,7 @@ export function setupRepoChanged(): RepoChangedHandle {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  clearAllSnapshots()
   vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
   vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({

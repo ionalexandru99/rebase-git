@@ -1,3 +1,4 @@
+import { type JSX, Match, Switch } from 'solid-js'
 import { REF_TREE_ROW_HEIGHT, type RefKind, type RefRow } from '@/lib/ref-tree'
 import { EmptyRow } from './EmptyRow'
 import { FolderRow } from './FolderRow'
@@ -14,50 +15,48 @@ interface RefTreeRowProps {
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
 }
 
-export function RefTreeRow({
-  row,
-  top,
-  loading,
-  onToggleCollapsed,
-  onSelectLeaf,
-  onCheckoutLeaf
-}: RefTreeRowProps) {
-  const baseStyle: React.CSSProperties = {
-    top: 0,
-    height: REF_TREE_ROW_HEIGHT,
-    transform: `translateY(${top}px)`,
+export function RefTreeRow(props: RefTreeRowProps) {
+  const baseStyle = (): JSX.CSSProperties => ({
+    top: '0',
+    height: `${REF_TREE_ROW_HEIGHT}px`,
+    transform: `translateY(${props.top}px)`,
     contain: 'layout paint style'
-  }
-
-  if (row.kind === 'section') {
-    return (
-      <SectionRow
-        row={row}
-        style={baseStyle}
-        loading={loading}
-        onToggleCollapsed={onToggleCollapsed}
-      />
-    )
-  }
-
-  if (row.kind === 'empty') {
-    return <EmptyRow row={row} style={baseStyle} />
-  }
-
-  if (row.kind === 'skeleton') {
-    return <SkeletonRowItem row={row} style={baseStyle} />
-  }
-
-  if (row.kind === 'folder') {
-    return <FolderRow row={row} style={baseStyle} onToggleCollapsed={onToggleCollapsed} />
-  }
+  })
 
   return (
-    <LeafRow
-      row={row}
-      style={baseStyle}
-      onSelectLeaf={onSelectLeaf}
-      onCheckoutLeaf={onCheckoutLeaf}
-    />
+    <Switch>
+      <Match when={props.row.kind === 'section'}>
+        <SectionRow
+          row={props.row as Extract<RefRow, { kind: 'section' }>}
+          style={baseStyle()}
+          loading={props.loading}
+          onToggleCollapsed={props.onToggleCollapsed}
+        />
+      </Match>
+      <Match when={props.row.kind === 'empty'}>
+        <EmptyRow row={props.row as Extract<RefRow, { kind: 'empty' }>} style={baseStyle()} />
+      </Match>
+      <Match when={props.row.kind === 'skeleton'}>
+        <SkeletonRowItem
+          row={props.row as Extract<RefRow, { kind: 'skeleton' }>}
+          style={baseStyle()}
+        />
+      </Match>
+      <Match when={props.row.kind === 'folder'}>
+        <FolderRow
+          row={props.row as Extract<RefRow, { kind: 'folder' }>}
+          style={baseStyle()}
+          onToggleCollapsed={props.onToggleCollapsed}
+        />
+      </Match>
+      <Match when={props.row.kind === 'leaf'}>
+        <LeafRow
+          row={props.row as Extract<RefRow, { kind: 'leaf' }>}
+          style={baseStyle()}
+          onSelectLeaf={props.onSelectLeaf}
+          onCheckoutLeaf={props.onCheckoutLeaf}
+        />
+      </Match>
+    </Switch>
   )
 }

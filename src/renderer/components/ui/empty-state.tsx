@@ -1,15 +1,15 @@
-import type { LucideIcon } from 'lucide-react'
-import type * as React from 'react'
-
+import type { LucideProps } from 'lucide-solid'
+import { type Component, type JSX, Show, splitProps } from 'solid-js'
+import { Dynamic } from 'solid-js/web'
 import { cn } from '@/lib/utils'
 
 type EmptyStateSize = 'sm' | 'md' | 'lg'
 
-interface EmptyStateProps extends Omit<React.ComponentProps<'div'>, 'title'> {
-  icon?: LucideIcon
-  title: React.ReactNode
-  description?: React.ReactNode
-  action?: React.ReactNode
+interface EmptyStateProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, 'title'> {
+  icon?: Component<LucideProps>
+  title: JSX.Element
+  description?: JSX.Element
+  action?: JSX.Element
   size?: EmptyStateSize
 }
 
@@ -35,37 +35,41 @@ const sizeMap: Record<EmptyStateSize, { wrap: string; icon: string; title: strin
     }
   }
 
-function EmptyState({
-  icon: Icon,
-  title,
-  description,
-  action,
-  size = 'md',
-  className,
-  ...props
-}: EmptyStateProps) {
-  const sizes = sizeMap[size]
+function EmptyState(props: EmptyStateProps) {
+  const [local, rest] = splitProps(props, [
+    'icon',
+    'title',
+    'description',
+    'action',
+    'size',
+    'class'
+  ])
+  const sizes = () => sizeMap[local.size ?? 'md']
   return (
     <div
       data-slot="empty-state"
-      className={cn('flex flex-col items-center justify-center text-center', sizes.wrap, className)}
-      {...props}
+      class={cn('flex flex-col items-center justify-center text-center', sizes().wrap, local.class)}
+      {...rest}
     >
-      {Icon && (
-        <div
-          className={cn(
-            'inline-flex items-center justify-center text-muted-foreground/60',
-            sizes.icon
-          )}
-        >
-          <Icon className="h-1/2 w-1/2" strokeWidth={1.6} />
-        </div>
-      )}
-      <p className={cn('text-foreground', sizes.title)}>{title}</p>
-      {description && (
-        <p className={cn('mt-1 max-w-xs leading-relaxed', sizes.copy)}>{description}</p>
-      )}
-      {action && <div className="mt-3">{action}</div>}
+      <Show when={local.icon}>
+        {(Icon) => (
+          <div
+            class={cn(
+              'inline-flex items-center justify-center text-muted-foreground/60',
+              sizes().icon
+            )}
+          >
+            <Dynamic component={Icon()} class="h-1/2 w-1/2" stroke-width={1.6} />
+          </div>
+        )}
+      </Show>
+      <p class={cn('text-foreground', sizes().title)}>{local.title}</p>
+      <Show when={local.description}>
+        <p class={cn('mt-1 max-w-xs leading-relaxed', sizes().copy)}>{local.description}</p>
+      </Show>
+      <Show when={local.action}>
+        <div class="mt-3">{local.action}</div>
+      </Show>
     </div>
   )
 }

@@ -1,40 +1,58 @@
-import { RemoteProviderIcon } from '@/components/RemoteProviderIcon'
-import { Badge } from '@/components/ui/badge'
-import { type ParsedRef, pillStyle, refClass, splitRemoteRef } from '@/lib/git-graph/refs'
+import { type JSX, Show } from 'solid-js'
+import { type ParsedRef, refClass, splitRemoteRef } from '@/lib/git-graph/refs'
 import { cn } from '@/lib/utils'
+import { RemoteProviderIcon } from '../RemoteProviderIcon'
+import { Badge } from '../ui/badge'
 
 const BASE_CLASS = 'h-6 shrink-0 rounded-md border px-2.5 text-xs font-medium tracking-tight'
 
+function pillStyle(kind: ParsedRef['kind'], laneHex: string): JSX.CSSProperties | undefined {
+  if (kind === 'branch' || kind === 'remote') {
+    return {
+      'border-color': `${laneHex}66`,
+      'background-color': `${laneHex}1f`,
+      color: laneHex
+    }
+  }
+  return undefined
+}
+
 interface RefBadgeProps {
-  ref: ParsedRef
+  parsedRef: ParsedRef
   laneHex: string
   remotes: Record<string, string>
 }
 
-export function RefBadge({ ref, laneHex, remotes }: RefBadgeProps) {
-  const style = pillStyle(ref.kind, laneHex)
-  if (ref.kind === 'remote') {
-    const { remote, branch } = splitRemoteRef(ref.label)
-    return (
-      <Badge
-        variant="outline"
-        className={cn(BASE_CLASS, 'gap-1.5', refClass(ref.kind))}
-        style={style}
-        title={ref.label}
-      >
-        <RemoteProviderIcon url={remotes[remote]} className="!size-3.5" />
-        {branch}
-      </Badge>
-    )
-  }
+export function RefBadge(props: RefBadgeProps) {
+  const style = () => pillStyle(props.parsedRef.kind, props.laneHex)
   return (
-    <Badge
-      variant="outline"
-      className={cn(BASE_CLASS, refClass(ref.kind))}
-      style={style}
-      title={ref.label}
+    <Show
+      when={props.parsedRef.kind === 'remote'}
+      fallback={
+        <Badge
+          variant="outline"
+          class={cn(BASE_CLASS, refClass(props.parsedRef.kind))}
+          style={style()}
+          title={props.parsedRef.label}
+        >
+          {props.parsedRef.label}
+        </Badge>
+      }
     >
-      {ref.label}
-    </Badge>
+      {(() => {
+        const split = () => splitRemoteRef(props.parsedRef.label)
+        return (
+          <Badge
+            variant="outline"
+            class={cn(BASE_CLASS, 'gap-1.5', refClass(props.parsedRef.kind))}
+            style={style()}
+            title={props.parsedRef.label}
+          >
+            <RemoteProviderIcon url={props.remotes[split().remote]} class="!size-3.5" />
+            {split().branch}
+          </Badge>
+        )
+      })()}
+    </Show>
   )
 }

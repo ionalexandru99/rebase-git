@@ -1,4 +1,6 @@
-import { FileDiff, History } from 'lucide-react'
+import { FileDiffIcon, HistoryIcon } from 'lucide-solid'
+import { Show } from 'solid-js'
+import type { BranchTracking, RefKind } from '@/lib/ref-tree'
 import {
   Sidebar as ShadSidebar,
   SidebarContent,
@@ -8,8 +10,7 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem
-} from '@/components/ui/sidebar'
-import type { BranchTracking, RefKind } from '@/lib/ref-tree'
+} from '../ui/sidebar'
 import { RefTreePanel } from './RefTreePanel'
 
 export type SidebarView = 'history' | 'local-changes'
@@ -24,55 +25,45 @@ interface AppSidebarProps {
   activeView: SidebarView
   tracking?: Record<string, BranchTracking>
   onSelectView: (view: SidebarView) => void
-  onResizeStart?: (e: React.MouseEvent) => void
+  onResizeStart?: (event: MouseEvent) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
 }
 
-export function AppSidebar({
-  localBranches,
-  remoteBranches,
-  tags,
-  currentBranch,
-  branchesLoading,
-  workingChanges,
-  activeView,
-  tracking,
-  onSelectView,
-  onResizeStart,
-  onCheckoutRef
-}: AppSidebarProps) {
+export function AppSidebar(props: AppSidebarProps) {
   return (
-    <ShadSidebar className="!top-10 !h-[calc(100svh-2.5rem)]">
-      {onResizeStart && (
+    <ShadSidebar class="!top-10 !h-[calc(100svh-2.5rem)]">
+      <Show when={props.onResizeStart}>
         <span
-          onMouseDown={onResizeStart}
-          aria-hidden
-          className="group/sidebar-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+          onMouseDown={(event) => props.onResizeStart?.(event)}
+          aria-hidden="true"
+          class="group/sidebar-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
         >
-          <span className="w-px bg-transparent transition-colors group-hover/sidebar-resize:bg-primary/60" />
+          <span class="w-px bg-transparent transition-colors group-hover/sidebar-resize:bg-primary/60" />
         </span>
-      )}
+      </Show>
 
-      <SidebarContent className="!overflow-hidden">
+      <SidebarContent class="!overflow-hidden">
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
-                isActive={activeView === 'local-changes'}
-                onClick={() => onSelectView('local-changes')}
+                isActive={props.activeView === 'local-changes'}
+                onClick={() => props.onSelectView('local-changes')}
               >
-                <FileDiff />
+                <FileDiffIcon />
                 <span>Local changes</span>
               </SidebarMenuButton>
-              {workingChanges > 0 && <SidebarMenuBadge>{workingChanges}</SidebarMenuBadge>}
+              <Show when={props.workingChanges > 0}>
+                <SidebarMenuBadge>{props.workingChanges}</SidebarMenuBadge>
+              </Show>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
-                isActive={activeView === 'history'}
-                onClick={() => onSelectView('history')}
+                isActive={props.activeView === 'history'}
+                onClick={() => props.onSelectView('history')}
               >
-                <History />
+                <HistoryIcon />
                 <span>History</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -80,13 +71,13 @@ export function AppSidebar({
         </SidebarGroup>
 
         <RefTreePanel
-          localBranches={localBranches}
-          remoteBranches={remoteBranches}
-          tags={tags}
-          currentBranch={currentBranch}
-          loading={branchesLoading}
-          tracking={tracking}
-          onCheckoutRef={onCheckoutRef}
+          localBranches={props.localBranches}
+          remoteBranches={props.remoteBranches}
+          tags={props.tags}
+          currentBranch={props.currentBranch}
+          loading={props.branchesLoading}
+          tracking={props.tracking}
+          onCheckoutRef={props.onCheckoutRef}
         />
       </SidebarContent>
     </ShadSidebar>

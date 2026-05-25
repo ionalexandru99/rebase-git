@@ -1,33 +1,43 @@
+import { For, type JSX, Show } from 'solid-js'
 import { RepoRow } from './RepoRow'
 
 interface RepoGroupProps {
   label: string
-  trailing?: React.ReactNode
+  trailing?: JSX.Element
   repos: string[]
   emptyText?: string
   onSelect: (path: string) => void
 }
 
-export function RepoGroup({ label, trailing, repos, emptyText, onSelect }: RepoGroupProps) {
+export function RepoGroup(props: RepoGroupProps) {
   return (
-    <section className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-          {label}
+    <section class="flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+          {props.label}
         </h3>
-        {trailing && <div className="min-w-0 max-w-xs">{trailing}</div>}
+        <Show when={props.trailing}>
+          <div class="min-w-0 max-w-xs">{props.trailing}</div>
+        </Show>
       </div>
-      {repos.length > 0 ? (
-        <ul className="flex flex-col">
-          {repos.map((repo) => (
-            <li key={repo}>
-              <RepoRow path={repo} onSelect={onSelect} />
-            </li>
-          ))}
+      <Show
+        when={props.repos.length > 0}
+        fallback={
+          <Show when={props.emptyText}>
+            <p class="px-3 py-2 text-sm text-muted-foreground">{props.emptyText}</p>
+          </Show>
+        }
+      >
+        <ul class="flex flex-col">
+          <For each={props.repos}>
+            {(repo) => (
+              <li>
+                <RepoRow path={repo} onSelect={props.onSelect} />
+              </li>
+            )}
+          </For>
         </ul>
-      ) : emptyText ? (
-        <p className="px-3 py-2 text-sm text-muted-foreground">{emptyText}</p>
-      ) : null}
+      </Show>
     </section>
   )
 }

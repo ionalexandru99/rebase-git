@@ -1,9 +1,9 @@
 import { decodeOrThrow } from '@shared/codec'
 import { SidebarPrefs } from '@shared/schemas/ipc'
-import { type ReactNode, useCallback } from 'react'
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { useDraggableWidth } from '@/hooks/useDraggableWidth'
+import type { JSX } from 'solid-js'
 import type { BranchTracking, RefKind } from '@/lib/ref-tree'
+import { useDraggableWidth } from '../../hooks/useDraggableWidth'
+import { SidebarInset, SidebarProvider } from '../ui/sidebar'
 import { AppSidebar, type SidebarView } from './Sidebar'
 import { Statusbar } from './Statusbar'
 import { Topbar } from './Topbar'
@@ -26,7 +26,7 @@ interface ShellProps {
   onSelectView: (view: SidebarView) => void
   onFetch?: () => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
-  children: ReactNode
+  children: JSX.Element
 }
 
 const loadSidebarPrefs = () => window.electronAPI.getSidebarPrefs()
@@ -38,22 +38,7 @@ const logSidebarPrefsError = (err: unknown) => {
   console.warn('[Shell] failed to load sidebar prefs', err)
 }
 
-export function Shell({
-  repoName,
-  repoPath,
-  branch,
-  localBranches,
-  remoteBranches,
-  tags,
-  branchesLoading = false,
-  changes,
-  activeView,
-  tracking,
-  onSelectView,
-  onFetch,
-  onCheckoutRef,
-  children
-}: ShellProps) {
+export function Shell(props: ShellProps) {
   const { width, isOpen, setOpen, onResizeStart } = useDraggableWidth({
     min: SIDEBAR_WIDTH_MIN,
     max: SIDEBAR_WIDTH_MAX,
@@ -64,32 +49,35 @@ export function Shell({
     onLoadError: logSidebarPrefsError
   })
 
-  const handleOpenChange = useCallback((next: boolean) => setOpen(next), [setOpen])
-
   return (
     <SidebarProvider
-      open={isOpen}
-      onOpenChange={handleOpenChange}
-      className="!min-h-0 h-full"
-      style={{ '--sidebar-width': `${width}px` } as React.CSSProperties}
+      open={isOpen()}
+      onOpenChange={setOpen}
+      class="!min-h-0 h-full"
+      style={{ '--sidebar-width': `${width()}px` }}
     >
       <AppSidebar
-        localBranches={localBranches}
-        remoteBranches={remoteBranches}
-        tags={tags}
-        currentBranch={branch}
-        branchesLoading={branchesLoading}
-        workingChanges={changes}
-        activeView={activeView}
-        tracking={tracking}
-        onSelectView={onSelectView}
+        localBranches={props.localBranches}
+        remoteBranches={props.remoteBranches}
+        tags={props.tags}
+        currentBranch={props.branch}
+        branchesLoading={props.branchesLoading}
+        workingChanges={props.changes}
+        activeView={props.activeView}
+        tracking={props.tracking}
+        onSelectView={props.onSelectView}
         onResizeStart={onResizeStart}
-        onCheckoutRef={onCheckoutRef}
+        onCheckoutRef={props.onCheckoutRef}
       />
-      <SidebarInset className="flex min-h-0 flex-col">
-        <Topbar repoName={repoName} repoPath={repoPath} branch={branch} onFetch={onFetch} />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t">{children}</div>
-        <Statusbar branch={branch} changes={changes} directionLabel="History" />
+      <SidebarInset class="flex min-h-0 flex-col">
+        <Topbar
+          repoName={props.repoName}
+          repoPath={props.repoPath}
+          branch={props.branch}
+          onFetch={props.onFetch}
+        />
+        <div class="flex min-h-0 flex-1 flex-col overflow-hidden border-t">{props.children}</div>
+        <Statusbar branch={props.branch} changes={props.changes} directionLabel="History" />
       </SidebarInset>
     </SidebarProvider>
   )

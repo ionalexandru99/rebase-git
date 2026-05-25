@@ -1,12 +1,12 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '@solidjs/testing-library'
 import { describe, expect, it } from 'vitest'
-import { HistoryPanel } from '@/components/HistoryPanel'
 import { layoutCommits } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
 import type { GitLog, GitLogEntry } from '@/types'
+import { HistoryPanel } from '../HistoryPanel'
 
 function renderPanel(log: GitLog | null, loading = false) {
-  return render(<HistoryPanel log={log} loading={loading} />)
+  return render(() => <HistoryPanel log={log} loading={loading} />)
 }
 
 function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {
@@ -109,6 +109,19 @@ describe('HistoryPanel', () => {
 
     expect(screen.getByTitle('origin/feature')).toBeInTheDocument()
     expect(screen.getByText('feature')).toBeInTheDocument()
+  })
+
+  it('virtualizes a large history, mounting only a small window of rows', () => {
+    const all: GitLogEntry[] = Array.from({ length: 10_000 }, (_unused, i) =>
+      entry({ hash: `hash${i}`, message: `commit-${i}` })
+    )
+    renderPanel({ all, total: all.length })
+
+    const rendered = screen.queryAllByText(/^commit-\d+$/)
+    expect(rendered.length).toBeGreaterThan(0)
+    expect(rendered.length).toBeLessThan(1000)
+    expect(screen.getByText('commit-0')).toBeInTheDocument()
+    expect(screen.queryByText('commit-9999')).not.toBeInTheDocument()
   })
 
   it('marks merge commits (parents.length >= 2) with a merge indicator', () => {

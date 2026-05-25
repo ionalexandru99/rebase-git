@@ -1,92 +1,90 @@
-import { Avatar as AvatarPrimitive } from 'radix-ui'
-import type * as React from 'react'
-
+import * as ImagePrimitive from '@kobalte/core/image'
+import { type ComponentProps, type JSX, splitProps } from 'solid-js'
 import { cn } from '@/lib/utils'
 
-function Avatar({
-  className,
-  size = 'default',
-  ...props
-}: React.ComponentProps<typeof AvatarPrimitive.Root> & {
-  size?: 'default' | 'sm' | 'lg'
-}) {
+function Avatar(
+  props: ComponentProps<typeof ImagePrimitive.Root> & { size?: 'default' | 'sm' | 'lg' }
+) {
+  const [local, rest] = splitProps(props, ['class', 'size'])
   return (
-    <AvatarPrimitive.Root
+    <ImagePrimitive.Root
       data-slot="avatar"
-      data-size={size}
-      className={cn(
+      data-size={local.size ?? 'default'}
+      class={cn(
         'group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-full select-none data-[size=lg]:size-10 data-[size=sm]:size-6',
-        className
+        local.class
       )}
-      {...props}
+      {...rest}
     />
   )
 }
 
-function AvatarImage({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+function AvatarImage(props: ComponentProps<typeof ImagePrimitive.Img>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
-    <AvatarPrimitive.Image
+    <ImagePrimitive.Img
       data-slot="avatar-image"
-      className={cn('aspect-square size-full', className)}
-      {...props}
+      class={cn('aspect-square size-full', local.class)}
+      {...rest}
     />
   )
 }
 
-function AvatarFallback({
-  className,
-  ...props
-}: React.ComponentProps<typeof AvatarPrimitive.Fallback>) {
+function AvatarFallback(props: ComponentProps<typeof ImagePrimitive.Fallback>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
-    <AvatarPrimitive.Fallback
+    <ImagePrimitive.Fallback
       data-slot="avatar-fallback"
-      className={cn(
+      class={cn(
         'flex size-full items-center justify-center rounded-full bg-muted text-sm text-muted-foreground group-data-[size=sm]/avatar:text-xs',
-        className
+        local.class
       )}
-      {...props}
+      {...rest}
     />
   )
 }
 
-function AvatarBadge({ className, ...props }: React.ComponentProps<'span'>) {
+function AvatarBadge(props: JSX.HTMLAttributes<HTMLSpanElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <span
       data-slot="avatar-badge"
-      className={cn(
+      class={cn(
         'absolute right-0 bottom-0 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-background select-none',
         'group-data-[size=sm]/avatar:size-2 group-data-[size=sm]/avatar:[&>svg]:hidden',
         'group-data-[size=default]/avatar:size-2.5 group-data-[size=default]/avatar:[&>svg]:size-2',
         'group-data-[size=lg]/avatar:size-3 group-data-[size=lg]/avatar:[&>svg]:size-2',
-        className
+        local.class
       )}
-      {...props}
+      {...rest}
     />
   )
 }
 
-function AvatarGroup({ className, ...props }: React.ComponentProps<'div'>) {
+function AvatarGroup(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <div
       data-slot="avatar-group"
-      className={cn(
+      class={cn(
         'group/avatar-group flex -space-x-2 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background',
-        className
+        local.class
       )}
-      {...props}
+      {...rest}
     />
   )
 }
 
-function AvatarGroupCount({ className, ...props }: React.ComponentProps<'div'>) {
+function AvatarGroupCount(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <div
       data-slot="avatar-group-count"
-      className={cn(
+      class={cn(
         'relative flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm text-muted-foreground ring-2 ring-background group-has-data-[size=lg]/avatar-group:size-10 group-has-data-[size=sm]/avatar-group:size-6 [&>svg]:size-4 group-has-data-[size=lg]/avatar-group:[&>svg]:size-5 group-has-data-[size=sm]/avatar-group:[&>svg]:size-3',
-        className
+        local.class
       )}
-      {...props}
+      {...rest}
     />
   )
 }

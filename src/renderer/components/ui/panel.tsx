@@ -1,94 +1,91 @@
-import type * as React from 'react'
-
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { type JSX, Show, splitProps } from 'solid-js'
 import { cn } from '@/lib/utils'
+import { ScrollArea } from './scroll-area'
 
-function Panel({ className, ...props }: React.ComponentProps<'section'>) {
+function Panel(props: JSX.HTMLAttributes<HTMLElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <section
       data-slot="panel"
-      className={cn(
+      class={cn(
         'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-card',
-        className
+        local.class
       )}
-      {...props}
+      {...rest}
     />
   )
 }
 
-function PanelHeader({ className, ...props }: React.ComponentProps<'header'>) {
+function PanelHeader(props: JSX.HTMLAttributes<HTMLElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <header
       data-slot="panel-header"
-      className={cn(
-        'flex h-9 shrink-0 items-center justify-between gap-2 border-b px-3',
-        className
-      )}
-      {...props}
+      class={cn('flex h-9 shrink-0 items-center justify-between gap-2 border-b px-3', local.class)}
+      {...rest}
     />
   )
 }
 
-function PanelHeaderGroup({ className, ...props }: React.ComponentProps<'div'>) {
+function PanelHeaderGroup(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <div
       data-slot="panel-header-group"
-      className={cn('flex min-w-0 items-baseline gap-2', className)}
-      {...props}
+      class={cn('flex min-w-0 items-baseline gap-2', local.class)}
+      {...rest}
     />
   )
 }
 
-function PanelTitle({ className, ...props }: React.ComponentProps<'h2'>) {
+function PanelTitle(props: JSX.HTMLAttributes<HTMLHeadingElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <h2
       data-slot="panel-title"
-      className={cn('text-xs font-semibold uppercase tracking-wider', className)}
-      {...props}
+      class={cn('text-xs font-semibold uppercase tracking-wider', local.class)}
+      {...rest}
     />
   )
 }
 
-function PanelSubtitle({ className, ...props }: React.ComponentProps<'span'>) {
+function PanelSubtitle(props: JSX.HTMLAttributes<HTMLSpanElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <span
       data-slot="panel-subtitle"
-      className={cn('truncate text-xs text-muted-foreground', className)}
-      {...props}
+      class={cn('truncate text-xs text-muted-foreground', local.class)}
+      {...rest}
     />
   )
 }
 
-function PanelActions({ className, ...props }: React.ComponentProps<'div'>) {
+function PanelActions(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <div
       data-slot="panel-actions"
-      className={cn('flex shrink-0 items-center gap-2', className)}
-      {...props}
+      class={cn('flex shrink-0 items-center gap-2', local.class)}
+      {...rest}
     />
   )
 }
 
-interface PanelBodyProps extends React.ComponentProps<'div'> {
-  scroll?: boolean
-}
-
-function PanelBody({ className, scroll = false, children, ...props }: PanelBodyProps) {
-  if (scroll) {
-    return (
-      <ScrollArea
-        data-slot="panel-body"
-        className={cn('flex-1 min-h-0', className)}
-        {...(props as React.ComponentProps<typeof ScrollArea>)}
-      >
-        {children}
-      </ScrollArea>
-    )
-  }
+function PanelBody(props: JSX.HTMLAttributes<HTMLDivElement> & { scroll?: boolean }) {
+  const [local, rest] = splitProps(props, ['class', 'scroll', 'children'])
   return (
-    <div data-slot="panel-body" className={cn('min-h-0 flex-1', className)} {...props}>
-      {children}
-    </div>
+    <Show
+      when={local.scroll}
+      fallback={
+        <div data-slot="panel-body" class={cn('min-h-0 flex-1', local.class)} {...rest}>
+          {local.children}
+        </div>
+      }
+    >
+      <ScrollArea data-slot="panel-body" class={cn('flex-1 min-h-0', local.class)} {...rest}>
+        {local.children}
+      </ScrollArea>
+    </Show>
   )
 }
 

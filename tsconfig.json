@@ -9,11 +9,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    "jsxImportSource": "solid-js",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/renderer/*"],
@@ -28,5 +29,6 @@
     "src/test/**/*",
     "vitest.config.ts",
     "playwright.config.ts"
-  ]
+  ],
+  "exclude": []
 }

@@ -1,4 +1,5 @@
-import { Cloud } from 'lucide-react'
+import { CloudIcon } from 'lucide-solid'
+import { Show } from 'solid-js'
 import azureSvg from '@/assets/providers/azure.svg?raw'
 import bitbucketSvg from '@/assets/providers/bitbucket.svg?raw'
 import codebergSvg from '@/assets/providers/codeberg.svg?raw'
@@ -23,27 +24,33 @@ const PROVIDERS: Record<Provider, { svg: string; label: string; style: Style }> 
 
 interface RemoteProviderIconProps {
   url: string | undefined
-  className?: string
+  class?: string
 }
 
-export function RemoteProviderIcon({ url, className }: RemoteProviderIconProps) {
-  const provider = detectProvider(url)
-  if (!provider) {
-    return <Cloud aria-label="remote" className={cn('shrink-0', className)} />
+export function RemoteProviderIcon(props: RemoteProviderIconProps) {
+  const provider = () => detectProvider(props.url)
+  const entry = () => {
+    const detected = provider()
+    return detected ? PROVIDERS[detected] : null
   }
-  const { svg, label, style } = PROVIDERS[provider]
   return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className={cn(
-        'inline-flex shrink-0 [&_svg]:size-full',
-        style === 'mono' && '[&_path]:fill-current',
-        className
+    <Show
+      when={entry()}
+      fallback={<CloudIcon aria-label="remote" class={cn('shrink-0', props.class)} />}
+    >
+      {(resolved) => (
+        <span
+          role="img"
+          aria-label={resolved().label}
+          title={resolved().label}
+          class={cn(
+            'inline-flex shrink-0 [&_svg]:size-full',
+            resolved().style === 'mono' && '[&_path]:fill-current',
+            props.class
+          )}
+          innerHTML={resolved().svg}
+        />
       )}
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: SVG imported as raw build-asset string, not user input
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    </Show>
   )
 }

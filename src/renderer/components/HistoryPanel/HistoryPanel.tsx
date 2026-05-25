@@ -1,9 +1,5 @@
-import { GitCommitHorizontal } from 'lucide-react'
-import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react'
-import { EmptyState } from '@/components/ui/empty-state'
-import { Panel } from '@/components/ui/panel'
-import { useThemeNonce } from '@/hooks/useThemeNonce'
-import { useVirtualList } from '@/hooks/useVirtualList'
+import { GitCommitHorizontalIcon } from 'lucide-solid'
+import { createMemo, createSignal, For, Show } from 'solid-js'
 import {
   computeRowRailWidth,
   COL_W as GRAPH_COL_W,
@@ -13,7 +9,11 @@ import {
 } from '@/lib/git-graph/canvas'
 import { type LayoutResult, layoutCommits } from '@/lib/git-graph/layout'
 import type { GitLog, GitLogEntry } from '@/types'
-import { CommitGraphCanvas, type CommitGraphCanvasHandle } from './CommitGraphCanvas'
+import { useThemeNonce } from '../../hooks/useThemeNonce'
+import { useVirtualList } from '../../hooks/useVirtualList'
+import { EmptyState } from '../ui/empty-state'
+import { Panel } from '../ui/panel'
+import { CommitGraphCanvas } from './CommitGraphCanvas'
 import { CommitRow } from './CommitRow'
 import { HistoryHeader } from './HistoryHeader'
 import { SkeletonRows } from './SkeletonRows'
@@ -30,167 +30,163 @@ const COL_AUTHOR_REM = 12
 const COL_SHA_REM = 4.5
 const COL_DATE_REM = 6.5
 
-export function HistoryPanel({ log, loading, remotes = {}, currentBranch }: HistoryPanelProps) {
-  const [filter, setFilter] = useState('')
-  const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
+export function HistoryPanel(props: HistoryPanelProps) {
+  const [filter, setFilter] = createSignal('')
+  const remotes = () => props.remotes ?? {}
+  const remoteNames = createMemo(() => new Set(Object.keys(remotes())))
 
-  const deferredLog = useDeferredValue(log)
-  const deferredFilter = useDeferredValue(filter)
-  const commits: GitLogEntry[] = deferredLog?.all ?? []
+  const commits = createMemo<GitLogEntry[]>(() => props.log?.all ?? [])
 
-  const onBranchSet = useMemo(
-    () => computeOnBranchSet(commits, remoteNames, currentBranch),
-    [commits, remoteNames, currentBranch]
+  const onBranchSet = createMemo(() =>
+    computeOnBranchSet(commits(), remoteNames(), props.currentBranch)
   )
 
-  const layoutCacheRef = useRef<LayoutResult | null>(null)
-  const { rows } = useMemo(() => {
-    const result = layoutCommits(commits, layoutCacheRef.current ?? undefined)
-    layoutCacheRef.current = result
+  let layoutCache: LayoutResult | null = null
+  const layout = createMemo(() => {
+    const result = layoutCommits(commits(), layoutCache ?? undefined)
+    layoutCache = result
     return result
-  }, [commits])
+  })
+  const rows = () => layout().rows
 
-  const visibleSet = useMemo(
-    () => computeVisibleSet(deferredFilter, commits),
-    [deferredFilter, commits]
-  )
+  const visibleSet = createMemo(() => computeVisibleSet(filter(), commits()))
 
-  const canvasHandleRef = useRef<CommitGraphCanvasHandle>(null)
-  const onScrollFrame = useCallback(() => {
-    canvasHandleRef.current?.redraw()
-  }, [])
-
-  const { scrollRef, onScroll, viewportHeight, startIndex, endIndex, totalHeight, scrollTop } =
+  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>()
+  const { setScrollRef, onScroll, viewportHeight, startIndex, endIndex, totalHeight, scrollTop } =
     useVirtualList({
-      rowCount: rows.length,
+      rowCount: () => rows().length,
       rowHeight: ROW_H,
-      overscan: OVERSCAN,
-      onScrollFrame
+      overscan: OVERSCAN
     })
+  const attachScroll = (element: HTMLDivElement) => {
+    setScrollEl(element)
+    setScrollRef(element)
+  }
 
-  const localMaxLanes = useMemo(() => {
+  const localMaxLanes = createMemo(() => {
     let max = 0
-    for (let i = startIndex; i < endIndex; i++) {
-      const row = rows[i]
+    const currentRows = rows()
+    for (let i = startIndex(); i < endIndex(); i++) {
+      const row = currentRows[i]
       if (!row) continue
       const candidate = Math.max(row.incoming.length, row.outgoing.length, row.commitLane + 1)
       if (candidate > max) max = candidate
     }
     return max
-  }, [rows, startIndex, endIndex])
-  const railWidth = Math.max(28, RAIL_PAD * 2 + Math.max(localMaxLanes - 1, 0) * GRAPH_COL_W)
+  })
+  const railWidth = () =>
+    Math.max(28, RAIL_PAD * 2 + Math.max(localMaxLanes() - 1, 0) * GRAPH_COL_W)
 
   const themeNonce = useThemeNonce()
 
   const gridTemplate = `minmax(0,1fr) ${COL_AUTHOR_REM}rem ${COL_SHA_REM}rem ${COL_DATE_REM}rem`
 
+  const visibleRows = createMemo(() => rows().slice(startIndex(), endIndex()))
+
   return (
-    <Panel className="h-full">
+    <Panel class="h-full">
       <HistoryHeader
-        total={log?.total}
-        loading={loading}
-        filter={filter}
+        total={props.log?.total}
+        loading={props.loading}
+        filter={filter()}
         onFilterChange={setFilter}
-        showFilter={commits.length > 0}
+        showFilter={commits().length > 0}
       />
 
-      {commits.length > 0 && (
+      <Show when={commits().length > 0}>
         <div
-          className="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-          style={{ gridTemplateColumns: gridTemplate }}
+          class="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+          style={{ 'grid-template-columns': gridTemplate }}
         >
-          <span className="pl-3">Subject</span>
+          <span class="pl-3">Subject</span>
           <span>Author</span>
           <span>SHA</span>
-          <span className="pr-3 text-right">Date</span>
+          <span class="pr-3 text-right">Date</span>
         </div>
-      )}
+      </Show>
 
       <div
-        ref={scrollRef}
+        ref={attachScroll}
         onScroll={onScroll}
-        className="min-h-0 flex-1 overflow-auto"
+        class="min-h-0 flex-1 overflow-auto"
         data-testid="history-scroll"
       >
-        {!log || commits.length === 0 ? (
-          loading ? (
-            <SkeletonRows gridTemplate={gridTemplate} viewportHeight={viewportHeight} />
-          ) : (
-            <HistoryEmptyState />
-          )
-        ) : (
+        <Show
+          when={props.log && commits().length > 0}
+          fallback={
+            <Show when={props.loading} fallback={<HistoryEmptyState />}>
+              <SkeletonRows gridTemplate={gridTemplate} viewportHeight={viewportHeight()} />
+            </Show>
+          }
+        >
           <div
-            className="relative"
-            style={
-              {
-                height: totalHeight,
-                '--row-cols': gridTemplate
-              } as React.CSSProperties
-            }
+            class="relative"
+            style={{ height: `${totalHeight()}px`, '--row-cols': gridTemplate }}
           >
-            {loading && (
+            <Show when={props.loading}>
               <LoadingOverlay
-                totalHeight={totalHeight}
-                scrollTop={scrollTop}
-                viewportHeight={viewportHeight}
+                totalHeight={totalHeight()}
+                scrollTop={scrollTop()}
+                viewportHeight={viewportHeight()}
                 gridTemplate={gridTemplate}
               />
-            )}
+            </Show>
 
             <CommitGraphCanvas
-              ref={canvasHandleRef}
-              rows={rows}
-              scrollContainerRef={scrollRef}
-              viewportHeight={viewportHeight}
-              visibleSet={visibleSet}
-              railWidth={railWidth}
-              themeNonce={themeNonce}
+              rows={rows()}
+              scrollContainer={scrollEl}
+              viewportHeight={viewportHeight()}
+              visibleSet={visibleSet()}
+              railWidth={railWidth()}
+              themeNonce={themeNonce()}
+              scrollTop={scrollTop()}
             />
 
-            {rows.slice(startIndex, endIndex).map((row, idx) => {
-              const i = startIndex + idx
-              const dim = !!(visibleSet && !visibleSet.has(row.commit.hash))
-              const offBranch = !!(onBranchSet && !onBranchSet.has(row.commit.hash))
-              return (
+            <For each={visibleRows()}>
+              {(row, idx) => (
                 <CommitRow
-                  key={row.commit.hash}
                   row={row}
-                  index={i}
-                  dim={dim}
-                  offBranch={offBranch}
+                  index={startIndex() + idx()}
+                  dim={!!(visibleSet() && !visibleSet()?.has(row.commit.hash))}
+                  offBranch={!!(onBranchSet() && !onBranchSet()?.has(row.commit.hash))}
                   rowRailWidth={computeRowRailWidth(row)}
-                  remotes={remotes}
-                  remoteNames={remoteNames}
+                  remotes={remotes()}
+                  remoteNames={remoteNames()}
                 />
-              )
-            })}
+              )}
+            </For>
           </div>
-        )}
+        </Show>
       </div>
     </Panel>
   )
 }
 
-function LoadingOverlay({
-  totalHeight,
-  scrollTop,
-  viewportHeight,
-  gridTemplate
-}: {
+interface LoadingOverlayProps {
   totalHeight: number
   scrollTop: number
   viewportHeight: number
   gridTemplate: string
-}) {
-  const visibleBelow = Math.max(0, totalHeight - scrollTop)
-  const overlayHeight = Math.min(viewportHeight, visibleBelow)
-  if (overlayHeight <= 0) return null
+}
+
+function LoadingOverlay(props: LoadingOverlayProps) {
+  const visibleBelow = () => Math.max(0, props.totalHeight - props.scrollTop)
+  const overlayHeight = () => Math.min(props.viewportHeight, visibleBelow())
   return (
-    <div className="pointer-events-none sticky top-0 z-0" style={{ height: 0 }} aria-hidden>
-      <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: overlayHeight }}>
-        <SkeletonRows gridTemplate={gridTemplate} viewportHeight={overlayHeight} />
+    <Show when={overlayHeight() > 0}>
+      <div
+        class="pointer-events-none sticky top-0 z-0"
+        style={{ height: '0px' }}
+        aria-hidden="true"
+      >
+        <div
+          class="absolute inset-x-0 top-0 overflow-hidden"
+          style={{ height: `${overlayHeight()}px` }}
+        >
+          <SkeletonRows gridTemplate={props.gridTemplate} viewportHeight={overlayHeight()} />
+        </div>
       </div>
-    </div>
+    </Show>
   )
 }
 
@@ -198,7 +194,7 @@ function HistoryEmptyState() {
   return (
     <EmptyState
       size="sm"
-      icon={GitCommitHorizontal}
+      icon={GitCommitHorizontalIcon}
       title="No commits yet"
       description="Make your first commit to populate the timeline."
     />

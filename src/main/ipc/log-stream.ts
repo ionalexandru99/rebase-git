@@ -1,10 +1,9 @@
 import { spawn } from 'node:child_process'
 import { encodeOrThrow } from '@shared/codec'
-import type { LogChunk } from '@shared/schemas/git'
+import { normalizeRepoPath } from '@shared/repo-path'
+import type { GitLogEntry, LogChunk } from '@shared/schemas/git'
 import { CancelLogStreamResponse, Channel, StartLogStreamResponse } from '@shared/schemas/ipc'
 import { ipcMain, webContents as webContentsApi } from 'electron'
-import { normalizeRepoPath } from '../git/instances'
-import type { SerializableLogEntry } from '../git/serialize'
 
 const FS_SEP = '\x1F'
 const RS_SEP = '\x00'
@@ -99,7 +98,7 @@ export function register(): void {
       finishOk()
 
       let buffer = ''
-      let batch: SerializableLogEntry[] = []
+      let batch: GitLogEntry[] = []
 
       const send = (done: boolean) => {
         if (webContents.isDestroyed()) return

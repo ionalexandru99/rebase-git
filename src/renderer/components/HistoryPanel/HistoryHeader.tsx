@@ -1,12 +1,7 @@
-import { Input } from '@/components/ui/input'
-import { LoadingBadge } from '@/components/ui/loading-badge'
-import {
-  PanelActions,
-  PanelHeader,
-  PanelHeaderGroup,
-  PanelSubtitle,
-  PanelTitle
-} from '@/components/ui/panel'
+import { Show } from 'solid-js'
+import { Input } from '../ui/input'
+import { LoadingBadge } from '../ui/loading-badge'
+import { PanelActions, PanelHeader, PanelHeaderGroup, PanelSubtitle, PanelTitle } from '../ui/panel'
 
 interface HistoryHeaderProps {
   total?: number
@@ -16,34 +11,30 @@ interface HistoryHeaderProps {
   showFilter: boolean
 }
 
-export function HistoryHeader({
-  total,
-  loading,
-  filter,
-  onFilterChange,
-  showFilter
-}: HistoryHeaderProps) {
+export function HistoryHeader(props: HistoryHeaderProps) {
   return (
-    <PanelHeader className="gap-3">
+    <PanelHeader class="gap-3">
       <PanelHeaderGroup>
-        <PanelTitle className="text-foreground">Timeline</PanelTitle>
+        <PanelTitle class="text-foreground">Timeline</PanelTitle>
         <PanelSubtitle>
-          {total
-            ? `${total} commit${total === 1 ? '' : 's'} · all branches`
+          {props.total
+            ? `${props.total} commit${props.total === 1 ? '' : 's'} · all branches`
             : 'Repository timeline'}
         </PanelSubtitle>
       </PanelHeaderGroup>
 
       <PanelActions>
-        {showFilter && (
+        <Show when={props.showFilter}>
           <Input
-            value={filter}
-            onChange={(event) => onFilterChange(event.target.value)}
+            value={props.filter}
+            onInput={(event) => props.onFilterChange(event.currentTarget.value)}
             placeholder="filter commits…"
-            className="h-7 w-40"
+            class="h-7 w-40"
           />
-        )}
-        {loading && <LoadingBadge />}
+        </Show>
+        <Show when={props.loading}>
+          <LoadingBadge />
+        </Show>
       </PanelActions>
     </PanelHeader>
   )

@@ -1,26 +1,27 @@
-import type * as React from 'react'
+import { type JSX, Show } from 'solid-js'
 
 interface FileSectionProps {
   label: string
   count: number
   emptyText?: string
-  children?: React.ReactNode
+  children?: JSX.Element
 }
 
-export function FileSection({ label, count, emptyText, children }: FileSectionProps) {
+export function FileSection(props: FileSectionProps) {
   return (
     <>
-      <div className="mt-3 mb-1 flex items-center justify-between px-2 first:mt-0">
-        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          {label}
+      <div class="mt-3 mb-1 flex items-center justify-between px-2 first:mt-0">
+        <span class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          {props.label}
         </span>
-        <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+        <span class="text-xs tabular-nums text-muted-foreground">{props.count}</span>
       </div>
-      {count === 0 && emptyText ? (
-        <p className="px-2 py-1.5 text-sm italic text-muted-foreground">{emptyText}</p>
-      ) : (
-        <ul className="space-y-px">{children}</ul>
-      )}
+      <Show
+        when={!(props.count === 0 && props.emptyText)}
+        fallback={<p class="px-2 py-1.5 text-sm italic text-muted-foreground">{props.emptyText}</p>}
+      >
+        <ul class="space-y-px">{props.children}</ul>
+      </Show>
     </>
   )
 }

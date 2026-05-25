@@ -1,6 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority'
-import type * as React from 'react'
-
+import { type JSX, splitProps } from 'solid-js'
 import { cn } from '@/lib/utils'
 
 const alertVariants = cva(
@@ -19,40 +18,39 @@ const alertVariants = cva(
   }
 )
 
-function Alert({
-  className,
-  variant,
-  ...props
-}: React.ComponentProps<'div'> & VariantProps<typeof alertVariants>) {
+function Alert(props: JSX.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>) {
+  const [local, rest] = splitProps(props, ['class', 'variant'])
   return (
     <div
       data-slot="alert"
       role="alert"
-      className={cn(alertVariants({ variant }), className)}
-      {...props}
+      class={cn(alertVariants({ variant: local.variant }), local.class)}
+      {...rest}
     />
   )
 }
 
-function AlertTitle({ className, ...props }: React.ComponentProps<'div'>) {
+function AlertTitle(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <div
       data-slot="alert-title"
-      className={cn('col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight', className)}
-      {...props}
+      class={cn('col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight', local.class)}
+      {...rest}
     />
   )
 }
 
-function AlertDescription({ className, ...props }: React.ComponentProps<'div'>) {
+function AlertDescription(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <div
       data-slot="alert-description"
-      className={cn(
+      class={cn(
         'col-start-2 grid justify-items-start gap-1 text-sm text-muted-foreground [&_p]:leading-relaxed',
-        className
+        local.class
       )}
-      {...props}
+      {...rest}
     />
   )
 }

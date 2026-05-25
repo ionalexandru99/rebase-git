@@ -1,12 +1,8 @@
-import { GitBranch, Plus, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { GitBranchIcon, PlusIcon, XIcon } from 'lucide-solid'
+import { For } from 'solid-js'
 import { cn } from '@/lib/utils'
-
-export interface TabDescriptor {
-  id: string
-  title: string
-  hasRepo: boolean
-}
+import type { TabDescriptor } from '../hooks/useTabs'
+import { Button } from './ui/button'
 
 interface TabBarProps {
   tabs: TabDescriptor[]
@@ -16,48 +12,49 @@ interface TabBarProps {
   onNew: () => void
 }
 
-export function TabBar({ tabs, activeTabId, onSelect, onClose, onNew }: TabBarProps) {
+export function TabBar(props: TabBarProps) {
   return (
-    <div className="drag-region relative flex h-11 shrink-0 items-end bg-muted pl-1 pr-1 dark:bg-background">
+    <div class="drag-region relative flex h-11 shrink-0 items-end bg-muted pl-1 pr-1 dark:bg-background">
       <BrandTitle />
 
-      <div role="tablist" className="no-drag flex min-w-0 items-end gap-0.5 overflow-x-auto">
-        {tabs.map((tab) => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            isActive={tab.id === activeTabId}
-            onSelect={() => onSelect(tab.id)}
-            onClose={() => onClose(tab.id)}
-          />
-        ))}
-        <NewTabButton onClick={onNew} />
+      <div role="tablist" class="no-drag flex min-w-0 items-end gap-0.5 overflow-x-auto">
+        <For each={props.tabs}>
+          {(tab) => (
+            <TabItem
+              tab={tab}
+              isActive={tab.id === props.activeTabId}
+              onSelect={() => props.onSelect(tab.id)}
+              onClose={() => props.onClose(tab.id)}
+            />
+          )}
+        </For>
+        <NewTabButton onClick={() => props.onNew()} />
       </div>
 
-      <div className="drag-region min-w-4 flex-1" />
+      <div class="drag-region min-w-4 flex-1" />
     </div>
   )
 }
 
 function BrandTitle() {
   return (
-    <div className="flex shrink-0 items-center gap-2 pb-2.5 pl-3 pr-4">
-      <span className="text-sm font-semibold tracking-tight">Rebase</span>
+    <div class="flex shrink-0 items-center gap-2 pb-2.5 pl-3 pr-4">
+      <span class="text-sm font-semibold tracking-tight">Rebase</span>
     </div>
   )
 }
 
-function NewTabButton({ onClick }: { onClick: () => void }) {
+function NewTabButton(props: { onClick: () => void }) {
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon-sm"
-      onClick={onClick}
+      onClick={() => props.onClick()}
       aria-label="Open new tab"
-      className="no-drag mx-1 mb-1.5 size-7 rounded-full text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+      class="no-drag mx-1 mb-1.5 size-7 rounded-full text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
     >
-      <Plus />
+      <PlusIcon />
     </Button>
   )
 }
@@ -69,12 +66,12 @@ interface TabItemProps {
   onClose: () => void
 }
 
-function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
+function TabItem(props: TabItemProps) {
   return (
     <div
-      className={cn(
+      class={cn(
         'group relative flex h-9 min-w-44 max-w-64 items-center gap-2 rounded-t-lg pl-3 pr-1.5 transition-colors',
-        isActive
+        props.isActive
           ? 'z-10 bg-background text-foreground dark:bg-muted'
           : 'text-muted-foreground hover:bg-foreground/10 hover:text-foreground'
       )}
@@ -82,38 +79,40 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
       <button
         type="button"
         role="tab"
-        aria-selected={isActive}
-        tabIndex={isActive ? 0 : -1}
-        onClick={onSelect}
-        onAuxClick={(e) => {
-          if (e.button === 1) {
-            e.preventDefault()
-            onClose()
+        aria-selected={props.isActive}
+        tabindex={props.isActive ? 0 : -1}
+        onClick={() => props.onSelect()}
+        onAuxClick={(event) => {
+          if (event.button === 1) {
+            event.preventDefault()
+            props.onClose()
           }
         }}
-        className="flex min-w-0 flex-1 items-center gap-2 border-none bg-transparent py-0 text-left text-sm"
+        class="flex min-w-0 flex-1 items-center gap-2 border-none bg-transparent py-0 text-left text-sm"
       >
-        <GitBranch
-          className={cn(
+        <GitBranchIcon
+          class={cn(
             'size-3.5 shrink-0 transition-colors',
-            isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+            props.isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
           )}
-          strokeWidth={2}
+          stroke-width={2}
         />
-        <span className={cn('truncate', tab.hasRepo ? 'font-medium' : 'italic')}>{tab.title}</span>
+        <span class={cn('truncate', props.tab.hasRepo ? 'font-medium' : 'italic')}>
+          {props.tab.title}
+        </span>
       </button>
       <Button
         type="button"
         variant="ghost"
         size="icon-xs"
-        onClick={onClose}
-        aria-label={`Close tab ${tab.title}`}
-        className={cn(
+        onClick={() => props.onClose()}
+        aria-label={`Close tab ${props.tab.title}`}
+        class={cn(
           'rounded-full hover:bg-foreground/15',
-          !isActive && 'opacity-0 group-hover:opacity-100'
+          !props.isActive && 'opacity-0 group-hover:opacity-100'
         )}
       >
-        <X />
+        <XIcon />
       </Button>
     </div>
   )

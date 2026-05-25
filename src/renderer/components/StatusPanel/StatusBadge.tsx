@@ -1,5 +1,5 @@
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { Badge } from '../ui/badge'
 
 export type StatusKind =
   | 'modified'
@@ -29,14 +29,14 @@ interface StatusBadgeProps {
   kind: StatusKind
 }
 
-export function StatusBadge({ kind }: StatusBadgeProps) {
+export function StatusBadge(props: StatusBadgeProps) {
   return (
     <Badge
       variant="outline"
-      aria-label={kind}
-      className={cn('px-1.5 font-mono text-xs uppercase', kindClass(kind))}
+      aria-label={props.kind}
+      class={cn('px-1.5 text-xs uppercase', kindClass(props.kind))}
     >
-      {glyphs[kind]}
+      {glyphs[props.kind]}
     </Badge>
   )
 }

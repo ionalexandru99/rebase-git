@@ -1,4 +1,7 @@
 import { Deferred, Effect } from 'effect'
+import { hasCachedData, readSnapshot, writeSnapshot } from '@/lib/git-cache'
+import type { GitClient } from '@/lib/git-client'
+import type { GitStatus } from '@/types'
 import * as api from './api'
 import type { GitSetters } from './types'
 
@@ -8,18 +11,41 @@ const formatCause = (error: unknown): string => {
   return String(error)
 }
 
+const withoutFile = (files: string[], file: string): string[] => files.filter((f) => f !== file)
+const withFile = (files: string[], file: string): string[] =>
+  files.includes(file) ? files : [...files, file]
+
+const applyStage = (status: GitStatus, file: string): GitStatus => ({
+  ...status,
+  staged: withFile(status.staged, file),
+  modified: withoutFile(status.modified, file),
+  not_added: withoutFile(status.not_added, file),
+  created: withoutFile(status.created, file),
+  deleted: withoutFile(status.deleted, file)
+})
+
+const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
+  ...status,
+  staged: withoutFile(status.staged, file),
+  modified: withFile(status.modified, file)
+})
+
 const loadStatus = (path: string, setters: GitSetters) =>
   Effect.gen(function* () {
     const response = yield* api.getStatus(path)
-    yield* Effect.sync(() => {
-      if (response._tag === 'Ok') {
+    if (response._tag === 'Ok') {
+      yield* writeSnapshot(path, {
+        status: response.status,
+        currentBranch: response.status.current
+      })
+      yield* Effect.sync(() => {
         setters.setStatus(response.status)
         setters.setCurrentBranch(response.status.current)
-      } else if (response._tag === 'GitError') {
-        console.error('[useGit] get-status failed', { path, error: response.message })
-        setters.setError(response.message)
-      }
-    })
+      })
+    } else if (response._tag === 'GitError') {
+      console.error('[useGit] get-status failed', { path, error: response.message })
+      yield* Effect.sync(() => setters.setError(response.message))
+    }
   }).pipe(
     Effect.catchAll((error) =>
       Effect.sync(() => {
@@ -33,15 +59,16 @@ const loadStatus = (path: string, setters: GitSetters) =>
 const loadBranches = (path: string, setters: GitSetters) =>
   Effect.gen(function* () {
     const response = yield* api.getBranches(path)
-    yield* Effect.sync(() => {
-      if (response._tag === 'Ok') {
+    if (response._tag === 'Ok') {
+      yield* writeSnapshot(path, { branches: response.branches })
+      yield* Effect.sync(() => {
         setters.setBranches(response.branches)
         setters.setCurrentBranch((prev) => prev || response.branches.current || '')
-      } else if (response._tag === 'GitError') {
-        console.error('[useGit] get-branches failed', { path, error: response.message })
-        setters.setError(response.message)
-      }
-    })
+      })
+    } else if (response._tag === 'GitError') {
+      console.error('[useGit] get-branches failed', { path, error: response.message })
+      yield* Effect.sync(() => setters.setError(response.message))
+    }
   }).pipe(
     Effect.catchAll((error) =>
       Effect.sync(() => {
@@ -52,24 +79,36 @@ const loadBranches = (path: string, setters: GitSetters) =>
     Effect.ensuring(Effect.sync(() => setters.setBranchesLoading(false)))
   )
 
+const refreshLog = (path: string, setters: GitSetters) =>
+  Effect.gen(function* () {
+    const response = yield* api.getLog(path)
+    if (response._tag === 'Ok') {
+      yield* writeSnapshot(path, { log: response.log })
+      yield* Effect.sync(() => setters.setLog(response.log))
+    }
+  }).pipe(
+    Effect.catchAll(() => Effect.sync(() => console.warn('[useGit] log refresh failed'))),
+    Effect.ensuring(Effect.sync(() => setters.setLogLoading(false)))
+  )
+
 export const silentRefreshRefs = (path: string, setters: GitSetters) =>
   Effect.gen(function* () {
     const branchesResponse = yield* api.getBranches(path)
-    yield* Effect.sync(() => {
-      if (branchesResponse._tag === 'Ok') {
+    if (branchesResponse._tag === 'Ok') {
+      yield* writeSnapshot(path, { branches: branchesResponse.branches })
+      yield* Effect.sync(() => {
         setters.setBranches(branchesResponse.branches)
         if (branchesResponse.branches.current) {
           setters.setCurrentBranch(branchesResponse.branches.current)
         }
-      }
-    })
+      })
+    }
 
     const logResponse = yield* api.getLog(path)
-    yield* Effect.sync(() => {
-      if (logResponse._tag === 'Ok') {
-        setters.setLog(logResponse.log)
-      }
-    })
+    if (logResponse._tag === 'Ok') {
+      yield* writeSnapshot(path, { log: logResponse.log })
+      yield* Effect.sync(() => setters.setLog(logResponse.log))
+    }
   }).pipe(
     Effect.catchAll(() =>
       Effect.sync(() => {
@@ -81,12 +120,16 @@ export const silentRefreshRefs = (path: string, setters: GitSetters) =>
 export const silentRefreshStatus = (path: string, setters: GitSetters) =>
   Effect.gen(function* () {
     const response = yield* api.getStatus(path)
-    yield* Effect.sync(() => {
-      if (response._tag === 'Ok') {
+    if (response._tag === 'Ok') {
+      yield* writeSnapshot(path, {
+        status: response.status,
+        currentBranch: response.status.current
+      })
+      yield* Effect.sync(() => {
         setters.setStatus(response.status)
         setters.setCurrentBranch(response.status.current)
-      }
-    })
+      })
+    }
   }).pipe(
     Effect.catchAll(() =>
       Effect.sync(() => {
@@ -145,11 +188,7 @@ export const openLifecycle = (
   Effect.gen(function* () {
     yield* Effect.sync(() => {
       setters.setOpening(true)
-      setters.setStatusLoading(true)
-      setters.setBranchesLoading(true)
       setters.setError(null)
-      setters.setStatus(null)
-      setters.setBranches(null)
     })
 
     const openResponse = yield* api.openRepo(path)
@@ -167,6 +206,12 @@ export const openLifecycle = (
     }
 
     const opened = openResponse.result
+    yield* writeSnapshot(opened.path, {
+      remotes: opened.remotes,
+      defaultBranch: opened.defaultBranch
+    })
+    const cached = yield* readSnapshot(opened.path)
+
     yield* Effect.sync(() => {
       setters.setRepoPath(opened.path)
       setters.setRemotes(opened.remotes)
@@ -174,6 +219,36 @@ export const openLifecycle = (
       setters.setOpening(false)
     })
 
+    if (hasCachedData(cached)) {
+      yield* Effect.sync(() => {
+        if (cached?.status) {
+          setters.setStatus(cached.status)
+          setters.setCurrentBranch(cached.status.current)
+        }
+        if (cached?.branches) setters.setBranches(cached.branches)
+        if (cached?.log) setters.setLog(cached.log)
+        setters.setStatusLoading(false)
+        setters.setBranchesLoading(false)
+        setters.setLogLoading(false)
+      })
+      yield* Deferred.succeed(initialOpenReady, undefined)
+      yield* Effect.all(
+        [
+          loadStatus(opened.path, setters),
+          loadBranches(opened.path, setters),
+          refreshLog(opened.path, setters)
+        ],
+        { concurrency: 'unbounded' }
+      )
+      return
+    }
+
+    yield* Effect.sync(() => {
+      setters.setStatusLoading(true)
+      setters.setBranchesLoading(true)
+      setters.setStatus(null)
+      setters.setBranches(null)
+    })
     yield* Effect.all(
       [
         restartLogStream(opened.path, setters),
@@ -220,22 +295,50 @@ export const commitProgram = (path: string, message: string, setters: GitSetters
     Effect.ensuring(Effect.sync(() => setters.setCommitting(false)))
   )
 
-export const stageProgram = (path: string, file: string, setters: GitSetters) =>
+const optimisticProgram = <Response extends { readonly _tag: string }>(
+  path: string,
+  file: string,
+  setters: GitSetters,
+  apply: (status: GitStatus, file: string) => GitStatus,
+  call: (path: string, file: string) => Effect.Effect<Response, Error, GitClient>
+) =>
   Effect.gen(function* () {
-    const response = yield* api.stageFile(path, file)
+    const cached = yield* readSnapshot(path)
+    const previous = cached?.status
+
+    if (previous) {
+      const optimistic = apply(previous, file)
+      yield* writeSnapshot(path, { status: optimistic })
+      yield* Effect.sync(() => setters.setStatus(optimistic))
+    }
+
+    const rollback = Effect.gen(function* () {
+      if (previous) {
+        yield* writeSnapshot(path, { status: previous })
+        yield* Effect.sync(() => setters.setStatus(previous))
+      }
+    })
+
+    const response = yield* call(path, file).pipe(
+      Effect.catchAll((error) =>
+        Effect.succeed({ _tag: 'GitError' as const, message: formatCause(error) })
+      )
+    )
+
     if (response._tag === 'Ok') {
       yield* silentRefreshStatus(path, setters)
-    } else if (response._tag === 'GitError') {
-      yield* Effect.sync(() => setters.setError(response.message))
+    } else {
+      const message =
+        'message' in response && typeof response.message === 'string'
+          ? response.message
+          : response._tag
+      yield* rollback
+      yield* Effect.sync(() => setters.setError(message))
     }
-  }).pipe(Effect.catchAll((error) => Effect.sync(() => setters.setError(formatCause(error)))))
+  })
+
+export const stageProgram = (path: string, file: string, setters: GitSetters) =>
+  optimisticProgram(path, file, setters, applyStage, api.stageFile)
 
 export const unstageProgram = (path: string, file: string, setters: GitSetters) =>
-  Effect.gen(function* () {
-    const response = yield* api.unstageFile(path, file)
-    if (response._tag === 'Ok') {
-      yield* silentRefreshStatus(path, setters)
-    } else if (response._tag === 'GitError') {
-      yield* Effect.sync(() => setters.setError(response.message))
-    }
-  }).pipe(Effect.catchAll((error) => Effect.sync(() => setters.setError(formatCause(error)))))
+  optimisticProgram(path, file, setters, applyUnstage, api.unstageFile)

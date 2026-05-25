@@ -43,6 +43,10 @@ function migrateLegacyWorkingDirectory(): void {
   }
 }
 
+export function getTheme(): 'dark' | 'light' {
+  return store.get('theme')
+}
+
 export function addRecentRepo(path: string): void {
   const recent = store.get('recentRepos')
   const filtered = recent.filter((r) => r !== path)
@@ -95,14 +99,6 @@ export function setActiveWorkspace(path: string | null): void {
   migrateLegacyWorkingDirectory()
   store.set('activeWorkspace', path)
   store.set('workingDirectory', path)
-}
-
-export function getWorkingDirectory(): string | null {
-  return getActiveWorkspace()
-}
-
-export function setWorkingDirectory(path: string): void {
-  addWorkspace(path)
 }
 
 export function isOnboardingComplete(): boolean {

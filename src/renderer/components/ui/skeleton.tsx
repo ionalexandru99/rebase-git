@@ -1,11 +1,13 @@
+import { type JSX, splitProps } from 'solid-js'
 import { cn } from '@/lib/utils'
 
-function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
+function Skeleton(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const [local, rest] = splitProps(props, ['class'])
   return (
     <div
       data-slot="skeleton"
-      className={cn('animate-pulse rounded-md bg-accent', className)}
-      {...props}
+      class={cn('animate-pulse rounded-md bg-accent', local.class)}
+      {...rest}
     />
   )
 }

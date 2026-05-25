@@ -6,7 +6,11 @@ export default defineConfig({
     name: 'main',
     environment: 'node',
     globals: true,
-    include: ['src/main/**/*.test.{ts,tsx}', 'src/shared/**/*.test.{ts,tsx}'],
+    include: [
+      'src/main/**/*.test.{ts,tsx}',
+      'src/sidecar/**/*.test.{ts,tsx}',
+      'src/shared/**/*.test.{ts,tsx}'
+    ],
   },
   resolve: {
     alias: {
