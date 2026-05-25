@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { encodeOrThrow } from '@shared/codec'
-import { resolveScanDirectory } from '@shared/repo-path'
 import {
   BranchesResponse,
   CheckoutResponse,
@@ -253,8 +252,9 @@ export async function fetchRepo(repoPath: string): Promise<typeof FetchResponse.
   return result.value
 }
 
-export async function scanForRepos(dirPath: string): Promise<typeof ScanForReposResponse.Encoded> {
-  const scanRoot = resolveScanDirectory(dirPath)
+export async function scanForRepos(
+  scanRoot: string | null
+): Promise<typeof ScanForReposResponse.Encoded> {
   if (!scanRoot) {
     return encodeOrThrow(ScanForReposResponse, {
       _tag: 'GitError',

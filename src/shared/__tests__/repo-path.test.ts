@@ -17,11 +17,15 @@ describe('resolveScanDirectory', () => {
   it('rejects parent-directory traversal segments', () => {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-scan-parent-'))
     try {
-      const traversal = path.join(parent, '..', path.basename(parent), '..', 'etc')
-      expect(resolveScanDirectory(traversal)).toBeNull()
+      expect(resolveScanDirectory(`${parent}/../../etc`)).toBeNull()
+      expect(resolveScanDirectory(`${parent}/child/../../etc`)).toBeNull()
     } finally {
       fs.rmSync(parent, { recursive: true, force: true })
     }
+  })
+
+  it('rejects relative paths', () => {
+    expect(resolveScanDirectory('relative/workspace')).toBeNull()
   })
 
   it('rejects empty paths and non-directories', () => {

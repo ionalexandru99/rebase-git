@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { resolveScanDirectory } from '@shared/repo-path'
 import * as operations from './operations'
 import { SidecarOp } from './protocol'
 
@@ -38,8 +39,10 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
         body.refKind as 'local' | 'remote' | 'tag',
         str(body, 'fullPath')
       )
-    case SidecarOp.scanForRepos:
-      return operations.scanForRepos(str(body, 'dirPath'))
+    case SidecarOp.scanForRepos: {
+      const scanRoot = resolveScanDirectory(str(body, 'dirPath'))
+      return operations.scanForRepos(scanRoot)
+    }
     default:
       return undefined
   }

@@ -9,15 +9,16 @@ export function normalizeRepoPath(repoPath: string): string {
   }
 }
 
+function hasParentSegment(dirPath: string): boolean {
+  return dirPath.split(/[/\\]/).includes('..')
+}
+
 export function resolveScanDirectory(dirPath: string): string | null {
-  if (!dirPath || dirPath.includes('\0')) return null
+  if (!dirPath || dirPath.includes('\0') || hasParentSegment(dirPath)) return null
+  if (!path.isAbsolute(dirPath)) return null
 
-  const normalizedInput = path.normalize(dirPath)
-  if (normalizedInput.split(path.sep).includes('..')) return null
-
-  const resolved = path.resolve(dirPath)
   try {
-    const canonical = fs.realpathSync.native(resolved)
+    const canonical = fs.realpathSync.native(dirPath)
     if (!fs.statSync(canonical).isDirectory()) return null
     return canonical
   } catch {

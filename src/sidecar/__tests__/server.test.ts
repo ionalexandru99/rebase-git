@@ -105,7 +105,7 @@ describe('sidecar server', () => {
   it('rejects scan-for-repos paths with parent traversal', async () => {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-scan-server-'))
     try {
-      const traversal = path.join(parent, '..', path.basename(parent), '..', 'etc')
+      const traversal = `${parent}/../..${path.sep}etc`
       const response = await call('scan-for-repos', { dirPath: traversal })
       const body = await response.json()
       expect(body._tag).toBe('GitError')
