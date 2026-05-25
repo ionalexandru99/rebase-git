@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type Accessor, createSignal, onCleanup } from 'solid-js'
 
 interface UseVirtualListOptions {
-  rowCount: number
+  rowCount: Accessor<number>
   rowHeight: number
   overscan?: number
   initialViewportHeight?: number
@@ -9,77 +9,55 @@ interface UseVirtualListOptions {
 }
 
 interface UseVirtualListResult {
-  scrollRef: React.RefObject<HTMLDivElement | null>
-  onScroll: (event: React.UIEvent<HTMLDivElement>) => void
-  scrollTop: number
-  viewportHeight: number
-  startIndex: number
-  endIndex: number
-  totalHeight: number
+  setScrollRef: (element: HTMLDivElement) => void
+  onScroll: (event: Event & { currentTarget: HTMLDivElement }) => void
+  scrollTop: Accessor<number>
+  viewportHeight: Accessor<number>
+  startIndex: Accessor<number>
+  endIndex: Accessor<number>
+  totalHeight: Accessor<number>
 }
 
-export function useVirtualList({
-  rowCount,
-  rowHeight,
-  overscan = 0,
-  initialViewportHeight,
-  onScrollFrame
-}: UseVirtualListOptions): UseVirtualListResult {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  const [viewportHeight, setViewportHeight] = useState<number>(() => {
-    if (typeof initialViewportHeight === 'number') return initialViewportHeight
-    if (typeof window !== 'undefined') return window.innerHeight
-    return 800
-  })
+export function useVirtualList(options: UseVirtualListOptions): UseVirtualListResult {
+  const [scrollTop, setScrollTop] = createSignal(0)
+  const [viewportHeight, setViewportHeight] = createSignal(
+    options.initialViewportHeight ?? (typeof window !== 'undefined' ? window.innerHeight : 800)
+  )
 
-  useLayoutEffect(() => {
-    const element = scrollRef.current
-    if (!element) return
+  let resizeObserver: ResizeObserver | undefined
+  const setScrollRef = (element: HTMLDivElement) => {
     const update = () => {
       if (element.clientHeight > 0) setViewportHeight(element.clientHeight)
     }
     update()
-    const ro = new ResizeObserver(update)
-    ro.observe(element)
-    return () => ro.disconnect()
-  }, [])
+    resizeObserver = new ResizeObserver(update)
+    resizeObserver.observe(element)
+  }
 
-  const rafRef = useRef<number | null>(null)
-  const frameRef = useRef(onScrollFrame)
-  frameRef.current = onScrollFrame
-
-  const onScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+  let raf: number | null = null
+  const onScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
     const target = event.currentTarget
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null
-      frameRef.current?.()
+    if (raf !== null) cancelAnimationFrame(raf)
+    raf = requestAnimationFrame(() => {
+      raf = null
+      options.onScrollFrame?.()
       setScrollTop(target.scrollTop)
     })
-  }, [])
-
-  useEffect(
-    () => () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
-    },
-    []
-  )
-
-  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
-  const endIndex = Math.min(
-    rowCount,
-    Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan
-  )
-  const totalHeight = rowCount * rowHeight
-
-  return {
-    scrollRef,
-    onScroll,
-    scrollTop,
-    viewportHeight,
-    startIndex,
-    endIndex,
-    totalHeight
   }
+
+  onCleanup(() => {
+    if (raf !== null) cancelAnimationFrame(raf)
+    resizeObserver?.disconnect()
+  })
+
+  const overscan = options.overscan ?? 0
+  const startIndex = () => Math.max(0, Math.floor(scrollTop() / options.rowHeight) - overscan)
+  const endIndex = () =>
+    Math.min(
+      options.rowCount(),
+      Math.ceil((scrollTop() + viewportHeight()) / options.rowHeight) + overscan
+    )
+  const totalHeight = () => options.rowCount() * options.rowHeight
+
+  return { setScrollRef, onScroll, scrollTop, viewportHeight, startIndex, endIndex, totalHeight }
 }

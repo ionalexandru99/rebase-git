@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@solidjs/testing-library'
 import { describe, expect, it, vi } from 'vitest'
-import { StatusPanel } from '@/components/StatusPanel'
 import type { GitStatus } from '@/types'
+import { StatusPanel } from '../StatusPanel'
 
 function emptyStatus(overrides: Partial<GitStatus> = {}): GitStatus {
   return {
@@ -23,20 +23,20 @@ function renderPanel(props: {
   onUnstage?: (file: string) => void
   loading?: boolean
 }) {
-  return render(
+  return render(() => (
     <StatusPanel
       status={props.status}
       onStage={props.onStage ?? vi.fn()}
       onUnstage={props.onUnstage ?? vi.fn()}
       loading={props.loading ?? false}
     />
-  )
+  ))
 }
 
 describe('StatusPanel', () => {
   it('renders nothing when status is null', () => {
-    const { container } = renderPanel({ status: null })
-    expect(container.firstChild).toBeNull()
+    renderPanel({ status: null })
+    expect(screen.queryByText('Working Directory')).not.toBeInTheDocument()
   })
 
   it('renders the section titles and counts when status has files', () => {

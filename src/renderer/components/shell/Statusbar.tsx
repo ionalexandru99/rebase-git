@@ -1,3 +1,5 @@
+import { Show } from 'solid-js'
+
 interface StatusbarProps {
   branch: string
   changes: number
@@ -5,28 +7,26 @@ interface StatusbarProps {
   lastFetch?: string
 }
 
-export function Statusbar({ branch, changes, directionLabel, lastFetch }: StatusbarProps) {
+export function Statusbar(props: StatusbarProps) {
   return (
-    <div className="flex h-7 shrink-0 items-center gap-3 border-t bg-background px-3 text-xs text-muted-foreground">
-      <span className="inline-flex items-center gap-1.5">
-        <span aria-hidden className="size-1.5 rounded-full bg-primary" />
-        {branch}
+    <div class="flex h-7 shrink-0 items-center gap-3 border-t bg-background px-3 text-xs text-muted-foreground">
+      <span class="inline-flex items-center gap-1.5">
+        <span aria-hidden="true" class="size-1.5 rounded-full bg-primary" />
+        {props.branch}
       </span>
       <span>
-        {changes} change{changes === 1 ? '' : 's'}
+        {props.changes} change{props.changes === 1 ? '' : 's'}
       </span>
-      <span className="flex-1" />
+      <span class="flex-1" />
       <span>
-        Direction: <span className="text-foreground">{directionLabel}</span>
+        Direction: <span class="text-foreground">{props.directionLabel}</span>
       </span>
       <span>·</span>
       <span>git</span>
-      {lastFetch && (
-        <>
-          <span>·</span>
-          <span>last fetch {lastFetch}</span>
-        </>
-      )}
+      <Show when={props.lastFetch}>
+        <span>·</span>
+        <span>last fetch {props.lastFetch}</span>
+      </Show>
     </div>
   )
 }

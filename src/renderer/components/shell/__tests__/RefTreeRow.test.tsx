@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@solidjs/testing-library'
 import { describe, expect, it, vi } from 'vitest'
-import { RefTreeRow } from '@/components/shell/RefTreeRow'
 import type { RefKind, RefLeafRow } from '@/lib/ref-tree'
+import { RefTreeRow } from '../RefTreeRow'
 
 function leaf(overrides: Partial<RefLeafRow> = {}): RefLeafRow {
   return {
@@ -16,7 +16,7 @@ function leaf(overrides: Partial<RefLeafRow> = {}): RefLeafRow {
 }
 
 function renderRow(row: RefLeafRow, onCheckoutLeaf?: (k: RefKind, p: string) => void) {
-  return render(
+  return render(() => (
     <RefTreeRow
       row={row}
       top={0}
@@ -24,7 +24,7 @@ function renderRow(row: RefLeafRow, onCheckoutLeaf?: (k: RefKind, p: string) => 
       onToggleCollapsed={() => {}}
       onCheckoutLeaf={onCheckoutLeaf}
     />
-  )
+  ))
 }
 
 describe('RefTreeRow leaf', () => {
@@ -47,15 +47,18 @@ describe('RefTreeRow leaf', () => {
   ])('calls onCheckoutLeaf with (%s, %s) on double-click', (refKind, fullPath) => {
     const onCheckoutLeaf = vi.fn()
     renderRow(leaf({ refKind, fullPath, name: fullPath }), onCheckoutLeaf)
-    fireEvent.doubleClick(screen.getByRole('button', { name: fullPath }))
+    fireEvent.dblClick(screen.getByRole('button', { name: fullPath }))
     expect(onCheckoutLeaf).toHaveBeenCalledWith(refKind, fullPath)
   })
 
-  it('opens a context menu with Checkout that fires onCheckoutLeaf', () => {
+  it('opens a context menu with Checkout that fires onCheckoutLeaf', async () => {
     const onCheckoutLeaf = vi.fn()
     renderRow(leaf({ refKind: 'remote', fullPath: 'origin/main', name: 'main' }), onCheckoutLeaf)
     fireEvent.contextMenu(screen.getByTitle('origin/main'))
-    fireEvent.click(screen.getByText('Checkout'))
+    const item = await screen.findByRole('menuitem', { name: 'Checkout' })
+    fireEvent.pointerDown(item)
+    fireEvent.pointerUp(item)
+    fireEvent.click(item)
     expect(onCheckoutLeaf).toHaveBeenCalledWith('remote', 'origin/main')
   })
 

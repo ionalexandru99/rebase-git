@@ -1,12 +1,12 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen } from '@solidjs/testing-library'
 import { describe, expect, it } from 'vitest'
-import { HistoryPanel } from '@/components/HistoryPanel'
 import { layoutCommits } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
 import type { GitLog, GitLogEntry } from '@/types'
+import { HistoryPanel } from '../HistoryPanel'
 
 function renderPanel(log: GitLog | null, loading = false) {
-  return render(<HistoryPanel log={log} loading={loading} />)
+  return render(() => <HistoryPanel log={log} loading={loading} />)
 }
 
 function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {

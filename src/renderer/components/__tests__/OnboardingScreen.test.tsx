@@ -1,20 +1,20 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@solidjs/testing-library'
 import { describe, expect, it, vi } from 'vitest'
-import { OnboardingScreen } from '@/components/OnboardingScreen'
+import { OnboardingScreen } from '../OnboardingScreen'
+
+const defaultProps = {
+  workingDirectory: null,
+  discoveredRepos: [],
+  loading: false,
+  error: null,
+  onSelectDirectory: vi.fn().mockResolvedValue(null),
+  onComplete: vi.fn(),
+  onOpenRepo: vi.fn()
+}
 
 describe('OnboardingScreen', () => {
-  const defaultProps = {
-    workingDirectory: null,
-    discoveredRepos: [],
-    loading: false,
-    error: null,
-    onSelectDirectory: vi.fn().mockResolvedValue(null),
-    onComplete: vi.fn(),
-    onOpenRepo: vi.fn()
-  }
-
   it('should render welcome message and select folder button', () => {
-    render(<OnboardingScreen {...defaultProps} />)
+    render(() => <OnboardingScreen {...defaultProps} />)
 
     expect(screen.getByText('Welcome to Rebase')).toBeInTheDocument()
     expect(
@@ -25,9 +25,9 @@ describe('OnboardingScreen', () => {
     expect(screen.getByRole('button', { name: /Select Working Folder/i })).toBeInTheDocument()
   })
 
-  it('should call onSelectDirectory when button is clicked', async () => {
+  it('should call onSelectDirectory when button is clicked', () => {
     const onSelectDirectory = vi.fn().mockResolvedValue(null)
-    render(<OnboardingScreen {...defaultProps} onSelectDirectory={onSelectDirectory} />)
+    render(() => <OnboardingScreen {...defaultProps} onSelectDirectory={onSelectDirectory} />)
 
     const button = screen.getByRole('button', { name: /Select Working Folder/i })
     fireEvent.click(button)
@@ -36,13 +36,13 @@ describe('OnboardingScreen', () => {
   })
 
   it('should show working directory and discovered repos after selection', () => {
-    render(
+    render(() => (
       <OnboardingScreen
         {...defaultProps}
         workingDirectory="/home/user/projects"
         discoveredRepos={['/home/user/projects/app', '/home/user/projects/lib']}
       />
-    )
+    ))
 
     expect(screen.getByText('/home/user/projects')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Found 2 repositories/i })).toBeInTheDocument()
@@ -52,14 +52,14 @@ describe('OnboardingScreen', () => {
 
   it('should call onOpenRepo when a discovered repo is clicked', () => {
     const onOpenRepo = vi.fn()
-    render(
+    render(() => (
       <OnboardingScreen
         {...defaultProps}
         workingDirectory="/home/user/projects"
         discoveredRepos={['/home/user/projects/app']}
         onOpenRepo={onOpenRepo}
       />
-    )
+    ))
 
     const repoItem = screen.getByText('/home/user/projects/app')
     fireEvent.click(repoItem)
@@ -69,13 +69,13 @@ describe('OnboardingScreen', () => {
 
   it('should call onComplete when Get Started is clicked', () => {
     const onComplete = vi.fn()
-    render(
+    render(() => (
       <OnboardingScreen
         {...defaultProps}
         workingDirectory="/home/user/projects"
         onComplete={onComplete}
       />
-    )
+    ))
 
     const button = screen.getByRole('button', { name: /Get Started/i })
     fireEvent.click(button)
@@ -84,40 +84,40 @@ describe('OnboardingScreen', () => {
   })
 
   it('should show loading state', () => {
-    render(<OnboardingScreen {...defaultProps} loading={true} />)
+    render(() => <OnboardingScreen {...defaultProps} loading={true} />)
 
     const button = screen.getByRole('button', { name: /Select Working Folder/i })
     expect(button).toBeDisabled()
   })
 
   it('should show error message', () => {
-    render(
+    render(() => (
       <OnboardingScreen {...defaultProps} workingDirectory="/bad/path" error="Permission denied" />
-    )
+    ))
 
     expect(screen.getByText('Permission denied')).toBeInTheDocument()
   })
 
   it('should show no repos found message when directory is empty', () => {
-    render(
+    render(() => (
       <OnboardingScreen
         {...defaultProps}
         workingDirectory="/home/user/empty"
         discoveredRepos={[]}
       />
-    )
+    ))
 
     expect(screen.getByText('No git repositories found in this folder.')).toBeInTheDocument()
   })
 
   it('should show singular repository count', () => {
-    render(
+    render(() => (
       <OnboardingScreen
         {...defaultProps}
         workingDirectory="/home/user/projects"
         discoveredRepos={['/home/user/projects/app']}
       />
-    )
+    ))
 
     expect(screen.getByText('Found 1 repository')).toBeInTheDocument()
   })

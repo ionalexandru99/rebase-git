@@ -57,17 +57,3 @@ export function refClass(kind: ParsedRef['kind']): string {
       return ''
   }
 }
-
-export function pillStyle(
-  kind: ParsedRef['kind'],
-  laneHex: string
-): React.CSSProperties | undefined {
-  if (kind === 'branch' || kind === 'remote') {
-    return {
-      borderColor: `${laneHex}66`,
-      backgroundColor: `${laneHex}1f`,
-      color: laneHex
-    }
-  }
-  return undefined
-}

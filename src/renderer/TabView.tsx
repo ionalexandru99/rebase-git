@@ -1,9 +1,9 @@
-import { AlertCircle } from 'lucide-react'
-import { useEffect, useRef } from 'react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useGit } from '@/hooks/useGit'
-import { RepoPicker } from '@/RepoPicker'
-import { Workspace } from '@/Workspace'
+import { AlertCircleIcon } from 'lucide-solid'
+import { createEffect, createMemo, type JSX, onMount, Show } from 'solid-js'
+import { Alert, AlertDescription } from './components/ui/alert'
+import { RepoPicker } from './RepoPicker'
+import { createGitStore } from './stores/git'
+import { Workspace } from './Workspace'
 
 interface TabViewProps {
   tabId: string
@@ -19,73 +19,62 @@ interface TabViewProps {
   onRequestOpenRepo: (sourceTabId: string, path: string) => boolean
 }
 
-export function TabView({
-  tabId,
-  initialRepoPath,
-  recentRepos,
-  discoveredRepos,
-  workspaces,
-  activeWorkspace,
-  onSwitchWorkspace,
-  onAddWorkspace,
-  onRemoveWorkspace,
-  onReportRepo,
-  onRequestOpenRepo
-}: TabViewProps) {
-  const git = useGit()
-  const modifiedCount = git.status?.modified.length ?? 0
-  const stagedCount = git.status?.staged.length ?? 0
-  const untrackedCount = git.status?.not_added.length ?? 0
-  const totalChanges = modifiedCount + stagedCount + untrackedCount
+export function TabView(props: TabViewProps) {
+  const git = createGitStore()
 
-  const restoredRef = useRef(false)
-  useEffect(() => {
-    if (restoredRef.current) return
-    restoredRef.current = true
-    if (initialRepoPath) git.openRepo(initialRepoPath)
-  }, [initialRepoPath, git.openRepo])
+  const modifiedCount = () => git.state.status?.modified.length ?? 0
+  const stagedCount = () => git.state.status?.staged.length ?? 0
+  const untrackedCount = () => git.state.status?.not_added.length ?? 0
+  const totalChanges = createMemo(() => modifiedCount() + stagedCount() + untrackedCount())
 
-  useEffect(() => {
-    onReportRepo(tabId, git.repoPath ?? null)
-  }, [git.repoPath, tabId, onReportRepo])
+  onMount(() => {
+    if (props.initialRepoPath) git.openRepo(props.initialRepoPath)
+  })
 
-  const errorBanner = git.error ? (
-    <div className="shrink-0 border-b px-4 py-2">
-      <Alert variant="destructive" className="border-destructive/30">
-        <AlertCircle />
-        <AlertDescription>{git.error}</AlertDescription>
-      </Alert>
-    </div>
-  ) : null
+  createEffect(() => {
+    props.onReportRepo(props.tabId, git.state.repoPath ?? null)
+  })
 
-  if (!git.repoPath) {
-    return (
-      <>
-        {errorBanner}
-        <RepoPicker
-          recentRepos={recentRepos}
-          discoveredRepos={discoveredRepos}
-          workspaces={workspaces}
-          activeWorkspace={activeWorkspace}
-          onSwitchWorkspace={onSwitchWorkspace}
-          onAddWorkspace={onAddWorkspace}
-          onRemoveWorkspace={onRemoveWorkspace}
-          onOpenRepo={(path) => {
-            if (!onRequestOpenRepo(tabId, path)) git.openRepo(path)
-          }}
-        />
-      </>
-    )
-  }
+  const errorBanner = (): JSX.Element => (
+    <Show when={git.state.error}>
+      <div class="shrink-0 border-b px-4 py-2">
+        <Alert variant="destructive" class="border-destructive/30">
+          <AlertCircleIcon />
+          <AlertDescription>{git.state.error}</AlertDescription>
+        </Alert>
+      </div>
+    </Show>
+  )
 
   return (
-    <Workspace
-      git={git}
-      modifiedCount={modifiedCount}
-      stagedCount={stagedCount}
-      untrackedCount={untrackedCount}
-      totalChanges={totalChanges}
-      errorBanner={errorBanner}
-    />
+    <Show
+      when={git.state.repoPath}
+      fallback={
+        <>
+          {errorBanner()}
+          <RepoPicker
+            recentRepos={props.recentRepos}
+            discoveredRepos={props.discoveredRepos}
+            workspaces={props.workspaces}
+            activeWorkspace={props.activeWorkspace}
+            onSwitchWorkspace={props.onSwitchWorkspace}
+            onAddWorkspace={props.onAddWorkspace}
+            onRemoveWorkspace={props.onRemoveWorkspace}
+            onOpenRepo={(path) => {
+              if (!props.onRequestOpenRepo(props.tabId, path)) git.openRepo(path)
+            }}
+          />
+        </>
+      }
+    >
+      <Workspace
+        git={git}
+        modifiedCount={modifiedCount()}
+        stagedCount={stagedCount()}
+        untrackedCount={untrackedCount()}
+        totalChanges={totalChanges()}
+        errorBanner={errorBanner()}
+      />
+    </Show>
   )
 }

@@ -1,15 +1,11 @@
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
-import react from '@vitejs/plugin-react'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import solid from 'vite-plugin-solid'
 
 const sharedAlias = {
   '@shared': path.resolve('src/shared')
 }
-
-const solidTree = /src[\\/]renderer[\\/]solid[\\/].*\.[jt]sx?$/
-const reactTree = /src[\\/]renderer[\\/](?!solid[\\/]).*\.[jt]sx$/
 
 export default defineConfig({
   main: {
@@ -33,7 +29,7 @@ export default defineConfig({
     }
   },
   renderer: {
-    plugins: [tailwindcss(), react({ include: reactTree }), solid({ include: solidTree })],
+    plugins: [tailwindcss(), solid()],
     resolve: {
       alias: {
         '@': path.resolve('src/renderer'),
@@ -43,8 +39,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: path.resolve('src/renderer/index.html'),
-          solid: path.resolve('src/renderer/solid.html')
+          index: path.resolve('src/renderer/index.html')
         },
         onwarn(warning, defaultHandler) {
           if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return

@@ -10,7 +10,7 @@
         var theme = 'dark'
         try {
           if (localStorage.getItem('theme') === 'light') theme = 'light'
-        } catch (e) {}
+        } catch {}
         var root = document.documentElement
         root.classList.toggle('dark', theme === 'dark')
         root.style.backgroundColor = theme === 'light' ? '#ffffff' : '#0a0a0a'

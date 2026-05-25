@@ -1,17 +1,17 @@
 import type { PersistedTabs } from '@shared/schemas/ipc'
-import { useEffect, useState } from 'react'
-import { OnboardingScreen } from '@/components/OnboardingScreen'
-import { TabBar } from '@/components/TabBar'
-import { Toaster } from '@/components/ui/sonner'
-import { useOnboarding } from '@/hooks/useOnboarding'
-import { useTabs } from '@/hooks/useTabs'
-import { TabView } from '@/TabView'
+import { createEffect, createSignal, For, onMount, Show } from 'solid-js'
+import { OnboardingScreen } from './components/OnboardingScreen'
+import { TabBar } from './components/TabBar'
+import { Toaster } from './components/ui/sonner'
+import { useOnboarding } from './hooks/useOnboarding'
+import { useTabs } from './hooks/useTabs'
+import { TabView } from './TabView'
 
-function App() {
+export default function App() {
   const onboarding = useOnboarding()
-  const [persistedTabs, setPersistedTabs] = useState<PersistedTabs | null>(null)
+  const [persistedTabs, setPersistedTabs] = createSignal<PersistedTabs | null>(null)
 
-  useEffect(() => {
+  onMount(() => {
     window.electronAPI
       .getPersistedTabs()
       .then((state) => {
@@ -21,38 +21,42 @@ function App() {
         console.error('[app] failed to load persisted tabs', error)
         setPersistedTabs({ tabs: [], activeIndex: 0 })
       })
-  }, [])
+  })
 
-  if (onboarding.onboardingComplete === null || persistedTabs === null) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background text-foreground">
-        <div className="animate-pulse text-xs text-muted-foreground">Loading...</div>
-      </div>
-    )
-  }
-
-  if (!onboarding.onboardingComplete) {
-    return (
-      <OnboardingScreen
-        workingDirectory={onboarding.workingDirectory}
-        discoveredRepos={onboarding.discoveredRepos}
-        loading={onboarding.loading}
-        error={onboarding.error}
-        onSelectDirectory={onboarding.addWorkspace}
-        onComplete={onboarding.completeOnboarding}
-        onOpenRepo={async (path) => {
-          await onboarding.completeOnboarding()
-          try {
-            await window.electronAPI.openRepo(path)
-          } catch (error) {
-            console.error('[onboarding] openRepo failed', { path, error })
-          }
-        }}
-      />
-    )
-  }
-
-  return <TabsShell persisted={persistedTabs} onboarding={onboarding} />
+  return (
+    <Show
+      when={onboarding.onboardingComplete() !== null && persistedTabs() !== null}
+      fallback={
+        <div class="flex h-screen items-center justify-center bg-background text-foreground">
+          <div class="animate-pulse text-xs text-muted-foreground">Loading...</div>
+        </div>
+      }
+    >
+      <Show
+        when={onboarding.onboardingComplete()}
+        fallback={
+          <OnboardingScreen
+            workingDirectory={onboarding.workingDirectory()}
+            discoveredRepos={onboarding.discoveredRepos()}
+            loading={onboarding.loading()}
+            error={onboarding.error()}
+            onSelectDirectory={onboarding.addWorkspace}
+            onComplete={onboarding.completeOnboarding}
+            onOpenRepo={async (path) => {
+              await onboarding.completeOnboarding()
+              try {
+                await window.electronAPI.openRepo(path)
+              } catch (error) {
+                console.error('[onboarding] openRepo failed', { path, error })
+              }
+            }}
+          />
+        }
+      >
+        <TabsShell persisted={persistedTabs() as PersistedTabs} onboarding={onboarding} />
+      </Show>
+    </Show>
+  )
 }
 
 interface TabsShellProps {
@@ -60,7 +64,7 @@ interface TabsShellProps {
   onboarding: ReturnType<typeof useOnboarding>
 }
 
-function TabsShell({ persisted, onboarding }: TabsShellProps) {
+function TabsShell(props: TabsShellProps) {
   const {
     tabs,
     activeTabId,
@@ -72,59 +76,58 @@ function TabsShell({ persisted, onboarding }: TabsShellProps) {
     requestOpenRepo,
     persistedSnapshot,
     initialRepoPath
-  } = useTabs(persisted)
-  const [recentRepos, setRecentRepos] = useState<string[]>([])
+  } = useTabs(props.persisted)
+  const [recentRepos, setRecentRepos] = createSignal<string[]>([])
 
-  useEffect(() => {
+  onMount(() => {
     window.electronAPI.getRecentRepos().then(setRecentRepos)
-  }, [])
+  })
 
-  useEffect(() => {
-    window.electronAPI.setPersistedTabs(persistedSnapshot).catch((error: unknown) => {
+  createEffect(() => {
+    window.electronAPI.setPersistedTabs(persistedSnapshot()).catch((error: unknown) => {
       console.warn('[app] failed to persist tab state', error)
     })
-  }, [persistedSnapshot])
+  })
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div class="flex h-screen flex-col bg-background text-foreground">
       <Toaster richColors position="bottom-right" />
       <TabBar
-        tabs={tabDescriptors}
-        activeTabId={activeTabId}
+        tabs={tabDescriptors()}
+        activeTabId={activeTabId()}
         onSelect={setActiveTabId}
         onClose={closeTab}
         onNew={newTab}
       />
 
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={
-              tab.id === activeTabId
-                ? 'flex min-h-0 flex-1 flex-col'
-                : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
-            }
-            aria-hidden={tab.id !== activeTabId}
-          >
-            <TabView
-              tabId={tab.id}
-              initialRepoPath={initialRepoPath(tab.id)}
-              recentRepos={recentRepos}
-              discoveredRepos={onboarding.discoveredRepos}
-              workspaces={onboarding.workspaces}
-              activeWorkspace={onboarding.activeWorkspace}
-              onSwitchWorkspace={onboarding.switchWorkspace}
-              onAddWorkspace={onboarding.addWorkspace}
-              onRemoveWorkspace={onboarding.removeWorkspace}
-              onReportRepo={reportTabRepo}
-              onRequestOpenRepo={requestOpenRepo}
-            />
-          </div>
-        ))}
+      <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <For each={tabs()}>
+          {(tab) => (
+            <div
+              class={
+                tab.id === activeTabId()
+                  ? 'flex min-h-0 flex-1 flex-col'
+                  : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
+              }
+              aria-hidden={tab.id !== activeTabId()}
+            >
+              <TabView
+                tabId={tab.id}
+                initialRepoPath={initialRepoPath(tab.id)}
+                recentRepos={recentRepos()}
+                discoveredRepos={props.onboarding.discoveredRepos()}
+                workspaces={props.onboarding.workspaces()}
+                activeWorkspace={props.onboarding.activeWorkspace()}
+                onSwitchWorkspace={props.onboarding.switchWorkspace}
+                onAddWorkspace={props.onboarding.addWorkspace}
+                onRemoveWorkspace={props.onboarding.removeWorkspace}
+                onReportRepo={reportTabRepo}
+                onRequestOpenRepo={requestOpenRepo}
+              />
+            </div>
+          )}
+        </For>
       </div>
     </div>
   )
 }
-
-export default App

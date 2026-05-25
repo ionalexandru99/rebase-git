@@ -1,15 +1,14 @@
 import { decodeOrThrow } from '@shared/codec'
 import { RefTreeToggles } from '@shared/schemas/ipc'
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { useVirtualList } from '@/hooks/useVirtualList'
+import { createMemo, createSignal, For, onCleanup, onMount } from 'solid-js'
 import {
   type BranchTracking,
   buildRefTreeRows,
   REF_TREE_OVERSCAN,
   REF_TREE_ROW_HEIGHT,
-  type RefKind,
-  rowKey
+  type RefKind
 } from '@/lib/ref-tree'
+import { useVirtualList } from '../../hooks/useVirtualList'
 import { RefTreeRow } from './RefTreeRow'
 
 export type { RefKind } from '@/lib/ref-tree'
@@ -25,19 +24,10 @@ interface RefTreePanelProps {
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
 }
 
-export const RefTreePanel = memo(function RefTreePanel({
-  localBranches,
-  remoteBranches,
-  tags,
-  currentBranch,
-  loading = false,
-  tracking,
-  onSelectRef,
-  onCheckoutRef
-}: RefTreePanelProps) {
-  const [toggles, setToggles] = useState<Set<string>>(() => new Set())
+export function RefTreePanel(props: RefTreePanelProps) {
+  const [toggles, setToggles] = createSignal<Set<string>>(new Set())
 
-  useEffect(() => {
+  onMount(() => {
     let cancelled = false
     window.electronAPI
       .getRefTreeToggles()
@@ -49,12 +39,12 @@ export const RefTreePanel = memo(function RefTreePanel({
       .catch((err: unknown) => {
         console.warn('[RefTreePanel] failed to load toggles', err)
       })
-    return () => {
+    onCleanup(() => {
       cancelled = true
-    }
-  }, [])
+    })
+  })
 
-  const toggle = useCallback((key: string) => {
+  const toggle = (key: string) => {
     setToggles((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -62,52 +52,50 @@ export const RefTreePanel = memo(function RefTreePanel({
       window.electronAPI.setRefTreeToggles([...next])
       return next
     })
-  }, [])
+  }
 
-  const rows = useMemo(
-    () =>
-      buildRefTreeRows({
-        localBranches,
-        remoteBranches,
-        tags,
-        toggles,
-        currentBranch,
-        loading,
-        tracking
-      }),
-    [localBranches, remoteBranches, tags, currentBranch, toggles, loading, tracking]
+  const rows = createMemo(() =>
+    buildRefTreeRows({
+      localBranches: props.localBranches,
+      remoteBranches: props.remoteBranches,
+      tags: props.tags,
+      toggles: toggles(),
+      currentBranch: props.currentBranch,
+      loading: props.loading ?? false,
+      tracking: props.tracking
+    })
   )
 
-  const { scrollRef, onScroll, startIndex, endIndex, totalHeight } = useVirtualList({
-    rowCount: rows.length,
+  const { setScrollRef, onScroll, startIndex, endIndex, totalHeight } = useVirtualList({
+    rowCount: () => rows().length,
     rowHeight: REF_TREE_ROW_HEIGHT,
     overscan: REF_TREE_OVERSCAN,
     initialViewportHeight: 400
   })
 
+  const visibleRows = createMemo(() => rows().slice(startIndex(), endIndex()))
+
   return (
     <div
-      ref={scrollRef}
+      ref={setScrollRef}
       onScroll={onScroll}
-      className="min-h-0 flex-1 overflow-auto px-1"
+      class="min-h-0 flex-1 overflow-auto px-1"
       data-testid="ref-tree-scroll"
     >
-      <div className="relative" style={{ height: totalHeight }}>
-        {rows.slice(startIndex, endIndex).map((row, idx) => {
-          const i = startIndex + idx
-          return (
+      <div class="relative" style={{ height: `${totalHeight()}px` }}>
+        <For each={visibleRows()}>
+          {(row, idx) => (
             <RefTreeRow
-              key={rowKey(row)}
               row={row}
-              top={i * REF_TREE_ROW_HEIGHT}
-              loading={loading}
+              top={(startIndex() + idx()) * REF_TREE_ROW_HEIGHT}
+              loading={props.loading ?? false}
               onToggleCollapsed={toggle}
-              onSelectLeaf={onSelectRef}
-              onCheckoutLeaf={onCheckoutRef}
+              onSelectLeaf={props.onSelectRef}
+              onCheckoutLeaf={props.onCheckoutRef}
             />
-          )
-        })}
+          )}
+        </For>
       </div>
     </div>
   )
-})
+}

@@ -1,4 +1,5 @@
-import { Button } from '@/components/ui/button'
+import { Show } from 'solid-js'
+import { Button } from '../ui/button'
 import { StatusBadge, type StatusKind } from './StatusBadge'
 
 interface FileRowProps {
@@ -9,24 +10,24 @@ interface FileRowProps {
   onAction?: (file: string) => void
 }
 
-export function FileRow({ file, display, kind, actionLabel, onAction }: FileRowProps) {
-  const label = display ?? file
+export function FileRow(props: FileRowProps) {
+  const label = () => props.display ?? props.file
   return (
-    <li className="group flex h-7 items-center gap-2 rounded-md px-2 hover:bg-accent">
-      <StatusBadge kind={kind} />
-      <span className="min-w-0 flex-1 truncate text-sm" title={label}>
-        {label}
+    <li class="group flex h-7 items-center gap-2 rounded-md px-2 hover:bg-accent">
+      <StatusBadge kind={props.kind} />
+      <span class="min-w-0 flex-1 truncate text-sm" title={label()}>
+        {label()}
       </span>
-      {actionLabel && onAction ? (
+      <Show when={props.actionLabel && props.onAction}>
         <Button
           variant="ghost"
           size="sm"
-          className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
-          onClick={() => onAction(file)}
+          class="shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+          onClick={() => props.onAction?.(props.file)}
         >
-          {actionLabel}
+          {props.actionLabel}
         </Button>
-      ) : null}
+      </Show>
     </li>
   )
 }
