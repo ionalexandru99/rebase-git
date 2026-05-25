@@ -2,11 +2,12 @@ import { AlertCircleIcon } from 'lucide-solid'
 import { createEffect, createMemo, type JSX, onMount, Show } from 'solid-js'
 import { Alert, AlertDescription } from './components/ui/alert'
 import { RepoPicker } from './RepoPicker'
-import { createGitStore } from './stores/git'
+import { useGitStore } from './stores/git'
 import { Workspace } from './Workspace'
 
 interface TabViewProps {
   tabId: string
+  tabActive: () => boolean
   initialRepoPath?: string | null
   recentRepos: string[]
   discoveredRepos: string[]
@@ -20,7 +21,7 @@ interface TabViewProps {
 }
 
 export function TabView(props: TabViewProps) {
-  const git = createGitStore()
+  const git = useGitStore(props.tabId, props.tabActive)
 
   const modifiedCount = () => git.state.status?.modified.length ?? 0
   const stagedCount = () => git.state.status?.staged.length ?? 0
@@ -28,7 +29,9 @@ export function TabView(props: TabViewProps) {
   const totalChanges = createMemo(() => modifiedCount() + stagedCount() + untrackedCount())
 
   onMount(() => {
-    if (props.initialRepoPath) git.openRepo(props.initialRepoPath)
+    if (props.initialRepoPath) {
+      git.openRepo(props.initialRepoPath)
+    }
   })
 
   createEffect(() => {
@@ -61,7 +64,9 @@ export function TabView(props: TabViewProps) {
             onAddWorkspace={props.onAddWorkspace}
             onRemoveWorkspace={props.onRemoveWorkspace}
             onOpenRepo={(path) => {
-              if (!props.onRequestOpenRepo(props.tabId, path)) git.openRepo(path)
+              if (!props.onRequestOpenRepo(props.tabId, path)) {
+                git.openRepo(path)
+              }
             }}
           />
         </>

@@ -119,6 +119,7 @@ function TabsShell(props: TabsShellProps) {
             >
               <TabView
                 tabId={tab.id}
+                tabActive={() => tab.id === activeTabId()}
                 initialRepoPath={initialRepoPath(tab.id)}
                 recentRepos={recentRepos()}
                 discoveredRepos={props.onboarding.discoveredRepos()}

@@ -9,7 +9,9 @@ export function storeValidatedScanRoot(canonicalPath: string): number {
 
 export function takeValidatedScanRoot(id: number): string | undefined {
   const canonicalPath = validatedScanRoots.get(id)
-  if (canonicalPath === undefined) return undefined
+  if (canonicalPath === undefined) {
+    return undefined
+  }
   validatedScanRoots.delete(id)
   return canonicalPath
 }

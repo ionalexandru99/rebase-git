@@ -1,17 +1,26 @@
 import { spawn } from 'node:child_process'
-import { encodeOrThrow } from '@shared/codec'
+import { parseOrThrow } from '@shared/codec'
 import {
-  BranchesResponse,
-  CheckoutResponse,
-  CommitResponse,
-  FetchResponse,
-  LogResponse,
-  OpenRepoResponse,
-  StageResponse,
-  StatusResponse,
-  UnstageResponse
+  type BranchesResponse,
+  BranchesResponseSchema,
+  type CheckoutResponse,
+  CheckoutResponseSchema,
+  type CommitResponse,
+  CommitResponseSchema,
+  type FetchResponse,
+  FetchResponseSchema,
+  type LogResponse,
+  LogResponseSchema,
+  type OpenRepoResponse,
+  OpenRepoResponseSchema,
+  type StageResponse,
+  StageResponseSchema,
+  type StatusResponse,
+  StatusResponseSchema,
+  type UnstageResponse,
+  UnstageResponseSchema
 } from '@shared/schemas/ipc'
-import { Effect, Option } from 'effect'
+import { fetchSemaphoreFor } from './fetch-semaphore'
 import { deriveLocalShortName } from './git/checkout'
 import { resolveDefaultBranch } from './git/defaultBranch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
@@ -24,7 +33,7 @@ import {
   serializeStatus
 } from './git/serialize'
 import { parseAheadBehind } from './git/tracking'
-import { activeFetches, fetchSemaphoreFor, gitInstances, releaseFetchSemaphore } from './state'
+import { activeFetches, gitInstances } from './state'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -32,40 +41,43 @@ function errorMessage(error: unknown): string {
 
 const INVALID_REPO_PATH = 'invalid repository path'
 
-export function openRepoRejected(
-  message: string = INVALID_REPO_PATH
-): typeof OpenRepoResponse.Encoded {
-  return encodeOrThrow(OpenRepoResponse, { _tag: 'GitError', message })
+export function openRepoRejected(message: string = INVALID_REPO_PATH): OpenRepoResponse {
+  return parseOrThrow(OpenRepoResponseSchema, { _tag: 'GitError', message })
 }
 
 export const invalidRepoPath = {
-  branches: () => encodeOrThrow(BranchesResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
-  checkout: () => encodeOrThrow(CheckoutResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
-  commit: () => encodeOrThrow(CommitResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
-  fetch: () => encodeOrThrow(FetchResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
-  log: () => encodeOrThrow(LogResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
-  stage: () => encodeOrThrow(StageResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
-  status: () => encodeOrThrow(StatusResponse, { _tag: 'GitError', message: INVALID_REPO_PATH }),
-  unstage: () => encodeOrThrow(UnstageResponse, { _tag: 'GitError', message: INVALID_REPO_PATH })
+  branches: () =>
+    parseOrThrow(BranchesResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  checkout: () =>
+    parseOrThrow(CheckoutResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  commit: () =>
+    parseOrThrow(CommitResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  fetch: () => parseOrThrow(FetchResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  log: () => parseOrThrow(LogResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  stage: () => parseOrThrow(StageResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  status: () =>
+    parseOrThrow(StatusResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  unstage: () =>
+    parseOrThrow(UnstageResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH })
 }
 
-export async function openRepo(repoPath: string): Promise<typeof OpenRepoResponse.Encoded> {
+export async function openRepo(repoPath: string): Promise<OpenRepoResponse> {
   const key = normalizeRepoPath(repoPath)
   try {
     const git = getOrCreateGit(gitInstances, key)
     const isRepo = await git.checkIsRepo()
     if (!isRepo) {
       gitInstances.delete(key)
-      return encodeOrThrow(OpenRepoResponse, { _tag: 'NotARepo' })
+      return parseOrThrow(OpenRepoResponseSchema, { _tag: 'NotARepo' })
     }
     const remotes = await git.getRemotes(true)
     const defaultBranch = await resolveDefaultBranch(git, undefined)
-    return encodeOrThrow(OpenRepoResponse, {
+    return parseOrThrow(OpenRepoResponseSchema, {
       _tag: 'Ok',
       result: { remotes: serializeRemotes(remotes), defaultBranch, path: key }
     })
   } catch (error) {
-    return encodeOrThrow(OpenRepoResponse, { _tag: 'GitError', message: errorMessage(error) })
+    return parseOrThrow(OpenRepoResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
 }
 
@@ -73,15 +85,19 @@ export async function closeRepo(repoPath: string): Promise<Record<string, never>
   const key = normalizeRepoPath(repoPath)
   gitInstances.delete(key)
   const proc = activeFetches.get(key)
-  if (proc && !proc.killed) proc.kill()
+  if (proc && !proc.killed) {
+    proc.kill()
+  }
   activeFetches.delete(key)
   releaseFetchSemaphore(key)
   return {}
 }
 
-export async function getBranches(repoPath: string): Promise<typeof BranchesResponse.Encoded> {
+export async function getBranches(repoPath: string): Promise<BranchesResponse> {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return encodeOrThrow(BranchesResponse, { _tag: 'RepoNotOpen' })
+  if (!git) {
+    return parseOrThrow(BranchesResponseSchema, { _tag: 'RepoNotOpen' })
+  }
   try {
     const [branches, tags, trackingRaw] = await Promise.all([
       git.branch(['-a']),
@@ -89,63 +105,62 @@ export async function getBranches(repoPath: string): Promise<typeof BranchesResp
       git.raw(['for-each-ref', 'refs/heads', '--format=%(refname:short)|%(upstream:track)'])
     ])
     const tracking = parseAheadBehind(trackingRaw)
-    return encodeOrThrow(BranchesResponse, {
+    return parseOrThrow(BranchesResponseSchema, {
       _tag: 'Ok',
       branches: serializeBranches(branches, tags, tracking)
     })
   } catch (error) {
-    return encodeOrThrow(BranchesResponse, { _tag: 'GitError', message: errorMessage(error) })
+    return parseOrThrow(BranchesResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
 }
 
-export async function getStatus(repoPath: string): Promise<typeof StatusResponse.Encoded> {
+export async function getStatus(repoPath: string): Promise<StatusResponse> {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return encodeOrThrow(StatusResponse, { _tag: 'RepoNotOpen' })
+  if (!git) {
+    return parseOrThrow(StatusResponseSchema, { _tag: 'RepoNotOpen' })
+  }
   try {
     const status = await git.status()
-    return encodeOrThrow(StatusResponse, { _tag: 'Ok', status: serializeStatus(status) })
+    return parseOrThrow(StatusResponseSchema, { _tag: 'Ok', status: serializeStatus(status) })
   } catch (error) {
-    return encodeOrThrow(StatusResponse, { _tag: 'GitError', message: errorMessage(error) })
+    return parseOrThrow(StatusResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
 }
 
-export async function stageFile(
-  repoPath: string,
-  file: string
-): Promise<typeof StageResponse.Encoded> {
+export async function stageFile(repoPath: string, file: string): Promise<StageResponse> {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return encodeOrThrow(StageResponse, { _tag: 'RepoNotOpen' })
+  if (!git) {
+    return parseOrThrow(StageResponseSchema, { _tag: 'RepoNotOpen' })
+  }
   try {
     await git.add(file)
-    return encodeOrThrow(StageResponse, { _tag: 'Ok' })
+    return parseOrThrow(StageResponseSchema, { _tag: 'Ok' })
   } catch (error) {
-    return encodeOrThrow(StageResponse, { _tag: 'GitError', message: errorMessage(error) })
+    return parseOrThrow(StageResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
 }
 
-export async function unstageFile(
-  repoPath: string,
-  file: string
-): Promise<typeof UnstageResponse.Encoded> {
+export async function unstageFile(repoPath: string, file: string): Promise<UnstageResponse> {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return encodeOrThrow(UnstageResponse, { _tag: 'RepoNotOpen' })
+  if (!git) {
+    return parseOrThrow(UnstageResponseSchema, { _tag: 'RepoNotOpen' })
+  }
   try {
     await git.reset(['HEAD', file])
-    return encodeOrThrow(UnstageResponse, { _tag: 'Ok' })
+    return parseOrThrow(UnstageResponseSchema, { _tag: 'Ok' })
   } catch (error) {
-    return encodeOrThrow(UnstageResponse, { _tag: 'GitError', message: errorMessage(error) })
+    return parseOrThrow(UnstageResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
 }
 
-export async function commit(
-  repoPath: string,
-  message: string
-): Promise<typeof CommitResponse.Encoded> {
+export async function commit(repoPath: string, message: string): Promise<CommitResponse> {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return encodeOrThrow(CommitResponse, { _tag: 'RepoNotOpen' })
+  if (!git) {
+    return parseOrThrow(CommitResponseSchema, { _tag: 'RepoNotOpen' })
+  }
   try {
     const result = await git.commit(message)
-    return encodeOrThrow(CommitResponse, {
+    return parseOrThrow(CommitResponseSchema, {
       _tag: 'Ok',
       result: {
         commit: result.commit,
@@ -154,23 +169,24 @@ export async function commit(
       }
     })
   } catch (error) {
-    return encodeOrThrow(CommitResponse, { _tag: 'GitError', message: errorMessage(error) })
+    return parseOrThrow(CommitResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
 }
 
-export async function getLog(
-  repoPath: string,
-  maxCount?: number
-): Promise<typeof LogResponse.Encoded> {
+export async function getLog(repoPath: string, maxCount?: number): Promise<LogResponse> {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return encodeOrThrow(LogResponse, { _tag: 'RepoNotOpen' })
+  if (!git) {
+    return parseOrThrow(LogResponseSchema, { _tag: 'RepoNotOpen' })
+  }
   try {
     const logOptions: Record<string, unknown> = { format: GRAPH_LOG_FORMAT, ...GRAPH_LOG_FLAGS }
-    if (typeof maxCount === 'number' && maxCount > 0) logOptions.maxCount = maxCount
+    if (typeof maxCount === 'number' && maxCount > 0) {
+      logOptions.maxCount = maxCount
+    }
     const log = await git.log(logOptions)
-    return encodeOrThrow(LogResponse, { _tag: 'Ok', log: serializeLog(log) })
+    return parseOrThrow(LogResponseSchema, { _tag: 'Ok', log: serializeLog(log) })
   } catch (error) {
-    return encodeOrThrow(LogResponse, { _tag: 'GitError', message: errorMessage(error) })
+    return parseOrThrow(LogResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
 }
 
@@ -178,9 +194,11 @@ export async function checkoutRef(
   repoPath: string,
   refKind: 'local' | 'remote' | 'tag',
   fullPath: string
-): Promise<typeof CheckoutResponse.Encoded> {
+): Promise<CheckoutResponse> {
   const git = lookupGit(gitInstances, repoPath)
-  if (!git) return encodeOrThrow(CheckoutResponse, { _tag: 'RepoNotOpen' })
+  if (!git) {
+    return parseOrThrow(CheckoutResponseSchema, { _tag: 'RepoNotOpen' })
+  }
   try {
     let checkedOut: string
     if (refKind === 'remote') {
@@ -194,7 +212,7 @@ export async function checkoutRef(
         ])
         const upstream = upstreamRaw.trim()
         if (upstream !== fullPath) {
-          return encodeOrThrow(CheckoutResponse, {
+          return parseOrThrow(CheckoutResponseSchema, {
             _tag: 'GitError',
             message: `Local branch '${shortName}' tracks ${upstream || 'no remote'}, not ${fullPath}. Resolve manually.`
           })
@@ -208,14 +226,14 @@ export async function checkoutRef(
       await git.checkout([fullPath])
       checkedOut = fullPath
     }
-    return encodeOrThrow(CheckoutResponse, { _tag: 'Ok', checkedOut })
+    return parseOrThrow(CheckoutResponseSchema, { _tag: 'Ok', checkedOut })
   } catch (error) {
-    return encodeOrThrow(CheckoutResponse, { _tag: 'GitError', message: errorMessage(error) })
+    return parseOrThrow(CheckoutResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
 }
 
-function runFetch(key: string): Effect.Effect<typeof FetchResponse.Encoded> {
-  return Effect.async<typeof FetchResponse.Encoded>((resume) => {
+function runFetch(key: string): Promise<FetchResponse> {
+  return new Promise((resolve) => {
     const proc = spawn('git', ['-C', key, 'fetch', '--prune'], {
       stdio: ['ignore', 'ignore', 'pipe'],
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
@@ -226,43 +244,45 @@ function runFetch(key: string): Effect.Effect<typeof FetchResponse.Encoded> {
     proc.stderr?.setEncoding('utf8')
     proc.stderr?.on('data', (chunk: string) => {
       stderrBuf += chunk
-      if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096)
+      if (stderrBuf.length > 4096) {
+        stderrBuf = stderrBuf.slice(-4096)
+      }
     })
 
     proc.on('error', (err) => {
-      if (activeFetches.get(key) === proc) activeFetches.delete(key)
-      resume(
-        Effect.succeed(encodeOrThrow(FetchResponse, { _tag: 'GitError', message: err.message }))
-      )
+      if (activeFetches.get(key) === proc) {
+        activeFetches.delete(key)
+      }
+      resolve(parseOrThrow(FetchResponseSchema, { _tag: 'GitError', message: err.message }))
     })
 
     proc.on('close', (code) => {
-      if (activeFetches.get(key) === proc) activeFetches.delete(key)
+      if (activeFetches.get(key) === proc) {
+        activeFetches.delete(key)
+      }
       if (code === 0) {
-        resume(Effect.succeed(encodeOrThrow(FetchResponse, { _tag: 'Ok' })))
+        resolve(parseOrThrow(FetchResponseSchema, { _tag: 'Ok' }))
       } else {
-        resume(
-          Effect.succeed(
-            encodeOrThrow(FetchResponse, {
-              _tag: 'GitError',
-              message: stderrBuf.trim() || `git fetch exited with code ${code}`
-            })
-          )
+        resolve(
+          parseOrThrow(FetchResponseSchema, {
+            _tag: 'GitError',
+            message: stderrBuf.trim() || `git fetch exited with code ${code}`
+          })
         )
       }
     })
   })
 }
 
-export async function fetchRepo(repoPath: string): Promise<typeof FetchResponse.Encoded> {
+export async function fetchRepo(repoPath: string): Promise<FetchResponse> {
   const key = normalizeRepoPath(repoPath)
   if (!gitInstances.has(key)) {
-    return encodeOrThrow(FetchResponse, { _tag: 'RepoNotOpen' })
+    return parseOrThrow(FetchResponseSchema, { _tag: 'RepoNotOpen' })
   }
   const semaphore = fetchSemaphoreFor(key)
-  const result = await Effect.runPromise(semaphore.withPermitsIfAvailable(1)(runFetch(key)))
-  if (Option.isNone(result)) {
-    return encodeOrThrow(FetchResponse, { _tag: 'FetchSkipped' })
+  const result = await semaphore.withPermitsIfAvailable(() => runFetch(key))
+  if (result === null) {
+    return parseOrThrow(FetchResponseSchema, { _tag: 'FetchSkipped' })
   }
-  return result.value
+  return result
 }

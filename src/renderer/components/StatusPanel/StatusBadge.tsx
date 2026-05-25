@@ -21,7 +21,9 @@ const glyphs: Record<StatusKind, string> = {
 }
 
 function kindClass(kind: StatusKind): string {
-  if (kind === 'conflicted') return 'border-destructive/40 bg-destructive/10 text-destructive'
+  if (kind === 'conflicted') {
+    return 'border-destructive/40 bg-destructive/10 text-destructive'
+  }
   return ''
 }
 

@@ -28,9 +28,13 @@ export function RepoPicker(props: RepoPickerProps) {
   const hasAnyWorkspace = () => props.workspaces.length > 0 || !!props.activeWorkspace
 
   const handleKeyDown: JSX.EventHandler<HTMLInputElement, KeyboardEvent> = (event) => {
-    if (event.key !== 'Enter') return
+    if (event.key !== 'Enter') {
+      return
+    }
     const first = filteredRecent()[0] ?? filteredDiscovered()[0]
-    if (first) props.onOpenRepo(first)
+    if (first) {
+      props.onOpenRepo(first)
+    }
   }
 
   return (

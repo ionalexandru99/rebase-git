@@ -16,9 +16,13 @@ export function CommitPanel(props: CommitPanelProps) {
 
   const handleCommit = async () => {
     const trimmed = message().trim()
-    if (!trimmed) return
+    if (!trimmed) {
+      return
+    }
     const success = await props.onCommit(trimmed)
-    if (success) setMessage('')
+    if (success) {
+      setMessage('')
+    }
   }
 
   const subjectLength = () => (message().split('\n')[0] ?? '').length

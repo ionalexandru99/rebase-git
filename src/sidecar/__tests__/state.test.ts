@@ -1,6 +1,5 @@
-import { Deferred, Effect, Option } from 'effect'
 import { describe, expect, it } from 'vitest'
-import { fetchSemaphoreFor, fetchSemaphoreSize, releaseFetchSemaphore } from '../state'
+import { fetchSemaphoreFor, fetchSemaphoreSize, releaseFetchSemaphore } from '../fetch-semaphore'
 
 describe('fetchSemaphoreFor', () => {
   it('returns the same semaphore for the same repo path', () => {
@@ -13,47 +12,49 @@ describe('fetchSemaphoreFor', () => {
     const a = fetchSemaphoreFor('/test/repo-a-iso')
     const b = fetchSemaphoreFor('/test/repo-b-iso')
 
-    const held = await Effect.runPromise(Deferred.make<void>())
-    const acquired = await Effect.runPromise(Deferred.make<void>())
-    const aHeld = Effect.runPromise(
-      a.withPermits(1)(Effect.zipRight(Deferred.succeed(acquired, undefined), Deferred.await(held)))
-    )
-    await Effect.runPromise(Deferred.await(acquired))
+    let releaseA: (() => void) | undefined
+    const holdA = new Promise<void>((resolve) => {
+      releaseA = resolve
+    })
+    const aHeld = a.withPermits(async () => {
+      await holdA
+      return 'a'
+    })
 
-    const bResult = await Effect.runPromise(b.withPermitsIfAvailable(1)(Effect.succeed('ok')))
-    expect(Option.isSome(bResult)).toBe(true)
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0)
+    })
 
-    await Effect.runPromise(Deferred.succeed(held, undefined))
+    const bResult = await b.withPermitsIfAvailable(async () => 'ok')
+    expect(bResult).toBe('ok')
+
+    releaseA?.()
     await aHeld
   })
 
-  it('refuses a second concurrent permit and skips with None', async () => {
+  it('refuses a second concurrent permit and skips with null', async () => {
     const semaphore = fetchSemaphoreFor('/test/repo-skip')
-    const held = await Effect.runPromise(Deferred.make<void>())
-    const acquired = await Effect.runPromise(Deferred.make<void>())
-    const first = Effect.runPromise(
-      semaphore.withPermits(1)(
-        Effect.zipRight(Deferred.succeed(acquired, undefined), Deferred.await(held))
-      )
-    )
-    await Effect.runPromise(Deferred.await(acquired))
+    let releaseFirst: (() => void) | undefined
+    const hold = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    const first = semaphore.withPermits(async () => {
+      await hold
+    })
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-    const second = await Effect.runPromise(
-      semaphore.withPermitsIfAvailable(1)(Effect.succeed('second'))
-    )
-    expect(Option.isNone(second)).toBe(true)
+    const second = await semaphore.withPermitsIfAvailable(async () => 'second')
+    expect(second).toBeNull()
 
-    await Effect.runPromise(Deferred.succeed(held, undefined))
+    releaseFirst?.()
     await first
   })
 
   it('lets a subsequent caller proceed after the first releases', async () => {
     const semaphore = fetchSemaphoreFor('/test/repo-release')
-    await Effect.runPromise(semaphore.withPermits(1)(Effect.succeed('first')))
-    const after = await Effect.runPromise(
-      semaphore.withPermitsIfAvailable(1)(Effect.succeed('after'))
-    )
-    expect(Option.isSome(after)).toBe(true)
+    await semaphore.withPermits(async () => 'first')
+    const after = await semaphore.withPermitsIfAvailable(async () => 'after')
+    expect(after).toBe('after')
   })
 })
 

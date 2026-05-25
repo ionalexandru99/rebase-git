@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Rebase** — a desktop Git GUI built with Electron 41 + TypeScript + Tailwind 4. `pnpm` is the package manager.
 
-> **Mid-rewrite.** Rebase is migrating to a "feels instant" architecture: Git work moves into a forked HTTP **sidecar** (so the main thread never blocks), the UI talks to it through an **Effect** domain layer (`Schema`/`HttpClient`/`ManagedRuntime`), and the renderer is moving **React 19 → SolidJS** (UI layer only — the Effect/sidecar core is framework-agnostic). The authoritative, PR-by-PR roadmap is **`INSTANT_REWRITE_PLAN.md`** — read it before making architectural changes. Until each slice lands, parts of the codebase still reflect the legacy model (React, `simple-git` on the main process).
+> Git work runs in a forked HTTP **sidecar** (main thread never blocks). The **SolidJS** renderer uses **TanStack Query** + `sidecarFetch` (Zod contracts in `src/shared/`). Commit history streams over IPC. See **`AGENTS.md`** for binding rules.
 
 `AGENTS.md` contains the binding rules: main thread never blocks on Git, tests required for every behaviour change, exact dependency versions (no `^`/`~`), restricted postinstall scripts (`pnpm.onlyBuiltDependencies`).
 
@@ -48,19 +48,19 @@ A `pre-push` hook in `.githooks/pre-push` runs `pnpm typecheck` and `pnpm check`
 Four processes, hard boundary between them:
 
 - `src/main/` — Node/Electron. Owns window lifecycle, dialogs, `electron-store` persistence, deep links, updater/menu, and sidecar spawn/health/kill. **No Git logic.**
-- `src/sidecar/` — forked `utilityProcess` HTTP server on loopback; owns all `simple-git` work. See `INSTANT_REWRITE_PLAN.md` for the PR-by-PR rollout.
+- `src/sidecar/` — forked `utilityProcess` HTTP server on loopback; owns all `simple-git` work.
 - `src/preload/` — typed `window.electronAPI` bridge for OS/window concerns and sidecar bootstrap config (`getSidecarConfig`). Context isolation is enabled; the renderer has no Node access.
-- `src/renderer/` — SolidJS UI (migration in progress) using an Effect `ManagedRuntime` + `@effect/platform` HTTP client for Git/domain operations. Vite alias `@` → `src/renderer`.
+- `src/renderer/` — SolidJS UI; TanStack Query + `sidecarFetch` for Git ops; TanStack Virtual for long lists. Vite alias `@` → `src/renderer`.
 
-Before changing architecture, read **`INSTANT_REWRITE_PLAN.md`** and **`AGENTS.md`** (tests, exact dependency versions, `pnpm.onlyBuiltDependencies`).
+Before changing architecture, read **`AGENTS.md`** (tests, exact dependency versions, `pnpm.onlyBuiltDependencies`).
 
 ### Multi-tab, multi-repo model
 
-The renderer supports N tabs, each independently holding a different repo. Git operations go through the Effect domain layer to the sidecar with a `repoPath` on every call — there is no implicit "current repo" on the main or sidecar side. Main-process IPC that remains (open/close repo, log stream, workspaces, settings) still takes `repoPath` where relevant.
+The renderer supports N tabs, each independently holding a different repo. Git operations reach the sidecar with a `repoPath` on every call — there is no implicit "current repo" on the main or sidecar side. Main-process IPC that remains (open/close repo, log stream, workspaces, settings) still takes `repoPath` where relevant.
 
 ### Git responses
 
-The sidecar returns Schema-encoded JSON (`{ _tag: 'Ok' | 'GitError' | 'RepoNotOpen', ... }`). The renderer decodes these via Effect `Schema` — don't assume legacy `{ success: boolean }` shapes for new code.
+The sidecar returns Zod-validated JSON (`{ _tag: 'Ok' | 'GitError' | 'RepoNotOpen', ... }`). The renderer parses these via `parseOrThrow` in `src/shared/codec.ts` — don't assume legacy `{ success: boolean }` shapes for new code.
 
 ### Workspaces
 
@@ -82,7 +82,7 @@ Main-process tests run in plain Node and must only cover pure logic (store, seri
 
 ## Style
 
-Biome enforces: single quotes (JS), double quotes (JSX), no semicolons, 2-space indent, 100-col lines, `useImportType` as error. Run `pnpm check:fix` before committing. shadcn components live in `src/renderer/components/ui/` (style: `new-york`, base color `neutral`, CSS vars enabled).
+Biome enforces: single quotes (JS), double quotes (JSX), no semicolons, 2-space indent, 100-col lines, `useImportType` as error, **`useBlockStatements` as error** (always brace `if`/`else`/`for`/`while`/`do`, including one-liners). Run `pnpm check:fix` before committing. shadcn components live in `src/renderer/components/ui/` (style: `new-york`, base color `neutral`, CSS vars enabled).
 
 Use descriptive variable names. Don't use one-letter or terse abbreviations like `r`, `g`, `c`, `ps`, `vh` for things that aren't obvious from context — write `result`, `git`, `commit`, `parents`, `viewportHeight`. The only acceptable short names are well-known conventions: `i`/`j` for loop indices, `e` for event-handler parameters, `_` for an unused parameter, and a one-letter name inside a tiny lambda where the type makes the meaning obvious (e.g. `xs.map((x) => x.id)`). When in doubt, spell it out — a reader who didn't write the code should still be able to tell what each name refers to.
 

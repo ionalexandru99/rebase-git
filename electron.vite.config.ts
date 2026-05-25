@@ -42,8 +42,12 @@ export default defineConfig({
           index: path.resolve('src/renderer/index.html')
         },
         onwarn(warning, defaultHandler) {
-          if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return
-          if (warning.code === 'SOURCEMAP_ERROR' && warning.message?.includes('use client')) return
+          if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
+            return
+          }
+          if (warning.code === 'SOURCEMAP_ERROR' && warning.message?.includes('use client')) {
+            return
+          }
           defaultHandler(warning)
         }
       }

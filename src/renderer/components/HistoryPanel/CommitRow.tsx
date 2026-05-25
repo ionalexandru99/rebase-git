@@ -9,7 +9,7 @@ import { RefBadge } from './RefBadge'
 
 interface CommitRowProps {
   row: RowLayout
-  index: number
+  top: number
   dim: boolean
   offBranch: boolean
   rowRailWidth: number
@@ -31,7 +31,7 @@ export function CommitRow(props: CommitRowProps) {
       style={{
         top: '0',
         height: `${ROW_H}px`,
-        transform: `translateY(${props.index * ROW_H}px)`,
+        transform: `translateY(${props.top}px)`,
         'grid-template-columns': 'var(--row-cols)',
         opacity: String(rowOpacity()),
         contain: 'layout paint style'

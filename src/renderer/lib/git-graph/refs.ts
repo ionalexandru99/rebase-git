@@ -8,7 +8,9 @@ function dedupeRefs(parsed: ParsedRef[]): ParsedRef[] {
     parsed.filter((ref) => ref.kind === 'branch' || ref.kind === 'head').map((ref) => ref.label)
   )
   return parsed.filter((ref) => {
-    if (ref.kind !== 'remote') return true
+    if (ref.kind !== 'remote') {
+      return true
+    }
     const slash = ref.label.indexOf('/')
     const branchName = slash === -1 ? ref.label : ref.label.slice(slash + 1)
     return !localNames.has(branchName)
@@ -16,22 +18,34 @@ function dedupeRefs(parsed: ParsedRef[]): ParsedRef[] {
 }
 
 export function parseRefs(refs: string, remoteNames?: Set<string>): ParsedRef[] {
-  if (!refs) return []
+  if (!refs) {
+    return []
+  }
   const parsed = refs
     .split(',')
     .map((raw) => raw.trim())
     .filter(Boolean)
     .map<ParsedRef | null>((part) => {
-      if (part.startsWith('HEAD -> ')) return { label: part.slice(8), kind: 'branch' }
-      if (part === 'HEAD') return null
-      if (part.startsWith('tag: ')) return { label: part.slice(5), kind: 'tag' }
-      if (/^stash@\{/.test(part)) return { label: part, kind: 'stash' }
+      if (part.startsWith('HEAD -> ')) {
+        return { label: part.slice(8), kind: 'branch' }
+      }
+      if (part === 'HEAD') {
+        return null
+      }
+      if (part.startsWith('tag: ')) {
+        return { label: part.slice(5), kind: 'tag' }
+      }
+      if (/^stash@\{/.test(part)) {
+        return { label: part, kind: 'stash' }
+      }
       if (part.includes('/')) {
         const first = part.slice(0, part.indexOf('/'))
         const haveRemotes = remoteNames && remoteNames.size > 0
         const isRemote = haveRemotes ? remoteNames.has(first) : first === 'origin'
         if (isRemote) {
-          if (part.slice(first.length + 1) === 'HEAD') return null
+          if (part.slice(first.length + 1) === 'HEAD') {
+            return null
+          }
           return { label: part, kind: 'remote' }
         }
       }
@@ -43,7 +57,9 @@ export function parseRefs(refs: string, remoteNames?: Set<string>): ParsedRef[] 
 
 export function splitRemoteRef(label: string): { remote: string; branch: string } {
   const slash = label.indexOf('/')
-  if (slash === -1) return { remote: label, branch: '' }
+  if (slash === -1) {
+    return { remote: label, branch: '' }
+  }
   return { remote: label.slice(0, slash), branch: label.slice(slash + 1) }
 }
 

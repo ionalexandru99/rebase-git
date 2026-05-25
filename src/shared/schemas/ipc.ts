@@ -1,5 +1,11 @@
-import { Schema } from 'effect'
-import { CommitSummary, GitBranches, GitLog, GitStatus, RepoOpenSuccess } from './git'
+import { z } from 'zod'
+import {
+  CommitSummarySchema,
+  GitBranchesSchema,
+  GitLogSchema,
+  GitStatusSchema,
+  RepoOpenSuccessSchema
+} from './git'
 
 export const Channel = {
   selectFolder: 'select-folder',
@@ -28,104 +34,98 @@ export const Channel = {
   repoChanged: 'repo-changed'
 } as const
 
-export const RepoNotOpen = Schema.TaggedStruct('RepoNotOpen', {})
-export type RepoNotOpen = typeof RepoNotOpen.Type
+const repoNotOpen = z.object({ _tag: z.literal('RepoNotOpen') })
+const gitError = z.object({ _tag: z.literal('GitError'), message: z.string() })
 
-export const GitError = Schema.TaggedStruct('GitError', {
-  message: Schema.String
+export const StatusResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), status: GitStatusSchema }),
+  repoNotOpen,
+  gitError
+])
+export type StatusResponse = z.infer<typeof StatusResponseSchema>
+
+export const BranchesResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), branches: GitBranchesSchema }),
+  repoNotOpen,
+  gitError
+])
+export type BranchesResponse = z.infer<typeof BranchesResponseSchema>
+
+export const OpenRepoResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), result: RepoOpenSuccessSchema }),
+  z.object({ _tag: z.literal('NotARepo') }),
+  gitError
+])
+export type OpenRepoResponse = z.infer<typeof OpenRepoResponseSchema>
+
+export const LogResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), log: GitLogSchema }),
+  repoNotOpen,
+  gitError
+])
+export type LogResponse = z.infer<typeof LogResponseSchema>
+
+export const StageResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok') }),
+  repoNotOpen,
+  gitError
+])
+export type StageResponse = z.infer<typeof StageResponseSchema>
+
+export const UnstageResponseSchema = StageResponseSchema
+export type UnstageResponse = z.infer<typeof UnstageResponseSchema>
+
+export const CommitResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), result: CommitSummarySchema }),
+  repoNotOpen,
+  gitError
+])
+export type CommitResponse = z.infer<typeof CommitResponseSchema>
+
+export const FetchResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok') }),
+  z.object({ _tag: z.literal('FetchSkipped') }),
+  repoNotOpen,
+  gitError
+])
+export type FetchResponse = z.infer<typeof FetchResponseSchema>
+
+export const StartLogStreamResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok') }),
+  gitError
+])
+export type StartLogStreamResponse = z.infer<typeof StartLogStreamResponseSchema>
+
+export const CancelLogStreamResponseSchema = z.object({})
+export type CancelLogStreamResponse = z.infer<typeof CancelLogStreamResponseSchema>
+
+export const ScanForReposResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), repos: z.array(z.string()) }),
+  gitError
+])
+export type ScanForReposResponse = z.infer<typeof ScanForReposResponseSchema>
+
+export const RefKindSchema = z.enum(['local', 'remote', 'tag'])
+export type RefKindSchema = z.infer<typeof RefKindSchema>
+
+export const CheckoutResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), checkedOut: z.string() }),
+  repoNotOpen,
+  gitError
+])
+export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>
+
+export const SidebarPrefsSchema = z.object({
+  open: z.boolean(),
+  width: z.number()
 })
-export type GitError = typeof GitError.Type
+export type SidebarPrefs = z.infer<typeof SidebarPrefsSchema>
 
-export const FetchSkipped = Schema.TaggedStruct('FetchSkipped', {})
-export type FetchSkipped = typeof FetchSkipped.Type
+export const RefTreeTogglesSchema = z.array(z.string())
+export type RefTreeToggles = z.infer<typeof RefTreeTogglesSchema>
 
-export const NotARepo = Schema.TaggedStruct('NotARepo', {})
-export type NotARepo = typeof NotARepo.Type
-
-export const StatusResponse = Schema.Union(
-  Schema.TaggedStruct('Ok', { status: GitStatus }),
-  RepoNotOpen,
-  GitError
-)
-export type StatusResponse = typeof StatusResponse.Type
-
-export const BranchesResponse = Schema.Union(
-  Schema.TaggedStruct('Ok', { branches: GitBranches }),
-  RepoNotOpen,
-  GitError
-)
-export type BranchesResponse = typeof BranchesResponse.Type
-
-export const OpenRepoResponse = Schema.Union(
-  Schema.TaggedStruct('Ok', { result: RepoOpenSuccess }),
-  NotARepo,
-  GitError
-)
-export type OpenRepoResponse = typeof OpenRepoResponse.Type
-
-export const LogResponse = Schema.Union(
-  Schema.TaggedStruct('Ok', { log: GitLog }),
-  RepoNotOpen,
-  GitError
-)
-export type LogResponse = typeof LogResponse.Type
-
-export const StageResponse = Schema.Union(Schema.TaggedStruct('Ok', {}), RepoNotOpen, GitError)
-export type StageResponse = typeof StageResponse.Type
-
-export const UnstageResponse = StageResponse
-export type UnstageResponse = StageResponse
-
-export const CommitResponse = Schema.Union(
-  Schema.TaggedStruct('Ok', { result: CommitSummary }),
-  RepoNotOpen,
-  GitError
-)
-export type CommitResponse = typeof CommitResponse.Type
-
-export const FetchResponse = Schema.Union(
-  Schema.TaggedStruct('Ok', {}),
-  FetchSkipped,
-  RepoNotOpen,
-  GitError
-)
-export type FetchResponse = typeof FetchResponse.Type
-
-export const StartLogStreamResponse = Schema.Union(Schema.TaggedStruct('Ok', {}), GitError)
-export type StartLogStreamResponse = typeof StartLogStreamResponse.Type
-
-export const CancelLogStreamResponse = Schema.Struct({})
-export type CancelLogStreamResponse = typeof CancelLogStreamResponse.Type
-
-export const ScanForReposResponse = Schema.Union(
-  Schema.TaggedStruct('Ok', { repos: Schema.Array(Schema.String) }),
-  GitError
-)
-export type ScanForReposResponse = typeof ScanForReposResponse.Type
-
-export const RefKindSchema = Schema.Literal('local', 'remote', 'tag')
-export type RefKindSchema = typeof RefKindSchema.Type
-
-export const CheckoutResponse = Schema.Union(
-  Schema.TaggedStruct('Ok', { checkedOut: Schema.String }),
-  RepoNotOpen,
-  GitError
-)
-export type CheckoutResponse = typeof CheckoutResponse.Type
-
-export const SidebarPrefs = Schema.Struct({
-  open: Schema.Boolean,
-  width: Schema.Number
+export const PersistedTabsSchema = z.object({
+  tabs: z.array(z.string().nullable()),
+  activeIndex: z.number()
 })
-export type SidebarPrefs = typeof SidebarPrefs.Type
-
-export const RefTreeToggles = Schema.Array(Schema.String)
-export type RefTreeToggles = typeof RefTreeToggles.Type
-
-export const PersistedTabs = Schema.mutable(
-  Schema.Struct({
-    tabs: Schema.mutable(Schema.Array(Schema.NullOr(Schema.String))),
-    activeIndex: Schema.Number
-  })
-)
-export type PersistedTabs = typeof PersistedTabs.Type
+export type PersistedTabs = z.infer<typeof PersistedTabsSchema>

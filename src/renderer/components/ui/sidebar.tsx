@@ -69,8 +69,11 @@ function SidebarProvider(
 
   const open = () => local.open ?? internalOpen()
   const setOpen = (value: boolean) => {
-    if (local.onOpenChange) local.onOpenChange(value)
-    else setInternalOpen(value)
+    if (local.onOpenChange) {
+      local.onOpenChange(value)
+    } else {
+      setInternalOpen(value)
+    }
   }
 
   const toggleSidebar = () => (isMobile() ? setOpenMobile(!openMobile()) : setOpen(!open()))
@@ -229,7 +232,9 @@ function SidebarTrigger(props: ComponentProps<typeof Button>) {
       size="icon"
       class={cn('size-7', local.class)}
       onClick={(event) => {
-        if (typeof local.onClick === 'function') local.onClick(event)
+        if (typeof local.onClick === 'function') {
+          local.onClick(event)
+        }
         toggleSidebar()
       }}
       {...rest}

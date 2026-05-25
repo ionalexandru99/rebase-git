@@ -1,8 +1,13 @@
 import { spawn } from 'node:child_process'
-import { encodeOrThrow } from '@shared/codec'
+import { parseOrThrow } from '@shared/codec'
 import { normalizeRepoPath } from '@shared/repo-path'
 import type { GitLogEntry, LogChunk } from '@shared/schemas/git'
-import { CancelLogStreamResponse, Channel, StartLogStreamResponse } from '@shared/schemas/ipc'
+import {
+  CancelLogStreamResponseSchema,
+  Channel,
+  type StartLogStreamResponse,
+  StartLogStreamResponseSchema
+} from '@shared/schemas/ipc'
 import { ipcMain, webContents as webContentsApi } from 'electron'
 
 const FS_SEP = '\x1F'
@@ -27,23 +32,33 @@ function streamKey(webContentsId: number, repoPath: string): string {
 function killActiveStream(webContentsId: number, repoPath: string): void {
   const key = streamKey(webContentsId, repoPath)
   const existing = activeLogStreams.get(key)
-  if (!existing) return
+  if (!existing) {
+    return
+  }
   activeLogStreams.delete(key)
-  if (!existing.proc.killed) existing.proc.kill()
+  if (!existing.proc.killed) {
+    existing.proc.kill()
+  }
   existing.finishOk()
 }
 
 function killAllStreamsForWebContents(webContentsId: number): void {
   for (const [key, stream] of activeLogStreams) {
-    if (stream.webContentsId !== webContentsId) continue
+    if (stream.webContentsId !== webContentsId) {
+      continue
+    }
     activeLogStreams.delete(key)
-    if (!stream.proc.killed) stream.proc.kill()
+    if (!stream.proc.killed) {
+      stream.proc.kill()
+    }
     stream.finishOk()
   }
 }
 
 function bindWebContentsCleanup(webContentsId: number): void {
-  if (webContentsCleanupBound.has(webContentsId)) return
+  if (webContentsCleanupBound.has(webContentsId)) {
+    return
+  }
   webContentsCleanupBound.add(webContentsId)
   const contents = webContentsApi.fromId(webContentsId)
   if (!contents) {
@@ -65,17 +80,21 @@ export function register(): void {
     killActiveStream(webContentsId, key)
     bindWebContentsCleanup(webContentsId)
 
-    return new Promise<typeof StartLogStreamResponse.Encoded>((resolve) => {
+    return new Promise<StartLogStreamResponse>((resolve) => {
       let resolved = false
       const finishOk = () => {
-        if (resolved) return
+        if (resolved) {
+          return
+        }
         resolved = true
-        resolve(encodeOrThrow(StartLogStreamResponse, { _tag: 'Ok' }))
+        resolve(parseOrThrow(StartLogStreamResponseSchema, { _tag: 'Ok' }))
       }
       const finishErr = (message: string) => {
-        if (resolved) return
+        if (resolved) {
+          return
+        }
         resolved = true
-        resolve(encodeOrThrow(StartLogStreamResponse, { _tag: 'GitError', message }))
+        resolve(parseOrThrow(StartLogStreamResponseSchema, { _tag: 'GitError', message }))
       }
 
       const proc = spawn(
@@ -101,8 +120,12 @@ export function register(): void {
       let batch: GitLogEntry[] = []
 
       const send = (done: boolean) => {
-        if (webContents.isDestroyed()) return
-        if (batch.length === 0 && !done) return
+        if (webContents.isDestroyed()) {
+          return
+        }
+        if (batch.length === 0 && !done) {
+          return
+        }
         const chunk: LogChunk = { repoPath: key, commits: batch, done }
         webContents.send(Channel.logChunk, chunk)
         batch = []
@@ -127,7 +150,9 @@ export function register(): void {
                 parents: parentsStr ? parentsStr.split(' ').filter(Boolean) : [],
                 refs: refs ?? ''
               })
-              if (batch.length >= STREAM_BATCH_SIZE) send(false)
+              if (batch.length >= STREAM_BATCH_SIZE) {
+                send(false)
+              }
             }
           }
           idx = buffer.indexOf(RS_SEP)
@@ -138,12 +163,16 @@ export function register(): void {
       proc.stderr?.setEncoding('utf8')
       proc.stderr?.on('data', (chunk: string) => {
         stderrBuf += chunk
-        if (stderrBuf.length > 4096) stderrBuf = stderrBuf.slice(-4096)
+        if (stderrBuf.length > 4096) {
+          stderrBuf = stderrBuf.slice(-4096)
+        }
       })
 
       proc.on('error', (err) => {
         const current = activeLogStreams.get(mapKey)
-        if (current?.proc !== proc) return
+        if (current?.proc !== proc) {
+          return
+        }
         activeLogStreams.delete(mapKey)
         if (!webContents.isDestroyed()) {
           const chunk: LogChunk = {
@@ -159,7 +188,9 @@ export function register(): void {
 
       proc.on('close', (code) => {
         const current = activeLogStreams.get(mapKey)
-        if (current?.proc !== proc) return
+        if (current?.proc !== proc) {
+          return
+        }
         activeLogStreams.delete(mapKey)
 
         if (code !== 0 && code !== null) {
@@ -188,6 +219,6 @@ export function register(): void {
     } else {
       killAllStreamsForWebContents(event.sender.id)
     }
-    return encodeOrThrow(CancelLogStreamResponse, {})
+    return parseOrThrow(CancelLogStreamResponseSchema, {})
   })
 }

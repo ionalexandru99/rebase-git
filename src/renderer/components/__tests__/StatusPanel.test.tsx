@@ -107,9 +107,9 @@ describe('StatusPanel', () => {
 
     expect(screen.getByText('Clean working tree')).toBeInTheDocument()
     expect(screen.getByText('Clean')).toBeInTheDocument()
-    expect(screen.getByText('No staged files')).toBeInTheDocument()
-    expect(screen.getByText('No working-tree changes')).toBeInTheDocument()
-    expect(screen.getByText('No untracked files')).toBeInTheDocument()
+    expect(screen.getByText('Staged')).toBeInTheDocument()
+    expect(screen.getByText('Changes')).toBeInTheDocument()
+    expect(screen.getByText('Untracked')).toBeInTheDocument()
   })
 
   it('shows a loading badge when loading and hides the clean badge', () => {

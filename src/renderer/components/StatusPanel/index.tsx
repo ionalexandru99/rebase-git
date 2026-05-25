@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js'
+import { Show } from 'solid-js'
 import type { GitStatus } from '@/types'
 import { Badge } from '../ui/badge'
 import { LoadingBadge } from '../ui/loading-badge'
@@ -11,9 +11,8 @@ import {
   PanelSubtitle,
   PanelTitle
 } from '../ui/panel'
-import { FileRow } from './FileRow'
-import { FileSection } from './FileSection'
 import { StatusPanelSkeleton } from './Skeleton'
+import { VirtualFileList } from './VirtualFileList'
 
 interface StatusPanelProps {
   status: GitStatus | null
@@ -47,10 +46,6 @@ export function StatusPanel(props: StatusPanelProps) {
             ? 'Clean working tree'
             : `${totalChanges()} pending change${totalChanges() === 1 ? '' : 's'}`
 
-        const stagedCount = () => status().staged.length + status().created.length
-        const changesCount = () =>
-          status().modified.length + status().deleted.length + status().renamed.length
-
         return (
           <Panel>
             <PanelHeader>
@@ -82,92 +77,12 @@ export function StatusPanel(props: StatusPanelProps) {
               </PanelActions>
             </PanelHeader>
 
-            <PanelBody scroll>
-              <div class="px-1.5 pb-3 pt-2">
-                <Show when={status().conflicted.length > 0}>
-                  <FileSection label="Conflicted" count={status().conflicted.length}>
-                    <For each={status().conflicted}>
-                      {(file) => <FileRow file={file} kind="conflicted" />}
-                    </For>
-                  </FileSection>
-                </Show>
-
-                <FileSection label="Staged" count={stagedCount()} emptyText="No staged files">
-                  <For each={status().staged}>
-                    {(file) => (
-                      <FileRow
-                        file={file}
-                        kind="staged"
-                        actionLabel="Unstage"
-                        onAction={props.onUnstage}
-                      />
-                    )}
-                  </For>
-                  <For each={status().created}>
-                    {(file) => (
-                      <FileRow
-                        file={file}
-                        kind="created"
-                        actionLabel="Unstage"
-                        onAction={props.onUnstage}
-                      />
-                    )}
-                  </For>
-                </FileSection>
-
-                <FileSection
-                  label="Changes"
-                  count={changesCount()}
-                  emptyText="No working-tree changes"
-                >
-                  <For each={status().modified}>
-                    {(file) => (
-                      <FileRow
-                        file={file}
-                        kind="modified"
-                        actionLabel="Stage"
-                        onAction={props.onStage}
-                      />
-                    )}
-                  </For>
-                  <For each={status().deleted}>
-                    {(file) => (
-                      <FileRow
-                        file={file}
-                        kind="deleted"
-                        actionLabel="Stage"
-                        onAction={props.onStage}
-                      />
-                    )}
-                  </For>
-                  <For each={status().renamed}>
-                    {(entry) => (
-                      <FileRow
-                        file={entry.to}
-                        display={`${entry.from} → ${entry.to}`}
-                        kind="renamed"
-                      />
-                    )}
-                  </For>
-                </FileSection>
-
-                <FileSection
-                  label="Untracked"
-                  count={status().not_added.length}
-                  emptyText="No untracked files"
-                >
-                  <For each={status().not_added}>
-                    {(file) => (
-                      <FileRow
-                        file={file}
-                        kind="untracked"
-                        actionLabel="Stage"
-                        onAction={props.onStage}
-                      />
-                    )}
-                  </For>
-                </FileSection>
-              </div>
+            <PanelBody class="flex min-h-0 flex-col">
+              <VirtualFileList
+                status={status()}
+                onStage={props.onStage}
+                onUnstage={props.onUnstage}
+              />
             </PanelBody>
           </Panel>
         )

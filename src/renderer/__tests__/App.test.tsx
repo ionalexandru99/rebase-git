@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library'
+import { fireEvent, screen, waitFor } from '@solidjs/testing-library'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { renderApp } from '@/../test/render-app'
 import { setupLogStream, sidecarMock } from '@/../test/setup'
-import App from '../App'
 
 beforeEach(() => {
   setupLogStream()
@@ -42,7 +42,7 @@ describe('App — onboarding gate', () => {
     vi.mocked(window.electronAPI.getOnboardingComplete).mockReturnValue(new Promise(() => {}))
     vi.mocked(window.electronAPI.getRecentRepos).mockResolvedValue([])
 
-    render(() => <App />)
+    renderApp()
 
     expect(screen.getByText('Loading...')).toBeInTheDocument()
   })
@@ -50,7 +50,7 @@ describe('App — onboarding gate', () => {
   it('renders the onboarding screen when onboarding is not complete', async () => {
     mockBaseAPI({ onboardingComplete: false })
 
-    render(() => <App />)
+    renderApp()
 
     await waitFor(() => {
       expect(screen.getByText('Welcome to Rebase')).toBeInTheDocument()
@@ -62,7 +62,7 @@ describe('App — tab shell', () => {
   it('renders the Rebase brand in the tab bar after onboarding', async () => {
     mockBaseAPI()
 
-    render(() => <App />)
+    renderApp()
 
     await waitFor(() => {
       expect(screen.getByText('Rebase')).toBeInTheDocument()
@@ -73,7 +73,7 @@ describe('App — tab shell', () => {
   it('starts with a single empty tab that shows the repo picker', async () => {
     mockBaseAPI({ workingDirectory: '/home/user/repos' })
 
-    render(() => <App />)
+    renderApp()
 
     await waitFor(() => {
       expect(screen.getByText('Open a repository')).toBeInTheDocument()
@@ -85,7 +85,7 @@ describe('App — tab shell', () => {
   it('clicking "New tab" adds a tab and switches to it', async () => {
     mockBaseAPI()
 
-    render(() => <App />)
+    renderApp()
 
     await screen.findByRole('button', { name: /Open new tab/i })
     expect(screen.getAllByRole('tab')).toHaveLength(1)
@@ -98,7 +98,7 @@ describe('App — tab shell', () => {
   it('closes a tab when its close button is clicked', async () => {
     mockBaseAPI()
 
-    render(() => <App />)
+    renderApp()
 
     await screen.findByRole('button', { name: /Open new tab/i })
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
@@ -113,7 +113,7 @@ describe('App — tab shell', () => {
   it('closing the active middle tab selects the right neighbour', async () => {
     mockBaseAPI()
 
-    render(() => <App />)
+    renderApp()
 
     await screen.findByRole('button', { name: /Open new tab/i })
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
@@ -136,7 +136,7 @@ describe('App — tab shell', () => {
   it('closing the active rightmost tab selects the left neighbour', async () => {
     mockBaseAPI()
 
-    render(() => <App />)
+    renderApp()
 
     await screen.findByRole('button', { name: /Open new tab/i })
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
@@ -155,7 +155,7 @@ describe('App — tab shell', () => {
   it('closing an inactive tab leaves the current selection alone', async () => {
     mockBaseAPI()
 
-    render(() => <App />)
+    renderApp()
 
     await screen.findByRole('button', { name: /Open new tab/i })
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
@@ -172,7 +172,7 @@ describe('App — tab shell', () => {
   it('closing the only remaining tab replaces it with a fresh selected tab', async () => {
     mockBaseAPI()
 
-    render(() => <App />)
+    renderApp()
 
     await screen.findByRole('button', { name: /Open new tab/i })
     const initialTab = screen.getByRole('tab')
@@ -193,7 +193,7 @@ describe('App — repo picker (no repo open)', () => {
       scanRepos: ['/home/user/repos/my-app']
     })
 
-    render(() => <App />)
+    renderApp()
 
     await waitFor(() => {
       expect(screen.getByText('Workspace')).toBeInTheDocument()
@@ -207,7 +207,7 @@ describe('App — repo picker (no repo open)', () => {
       recentRepos: ['/recent/repo']
     })
 
-    render(() => <App />)
+    renderApp()
 
     await waitFor(() => {
       expect(screen.getByText('Recent')).toBeInTheDocument()
@@ -218,7 +218,7 @@ describe('App — repo picker (no repo open)', () => {
   it('shows the add-workspace hint when no workspace has been configured', async () => {
     mockBaseAPI()
 
-    render(() => <App />)
+    renderApp()
 
     await waitFor(() => {
       expect(screen.getByText('Add a workspace')).toBeInTheDocument()
@@ -257,7 +257,7 @@ describe('App — repo picker (no repo open)', () => {
       branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
     })
 
-    render(() => <App />)
+    renderApp()
 
     const repoEntry = await screen.findByText('/home/user/repos/my-app')
     fireEvent.click(repoEntry)
@@ -274,7 +274,7 @@ describe('App — repo picker (no repo open)', () => {
       recentRepos: ['/recent/cool-repo', '/recent/something-else']
     })
 
-    render(() => <App />)
+    renderApp()
 
     await screen.findByText('/home/user/repos/my-app')
     expect(screen.getByText('/home/user/repos/other-thing')).toBeInTheDocument()
@@ -322,7 +322,7 @@ describe('App — persisted tabs', () => {
     })
     setupLogStream()
 
-    render(() => <App />)
+    renderApp()
 
     await waitFor(() => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/restored')
@@ -357,7 +357,7 @@ describe('App — persisted tabs', () => {
     })
     setupLogStream()
 
-    render(() => <App />)
+    renderApp()
     fireEvent.click(await screen.findByText('/home/user/projects/my-app'))
 
     await waitFor(() => {
@@ -414,7 +414,7 @@ describe('App — workspace (repo open)', () => {
     vi.mocked(sidecarMock.getBranches).mockResolvedValue(branchesMock)
     const stream = setupLogStream()
 
-    render(() => <App />)
+    renderApp()
 
     const repoRow = await screen.findByText('/home/user/projects/my-app')
     fireEvent.click(repoRow)
@@ -495,7 +495,7 @@ describe('App — workspace (repo open)', () => {
     })
     setupLogStream()
 
-    render(() => <App />)
+    renderApp()
     const repoRow = await screen.findByText('/workspace/repo')
     fireEvent.click(repoRow)
 
@@ -535,7 +535,7 @@ describe('App — workspace (repo open)', () => {
     })
     setupLogStream()
 
-    render(() => <App />)
+    renderApp()
 
     fireEvent.click(await screen.findByText('/projects/repo-a'))
     await waitFor(() => {
@@ -582,7 +582,7 @@ describe('App — workspace (repo open)', () => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
     setupLogStream()
 
-    render(() => <App />)
+    renderApp()
 
     const firstRow = await screen.findByText('/home/user/projects/my-app')
     fireEvent.click(firstRow)
@@ -615,7 +615,7 @@ describe('App — workspace (repo open)', () => {
       _tag: 'NotARepo'
     })
 
-    render(() => <App />)
+    renderApp()
     const repoRow = await screen.findByText('/workspace/bad-repo')
     fireEvent.click(repoRow)
 
