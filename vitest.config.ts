@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/renderer/**/*.test.{ts,tsx}'],
+    exclude: [...configDefaults.exclude, 'src/renderer/solid/**'],
     setupFiles: ['./src/test/setup.ts'],
   },
   resolve: {
