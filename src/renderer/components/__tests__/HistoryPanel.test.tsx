@@ -177,6 +177,29 @@ describe('HistoryPanel', () => {
     expect(screen.getByText('shared base')).toBeInTheDocument()
     expect(screen.queryByText('main tip')).not.toBeInTheDocument()
   })
+
+  it('does not filter when selected refs exist but filter mode is off', () => {
+    renderPanel(
+      {
+        all: [
+          entry({ hash: 'f1', message: 'feature tip', refs: 'feature', parents: ['base'] }),
+          entry({ hash: 'm1', message: 'main tip', refs: 'main', parents: ['base'] }),
+          entry({ hash: 'base', message: 'shared base', parents: [] })
+        ],
+        total: 3
+      },
+      {
+        branchFilterActive: false,
+        selectedBranchRefs: new Set([refFilterKey('local', 'feature')]),
+        remoteBranches: []
+      }
+    )
+
+    expect(screen.getByText('3 commits · all branches')).toBeInTheDocument()
+    expect(screen.getByText('feature tip')).toBeInTheDocument()
+    expect(screen.getByText('main tip')).toBeInTheDocument()
+    expect(screen.getByText('shared base')).toBeInTheDocument()
+  })
 })
 
 describe('parseRefs', () => {

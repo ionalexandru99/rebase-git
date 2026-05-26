@@ -43,14 +43,17 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const branchFilterActive = () =>
     !!(props.branchFilterActive && props.selectedBranchRefs && props.selectedBranchRefs.size > 0)
 
-  const branchFilteredSet = createMemo(() =>
-    computeBranchFilterSet(
+  const branchFilteredSet = createMemo(() => {
+    if (!props.branchFilterActive || !props.selectedBranchRefs?.size) {
+      return null
+    }
+    return computeBranchFilterSet(
       allCommits(),
       props.selectedBranchRefs,
       props.remoteBranches,
       remoteNames()
     )
-  )
+  })
 
   const commits = createMemo<GitLogEntry[]>(() => {
     const set = branchFilteredSet()
