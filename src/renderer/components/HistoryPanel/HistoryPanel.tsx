@@ -17,13 +17,16 @@ import { CommitGraphCanvas } from './CommitGraphCanvas'
 import { CommitRow } from './CommitRow'
 import { HistoryHeader } from './HistoryHeader'
 import { SkeletonRows } from './SkeletonRows'
-import { computeOnBranchSet, computeVisibleSet } from './selectors'
+import { computeBranchFilterSet, computeOnBranchSet, computeVisibleSet } from './selectors'
 
 interface HistoryPanelProps {
   log: GitLog | null
   loading: boolean
   remotes?: Record<string, string>
   currentBranch?: string
+  remoteBranches?: string[]
+  branchFilterActive?: boolean
+  selectedBranchRefs?: ReadonlySet<string>
 }
 
 const COL_AUTHOR_REM = 12
@@ -35,15 +38,48 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const remotes = () => props.remotes ?? {}
   const remoteNames = createMemo(() => new Set(Object.keys(remotes())))
 
-  const commits = createMemo<GitLogEntry[]>(() => props.log?.all ?? [])
+  const allCommits = createMemo<GitLogEntry[]>(() => props.log?.all ?? [])
 
-  const onBranchSet = createMemo(() =>
-    computeOnBranchSet(commits(), remoteNames(), props.currentBranch)
-  )
+  const branchFilterActive = () =>
+    !!(props.branchFilterActive && props.selectedBranchRefs && props.selectedBranchRefs.size > 0)
+
+  const branchFilteredSet = createMemo(() => {
+    if (!props.branchFilterActive || !props.selectedBranchRefs?.size) {
+      return null
+    }
+    return computeBranchFilterSet(
+      allCommits(),
+      props.selectedBranchRefs,
+      props.remoteBranches,
+      remoteNames()
+    )
+  })
+
+  const commits = createMemo<GitLogEntry[]>(() => {
+    const set = branchFilteredSet()
+    if (!set) {
+      return allCommits()
+    }
+    return allCommits().filter((commit) => set.has(commit.hash))
+  })
+
+  const onBranchSet = createMemo(() => {
+    if (branchFilterActive()) {
+      return null
+    }
+    return computeOnBranchSet(allCommits(), remoteNames(), props.currentBranch)
+  })
 
   let layoutCache: LayoutResult | null = null
   const layout = createMemo(() => {
-    const result = layoutCommits(commits(), layoutCache ?? undefined)
+    const list = commits()
+    if (
+      layoutCache &&
+      (list.length < layoutCache.commits.length || list[0]?.hash !== layoutCache.commits[0]?.hash)
+    ) {
+      layoutCache = null
+    }
+    const result = layoutCommits(list, layoutCache ?? undefined)
     layoutCache = result
     return result
   })
@@ -99,10 +135,13 @@ export function HistoryPanel(props: HistoryPanelProps) {
     <Panel class="h-full">
       <HistoryHeader
         total={props.log?.total}
+        visibleTotal={commits().length}
         loading={props.loading}
         filter={filter()}
         onFilterChange={setFilter}
-        showFilter={commits().length > 0}
+        showFilter={allCommits().length > 0}
+        branchFilterActive={props.branchFilterActive}
+        selectedBranchCount={props.selectedBranchRefs?.size}
       />
 
       <Show when={commits().length > 0}>
@@ -126,7 +165,17 @@ export function HistoryPanel(props: HistoryPanelProps) {
         <Show
           when={props.log && commits().length > 0}
           fallback={
-            <Show when={props.loading} fallback={<HistoryEmptyState />}>
+            <Show
+              when={props.loading}
+              fallback={
+                <Show
+                  when={branchFilterActive() && allCommits().length > 0}
+                  fallback={<HistoryEmptyState />}
+                >
+                  <FilteredEmptyState />
+                </Show>
+              }
+            >
               <SkeletonRows gridTemplate={gridTemplate} viewportHeight={viewportHeight()} />
             </Show>
           }
@@ -220,6 +269,17 @@ function HistoryEmptyState() {
       icon={GitCommitHorizontalIcon}
       title="No commits yet"
       description="Make your first commit to populate the timeline."
+    />
+  )
+}
+
+function FilteredEmptyState() {
+  return (
+    <EmptyState
+      size="sm"
+      icon={GitCommitHorizontalIcon}
+      title="No matching commits"
+      description="Selected branches have no commits in the loaded history yet."
     />
   )
 }

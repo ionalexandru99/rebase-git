@@ -1,6 +1,7 @@
-import { FileDiffIcon, HistoryIcon } from 'lucide-solid'
+import { FileDiffIcon, HistoryIcon, ListFilterIcon } from 'lucide-solid'
 import { Show } from 'solid-js'
 import type { BranchTracking, RefKind } from '@/lib/ref-tree'
+import { Button } from '../ui/button'
 import {
   Sidebar as ShadSidebar,
   SidebarContent,
@@ -24,7 +25,11 @@ interface AppSidebarProps {
   workingChanges: number
   activeView: SidebarView
   tracking?: Record<string, BranchTracking>
+  branchFilterActive?: boolean
+  selectedFilterRefs?: ReadonlySet<string>
   onSelectView: (view: SidebarView) => void
+  onToggleBranchFilter?: () => void
+  onToggleFilterRef?: (refKind: RefKind, fullPath: string) => void
   onResizeStart?: (event: MouseEvent) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
 }
@@ -70,15 +75,45 @@ export function AppSidebar(props: AppSidebarProps) {
           </SidebarMenu>
         </SidebarGroup>
 
-        <RefTreePanel
-          localBranches={props.localBranches}
-          remoteBranches={props.remoteBranches}
-          tags={props.tags}
-          currentBranch={props.currentBranch}
-          loading={props.branchesLoading}
-          tracking={props.tracking}
-          onCheckoutRef={props.onCheckoutRef}
-        />
+        <SidebarGroup class="min-h-0 flex-1 !overflow-hidden">
+          <div class="flex items-center justify-between px-2 pb-1">
+            <SidebarGroupLabel class="mb-0">Branches</SidebarGroupLabel>
+            <div class="relative">
+              <Button
+                type="button"
+                variant={props.branchFilterActive ? 'secondary' : 'ghost'}
+                size="icon-xs"
+                title="Filter timeline by branch"
+                aria-pressed={props.branchFilterActive}
+                data-testid="branch-filter-toggle"
+                onClick={() => props.onToggleBranchFilter?.()}
+              >
+                <ListFilterIcon />
+              </Button>
+              <Show when={(props.selectedFilterRefs?.size ?? 0) > 0}>
+                <span
+                  data-testid="branch-filter-count"
+                  class="pointer-events-none absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground"
+                >
+                  {props.selectedFilterRefs?.size}
+                </span>
+              </Show>
+            </div>
+          </div>
+
+          <RefTreePanel
+            localBranches={props.localBranches}
+            remoteBranches={props.remoteBranches}
+            tags={props.tags}
+            currentBranch={props.currentBranch}
+            loading={props.branchesLoading}
+            tracking={props.tracking}
+            filterActive={props.branchFilterActive}
+            selectedFilterRefs={props.selectedFilterRefs}
+            onToggleFilterRef={props.onToggleFilterRef}
+            onCheckoutRef={props.onCheckoutRef}
+          />
+        </SidebarGroup>
       </SidebarContent>
     </ShadSidebar>
   )

@@ -1,6 +1,140 @@
 import { fuzzyMatchSet } from '@/lib/fuzzy'
 import { parseRefs } from '@/lib/git-graph/refs'
+import type { RefKind } from '@/lib/ref-tree'
 import type { GitLogEntry } from '@/types'
+
+export interface FilterRef {
+  kind: RefKind
+  fullPath: string
+}
+
+export function refFilterKey(kind: RefKind, fullPath: string): string {
+  return `${kind}:${fullPath}`
+}
+
+export function parseFilterRefKey(key: string): FilterRef | null {
+  const colon = key.indexOf(':')
+  if (colon === -1) {
+    return null
+  }
+  const kind = key.slice(0, colon) as RefKind
+  if (kind !== 'local' && kind !== 'remote' && kind !== 'tag') {
+    return null
+  }
+  const fullPath = key.slice(colon + 1)
+  if (!fullPath) {
+    return null
+  }
+  return { kind, fullPath }
+}
+
+function buildCommitByHash(commits: GitLogEntry[]): Map<string, GitLogEntry> {
+  const byHash = new Map<string, GitLogEntry>()
+  for (const commit of commits) {
+    byHash.set(commit.hash, commit)
+  }
+  return byHash
+}
+
+function computeReachableSet(commits: GitLogEntry[], tipHashes: string[]): Set<string> {
+  const byHash = buildCommitByHash(commits)
+  const reachable = new Set<string>()
+  const stack = [...tipHashes]
+  while (stack.length > 0) {
+    const hash = stack.pop() as string
+    if (reachable.has(hash)) {
+      continue
+    }
+    reachable.add(hash)
+    const commit = byHash.get(hash)
+    if (!commit) {
+      continue
+    }
+    for (const parent of commit.parents) {
+      stack.push(parent)
+    }
+  }
+  return reachable
+}
+
+export function findRefTip(
+  commits: GitLogEntry[],
+  refKind: RefKind,
+  fullPath: string,
+  remoteNames: Set<string>
+): string | undefined {
+  for (const commit of commits) {
+    if (!commit.refs) {
+      continue
+    }
+    const parsed = parseRefs(commit.refs, remoteNames)
+    for (const ref of parsed) {
+      if (refKind === 'local' && ref.kind === 'branch' && ref.label === fullPath) {
+        return commit.hash
+      }
+      if (refKind === 'remote' && ref.kind === 'remote' && ref.label === fullPath) {
+        return commit.hash
+      }
+    }
+  }
+  return undefined
+}
+
+export function expandFilterRefs(
+  selectedRefs: ReadonlySet<string>,
+  remoteBranches: string[]
+): FilterRef[] {
+  const remoteSet = new Set(remoteBranches)
+  const expanded: FilterRef[] = []
+  const seen = new Set<string>()
+
+  for (const key of selectedRefs) {
+    const parsed = parseFilterRefKey(key)
+    if (!parsed || parsed.kind === 'tag') {
+      continue
+    }
+    const ownKey = refFilterKey(parsed.kind, parsed.fullPath)
+    if (!seen.has(ownKey)) {
+      seen.add(ownKey)
+      expanded.push(parsed)
+    }
+    if (parsed.kind === 'local') {
+      const trackingRemote = `origin/${parsed.fullPath}`
+      if (remoteSet.has(trackingRemote)) {
+        const remoteKey = refFilterKey('remote', trackingRemote)
+        if (!seen.has(remoteKey)) {
+          seen.add(remoteKey)
+          expanded.push({ kind: 'remote', fullPath: trackingRemote })
+        }
+      }
+    }
+  }
+  return expanded
+}
+
+export function computeBranchFilterSet(
+  commits: GitLogEntry[],
+  selectedRefs: ReadonlySet<string> | undefined,
+  remoteBranches: string[] | undefined,
+  remoteNames: Set<string>
+): Set<string> | null {
+  if (!selectedRefs || selectedRefs.size === 0) {
+    return null
+  }
+
+  const expanded = expandFilterRefs(selectedRefs, remoteBranches ?? [])
+  const tipHashes: string[] = []
+  for (const ref of expanded) {
+    const tip = findRefTip(commits, ref.kind, ref.fullPath, remoteNames)
+    if (tip) {
+      tipHashes.push(tip)
+    }
+  }
+  if (tipHashes.length === 0) {
+    return new Set()
+  }
+  return computeReachableSet(commits, tipHashes)
+}
 
 export function computeOnBranchSet(
   commits: GitLogEntry[],
@@ -37,27 +171,7 @@ export function computeOnBranchSet(
     return null
   }
 
-  const byHash = new Map<string, GitLogEntry>()
-  for (const commit of commits) {
-    byHash.set(commit.hash, commit)
-  }
-  const reachable = new Set<string>()
-  const stack = [tip]
-  while (stack.length > 0) {
-    const hash = stack.pop() as string
-    if (reachable.has(hash)) {
-      continue
-    }
-    reachable.add(hash)
-    const commit = byHash.get(hash)
-    if (!commit) {
-      continue
-    }
-    for (const parent of commit.parents) {
-      stack.push(parent)
-    }
-  }
-  return reachable
+  return computeReachableSet(commits, [tip])
 }
 
 export function computeVisibleSet(filter: string, commits: GitLogEntry[]): Set<string> | null {

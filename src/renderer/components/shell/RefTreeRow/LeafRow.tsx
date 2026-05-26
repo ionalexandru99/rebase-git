@@ -14,7 +14,10 @@ import { AheadBehindBadge } from './AheadBehindBadge'
 interface LeafRowProps {
   row: RefLeafRow
   style: JSX.CSSProperties
+  filterActive?: boolean
+  filterSelected?: boolean
   onSelectLeaf?: (refKind: RefKind, fullPath: string) => void
+  onToggleFilterRef?: (refKind: RefKind, fullPath: string) => void
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
 }
 
@@ -27,23 +30,51 @@ const iconFor: Record<RefKind, Component<LucideProps>> = {
 export function LeafRow(props: LeafRowProps) {
   const icon = () => iconFor[props.row.refKind]
   const padLeft = () => 6 + props.row.depth * REF_TREE_INDENT_PX + 14
+  const showFilterCheckbox = () =>
+    props.filterActive && (props.row.refKind === 'local' || props.row.refKind === 'remote')
+
+  const handleClick = () => {
+    if (props.filterActive && showFilterCheckbox()) {
+      props.onToggleFilterRef?.(props.row.refKind, props.row.fullPath)
+      return
+    }
+    props.onSelectLeaf?.(props.row.refKind, props.row.fullPath)
+  }
 
   return (
     <ContextMenu>
       <ContextMenuTrigger
         as="button"
         type="button"
-        onClick={() => props.onSelectLeaf?.(props.row.refKind, props.row.fullPath)}
+        onClick={handleClick}
         onDblClick={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}
         class={cn(
           'absolute inset-x-0 flex items-center gap-1.5 rounded-sm pr-2 text-sm hover:bg-sidebar-accent/60',
           props.row.isCurrent
             ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-            : 'text-foreground/90'
+            : 'text-foreground/90',
+          props.filterSelected && 'ring-1 ring-inset ring-sidebar-primary/40'
         )}
         style={{ ...props.style, 'padding-left': `${padLeft()}px` }}
         title={props.row.fullPath}
+        aria-pressed={props.filterActive ? props.filterSelected : undefined}
       >
+        <Show when={showFilterCheckbox()}>
+          <span
+            data-testid="ref-filter-checkbox"
+            aria-hidden="true"
+            class={cn(
+              'flex size-3.5 shrink-0 items-center justify-center rounded-sm border',
+              props.filterSelected
+                ? 'border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground'
+                : 'border-muted-foreground/40 bg-background'
+            )}
+          >
+            <Show when={props.filterSelected}>
+              <CheckIcon class="size-2.5" />
+            </Show>
+          </span>
+        </Show>
         <Show when={props.row.isCurrent}>
           <span
             aria-hidden="true"

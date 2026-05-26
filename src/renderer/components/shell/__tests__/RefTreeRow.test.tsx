@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@solidjs/testing-library'
 import { describe, expect, it, vi } from 'vitest'
+import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import type { RefKind, RefLeafRow } from '@/lib/ref-tree'
 import { RefTreeRow } from '../RefTreeRow'
 
@@ -15,14 +16,25 @@ function leaf(overrides: Partial<RefLeafRow> = {}): RefLeafRow {
   }
 }
 
-function renderRow(row: RefLeafRow, onCheckoutLeaf?: (k: RefKind, p: string) => void) {
+function renderRow(
+  row: RefLeafRow,
+  options: {
+    onCheckoutLeaf?: (k: RefKind, p: string) => void
+    onToggleFilterRef?: (k: RefKind, p: string) => void
+    filterActive?: boolean
+    selectedFilterRefs?: ReadonlySet<string>
+  } = {}
+) {
   return render(() => (
     <RefTreeRow
       row={row}
       top={0}
       loading={false}
       onToggleCollapsed={() => {}}
-      onCheckoutLeaf={onCheckoutLeaf}
+      onCheckoutLeaf={options.onCheckoutLeaf}
+      onToggleFilterRef={options.onToggleFilterRef}
+      filterActive={options.filterActive}
+      selectedFilterRefs={options.selectedFilterRefs}
     />
   ))
 }
@@ -46,14 +58,16 @@ describe('RefTreeRow leaf', () => {
     ['tag', 'v1.0.0']
   ])('calls onCheckoutLeaf with (%s, %s) on double-click', (refKind, fullPath) => {
     const onCheckoutLeaf = vi.fn()
-    renderRow(leaf({ refKind, fullPath, name: fullPath }), onCheckoutLeaf)
+    renderRow(leaf({ refKind, fullPath, name: fullPath }), { onCheckoutLeaf })
     fireEvent.dblClick(screen.getByRole('button', { name: fullPath }))
     expect(onCheckoutLeaf).toHaveBeenCalledWith(refKind, fullPath)
   })
 
   it('opens a context menu with Checkout that fires onCheckoutLeaf', async () => {
     const onCheckoutLeaf = vi.fn()
-    renderRow(leaf({ refKind: 'remote', fullPath: 'origin/main', name: 'main' }), onCheckoutLeaf)
+    renderRow(leaf({ refKind: 'remote', fullPath: 'origin/main', name: 'main' }), {
+      onCheckoutLeaf
+    })
     fireEvent.contextMenu(screen.getByTitle('origin/main'))
     const item = await screen.findByRole('menuitem', { name: 'Checkout' })
     fireEvent.pointerDown(item)
@@ -80,5 +94,45 @@ describe('RefTreeRow leaf', () => {
     renderRow(leaf())
     expect(screen.queryByTestId('ref-ahead')).not.toBeInTheDocument()
     expect(screen.queryByTestId('ref-behind')).not.toBeInTheDocument()
+  })
+
+  it('shows a filter checkbox for branch rows when filter mode is active', () => {
+    renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }), {
+      filterActive: true
+    })
+    expect(screen.getByTestId('ref-filter-checkbox')).toBeInTheDocument()
+  })
+
+  it('does not show a filter checkbox for tags when filter mode is active', () => {
+    renderRow(leaf({ refKind: 'tag', fullPath: 'v1.0', name: 'v1.0' }), { filterActive: true })
+    expect(screen.queryByTestId('ref-filter-checkbox')).not.toBeInTheDocument()
+  })
+
+  it('calls onToggleFilterRef on click when filter mode is active', () => {
+    const onToggleFilterRef = vi.fn()
+    renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }), {
+      filterActive: true,
+      onToggleFilterRef
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'feature' }))
+    expect(onToggleFilterRef).toHaveBeenCalledWith('local', 'feature')
+  })
+
+  it('still calls onCheckoutLeaf on double-click when filter mode is active', () => {
+    const onCheckoutLeaf = vi.fn()
+    renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }), {
+      filterActive: true,
+      onCheckoutLeaf
+    })
+    fireEvent.dblClick(screen.getByRole('button', { name: 'feature' }))
+    expect(onCheckoutLeaf).toHaveBeenCalledWith('local', 'feature')
+  })
+
+  it('marks selected filter refs as pressed', () => {
+    renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }), {
+      filterActive: true,
+      selectedFilterRefs: new Set([refFilterKey('local', 'feature')])
+    })
+    expect(screen.getByRole('button', { name: 'feature' })).toHaveAttribute('aria-pressed', 'true')
   })
 })

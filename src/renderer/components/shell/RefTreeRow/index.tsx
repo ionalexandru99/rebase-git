@@ -1,4 +1,5 @@
 import { type JSX, Match, Switch } from 'solid-js'
+import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import { REF_TREE_ROW_HEIGHT, type RefKind, type RefRow } from '@/lib/ref-tree'
 import { EmptyRow } from './EmptyRow'
 import { FolderRow } from './FolderRow'
@@ -10,8 +11,11 @@ interface RefTreeRowProps {
   row: RefRow
   top: number
   loading: boolean
+  filterActive?: boolean
+  selectedFilterRefs?: ReadonlySet<string>
   onToggleCollapsed: (key: string) => void
   onSelectLeaf?: (refKind: RefKind, fullPath: string) => void
+  onToggleFilterRef?: (refKind: RefKind, fullPath: string) => void
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
 }
 
@@ -53,7 +57,17 @@ export function RefTreeRow(props: RefTreeRowProps) {
         <LeafRow
           row={props.row as Extract<RefRow, { kind: 'leaf' }>}
           style={baseStyle()}
+          filterActive={props.filterActive}
+          filterSelected={
+            props.selectedFilterRefs?.has(
+              refFilterKey(
+                (props.row as Extract<RefRow, { kind: 'leaf' }>).refKind,
+                (props.row as Extract<RefRow, { kind: 'leaf' }>).fullPath
+              )
+            ) ?? false
+          }
           onSelectLeaf={props.onSelectLeaf}
+          onToggleFilterRef={props.onToggleFilterRef}
           onCheckoutLeaf={props.onCheckoutLeaf}
         />
       </Match>
