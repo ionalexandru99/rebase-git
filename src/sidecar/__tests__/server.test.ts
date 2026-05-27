@@ -33,11 +33,20 @@ function createFixtureRepo(commitCount: number): string {
   git(repo, ['init', '-b', 'main'])
   git(repo, ['config', 'user.email', 'test@example.com'])
   git(repo, ['config', 'user.name', 'Test'])
+  let importScript = ''
   for (let i = 1; i <= commitCount; i++) {
-    fs.writeFileSync(path.join(repo, 'file.txt'), `${i}\n`)
-    git(repo, ['add', 'file.txt'])
-    git(repo, ['commit', '-m', `commit ${i}`])
+    const fileContent = `${i}\n`
+    const message = `commit ${i}`
+    importScript += `blob\nmark :${i}\ndata ${Buffer.byteLength(fileContent)}\n${fileContent}`
+    importScript += `commit refs/heads/main\ncommitter Test <test@example.com> ${1_700_000_000 + i} +0000\n`
+    importScript += `data ${Buffer.byteLength(message)}\n${message}\nM 100644 :${i} file.txt\n`
   }
+  execFileSync('git', ['fast-import'], {
+    cwd: repo,
+    input: importScript,
+    stdio: ['pipe', 'ignore', 'ignore']
+  })
+  git(repo, ['checkout', '-f', 'main'])
   return repo
 }
 
