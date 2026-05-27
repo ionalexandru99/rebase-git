@@ -113,4 +113,40 @@ describe('CommitGraphCanvas', () => {
     })
     expect(strokeCount).toBeLessThan(4)
   })
+
+  it('redraws when visible row graph geometry changes without changing row count', async () => {
+    const scrollContainer = document.createElement('div')
+    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
+    const [scrollEl] = createSignal<HTMLDivElement | undefined>(scrollContainer)
+    const [rows, setRows] = createSignal<RowLayout[]>([
+      { ...row('a'), incoming: [], outgoing: [] },
+      { ...row('b'), incoming: [], outgoing: [] }
+    ])
+
+    render(() => (
+      <CommitGraphCanvas
+        rows={rows()}
+        scrollContainer={scrollEl}
+        viewportHeight={400}
+        visibleSet={null}
+        railWidth={40}
+        themeNonce={0}
+        scrollTop={0}
+        startIndex={0}
+        endIndex={2}
+        graphLayoutEndIndex={2}
+      />
+    ))
+
+    await vi.waitFor(() => {
+      expect(fillCount).toBeGreaterThan(0)
+    })
+    const before = strokeCount + fillCount
+
+    setRows([row('a'), row('b')])
+
+    await vi.waitFor(() => {
+      expect(strokeCount + fillCount).toBeGreaterThan(before)
+    })
+  })
 })

@@ -105,8 +105,12 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     void props.rows.length
     void props.graphLayoutEndIndex
     if (props.graphLayoutEndIndex > 0) {
-      void props.rows[0]?.commitLane
-      void props.rows[props.graphLayoutEndIndex - 1]?.commitLane
+      const end = Math.min(props.endIndex, props.graphLayoutEndIndex)
+      for (let index = props.startIndex; index < end; index++) {
+        void props.rows[index]?.commitLane
+        void props.rows[index]?.incoming.length
+        void props.rows[index]?.outgoing.length
+      }
     }
     visibleSetRevision(props.visibleSet)
     scheduleDraw()

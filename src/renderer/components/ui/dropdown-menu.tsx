@@ -103,12 +103,10 @@ function DropdownMenuRadioItem(props: ComponentProps<typeof DropdownMenuPrimitiv
   )
 }
 
-function DropdownMenuLabel(
-  props: ComponentProps<typeof DropdownMenuPrimitive.GroupLabel> & { inset?: boolean }
-) {
+function DropdownMenuLabel(props: JSX.HTMLAttributes<HTMLDivElement> & { inset?: boolean }) {
   const [local, rest] = splitProps(props, ['class', 'inset'])
   return (
-    <DropdownMenuPrimitive.GroupLabel
+    <div
       data-slot="dropdown-menu-label"
       data-inset={local.inset}
       class={cn('px-2 py-1.5 text-sm font-medium data-[inset]:pl-8', local.class)}
