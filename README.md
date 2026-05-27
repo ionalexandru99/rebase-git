@@ -10,7 +10,7 @@ A professional Git GUI built with Electron, React, TypeScript, and TailwindCSS.
 | **electron-vite** | Build tool for Electron |
 | **electron-builder** | Packaging and distribution |
 | **React** (v19) | UI framework |
-| **Vite** (v5) | Bundler and dev server |
+| **Vite** (v6) | Bundler and dev server |
 | **TypeScript** (v5.8) | Type safety |
 | **TailwindCSS** (v4) | Styling |
 | **Biome** (v2.4) | Formatter and linter |
@@ -37,8 +37,107 @@ A professional Git GUI built with Electron, React, TypeScript, and TailwindCSS.
 
 ### Prerequisites
 
-- Node.js (v18 or higher)
-- pnpm
+- Node.js 24
+- pnpm 10 or higher
+- Git
+
+The supported Node version is declared in `package.json`. If you use a Node version manager, run this project with Node 24 before installing dependencies.
+
+### macOS Setup
+
+Install Node.js 24 and pnpm, then install dependencies:
+
+```bash
+corepack enable
+corepack prepare pnpm@10.33.0 --activate
+pnpm install
+```
+
+Run the app in development mode:
+
+```bash
+pnpm dev
+```
+
+Build production files:
+
+```bash
+pnpm build
+```
+
+Package a macOS app:
+
+```bash
+pnpm package:mac
+```
+
+If `pnpm dev` fails with `Error: Electron uninstall` or `Electron failed to install correctly`, Electron's platform binary was not unpacked correctly. Rebuild Electron and retry:
+
+```bash
+pnpm rebuild electron
+pnpm dev
+```
+
+If that still fails, remove `node_modules` and reinstall:
+
+```bash
+rm -rf node_modules
+pnpm install --force
+pnpm rebuild electron
+pnpm dev
+```
+
+### Linux Setup
+
+Install system packages needed by Electron. Package names vary by distro, but these are the usual Ubuntu/Debian packages:
+
+```bash
+sudo apt update
+sudo apt install -y \
+  git \
+  libgtk-3-0 \
+  libnss3 \
+  libxss1 \
+  libasound2t64 \
+  libatk-bridge2.0-0 \
+  libdrm2 \
+  libgbm1
+```
+
+On older Ubuntu/Debian releases, the audio package may be named `libasound2` instead of `libasound2t64`.
+
+Install Node.js 24 and pnpm, then install dependencies:
+
+```bash
+corepack enable
+corepack prepare pnpm@10.33.0 --activate
+pnpm install
+```
+
+Run the app in development mode:
+
+```bash
+pnpm dev
+```
+
+Build production files:
+
+```bash
+pnpm build
+```
+
+Package a Linux build:
+
+```bash
+pnpm package:linux
+```
+
+If Electron fails to launch after install, rebuild its downloaded binary:
+
+```bash
+pnpm rebuild electron
+pnpm dev
+```
 
 ### Installation
 
@@ -151,4 +250,4 @@ This app follows Electron's secure best practices:
 
 ## License
 
-MIT
+Apache-2.0

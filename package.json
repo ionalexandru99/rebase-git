@@ -4,7 +4,7 @@
   "description": "A fast desktop Git GUI built with Electron + TypeScript",
   "main": "./out/main/index.js",
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.2.2",
