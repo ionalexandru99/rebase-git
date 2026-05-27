@@ -90,6 +90,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts=false
 
+      - name: Rebuild Electron binary
+        run: pnpm rebuild electron --pending
+
       - name: Install Electron system libraries
         run: |
           sudo apt-get update -q
