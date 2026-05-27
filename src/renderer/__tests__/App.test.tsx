@@ -573,7 +573,7 @@ describe('App — workspace (repo open)', () => {
     vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
       Promise.resolve({
         _tag: 'Ok',
-        result: { path, remotes: {}, defaultBranch: 'main' }
+        result: { path, remotes: {}, defaultBranch: 'feature/ui' }
       })
     )
     vi.mocked(sidecarMock.getStatus).mockResolvedValue(statusMock)
@@ -589,6 +589,7 @@ describe('App — workspace (repo open)', () => {
         maxCount: LOG_PAGE_SIZE
       })
     })
+    await screen.findAllByText('feature/ui')
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     const repoBPickerRow = (await screen.findAllByText('/projects/repo-b'))
