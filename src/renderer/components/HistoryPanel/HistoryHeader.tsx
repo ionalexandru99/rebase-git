@@ -1,4 +1,5 @@
 import { Show } from 'solid-js'
+import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { LoadingBadge } from '../ui/loading-badge'
 import { PanelActions, PanelHeader, PanelHeaderGroup, PanelSubtitle, PanelTitle } from '../ui/panel'
@@ -7,11 +8,13 @@ interface HistoryHeaderProps {
   total?: number
   visibleTotal?: number
   loading: boolean
+  loadingMore?: boolean
+  hasMore?: boolean
+  onLoadMore?: () => void
   filter: string
   onFilterChange: (value: string) => void
   showFilter: boolean
-  branchFilterActive?: boolean
-  selectedBranchCount?: number
+  visibleBranchCount?: number
 }
 
 function subtitle(props: HistoryHeaderProps): string {
@@ -20,11 +23,16 @@ function subtitle(props: HistoryHeaderProps): string {
     return 'Repository timeline'
   }
   const count = visible ?? 0
-  const commitLabel = `${count} commit${count === 1 ? '' : 's'}`
-  if (props.branchFilterActive && (props.selectedBranchCount ?? 0) > 0) {
-    return `${commitLabel} · filtered`
+  const commitLabel = `${count.toLocaleString()} commit${count === 1 ? '' : 's'}`
+  const visibleBranchCount = props.visibleBranchCount ?? 0
+  const filterLabel =
+    visibleBranchCount === 0
+      ? ' · no branches visible'
+      : ` · ${visibleBranchCount} branch${visibleBranchCount === 1 ? '' : 'es'} visible`
+  if (props.hasMore) {
+    return `${commitLabel}${filterLabel} · more available`
   }
-  return `${commitLabel} · all branches`
+  return `${commitLabel}${filterLabel}`
 }
 
 export function HistoryHeader(props: HistoryHeaderProps) {
@@ -36,6 +44,17 @@ export function HistoryHeader(props: HistoryHeaderProps) {
       </PanelHeaderGroup>
 
       <PanelActions>
+        <Show when={props.hasMore && props.onLoadMore}>
+          <Button
+            size="sm"
+            variant="outline"
+            class="h-7"
+            disabled={props.loadingMore || props.loading}
+            onClick={() => props.onLoadMore?.()}
+          >
+            {props.loadingMore ? 'Loading…' : 'Load more'}
+          </Button>
+        </Show>
         <Show when={props.showFilter}>
           <Input
             value={props.filter}
@@ -44,7 +63,7 @@ export function HistoryHeader(props: HistoryHeaderProps) {
             class="h-7 w-40"
           />
         </Show>
-        <Show when={props.loading}>
+        <Show when={props.loading || props.loadingMore}>
           <LoadingBadge />
         </Show>
       </PanelActions>

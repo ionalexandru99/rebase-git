@@ -1,15 +1,16 @@
+import { Channel } from '@shared/channels'
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
-import {
-  type CancelLogStreamResponse,
-  Channel,
-  type CheckoutResponse,
-  type OpenRepoResponse,
-  type PersistedTabs,
-  type RefTreeToggles,
-  type ScanForReposResponse,
-  type SidebarPrefs,
-  type StartLogStreamResponse
+import type {
+  CancelLogStreamResponse,
+  CheckoutResponse,
+  OpenRepoResponse,
+  PersistedTabs,
+  RefTreeToggles,
+  ScanForReposResponse,
+  SidebarPrefs,
+  StartLogStreamResponse
 } from '@shared/schemas/ipc'
+import type { LogStreamOptions } from '@shared/schemas/log-stream'
 import { contextBridge, ipcRenderer } from 'electron'
 
 export type LogChunkEvent = LogChunk
@@ -24,7 +25,7 @@ export interface IElectronAPI {
     refKind: 'local' | 'remote' | 'tag',
     fullPath: string
   ) => Promise<CheckoutResponse>
-  startLogStream: (repoPath: string) => Promise<StartLogStreamResponse>
+  startLogStream: (repoPath: string, options?: LogStreamOptions) => Promise<StartLogStreamResponse>
   cancelLogStream: (repoPath?: string) => Promise<CancelLogStreamResponse>
   onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => () => void
@@ -43,7 +44,7 @@ export interface IElectronAPI {
   getOnboardingComplete: () => Promise<boolean>
   setOnboardingComplete: (complete: boolean) => Promise<void>
   scanForRepos: (dirPath: string) => Promise<ScanForReposResponse>
-  getSidecarConfig: () => Promise<{ baseUrl: string; token: string }>
+  sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
 }
 
 const api: IElectronAPI = {
@@ -52,7 +53,8 @@ const api: IElectronAPI = {
   closeRepo: (path: string) => ipcRenderer.invoke(Channel.closeRepo, path),
   checkoutRef: (repoPath: string, refKind: 'local' | 'remote' | 'tag', fullPath: string) =>
     ipcRenderer.invoke(Channel.checkoutRef, repoPath, refKind, fullPath),
-  startLogStream: (repoPath: string) => ipcRenderer.invoke(Channel.startLogStream, repoPath),
+  startLogStream: (repoPath: string, options?: LogStreamOptions) =>
+    ipcRenderer.invoke(Channel.startLogStream, repoPath, options),
   cancelLogStream: (repoPath?: string) =>
     ipcRenderer.invoke(Channel.cancelLogStream, repoPath ?? ''),
   onLogChunk: (cb: (chunk: LogChunk) => void) => {
@@ -82,7 +84,8 @@ const api: IElectronAPI = {
   setOnboardingComplete: (complete: boolean) =>
     ipcRenderer.invoke('set-onboarding-complete', complete),
   scanForRepos: (dirPath: string) => ipcRenderer.invoke(Channel.scanForRepos, dirPath),
-  getSidecarConfig: () => ipcRenderer.invoke(Channel.getSidecarConfig)
+  sidecarRequest: (op: string, body: Record<string, unknown>) =>
+    ipcRenderer.invoke(Channel.sidecarRequest, op, body)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

@@ -23,11 +23,9 @@ interface ShellProps {
   changes: number
   activeView: SidebarView
   tracking?: Record<string, BranchTracking>
-  branchFilterActive?: boolean
-  selectedFilterRefs?: ReadonlySet<string>
+  visibleTimelineRefs?: ReadonlySet<string>
   onSelectView: (view: SidebarView) => void
-  onToggleBranchFilter?: () => void
-  onToggleFilterRef?: (refKind: RefKind, fullPath: string) => void
+  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onFetch?: () => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
   children: JSX.Element
@@ -69,11 +67,9 @@ export function Shell(props: ShellProps) {
         workingChanges={props.changes}
         activeView={props.activeView}
         tracking={props.tracking}
-        branchFilterActive={props.branchFilterActive}
-        selectedFilterRefs={props.selectedFilterRefs}
+        visibleTimelineRefs={props.visibleTimelineRefs}
         onSelectView={props.onSelectView}
-        onToggleBranchFilter={props.onToggleBranchFilter}
-        onToggleFilterRef={props.onToggleFilterRef}
+        onToggleTimelineVisibility={props.onToggleTimelineVisibility}
         onResizeStart={onResizeStart}
         onCheckoutRef={props.onCheckoutRef}
       />

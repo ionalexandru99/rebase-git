@@ -1,7 +1,8 @@
+import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import { fireEvent, screen, waitFor } from '@solidjs/testing-library'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderApp } from '@/../test/render-app'
-import { setupLogStream, sidecarMock } from '@/../test/setup'
+import { mockBranchResponses, setupLogStream, sidecarMock } from '@/../test/setup'
 
 beforeEach(() => {
   setupLogStream()
@@ -252,10 +253,7 @@ describe('App — repo picker (no repo open)', () => {
         renamed: []
       }
     })
-    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
-      _tag: 'Ok',
-      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
-    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
 
     renderApp()
 
@@ -316,10 +314,7 @@ describe('App — persisted tabs', () => {
         renamed: []
       }
     })
-    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
-      _tag: 'Ok',
-      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
-    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
     renderApp()
@@ -351,10 +346,7 @@ describe('App — persisted tabs', () => {
         renamed: []
       }
     })
-    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
-      _tag: 'Ok',
-      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
-    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
     renderApp()
@@ -392,8 +384,10 @@ describe('App — workspace (repo open)', () => {
     }
   }
   const branchesMock = {
-    _tag: 'Ok' as const,
-    branches: { current: 'feature/ui', all: ['main', 'feature/ui'], remotes: [], tags: [] }
+    current: 'feature/ui',
+    all: ['main', 'feature/ui'],
+    remotes: [] as string[],
+    tags: [] as string[]
   }
   const sampleCommit = {
     hash: '1234567abc',
@@ -411,7 +405,7 @@ describe('App — workspace (repo open)', () => {
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
     vi.mocked(sidecarMock.getStatus).mockResolvedValue(statusMock)
-    vi.mocked(sidecarMock.getBranches).mockResolvedValue(branchesMock)
+    mockBranchResponses(branchesMock)
     const stream = setupLogStream()
 
     renderApp()
@@ -425,7 +419,10 @@ describe('App — workspace (repo open)', () => {
 
     await screen.findByText('Timeline')
     await waitFor(() => {
-      expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/my-app')
+      expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/my-app', {
+        skip: 0,
+        maxCount: LOG_PAGE_SIZE
+      })
     })
 
     stream.fire({
@@ -450,14 +447,14 @@ describe('App — workspace (repo open)', () => {
 
     expect(await screen.findByText('Timeline')).toBeVisible()
     expect(await screen.findByText('Initial commit')).toBeVisible()
-    expect(screen.getByText('Working Directory')).not.toBeVisible()
-    expect(screen.getByText('Commit')).not.toBeVisible()
+    expect(screen.queryByText('Working Directory')).not.toBeInTheDocument()
+    expect(screen.queryByText('Commit')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
 
     expect(await screen.findByText('Working Directory')).toBeVisible()
     expect(screen.getByText('Commit')).toBeVisible()
-    expect(screen.getByText('Timeline')).not.toBeVisible()
+    expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
   })
 
   it('does not expose a Close repository control — closing the tab is the only exit', async () => {
@@ -489,10 +486,7 @@ describe('App — workspace (repo open)', () => {
         renamed: []
       }
     })
-    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
-      _tag: 'Ok',
-      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
-    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
     renderApp()
@@ -529,10 +523,7 @@ describe('App — workspace (repo open)', () => {
         renamed: []
       }
     })
-    vi.mocked(sidecarMock.getBranches).mockResolvedValue({
-      _tag: 'Ok',
-      branches: { current: 'main', all: ['main'], remotes: [], tags: [] }
-    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
     renderApp()
@@ -572,6 +563,54 @@ describe('App — workspace (repo open)', () => {
     expect(remainingTabs[1]).toHaveAttribute('aria-selected', 'false')
     expect(remainingTabs[1]).toHaveTextContent('repo-b')
     expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps inactive tab log streams up to date', async () => {
+    mockBaseAPI({
+      workingDirectory: '/projects',
+      scanRepos: ['/projects/repo-a', '/projects/repo-b']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
+      Promise.resolve({
+        _tag: 'Ok',
+        result: { path, remotes: {}, defaultBranch: 'main' }
+      })
+    )
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue(statusMock)
+    mockBranchResponses(branchesMock)
+    const stream = setupLogStream()
+
+    renderApp()
+
+    fireEvent.click(await screen.findByText('/projects/repo-a'))
+    await waitFor(() => {
+      expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/projects/repo-a', {
+        skip: 0,
+        maxCount: LOG_PAGE_SIZE
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    const repoBPickerRow = (await screen.findAllByText('/projects/repo-b'))
+      .map((el) => el.closest('button'))
+      .find((button): button is HTMLButtonElement => !!button)
+    fireEvent.click(repoBPickerRow as HTMLButtonElement)
+    await waitFor(() => {
+      expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/projects/repo-b', {
+        skip: 0,
+        maxCount: LOG_PAGE_SIZE
+      })
+    })
+
+    stream.fire({
+      repoPath: '/projects/repo-a',
+      commits: [{ ...sampleCommit, hash: 'hidden123', message: 'Hidden tab commit' }]
+    })
+    stream.fireDone('/projects/repo-a')
+
+    fireEvent.click(screen.getByRole('tab', { name: /repo-a/i }))
+
+    expect(await screen.findByText('Hidden tab commit')).toBeVisible()
   })
 
   it('switches to the existing tab instead of loading the repo twice', async () => {

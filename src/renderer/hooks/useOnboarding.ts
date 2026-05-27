@@ -24,10 +24,13 @@ export function useOnboarding(): OnboardingStore {
   const [discoveredRepos, setDiscoveredRepos] = createSignal<string[]>([])
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
+  let scanGeneration = 0
 
   const scanWorkspace = async (path: string | null) => {
+    const generation = ++scanGeneration
     if (!path) {
       setDiscoveredRepos([])
+      setLoading(false)
       return
     }
     setLoading(true)
@@ -37,6 +40,9 @@ export function useOnboarding(): OnboardingStore {
         ScanForReposResponseSchema,
         await window.electronAPI.scanForRepos(path)
       )
+      if (generation !== scanGeneration) {
+        return
+      }
       if (decoded._tag === 'Ok') {
         setDiscoveredRepos([...decoded.repos])
       } else {
@@ -44,9 +50,14 @@ export function useOnboarding(): OnboardingStore {
         setError(decoded.message || 'Failed to scan for repositories')
       }
     } catch (err) {
+      if (generation !== scanGeneration) {
+        return
+      }
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
-      setLoading(false)
+      if (generation === scanGeneration) {
+        setLoading(false)
+      }
     }
   }
 

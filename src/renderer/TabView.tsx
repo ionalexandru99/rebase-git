@@ -74,6 +74,7 @@ export function TabView(props: TabViewProps) {
     >
       <Workspace
         git={git}
+        tabActive={props.tabActive}
         modifiedCount={modifiedCount()}
         stagedCount={stagedCount()}
         untrackedCount={untrackedCount()}

@@ -1,7 +1,6 @@
-import { spawn } from 'node:child_process'
 import { parseOrThrow } from '@shared/codec'
 import { normalizeRepoPath } from '@shared/repo-path'
-import type { GitLogEntry, LogChunk } from '@shared/schemas/git'
+import type { LogChunk } from '@shared/schemas/git'
 import {
   CancelLogStreamResponseSchema,
   Channel,
@@ -9,14 +8,10 @@ import {
   StartLogStreamResponseSchema
 } from '@shared/schemas/ipc'
 import { ipcMain, webContents as webContentsApi } from 'electron'
-
-const FS_SEP = '\x1F'
-const RS_SEP = '\x00'
-const STREAM_FORMAT = ['%H', '%P', '%aI', '%aN', '%s', '%D'].join(FS_SEP)
-const STREAM_BATCH_SIZE = 500
+import { sidecarLogStream } from '../sidecar'
 
 interface ActiveStream {
-  proc: ReturnType<typeof spawn>
+  controller: AbortController
   finishOk: () => void
   webContentsId: number
   repoPath: string
@@ -36,9 +31,7 @@ function killActiveStream(webContentsId: number, repoPath: string): void {
     return
   }
   activeLogStreams.delete(key)
-  if (!existing.proc.killed) {
-    existing.proc.kill()
-  }
+  existing.controller.abort()
   existing.finishOk()
 }
 
@@ -48,11 +41,13 @@ function killAllStreamsForWebContents(webContentsId: number): void {
       continue
     }
     activeLogStreams.delete(key)
-    if (!stream.proc.killed) {
-      stream.proc.kill()
-    }
+    stream.controller.abort()
     stream.finishOk()
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function bindWebContentsCleanup(webContentsId: number): void {
@@ -72,146 +67,77 @@ function bindWebContentsCleanup(webContentsId: number): void {
 }
 
 export function register(): void {
-  ipcMain.handle(Channel.startLogStream, async (event, repoPath: string) => {
-    const key = normalizeRepoPath(repoPath)
-    const webContents = event.sender
-    const webContentsId = webContents.id
+  ipcMain.handle(
+    Channel.startLogStream,
+    async (event, repoPath: string, options?: { skip?: number; maxCount?: number }) => {
+      const key = normalizeRepoPath(repoPath)
+      const webContents = event.sender
+      const webContentsId = webContents.id
 
-    killActiveStream(webContentsId, key)
-    bindWebContentsCleanup(webContentsId)
+      killActiveStream(webContentsId, key)
+      bindWebContentsCleanup(webContentsId)
 
-    return new Promise<StartLogStreamResponse>((resolve) => {
-      let resolved = false
-      const finishOk = () => {
-        if (resolved) {
-          return
+      return new Promise<StartLogStreamResponse>((resolve) => {
+        let resolved = false
+        const finishOk = () => {
+          if (resolved) {
+            return
+          }
+          resolved = true
+          resolve(parseOrThrow(StartLogStreamResponseSchema, { _tag: 'Ok' }))
         }
-        resolved = true
-        resolve(parseOrThrow(StartLogStreamResponseSchema, { _tag: 'Ok' }))
-      }
-      const finishErr = (message: string) => {
-        if (resolved) {
-          return
+        const finishErr = (message: string) => {
+          if (resolved) {
+            return
+          }
+          resolved = true
+          resolve(parseOrThrow(StartLogStreamResponseSchema, { _tag: 'GitError', message }))
         }
-        resolved = true
-        resolve(parseOrThrow(StartLogStreamResponseSchema, { _tag: 'GitError', message }))
-      }
 
-      const proc = spawn(
-        'git',
-        [
-          '-C',
-          key,
-          'log',
-          '-z',
-          '--branches',
-          '--remotes',
-          '--date-order',
-          `--format=${STREAM_FORMAT}`
-        ],
-        { stdio: ['ignore', 'pipe', 'pipe'] }
-      )
-      const mapKey = streamKey(webContentsId, key)
-      activeLogStreams.set(mapKey, { proc, finishOk, webContentsId, repoPath: key })
+        const mapKey = streamKey(webContentsId, key)
+        const controller = new AbortController()
+        activeLogStreams.set(mapKey, { controller, finishOk, webContentsId, repoPath: key })
 
-      finishOk()
-
-      let buffer = ''
-      let batch: GitLogEntry[] = []
-
-      const send = (done: boolean) => {
-        if (webContents.isDestroyed()) {
-          return
+        const send = (chunk: LogChunk) => {
+          if (webContents.isDestroyed()) {
+            return
+          }
+          webContents.send(Channel.logChunk, chunk)
         }
-        if (batch.length === 0 && !done) {
-          return
-        }
-        const chunk: LogChunk = { repoPath: key, commits: batch, done }
-        webContents.send(Channel.logChunk, chunk)
-        batch = []
-      }
 
-      proc.stdout?.setEncoding('utf8')
-      proc.stdout?.on('data', (chunk: string) => {
-        buffer += chunk
-        let idx = buffer.indexOf(RS_SEP)
-        while (idx !== -1) {
-          const record = buffer.slice(0, idx)
-          buffer = buffer.slice(idx + 1)
-          if (record) {
-            const fields = record.split(FS_SEP)
-            if (fields.length >= 6) {
-              const [hash, parentsStr, date, author_name, message, refs] = fields
-              batch.push({
-                hash,
-                message: message ?? '',
-                author_name: author_name ?? '',
-                date: date ?? '',
-                parents: parentsStr ? parentsStr.split(' ').filter(Boolean) : [],
-                refs: refs ?? ''
-              })
-              if (batch.length >= STREAM_BATCH_SIZE) {
-                send(false)
-              }
+        void sidecarLogStream(key, controller.signal, finishOk, send, options)
+          .catch((error: unknown) => {
+            const current = activeLogStreams.get(mapKey)
+            if (current?.controller !== controller) {
+              return
             }
-          }
-          idx = buffer.indexOf(RS_SEP)
-        }
+            activeLogStreams.delete(mapKey)
+            if (isAbortError(error)) {
+              finishOk()
+              return
+            }
+            const message = error instanceof Error ? error.message : String(error)
+            if (!webContents.isDestroyed()) {
+              webContents.send(Channel.logChunk, {
+                repoPath: key,
+                commits: [],
+                done: true,
+                error: message
+              })
+            }
+            finishErr(message)
+          })
+          .then(() => {
+            const current = activeLogStreams.get(mapKey)
+            if (current?.controller !== controller) {
+              return
+            }
+            activeLogStreams.delete(mapKey)
+            finishOk()
+          })
       })
-
-      let stderrBuf = ''
-      proc.stderr?.setEncoding('utf8')
-      proc.stderr?.on('data', (chunk: string) => {
-        stderrBuf += chunk
-        if (stderrBuf.length > 4096) {
-          stderrBuf = stderrBuf.slice(-4096)
-        }
-      })
-
-      proc.on('error', (err) => {
-        const current = activeLogStreams.get(mapKey)
-        if (current?.proc !== proc) {
-          return
-        }
-        activeLogStreams.delete(mapKey)
-        if (!webContents.isDestroyed()) {
-          const chunk: LogChunk = {
-            repoPath: key,
-            commits: [],
-            done: true,
-            error: err.message
-          }
-          webContents.send(Channel.logChunk, chunk)
-        }
-        finishErr(err.message)
-      })
-
-      proc.on('close', (code) => {
-        const current = activeLogStreams.get(mapKey)
-        if (current?.proc !== proc) {
-          return
-        }
-        activeLogStreams.delete(mapKey)
-
-        if (code !== 0 && code !== null) {
-          const message = stderrBuf.trim() || `git log exited with code ${code}`
-          if (!webContents.isDestroyed()) {
-            const chunk: LogChunk = { repoPath: key, commits: [], done: true, error: message }
-            webContents.send(Channel.logChunk, chunk)
-          }
-          finishErr(message)
-          return
-        }
-
-        send(false)
-        if (!webContents.isDestroyed()) {
-          const chunk: LogChunk = { repoPath: key, commits: [], done: true }
-          webContents.send(Channel.logChunk, chunk)
-        }
-        finishOk()
-      })
-    })
-  })
+    }
+  )
 
   ipcMain.handle(Channel.cancelLogStream, (event, repoPath: string) => {
     if (repoPath) {

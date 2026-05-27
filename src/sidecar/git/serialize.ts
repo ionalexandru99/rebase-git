@@ -16,20 +16,6 @@ export interface SerializableStatus {
   renamed: RenamedFile[]
 }
 
-export interface SerializableLogEntry {
-  hash: string
-  message: string
-  author_name: string
-  date: string
-  parents: string[]
-  refs: string
-}
-
-export interface SerializableLog {
-  all: SerializableLogEntry[]
-  total: number
-}
-
 export interface BranchTracking {
   ahead: number
   behind: number
@@ -42,23 +28,6 @@ export interface SerializableBranches {
   tags: string[]
   tracking?: Record<string, BranchTracking>
 }
-
-export const GRAPH_LOG_FORMAT = {
-  hash: '%H',
-  date: '%aI',
-  message: '%s',
-  refs: '%D',
-  body: '',
-  author_name: '%aN',
-  author_email: '%aE',
-  parents: '%P'
-} as const
-
-export const GRAPH_LOG_FLAGS = {
-  '--branches': null,
-  '--remotes': null,
-  '--date-order': null
-} as const
 
 export function serializeStatus(
   status: Awaited<ReturnType<ReturnType<typeof simpleGit>['status']>>
@@ -75,34 +44,13 @@ export function serializeStatus(
   }
 }
 
-export function serializeLog(
-  log: Awaited<ReturnType<ReturnType<typeof simpleGit>['log']>>
-): SerializableLog {
-  return {
-    total: log.total,
-    all: log.all.map((entry) => {
-      const raw = entry as typeof entry & { parents?: string; refs?: string }
-      const parents = raw.parents ? raw.parents.split(' ').filter(Boolean) : []
-      return {
-        hash: entry.hash,
-        message: entry.message,
-        author_name: entry.author_name,
-        date: entry.date,
-        parents,
-        refs: raw.refs ?? ''
-      }
-    })
-  }
-}
-
-export function serializeBranches(
-  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>,
-  tags: Awaited<ReturnType<ReturnType<typeof simpleGit>['tags']>>,
-  tracking?: Record<string, BranchTracking>
-): SerializableBranches {
+export function partitionBranchNames(names: readonly string[]): {
+  local: string[]
+  remotes: string[]
+} {
   const local: string[] = []
   const remotes: string[] = []
-  for (const name of branches.all) {
+  for (const name of names) {
     if (name.startsWith('remotes/')) {
       const stripped = name.slice('remotes/'.length)
       if (stripped.includes(' -> ')) {
@@ -113,6 +61,45 @@ export function serializeBranches(
       local.push(name)
     }
   }
+  return { local, remotes }
+}
+
+export function serializeLocalBranches(
+  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>,
+  tracking?: Record<string, BranchTracking>
+): Pick<SerializableBranches, 'current' | 'all' | 'tracking'> {
+  const { local } = partitionBranchNames(branches.all)
+  return {
+    current: branches.current ?? '',
+    all: local,
+    tracking
+  }
+}
+
+export function serializeRemoteBranchNames(
+  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>
+): string[] {
+  const remotes: string[] = []
+  for (const name of branches.all) {
+    if (name.startsWith('remotes/')) {
+      const stripped = name.slice('remotes/'.length)
+      if (stripped.includes(' -> ')) {
+        continue
+      }
+      remotes.push(stripped)
+    } else {
+      remotes.push(name)
+    }
+  }
+  return remotes
+}
+
+export function serializeBranches(
+  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>,
+  tags: Awaited<ReturnType<ReturnType<typeof simpleGit>['tags']>>,
+  tracking?: Record<string, BranchTracking>
+): SerializableBranches {
+  const { local, remotes } = partitionBranchNames(branches.all)
   return {
     current: branches.current ?? '',
     all: local,

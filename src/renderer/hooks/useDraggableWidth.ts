@@ -1,3 +1,4 @@
+import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
 import { type Accessor, createSignal, onCleanup, onMount } from 'solid-js'
 
 interface PaneState {
@@ -87,15 +88,26 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     document.body.style.userSelect = 'none'
     document.body.dataset.sidebarResizing = 'true'
 
+    let pendingFrame: number | null = null
+
     const onMove = (moveEvent: MouseEvent) => {
-      const next = Math.max(min, Math.min(max, startWidth + (moveEvent.clientX - startX)))
-      dragWidth = next
-      setWidth(next)
+      dragWidth = Math.max(min, Math.min(max, startWidth + (moveEvent.clientX - startX)))
+      if (pendingFrame !== null) {
+        return
+      }
+      pendingFrame = requestAnimationFrame(() => {
+        pendingFrame = null
+        setWidth(dragWidth)
+      })
     }
 
     const finalize = () => {
       if (!dragTeardown) {
         return
+      }
+      if (pendingFrame !== null) {
+        cancelAnimationFrame(pendingFrame)
+        pendingFrame = null
       }
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', finalize)
@@ -103,7 +115,9 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
       document.body.style.userSelect = ''
       delete document.body.dataset.sidebarResizing
       dragTeardown = null
+      setWidth(dragWidth)
       persist(isOpen(), dragWidth)
+      window.dispatchEvent(new Event(SIDEBAR_RESIZE_END_EVENT))
     }
 
     dragTeardown = finalize

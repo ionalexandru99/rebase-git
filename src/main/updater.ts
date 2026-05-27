@@ -5,6 +5,10 @@ import electronUpdater from 'electron-updater'
 const { autoUpdater } = electronUpdater
 
 export function setupUpdater(): void {
+  if (!app.isPackaged) {
+    return
+  }
+
   log.transports.file.level = 'info'
   autoUpdater.logger = log
 
@@ -31,10 +35,14 @@ export function setupUpdater(): void {
 
   autoUpdater.on('update-downloaded', (info) => {
     log.info('Update downloaded', info)
-    autoUpdater.quitAndInstall()
   })
 
-  app.on('ready', () => {
+  const checkForUpdates = () => {
     autoUpdater.checkForUpdatesAndNotify()
-  })
+  }
+  if (app.isReady()) {
+    checkForUpdates()
+  } else {
+    app.on('ready', checkForUpdates)
+  }
 }

@@ -1,4 +1,12 @@
-import { CheckIcon, CloudIcon, GitBranchIcon, type LucideProps, TagIcon } from 'lucide-solid'
+import {
+  CheckIcon,
+  CloudIcon,
+  EyeIcon,
+  EyeOffIcon,
+  GitBranchIcon,
+  type LucideProps,
+  TagIcon
+} from 'lucide-solid'
 import { type Component, type JSX, Show } from 'solid-js'
 import { Dynamic } from 'solid-js/web'
 import { REF_TREE_INDENT_PX, type RefKind, type RefLeafRow } from '@/lib/ref-tree'
@@ -14,10 +22,8 @@ import { AheadBehindBadge } from './AheadBehindBadge'
 interface LeafRowProps {
   row: RefLeafRow
   style: JSX.CSSProperties
-  filterActive?: boolean
-  filterSelected?: boolean
-  onSelectLeaf?: (refKind: RefKind, fullPath: string) => void
-  onToggleFilterRef?: (refKind: RefKind, fullPath: string) => void
+  timelineVisible?: boolean
+  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
 }
 
@@ -30,69 +36,80 @@ const iconFor: Record<RefKind, Component<LucideProps>> = {
 export function LeafRow(props: LeafRowProps) {
   const icon = () => iconFor[props.row.refKind]
   const padLeft = () => 6 + props.row.depth * REF_TREE_INDENT_PX + 14
-  const showFilterCheckbox = () =>
-    props.filterActive && (props.row.refKind === 'local' || props.row.refKind === 'remote')
+  const showTimelineEye = () => props.row.refKind === 'local' || props.row.refKind === 'remote'
 
-  const handleClick = () => {
-    if (props.filterActive && showFilterCheckbox()) {
-      props.onToggleFilterRef?.(props.row.refKind, props.row.fullPath)
-      return
-    }
-    props.onSelectLeaf?.(props.row.refKind, props.row.fullPath)
+  const handleToggleVisibility = (event: MouseEvent) => {
+    event.stopPropagation()
+    event.preventDefault()
+    props.onToggleTimelineVisibility?.(props.row.refKind, props.row.fullPath)
   }
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger
-        as="button"
-        type="button"
-        onClick={handleClick}
-        onDblClick={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}
+      <div
         class={cn(
-          'absolute inset-x-0 flex items-center gap-1.5 rounded-sm pr-2 text-sm hover:bg-sidebar-accent/60',
+          'group/branch-row absolute inset-x-0 flex items-center rounded-sm pr-1 hover:bg-sidebar-accent/60',
           props.row.isCurrent
             ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-            : 'text-foreground/90',
-          props.filterSelected && 'ring-1 ring-inset ring-sidebar-primary/40'
+            : 'text-foreground/90'
         )}
-        style={{ ...props.style, 'padding-left': `${padLeft()}px` }}
-        title={props.row.fullPath}
-        aria-pressed={props.filterActive ? props.filterSelected : undefined}
+        style={props.style}
+        data-testid="ref-tree-leaf-row"
       >
-        <Show when={showFilterCheckbox()}>
-          <span
-            data-testid="ref-filter-checkbox"
-            aria-hidden="true"
+        <ContextMenuTrigger
+          as="button"
+          type="button"
+          onDblClick={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}
+          class="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm py-0 pr-0 text-sm"
+          style={{ 'padding-left': `${padLeft()}px` }}
+          title={props.row.fullPath}
+        >
+          <Show when={props.row.isCurrent}>
+            <span
+              aria-hidden="true"
+              data-testid="current-ref-bar"
+              class="pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-sm bg-sidebar-primary"
+            />
+          </Show>
+          <Dynamic component={icon()} class="size-3.5 shrink-0 opacity-70" />
+          <span class="min-w-0 truncate text-left">{props.row.name}</span>
+          <AheadBehindBadge ahead={props.row.ahead} behind={props.row.behind} />
+          <Show when={props.row.isCurrent}>
+            <CheckIcon
+              aria-hidden="true"
+              data-testid="current-ref-check"
+              class="ml-auto size-3.5 shrink-0 text-sidebar-primary"
+            />
+          </Show>
+        </ContextMenuTrigger>
+
+        <Show when={showTimelineEye()}>
+          <button
+            type="button"
+            data-testid="timeline-visibility-toggle"
             class={cn(
-              'flex size-3.5 shrink-0 items-center justify-center rounded-sm border',
-              props.filterSelected
-                ? 'border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground'
-                : 'border-muted-foreground/40 bg-background'
+              'mr-0.5 flex size-7 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground',
+              props.timelineVisible
+                ? 'opacity-100'
+                : 'opacity-0 group-hover/branch-row:opacity-100 group-focus-within/branch-row:opacity-100 focus-visible:opacity-100'
             )}
+            aria-pressed={props.timelineVisible ?? false}
+            aria-label={
+              props.timelineVisible
+                ? `Hide ${props.row.fullPath} from timeline`
+                : `Show ${props.row.fullPath} on timeline`
+            }
+            title={
+              props.timelineVisible ? 'Visible on timeline' : 'Hidden from timeline — click to show'
+            }
+            onClick={handleToggleVisibility}
           >
-            <Show when={props.filterSelected}>
-              <CheckIcon class="size-2.5" />
+            <Show when={props.timelineVisible} fallback={<EyeOffIcon class="size-3.5" />}>
+              <EyeIcon class="size-3.5" />
             </Show>
-          </span>
+          </button>
         </Show>
-        <Show when={props.row.isCurrent}>
-          <span
-            aria-hidden="true"
-            data-testid="current-ref-bar"
-            class="pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-sm bg-sidebar-primary"
-          />
-        </Show>
-        <Dynamic component={icon()} class="size-3.5 shrink-0 opacity-70" />
-        <span class="min-w-0 truncate text-left">{props.row.name}</span>
-        <AheadBehindBadge ahead={props.row.ahead} behind={props.row.behind} />
-        <Show when={props.row.isCurrent}>
-          <CheckIcon
-            aria-hidden="true"
-            data-testid="current-ref-check"
-            class="ml-auto size-3.5 shrink-0 text-sidebar-primary"
-          />
-        </Show>
-      </ContextMenuTrigger>
+      </div>
       <ContextMenuContent>
         <ContextMenuItem
           onSelect={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}

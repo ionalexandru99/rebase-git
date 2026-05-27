@@ -1,7 +1,7 @@
 import { GitMergeIcon } from 'lucide-solid'
 import { createMemo, For, Show } from 'solid-js'
 import { formatCommitDate, initials } from '@/lib/format'
-import { laneColor, ROW_H } from '@/lib/git-graph/canvas'
+import { computeRowRailWidth, laneColor, ROW_H } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
 import { cn } from '@/lib/utils'
@@ -12,7 +12,7 @@ interface CommitRowProps {
   top: number
   dim: boolean
   offBranch: boolean
-  rowRailWidth: number
+  gridTail: string
   remotes: Record<string, string>
   remoteNames: Set<string>
 }
@@ -24,23 +24,21 @@ export function CommitRow(props: CommitRowProps) {
   const laneHex = () => laneColor(props.row.commitLane)
   const rowOpacity = () => (props.dim ? 0.35 : props.offBranch ? 0.6 : 1)
   const subjectClass = () => (props.offBranch ? 'text-muted-foreground' : 'text-foreground')
+  const gridTemplate = () => `${computeRowRailWidth(props.row)}px minmax(0,1fr) ${props.gridTail}`
 
   return (
     <div
       class="group/row absolute inset-x-0 z-10 grid items-center gap-1 bg-card px-0 hover:bg-muted"
       style={{
-        top: '0',
+        top: `${props.top}px`,
         height: `${ROW_H}px`,
-        transform: `translateY(${props.top}px)`,
-        'grid-template-columns': 'var(--row-cols)',
+        'grid-template-columns': gridTemplate(),
         opacity: String(rowOpacity()),
-        contain: 'layout paint style'
+        contain: 'layout style'
       }}
     >
-      <span
-        class="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm"
-        style={{ 'padding-left': `${props.rowRailWidth}px` }}
-      >
+      <span aria-hidden="true" />
+      <span class="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
         <Show when={isMerge()}>
           <GitMergeIcon aria-label="merge commit" class="size-3 shrink-0 text-emerald-500" />
         </Show>

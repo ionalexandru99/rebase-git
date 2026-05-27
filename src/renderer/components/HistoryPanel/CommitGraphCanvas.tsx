@@ -1,4 +1,4 @@
-import { type Accessor, createEffect } from 'solid-js'
+import { type Accessor, createEffect, onCleanup } from 'solid-js'
 import { drawGraphRow, ROW_H, readCssVar } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
 
@@ -12,10 +12,24 @@ interface CommitGraphCanvasProps {
   scrollTop: number
   startIndex: number
   endIndex: number
+  graphLayoutEndIndex: number
+}
+
+function visibleSetRevision(visibleSet: Set<string> | null): string {
+  if (!visibleSet) {
+    return 'all'
+  }
+  if (visibleSet.size === 0) {
+    return 'none'
+  }
+  const hashes = [...visibleSet]
+  hashes.sort()
+  return `${visibleSet.size}:${hashes[0]}:${hashes[hashes.length - 1]}`
 }
 
 export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
   let canvas: HTMLCanvasElement | undefined
+  let drawFrame: number | null = null
 
   const drawCanvas = () => {
     const scroller = props.scrollContainer()
@@ -32,6 +46,7 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     const visible = props.visibleSet
     const railWidth = props.railWidth
     const liveScrollTop = scroller.scrollTop
+    const graphLayoutEndIndex = props.graphLayoutEndIndex
 
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
     const bitmapW = Math.max(1, Math.round(railWidth * dpr))
@@ -53,18 +68,31 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     const start = props.startIndex
     const end = props.endIndex
 
-    for (let i = start; i < end; i++) {
-      const row = rows[i]
+    for (let index = start; index < end; index++) {
+      if (index >= graphLayoutEndIndex) {
+        continue
+      }
+      const row = rows[index]
       if (!row) {
         continue
       }
-      const yTop = i * ROW_H - liveScrollTop
+      const yTop = index * ROW_H - liveScrollTop
       if (yTop + ROW_H < 0 || yTop > viewportHeight) {
         continue
       }
       const dim = !!(visible && !visible.has(row.commit.hash))
-      drawGraphRow(ctx, row, yTop, i === 0, dim, bgColor, mergeColor)
+      drawGraphRow(ctx, row, yTop, index === 0, dim, bgColor, mergeColor)
     }
+  }
+
+  const scheduleDraw = () => {
+    if (drawFrame !== null) {
+      return
+    }
+    drawFrame = requestAnimationFrame(() => {
+      drawFrame = null
+      drawCanvas()
+    })
   }
 
   createEffect(() => {
@@ -72,7 +100,22 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     void props.scrollTop
     void props.startIndex
     void props.endIndex
-    drawCanvas()
+    void props.viewportHeight
+    void props.railWidth
+    void props.rows.length
+    void props.graphLayoutEndIndex
+    if (props.graphLayoutEndIndex > 0) {
+      void props.rows[0]?.commitLane
+      void props.rows[props.graphLayoutEndIndex - 1]?.commitLane
+    }
+    visibleSetRevision(props.visibleSet)
+    scheduleDraw()
+  })
+
+  onCleanup(() => {
+    if (drawFrame !== null) {
+      cancelAnimationFrame(drawFrame)
+    }
   })
 
   return (

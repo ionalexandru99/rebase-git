@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseOrThrow } from '@shared/codec'
+import { type LogChunk, LogChunkSchema } from '@shared/schemas/git'
+import type { SidecarOpName } from '@shared/sidecar-ops'
 import { type UtilityProcess, utilityProcess } from 'electron'
-import type { SidecarMessage, SidecarOpName } from '../sidecar/protocol'
+import type { SidecarMessage } from '../sidecar/protocol'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const START_TIMEOUT_MS = 30_000
@@ -35,19 +38,21 @@ function allocatePort(): Promise<number> {
   })
 }
 
-async function checkHealth(baseUrl: string): Promise<boolean> {
+async function checkHealth(baseUrl: string, token: string): Promise<boolean> {
   try {
-    const response = await fetch(`${baseUrl}/health`)
+    const response = await fetch(`${baseUrl}/health`, {
+      headers: { authorization: `Bearer ${token}` }
+    })
     return response.ok
   } catch {
     return false
   }
 }
 
-async function waitForHealth(baseUrl: string): Promise<void> {
+async function waitForHealth(baseUrl: string, token: string): Promise<void> {
   const deadline = Date.now() + START_TIMEOUT_MS
   while (Date.now() < deadline) {
-    if (await checkHealth(baseUrl)) {
+    if (await checkHealth(baseUrl, token)) {
       return
     }
     await new Promise((resolve) => setTimeout(resolve, 100))
@@ -90,7 +95,7 @@ async function spawn(): Promise<Sidecar> {
     child.postMessage({ type: 'start', hostname, port, token })
   })
 
-  await waitForHealth(baseUrl)
+  await waitForHealth(baseUrl, token)
   return { child, baseUrl, token }
 }
 
@@ -121,11 +126,6 @@ async function ensureSidecar(): Promise<Sidecar> {
   return startSidecar()
 }
 
-export async function getSidecarConfig(): Promise<{ baseUrl: string; token: string }> {
-  const { baseUrl, token } = await ensureSidecar()
-  return { baseUrl, token }
-}
-
 export async function sidecarRequest<T>(
   op: SidecarOpName,
   body: Record<string, unknown>
@@ -140,6 +140,63 @@ export async function sidecarRequest<T>(
     throw new Error(`sidecar ${op} failed with status ${response.status}`)
   }
   return (await response.json()) as T
+}
+
+export interface LogStreamOptions {
+  skip?: number
+  maxCount?: number
+}
+
+export async function sidecarLogStream(
+  repoPath: string,
+  signal: AbortSignal,
+  onStarted: () => void,
+  onChunk: (chunk: LogChunk) => void,
+  options?: LogStreamOptions
+): Promise<void> {
+  const { baseUrl, token } = await ensureSidecar()
+  const response = await fetch(`${baseUrl}/stream/log`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      repoPath,
+      skip: options?.skip,
+      maxCount: options?.maxCount
+    }),
+    signal
+  })
+  if (!response.ok) {
+    throw new Error(`sidecar log stream failed with status ${response.status}`)
+  }
+  onStarted()
+  if (!response.body) {
+    throw new Error('sidecar log stream response body missing')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    let newline = buffer.indexOf('\n')
+    while (newline !== -1) {
+      const line = buffer.slice(0, newline).trim()
+      buffer = buffer.slice(newline + 1)
+      if (line) {
+        onChunk(parseOrThrow(LogChunkSchema, JSON.parse(line)))
+      }
+      newline = buffer.indexOf('\n')
+    }
+  }
+
+  const lastLine = `${buffer}${decoder.decode()}`.trim()
+  if (lastLine) {
+    onChunk(parseOrThrow(LogChunkSchema, JSON.parse(lastLine)))
+  }
 }
 
 export async function killSidecar(): Promise<void> {

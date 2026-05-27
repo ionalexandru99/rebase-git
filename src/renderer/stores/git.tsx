@@ -1,24 +1,37 @@
 import { parseOrThrow } from '@shared/codec'
+import { LOG_PAGE_SIZE } from '@shared/graph-config'
+import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import {
   BranchesResponseSchema,
   CommitResponseSchema,
   FetchResponseSchema,
-  LogResponseSchema,
+  LocalBranchesResponseSchema,
   OpenRepoResponseSchema,
+  RemoteRefsResponseSchema,
   StageResponseSchema,
   StartLogStreamResponseSchema,
   StatusResponseSchema,
   UnstageResponseSchema
 } from '@shared/schemas/ipc'
+import { SidecarOp } from '@shared/sidecar-ops'
 import { createMutation, createQuery, useQueryClient } from '@tanstack/solid-query'
-import { type Accessor, createEffect, createSignal, onCleanup } from 'solid-js'
+import { type Accessor, batch, createEffect, createSignal, onCleanup } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { repoQueryKeys } from '@/lib/query-keys'
-import { hasCachedData, readSnapshot, writeSnapshot } from '@/lib/repo-snapshot-cache'
-import { LOG_REFRESH_MAX_COUNT, sidecarFetch } from '@/lib/sidecar-fetch'
+import { readSnapshot, writeSnapshot } from '@/lib/repo-snapshot-cache'
+import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
+const LOG_FLUSH_MS = 100
+
+const mergeBranches = (existing: GitBranches | null, patch: Partial<GitBranches>): GitBranches => ({
+  current: patch.current ?? existing?.current ?? '',
+  all: patch.all ?? existing?.all ?? [],
+  remotes: patch.remotes ?? existing?.remotes ?? [],
+  tags: patch.tags ?? existing?.tags ?? [],
+  tracking: patch.tracking ?? existing?.tracking
+})
 
 export interface GitState {
   repoPath: string | null
@@ -33,6 +46,8 @@ export interface GitState {
   statusLoading: boolean
   branchesLoading: boolean
   logLoading: boolean
+  logLoadingMore: boolean
+  logHasMore: boolean
   error: string | null
 }
 
@@ -49,6 +64,8 @@ const initialState: GitState = {
   statusLoading: false,
   branchesLoading: false,
   logLoading: false,
+  logLoadingMore: false,
+  logHasMore: false,
   error: null
 }
 
@@ -60,6 +77,93 @@ const formatCause = (error: unknown): string => {
     return error
   }
   return String(error)
+}
+
+const isInvalidSidecarRequest = (error: unknown): boolean => {
+  return formatCause(error).includes('invalid sidecar request')
+}
+
+const parseLocalBranchesResponse = (response: {
+  _tag: string
+  branches?: LocalBranches
+  message?: string
+}): LocalBranches => {
+  if (response._tag === 'Ok' && response.branches) {
+    return response.branches
+  }
+  if (response._tag === 'GitError') {
+    throw new Error(response.message ?? 'Git error')
+  }
+  throw new Error('Repository not open')
+}
+
+const parseRemoteRefsResponse = (response: {
+  _tag: string
+  refs?: RemoteRefs
+  message?: string
+}): RemoteRefs => {
+  if (response._tag === 'Ok' && response.refs) {
+    return response.refs
+  }
+  if (response._tag === 'GitError') {
+    throw new Error(response.message ?? 'Git error')
+  }
+  throw new Error('Repository not open')
+}
+
+const fetchLocalBranches = async (path: string): Promise<LocalBranches> => {
+  try {
+    const response = await sidecarFetch(
+      SidecarOp.getLocalBranches,
+      { repoPath: path },
+      LocalBranchesResponseSchema
+    )
+    return parseLocalBranchesResponse(response)
+  } catch (error) {
+    if (!isInvalidSidecarRequest(error)) {
+      throw error
+    }
+    const response = await sidecarFetch(
+      SidecarOp.getBranches,
+      { repoPath: path },
+      BranchesResponseSchema
+    )
+    if (response._tag === 'Ok') {
+      return {
+        current: response.branches.current,
+        all: response.branches.all,
+        tracking: response.branches.tracking
+      }
+    }
+    return parseLocalBranchesResponse(response)
+  }
+}
+
+const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
+  try {
+    const response = await sidecarFetch(
+      SidecarOp.getRemoteRefs,
+      { repoPath: path },
+      RemoteRefsResponseSchema
+    )
+    return parseRemoteRefsResponse(response)
+  } catch (error) {
+    if (!isInvalidSidecarRequest(error)) {
+      throw error
+    }
+    const response = await sidecarFetch(
+      SidecarOp.getBranches,
+      { repoPath: path },
+      BranchesResponseSchema
+    )
+    if (response._tag === 'Ok') {
+      return {
+        remotes: response.branches.remotes,
+        tags: response.branches.tags
+      }
+    }
+    return parseRemoteRefsResponse(response)
+  }
 }
 
 const withoutFile = (files: string[], file: string): string[] => files.filter((f) => f !== file)
@@ -87,37 +191,58 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const [fetchTick, setFetchTick] = createSignal(0)
 
   let logBuffer: GitLogEntry[] = []
-  let logFlushRaf: number | null = null
+  let logFlushTimer: ReturnType<typeof setTimeout> | null = null
   let openGeneration = 0
 
   const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
-    logFlushRaf = null
+    logFlushTimer = null
     if (expectedGen !== openGeneration || expectedPath !== state.repoPath) {
       return
     }
-    const log: GitLog = { all: logBuffer, total: logBuffer.length }
-    setState('log', log)
+    const nextLength = logBuffer.length
+    const previous = state.log?.all ?? []
+    if (nextLength === previous.length && state.log?.total === nextLength) {
+      return
+    }
+
+    if (previous.length === 0 || nextLength < previous.length) {
+      setState('log', { all: [...logBuffer], total: nextLength })
+    } else {
+      batch(() => {
+        for (let index = previous.length; index < nextLength; index++) {
+          setState('log', 'all', index, logBuffer[index])
+        }
+        setState('log', 'total', nextLength)
+      })
+    }
+
     const path = state.repoPath
     if (path) {
-      queryClient.setQueryData(repoQueryKeys(tabId, path).log, log)
-      writeSnapshot(path, { log })
+      const log = state.log
+      if (log) {
+        queryClient.setQueryData(repoQueryKeys(tabId, path).log, log)
+        writeSnapshot(path, { log })
+      }
     }
   }
 
   const scheduleLogFlush = () => {
-    if (logFlushRaf !== null) {
+    if (!tabActive()) {
+      return
+    }
+    if (logFlushTimer !== null) {
       return
     }
     const expectedGen = openGeneration
     const expectedPath = state.repoPath
-    logFlushRaf = requestAnimationFrame(() => flushLogToStore(expectedGen, expectedPath))
+    logFlushTimer = setTimeout(() => flushLogToStore(expectedGen, expectedPath), LOG_FLUSH_MS)
   }
 
   const reset = () => {
     logBuffer = []
-    if (logFlushRaf !== null) {
-      cancelAnimationFrame(logFlushRaf)
-      logFlushRaf = null
+    if (logFlushTimer !== null) {
+      clearTimeout(logFlushTimer)
+      logFlushTimer = null
     }
     setState({ ...initialState })
   }
@@ -133,7 +258,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     const queryKeys = keys()
     return {
       queryKey: queryKeys?.status ?? ['tab', tabId, 'idle', 'status'],
-      enabled: Boolean(path && tabActive()),
+      enabled: Boolean(path),
       queryFn: async () => {
         if (!path) {
           throw new Error('Repository path missing')
@@ -150,28 +275,33 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
   })
 
-  const branchesQuery = createQuery(() => {
+  const localBranchesQuery = createQuery(() => {
     const path = repoPath()
     const queryKeys = keys()
     return {
-      queryKey: queryKeys?.branches ?? ['tab', tabId, 'idle', 'branches'],
-      enabled: Boolean(path && tabActive()),
+      queryKey: queryKeys?.localBranches ?? ['tab', tabId, 'idle', 'local-branches'],
+      enabled: Boolean(path),
       queryFn: async () => {
         if (!path) {
           throw new Error('Repository path missing')
         }
-        const response = await sidecarFetch(
-          'get-branches',
-          { repoPath: path },
-          BranchesResponseSchema
-        )
-        if (response._tag === 'Ok') {
-          return response.branches
+        return fetchLocalBranches(path)
+      }
+    }
+  })
+
+  const remoteRefsQuery = createQuery(() => {
+    const path = repoPath()
+    const queryKeys = keys()
+    const localReady = Boolean(localBranchesQuery.data)
+    return {
+      queryKey: queryKeys?.remoteRefs ?? ['tab', tabId, 'idle', 'remote-refs'],
+      enabled: Boolean(path) && localReady,
+      queryFn: async () => {
+        if (!path) {
+          throw new Error('Repository path missing')
         }
-        if (response._tag === 'GitError') {
-          throw new Error(response.message)
-        }
-        throw new Error('Repository not open')
+        return fetchRemoteRefs(path)
       }
     }
   })
@@ -186,50 +316,91 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         writeSnapshot(path, { status: data, currentBranch: data.current })
       }
     }
-    setState('statusLoading', statusQuery.isFetching)
+    setState('statusLoading', statusQuery.isFetching && !statusQuery.data)
   })
 
   createEffect(() => {
-    const data = branchesQuery.data
+    const error = statusQuery.error
+    if (error) {
+      setState('error', formatCause(error))
+    }
+  })
+
+  createEffect(() => {
+    const data = localBranchesQuery.data
     if (data) {
-      setState('branches', data)
+      setState('branches', (previous) => mergeBranches(previous, data))
       if (data.current) {
         setState('currentBranch', data.current)
       }
       const path = repoPath()
       if (path) {
-        writeSnapshot(path, { branches: data })
+        writeSnapshot(path, {
+          branches: mergeBranches(readSnapshot(path)?.branches ?? null, data)
+        })
       }
     }
-    setState('branchesLoading', branchesQuery.isFetching)
+    setState('branchesLoading', localBranchesQuery.isFetching && !localBranchesQuery.data)
+  })
+
+  createEffect(() => {
+    const error = localBranchesQuery.error
+    if (error) {
+      setState('error', formatCause(error))
+    }
+  })
+
+  createEffect(() => {
+    const data = remoteRefsQuery.data
+    if (data) {
+      setState('branches', (previous) => mergeBranches(previous, data))
+      const path = repoPath()
+      if (path) {
+        writeSnapshot(path, {
+          branches: mergeBranches(readSnapshot(path)?.branches ?? null, data)
+        })
+      }
+    }
+  })
+
+  createEffect(() => {
+    const error = remoteRefsQuery.error
+    if (error) {
+      setState('error', formatCause(error))
+    }
+  })
+
+  createEffect(() => {
+    if (tabActive() && logBuffer.length > 0) {
+      scheduleLogFlush()
+    }
   })
 
   const invalidateRepoQueries = (path: string) => {
     const queryKeys = repoQueryKeys(tabId, path)
     void queryClient.invalidateQueries({ queryKey: queryKeys.status })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.branches })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.localBranches })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
+  }
+
+  const refreshLocalBranches = async (path: string) => {
+    const queryKeys = repoQueryKeys(tabId, path)
+    await queryClient.fetchQuery({
+      queryKey: queryKeys.localBranches,
+      queryFn: async () => {
+        const local = await fetchLocalBranches(path)
+        writeSnapshot(path, {
+          branches: mergeBranches(readSnapshot(path)?.branches ?? null, local)
+        })
+        return local
+      }
+    })
   }
 
   const refreshBranchesOnly = async (path: string) => {
+    await refreshLocalBranches(path)
     const queryKeys = repoQueryKeys(tabId, path)
-    await queryClient.fetchQuery({
-      queryKey: queryKeys.branches,
-      queryFn: async () => {
-        const response = await sidecarFetch(
-          'get-branches',
-          { repoPath: path },
-          BranchesResponseSchema
-        )
-        if (response._tag === 'Ok') {
-          writeSnapshot(path, { branches: response.branches })
-          return response.branches
-        }
-        if (response._tag === 'GitError') {
-          throw new Error(response.message)
-        }
-        throw new Error('Repository not open')
-      }
-    })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
   }
 
   const refreshStatus = async (path: string) => {
@@ -250,48 +421,99 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     })
   }
 
-  const refreshLogLimited = async (path: string) => {
-    const expectedGen = openGeneration
-    const response = await sidecarFetch(
-      'get-log',
-      { repoPath: path, maxCount: LOG_REFRESH_MAX_COUNT },
-      LogResponseSchema
-    )
-    if (expectedGen !== openGeneration || state.repoPath !== path) {
-      return
-    }
-    if (response._tag === 'Ok') {
-      logBuffer = [...response.log.all]
-      writeSnapshot(path, { log: response.log })
-      flushLogToStore(expectedGen, path)
-    }
-  }
+  const restartLogStream = async (
+    path: string,
+    options?: { clearLog?: boolean; skip?: number; maxCount?: number }
+  ) => {
+    const skip = options?.skip ?? 0
+    const maxCount = options?.maxCount ?? LOG_PAGE_SIZE
+    const append = skip > 0
+    const clearLog = options?.clearLog ?? !append
 
-  const restartLogStream = async (path: string) => {
-    logBuffer = []
-    setState('log', { all: [], total: 0 })
-    setState('logLoading', true)
+    if (!append) {
+      logBuffer = []
+      if (clearLog) {
+        setState('log', { all: [], total: 0 })
+        setState('logHasMore', false)
+      }
+      setState('logLoading', true)
+    } else {
+      setState('logLoadingMore', true)
+    }
+
     try {
       await window.electronAPI.cancelLogStream(path).catch(() => {})
       const response = parseOrThrow(
         StartLogStreamResponseSchema,
-        await window.electronAPI.startLogStream(path)
+        await window.electronAPI.startLogStream(path, { skip, maxCount })
       )
       if (response._tag === 'GitError') {
         setState('error', response.message)
-        setState('logLoading', false)
+        if (append) {
+          setState('logLoadingMore', false)
+        } else {
+          setState('logLoading', false)
+        }
       }
     } catch (error) {
       setState('error', formatCause(error))
-      setState('logLoading', false)
+      if (append) {
+        setState('logLoadingMore', false)
+      } else {
+        setState('logLoading', false)
+      }
     }
+  }
+
+  const loadMoreHistory = async () => {
+    const path = state.repoPath
+    if (!path || !state.logHasMore || state.logLoadingMore || state.logLoading) {
+      return
+    }
+    const skip = state.log?.all.length ?? logBuffer.length
+    await restartLogStream(path, { skip, maxCount: LOG_PAGE_SIZE, clearLog: false })
   }
 
   const runFetchAndRefresh = async (path: string) => {
     const response = await sidecarFetch('fetch-repo', { repoPath: path }, FetchResponseSchema)
     if (response._tag === 'Ok' && tabActive()) {
       await refreshBranchesOnly(path)
+    } else if (response._tag === 'GitError') {
+      setState('error', response.message)
     }
+  }
+
+  const runIfCurrent = (
+    generation: number,
+    path: string,
+    label: string,
+    task: () => Promise<void>
+  ) => {
+    void task().catch((error: unknown) => {
+      if (generation !== openGeneration || state.repoPath !== path) {
+        return
+      }
+      console.error(`[git] ${label} failed for ${path}:`, formatCause(error))
+      setState('error', formatCause(error))
+    })
+  }
+
+  const startRepoRefresh = (
+    path: string,
+    generation: number,
+    options?: { clearLogOnStream?: boolean }
+  ) => {
+    runIfCurrent(generation, path, 'refreshStatus', async () => {
+      await refreshStatus(path)
+    })
+
+    runIfCurrent(generation, path, 'refreshLocalBranches', async () => {
+      await refreshLocalBranches(path)
+    })
+
+    runIfCurrent(generation, path, 'restartLogStream', async () => {
+      await restartLogStream(path, { clearLog: options?.clearLogOnStream ?? true })
+    })
   }
 
   const openRepo = async (path: string) => {
@@ -327,60 +549,21 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         repoPath: opened.path,
         remotes: opened.remotes,
         defaultBranch: opened.defaultBranch,
-        opening: false
+        currentBranch: cached?.status?.current ?? cached?.currentBranch ?? '',
+        status: cached?.status ?? null,
+        branches: cached?.branches ?? null,
+        log: cached?.log ?? null,
+        opening: false,
+        statusLoading: !cached?.status,
+        branchesLoading: !cached?.branches?.all?.length,
+        logLoading: false
       })
 
-      if (hasCachedData(cached)) {
-        if (cached?.status) {
-          setState('status', cached.status)
-          setState('currentBranch', cached.status.current)
-        }
-        if (cached?.branches) {
-          setState('branches', cached.branches)
-        }
-        if (cached?.log) {
-          logBuffer = [...(cached.log.all ?? [])]
-          setState('log', cached.log)
-        }
-        setState({ statusLoading: false, branchesLoading: false, logLoading: false })
-        void (async () => {
-          const refreshLabels = [
-            'refreshStatus',
-            'refreshBranchesOnly',
-            'refreshLogLimited'
-          ] as const
-          const refreshResults = await Promise.allSettled([
-            refreshStatus(opened.path),
-            refreshBranchesOnly(opened.path),
-            refreshLogLimited(opened.path)
-          ])
-          for (let i = 0; i < refreshResults.length; i++) {
-            const result = refreshResults[i]
-            if (result?.status === 'rejected') {
-              console.error(
-                `[git] ${refreshLabels[i]} failed for ${opened.path}:`,
-                formatCause(result.reason)
-              )
-            }
-          }
-          if (generation === openGeneration && state.repoPath === opened.path) {
-            await restartLogStream(opened.path)
-          }
-        })()
-        return
+      if (cached?.log?.all) {
+        logBuffer = [...cached.log.all]
       }
 
-      setState({
-        statusLoading: true,
-        branchesLoading: true,
-        status: null,
-        branches: null
-      })
-      await Promise.all([
-        restartLogStream(opened.path),
-        refreshStatus(opened.path),
-        refreshBranchesOnly(opened.path)
-      ])
+      startRepoRefresh(opened.path, generation, { clearLogOnStream: !cached?.log })
     } catch (error) {
       if (generation !== openGeneration) {
         return
@@ -497,9 +680,6 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }))
 
   const unsubLog = window.electronAPI.onLogChunk((chunk) => {
-    if (!tabActive()) {
-      return
-    }
     if (chunk.repoPath !== state.repoPath) {
       return
     }
@@ -513,14 +693,18 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       setState('error', chunk.error)
     }
     if (chunk.done) {
+      if (chunk.hasMore !== undefined) {
+        setState('logHasMore', chunk.hasMore)
+      }
       setState('logLoading', false)
+      setState('logLoadingMore', false)
+      if (tabActive()) {
+        flushLogToStore(openGeneration, state.repoPath)
+      }
     }
   })
 
   const unsubChanged = window.electronAPI.onRepoChanged((event) => {
-    if (!tabActive()) {
-      return
-    }
     if (event.repoPath !== state.repoPath) {
       return
     }
@@ -548,16 +732,23 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
 
   onCleanup(() => {
     openGeneration++
-    if (logFlushRaf !== null) {
-      cancelAnimationFrame(logFlushRaf)
+    if (logFlushTimer !== null) {
+      clearTimeout(logFlushTimer)
+      logFlushTimer = null
     }
+    logBuffer = []
+    setState('log', null)
     unsubLog?.()
     unsubChanged?.()
+
     const path = state.repoPath
-    if (path) {
+    if (!path) {
+      return
+    }
+    setTimeout(() => {
       Promise.resolve(window.electronAPI.cancelLogStream(path)).catch(() => {})
       Promise.resolve(window.electronAPI.closeRepo(path)).catch(() => {})
-    }
+    }, 0)
   })
 
   const fetchNow = async () => {
@@ -566,7 +757,11 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       return
     }
     setFetchTick((tick) => tick + 1)
-    await runFetchAndRefresh(path)
+    try {
+      await runFetchAndRefresh(path)
+    } catch (error) {
+      setState('error', formatCause(error))
+    }
   }
 
   return {
@@ -578,6 +773,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     unstageFile: (file: string) => unstageMutation.mutateAsync(file),
     commit: (message: string) => commitMutation.mutateAsync(message),
     fetchNow,
+    loadMoreHistory,
     invalidateRepoQueries
   }
 }

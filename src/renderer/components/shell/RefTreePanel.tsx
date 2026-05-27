@@ -1,12 +1,14 @@
 import { parseOrThrow } from '@shared/codec'
+import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import { RefTreeTogglesSchema } from '@shared/schemas/ipc'
-import { createMemo, createSignal, For, onCleanup, onMount } from 'solid-js'
+import { type Accessor, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import {
   type BranchTracking,
   buildRefTreeRows,
   REF_TREE_OVERSCAN,
   REF_TREE_ROW_HEIGHT,
-  type RefKind
+  type RefKind,
+  type RefRow
 } from '@/lib/ref-tree'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
 import { RefTreeRow } from './RefTreeRow'
@@ -20,11 +22,43 @@ interface RefTreePanelProps {
   currentBranch: string
   loading?: boolean
   tracking?: Record<string, BranchTracking>
-  filterActive?: boolean
-  selectedFilterRefs?: ReadonlySet<string>
-  onSelectRef?: (refKind: RefKind, fullPath: string) => void
-  onToggleFilterRef?: (refKind: RefKind, fullPath: string) => void
+  visibleTimelineRefs?: ReadonlySet<string>
+  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
+}
+
+interface VirtualRefTreeRowProps {
+  index: number
+  top: number
+  rows: Accessor<RefRow[]>
+  localLoading: boolean
+  visibleTimelineRefs?: ReadonlySet<string>
+  onToggleCollapsed: (key: string) => void
+  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
+  onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
+}
+
+function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
+  const row = createMemo(() => props.rows()[props.index])
+  return (
+    <Show when={row()}>
+      {(definedRow) => (
+        <RefTreeRow
+          row={definedRow()}
+          top={props.top}
+          localLoading={props.localLoading}
+          visibleTimelineRefs={props.visibleTimelineRefs}
+          onToggleCollapsed={props.onToggleCollapsed}
+          onToggleTimelineVisibility={props.onToggleTimelineVisibility}
+          onCheckoutLeaf={props.onCheckoutRef}
+        />
+      )}
+    </Show>
+  )
+}
+
+function persistToggles(next: Set<string>): void {
+  window.electronAPI.setRefTreeToggles(filterPersistedRefTreeToggles([...next]))
 }
 
 export function RefTreePanel(props: RefTreePanelProps) {
@@ -39,7 +73,7 @@ export function RefTreePanel(props: RefTreePanelProps) {
           return
         }
         const decoded = parseOrThrow(RefTreeTogglesSchema, res)
-        setToggles(new Set(decoded))
+        setToggles(new Set(filterPersistedRefTreeToggles(decoded)))
       })
       .catch((err: unknown) => {
         console.warn('[RefTreePanel] failed to load toggles', err)
@@ -47,6 +81,25 @@ export function RefTreePanel(props: RefTreePanelProps) {
     onCleanup(() => {
       cancelled = true
     })
+  })
+
+  const rows = createMemo(() =>
+    buildRefTreeRows({
+      localBranches: props.localBranches,
+      remoteBranches: props.remoteBranches,
+      tags: props.tags,
+      toggles: toggles(),
+      currentBranch: props.currentBranch,
+      localLoading: props.loading ?? false,
+      tracking: props.tracking
+    })
+  )
+
+  const { setScrollRef, onScroll, virtualItems, totalHeight, virtualizer } = useFixedVirtualizer({
+    count: () => rows().length,
+    rowHeight: REF_TREE_ROW_HEIGHT,
+    overscan: REF_TREE_OVERSCAN,
+    initialViewportHeight: 400
   })
 
   const toggle = (key: string) => {
@@ -57,29 +110,13 @@ export function RefTreePanel(props: RefTreePanelProps) {
       } else {
         next.add(key)
       }
-      window.electronAPI.setRefTreeToggles([...next])
+      persistToggles(next)
+      queueMicrotask(() => {
+        virtualizer.measure()
+      })
       return next
     })
   }
-
-  const rows = createMemo(() =>
-    buildRefTreeRows({
-      localBranches: props.localBranches,
-      remoteBranches: props.remoteBranches,
-      tags: props.tags,
-      toggles: toggles(),
-      currentBranch: props.currentBranch,
-      loading: props.loading ?? false,
-      tracking: props.tracking
-    })
-  )
-
-  const { setScrollRef, onScroll, virtualItems, totalHeight } = useFixedVirtualizer({
-    count: () => rows().length,
-    rowHeight: REF_TREE_ROW_HEIGHT,
-    overscan: REF_TREE_OVERSCAN,
-    initialViewportHeight: 400
-  })
 
   return (
     <div
@@ -91,16 +128,15 @@ export function RefTreePanel(props: RefTreePanelProps) {
       <div class="relative" style={{ height: `${totalHeight()}px` }}>
         <For each={virtualItems()}>
           {(virtualItem) => (
-            <RefTreeRow
-              row={rows()[virtualItem.index]}
+            <VirtualRefTreeRow
+              index={virtualItem.index}
               top={virtualItem.start}
-              loading={props.loading ?? false}
-              filterActive={props.filterActive}
-              selectedFilterRefs={props.selectedFilterRefs}
+              rows={rows}
+              localLoading={props.loading ?? false}
+              visibleTimelineRefs={props.visibleTimelineRefs}
               onToggleCollapsed={toggle}
-              onSelectLeaf={props.onSelectRef}
-              onToggleFilterRef={props.onToggleFilterRef}
-              onCheckoutLeaf={props.onCheckoutRef}
+              onToggleTimelineVisibility={props.onToggleTimelineVisibility}
+              onCheckoutRef={props.onCheckoutRef}
             />
           )}
         </For>

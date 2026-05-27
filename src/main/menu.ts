@@ -1,11 +1,9 @@
-import contextMenuModule from 'electron-context-menu'
-
-const contextMenu = contextMenuModule.default || contextMenuModule
+import contextMenu from 'electron-context-menu'
 
 export function setupContextMenu(): void {
   contextMenu({
     showSearchWithGoogle: false,
-    showInspectElement: true,
+    showInspectElement: process.env.NODE_ENV !== 'production',
     prepend: (_defaultActions, _params, _browserWindow) => [
       {
         label: 'Git GUI',

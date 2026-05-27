@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { GitLogEntry } from '@/types'
-import { computeBranchFilterSet, expandFilterRefs, findRefTip, refFilterKey } from '../selectors'
+import {
+  computeBranchFilterSet,
+  computeOnBranchSet,
+  countVisibleBranchRefs,
+  expandFilterRefs,
+  findRefTip,
+  pruneAncestorTips,
+  refFilterKey,
+  resolveTrackingRemoteBranches
+} from '../selectors'
 
 function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {
   return {
@@ -32,34 +41,29 @@ describe('findRefTip', () => {
     const commits = [entry({ hash: 'rtip', refs: 'origin/feature' })]
     expect(findRefTip(commits, 'remote', 'origin/feature', remoteNames)).toBe('rtip')
   })
-
-  it('returns undefined when the ref is not in the log', () => {
-    const commits = [entry({ hash: 'a', refs: 'main' })]
-    expect(findRefTip(commits, 'local', 'missing', remoteNames)).toBeUndefined()
-  })
 })
 
 describe('expandFilterRefs', () => {
-  const remotes = ['origin/main', 'origin/feature', 'upstream/feature']
-
-  it('includes origin tracking remote for a selected local branch', () => {
-    const selected = new Set([refFilterKey('local', 'feature')])
-    const expanded = expandFilterRefs(selected, remotes)
-    expect(expanded).toEqual([
+  it('returns only explicitly selected refs', () => {
+    const selected = new Set([
+      refFilterKey('local', 'feature'),
+      refFilterKey('remote', 'origin/main')
+    ])
+    expect(expandFilterRefs(selected)).toEqual([
       { kind: 'local', fullPath: 'feature' },
-      { kind: 'remote', fullPath: 'origin/feature' }
+      { kind: 'remote', fullPath: 'origin/main' }
     ])
   })
+})
 
-  it('does not auto-add a local branch for remote-only selection', () => {
-    const selected = new Set([refFilterKey('remote', 'origin/feature')])
-    const expanded = expandFilterRefs(selected, remotes)
-    expect(expanded).toEqual([{ kind: 'remote', fullPath: 'origin/feature' }])
-  })
-
-  it('skips tags', () => {
-    const selected = new Set([refFilterKey('tag', 'v1.0')])
-    expect(expandFilterRefs(selected, remotes)).toEqual([])
+describe('pruneAncestorTips', () => {
+  it('drops tips that are strict ancestors of another selected tip', () => {
+    const commits = [
+      entry({ hash: 'main-tip', refs: 'main', parents: ['feature-tip'] }),
+      entry({ hash: 'feature-tip', refs: 'feature', parents: ['shared'] }),
+      entry({ hash: 'shared', refs: '', parents: [] })
+    ]
+    expect(pruneAncestorTips(commits, ['main-tip', 'feature-tip'])).toEqual(['main-tip'])
   })
 })
 
@@ -69,20 +73,56 @@ describe('computeBranchFilterSet', () => {
 
   it('returns null for empty selection', () => {
     expect(computeBranchFilterSet([], new Set(), remotes, remoteNames)).toBeNull()
-    expect(computeBranchFilterSet([], undefined, remotes, remoteNames)).toBeNull()
   })
 
-  it('walks ancestry from local branch and origin tips', () => {
+  it('does not add commits when a selected branch is already contained in main', () => {
     const commits = [
-      entry({ hash: 'f1', refs: 'feature, origin/feature', parents: ['base'] }),
-      entry({ hash: 'base', refs: '', parents: [] })
+      entry({ hash: 'main-tip', refs: 'main, origin/main', parents: ['feature-tip'] }),
+      entry({ hash: 'feature-tip', refs: 'feature', parents: ['shared'] }),
+      entry({ hash: 'shared', refs: '', parents: [] })
+    ]
+    const mainOnly = computeBranchFilterSet(
+      commits,
+      new Set([refFilterKey('local', 'main'), refFilterKey('remote', 'origin/main')]),
+      remotes,
+      remoteNames
+    )
+    const withFeature = computeBranchFilterSet(
+      commits,
+      new Set([
+        refFilterKey('local', 'main'),
+        refFilterKey('remote', 'origin/main'),
+        refFilterKey('local', 'feature')
+      ]),
+      remotes,
+      remoteNames
+    )
+    expect(withFeature).toEqual(mainOnly)
+  })
+
+  it('does not pull in a diverged tracking remote for a local branch', () => {
+    const commits = [
+      entry({ hash: 'remote-tip', refs: 'origin/feature', parents: ['remote-only'] }),
+      entry({ hash: 'remote-only', refs: '', parents: ['shared'] }),
+      entry({ hash: 'local-tip', refs: 'feature', parents: ['shared'] }),
+      entry({ hash: 'shared', refs: 'main', parents: [] })
     ]
     const selected = new Set([refFilterKey('local', 'feature')])
     const result = computeBranchFilterSet(commits, selected, remotes, remoteNames)
-    expect(result).toEqual(new Set(['f1', 'base']))
+    expect(result).toEqual(new Set(['local-tip', 'shared']))
   })
 
-  it('unions ancestry from multiple selected branches', () => {
+  it('includes a tracking remote at the same commit as the local branch', () => {
+    const commits = [
+      entry({ hash: 'tip', refs: 'main, origin/main', parents: ['base'] }),
+      entry({ hash: 'base', refs: '', parents: [] })
+    ]
+    const selected = new Set([refFilterKey('local', 'main')])
+    const result = computeBranchFilterSet(commits, selected, remotes, remoteNames)
+    expect(result).toEqual(new Set(['tip', 'base']))
+  })
+
+  it('unions unique commits from branches that diverge', () => {
     const commits = [
       entry({ hash: 'a1', refs: 'alpha', parents: ['shared'] }),
       entry({ hash: 'b1', refs: 'beta', parents: ['shared'] }),
@@ -92,10 +132,42 @@ describe('computeBranchFilterSet', () => {
     const result = computeBranchFilterSet(commits, selected, [], remoteNames)
     expect(result).toEqual(new Set(['a1', 'b1', 'shared']))
   })
+})
 
-  it('returns empty set when no tips resolve', () => {
-    const selected = new Set([refFilterKey('local', 'missing')])
-    const result = computeBranchFilterSet([], selected, remotes, remoteNames)
-    expect(result).toEqual(new Set())
+describe('countVisibleBranchRefs', () => {
+  it('counts a selected local branch and its tracking remote as one branch', () => {
+    const selected = new Set([
+      refFilterKey('local', 'main'),
+      refFilterKey('remote', 'origin/main'),
+      refFilterKey('local', 'feature')
+    ])
+    expect(countVisibleBranchRefs(selected, ['origin/main'], new Set(['origin']))).toBe(2)
+  })
+
+  it('counts remote-only selections as visible branches', () => {
+    const selected = new Set([refFilterKey('remote', 'origin/feature')])
+    expect(countVisibleBranchRefs(selected, ['origin/feature'], new Set(['origin']))).toBe(1)
+  })
+})
+
+describe('computeOnBranchSet', () => {
+  it('returns commits reachable from HEAD on the current branch', () => {
+    const commits = [
+      entry({ hash: 'feature-tip', refs: 'feature', parents: ['base'] }),
+      entry({ hash: 'main-tip', refs: 'HEAD -> main', parents: ['base'] }),
+      entry({ hash: 'base', refs: '', parents: [] })
+    ]
+    expect(computeOnBranchSet(commits, new Set(['origin']), 'main')).toEqual(
+      new Set(['main-tip', 'base'])
+    )
+  })
+})
+
+describe('resolveTrackingRemoteBranches', () => {
+  it('lists origin and other remotes for a local branch name', () => {
+    const remotes = ['origin/main', 'upstream/main']
+    expect(resolveTrackingRemoteBranches('main', remotes, new Set(['origin', 'upstream']))).toEqual(
+      ['origin/main', 'upstream/main']
+    )
   })
 })

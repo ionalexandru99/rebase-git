@@ -1,3 +1,5 @@
+import { REF_TREE_REMOTE_SECTION_KEY, REF_TREE_TAG_SECTION_KEY } from '@shared/ref-tree-toggles'
+
 export type RefKind = 'local' | 'remote' | 'tag'
 
 export interface BranchTracking {
@@ -56,7 +58,13 @@ export const REF_TREE_OVERSCAN = REF_TREE_OVERSCAN_VALUE
 export const REF_TREE_INDENT_PX = 12
 
 export function sectionKey(refKind: RefKind): string {
-  return refKind === 'local' ? `section:${refKind}` : `section:${refKind}:expanded`
+  if (refKind === 'local') {
+    return 'section:local'
+  }
+  if (refKind === 'remote') {
+    return REF_TREE_REMOTE_SECTION_KEY
+  }
+  return REF_TREE_TAG_SECTION_KEY
 }
 
 export function folderKey(refKind: RefKind, fullPath: string): string {
@@ -91,7 +99,7 @@ interface BuildRowsOptions {
   tags: string[]
   toggles: Set<string>
   currentBranch: string
-  loading: boolean
+  localLoading: boolean
   tracking?: Record<string, BranchTracking>
 }
 
@@ -101,18 +109,16 @@ export function buildRefTreeRows({
   tags,
   toggles,
   currentBranch,
-  loading,
+  localLoading,
   tracking
 }: BuildRowsOptions): RefRow[] {
   const out: RefRow[] = []
-  const noData = localBranches.length === 0 && remoteBranches.length === 0 && tags.length === 0
-  if (loading && noData) {
+  const noLocalData = localBranches.length === 0
+  if (localLoading && noLocalData) {
     pushSkeletonSection(out, 'local', 'Local branches', toggles, 4)
-    pushSkeletonSection(out, 'remote', 'Remote branches', toggles, 3)
-    pushSkeletonSection(out, 'tag', 'Tags', toggles, 2)
-    return out
+  } else {
+    buildSection(out, 'local', 'Local branches', localBranches, toggles, currentBranch, tracking)
   }
-  buildSection(out, 'local', 'Local branches', localBranches, toggles, currentBranch, tracking)
   buildSection(out, 'remote', 'Remote branches', remoteBranches, toggles, currentBranch)
   buildSection(out, 'tag', 'Tags', tags, toggles, currentBranch)
   return out

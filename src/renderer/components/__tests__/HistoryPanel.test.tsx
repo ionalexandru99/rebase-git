@@ -1,26 +1,35 @@
-import { render, screen } from '@solidjs/testing-library'
+import { fireEvent, render, screen } from '@solidjs/testing-library'
 import { describe, expect, it } from 'vitest'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
-import { layoutCommits } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
 import type { GitLog, GitLogEntry } from '@/types'
 import { HistoryPanel } from '../HistoryPanel'
 
 interface PanelOptions {
   loading?: boolean
-  branchFilterActive?: boolean
-  selectedBranchRefs?: ReadonlySet<string>
+  hasMore?: boolean
+  onLoadMore?: () => void
+  visibleBranchRefs?: ReadonlySet<string>
   remoteBranches?: string[]
+  repoPath?: string
+  currentBranch?: string
 }
 
 function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
+  const visibleBranchRefs =
+    options.visibleBranchRefs ??
+    new Set([refFilterKey('local', 'main'), refFilterKey('remote', 'origin/main')])
+
   return render(() => (
     <HistoryPanel
       log={log}
       loading={options.loading ?? false}
-      branchFilterActive={options.branchFilterActive}
-      selectedBranchRefs={options.selectedBranchRefs}
-      remoteBranches={options.remoteBranches}
+      hasMore={options.hasMore}
+      onLoadMore={options.onLoadMore}
+      visibleBranchRefs={visibleBranchRefs}
+      remoteBranches={options.remoteBranches ?? ['origin/main']}
+      repoPath={options.repoPath}
+      currentBranch={options.currentBranch}
     />
   ))
 }
@@ -31,7 +40,7 @@ function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): Git
     author_name: 'Jane Doe',
     date: new Date().toISOString(),
     parents: [],
-    refs: '',
+    refs: 'main',
     ...overrides
   }
 }
@@ -69,7 +78,7 @@ describe('HistoryPanel', () => {
       total: 2
     })
 
-    expect(screen.getByText('2 commits · all branches')).toBeInTheDocument()
+    expect(screen.getByText('2 commits · 1 branch visible')).toBeInTheDocument()
     expect(screen.getByText('Add support for sparse checkouts')).toBeInTheDocument()
     expect(screen.getByText('Refactor commit panel')).toBeInTheDocument()
     expect(screen.getByText('1234567')).toBeInTheDocument()
@@ -80,18 +89,35 @@ describe('HistoryPanel', () => {
   })
 
   it('uses singular copy for one commit', () => {
-    renderPanel({
-      all: [entry({ hash: 'aaa', message: 'one', author_name: 'Solo' })],
-      total: 1
-    })
+    renderPanel(
+      {
+        all: [entry({ hash: 'aaa', message: 'one', author_name: 'Solo' })],
+        total: 1
+      },
+      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]) }
+    )
 
-    expect(screen.getByText('1 commit · all branches')).toBeInTheDocument()
+    expect(screen.getByText('1 commit · 1 branch visible')).toBeInTheDocument()
   })
 
   it('shows the loading badge', () => {
     renderPanel({ all: [], total: 0 }, { loading: true })
 
     expect(screen.getByText('Loading')).toBeInTheDocument()
+  })
+
+  it('shows streamed commits without skeleton while history is still loading', () => {
+    renderPanel(
+      {
+        all: [entry({ hash: 'aaa', message: 'first streamed commit' })],
+        total: 1
+      },
+      { loading: true }
+    )
+
+    expect(screen.getByText('first streamed commit')).toBeInTheDocument()
+    expect(screen.getByText('Loading')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Loading commit history')).not.toBeInTheDocument()
   })
 
   it('renders branch and HEAD ref chips parsed from %D output', () => {
@@ -106,30 +132,40 @@ describe('HistoryPanel', () => {
       total: 1
     })
 
-    expect(screen.getByText('main')).toBeInTheDocument()
-    expect(screen.queryByText('origin/main')).not.toBeInTheDocument()
+    expect(screen.getByTitle('main')).toBeInTheDocument()
+    expect(screen.getByTitle('origin/main')).toBeInTheDocument()
     expect(screen.getByText('v1.0')).toBeInTheDocument()
   })
 
   it('keeps the remote ref when no local branch is at the same SHA', () => {
-    renderPanel({
-      all: [
-        entry({
-          hash: 'aaa',
-          message: 'tip',
-          refs: 'origin/feature'
-        })
-      ],
-      total: 1
-    })
+    renderPanel(
+      {
+        all: [
+          entry({
+            hash: 'aaa',
+            message: 'tip',
+            refs: 'origin/feature'
+          })
+        ],
+        total: 1
+      },
+      {
+        visibleBranchRefs: new Set([refFilterKey('remote', 'origin/feature')])
+      }
+    )
 
     expect(screen.getByTitle('origin/feature')).toBeInTheDocument()
     expect(screen.getByText('feature')).toBeInTheDocument()
   })
 
   it('virtualizes a large history, mounting only a small window of rows', () => {
-    const all: GitLogEntry[] = Array.from({ length: 10_000 }, (_unused, i) =>
-      entry({ hash: `hash${i}`, message: `commit-${i}` })
+    const all: GitLogEntry[] = Array.from({ length: 10_000 }, (_unused, index) =>
+      entry({
+        hash: `hash${index}`,
+        message: `commit-${index}`,
+        parents: index < 9_999 ? [`hash${index + 1}`] : [],
+        refs: index === 0 ? 'main' : ''
+      })
     )
     renderPanel({ all, total: all.length })
 
@@ -155,7 +191,7 @@ describe('HistoryPanel', () => {
     expect(screen.getByLabelText('merge commit')).toBeInTheDocument()
   })
 
-  it('hides commits outside the selected branch filter', () => {
+  it('hides commits outside visible branches', () => {
     renderPanel(
       {
         all: [
@@ -166,46 +202,114 @@ describe('HistoryPanel', () => {
         total: 3
       },
       {
-        branchFilterActive: true,
-        selectedBranchRefs: new Set([refFilterKey('local', 'feature')]),
+        visibleBranchRefs: new Set([refFilterKey('local', 'feature')]),
         remoteBranches: []
       }
     )
 
-    expect(screen.getByText('2 commits · filtered')).toBeInTheDocument()
+    expect(screen.getByText('2 commits · 1 branch visible')).toBeInTheDocument()
     expect(screen.getByText('feature tip')).toBeInTheDocument()
     expect(screen.getByText('shared base')).toBeInTheDocument()
     expect(screen.queryByText('main tip')).not.toBeInTheDocument()
   })
 
-  it('does not filter when selected refs exist but filter mode is off', () => {
+  it('keeps the same commit count when adding a branch already on main', () => {
+    const log = {
+      all: [
+        entry({ hash: 'm1', message: 'main tip', refs: 'main, origin/main', parents: ['f1'] }),
+        entry({ hash: 'f1', message: 'feature tip', refs: 'feature', parents: ['base'] }),
+        entry({ hash: 'base', message: 'shared base', parents: [] })
+      ],
+      total: 3
+    }
+    renderPanel(log, {
+      visibleBranchRefs: new Set([
+        refFilterKey('local', 'main'),
+        refFilterKey('remote', 'origin/main'),
+        refFilterKey('local', 'feature')
+      ])
+    })
+    expect(screen.getByText('3 commits · 2 branches visible')).toBeInTheDocument()
+  })
+
+  it('dims commits that are not reachable from the current local branch', () => {
     renderPanel(
       {
         all: [
-          entry({ hash: 'f1', message: 'feature tip', refs: 'feature', parents: ['base'] }),
-          entry({ hash: 'm1', message: 'main tip', refs: 'main', parents: ['base'] }),
-          entry({ hash: 'base', message: 'shared base', parents: [] })
+          entry({
+            hash: 'feature-tip',
+            message: 'feature tip',
+            refs: 'feature',
+            parents: ['base']
+          }),
+          entry({ hash: 'main-tip', message: 'main tip', refs: 'HEAD -> main', parents: ['base'] }),
+          entry({ hash: 'base', message: 'shared base', refs: '', parents: [] })
         ],
         total: 3
       },
       {
-        branchFilterActive: false,
-        selectedBranchRefs: new Set([refFilterKey('local', 'feature')]),
+        currentBranch: 'main',
+        visibleBranchRefs: new Set([
+          refFilterKey('local', 'main'),
+          refFilterKey('local', 'feature')
+        ]),
         remoteBranches: []
       }
     )
 
-    expect(screen.getByText('3 commits · all branches')).toBeInTheDocument()
-    expect(screen.getByText('feature tip')).toBeInTheDocument()
-    expect(screen.getByText('main tip')).toBeInTheDocument()
-    expect(screen.getByText('shared base')).toBeInTheDocument()
+    expect(screen.getByText('feature tip').closest('[style*="opacity"]')).toHaveStyle({
+      opacity: '0.6'
+    })
+    expect(screen.getByText('main tip').closest('[style*="opacity"]')).toHaveStyle({
+      opacity: '1'
+    })
+  })
+
+  it('shows more-available copy when additional history can be loaded', () => {
+    renderPanel(
+      {
+        all: [entry({ hash: 'a', message: 'first' }), entry({ hash: 'b', message: 'second' })],
+        total: 2
+      },
+      { hasMore: true, onLoadMore: () => {} }
+    )
+
+    expect(screen.getByText(/more available/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
+  })
+
+  it('restores the previous scroll position for a repo', () => {
+    const log = {
+      all: Array.from({ length: 200 }, (_unused, index) =>
+        entry({
+          hash: `scroll${index}`,
+          message: `scroll-${index}`,
+          parents: index < 199 ? [`scroll${index + 1}`] : [],
+          refs: index === 0 ? 'main' : ''
+        })
+      ),
+      total: 200
+    }
+    const first = renderPanel(log, { repoPath: '/repo/scroll' })
+    const scroller = screen.getByTestId('history-scroll')
+    scroller.scrollTop = 320
+    fireEvent.scroll(scroller)
+    first.unmount()
+
+    renderPanel(log, { repoPath: '/repo/other' }).unmount()
+    renderPanel(log, { repoPath: '/repo/scroll' })
+
+    expect(screen.getByTestId('history-scroll').scrollTop).toBe(320)
   })
 })
 
 describe('parseRefs', () => {
-  it('drops origin/X when local X is on the same commit', () => {
+  it('keeps local and origin when both decorate the same commit', () => {
     const refs = parseRefs('HEAD -> main, origin/main')
-    expect(refs).toEqual([{ label: 'main', kind: 'branch' }])
+    expect(refs).toEqual([
+      { label: 'main', kind: 'branch' },
+      { label: 'origin/main', kind: 'remote' }
+    ])
   })
 
   it('keeps origin/X when no matching local branch is present', () => {
@@ -220,85 +324,9 @@ describe('parseRefs', () => {
 
   it('drops origin/HEAD symref so it never renders as a pill', () => {
     const refs = parseRefs('HEAD -> main, origin/main, origin/HEAD', new Set(['origin']))
-    expect(refs).toEqual([{ label: 'main', kind: 'branch' }])
-  })
-})
-
-describe('layoutCommits', () => {
-  it('places a single linear chain in lane 0', () => {
-    const commits: GitLogEntry[] = [
-      entry({ hash: 'c1', parents: ['c2'] }),
-      entry({ hash: 'c2', parents: ['c3'] }),
-      entry({ hash: 'c3', parents: [] })
-    ]
-
-    const { rows, maxLanes } = layoutCommits(commits)
-
-    expect(maxLanes).toBe(1)
-    expect(rows.map((r) => r.commitLane)).toEqual([0, 0, 0])
-    expect(rows[2].outgoing).toEqual([])
-  })
-
-  it('opens a second lane when a sibling branch tip appears', () => {
-    const commits: GitLogEntry[] = [
-      entry({ hash: 'c1', parents: ['c3'] }),
-      entry({ hash: 'c2', parents: ['c3'] }),
-      entry({ hash: 'c3', parents: [] })
-    ]
-
-    const { rows, maxLanes } = layoutCommits(commits)
-
-    expect(maxLanes).toBe(2)
-    expect(rows[0].commitLane).toBe(0)
-    expect(rows[1].commitLane).toBe(1)
-    expect(rows[2].commitLane).toBe(0)
-    expect(rows[2].outgoing).toEqual([])
-  })
-
-  it('handles a merge commit by expanding into two outgoing lanes', () => {
-    const commits: GitLogEntry[] = [
-      entry({ hash: 'c1', parents: ['c2', 'c3'] }),
-      entry({ hash: 'c2', parents: ['c4'] }),
-      entry({ hash: 'c3', parents: ['c4'] }),
-      entry({ hash: 'c4', parents: [] })
-    ]
-
-    const { rows, maxLanes } = layoutCommits(commits)
-
-    expect(maxLanes).toBe(2)
-    expect(rows[0].commitLane).toBe(0)
-    expect(rows[0].outgoing.length).toBe(2)
-    expect(rows[0].outgoing).toContain('c2')
-    expect(rows[0].outgoing).toContain('c3')
-    expect(rows[3].outgoing).toEqual([])
-  })
-
-  it('produces the same layout incrementally as in one pass', () => {
-    const all: GitLogEntry[] = [
-      entry({ hash: 'a', parents: ['b', 'c'] }),
-      entry({ hash: 'b', parents: ['d'] }),
-      entry({ hash: 'c', parents: ['d'] }),
-      entry({ hash: 'd', parents: ['e'] }),
-      entry({ hash: 'e', parents: [] })
-    ]
-
-    const full = layoutCommits(all)
-
-    const prefix = all.slice(0, 2)
-    const step1 = layoutCommits(prefix)
-    const step2 = layoutCommits(all, step1)
-
-    expect(step2.maxLanes).toBe(full.maxLanes)
-    expect(step2.rows.map((r) => r.commitLane)).toEqual(full.rows.map((r) => r.commitLane))
-    expect(step2.rows.map((r) => r.outgoing)).toEqual(full.rows.map((r) => r.outgoing))
-    expect(step2.rows.map((r) => r.incoming)).toEqual(full.rows.map((r) => r.incoming))
-  })
-
-  it('rebuilds from scratch when the cached prefix no longer matches', () => {
-    const cached = layoutCommits([entry({ hash: 'x', parents: [] })])
-    const fresh = layoutCommits([entry({ hash: 'y', parents: [] })], cached)
-
-    expect(fresh.rows).toHaveLength(1)
-    expect(fresh.rows[0].commit.hash).toBe('y')
+    expect(refs).toEqual([
+      { label: 'main', kind: 'branch' },
+      { label: 'origin/main', kind: 'remote' }
+    ])
   })
 })

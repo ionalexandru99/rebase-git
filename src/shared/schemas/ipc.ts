@@ -4,35 +4,12 @@ import {
   GitBranchesSchema,
   GitLogSchema,
   GitStatusSchema,
+  LocalBranchesSchema,
+  RemoteRefsSchema,
   RepoOpenSuccessSchema
 } from './git'
 
-export const Channel = {
-  selectFolder: 'select-folder',
-  openRepo: 'open-repo',
-  closeRepo: 'close-repo',
-  startLogStream: 'start-log-stream',
-  cancelLogStream: 'cancel-log-stream',
-  scanForRepos: 'scan-for-repos',
-  getRecentRepos: 'get-recent-repos',
-  getWorkspaces: 'get-workspaces',
-  addWorkspace: 'add-workspace',
-  removeWorkspace: 'remove-workspace',
-  getActiveWorkspace: 'get-active-workspace',
-  setActiveWorkspace: 'set-active-workspace',
-  getOnboardingComplete: 'get-onboarding-complete',
-  setOnboardingComplete: 'set-onboarding-complete',
-  getSidebarPrefs: 'get-sidebar-prefs',
-  setSidebarPrefs: 'set-sidebar-prefs',
-  getRefTreeToggles: 'get-ref-tree-toggles',
-  setRefTreeToggles: 'set-ref-tree-toggles',
-  getPersistedTabs: 'get-persisted-tabs',
-  setPersistedTabs: 'set-persisted-tabs',
-  checkoutRef: 'checkout-ref',
-  getSidecarConfig: 'get-sidecar-config',
-  logChunk: 'log-chunk',
-  repoChanged: 'repo-changed'
-} as const
+export { Channel } from '../channels'
 
 const repoNotOpen = z.object({ _tag: z.literal('RepoNotOpen') })
 const gitError = z.object({ _tag: z.literal('GitError'), message: z.string() })
@@ -50,6 +27,20 @@ export const BranchesResponseSchema = z.discriminatedUnion('_tag', [
   gitError
 ])
 export type BranchesResponse = z.infer<typeof BranchesResponseSchema>
+
+export const LocalBranchesResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), branches: LocalBranchesSchema }),
+  repoNotOpen,
+  gitError
+])
+export type LocalBranchesResponse = z.infer<typeof LocalBranchesResponseSchema>
+
+export const RemoteRefsResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), refs: RemoteRefsSchema }),
+  repoNotOpen,
+  gitError
+])
+export type RemoteRefsResponse = z.infer<typeof RemoteRefsResponseSchema>
 
 export const OpenRepoResponseSchema = z.discriminatedUnion('_tag', [
   z.object({ _tag: z.literal('Ok'), result: RepoOpenSuccessSchema }),

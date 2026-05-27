@@ -49,6 +49,19 @@ export const GitBranchesSchema = z.object({
 })
 export type GitBranches = z.infer<typeof GitBranchesSchema>
 
+export const LocalBranchesSchema = z.object({
+  current: z.string(),
+  all: z.array(z.string()),
+  tracking: z.record(z.string(), BranchTrackingSchema).optional()
+})
+export type LocalBranches = z.infer<typeof LocalBranchesSchema>
+
+export const RemoteRefsSchema = z.object({
+  remotes: z.array(z.string()),
+  tags: z.array(z.string())
+})
+export type RemoteRefs = z.infer<typeof RemoteRefsSchema>
+
 export const RepoOpenSuccessSchema = z.object({
   remotes: z.record(z.string(), z.string()),
   defaultBranch: z.string().optional(),
@@ -71,6 +84,7 @@ export const LogChunkSchema = z.object({
   repoPath: z.string(),
   commits: z.array(GitLogEntrySchema),
   done: z.boolean(),
+  hasMore: z.boolean().optional(),
   error: z.string().optional()
 })
 export type LogChunk = z.infer<typeof LogChunkSchema>

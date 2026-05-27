@@ -2,8 +2,13 @@ import fs from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import path from 'node:path'
 import { parseOrThrow } from '@shared/codec'
-import { type ScanForReposResponse, ScanForReposResponseSchema } from '@shared/schemas/ipc'
+import {
+  RefKindSchema,
+  type ScanForReposResponse,
+  ScanForReposResponseSchema
+} from '@shared/schemas/ipc'
 import { simpleGit } from 'simple-git'
+import { streamGitLog } from './log-stream'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 import { SidecarOp } from './protocol'
@@ -144,6 +149,26 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       }
       return operations.getBranches(repoPath)
     }
+    case SidecarOp.getLocalBranches: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.localBranches()
+      }
+      return operations.getLocalBranches(repoPath)
+    }
+    case SidecarOp.getRemoteRefs: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.remoteRefs()
+      }
+      return operations.getRemoteRefs(repoPath)
+    }
     case SidecarOp.getStatus: {
       const repoPath = safeRepoPath(body)
       if (repoPath === BAD_REQUEST) {
@@ -239,7 +264,11 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       if (!fullPath) {
         return BAD_REQUEST
       }
-      return operations.checkoutRef(repoPath, body.refKind as 'local' | 'remote' | 'tag', fullPath)
+      const refKind = RefKindSchema.safeParse(body.refKind)
+      if (!refKind.success) {
+        return BAD_REQUEST
+      }
+      return operations.checkoutRef(repoPath, refKind.data, fullPath)
     }
     default:
       return undefined
@@ -250,16 +279,25 @@ function readBody(req: IncomingMessage): Promise<Body> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let total = 0
+    let rejected = false
     req.on('data', (chunk: Buffer) => {
+      if (rejected) {
+        return
+      }
       total += chunk.length
       if (total > MAX_BODY_BYTES) {
-        req.pause()
+        rejected = true
+        chunks.length = 0
+        req.resume()
         reject(new BodyTooLargeError())
         return
       }
       chunks.push(chunk)
     })
     req.on('end', () => {
+      if (rejected) {
+        return
+      }
       const raw = Buffer.concat(chunks).toString('utf8')
       if (!raw) {
         return resolve({})
@@ -274,16 +312,9 @@ function readBody(req: IncomingMessage): Promise<Body> {
   })
 }
 
-const CORS_HEADERS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'authorization, content-type',
-  'access-control-max-age': '86400'
-} as const
-
 function sendJson(res: ServerResponse, status: number, payload: unknown): void {
   const data = JSON.stringify(payload)
-  res.writeHead(status, { 'content-type': 'application/json', ...CORS_HEADERS })
+  res.writeHead(status, { 'content-type': 'application/json' })
   res.end(data)
 }
 
@@ -291,14 +322,13 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
   const url = new URL(req.url ?? '/', 'http://localhost')
 
   if (req.method === 'OPTIONS') {
-    const requestedHeaders = req.headers['access-control-request-headers']
-    res.writeHead(204, {
-      ...CORS_HEADERS,
-      'access-control-allow-headers':
-        requestedHeaders ?? CORS_HEADERS['access-control-allow-headers'],
-      'access-control-allow-private-network': 'true'
-    })
+    res.writeHead(403)
     res.end()
+    return
+  }
+
+  if (req.headers.authorization !== `Bearer ${token}`) {
+    sendJson(res, 401, { error: 'unauthorized' })
     return
   }
 
@@ -307,8 +337,24 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
     return
   }
 
-  if (req.headers.authorization !== `Bearer ${token}`) {
-    sendJson(res, 401, { error: 'unauthorized' })
+  if (url.pathname === '/stream/log' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST || !repoPath) {
+        sendJson(res, 400, { error: 'bad request' })
+        return
+      }
+      const skip = typeof body.skip === 'number' ? body.skip : undefined
+      const maxCount = typeof body.maxCount === 'number' ? body.maxCount : undefined
+      streamGitLog(repoPath, res, { skip, maxCount })
+    } catch (error) {
+      if (error instanceof BodyTooLargeError) {
+        sendJson(res, 413, { error: 'payload too large' })
+        return
+      }
+      sendJson(res, 500, { error: 'internal error' })
+    }
     return
   }
 

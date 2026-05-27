@@ -20,9 +20,6 @@ export function FolderRow(props: FolderRowProps) {
     >
       <Chevron expanded={props.row.expanded} />
       <span class="truncate">{props.row.name}</span>
-      <span class="ml-auto text-[10px] tabular-nums text-muted-foreground/70">
-        {props.row.childCount}
-      </span>
     </button>
   )
 }

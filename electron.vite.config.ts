@@ -26,6 +26,14 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: sharedAlias
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          format: 'cjs',
+          entryFileNames: '[name].cjs'
+        }
+      }
     }
   },
   renderer: {

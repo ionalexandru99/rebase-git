@@ -1,3 +1,4 @@
+import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
 import { createVirtualizer } from '@tanstack/solid-virtual'
 import { type Accessor, createSignal, onCleanup } from 'solid-js'
 
@@ -14,9 +15,11 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
     options.initialViewportHeight ?? (typeof window !== 'undefined' ? window.innerHeight : 800)
   )
   const [scrollTop, setScrollTop] = createSignal(0)
+  const [scrollRevision, setScrollRevision] = createSignal(0)
 
   let scrollElement: HTMLDivElement | undefined
   let resizeObserver: ResizeObserver | undefined
+  let resizeFrame: number | null = null
 
   const virtualizer = createVirtualizer({
     get count() {
@@ -27,41 +30,59 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
     overscan: options.overscan
   })
 
-  const setScrollRef = (element: HTMLDivElement) => {
-    scrollElement = element
-    resizeObserver?.disconnect()
-    const update = () => {
-      if (element.clientHeight > 0) {
-        setViewportHeight(element.clientHeight)
-      }
-      virtualizer.measure()
+  const measureViewport = () => {
+    if (!scrollElement) {
+      return
     }
-    update()
-    resizeObserver = new ResizeObserver(update)
-    resizeObserver.observe(element)
+    if (scrollElement.clientHeight > 0) {
+      setViewportHeight(scrollElement.clientHeight)
+    }
+    virtualizer.measure()
   }
 
-  let raf: number | null = null
-  const onScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-    const target = event.currentTarget
-    if (raf !== null) {
-      cancelAnimationFrame(raf)
+  const scheduleMeasure = () => {
+    if (resizeFrame !== null) {
+      return
     }
-    raf = requestAnimationFrame(() => {
-      raf = null
-      options.onScrollFrame?.()
-      setScrollTop(target.scrollTop)
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = null
+      measureViewport()
     })
   }
 
+  const setScrollRef = (element: HTMLDivElement) => {
+    scrollElement = element
+    resizeObserver?.disconnect()
+    measureViewport()
+    resizeObserver = new ResizeObserver(() => {
+      scheduleMeasure()
+    })
+    resizeObserver.observe(element)
+  }
+
+  const onSidebarResizeEnd = () => {
+    scheduleMeasure()
+  }
+  window.addEventListener(SIDEBAR_RESIZE_END_EVENT, onSidebarResizeEnd)
+
+  const onScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+    const target = event.currentTarget
+    setScrollTop(target.scrollTop)
+    setScrollRevision((revision) => revision + 1)
+    options.onScrollFrame?.()
+  }
+
   onCleanup(() => {
-    if (raf !== null) {
-      cancelAnimationFrame(raf)
+    window.removeEventListener(SIDEBAR_RESIZE_END_EVENT, onSidebarResizeEnd)
+    if (resizeFrame !== null) {
+      cancelAnimationFrame(resizeFrame)
     }
     resizeObserver?.disconnect()
   })
 
   const virtualItems = () => {
+    scrollRevision()
+    scrollTop()
     const items = virtualizer.getVirtualItems()
     const count = options.count()
     if (items.length > 0 || count === 0) {
@@ -70,11 +91,12 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
 
     const viewport = viewportHeight()
     const overscan = options.overscan
-    const start = Math.max(0, Math.floor(scrollTop() / options.rowHeight) - overscan)
+    const offset = scrollTop()
+    const start = Math.max(0, Math.floor(offset / options.rowHeight) - overscan)
     const visibleCount = Math.ceil(viewport / options.rowHeight) + overscan * 2
     const end = Math.min(count, start + visibleCount)
-    return Array.from({ length: end - start }, (_, offset) => {
-      const index = start + offset
+    return Array.from({ length: end - start }, (_, itemOffset) => {
+      const index = start + itemOffset
       return {
         index,
         start: index * options.rowHeight,
@@ -87,11 +109,13 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
   }
 
   const startIndex = () => {
+    scrollRevision()
     const items = virtualItems()
     return items.length > 0 ? items[0].index : 0
   }
 
   const endIndex = () => {
+    scrollRevision()
     const items = virtualItems()
     return items.length > 0 ? items[items.length - 1].index + 1 : 0
   }

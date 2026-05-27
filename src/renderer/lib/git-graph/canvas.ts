@@ -37,21 +37,25 @@ export function laneX(lane: number): number {
   return RAIL_PAD + lane * COL_W
 }
 
+export function computeGraphRailWidth(maxLanes: number): number {
+  return Math.max(28, RAIL_PAD * 2 + Math.max(maxLanes - 1, 0) * COL_W)
+}
+
 export function computeRowRailWidth(row: RowLayout): number {
-  let max = row.commitLane
-  for (let j = row.incoming.length - 1; j > max; j--) {
-    if (row.incoming[j] !== null) {
-      max = j
+  let maxLane = row.commitLane
+  for (let lane = row.incoming.length - 1; lane > maxLane; lane--) {
+    if (row.incoming[lane] !== null) {
+      maxLane = lane
       break
     }
   }
-  for (let j = row.outgoing.length - 1; j > max; j--) {
-    if (row.outgoing[j] !== null) {
-      max = j
+  for (let lane = row.outgoing.length - 1; lane > maxLane; lane--) {
+    if (row.outgoing[lane] !== null) {
+      maxLane = lane
       break
     }
   }
-  return Math.max(28, RAIL_PAD * 2 + max * COL_W)
+  return computeGraphRailWidth(maxLane + 1)
 }
 
 export function readCssVar(name: string, fallback: string): string {

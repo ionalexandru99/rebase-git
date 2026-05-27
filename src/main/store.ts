@@ -1,3 +1,4 @@
+import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import Store from 'electron-store'
 
 interface StoreSchema {
@@ -131,11 +132,11 @@ export function setSidebarPrefs(prefs: SidebarPrefs): void {
 }
 
 export function getRefTreeToggles(): string[] {
-  return store.get('sidebarRefTreeToggles')
+  return filterPersistedRefTreeToggles(store.get('sidebarRefTreeToggles'))
 }
 
 export function setRefTreeToggles(toggles: string[]): void {
-  store.set('sidebarRefTreeToggles', toggles)
+  store.set('sidebarRefTreeToggles', filterPersistedRefTreeToggles(toggles))
 }
 
 export interface PersistedTabState {

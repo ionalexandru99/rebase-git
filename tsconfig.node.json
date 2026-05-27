@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -12,10 +14,13 @@
     }
   },
   "include": [
-    "vite.*.config.ts",
+    "electron.vite.config.ts",
+    "playwright.config.ts",
+    "vitest.config.ts",
     "vitest.main.config.ts",
     "electron-builder.config.js",
     "src/main/**/*",
+    "src/sidecar/**/*",
     "src/shared/**/*"
   ]
 }

@@ -72,7 +72,7 @@ test.describe('Git GUI E2E', () => {
     await expect(page.getByRole('button', { name: 'Select Working Folder' })).toBeVisible()
   })
 
-  test('renderer reaches the sidecar directly for status + branches using the handed-out config', async () => {
+  test('renderer reaches the sidecar through the preload proxy for status + branches', async () => {
     const repo = createFixtureRepo()
     try {
       const result = await page.evaluate(async (repoPath) => {
@@ -82,42 +82,25 @@ test.describe('Git GUI E2E', () => {
           }
         ).electronAPI
         const open = (await api.openRepo(repoPath)) as { _tag: string }
-        const config = (await api.getSidecarConfig()) as { baseUrl: string; token: string }
-        const callOp = async (op: string, token = config.token) => {
-          const response = await fetch(`${config.baseUrl}/op/${op}`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-            body: JSON.stringify({ repoPath })
-          })
-          return { httpStatus: response.status, body: await response.json() }
+        const status = (await api.sidecarRequest('get-status', { repoPath })) as { _tag: string }
+        const branches = (await api.sidecarRequest('get-branches', { repoPath })) as {
+          _tag: string
+          branches?: { current: string }
         }
-        const status = await callOp('get-status')
-        const branches = await callOp('get-branches')
-        const unauthorized = await fetch(`${config.baseUrl}/op/get-status`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: 'Bearer wrong' },
-          body: JSON.stringify({ repoPath })
-        })
         return {
           open: open._tag,
-          hasBaseUrl: config.baseUrl.startsWith('http://127.0.0.1:'),
-          hasToken: config.token.length > 0,
-          statusHttp: status.httpStatus,
-          statusTag: (status.body as { _tag: string })._tag,
-          branchesTag: (branches.body as { _tag: string })._tag,
-          currentBranch: (branches.body as { branches?: { current: string } }).branches?.current,
-          unauthorizedStatus: unauthorized.status
+          exposesSidecarConfig: 'getSidecarConfig' in api,
+          statusTag: status._tag,
+          branchesTag: branches._tag,
+          currentBranch: branches.branches?.current
         }
       }, repo)
 
       expect(result.open).toBe('Ok')
-      expect(result.hasBaseUrl).toBe(true)
-      expect(result.hasToken).toBe(true)
-      expect(result.statusHttp).toBe(200)
+      expect(result.exposesSidecarConfig).toBe(false)
       expect(result.statusTag).toBe('Ok')
       expect(result.branchesTag).toBe('Ok')
       expect(result.currentBranch).toBe('main')
-      expect(result.unauthorizedStatus).toBe(401)
     } finally {
       await page
         .evaluate(async (repoPath) => {

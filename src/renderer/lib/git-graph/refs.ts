@@ -3,17 +3,15 @@ export interface ParsedRef {
   kind: 'head' | 'branch' | 'remote' | 'tag' | 'stash'
 }
 
-function dedupeRefs(parsed: ParsedRef[]): ParsedRef[] {
-  const localNames = new Set(
-    parsed.filter((ref) => ref.kind === 'branch' || ref.kind === 'head').map((ref) => ref.label)
-  )
+function dedupeExactRefs(parsed: ParsedRef[]): ParsedRef[] {
+  const seen = new Set<string>()
   return parsed.filter((ref) => {
-    if (ref.kind !== 'remote') {
-      return true
+    const key = `${ref.kind}:${ref.label}`
+    if (seen.has(key)) {
+      return false
     }
-    const slash = ref.label.indexOf('/')
-    const branchName = slash === -1 ? ref.label : ref.label.slice(slash + 1)
-    return !localNames.has(branchName)
+    seen.add(key)
+    return true
   })
 }
 
@@ -52,7 +50,7 @@ export function parseRefs(refs: string, remoteNames?: Set<string>): ParsedRef[] 
       return { label: part, kind: 'branch' }
     })
     .filter((ref): ref is ParsedRef => ref !== null)
-  return dedupeRefs(parsed)
+  return dedupeExactRefs(parsed)
 }
 
 export function splitRemoteRef(label: string): { remote: string; branch: string } {

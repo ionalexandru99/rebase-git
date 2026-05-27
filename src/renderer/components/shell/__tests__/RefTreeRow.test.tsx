@@ -20,21 +20,19 @@ function renderRow(
   row: RefLeafRow,
   options: {
     onCheckoutLeaf?: (k: RefKind, p: string) => void
-    onToggleFilterRef?: (k: RefKind, p: string) => void
-    filterActive?: boolean
-    selectedFilterRefs?: ReadonlySet<string>
+    onToggleTimelineVisibility?: (k: RefKind, p: string) => void
+    visibleTimelineRefs?: ReadonlySet<string>
   } = {}
 ) {
   return render(() => (
     <RefTreeRow
       row={row}
       top={0}
-      loading={false}
+      localLoading={false}
       onToggleCollapsed={() => {}}
       onCheckoutLeaf={options.onCheckoutLeaf}
-      onToggleFilterRef={options.onToggleFilterRef}
-      filterActive={options.filterActive}
-      selectedFilterRefs={options.selectedFilterRefs}
+      onToggleTimelineVisibility={options.onToggleTimelineVisibility}
+      visibleTimelineRefs={options.visibleTimelineRefs}
     />
   ))
 }
@@ -96,43 +94,38 @@ describe('RefTreeRow leaf', () => {
     expect(screen.queryByTestId('ref-behind')).not.toBeInTheDocument()
   })
 
-  it('shows a filter checkbox for branch rows when filter mode is active', () => {
+  it('shows a timeline visibility toggle for branch rows', () => {
+    renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }))
+    expect(screen.getByTestId('timeline-visibility-toggle')).toBeInTheDocument()
+  })
+
+  it('does not show a timeline visibility toggle for tags', () => {
+    renderRow(leaf({ refKind: 'tag', fullPath: 'v1.0', name: 'v1.0' }))
+    expect(screen.queryByTestId('timeline-visibility-toggle')).not.toBeInTheDocument()
+  })
+
+  it('calls onToggleTimelineVisibility when the eye is clicked', () => {
+    const onToggleTimelineVisibility = vi.fn()
     renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }), {
-      filterActive: true
+      onToggleTimelineVisibility
     })
-    expect(screen.getByTestId('ref-filter-checkbox')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('timeline-visibility-toggle'))
+    expect(onToggleTimelineVisibility).toHaveBeenCalledWith('local', 'feature')
   })
 
-  it('does not show a filter checkbox for tags when filter mode is active', () => {
-    renderRow(leaf({ refKind: 'tag', fullPath: 'v1.0', name: 'v1.0' }), { filterActive: true })
-    expect(screen.queryByTestId('ref-filter-checkbox')).not.toBeInTheDocument()
-  })
-
-  it('calls onToggleFilterRef on click when filter mode is active', () => {
-    const onToggleFilterRef = vi.fn()
-    renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }), {
-      filterActive: true,
-      onToggleFilterRef
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'feature' }))
-    expect(onToggleFilterRef).toHaveBeenCalledWith('local', 'feature')
-  })
-
-  it('still calls onCheckoutLeaf on double-click when filter mode is active', () => {
+  it('still calls onCheckoutLeaf on double-click on the branch row', () => {
     const onCheckoutLeaf = vi.fn()
     renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }), {
-      filterActive: true,
       onCheckoutLeaf
     })
     fireEvent.dblClick(screen.getByRole('button', { name: 'feature' }))
     expect(onCheckoutLeaf).toHaveBeenCalledWith('local', 'feature')
   })
 
-  it('marks selected filter refs as pressed', () => {
+  it('marks visible timeline refs as pressed on the eye toggle', () => {
     renderRow(leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' }), {
-      filterActive: true,
-      selectedFilterRefs: new Set([refFilterKey('local', 'feature')])
+      visibleTimelineRefs: new Set([refFilterKey('local', 'feature')])
     })
-    expect(screen.getByRole('button', { name: 'feature' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('timeline-visibility-toggle')).toHaveAttribute('aria-pressed', 'true')
   })
 })

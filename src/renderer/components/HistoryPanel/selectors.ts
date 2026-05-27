@@ -80,11 +80,38 @@ export function findRefTip(
   return undefined
 }
 
-export function expandFilterRefs(
-  selectedRefs: ReadonlySet<string>,
-  remoteBranches: string[]
-): FilterRef[] {
+export function resolveTrackingRemoteBranches(
+  localBranch: string,
+  remoteBranches: readonly string[],
+  remoteNames?: ReadonlySet<string>
+): string[] {
   const remoteSet = new Set(remoteBranches)
+  const tracking: string[] = []
+  const add = (fullPath: string) => {
+    if (remoteSet.has(fullPath) && !tracking.includes(fullPath)) {
+      tracking.push(fullPath)
+    }
+  }
+
+  add(`origin/${localBranch}`)
+  if (remoteNames) {
+    for (const remote of remoteNames) {
+      add(`${remote}/${localBranch}`)
+    }
+  }
+  for (const fullPath of remoteBranches) {
+    const slash = fullPath.indexOf('/')
+    if (slash === -1) {
+      continue
+    }
+    if (fullPath.slice(slash + 1) === localBranch) {
+      add(fullPath)
+    }
+  }
+  return tracking
+}
+
+export function expandFilterRefs(selectedRefs: ReadonlySet<string>): FilterRef[] {
   const expanded: FilterRef[] = []
   const seen = new Set<string>()
 
@@ -98,18 +125,109 @@ export function expandFilterRefs(
       seen.add(ownKey)
       expanded.push(parsed)
     }
-    if (parsed.kind === 'local') {
-      const trackingRemote = `origin/${parsed.fullPath}`
-      if (remoteSet.has(trackingRemote)) {
-        const remoteKey = refFilterKey('remote', trackingRemote)
-        if (!seen.has(remoteKey)) {
-          seen.add(remoteKey)
-          expanded.push({ kind: 'remote', fullPath: trackingRemote })
-        }
+  }
+  return expanded
+}
+
+export function countVisibleBranchRefs(
+  selectedRefs: ReadonlySet<string>,
+  remoteBranches: readonly string[] = [],
+  remoteNames?: ReadonlySet<string>
+): number {
+  const refs = expandFilterRefs(selectedRefs)
+  const selectedLocalBranches = new Set(
+    refs.filter((ref) => ref.kind === 'local').map((ref) => ref.fullPath)
+  )
+  const trackingRemoteKeys = new Set<string>()
+  for (const localBranch of selectedLocalBranches) {
+    for (const trackingPath of resolveTrackingRemoteBranches(
+      localBranch,
+      remoteBranches,
+      remoteNames
+    )) {
+      trackingRemoteKeys.add(refFilterKey('remote', trackingPath))
+    }
+  }
+
+  let count = 0
+  for (const ref of refs) {
+    if (ref.kind === 'remote' && trackingRemoteKeys.has(refFilterKey('remote', ref.fullPath))) {
+      continue
+    }
+    count += 1
+  }
+  return count
+}
+
+export function pruneAncestorTips(commits: GitLogEntry[], tipHashes: string[]): string[] {
+  const reachability = new Map<string, Set<string>>()
+  for (const tip of tipHashes) {
+    reachability.set(tip, computeReachableSet(commits, [tip]))
+  }
+  return tipHashes.filter((tip) => {
+    for (const other of tipHashes) {
+      if (tip === other) {
+        continue
+      }
+      if (reachability.get(other)?.has(tip)) {
+        return false
+      }
+    }
+    return true
+  })
+}
+
+function collectTimelineTips(
+  commits: GitLogEntry[],
+  selectedRefs: ReadonlySet<string>,
+  remoteBranches: readonly string[],
+  remoteNames: Set<string>
+): string[] {
+  const tips: string[] = []
+  const seen = new Set<string>()
+
+  const addTip = (hash: string | undefined) => {
+    if (!hash || seen.has(hash)) {
+      return
+    }
+    seen.add(hash)
+    tips.push(hash)
+  }
+
+  for (const key of selectedRefs) {
+    const parsed = parseFilterRefKey(key)
+    if (!parsed || parsed.kind === 'tag') {
+      continue
+    }
+    addTip(findRefTip(commits, parsed.kind, parsed.fullPath, remoteNames))
+  }
+
+  for (const key of selectedRefs) {
+    const parsed = parseFilterRefKey(key)
+    if (!parsed || parsed.kind !== 'local') {
+      continue
+    }
+    const localTip = findRefTip(commits, 'local', parsed.fullPath, remoteNames)
+    if (!localTip) {
+      continue
+    }
+    for (const trackingPath of resolveTrackingRemoteBranches(
+      parsed.fullPath,
+      remoteBranches,
+      remoteNames
+    )) {
+      const remoteKey = refFilterKey('remote', trackingPath)
+      if (selectedRefs.has(remoteKey)) {
+        continue
+      }
+      const remoteTip = findRefTip(commits, 'remote', trackingPath, remoteNames)
+      if (remoteTip === localTip) {
+        addTip(remoteTip)
       }
     }
   }
-  return expanded
+
+  return pruneAncestorTips(commits, tips)
 }
 
 export function computeBranchFilterSet(
@@ -122,14 +240,7 @@ export function computeBranchFilterSet(
     return null
   }
 
-  const expanded = expandFilterRefs(selectedRefs, remoteBranches ?? [])
-  const tipHashes: string[] = []
-  for (const ref of expanded) {
-    const tip = findRefTip(commits, ref.kind, ref.fullPath, remoteNames)
-    if (tip) {
-      tipHashes.push(tip)
-    }
-  }
+  const tipHashes = collectTimelineTips(commits, selectedRefs, remoteBranches ?? [], remoteNames)
   if (tipHashes.length === 0) {
     return new Set()
   }

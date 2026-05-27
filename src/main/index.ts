@@ -2,9 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog } from 'electron'
-import windowStateKeeperModule from 'electron-window-state'
-
-const windowStateKeeper = windowStateKeeperModule.default || windowStateKeeperModule
+import windowStateKeeper from 'electron-window-state'
 
 import * as logStreamIpc from './ipc/log-stream'
 import * as repoIpc from './ipc/repo'
@@ -21,16 +19,40 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 function resolvePreload(): string {
   const base = path.join(__dirname, '../preload/index')
+  if (fs.existsSync(`${base}.cjs`)) {
+    return `${base}.cjs`
+  }
   if (fs.existsSync(`${base}.mjs`)) {
     return `${base}.mjs`
   }
   if (fs.existsSync(`${base}.js`)) {
     return `${base}.js`
   }
-  if (fs.existsSync(`${base}.cjs`)) {
-    return `${base}.cjs`
-  }
   return `${base}.js`
+}
+
+function isAllowedNavigation(targetUrl: string): boolean {
+  try {
+    const parsed = new URL(targetUrl)
+    if (process.env.ELECTRON_RENDERER_URL) {
+      return parsed.origin === new URL(process.env.ELECTRON_RENDERER_URL).origin
+    }
+    if (parsed.protocol !== 'file:') {
+      return false
+    }
+    return path.normalize(fileURLToPath(parsed)) === path.join(__dirname, '../renderer/index.html')
+  } catch {
+    return false
+  }
+}
+
+function hardenNavigation(win: BrowserWindow): void {
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.on('will-navigate', (event, targetUrl) => {
+    if (!isAllowedNavigation(targetUrl)) {
+      event.preventDefault()
+    }
+  })
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -54,12 +76,13 @@ function createWindow(): void {
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: resolvePreload(),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true
     }
   })
   mainWindow = win
 
+  hardenNavigation(win)
   mainWindowState.manage(win)
   wireWindowRecovery(win)
 

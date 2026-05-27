@@ -10,12 +10,10 @@ import { SkeletonRowItem } from './SkeletonRow'
 interface RefTreeRowProps {
   row: RefRow
   top: number
-  loading: boolean
-  filterActive?: boolean
-  selectedFilterRefs?: ReadonlySet<string>
+  localLoading: boolean
+  visibleTimelineRefs?: ReadonlySet<string>
   onToggleCollapsed: (key: string) => void
-  onSelectLeaf?: (refKind: RefKind, fullPath: string) => void
-  onToggleFilterRef?: (refKind: RefKind, fullPath: string) => void
+  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
 }
 
@@ -33,7 +31,7 @@ export function RefTreeRow(props: RefTreeRowProps) {
         <SectionRow
           row={props.row as Extract<RefRow, { kind: 'section' }>}
           style={baseStyle()}
-          loading={props.loading}
+          loading={props.localLoading && props.row.refKind === 'local'}
           onToggleCollapsed={props.onToggleCollapsed}
         />
       </Match>
@@ -57,17 +55,15 @@ export function RefTreeRow(props: RefTreeRowProps) {
         <LeafRow
           row={props.row as Extract<RefRow, { kind: 'leaf' }>}
           style={baseStyle()}
-          filterActive={props.filterActive}
-          filterSelected={
-            props.selectedFilterRefs?.has(
+          timelineVisible={
+            props.visibleTimelineRefs?.has(
               refFilterKey(
                 (props.row as Extract<RefRow, { kind: 'leaf' }>).refKind,
                 (props.row as Extract<RefRow, { kind: 'leaf' }>).fullPath
               )
             ) ?? false
           }
-          onSelectLeaf={props.onSelectLeaf}
-          onToggleFilterRef={props.onToggleFilterRef}
+          onToggleTimelineVisibility={props.onToggleTimelineVisibility}
           onCheckoutLeaf={props.onCheckoutLeaf}
         />
       </Match>

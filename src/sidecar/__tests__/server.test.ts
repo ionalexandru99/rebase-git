@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { STREAM_BATCH_SIZE } from '../log-stream'
 import { createSidecarServer } from '../server'
 
 const TOKEN = 'test-token'
@@ -13,6 +14,19 @@ let server: ReturnType<typeof createSidecarServer>
 
 function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' })
+}
+
+function createFixtureRepo(commitCount: number): string {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sidecar-log-'))
+  git(repo, ['init', '-b', 'main'])
+  git(repo, ['config', 'user.email', 'test@example.com'])
+  git(repo, ['config', 'user.name', 'Test'])
+  for (let i = 1; i <= commitCount; i++) {
+    fs.writeFileSync(path.join(repo, 'file.txt'), `${i}\n`)
+    git(repo, ['add', 'file.txt'])
+    git(repo, ['commit', '-m', `commit ${i}`])
+  }
+  return repo
 }
 
 async function call(op: string, body: Record<string, unknown>, token = TOKEN): Promise<Response> {
@@ -44,9 +58,16 @@ afterAll(async () => {
 })
 
 describe('sidecar server', () => {
-  it('serves health without auth', async () => {
-    const response = await fetch(`${baseUrl}/health`)
+  it('serves health with auth', async () => {
+    const response = await fetch(`${baseUrl}/health`, {
+      headers: { authorization: `Bearer ${TOKEN}` }
+    })
     expect(response.ok).toBe(true)
+  })
+
+  it('rejects health without a valid token', async () => {
+    const response = await fetch(`${baseUrl}/health`)
+    expect(response.status).toBe(401)
   })
 
   it('rejects op requests without a valid token', async () => {
@@ -97,9 +118,126 @@ describe('sidecar server', () => {
     expect(body.branches.all).toContain('main')
   })
 
+  it('lists local branches separately', async () => {
+    const body = await (await call('get-local-branches', { repoPath })).json()
+    expect(body._tag).toBe('Ok')
+    expect(body.branches.current).toBe('main')
+    expect(body.branches.all).toContain('main')
+  })
+
+  it('lists remote refs separately', async () => {
+    const body = await (await call('get-remote-refs', { repoPath })).json()
+    expect(body._tag).toBe('Ok')
+    expect(body.refs.remotes).toEqual([])
+    expect(body.refs.tags).toEqual([])
+  })
+
   it('rejects an unknown op', async () => {
     const response = await call('nope', { repoPath })
     expect(response.status).toBe(404)
+  })
+
+  it('streams log chunks over the sidecar stream endpoint', async () => {
+    const response = await fetch(`${baseUrl}/stream/log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ repoPath })
+    })
+    expect(response.ok).toBe(true)
+    const lines = (await response.text()).trim().split('\n')
+    const chunks = lines.map((line) => JSON.parse(line) as { commits: Array<{ message: string }> })
+    expect(
+      chunks.some((chunk) => chunk.commits.some((commit) => commit.message === 'initial'))
+    ).toBe(true)
+  })
+
+  it('streams more than one batch of commits', async () => {
+    const largeRepo = createFixtureRepo(STREAM_BATCH_SIZE + 5)
+    try {
+      await call('open-repo', { repoPath: largeRepo })
+      const response = await fetch(`${baseUrl}/stream/log`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({ repoPath: largeRepo })
+      })
+      expect(response.ok).toBe(true)
+      const lines = (await response.text()).trim().split('\n')
+      const chunks = lines.map(
+        (line) => JSON.parse(line) as { commits: Array<{ message: string }>; done: boolean }
+      )
+      const commits = chunks.flatMap((chunk) => chunk.commits)
+
+      expect(commits).toHaveLength(STREAM_BATCH_SIZE + 5)
+      expect(chunks.filter((chunk) => chunk.commits.length > 0)).toHaveLength(2)
+      expect(chunks[chunks.length - 1]?.done).toBe(true)
+    } finally {
+      fs.rmSync(largeRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('reports hasMore when a maxCount page is full', async () => {
+    const pagedRepo = createFixtureRepo(15)
+    try {
+      await call('open-repo', { repoPath: pagedRepo })
+      const response = await fetch(`${baseUrl}/stream/log`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({ repoPath: pagedRepo, maxCount: 10 })
+      })
+      expect(response.ok).toBe(true)
+      const lines = (await response.text()).trim().split('\n')
+      const chunks = lines.map(
+        (line) =>
+          JSON.parse(line) as {
+            commits: Array<{ message: string }>
+            done: boolean
+            hasMore?: boolean
+          }
+      )
+      const commits = chunks.flatMap((chunk) => chunk.commits)
+      const terminal = chunks[chunks.length - 1]
+
+      expect(commits).toHaveLength(10)
+      expect(terminal?.done).toBe(true)
+      expect(terminal?.hasMore).toBe(true)
+    } finally {
+      fs.rmSync(pagedRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('streams a later page with skip and clears hasMore on the final page', async () => {
+    const pagedRepo = createFixtureRepo(15)
+    try {
+      await call('open-repo', { repoPath: pagedRepo })
+      const response = await fetch(`${baseUrl}/stream/log`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({ repoPath: pagedRepo, skip: 10, maxCount: 10 })
+      })
+      expect(response.ok).toBe(true)
+      const lines = (await response.text()).trim().split('\n')
+      const chunks = lines.map(
+        (line) =>
+          JSON.parse(line) as {
+            commits: Array<{ message: string }>
+            done: boolean
+            hasMore?: boolean
+          }
+      )
+      const commits = chunks.flatMap((chunk) => chunk.commits)
+      const terminal = chunks[chunks.length - 1]
+
+      expect(commits).toHaveLength(5)
+      expect(terminal?.done).toBe(true)
+      expect(terminal?.hasMore).toBe(false)
+    } finally {
+      fs.rmSync(pagedRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects checkout requests with an invalid ref kind', async () => {
+    const response = await call('checkout-ref', { repoPath, refKind: 'branch', fullPath: 'main' })
+    expect(response.status).toBe(400)
   })
 
   it('returns 400 when required string fields are missing', async () => {
@@ -145,7 +283,7 @@ describe('sidecar server', () => {
     expect(await response.json()).toEqual({ error: 'internal error' })
   })
 
-  it('answers CORS preflight without auth and advertises the request headers', async () => {
+  it('rejects browser CORS preflight requests', async () => {
     const response = await fetch(`${baseUrl}/op/get-branches`, {
       method: 'OPTIONS',
       headers: {
@@ -155,16 +293,11 @@ describe('sidecar server', () => {
         'access-control-request-private-network': 'true'
       }
     })
-    expect(response.status).toBe(204)
-    expect(response.headers.get('access-control-allow-origin')).toBe('*')
-    const allowHeaders = response.headers.get('access-control-allow-headers') ?? ''
-    expect(allowHeaders).toContain('authorization')
-    expect(allowHeaders).toContain('traceparent')
-    expect(response.headers.get('access-control-allow-private-network')).toBe('true')
+    expect(response.status).toBe(403)
   })
 
-  it('includes the allow-origin header on op responses so the renderer can read them', async () => {
+  it('does not include wildcard CORS headers on op responses', async () => {
     const response = await call('get-branches', { repoPath })
-    expect(response.headers.get('access-control-allow-origin')).toBe('*')
+    expect(response.headers.get('access-control-allow-origin')).toBeNull()
   })
 })

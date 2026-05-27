@@ -1,5 +1,6 @@
+import { REF_TREE_REMOTE_SECTION_KEY } from '@shared/ref-tree-toggles'
 import { describe, expect, it } from 'vitest'
-import { buildRefTreeRows, sectionKey } from '../ref-tree'
+import { buildRefTreeRows } from '../ref-tree'
 
 function rowsFor(toggles: Set<string> = new Set()) {
   return buildRefTreeRows({
@@ -8,7 +9,7 @@ function rowsFor(toggles: Set<string> = new Set()) {
     tags: ['v1.0.0'],
     toggles,
     currentBranch: 'main',
-    loading: false
+    localLoading: false
   })
 }
 
@@ -33,12 +34,32 @@ describe('ref-tree default section expansion', () => {
     expect(rows.some((r) => r.kind === 'leaf' && r.refKind === 'tag')).toBe(false)
   })
 
-  it('persisted toggles can expand remote and collapse local', () => {
-    const rows = rowsFor(new Set([sectionKey('local'), sectionKey('remote')]))
+  it('in-memory toggles can expand remote and collapse local', () => {
+    const rows = rowsFor(new Set(['section:local', REF_TREE_REMOTE_SECTION_KEY]))
     const localSection = rows.find((r) => r.kind === 'section' && r.refKind === 'local')
     const remoteSection = rows.find((r) => r.kind === 'section' && r.refKind === 'remote')
     expect(localSection?.kind === 'section' && localSection.expanded).toBe(false)
     expect(remoteSection?.kind === 'section' && remoteSection.expanded).toBe(true)
+  })
+})
+
+describe('ref-tree loading skeleton', () => {
+  it('shows local skeleton only while remote and tags stay collapsed', () => {
+    const rows = buildRefTreeRows({
+      localBranches: [],
+      remoteBranches: [],
+      tags: [],
+      toggles: new Set(),
+      currentBranch: 'main',
+      localLoading: true
+    })
+    expect(rows.some((row) => row.kind === 'skeleton' && row.refKind === 'local')).toBe(true)
+    expect(rows.some((row) => row.kind === 'skeleton' && row.refKind === 'remote')).toBe(false)
+    expect(rows.some((row) => row.kind === 'skeleton' && row.refKind === 'tag')).toBe(false)
+    const remoteSection = rows.find((row) => row.kind === 'section' && row.refKind === 'remote')
+    const tagSection = rows.find((row) => row.kind === 'section' && row.refKind === 'tag')
+    expect(remoteSection?.kind === 'section' && remoteSection.expanded).toBe(false)
+    expect(tagSection?.kind === 'section' && tagSection.expanded).toBe(false)
   })
 })
 
@@ -50,7 +71,7 @@ describe('ref-tree tracking attachment to local leaves', () => {
       tags: [],
       toggles: new Set(),
       currentBranch: 'main',
-      loading: false,
+      localLoading: false,
       tracking: {
         main: { ahead: 2, behind: 1 },
         develop: { ahead: 0, behind: 3 }
@@ -71,7 +92,7 @@ describe('ref-tree tracking attachment to local leaves', () => {
       tags: [],
       toggles: new Set(),
       currentBranch: 'main',
-      loading: false,
+      localLoading: false,
       tracking: { main: { ahead: 1, behind: 0 } }
     })
     const untracked = rows.find((r) => r.kind === 'leaf' && r.fullPath === 'untracked')

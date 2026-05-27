@@ -1,9 +1,12 @@
 import '@testing-library/jest-dom/vitest'
+import type { GitBranches } from '@shared/schemas/git'
 import type {
   BranchesResponse,
   CommitResponse,
   FetchResponse,
+  LocalBranchesResponse,
   LogResponse,
+  RemoteRefsResponse,
   StageResponse,
   StatusResponse,
   UnstageResponse
@@ -14,6 +17,8 @@ import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 export const sidecarMock = {
   getStatus: vi.fn<(repoPath: string) => Promise<StatusResponse>>(),
   getBranches: vi.fn<(repoPath: string) => Promise<BranchesResponse>>(),
+  getLocalBranches: vi.fn<(repoPath: string) => Promise<LocalBranchesResponse>>(),
+  getRemoteRefs: vi.fn<(repoPath: string) => Promise<RemoteRefsResponse>>(),
   getLog: vi.fn<(repoPath: string) => Promise<LogResponse>>(),
   stageFile: vi.fn<(repoPath: string, file: string) => Promise<StageResponse>>(),
   unstageFile: vi.fn<(repoPath: string, file: string) => Promise<UnstageResponse>>(),
@@ -42,6 +47,12 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             break
           case 'get-branches':
             payload = await mock.getBranches(repoPath)
+            break
+          case 'get-local-branches':
+            payload = await mock.getLocalBranches(repoPath)
+            break
+          case 'get-remote-refs':
+            payload = await mock.getRemoteRefs(repoPath)
             break
           case 'get-log':
             payload = await mock.getLog(repoPath)
@@ -132,7 +143,7 @@ const mockElectronAPI = {
   getOnboardingComplete: vi.fn(),
   setOnboardingComplete: vi.fn(),
   scanForRepos: vi.fn(),
-  getSidecarConfig: vi.fn()
+  sidecarRequest: vi.fn()
 }
 
 Object.defineProperty(window, 'electronAPI', {
@@ -152,9 +163,10 @@ export interface LogStreamHandle {
       refs: string
     }>
     done?: boolean
+    hasMore?: boolean
     error?: string
   }) => void
-  fireDone: (repoPath: string) => void
+  fireDone: (repoPath: string, hasMore?: boolean) => void
 }
 
 export function setupLogStream(): LogStreamHandle {
@@ -176,9 +188,9 @@ export function setupLogStream(): LogStreamHandle {
         callback({ done: false, ...chunk })
       }
     },
-    fireDone: (repoPath) => {
+    fireDone: (repoPath, hasMore) => {
       for (const callback of listeners.slice()) {
-        callback({ repoPath, commits: [], done: true })
+        callback({ repoPath, commits: [], done: true, hasMore })
       }
     }
   }
@@ -208,6 +220,36 @@ export function setupRepoChanged(): RepoChangedHandle {
   }
 }
 
+export function mockBranchResponses(
+  branches: Pick<GitBranches, 'current' | 'all'> &
+    Partial<Pick<GitBranches, 'remotes' | 'tags' | 'tracking'>>
+): void {
+  const remotes = branches.remotes ?? []
+  const tags = branches.tags ?? []
+  vi.mocked(sidecarMock.getLocalBranches).mockResolvedValue({
+    _tag: 'Ok',
+    branches: {
+      current: branches.current,
+      all: branches.all,
+      tracking: branches.tracking
+    }
+  })
+  vi.mocked(sidecarMock.getRemoteRefs).mockResolvedValue({
+    _tag: 'Ok',
+    refs: { remotes, tags }
+  })
+  vi.mocked(sidecarMock.getBranches).mockResolvedValue({
+    _tag: 'Ok',
+    branches: {
+      current: branches.current,
+      all: branches.all,
+      remotes,
+      tags,
+      tracking: branches.tracking
+    }
+  })
+}
+
 beforeEach(() => {
   vi.resetAllMocks()
   clearAllSnapshots()
@@ -218,8 +260,7 @@ beforeEach(() => {
     activeIndex: 0
   })
   vi.mocked(window.electronAPI.setPersistedTabs).mockResolvedValue(undefined)
-  vi.mocked(window.electronAPI.getSidecarConfig).mockResolvedValue({
-    baseUrl: 'http://127.0.0.1:9',
-    token: 'test-token'
-  })
+  vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+  vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
+  mockBranchResponses({ current: '', all: [], remotes: [], tags: [] })
 })

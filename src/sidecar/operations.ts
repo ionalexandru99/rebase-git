@@ -9,10 +9,14 @@ import {
   CommitResponseSchema,
   type FetchResponse,
   FetchResponseSchema,
+  type LocalBranchesResponse,
+  LocalBranchesResponseSchema,
   type LogResponse,
   LogResponseSchema,
   type OpenRepoResponse,
   OpenRepoResponseSchema,
+  type RemoteRefsResponse,
+  RemoteRefsResponseSchema,
   type StageResponse,
   StageResponseSchema,
   type StatusResponse,
@@ -24,15 +28,15 @@ import { fetchSemaphoreFor, releaseFetchSemaphore } from './fetch-semaphore'
 import { deriveLocalShortName } from './git/checkout'
 import { resolveDefaultBranch } from './git/defaultBranch'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
+import { LOG_FORMAT, parseGitLogOutput } from './git/log-format'
 import {
-  GRAPH_LOG_FLAGS,
-  GRAPH_LOG_FORMAT,
-  serializeBranches,
-  serializeLog,
+  serializeLocalBranches,
+  serializeRemoteBranchNames,
   serializeRemotes,
   serializeStatus
 } from './git/serialize'
 import { parseAheadBehind } from './git/tracking'
+import { withRepoLock } from './repo-lock'
 import { activeFetches, gitInstances } from './state'
 
 function errorMessage(error: unknown): string {
@@ -41,6 +45,10 @@ function errorMessage(error: unknown): string {
 
 const INVALID_REPO_PATH = 'invalid repository path'
 
+function isSafeCheckoutRef(ref: string): boolean {
+  return ref.length > 0 && !ref.includes('\0') && !ref.startsWith('-')
+}
+
 export function openRepoRejected(message: string = INVALID_REPO_PATH): OpenRepoResponse {
   return parseOrThrow(OpenRepoResponseSchema, { _tag: 'GitError', message })
 }
@@ -48,6 +56,10 @@ export function openRepoRejected(message: string = INVALID_REPO_PATH): OpenRepoR
 export const invalidRepoPath = {
   branches: () =>
     parseOrThrow(BranchesResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  localBranches: () =>
+    parseOrThrow(LocalBranchesResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  remoteRefs: () =>
+    parseOrThrow(RemoteRefsResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   checkout: () =>
     parseOrThrow(CheckoutResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   commit: () =>
@@ -93,21 +105,82 @@ export async function closeRepo(repoPath: string): Promise<Record<string, never>
   return {}
 }
 
+export async function getLocalBranches(repoPath: string): Promise<LocalBranchesResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(LocalBranchesResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  try {
+    const [branches, trackingRaw] = await Promise.all([
+      git.branch(),
+      git.raw(['for-each-ref', 'refs/heads', '--format=%(refname:short)|%(upstream:track)'])
+    ])
+    const tracking = parseAheadBehind(trackingRaw)
+    return parseOrThrow(LocalBranchesResponseSchema, {
+      _tag: 'Ok',
+      branches: serializeLocalBranches(branches, tracking)
+    })
+  } catch (error) {
+    return parseOrThrow(LocalBranchesResponseSchema, {
+      _tag: 'GitError',
+      message: errorMessage(error)
+    })
+  }
+}
+
+export async function getRemoteRefs(repoPath: string): Promise<RemoteRefsResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(RemoteRefsResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  try {
+    const [branches, tags] = await Promise.all([git.branch(['-r']), git.tags()])
+    return parseOrThrow(RemoteRefsResponseSchema, {
+      _tag: 'Ok',
+      refs: {
+        remotes: serializeRemoteBranchNames(branches),
+        tags: [...tags.all]
+      }
+    })
+  } catch (error) {
+    return parseOrThrow(RemoteRefsResponseSchema, {
+      _tag: 'GitError',
+      message: errorMessage(error)
+    })
+  }
+}
+
 export async function getBranches(repoPath: string): Promise<BranchesResponse> {
   const git = lookupGit(gitInstances, repoPath)
   if (!git) {
     return parseOrThrow(BranchesResponseSchema, { _tag: 'RepoNotOpen' })
   }
   try {
-    const [branches, tags, trackingRaw] = await Promise.all([
-      git.branch(['-a']),
-      git.tags(),
-      git.raw(['for-each-ref', 'refs/heads', '--format=%(refname:short)|%(upstream:track)'])
+    const [localResult, remoteResult] = await Promise.all([
+      getLocalBranches(repoPath),
+      getRemoteRefs(repoPath)
     ])
-    const tracking = parseAheadBehind(trackingRaw)
+    if (localResult._tag === 'RepoNotOpen' || remoteResult._tag === 'RepoNotOpen') {
+      return parseOrThrow(BranchesResponseSchema, { _tag: 'RepoNotOpen' })
+    }
+    if (localResult._tag === 'GitError') {
+      return parseOrThrow(BranchesResponseSchema, {
+        _tag: 'GitError',
+        message: localResult.message
+      })
+    }
+    if (remoteResult._tag === 'GitError') {
+      return parseOrThrow(BranchesResponseSchema, {
+        _tag: 'GitError',
+        message: remoteResult.message
+      })
+    }
     return parseOrThrow(BranchesResponseSchema, {
       _tag: 'Ok',
-      branches: serializeBranches(branches, tags, tracking)
+      branches: {
+        ...localResult.branches,
+        ...remoteResult.refs
+      }
     })
   } catch (error) {
     return parseOrThrow(BranchesResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
@@ -132,12 +205,14 @@ export async function stageFile(repoPath: string, file: string): Promise<StageRe
   if (!git) {
     return parseOrThrow(StageResponseSchema, { _tag: 'RepoNotOpen' })
   }
-  try {
-    await git.add(file)
-    return parseOrThrow(StageResponseSchema, { _tag: 'Ok' })
-  } catch (error) {
-    return parseOrThrow(StageResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
-  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.add(file)
+      return parseOrThrow(StageResponseSchema, { _tag: 'Ok' })
+    } catch (error) {
+      return parseOrThrow(StageResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
+    }
+  })
 }
 
 export async function unstageFile(repoPath: string, file: string): Promise<UnstageResponse> {
@@ -145,12 +220,14 @@ export async function unstageFile(repoPath: string, file: string): Promise<Unsta
   if (!git) {
     return parseOrThrow(UnstageResponseSchema, { _tag: 'RepoNotOpen' })
   }
-  try {
-    await git.reset(['HEAD', file])
-    return parseOrThrow(UnstageResponseSchema, { _tag: 'Ok' })
-  } catch (error) {
-    return parseOrThrow(UnstageResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
-  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.reset(['HEAD', file])
+      return parseOrThrow(UnstageResponseSchema, { _tag: 'Ok' })
+    } catch (error) {
+      return parseOrThrow(UnstageResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
+    }
+  })
 }
 
 export async function commit(repoPath: string, message: string): Promise<CommitResponse> {
@@ -158,33 +235,74 @@ export async function commit(repoPath: string, message: string): Promise<CommitR
   if (!git) {
     return parseOrThrow(CommitResponseSchema, { _tag: 'RepoNotOpen' })
   }
-  try {
-    const result = await git.commit(message)
-    return parseOrThrow(CommitResponseSchema, {
-      _tag: 'Ok',
-      result: {
-        commit: result.commit,
-        branch: result.branch,
-        summary: { ...result.summary }
+  return withRepoLock(repoPath, async () => {
+    try {
+      const result = await git.commit(message)
+      return parseOrThrow(CommitResponseSchema, {
+        _tag: 'Ok',
+        result: {
+          commit: result.commit,
+          branch: result.branch,
+          summary: { ...result.summary }
+        }
+      })
+    } catch (error) {
+      return parseOrThrow(CommitResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
+    }
+  })
+}
+
+function runGit(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout?.setEncoding('utf8')
+    proc.stdout?.on('data', (chunk: string) => {
+      stdout += chunk
+    })
+
+    proc.stderr?.setEncoding('utf8')
+    proc.stderr?.on('data', (chunk: string) => {
+      stderr += chunk
+      if (stderr.length > 4096) {
+        stderr = stderr.slice(-4096)
       }
     })
-  } catch (error) {
-    return parseOrThrow(CommitResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
-  }
+
+    proc.on('error', reject)
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout)
+        return
+      }
+      reject(new Error(stderr.trim() || `git exited with code ${code}`))
+    })
+  })
 }
 
 export async function getLog(repoPath: string, maxCount?: number): Promise<LogResponse> {
-  const git = lookupGit(gitInstances, repoPath)
-  if (!git) {
+  if (!lookupGit(gitInstances, repoPath)) {
     return parseOrThrow(LogResponseSchema, { _tag: 'RepoNotOpen' })
   }
   try {
-    const logOptions: Record<string, unknown> = { format: GRAPH_LOG_FORMAT, ...GRAPH_LOG_FLAGS }
+    const args = [
+      '-C',
+      repoPath,
+      'log',
+      '-z',
+      '--branches',
+      '--remotes',
+      '--topo-order',
+      `--format=${LOG_FORMAT}`
+    ]
     if (typeof maxCount === 'number' && maxCount > 0) {
-      logOptions.maxCount = maxCount
+      args.splice(4, 0, `--max-count=${maxCount}`)
     }
-    const log = await git.log(logOptions)
-    return parseOrThrow(LogResponseSchema, { _tag: 'Ok', log: serializeLog(log) })
+    const raw = await runGit(args)
+    const all = parseGitLogOutput(raw)
+    return parseOrThrow(LogResponseSchema, { _tag: 'Ok', log: { all, total: all.length } })
   } catch (error) {
     return parseOrThrow(LogResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
   }
@@ -199,37 +317,56 @@ export async function checkoutRef(
   if (!git) {
     return parseOrThrow(CheckoutResponseSchema, { _tag: 'RepoNotOpen' })
   }
-  try {
-    let checkedOut: string
-    if (refKind === 'remote') {
-      const shortName = deriveLocalShortName(fullPath)
-      const existing = await git.branch(['--list', shortName])
-      if (existing.all.length > 0) {
-        const upstreamRaw = await git.raw([
-          'for-each-ref',
-          `refs/heads/${shortName}`,
-          '--format=%(upstream:short)'
-        ])
-        const upstream = upstreamRaw.trim()
-        if (upstream !== fullPath) {
+  if (!isSafeCheckoutRef(fullPath)) {
+    return parseOrThrow(CheckoutResponseSchema, {
+      _tag: 'GitError',
+      message: 'invalid ref name'
+    })
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      let checkedOut: string
+      if (refKind === 'remote') {
+        try {
+          await git.raw(['show-ref', '--verify', `refs/remotes/${fullPath}`])
+        } catch {
           return parseOrThrow(CheckoutResponseSchema, {
             _tag: 'GitError',
-            message: `Local branch '${shortName}' tracks ${upstream || 'no remote'}, not ${fullPath}. Resolve manually.`
+            message: `Remote branch '${fullPath}' does not exist`
           })
         }
-        await git.checkout([shortName])
+        const shortName = deriveLocalShortName(fullPath)
+        const existing = await git.branch(['--list', shortName])
+        if (existing.all.length > 0) {
+          const upstreamRaw = await git.raw([
+            'for-each-ref',
+            `refs/heads/${shortName}`,
+            '--format=%(upstream:short)'
+          ])
+          const upstream = upstreamRaw.trim()
+          if (upstream !== fullPath) {
+            return parseOrThrow(CheckoutResponseSchema, {
+              _tag: 'GitError',
+              message: `Local branch '${shortName}' tracks ${upstream || 'no remote'}, not ${fullPath}. Resolve manually.`
+            })
+          }
+          await git.checkout([shortName])
+        } else {
+          await git.checkout(['--track', fullPath])
+        }
+        checkedOut = shortName
       } else {
-        await git.checkout(['--track', fullPath])
+        await git.checkout([fullPath])
+        checkedOut = fullPath
       }
-      checkedOut = shortName
-    } else {
-      await git.checkout([fullPath])
-      checkedOut = fullPath
+      return parseOrThrow(CheckoutResponseSchema, { _tag: 'Ok', checkedOut })
+    } catch (error) {
+      return parseOrThrow(CheckoutResponseSchema, {
+        _tag: 'GitError',
+        message: errorMessage(error)
+      })
     }
-    return parseOrThrow(CheckoutResponseSchema, { _tag: 'Ok', checkedOut })
-  } catch (error) {
-    return parseOrThrow(CheckoutResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
-  }
+  })
 }
 
 function runFetch(key: string): Promise<FetchResponse> {
@@ -279,10 +416,12 @@ export async function fetchRepo(repoPath: string): Promise<FetchResponse> {
   if (!gitInstances.has(key)) {
     return parseOrThrow(FetchResponseSchema, { _tag: 'RepoNotOpen' })
   }
-  const semaphore = fetchSemaphoreFor(key)
-  const result = await semaphore.withPermitsIfAvailable(() => runFetch(key))
-  if (result === null) {
-    return parseOrThrow(FetchResponseSchema, { _tag: 'FetchSkipped' })
-  }
-  return result
+  return withRepoLock(key, async () => {
+    const semaphore = fetchSemaphoreFor(key)
+    const result = await semaphore.withPermitsIfAvailable(() => runFetch(key))
+    if (result === null) {
+      return parseOrThrow(FetchResponseSchema, { _tag: 'FetchSkipped' })
+    }
+    return result
+  })
 }

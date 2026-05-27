@@ -218,6 +218,47 @@ describe('useOnboarding', () => {
     expect(window.electronAPI.scanForRepos).toHaveBeenLastCalledWith('/home/user/work')
   })
 
+  it('ignores stale scan results after switching workspaces', async () => {
+    defaultMocks('/home/user/personal', ['/home/user/personal', '/home/user/work'])
+    vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
+
+    let resolvePersonal: (value: { _tag: 'Ok'; repos: string[] }) => void = () => {}
+    let resolveWork: (value: { _tag: 'Ok'; repos: string[] }) => void = () => {}
+    vi.mocked(window.electronAPI.scanForRepos).mockImplementation((path: string) => {
+      if (path === '/home/user/personal') {
+        return new Promise((resolve) => {
+          resolvePersonal = resolve
+        })
+      }
+      return new Promise((resolve) => {
+        resolveWork = resolve
+      })
+    })
+
+    const { result } = renderHook(() => useOnboarding())
+
+    await waitFor(() => {
+      expect(result.activeWorkspace()).toBe('/home/user/personal')
+    })
+
+    const switched = result.switchWorkspace('/home/user/work')
+    await waitFor(() => {
+      expect(window.electronAPI.scanForRepos).toHaveBeenCalledWith('/home/user/work')
+    })
+    resolveWork({ _tag: 'Ok', repos: ['/home/user/work/job'] })
+    await switched
+
+    await waitFor(() => {
+      expect(result.discoveredRepos()).toEqual(['/home/user/work/job'])
+    })
+
+    resolvePersonal({ _tag: 'Ok', repos: ['/home/user/personal/app'] })
+    await Promise.resolve()
+
+    expect(result.activeWorkspace()).toBe('/home/user/work')
+    expect(result.discoveredRepos()).toEqual(['/home/user/work/job'])
+  })
+
   it('should remove a workspace and fall back to the first remaining one', async () => {
     defaultMocks('/home/user/personal', ['/home/user/personal', '/home/user/work'])
     vi.mocked(window.electronAPI.getOnboardingComplete).mockResolvedValue(true)
