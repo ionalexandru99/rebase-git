@@ -98,9 +98,11 @@ jobs:
 
       - name: Fix Electron sandbox permissions
         run: |
-          sandbox=$(find node_modules -name chrome-sandbox -path "*/electron/dist/*" | head -1)
-          sudo chown root:root "$sandbox"
-          sudo chmod 4755 "$sandbox"
+          sandbox=$(find node_modules -path "*/electron/dist/chrome-sandbox" -print -quit)
+          if [ -n "$sandbox" ]; then
+            sudo chown root:root "$sandbox"
+            sudo chmod 4755 "$sandbox"
+          fi
 
       - name: Build
         run: pnpm build
