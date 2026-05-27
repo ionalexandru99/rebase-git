@@ -88,7 +88,7 @@ jobs:
           restore-keys: pnpm-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts=false
 
       - name: Install Electron system libraries
         run: |
