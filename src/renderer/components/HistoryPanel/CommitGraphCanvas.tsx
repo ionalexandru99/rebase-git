@@ -1,6 +1,6 @@
-import { type Accessor, createEffect, onCleanup } from 'solid-js'
 import { drawGraphRow, ROW_H, readCssVar } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
+import { type Accessor, createEffect, onCleanup } from '@/lib/react-compat'
 
 interface CommitGraphCanvasProps {
   rows: RowLayout[]
@@ -123,10 +123,16 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
   })
 
   return (
-    <div class="pointer-events-none sticky top-0 z-20" style={{ height: '0px' }} aria-hidden="true">
+    <div
+      className="pointer-events-none sticky top-0 z-20"
+      style={{ height: '0px' }}
+      aria-hidden="true"
+    >
       <canvas
-        ref={canvas}
-        class="absolute left-0 top-0"
+        ref={(node) => {
+          canvas = node ?? undefined
+        }}
+        className="absolute left-0 top-0"
         style={{ width: `${props.railWidth}px`, height: `${props.viewportHeight}px` }}
       />
     </div>

@@ -1,7 +1,15 @@
 import { parseOrThrow } from '@shared/codec'
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import { RefTreeTogglesSchema } from '@shared/schemas/ipc'
-import { type Accessor, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
+import {
+  type Accessor,
+  createMemo,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show
+} from '@/lib/react-compat'
 import {
   type BranchTracking,
   buildRefTreeRows,
@@ -122,10 +130,10 @@ export function RefTreePanel(props: RefTreePanelProps) {
     <div
       ref={setScrollRef}
       onScroll={onScroll}
-      class="min-h-0 flex-1 overflow-auto px-1"
+      className="min-h-0 flex-1 overflow-auto px-1"
       data-testid="ref-tree-scroll"
     >
-      <div class="relative" style={{ height: `${totalHeight()}px` }}>
+      <div className="relative" style={{ height: `${totalHeight()}px` }}>
         <For each={virtualItems()}>
           {(virtualItem) => (
             <VirtualRefTreeRow

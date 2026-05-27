@@ -1,4 +1,4 @@
-import { type Accessor, createSignal, onCleanup, onMount } from 'solid-js'
+import { type Accessor, createSignal, onCleanup, onMount } from '@/lib/react-compat'
 
 const MOBILE_BREAKPOINT = 768
 

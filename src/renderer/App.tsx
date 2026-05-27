@@ -1,5 +1,5 @@
 import type { PersistedTabs } from '@shared/schemas/ipc'
-import { createEffect, createSignal, For, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, For, onMount, Show } from '@/lib/react-compat'
 import { OnboardingScreen } from './components/OnboardingScreen'
 import { TabBar } from './components/TabBar'
 import { Toaster } from './components/ui/sonner'
@@ -27,8 +27,8 @@ export default function App() {
     <Show
       when={onboarding.onboardingComplete() !== null && persistedTabs() !== null}
       fallback={
-        <div class="flex h-screen items-center justify-center bg-background text-foreground">
-          <div class="animate-pulse text-xs text-muted-foreground">Loading...</div>
+        <div className="flex h-screen items-center justify-center bg-background text-foreground">
+          <div className="animate-pulse text-xs text-muted-foreground">Loading...</div>
         </div>
       }
     >
@@ -96,7 +96,7 @@ function TabsShell(props: TabsShellProps) {
   })
 
   return (
-    <div class="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col bg-background text-foreground">
       <Toaster richColors position="bottom-right" />
       <TabBar
         tabs={tabDescriptors()}
@@ -106,11 +106,11 @@ function TabsShell(props: TabsShellProps) {
         onNew={newTab}
       />
 
-      <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <For each={tabs()}>
           {(tab) => (
             <div
-              class={
+              className={
                 tab.id === activeTabId()
                   ? 'flex min-h-0 flex-1 flex-col'
                   : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'

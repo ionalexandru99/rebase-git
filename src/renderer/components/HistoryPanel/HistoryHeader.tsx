@@ -1,4 +1,4 @@
-import { Show } from 'solid-js'
+import { Show } from '@/lib/react-compat'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { LoadingBadge } from '../ui/loading-badge'
@@ -37,9 +37,9 @@ function subtitle(props: HistoryHeaderProps): string {
 
 export function HistoryHeader(props: HistoryHeaderProps) {
   return (
-    <PanelHeader class="gap-3">
+    <PanelHeader className="gap-3">
       <PanelHeaderGroup>
-        <PanelTitle class="text-foreground">Timeline</PanelTitle>
+        <PanelTitle className="text-foreground">Timeline</PanelTitle>
         <PanelSubtitle>{subtitle(props)}</PanelSubtitle>
       </PanelHeaderGroup>
 
@@ -48,7 +48,7 @@ export function HistoryHeader(props: HistoryHeaderProps) {
           <Button
             size="sm"
             variant="outline"
-            class="h-7"
+            className="h-7"
             disabled={props.loadingMore || props.loading}
             onClick={() => props.onLoadMore?.()}
           >
@@ -58,9 +58,9 @@ export function HistoryHeader(props: HistoryHeaderProps) {
         <Show when={props.showFilter}>
           <Input
             value={props.filter}
-            onInput={(event) => props.onFilterChange(event.currentTarget.value)}
+            onChange={(event) => props.onFilterChange(event.currentTarget.value)}
             placeholder="filter commits…"
-            class="h-7 w-40"
+            className="h-7 w-40"
           />
         </Show>
         <Show when={props.loading || props.loadingMore}>

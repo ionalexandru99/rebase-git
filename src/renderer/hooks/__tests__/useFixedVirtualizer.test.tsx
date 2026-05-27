@@ -1,7 +1,7 @@
-import { render, screen } from '@solidjs/testing-library'
-import { For } from 'solid-js'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { useFixedVirtualizer } from '@/hooks/useFixedVirtualizer'
+import { For } from '@/lib/react-compat'
 
 function ScrollHarness() {
   const virtualizer = useFixedVirtualizer({
@@ -35,7 +35,7 @@ function ScrollHarness() {
 
 describe('useFixedVirtualizer', () => {
   it('updates visible rows synchronously when scrollTop changes', () => {
-    render(() => <ScrollHarness />)
+    render(<ScrollHarness />)
     const scroller = screen.getByTestId('scroller') as HTMLDivElement
     Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 320 })
 

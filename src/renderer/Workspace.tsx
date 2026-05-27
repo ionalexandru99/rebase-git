@@ -1,5 +1,6 @@
-import { createEffect, createMemo, createSignal, type JSX, on, Show } from 'solid-js'
+import { useEffect } from 'react'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
+import { createMemo, createSignal, type JSX, Show } from '@/lib/react-compat'
 import {
   defaultVisibleTimelineRefs,
   effectiveVisibleTimelineRefs,
@@ -27,7 +28,8 @@ interface WorkspaceProps {
 
 export function Workspace(props: WorkspaceProps) {
   const git = props.git
-  const repoName = () => repoDisplayName(git.state.repoPath)
+  const repoPath = git.state.repoPath
+  const repoName = () => repoDisplayName(repoPath)
   const branch = () => git.state.currentBranch || 'no-branch'
   const [activeView, setActiveView] = createSignal<SidebarView>('history')
   const [visibleTimelineRefs, setVisibleTimelineRefs] = createSignal<Set<string>>(new Set())
@@ -36,37 +38,33 @@ export function Workspace(props: WorkspaceProps) {
   const sidebarRemoteBranches = createMemo(() => git.state.branches?.remotes ?? [])
   const sidebarTags = createMemo(() => git.state.branches?.tags ?? [])
   const sidebarTracking = createMemo(() => git.state.branches?.tracking)
+  const localBranches = sidebarLocalBranches()
+  const remoteBranches = sidebarRemoteBranches()
 
   const timelineFilterRefs = createMemo(() =>
     effectiveVisibleTimelineRefs(
       visibleTimelineRefs(),
-      sidebarLocalBranches(),
-      sidebarRemoteBranches(),
+      localBranches,
+      remoteBranches,
       git.state.defaultBranch,
       git.state.currentBranch,
       new Set(Object.keys(git.state.remotes))
     )
   )
 
-  createEffect(
-    on(
-      () => git.state.repoPath,
-      (repoPath) => {
-        if (!repoPath) {
-          setVisibleTimelineRefs(new Set<string>())
-          return
-        }
-        setVisibleTimelineRefs(new Set<string>())
-      }
-    )
-  )
-
-  createEffect(() => {
-    if (!git.state.repoPath) {
+  useEffect(() => {
+    if (!repoPath) {
+      setVisibleTimelineRefs(new Set<string>())
       return
     }
-    const local = sidebarLocalBranches()
-    if (local.length === 0) {
+    setVisibleTimelineRefs(new Set<string>())
+  }, [repoPath, setVisibleTimelineRefs])
+
+  useEffect(() => {
+    if (!repoPath) {
+      return
+    }
+    if (localBranches.length === 0) {
       return
     }
     setVisibleTimelineRefs((prev) => {
@@ -74,17 +72,25 @@ export function Workspace(props: WorkspaceProps) {
         return prev
       }
       return defaultVisibleTimelineRefs(
-        local,
-        sidebarRemoteBranches(),
+        localBranches,
+        remoteBranches,
         git.state.defaultBranch,
         git.state.currentBranch,
         new Set(Object.keys(git.state.remotes))
       )
     })
-  })
+  }, [
+    repoPath,
+    git.state.defaultBranch,
+    git.state.currentBranch,
+    git.state.remotes,
+    localBranches,
+    remoteBranches,
+    setVisibleTimelineRefs
+  ])
 
   const handleCheckoutRef = useCheckoutRef(
-    () => git.state.repoPath,
+    () => repoPath,
     (repoPath) => git.refreshAfterCheckout(repoPath)
   )
 
@@ -97,8 +103,8 @@ export function Workspace(props: WorkspaceProps) {
       toggleVisibleTimelineRef(
         prev,
         key,
-        sidebarLocalBranches(),
-        sidebarRemoteBranches(),
+        localBranches,
+        remoteBranches,
         git.state.defaultBranch,
         git.state.currentBranch,
         new Set(Object.keys(git.state.remotes))
@@ -109,10 +115,10 @@ export function Workspace(props: WorkspaceProps) {
   return (
     <Shell
       repoName={repoName()}
-      repoPath={git.state.repoPath}
+      repoPath={repoPath}
       branch={branch()}
-      localBranches={sidebarLocalBranches()}
-      remoteBranches={sidebarRemoteBranches()}
+      localBranches={localBranches}
+      remoteBranches={remoteBranches}
       tags={sidebarTags()}
       branchesLoading={git.state.branchesLoading}
       changes={props.totalChanges}
@@ -125,10 +131,10 @@ export function Workspace(props: WorkspaceProps) {
       onToggleTimelineVisibility={handleToggleTimelineVisibility}
     >
       {props.errorBanner}
-      <div class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
         <Show when={activeView() === 'local-changes'}>
-          <div class="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(21rem,0.85fr)_minmax(0,1.15fr)]">
-            <div class="min-h-0 overflow-hidden">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(21rem,0.85fr)_minmax(0,1.15fr)]">
+            <div className="min-h-0 overflow-hidden">
               <StatusPanel
                 status={git.state.status}
                 onStage={git.stageFile}
@@ -136,30 +142,30 @@ export function Workspace(props: WorkspaceProps) {
                 loading={git.loading() || git.state.statusLoading}
               />
             </div>
-            <div class="min-h-0 overflow-hidden">
+            <div className="min-h-0 overflow-hidden">
               <CommitPanel onCommit={git.commit} loading={git.loading()} />
             </div>
           </div>
         </Show>
         <Show when={(props.tabActive?.() ?? true) && activeView() === 'history'}>
-          <div class="min-h-0 flex-1 overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">
             <HistoryPanel
               log={git.state.log}
               loading={git.state.logLoading}
               loadingMore={git.state.logLoadingMore}
               hasMore={git.state.logHasMore}
               onLoadMore={() => void git.loadMoreHistory()}
-              repoPath={git.state.repoPath}
+              repoPath={repoPath}
               remotes={git.state.remotes}
               currentBranch={git.state.currentBranch}
-              remoteBranches={sidebarRemoteBranches()}
+              remoteBranches={remoteBranches}
               visibleBranchRefs={timelineFilterRefs()}
             />
           </div>
         </Show>
       </div>
 
-      <span class="sr-only">
+      <span className="sr-only">
         {props.modifiedCount} modified, {props.stagedCount} staged, {props.untrackedCount} untracked
       </span>
     </Shell>

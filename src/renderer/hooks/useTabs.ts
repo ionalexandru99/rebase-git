@@ -1,4 +1,4 @@
-import { type Accessor, createMemo, createSignal, onCleanup, onMount } from 'solid-js'
+import { type Accessor, createMemo, createSignal, onCleanup, onMount } from '@/lib/react-compat'
 
 export interface TabDescriptor {
   id: string

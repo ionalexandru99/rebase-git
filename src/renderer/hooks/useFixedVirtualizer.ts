@@ -1,6 +1,8 @@
 import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
-import { createVirtualizer } from '@tanstack/solid-virtual'
-import { type Accessor, createSignal, onCleanup } from 'solid-js'
+import type { UIEvent } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { type Accessor, createSignal } from '@/lib/react-compat'
+import { createVirtualizer } from '@/lib/react-virtual-compat'
 
 interface UseFixedVirtualizerOptions {
   count: Accessor<number>
@@ -17,68 +19,89 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
   const [scrollTop, setScrollTop] = createSignal(0)
   const [scrollRevision, setScrollRevision] = createSignal(0)
 
-  let scrollElement: HTMLDivElement | undefined
-  let resizeObserver: ResizeObserver | undefined
-  let resizeFrame: number | null = null
+  const scrollElement = useRef<HTMLDivElement | null>(null)
+  const resizeObserver = useRef<ResizeObserver | null>(null)
+  const resizeFrame = useRef<number | null>(null)
 
   const virtualizer = createVirtualizer({
     get count() {
       return options.count()
     },
-    getScrollElement: () => scrollElement ?? null,
+    getScrollElement: () => scrollElement.current,
     estimateSize: () => options.rowHeight,
     overscan: options.overscan
   })
+  const virtualizerRef = useRef(virtualizer)
+  virtualizerRef.current = virtualizer
 
-  const measureViewport = () => {
-    if (!scrollElement) {
+  const measureViewport = useCallback(() => {
+    const element = scrollElement.current
+    if (!element) {
       return
     }
-    if (scrollElement.clientHeight > 0) {
-      setViewportHeight(scrollElement.clientHeight)
+    if (element.clientHeight > 0) {
+      setViewportHeight(element.clientHeight)
     }
-    virtualizer.measure()
-  }
+    virtualizerRef.current.measure()
+  }, [setViewportHeight])
 
-  const scheduleMeasure = () => {
-    if (resizeFrame !== null) {
+  const scheduleMeasure = useCallback(() => {
+    if (resizeFrame.current !== null) {
       return
     }
-    resizeFrame = requestAnimationFrame(() => {
-      resizeFrame = null
+    resizeFrame.current = requestAnimationFrame(() => {
+      resizeFrame.current = null
       measureViewport()
     })
-  }
+  }, [measureViewport])
 
-  const setScrollRef = (element: HTMLDivElement) => {
-    scrollElement = element
-    resizeObserver?.disconnect()
-    measureViewport()
-    resizeObserver = new ResizeObserver(() => {
-      scheduleMeasure()
-    })
-    resizeObserver.observe(element)
-  }
+  const setScrollRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (scrollElement.current === element) {
+        return
+      }
+      resizeObserver.current?.disconnect()
+      if (!element) {
+        scrollElement.current = null
+        return
+      }
+      scrollElement.current = element
+      if (element.clientHeight > 0) {
+        setViewportHeight(element.clientHeight)
+      }
+      resizeObserver.current = new ResizeObserver(() => {
+        scheduleMeasure()
+      })
+      resizeObserver.current.observe(element)
+    },
+    [scheduleMeasure, setViewportHeight]
+  )
 
-  const onSidebarResizeEnd = () => {
+  const onSidebarResizeEnd = useCallback(() => {
     scheduleMeasure()
-  }
-  window.addEventListener(SIDEBAR_RESIZE_END_EVENT, onSidebarResizeEnd)
+  }, [scheduleMeasure])
+  useEffect(() => {
+    window.addEventListener(SIDEBAR_RESIZE_END_EVENT, onSidebarResizeEnd)
+    return () => {
+      window.removeEventListener(SIDEBAR_RESIZE_END_EVENT, onSidebarResizeEnd)
+    }
+  }, [onSidebarResizeEnd])
 
-  const onScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+  const onScroll = (event: UIEvent<HTMLDivElement>) => {
     const target = event.currentTarget
     setScrollTop(target.scrollTop)
     setScrollRevision((revision) => revision + 1)
     options.onScrollFrame?.()
   }
 
-  onCleanup(() => {
-    window.removeEventListener(SIDEBAR_RESIZE_END_EVENT, onSidebarResizeEnd)
-    if (resizeFrame !== null) {
-      cancelAnimationFrame(resizeFrame)
+  useEffect(() => {
+    return () => {
+      if (resizeFrame.current !== null) {
+        cancelAnimationFrame(resizeFrame.current)
+      }
+      resizeObserver.current?.disconnect()
     }
-    resizeObserver?.disconnect()
-  })
+  }, [])
 
   const virtualItems = () => {
     scrollRevision()
@@ -111,13 +134,14 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
   const startIndex = () => {
     scrollRevision()
     const items = virtualItems()
-    return items.length > 0 ? items[0].index : 0
+    return items[0]?.index ?? 0
   }
 
   const endIndex = () => {
     scrollRevision()
     const items = virtualItems()
-    return items.length > 0 ? items[items.length - 1].index + 1 : 0
+    const last = items.at(-1)
+    return last ? last.index + 1 : 0
   }
 
   return {

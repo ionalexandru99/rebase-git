@@ -1,6 +1,7 @@
-import { FolderPlusIcon, GitBranchIcon, SearchIcon } from 'lucide-solid'
-import { createMemo, createSignal, type JSX, Show } from 'solid-js'
+import { FolderPlusIcon, GitBranchIcon, SearchIcon } from 'lucide-react'
+import type { KeyboardEvent } from 'react'
 import { fuzzyFilter } from '@/lib/fuzzy'
+import { createMemo, createSignal, Show } from '@/lib/react-compat'
 import { Button } from '../components/ui/button'
 import { EmptyState } from '../components/ui/empty-state'
 import { Input } from '../components/ui/input'
@@ -27,7 +28,7 @@ export function RepoPicker(props: RepoPickerProps) {
 
   const hasAnyWorkspace = () => props.workspaces.length > 0 || !!props.activeWorkspace
 
-  const handleKeyDown: JSX.EventHandler<HTMLInputElement, KeyboardEvent> = (event) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') {
       return
     }
@@ -41,7 +42,7 @@ export function RepoPicker(props: RepoPickerProps) {
     <Show
       when={hasAnyWorkspace()}
       fallback={
-        <div class="flex min-h-0 flex-1 items-center justify-center p-6">
+        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
           <EmptyState
             size="lg"
             icon={FolderPlusIcon}
@@ -57,31 +58,31 @@ export function RepoPicker(props: RepoPickerProps) {
         </div>
       }
     >
-      <div class="min-h-0 flex-1 overflow-auto">
-        <div class="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10">
-          <div class="flex items-center gap-3">
-            <div class="rounded-md border bg-card p-2">
-              <GitBranchIcon class="size-4 text-muted-foreground" />
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md border bg-card p-2">
+              <GitBranchIcon className="size-4 text-muted-foreground" />
             </div>
             <div>
-              <h2 class="text-base font-semibold">Open a repository</h2>
-              <p class="text-sm text-muted-foreground">
+              <h2 className="text-base font-semibold">Open a repository</h2>
+              <p className="text-sm text-muted-foreground">
                 Pick a repository from your workspace or recents.
               </p>
             </div>
           </div>
 
-          <div class="relative">
-            <SearchIcon class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               value={query()}
-              onInput={(event) => setQuery(event.currentTarget.value)}
+              onChange={(event) => setQuery(event.currentTarget.value)}
               onKeyDown={handleKeyDown}
               placeholder="Search repositories…"
-              class="pl-9"
+              className="pl-9"
               aria-label="Search repositories"
-              autofocus
+              autoFocus
             />
           </div>
 

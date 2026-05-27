@@ -8,9 +8,8 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": [

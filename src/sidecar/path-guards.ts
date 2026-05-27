@@ -36,9 +36,6 @@ export function resolveExistingDirectory(inputPath: string): string | null {
     if (!fs.statSync(canonical).isDirectory()) {
       return null
     }
-    if (!assertPathWithinDirectory(canonical, resolved)) {
-      return null
-    }
     return canonical
   } catch {
     return null

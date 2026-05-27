@@ -1,5 +1,6 @@
-import { FileDiffIcon, HistoryIcon } from 'lucide-solid'
-import { Show } from 'solid-js'
+import { FileDiffIcon, HistoryIcon } from 'lucide-react'
+import type { MouseEvent } from 'react'
+import { Show } from '@/lib/react-compat'
 import type { BranchTracking, RefKind } from '@/lib/ref-tree'
 import {
   Sidebar as ShadSidebar,
@@ -27,24 +28,24 @@ interface AppSidebarProps {
   visibleTimelineRefs?: ReadonlySet<string>
   onSelectView: (view: SidebarView) => void
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
-  onResizeStart?: (event: MouseEvent) => void
+  onResizeStart?: (event: MouseEvent<HTMLSpanElement>) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
 }
 
 export function AppSidebar(props: AppSidebarProps) {
   return (
-    <ShadSidebar class="!top-10 !h-[calc(100svh-2.5rem)]">
+    <ShadSidebar className="!top-10 !h-[calc(100svh-2.5rem)]">
       <Show when={props.onResizeStart}>
         <span
           onMouseDown={(event) => props.onResizeStart?.(event)}
           aria-hidden="true"
-          class="group/sidebar-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+          className="group/sidebar-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
         >
-          <span class="w-px bg-transparent transition-colors group-hover/sidebar-resize:bg-primary/60" />
+          <span className="w-px bg-transparent transition-colors group-hover/sidebar-resize:bg-primary/60" />
         </span>
       </Show>
 
-      <SidebarContent class="!overflow-hidden">
+      <SidebarContent className="!overflow-hidden">
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarMenu>
@@ -72,8 +73,8 @@ export function AppSidebar(props: AppSidebarProps) {
           </SidebarMenu>
         </SidebarGroup>
 
-        <SidebarGroup class="min-h-0 flex-1 !overflow-hidden">
-          <SidebarGroupLabel class="px-2 pb-1">Branches</SidebarGroupLabel>
+        <SidebarGroup className="min-h-0 flex-1 !overflow-hidden">
+          <SidebarGroupLabel className="px-2 pb-1">Branches</SidebarGroupLabel>
 
           <RefTreePanel
             localBranches={props.localBranches}

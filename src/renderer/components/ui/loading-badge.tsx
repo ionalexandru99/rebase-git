@@ -1,5 +1,5 @@
-import { Loader2Icon } from 'lucide-solid'
-import { type JSX, splitProps } from 'solid-js'
+import { Loader2Icon } from 'lucide-react'
+import { type JSX, splitProps } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
 import { Badge, type BadgeProps } from './badge'
 
@@ -8,17 +8,17 @@ interface LoadingBadgeProps extends BadgeProps {
 }
 
 function LoadingBadge(props: LoadingBadgeProps) {
-  const [local, rest] = splitProps(props, ['label', 'class'])
+  const [local, rest] = splitProps(props, ['label', 'className'])
   return (
     <Badge
       variant="outline"
-      class={cn(
+      className={cn(
         'gap-1 border-border bg-transparent font-normal text-muted-foreground',
-        local.class
+        local.className
       )}
       {...rest}
     >
-      <Loader2Icon class="animate-spin" />
+      <Loader2Icon className="animate-spin" />
       {local.label ?? 'Loading'}
     </Badge>
   )

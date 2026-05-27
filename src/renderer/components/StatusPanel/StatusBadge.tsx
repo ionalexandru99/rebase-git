@@ -36,7 +36,7 @@ export function StatusBadge(props: StatusBadgeProps) {
     <Badge
       variant="outline"
       aria-label={props.kind}
-      class={cn('px-1.5 text-xs uppercase', kindClass(props.kind))}
+      className={cn('px-1.5 text-xs uppercase', kindClass(props.kind))}
     >
       {glyphs[props.kind]}
     </Badge>

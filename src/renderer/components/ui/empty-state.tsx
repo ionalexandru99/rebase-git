@@ -1,6 +1,5 @@
-import type { LucideProps } from 'lucide-solid'
-import { type Component, type JSX, Show, splitProps } from 'solid-js'
-import { Dynamic } from 'solid-js/web'
+import type { LucideProps } from 'lucide-react'
+import { type Component, Dynamic, type JSX, Show, splitProps } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
 
 type EmptyStateSize = 'sm' | 'md' | 'lg'
@@ -42,33 +41,37 @@ function EmptyState(props: EmptyStateProps) {
     'description',
     'action',
     'size',
-    'class'
+    'className'
   ])
   const sizes = () => sizeMap[local.size ?? 'md']
   return (
     <div
       data-slot="empty-state"
-      class={cn('flex flex-col items-center justify-center text-center', sizes().wrap, local.class)}
+      className={cn(
+        'flex flex-col items-center justify-center text-center',
+        sizes().wrap,
+        local.className
+      )}
       {...rest}
     >
       <Show when={local.icon}>
         {(Icon) => (
           <div
-            class={cn(
+            className={cn(
               'inline-flex items-center justify-center text-muted-foreground/60',
               sizes().icon
             )}
           >
-            <Dynamic component={Icon()} class="h-1/2 w-1/2" stroke-width={1.6} />
+            <Dynamic component={Icon()} className="h-1/2 w-1/2" strokeWidth={1.6} />
           </div>
         )}
       </Show>
-      <p class={cn('text-foreground', sizes().title)}>{local.title}</p>
+      <p className={cn('text-foreground', sizes().title)}>{local.title}</p>
       <Show when={local.description}>
-        <p class={cn('mt-1 max-w-xs leading-relaxed', sizes().copy)}>{local.description}</p>
+        <p className={cn('mt-1 max-w-xs leading-relaxed', sizes().copy)}>{local.description}</p>
       </Show>
       <Show when={local.action}>
-        <div class="mt-3">{local.action}</div>
+        <div className="mt-3">{local.action}</div>
       </Show>
     </div>
   )

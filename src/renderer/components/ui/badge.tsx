@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority'
-import { type JSX, splitProps } from 'solid-js'
+import { type JSX, splitProps } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
 
 const badgeVariants = cva(
@@ -26,12 +26,12 @@ const badgeVariants = cva(
 export type BadgeProps = JSX.HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeVariants>
 
 function Badge(props: BadgeProps) {
-  const [local, rest] = splitProps(props, ['class', 'variant'])
+  const [local, rest] = splitProps(props, ['className', 'variant'])
   return (
     <span
       data-slot="badge"
       data-variant={local.variant ?? 'default'}
-      class={cn(badgeVariants({ variant: local.variant }), local.class)}
+      className={cn(badgeVariants({ variant: local.variant }), local.className)}
       {...rest}
     />
   )

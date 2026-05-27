@@ -1,4 +1,4 @@
-import type { JSX } from 'solid-js'
+import type { JSX } from '@/lib/react-compat'
 import type { RefEmptyRow } from '@/lib/ref-tree'
 
 interface EmptyRowProps {
@@ -9,7 +9,7 @@ interface EmptyRowProps {
 export function EmptyRow(props: EmptyRowProps) {
   return (
     <div
-      class="absolute inset-x-0 flex items-center px-6 text-xs text-muted-foreground/70"
+      className="absolute inset-x-0 flex items-center px-6 text-xs text-muted-foreground/70"
       style={props.style}
     >
       {props.row.label}

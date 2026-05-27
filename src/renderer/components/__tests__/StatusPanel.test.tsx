@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@solidjs/testing-library'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { GitStatus } from '@/types'
 import { StatusPanel } from '../StatusPanel'
@@ -23,14 +23,14 @@ function renderPanel(props: {
   onUnstage?: (file: string) => void
   loading?: boolean
 }) {
-  return render(() => (
+  return render(
     <StatusPanel
       status={props.status}
       onStage={props.onStage ?? vi.fn()}
       onUnstage={props.onUnstage ?? vi.fn()}
       loading={props.loading ?? false}
     />
-  ))
+  )
 }
 
 describe('StatusPanel', () => {

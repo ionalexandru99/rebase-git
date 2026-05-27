@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@solidjs/testing-library'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { TabDescriptor } from '../../hooks/useTabs'
 import { TabBar } from '../TabBar'
@@ -10,7 +10,7 @@ const baseTabs: TabDescriptor[] = [
 
 describe('TabBar', () => {
   it('renders the Rebase brand and a new-tab button', () => {
-    render(() => (
+    render(
       <TabBar
         tabs={baseTabs}
         activeTabId="a"
@@ -18,14 +18,14 @@ describe('TabBar', () => {
         onClose={vi.fn()}
         onNew={vi.fn()}
       />
-    ))
+    )
 
     expect(screen.getByText('Rebase')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
   })
 
   it('renders each tab as a role="tab" element with the title visible', () => {
-    render(() => (
+    render(
       <TabBar
         tabs={baseTabs}
         activeTabId="a"
@@ -33,7 +33,7 @@ describe('TabBar', () => {
         onClose={vi.fn()}
         onNew={vi.fn()}
       />
-    ))
+    )
 
     const tabs = screen.getAllByRole('tab')
     expect(tabs).toHaveLength(2)
@@ -42,7 +42,7 @@ describe('TabBar', () => {
   })
 
   it('marks the active tab with aria-selected', () => {
-    render(() => (
+    render(
       <TabBar
         tabs={baseTabs}
         activeTabId="b"
@@ -50,7 +50,7 @@ describe('TabBar', () => {
         onClose={vi.fn()}
         onNew={vi.fn()}
       />
-    ))
+    )
 
     const tabs = screen.getAllByRole('tab')
     expect(tabs[0]).toHaveAttribute('aria-selected', 'false')
@@ -59,7 +59,7 @@ describe('TabBar', () => {
 
   it('invokes onSelect when a tab is clicked', () => {
     const onSelect = vi.fn()
-    render(() => (
+    render(
       <TabBar
         tabs={baseTabs}
         activeTabId="a"
@@ -67,7 +67,7 @@ describe('TabBar', () => {
         onClose={vi.fn()}
         onNew={vi.fn()}
       />
-    ))
+    )
 
     fireEvent.click(screen.getByText('web-app'))
     expect(onSelect).toHaveBeenCalledWith('b')
@@ -75,7 +75,7 @@ describe('TabBar', () => {
 
   it('invokes onClose when a close button is clicked', () => {
     const onClose = vi.fn()
-    render(() => (
+    render(
       <TabBar
         tabs={baseTabs}
         activeTabId="a"
@@ -83,7 +83,7 @@ describe('TabBar', () => {
         onClose={onClose}
         onNew={vi.fn()}
       />
-    ))
+    )
 
     const closeButtons = screen.getAllByRole('button', { name: /Close tab/i })
     fireEvent.click(closeButtons[1])
@@ -92,9 +92,9 @@ describe('TabBar', () => {
 
   it('invokes onNew when the plus button is clicked', () => {
     const onNew = vi.fn()
-    render(() => (
+    render(
       <TabBar tabs={baseTabs} activeTabId="a" onSelect={vi.fn()} onClose={vi.fn()} onNew={onNew} />
-    ))
+    )
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(onNew).toHaveBeenCalledTimes(1)
@@ -102,7 +102,7 @@ describe('TabBar', () => {
 
   it('still renders a close button when only one tab is open', () => {
     const onClose = vi.fn()
-    render(() => (
+    render(
       <TabBar
         tabs={[{ id: 'only', title: 'My Tab', hasRepo: true }]}
         activeTabId="only"
@@ -110,7 +110,7 @@ describe('TabBar', () => {
         onClose={onClose}
         onNew={vi.fn()}
       />
-    ))
+    )
 
     const closeButtons = screen.getAllByRole('button', { name: /Close tab/i })
     expect(closeButtons).toHaveLength(1)
@@ -119,7 +119,7 @@ describe('TabBar', () => {
   })
 
   it('shows the title in italics for tabs without a repo', () => {
-    render(() => (
+    render(
       <TabBar
         tabs={[{ id: 'x', title: 'New tab', hasRepo: false }]}
         activeTabId="x"
@@ -127,7 +127,7 @@ describe('TabBar', () => {
         onClose={vi.fn()}
         onNew={vi.fn()}
       />
-    ))
+    )
 
     const label = screen.getByText('New tab')
     expect(label.className).toMatch(/italic/)

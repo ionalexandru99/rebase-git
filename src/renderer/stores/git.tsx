@@ -14,10 +14,11 @@ import {
   UnstageResponseSchema
 } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
-import { createMutation, createQuery, useQueryClient } from '@tanstack/solid-query'
-import { type Accessor, batch, createEffect, createSignal, onCleanup } from 'solid-js'
-import { createStore } from 'solid-js/store'
+import { useEffect, useRef } from 'react'
 import { repoQueryKeys } from '@/lib/query-keys'
+import { type Accessor, batch, createSignal } from '@/lib/react-compat'
+import { createMutation, createQuery, useQueryClient } from '@/lib/react-query-compat'
+import { createStore } from '@/lib/react-store-compat'
 import { readSnapshot, writeSnapshot } from '@/lib/repo-snapshot-cache'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
@@ -25,13 +26,26 @@ import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 const LOG_FLUSH_MS = 100
 
-const mergeBranches = (existing: GitBranches | null, patch: Partial<GitBranches>): GitBranches => ({
-  current: patch.current ?? existing?.current ?? '',
-  all: patch.all ?? existing?.all ?? [],
-  remotes: patch.remotes ?? existing?.remotes ?? [],
-  tags: patch.tags ?? existing?.tags ?? [],
-  tracking: patch.tracking ?? existing?.tracking
-})
+const mergeBranches = (existing: GitBranches | null, patch: Partial<GitBranches>): GitBranches => {
+  const next = {
+    current: patch.current ?? existing?.current ?? '',
+    all: patch.all ?? existing?.all ?? [],
+    remotes: patch.remotes ?? existing?.remotes ?? [],
+    tags: patch.tags ?? existing?.tags ?? [],
+    tracking: patch.tracking ?? existing?.tracking
+  }
+  if (
+    existing &&
+    existing.current === next.current &&
+    existing.all === next.all &&
+    existing.remotes === next.remotes &&
+    existing.tags === next.tags &&
+    existing.tracking === next.tracking
+  ) {
+    return existing
+  }
+  return next
+}
 
 export interface GitState {
   repoPath: string | null
@@ -190,27 +204,27 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const [state, setState] = createStore<GitState>({ ...initialState })
   const [fetchTick, setFetchTick] = createSignal(0)
 
-  let logBuffer: GitLogEntry[] = []
-  let logFlushTimer: ReturnType<typeof setTimeout> | null = null
-  let openGeneration = 0
+  const logBuffer = useRef<GitLogEntry[]>([])
+  const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const openGeneration = useRef(0)
 
   const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
-    logFlushTimer = null
-    if (expectedGen !== openGeneration || expectedPath !== state.repoPath) {
+    logFlushTimer.current = null
+    if (expectedGen !== openGeneration.current || expectedPath !== state.repoPath) {
       return
     }
-    const nextLength = logBuffer.length
+    const nextLength = logBuffer.current.length
     const previous = state.log?.all ?? []
     if (nextLength === previous.length && state.log?.total === nextLength) {
       return
     }
 
     if (previous.length === 0 || nextLength < previous.length) {
-      setState('log', { all: [...logBuffer], total: nextLength })
+      setState('log', { all: [...logBuffer.current], total: nextLength })
     } else {
       batch(() => {
         for (let index = previous.length; index < nextLength; index++) {
-          setState('log', 'all', index, logBuffer[index])
+          setState('log', 'all', index, logBuffer.current[index])
         }
         setState('log', 'total', nextLength)
       })
@@ -227,22 +241,28 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }
 
   const scheduleLogFlush = () => {
-    if (!tabActive()) {
+    if (logFlushTimer.current !== null) {
       return
     }
-    if (logFlushTimer !== null) {
-      return
-    }
-    const expectedGen = openGeneration
+    const expectedGen = openGeneration.current
     const expectedPath = state.repoPath
-    logFlushTimer = setTimeout(() => flushLogToStore(expectedGen, expectedPath), LOG_FLUSH_MS)
+    logFlushTimer.current = setTimeout(() => {
+      if (!tabActive()) {
+        logFlushTimer.current = null
+        if (logBuffer.current.length > 0) {
+          scheduleLogFlush()
+        }
+        return
+      }
+      flushLogToStore(expectedGen, expectedPath)
+    }, LOG_FLUSH_MS)
   }
 
   const reset = () => {
-    logBuffer = []
-    if (logFlushTimer !== null) {
-      clearTimeout(logFlushTimer)
-      logFlushTimer = null
+    logBuffer.current = []
+    if (logFlushTimer.current !== null) {
+      clearTimeout(logFlushTimer.current)
+      logFlushTimer.current = null
     }
     setState({ ...initialState })
   }
@@ -306,7 +326,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
   })
 
-  createEffect(() => {
+  useEffect(() => {
     const data = statusQuery.data
     if (data) {
       setState('status', data)
@@ -317,19 +337,19 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       }
     }
     setState('statusLoading', statusQuery.isFetching && !statusQuery.data)
-  })
+  }, [statusQuery.data, statusQuery.isFetching, state.repoPath])
 
-  createEffect(() => {
+  useEffect(() => {
     const error = statusQuery.error
     if (error) {
       setState('error', formatCause(error))
     }
-  })
+  }, [statusQuery.error])
 
-  createEffect(() => {
+  useEffect(() => {
     const data = localBranchesQuery.data
     if (data) {
-      setState('branches', (previous) => mergeBranches(previous, data))
+      setState('branches', (previous: GitBranches | null) => mergeBranches(previous, data))
       if (data.current) {
         setState('currentBranch', data.current)
       }
@@ -341,19 +361,19 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       }
     }
     setState('branchesLoading', localBranchesQuery.isFetching && !localBranchesQuery.data)
-  })
+  }, [localBranchesQuery.data, localBranchesQuery.isFetching, state.repoPath])
 
-  createEffect(() => {
+  useEffect(() => {
     const error = localBranchesQuery.error
     if (error) {
       setState('error', formatCause(error))
     }
-  })
+  }, [localBranchesQuery.error])
 
-  createEffect(() => {
+  useEffect(() => {
     const data = remoteRefsQuery.data
     if (data) {
-      setState('branches', (previous) => mergeBranches(previous, data))
+      setState('branches', (previous: GitBranches | null) => mergeBranches(previous, data))
       const path = repoPath()
       if (path) {
         writeSnapshot(path, {
@@ -361,17 +381,17 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         })
       }
     }
-  })
+  }, [remoteRefsQuery.data, state.repoPath])
 
-  createEffect(() => {
+  useEffect(() => {
     const error = remoteRefsQuery.error
     if (error) {
       setState('error', formatCause(error))
     }
-  })
+  }, [remoteRefsQuery.error])
 
-  createEffect(() => {
-    if (tabActive() && logBuffer.length > 0) {
+  useEffect(() => {
+    if (tabActive() && logBuffer.current.length > 0) {
       scheduleLogFlush()
     }
   })
@@ -384,7 +404,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }
 
   const applyLocalBranches = (path: string, local: LocalBranches) => {
-    setState('branches', (previous) => mergeBranches(previous, local))
+    setState('branches', (previous: GitBranches | null) => mergeBranches(previous, local))
     if (local.current) {
       setState('currentBranch', local.current)
     }
@@ -438,7 +458,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     const clearLog = options?.clearLog ?? !append
 
     if (!append) {
-      logBuffer = []
+      logBuffer.current = []
       if (clearLog) {
         setState('log', { all: [], total: 0 })
         setState('logHasMore', false)
@@ -477,7 +497,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     if (!path || !state.logHasMore || state.logLoadingMore || state.logLoading) {
       return
     }
-    const skip = state.log?.all.length ?? logBuffer.length
+    const skip = state.log?.all.length ?? logBuffer.current.length
     await restartLogStream(path, { skip, maxCount: LOG_PAGE_SIZE, clearLog: false })
   }
 
@@ -497,7 +517,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     task: () => Promise<void>
   ) => {
     void task().catch((error: unknown) => {
-      if (generation !== openGeneration || state.repoPath !== path) {
+      if (generation !== openGeneration.current || state.repoPath !== path) {
         return
       }
       console.error(`[git] ${label} failed for ${path}:`, formatCause(error))
@@ -524,7 +544,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }
 
   const openRepo = async (path: string) => {
-    const generation = ++openGeneration
+    const generation = ++openGeneration.current
     setState('opening', true)
     setState('error', null)
 
@@ -533,7 +553,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         OpenRepoResponseSchema,
         await window.electronAPI.openRepo(path)
       )
-      if (generation !== openGeneration) {
+      if (generation !== openGeneration.current) {
         return
       }
 
@@ -567,12 +587,12 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       })
 
       if (cached?.log?.all) {
-        logBuffer = [...cached.log.all]
+        logBuffer.current = [...cached.log.all]
       }
 
       startRepoRefresh(opened.path, generation, { clearLogOnStream: !cached?.log })
     } catch (error) {
-      if (generation !== openGeneration) {
+      if (generation !== openGeneration.current) {
         return
       }
       setState('error', formatCause(error))
@@ -582,7 +602,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }
 
   const closeRepo = async () => {
-    openGeneration++
+    openGeneration.current++
     const path = state.repoPath
     if (path) {
       try {
@@ -686,44 +706,51 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
   }))
 
-  const unsubLog = window.electronAPI.onLogChunk((chunk) => {
-    if (chunk.repoPath !== state.repoPath) {
-      return
-    }
-    if (chunk.commits.length > 0) {
-      for (const commit of chunk.commits) {
-        logBuffer.push(commit)
+  useEffect(() => {
+    const unsubLog = window.electronAPI.onLogChunk((chunk) => {
+      if (chunk.repoPath !== state.repoPath) {
+        return
       }
-      scheduleLogFlush()
-    }
-    if (chunk.error) {
-      setState('error', chunk.error)
-    }
-    if (chunk.done) {
-      if (chunk.hasMore !== undefined) {
-        setState('logHasMore', chunk.hasMore)
+      if (chunk.commits.length > 0) {
+        for (const commit of chunk.commits) {
+          logBuffer.current.push(commit)
+        }
+        scheduleLogFlush()
       }
-      setState('logLoading', false)
-      setState('logLoadingMore', false)
-      if (tabActive()) {
-        flushLogToStore(openGeneration, state.repoPath)
+      if (chunk.error) {
+        setState('error', chunk.error)
       }
-    }
-  })
+      if (chunk.done) {
+        if (chunk.hasMore !== undefined) {
+          setState('logHasMore', chunk.hasMore)
+        }
+        setState('logLoading', false)
+        setState('logLoadingMore', false)
+        if (tabActive()) {
+          flushLogToStore(openGeneration.current, state.repoPath)
+        }
+      }
+    })
 
-  const unsubChanged = window.electronAPI.onRepoChanged((event) => {
-    if (event.repoPath !== state.repoPath) {
-      return
-    }
-    const path = event.repoPath
-    if (event.kind === 'refs') {
-      void refreshBranchesOnly(path)
-    } else {
-      void refreshStatus(path)
-    }
-  })
+    const unsubChanged = window.electronAPI.onRepoChanged((event) => {
+      if (event.repoPath !== state.repoPath) {
+        return
+      }
+      const path = event.repoPath
+      if (event.kind === 'refs') {
+        void refreshBranchesOnly(path)
+      } else {
+        void refreshStatus(path)
+      }
+    })
 
-  createEffect(() => {
+    return () => {
+      unsubLog?.()
+      unsubChanged?.()
+    }
+  }, [])
+
+  useEffect(() => {
     const path = state.repoPath
     fetchTick()
     if (!path || !tabActive()) {
@@ -734,29 +761,29 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         void runFetchAndRefresh(path)
       }
     }, AUTO_FETCH_INTERVAL_MS)
-    onCleanup(() => window.clearInterval(handle))
+    return () => window.clearInterval(handle)
   })
 
-  onCleanup(() => {
-    openGeneration++
-    if (logFlushTimer !== null) {
-      clearTimeout(logFlushTimer)
-      logFlushTimer = null
-    }
-    logBuffer = []
-    setState('log', null)
-    unsubLog?.()
-    unsubChanged?.()
+  useEffect(() => {
+    return () => {
+      openGeneration.current++
+      if (logFlushTimer.current !== null) {
+        clearTimeout(logFlushTimer.current)
+        logFlushTimer.current = null
+      }
+      logBuffer.current = []
+      setState('log', null)
 
-    const path = state.repoPath
-    if (!path) {
-      return
+      const path = state.repoPath
+      if (!path) {
+        return
+      }
+      setTimeout(() => {
+        Promise.resolve(window.electronAPI.cancelLogStream(path)).catch(() => {})
+        Promise.resolve(window.electronAPI.closeRepo(path)).catch(() => {})
+      }, 0)
     }
-    setTimeout(() => {
-      Promise.resolve(window.electronAPI.cancelLogStream(path)).catch(() => {})
-      Promise.resolve(window.electronAPI.closeRepo(path)).catch(() => {})
-    }, 0)
-  })
+  }, [])
 
   const fetchNow = async () => {
     const path = state.repoPath

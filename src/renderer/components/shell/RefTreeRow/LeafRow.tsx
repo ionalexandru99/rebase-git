@@ -6,9 +6,9 @@ import {
   GitBranchIcon,
   type LucideProps,
   TagIcon
-} from 'lucide-solid'
-import { type Component, type JSX, Show } from 'solid-js'
-import { Dynamic } from 'solid-js/web'
+} from 'lucide-react'
+import type { MouseEvent } from 'react'
+import { type Component, Dynamic, type JSX, Show } from '@/lib/react-compat'
 import { REF_TREE_INDENT_PX, type RefKind, type RefLeafRow } from '@/lib/ref-tree'
 import { cn } from '@/lib/utils'
 import {
@@ -38,7 +38,7 @@ export function LeafRow(props: LeafRowProps) {
   const padLeft = () => 6 + props.row.depth * REF_TREE_INDENT_PX + 14
   const showTimelineEye = () => props.row.refKind === 'local' || props.row.refKind === 'remote'
 
-  const handleToggleVisibility = (event: MouseEvent) => {
+  const handleToggleVisibility = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
     event.preventDefault()
     props.onToggleTimelineVisibility?.(props.row.refKind, props.row.fullPath)
@@ -47,7 +47,7 @@ export function LeafRow(props: LeafRowProps) {
   return (
     <ContextMenu>
       <div
-        class={cn(
+        className={cn(
           'group/branch-row absolute inset-x-0 flex items-center rounded-sm pr-1 hover:bg-sidebar-accent/60',
           props.row.isCurrent
             ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
@@ -59,26 +59,26 @@ export function LeafRow(props: LeafRowProps) {
         <ContextMenuTrigger
           as="button"
           type="button"
-          onDblClick={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}
-          class="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm py-0 pr-0 text-sm"
-          style={{ 'padding-left': `${padLeft()}px` }}
+          onDoubleClick={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm py-0 pr-0 text-sm"
+          style={{ paddingLeft: `${padLeft()}px` }}
           title={props.row.fullPath}
         >
           <Show when={props.row.isCurrent}>
             <span
               aria-hidden="true"
               data-testid="current-ref-bar"
-              class="pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-sm bg-sidebar-primary"
+              className="pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-sm bg-sidebar-primary"
             />
           </Show>
-          <Dynamic component={icon()} class="size-3.5 shrink-0 opacity-70" />
-          <span class="min-w-0 truncate text-left">{props.row.name}</span>
+          <Dynamic component={icon()} className="size-3.5 shrink-0 opacity-70" />
+          <span className="min-w-0 truncate text-left">{props.row.name}</span>
           <AheadBehindBadge ahead={props.row.ahead} behind={props.row.behind} />
           <Show when={props.row.isCurrent}>
             <CheckIcon
               aria-hidden="true"
               data-testid="current-ref-check"
-              class="ml-auto size-3.5 shrink-0 text-sidebar-primary"
+              className="ml-auto size-3.5 shrink-0 text-sidebar-primary"
             />
           </Show>
         </ContextMenuTrigger>
@@ -87,7 +87,7 @@ export function LeafRow(props: LeafRowProps) {
           <button
             type="button"
             data-testid="timeline-visibility-toggle"
-            class={cn(
+            className={cn(
               'mr-0.5 flex size-7 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground',
               props.timelineVisible
                 ? 'opacity-100'
@@ -104,8 +104,8 @@ export function LeafRow(props: LeafRowProps) {
             }
             onClick={handleToggleVisibility}
           >
-            <Show when={props.timelineVisible} fallback={<EyeOffIcon class="size-3.5" />}>
-              <EyeIcon class="size-3.5" />
+            <Show when={props.timelineVisible} fallback={<EyeOffIcon className="size-3.5" />}>
+              <EyeIcon className="size-3.5" />
             </Show>
           </button>
         </Show>

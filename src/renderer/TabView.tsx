@@ -1,5 +1,5 @@
-import { AlertCircleIcon } from 'lucide-solid'
-import { createEffect, createMemo, type JSX, onMount, Show } from 'solid-js'
+import { AlertCircleIcon } from 'lucide-react'
+import { createEffect, createMemo, type JSX, onMount, Show } from '@/lib/react-compat'
 import { Alert, AlertDescription } from './components/ui/alert'
 import { RepoPicker } from './RepoPicker'
 import { useGitStore } from './stores/git'
@@ -40,8 +40,8 @@ export function TabView(props: TabViewProps) {
 
   const errorBanner = (): JSX.Element => (
     <Show when={git.state.error}>
-      <div class="shrink-0 border-b px-4 py-2">
-        <Alert variant="destructive" class="border-destructive/30">
+      <div className="shrink-0 border-b px-4 py-2">
+        <Alert variant="destructive" className="border-destructive/30">
           <AlertCircleIcon />
           <AlertDescription>{git.state.error}</AlertDescription>
         </Alert>

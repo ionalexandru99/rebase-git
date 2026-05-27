@@ -1,9 +1,9 @@
-import { GitMergeIcon } from 'lucide-solid'
-import { createMemo, For, Show } from 'solid-js'
+import { GitMergeIcon } from 'lucide-react'
 import { formatCommitDate, initials } from '@/lib/format'
 import { computeRowRailWidth, laneColor, ROW_H } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
+import { createMemo, For, Show } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
 import { RefBadge } from './RefBadge'
 
@@ -28,40 +28,40 @@ export function CommitRow(props: CommitRowProps) {
 
   return (
     <div
-      class="group/row absolute inset-x-0 z-10 grid items-center gap-1 bg-card px-0 hover:bg-muted"
+      className="group/row absolute inset-x-0 z-10 grid items-center gap-1 bg-card px-0 hover:bg-muted"
       style={{
         top: `${props.top}px`,
         height: `${ROW_H}px`,
-        'grid-template-columns': gridTemplate(),
+        gridTemplateColumns: gridTemplate(),
         opacity: String(rowOpacity()),
         contain: 'layout style'
       }}
     >
       <span aria-hidden="true" />
-      <span class="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
+      <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
         <Show when={isMerge()}>
-          <GitMergeIcon aria-label="merge commit" class="size-3 shrink-0 text-emerald-500" />
+          <GitMergeIcon aria-label="merge commit" className="size-3 shrink-0 text-emerald-500" />
         </Show>
         <For each={refs()}>
           {(parsedRef) => (
             <RefBadge parsedRef={parsedRef} laneHex={laneHex()} remotes={props.remotes} />
           )}
         </For>
-        <span class={cn('min-w-0 truncate', subjectClass())}>{commit().message}</span>
+        <span className={cn('min-w-0 truncate', subjectClass())}>{commit().message}</span>
       </span>
 
-      <span class="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-        <span class="flex size-4 shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground/80">
+      <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+        <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground/80">
           {initials(commit().author_name)}
         </span>
-        <span class="min-w-0 truncate">{commit().author_name}</span>
+        <span className="min-w-0 truncate">{commit().author_name}</span>
       </span>
 
-      <code class="cursor-default truncate text-xs tabular-nums text-muted-foreground">
+      <code className="cursor-default truncate text-xs tabular-nums text-muted-foreground">
         {commit().hash.slice(0, 7)}
       </code>
 
-      <time class="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground">
+      <time className="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground">
         {formatCommitDate(commit().date)}
       </time>
     </div>

@@ -1,5 +1,5 @@
-import { type JSX, Match, Switch } from 'solid-js'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
+import { type JSX, Match, Switch } from '@/lib/react-compat'
 import { REF_TREE_ROW_HEIGHT, type RefKind, type RefRow } from '@/lib/ref-tree'
 import { EmptyRow } from './EmptyRow'
 import { FolderRow } from './FolderRow'

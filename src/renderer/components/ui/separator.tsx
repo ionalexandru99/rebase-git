@@ -1,16 +1,17 @@
-import { Separator as SeparatorPrimitive } from '@kobalte/core/separator'
-import { type ComponentProps, splitProps } from 'solid-js'
+import type { HTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 
-function Separator(props: ComponentProps<typeof SeparatorPrimitive>) {
-  const [local, rest] = splitProps(props, ['class', 'orientation'])
+function Separator(
+  props: HTMLAttributes<HTMLDivElement> & { orientation?: 'horizontal' | 'vertical' }
+) {
+  const { className, orientation = 'horizontal', ...rest } = props
   return (
-    <SeparatorPrimitive
+    <div
       data-slot="separator"
-      orientation={local.orientation ?? 'horizontal'}
-      class={cn(
+      data-orientation={orientation}
+      className={cn(
         'shrink-0 bg-border data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px',
-        local.class
+        className
       )}
       {...rest}
     />

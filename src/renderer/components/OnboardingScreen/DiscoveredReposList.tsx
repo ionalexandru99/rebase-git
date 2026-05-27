@@ -1,5 +1,5 @@
-import { GitBranchIcon } from 'lucide-solid'
-import { For } from 'solid-js'
+import { GitBranchIcon } from 'lucide-react'
+import { For } from '@/lib/react-compat'
 import { RepoListItem } from '../RepoListItem'
 import { ScrollArea } from '../ui/scroll-area'
 
@@ -11,13 +11,13 @@ interface DiscoveredReposListProps {
 export function DiscoveredReposList(props: DiscoveredReposListProps) {
   const count = () => props.repos.length
   return (
-    <div class="mb-3">
-      <h2 class="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+    <div className="mb-3">
+      <h2 className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
         Found {count()} {count() === 1 ? 'repository' : 'repositories'}
       </h2>
-      <div class="overflow-hidden rounded-sm border border-border">
-        <ScrollArea class="h-44">
-          <ul class="divide-y divide-border/60">
+      <div className="overflow-hidden rounded-sm border border-border">
+        <ScrollArea className="h-44">
+          <ul className="divide-y divide-border/60">
             <For each={props.repos}>
               {(repo) => (
                 <li>

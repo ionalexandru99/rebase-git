@@ -1,6 +1,7 @@
 import { parseOrThrow } from '@shared/codec'
 import { ScanForReposResponseSchema } from '@shared/schemas/ipc'
-import { type Accessor, createSignal, onMount } from 'solid-js'
+import { useRef } from 'react'
+import { type Accessor, createSignal, onMount } from '@/lib/react-compat'
 
 export interface OnboardingStore {
   onboardingComplete: Accessor<boolean | null>
@@ -24,10 +25,11 @@ export function useOnboarding(): OnboardingStore {
   const [discoveredRepos, setDiscoveredRepos] = createSignal<string[]>([])
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
-  let scanGeneration = 0
+  const scanGeneration = useRef(0)
 
   const scanWorkspace = async (path: string | null) => {
-    const generation = ++scanGeneration
+    const generation = scanGeneration.current + 1
+    scanGeneration.current = generation
     if (!path) {
       setDiscoveredRepos([])
       setLoading(false)
@@ -40,7 +42,7 @@ export function useOnboarding(): OnboardingStore {
         ScanForReposResponseSchema,
         await window.electronAPI.scanForRepos(path)
       )
-      if (generation !== scanGeneration) {
+      if (generation !== scanGeneration.current) {
         return
       }
       if (decoded._tag === 'Ok') {
@@ -50,12 +52,12 @@ export function useOnboarding(): OnboardingStore {
         setError(decoded.message || 'Failed to scan for repositories')
       }
     } catch (err) {
-      if (generation !== scanGeneration) {
+      if (generation !== scanGeneration.current) {
         return
       }
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
-      if (generation === scanGeneration) {
+      if (generation === scanGeneration.current) {
         setLoading(false)
       }
     }

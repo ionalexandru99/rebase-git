@@ -1,10 +1,11 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/solid-query'
-import type { ParentProps } from 'solid-js'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ParentProps } from '@/lib/react-compat'
 
-export function createQueryClient(): QueryClient {
+export function createQueryClient(options: { gcTime?: number } = {}): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
+        gcTime: options.gcTime,
         staleTime: 30_000,
         retry: false,
         refetchOnWindowFocus: false

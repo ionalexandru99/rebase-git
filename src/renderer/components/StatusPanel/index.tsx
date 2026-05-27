@@ -1,4 +1,4 @@
-import { Show } from 'solid-js'
+import { Show } from '@/lib/react-compat'
 import type { GitStatus } from '@/types'
 import { Badge } from '../ui/badge'
 import { LoadingBadge } from '../ui/loading-badge'
@@ -77,7 +77,7 @@ export function StatusPanel(props: StatusPanelProps) {
               </PanelActions>
             </PanelHeader>
 
-            <PanelBody class="flex min-h-0 flex-col">
+            <PanelBody className="flex min-h-0 flex-col">
               <VirtualFileList
                 status={status()}
                 onStage={props.onStage}

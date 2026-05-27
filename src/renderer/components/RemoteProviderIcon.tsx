@@ -1,5 +1,4 @@
-import { CloudIcon } from 'lucide-solid'
-import { Show } from 'solid-js'
+import { CloudIcon } from 'lucide-react'
 import azureSvg from '@/assets/providers/azure.svg?raw'
 import bitbucketSvg from '@/assets/providers/bitbucket.svg?raw'
 import codebergSvg from '@/assets/providers/codeberg.svg?raw'
@@ -8,6 +7,7 @@ import githubSvg from '@/assets/providers/github.svg?raw'
 import gitlabSvg from '@/assets/providers/gitlab.svg?raw'
 import sourcehutSvg from '@/assets/providers/sourcehut.svg?raw'
 import { detectProvider, type Provider } from '@/lib/providers'
+import { Show } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
 
 type Style = 'color' | 'mono'
@@ -24,7 +24,7 @@ const PROVIDERS: Record<Provider, { svg: string; label: string; style: Style }> 
 
 interface RemoteProviderIconProps {
   url: string | undefined
-  class?: string
+  className?: string
 }
 
 export function RemoteProviderIcon(props: RemoteProviderIconProps) {
@@ -36,19 +36,18 @@ export function RemoteProviderIcon(props: RemoteProviderIconProps) {
   return (
     <Show
       when={entry()}
-      fallback={<CloudIcon aria-label="remote" class={cn('shrink-0', props.class)} />}
+      fallback={<CloudIcon aria-label="remote" className={cn('shrink-0', props.className)} />}
     >
       {(resolved) => (
-        <span
-          role="img"
-          aria-label={resolved().label}
+        <img
+          alt={resolved().label}
           title={resolved().label}
-          class={cn(
-            'inline-flex shrink-0 [&_svg]:size-full',
-            resolved().style === 'mono' && '[&_path]:fill-current',
-            props.class
+          className={cn(
+            'inline-flex shrink-0 object-contain',
+            resolved().style === 'mono' && 'text-current',
+            props.className
           )}
-          innerHTML={resolved().svg}
+          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(resolved().svg)}`}
         />
       )}
     </Show>

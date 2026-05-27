@@ -1,4 +1,4 @@
-import { render } from 'solid-js/web'
+import { render } from '@/lib/react-dom-compat'
 import './index.css'
 import App from './App'
 import { QueryProvider } from './providers/QueryProvider'

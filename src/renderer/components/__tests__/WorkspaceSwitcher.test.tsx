@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { WorkspaceSwitcher } from '../WorkspaceSwitcher'
 
@@ -6,7 +6,7 @@ describe('WorkspaceSwitcher', () => {
   it('opens the workspace menu and switches workspaces', async () => {
     const onSwitch = vi.fn()
 
-    render(() => (
+    render(
       <WorkspaceSwitcher
         workspaces={['/home/user/personal', '/home/user/work']}
         activeWorkspace="/home/user/personal"
@@ -14,7 +14,7 @@ describe('WorkspaceSwitcher', () => {
         onAdd={vi.fn()}
         onRemove={vi.fn()}
       />
-    ))
+    )
 
     fireEvent.pointerDown(screen.getByRole('button', { name: /Switch workspace/i }), {
       button: 0,

@@ -1,6 +1,15 @@
-import { GitCommitHorizontalIcon } from 'lucide-solid'
-import { createDeferred, createEffect, createMemo, createSignal, For, Show } from 'solid-js'
+import { GitCommitHorizontalIcon } from 'lucide-react'
+import type { UIEvent } from 'react'
+import { useCallback } from 'react'
 import { computeGraphRailWidth, OVERSCAN, ROW_H } from '@/lib/git-graph/canvas'
+import {
+  createDeferred,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Show
+} from '@/lib/react-compat'
 import type { GitLog, GitLogEntry } from '@/types'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
 import { buildDisplayRows, useGraphLayoutWorker } from '../../hooks/useGraphLayoutWorker'
@@ -116,14 +125,20 @@ export function HistoryPanel(props: HistoryPanelProps) {
     rowHeight: ROW_H,
     overscan: OVERSCAN
   })
-  const attachScroll = (element: HTMLDivElement) => {
-    setScrollEl(element)
-    setScrollRef(element)
-    const repoPath = props.repoPath
-    if (repoPath) {
-      element.scrollTop = historyScrollPositions.get(repoPath) ?? 0
-    }
-  }
+  const attachScroll = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (!element) {
+        return
+      }
+      setScrollEl(element)
+      setScrollRef(element)
+      const repoPath = props.repoPath
+      if (repoPath) {
+        element.scrollTop = historyScrollPositions.get(repoPath) ?? 0
+      }
+    },
+    [props.repoPath, setScrollEl, setScrollRef]
+  )
 
   createEffect(() => {
     const element = scrollEl()
@@ -134,7 +149,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
     element.scrollTop = historyScrollPositions.get(repoPath) ?? 0
   })
 
-  const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const repoPath = props.repoPath
     if (repoPath) {
       rememberHistoryScroll(repoPath, event.currentTarget.scrollTop)
@@ -180,7 +195,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const showSkeleton = () => props.loading && !hasCommits()
 
   return (
-    <Panel class="h-full">
+    <Panel className="h-full">
       <HistoryHeader
         total={props.log?.total}
         visibleTotal={commits().length}
@@ -196,21 +211,21 @@ export function HistoryPanel(props: HistoryPanelProps) {
 
       <Show when={commits().length > 0}>
         <div
-          class="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
-          style={{ 'grid-template-columns': headerGridTemplate() }}
+          className="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+          style={{ gridTemplateColumns: headerGridTemplate() }}
         >
           <span aria-hidden="true" />
           <span>Subject</span>
           <span>Author</span>
           <span>SHA</span>
-          <span class="pr-3 text-right">Date</span>
+          <span className="pr-3 text-right">Date</span>
         </div>
       </Show>
 
       <div
         ref={attachScroll}
         onScroll={handleScroll}
-        class="min-h-0 min-h-[480px] flex-1 overflow-auto"
+        className="min-h-0 min-h-[480px] flex-1 overflow-auto"
         data-testid="history-scroll"
       >
         <Show
@@ -233,7 +248,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
           }
         >
           <div
-            class="relative"
+            className="relative"
             style={{ height: `${totalHeight()}px`, '--row-grid-tail': gridTail }}
           >
             <CommitGraphCanvas

@@ -4,20 +4,20 @@ import {
   Loader2Icon,
   OctagonXIcon,
   TriangleAlertIcon
-} from 'lucide-solid'
-import { Toaster as Sonner, type ToasterProps } from 'solid-sonner'
+} from 'lucide-react'
+import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
 function Toaster(props: ToasterProps) {
   return (
     <Sonner
       theme="system"
-      class="toaster group"
+      className="toaster group"
       icons={{
-        success: <CircleCheckIcon class="size-4" />,
-        info: <InfoIcon class="size-4" />,
-        warning: <TriangleAlertIcon class="size-4" />,
-        error: <OctagonXIcon class="size-4" />,
-        loading: <Loader2Icon class="size-4 animate-spin" />
+        success: <CircleCheckIcon className="size-4" />,
+        info: <InfoIcon className="size-4" />,
+        warning: <TriangleAlertIcon className="size-4" />,
+        error: <OctagonXIcon className="size-4" />,
+        loading: <Loader2Icon className="size-4 animate-spin" />
       }}
       style={{
         '--normal-bg': 'var(--popover)',

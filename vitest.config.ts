@@ -1,9 +1,9 @@
 import path from 'node:path'
-import solid from 'vite-plugin-solid'
+import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  plugins: [solid()],
+  plugins: [react()],
   resolve: {
     conditions: ['development', 'browser'],
     alias: {
@@ -19,7 +19,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     server: {
       deps: {
-        inline: [/solid-js/, /@solidjs/, /@kobalte/, /solid-sonner/, /corvu/, /lucide-solid/],
+        inline: [/react/, /@testing-library\/react/, /sonner/, /lucide-react/],
       },
     },
   },

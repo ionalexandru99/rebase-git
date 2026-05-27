@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@solidjs/testing-library'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import { parseRefs } from '@/lib/git-graph/refs'
@@ -20,7 +20,7 @@ function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
     options.visibleBranchRefs ??
     new Set([refFilterKey('local', 'main'), refFilterKey('remote', 'origin/main')])
 
-  return render(() => (
+  return render(
     <HistoryPanel
       log={log}
       loading={options.loading ?? false}
@@ -31,7 +31,7 @@ function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
       repoPath={options.repoPath}
       currentBranch={options.currentBranch}
     />
-  ))
+  )
 }
 
 function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {

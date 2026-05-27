@@ -1,7 +1,7 @@
 import { GRAPH_LAYOUT_DEBOUNCE_MS } from '@shared/graph-config'
 import type { LayoutResultMessage } from '@shared/graph-layout-protocol'
-import { type Accessor, createEffect, createSignal, onCleanup, untrack } from 'solid-js'
 import { attachCommitsToLayoutRows, type LayoutResult, layoutCommits } from '@/lib/git-graph/layout'
+import { type Accessor, createEffect, createSignal, onCleanup, untrack } from '@/lib/react-compat'
 import type { GitLogEntry } from '@/types'
 
 interface UseGraphLayoutWorkerOptions {

@@ -1,5 +1,5 @@
 import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
-import { type Accessor, createSignal, onCleanup, onMount } from 'solid-js'
+import { type Accessor, createSignal, onCleanup, onMount } from '@/lib/react-compat'
 
 interface PaneState {
   open: boolean

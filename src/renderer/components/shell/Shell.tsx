@@ -1,6 +1,6 @@
 import { parseOrThrow } from '@shared/codec'
 import { SidebarPrefsSchema } from '@shared/schemas/ipc'
-import type { JSX } from 'solid-js'
+import type { JSX } from '@/lib/react-compat'
 import type { BranchTracking, RefKind } from '@/lib/ref-tree'
 import { useDraggableWidth } from '../../hooks/useDraggableWidth'
 import { SidebarInset, SidebarProvider } from '../ui/sidebar'
@@ -55,7 +55,7 @@ export function Shell(props: ShellProps) {
     <SidebarProvider
       open={isOpen()}
       onOpenChange={setOpen}
-      class="!min-h-0 h-full"
+      className="!min-h-0 h-full"
       style={{ '--sidebar-width': `${width()}px` }}
     >
       <AppSidebar
@@ -70,17 +70,19 @@ export function Shell(props: ShellProps) {
         visibleTimelineRefs={props.visibleTimelineRefs}
         onSelectView={props.onSelectView}
         onToggleTimelineVisibility={props.onToggleTimelineVisibility}
-        onResizeStart={onResizeStart}
+        onResizeStart={(event) => onResizeStart(event.nativeEvent)}
         onCheckoutRef={props.onCheckoutRef}
       />
-      <SidebarInset class="flex min-h-0 flex-col">
+      <SidebarInset className="flex min-h-0 flex-col">
         <Topbar
           repoName={props.repoName}
           repoPath={props.repoPath}
           branch={props.branch}
           onFetch={props.onFetch}
         />
-        <div class="flex min-h-0 flex-1 flex-col overflow-hidden border-t">{props.children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
+          {props.children}
+        </div>
         <Statusbar branch={props.branch} changes={props.changes} directionLabel="History" />
       </SidebarInset>
     </SidebarProvider>

@@ -11,7 +11,8 @@ import type {
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
-import { beforeEach, vi } from 'vitest'
+import { cleanup } from '@testing-library/react'
+import { afterEach, beforeEach, vi } from 'vitest'
 import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 
 export const sidecarMock = {
@@ -263,4 +264,8 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   mockBranchResponses({ current: '', all: [], remotes: [], tags: [] })
+})
+
+afterEach(() => {
+  cleanup()
 })

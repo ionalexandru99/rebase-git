@@ -1,6 +1,7 @@
-import { createRoot, createSignal } from 'solid-js'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildDisplayRows, useGraphLayoutWorker } from '@/hooks/useGraphLayoutWorker'
+import { createSignal } from '@/lib/react-compat'
 import type { GitLogEntry } from '@/types'
 
 function entry(hash: string, parents: string[] = []): GitLogEntry {
@@ -20,89 +21,66 @@ describe('useGraphLayoutWorker', () => {
   })
 
   it('lays out commits synchronously', async () => {
-    await new Promise<void>((resolve) => {
-      createRoot((dispose) => {
-        const graphLayout = useGraphLayoutWorker({
-          commits: () => [entry('a', ['b']), entry('b')],
-          loading: () => false,
-          enabled: () => true,
-          debounceMs: 0
-        })
-
-        const wait = () => {
-          const layout = graphLayout.layout()
-          if (layout && layout.rows.length === 2) {
-            expect(graphLayout.laidOutThroughIndex()).toBe(2)
-            expect(layout.maxLanes).toBeGreaterThan(0)
-            dispose()
-            resolve()
-            return
-          }
-          setTimeout(wait, 10)
-        }
-        wait()
+    const { result } = renderHook(() =>
+      useGraphLayoutWorker({
+        commits: () => [entry('a', ['b']), entry('b')],
+        loading: () => false,
+        enabled: () => true,
+        debounceMs: 0
       })
+    )
+
+    await waitFor(() => {
+      expect(result.current.layout()?.rows).toHaveLength(2)
     })
+    expect(result.current.laidOutThroughIndex()).toBe(2)
+    expect(result.current.layout()?.maxLanes).toBeGreaterThan(0)
   })
 
   it('lays out the first batch immediately while history is still loading', async () => {
-    await new Promise<void>((resolve) => {
-      createRoot((dispose) => {
-        const graphLayout = useGraphLayoutWorker({
-          commits: () => [entry('a')],
-          loading: () => true,
-          enabled: () => true,
-          debounceMs: 250
-        })
-
-        const wait = () => {
-          const layout = graphLayout.layout()
-          if (layout && layout.rows.length === 1) {
-            dispose()
-            resolve()
-            return
-          }
-          setTimeout(wait, 10)
-        }
-        wait()
+    const { result } = renderHook(() =>
+      useGraphLayoutWorker({
+        commits: () => [entry('a')],
+        loading: () => true,
+        enabled: () => true,
+        debounceMs: 250
       })
+    )
+
+    await waitFor(() => {
+      expect(result.current.layout()?.rows).toHaveLength(1)
     })
   })
 
   it('recomputes layout when the filtered commit list shrinks', async () => {
-    await new Promise<void>((resolve) => {
-      createRoot((dispose) => {
-        const [commits, setCommits] = createSignal([
-          entry('a', ['b']),
-          entry('b', ['c']),
-          entry('c')
-        ])
-        const graphLayout = useGraphLayoutWorker({
+    const { result } = renderHook(() => {
+      const [commits, setCommits] = createSignal([entry('a', ['b']), entry('b', ['c']), entry('c')])
+      return {
+        graphLayout: useGraphLayoutWorker({
           commits,
           loading: () => false,
           enabled: () => true,
           debounceMs: 0
-        })
-
-        const waitForLayout = (expectedLength: number, onMatch: () => void) => {
-          const layout = graphLayout.layout()
-          if (layout && layout.rows.length === expectedLength) {
-            onMatch()
-            return
-          }
-          setTimeout(() => waitForLayout(expectedLength, onMatch), 10)
-        }
-
-        waitForLayout(3, () => {
-          setCommits([entry('a', ['b']), entry('b')])
-          waitForLayout(2, () => {
-            expect(graphLayout.layout()?.commits.map((commit) => commit.hash)).toEqual(['a', 'b'])
-            dispose()
-            resolve()
-          })
-        })
-      })
+        }),
+        setCommits
+      }
     })
+
+    await waitFor(() => {
+      expect(result.current.graphLayout.layout()?.rows).toHaveLength(3)
+    })
+
+    act(() => {
+      result.current.setCommits([entry('a', ['b']), entry('b')])
+    })
+
+    await waitFor(() => {
+      expect(result.current.graphLayout.layout()?.rows).toHaveLength(2)
+    })
+    expect(result.current.graphLayout.layout()?.commits.map((commit) => commit.hash)).toEqual([
+      'a',
+      'b'
+    ])
   })
 
   it('buildDisplayRows fills beyond laid-out indices with empty graph rows', () => {

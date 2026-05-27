@@ -1,5 +1,4 @@
-import { render } from '@solidjs/testing-library'
-import { createSignal } from 'solid-js'
+import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CommitGraphCanvas } from '@/components/HistoryPanel/CommitGraphCanvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
@@ -54,18 +53,16 @@ describe('CommitGraphCanvas', () => {
   })
 
   it('redraws when the visible filter set changes', async () => {
-    const [scrollEl, setScrollEl] = createSignal<HTMLDivElement | undefined>()
-    const [visibleSet, setVisibleSet] = createSignal<Set<string> | null>(new Set(['a']))
     const scrollContainer = document.createElement('div')
     Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    setScrollEl(scrollContainer)
+    const scrollEl = () => scrollContainer
 
-    const { unmount } = render(() => (
+    const { rerender, unmount } = render(
       <CommitGraphCanvas
         rows={[row('a'), row('b')]}
         scrollContainer={scrollEl}
         viewportHeight={400}
-        visibleSet={visibleSet()}
+        visibleSet={new Set(['a'])}
         railWidth={40}
         themeNonce={0}
         scrollTop={0}
@@ -73,14 +70,28 @@ describe('CommitGraphCanvas', () => {
         endIndex={2}
         graphLayoutEndIndex={2}
       />
-    ))
+    )
 
     await vi.waitFor(() => {
       expect(strokeCount + fillCount).toBeGreaterThan(0)
     })
     const before = strokeCount + fillCount
 
-    setVisibleSet(new Set(['b']))
+    rerender(
+      <CommitGraphCanvas
+        rows={[row('a'), row('b')]}
+        scrollContainer={scrollEl}
+        viewportHeight={400}
+        visibleSet={new Set(['b'])}
+        railWidth={40}
+        themeNonce={0}
+        scrollTop={0}
+        startIndex={0}
+        endIndex={2}
+        graphLayoutEndIndex={2}
+      />
+    )
+
     await vi.waitFor(() => {
       expect(strokeCount + fillCount).toBeGreaterThan(before)
     })
@@ -91,9 +102,9 @@ describe('CommitGraphCanvas', () => {
   it('skips rows beyond graphLayoutEndIndex', async () => {
     const scrollContainer = document.createElement('div')
     Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    const [scrollEl] = createSignal<HTMLDivElement | undefined>(scrollContainer)
+    const scrollEl = () => scrollContainer
 
-    render(() => (
+    render(
       <CommitGraphCanvas
         rows={[row('a'), row('b')]}
         scrollContainer={scrollEl}
@@ -106,7 +117,7 @@ describe('CommitGraphCanvas', () => {
         endIndex={2}
         graphLayoutEndIndex={1}
       />
-    ))
+    )
 
     await vi.waitFor(() => {
       expect(fillCount).toBeGreaterThan(0)
@@ -117,15 +128,15 @@ describe('CommitGraphCanvas', () => {
   it('redraws when visible row graph geometry changes without changing row count', async () => {
     const scrollContainer = document.createElement('div')
     Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    const [scrollEl] = createSignal<HTMLDivElement | undefined>(scrollContainer)
-    const [rows, setRows] = createSignal<RowLayout[]>([
+    const scrollEl = () => scrollContainer
+    const initialRows: RowLayout[] = [
       { ...row('a'), incoming: [], outgoing: [] },
       { ...row('b'), incoming: [], outgoing: [] }
-    ])
+    ]
 
-    render(() => (
+    const { rerender } = render(
       <CommitGraphCanvas
-        rows={rows()}
+        rows={initialRows}
         scrollContainer={scrollEl}
         viewportHeight={400}
         visibleSet={null}
@@ -136,14 +147,27 @@ describe('CommitGraphCanvas', () => {
         endIndex={2}
         graphLayoutEndIndex={2}
       />
-    ))
+    )
 
     await vi.waitFor(() => {
       expect(fillCount).toBeGreaterThan(0)
     })
     const before = strokeCount + fillCount
 
-    setRows([row('a'), row('b')])
+    rerender(
+      <CommitGraphCanvas
+        rows={[row('a'), row('b')]}
+        scrollContainer={scrollEl}
+        viewportHeight={400}
+        visibleSet={null}
+        railWidth={40}
+        themeNonce={0}
+        scrollTop={0}
+        startIndex={0}
+        endIndex={2}
+        graphLayoutEndIndex={2}
+      />
+    )
 
     await vi.waitFor(() => {
       expect(strokeCount + fillCount).toBeGreaterThan(before)

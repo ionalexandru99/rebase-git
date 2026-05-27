@@ -1,4 +1,4 @@
-import { createMemo, For } from 'solid-js'
+import { createMemo, For } from '@/lib/react-compat'
 import { buildStatusFileRows, type StatusFileRow } from '@/lib/status-file-rows'
 import { STATUS_FILE_OVERSCAN, STATUS_FILE_ROW_HEIGHT } from '@/lib/virtual-config'
 import type { GitStatus } from '@/types'
@@ -20,18 +20,18 @@ function StatusVirtualRow(props: {
   if (props.row.kind === 'section') {
     return (
       <li
-        class="absolute inset-x-0 list-none px-1.5"
+        className="absolute inset-x-0 list-none px-1.5"
         style={{
           top: '0',
           height: `${STATUS_FILE_ROW_HEIGHT}px`,
           transform: `translateY(${props.top}px)`
         }}
       >
-        <div class="flex h-full items-center justify-between px-2">
-          <span class="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        <div className="flex h-full items-center justify-between px-2">
+          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             {props.row.label}
           </span>
-          <span class="text-xs tabular-nums text-muted-foreground">{props.row.count}</span>
+          <span className="text-xs tabular-nums text-muted-foreground">{props.row.count}</span>
         </div>
       </li>
     )
@@ -39,7 +39,7 @@ function StatusVirtualRow(props: {
 
   return (
     <li
-      class="absolute inset-x-0 list-none"
+      className="absolute inset-x-0 list-none"
       style={{
         top: '0',
         height: `${STATUS_FILE_ROW_HEIGHT}px`,
@@ -70,10 +70,10 @@ export function VirtualFileList(props: VirtualFileListProps) {
     <div
       ref={setScrollRef}
       onScroll={onScroll}
-      class="min-h-0 min-h-[480px] flex-1 overflow-auto px-1.5 pb-3 pt-2"
+      className="min-h-0 min-h-[480px] flex-1 overflow-auto px-1.5 pb-3 pt-2"
       data-testid="status-file-scroll"
     >
-      <ul class="relative m-0 list-none p-0" style={{ height: `${totalHeight()}px` }}>
+      <ul className="relative m-0 list-none p-0" style={{ height: `${totalHeight()}px` }}>
         <For each={virtualItems()}>
           {(virtualItem) => {
             const row = rows()[virtualItem.index]

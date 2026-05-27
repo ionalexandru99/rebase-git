@@ -1,9 +1,9 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
-import { waitFor } from '@solidjs/testing-library'
-import { type Accessor, createSignal } from 'solid-js'
+import { waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
 import { setupLogStream, sidecarMock } from '@/../test/setup'
+import { type Accessor, createSignal } from '@/lib/react-compat'
 import { type GitStore, useGitStore } from '@/stores/git'
 
 const repoPath = '/home/user/project'

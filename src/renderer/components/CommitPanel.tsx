@@ -1,5 +1,5 @@
-import { Loader2Icon } from 'lucide-solid'
-import { createSignal, Show } from 'solid-js'
+import { Loader2Icon } from 'lucide-react'
+import { createSignal, Show } from '@/lib/react-compat'
 import { Button } from './ui/button'
 import { Panel, PanelHeader, PanelHeaderGroup, PanelTitle } from './ui/panel'
 import { Textarea } from './ui/textarea'
@@ -29,13 +29,13 @@ export function CommitPanel(props: CommitPanelProps) {
   const subjectWarn = () => subjectLength() > MAX_SUBJECT_LENGTH
 
   return (
-    <Panel class="flex-none">
+    <Panel className="flex-none">
       <PanelHeader>
         <PanelHeaderGroup>
           <PanelTitle>Commit</PanelTitle>
         </PanelHeaderGroup>
         <span
-          class={`text-xs tabular-nums ${
+          className={`text-xs tabular-nums ${
             subjectWarn() ? 'text-destructive' : 'text-muted-foreground'
           }`}
         >
@@ -43,18 +43,18 @@ export function CommitPanel(props: CommitPanelProps) {
         </span>
       </PanelHeader>
 
-      <div class="flex flex-col gap-2.5 p-3">
+      <div className="flex flex-col gap-2.5 p-3">
         <Textarea
           value={message()}
-          onInput={(event) => setMessage(event.currentTarget.value)}
+          onChange={(event) => setMessage(event.currentTarget.value)}
           placeholder="Summarize the change in one line, then describe details below."
           rows={3}
-          class="resize-none"
+          className="resize-none"
         />
-        <div class="flex items-center justify-end">
+        <div className="flex items-center justify-end">
           <Button size="sm" onClick={handleCommit} disabled={!message().trim() || props.loading}>
             <Show when={props.loading} fallback={'Commit Changes'}>
-              <Loader2Icon class="animate-spin" />
+              <Loader2Icon className="animate-spin" />
               Committing...
             </Show>
           </Button>

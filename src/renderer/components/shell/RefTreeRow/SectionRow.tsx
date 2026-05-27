@@ -1,4 +1,4 @@
-import { type JSX, Show } from 'solid-js'
+import { type JSX, Show } from '@/lib/react-compat'
 import { type RefSectionRow, sectionKey } from '@/lib/ref-tree'
 import { Skeleton } from '../../ui/skeleton'
 import { Chevron } from './Chevron'
@@ -15,16 +15,16 @@ export function SectionRow(props: SectionRowProps) {
     <button
       type="button"
       onClick={() => props.onToggleCollapsed(sectionKey(props.row.refKind))}
-      class="absolute inset-x-0 flex items-center gap-1 px-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
+      className="absolute inset-x-0 flex items-center gap-1 px-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground"
       style={props.style}
     >
       <Chevron expanded={props.row.expanded} />
       <span>{props.row.label}</span>
       <Show
         when={props.loading}
-        fallback={<span class="ml-auto pr-1 tabular-nums opacity-60">{props.row.count}</span>}
+        fallback={<span className="ml-auto pr-1 tabular-nums opacity-60">{props.row.count}</span>}
       >
-        <Skeleton class="ml-auto h-2 w-4 rounded-sm" />
+        <Skeleton className="ml-auto h-2 w-4 rounded-sm" />
       </Show>
     </button>
   )

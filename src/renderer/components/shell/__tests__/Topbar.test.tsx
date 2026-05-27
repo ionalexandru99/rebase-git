@@ -1,10 +1,10 @@
-import { fireEvent, render, screen } from '@solidjs/testing-library'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { SidebarProvider } from '../../ui/sidebar'
 import { Topbar } from '../Topbar'
 
 function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
-  return render(() => (
+  return render(
     <SidebarProvider>
       <Topbar
         repoName={overrides.repoName ?? 'my-repo'}
@@ -13,7 +13,7 @@ function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
         onFetch={overrides.onFetch}
       />
     </SidebarProvider>
-  ))
+  )
 }
 
 describe('Topbar', () => {

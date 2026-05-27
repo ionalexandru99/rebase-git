@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@solidjs/testing-library'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import type { RefKind, RefLeafRow } from '@/lib/ref-tree'
@@ -24,7 +24,7 @@ function renderRow(
     visibleTimelineRefs?: ReadonlySet<string>
   } = {}
 ) {
-  return render(() => (
+  return render(
     <RefTreeRow
       row={row}
       top={0}
@@ -34,7 +34,7 @@ function renderRow(
       onToggleTimelineVisibility={options.onToggleTimelineVisibility}
       visibleTimelineRefs={options.visibleTimelineRefs}
     />
-  ))
+  )
 }
 
 describe('RefTreeRow leaf', () => {

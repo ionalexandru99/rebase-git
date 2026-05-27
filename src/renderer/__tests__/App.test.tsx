@@ -1,5 +1,5 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
-import { fireEvent, screen, waitFor, within } from '@solidjs/testing-library'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderApp } from '@/../test/render-app'
 import { mockBranchResponses, setupLogStream, sidecarMock } from '@/../test/setup'
@@ -275,6 +275,7 @@ describe('App — repo picker (no repo open)', () => {
     renderApp()
 
     await screen.findByText('/home/user/repos/my-app')
+    await screen.findByText('/recent/cool-repo')
     expect(screen.getByText('/home/user/repos/other-thing')).toBeInTheDocument()
     expect(screen.getByText('/recent/cool-repo')).toBeInTheDocument()
     expect(screen.getByText('/recent/something-else')).toBeInTheDocument()
