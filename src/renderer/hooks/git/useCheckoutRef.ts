@@ -1,7 +1,10 @@
 import { toast } from 'solid-sonner'
 import type { RefKind } from '@/lib/ref-tree'
 
-export function useCheckoutRef(repoPath: () => string | null) {
+export function useCheckoutRef(
+  repoPath: () => string | null,
+  onCheckedOut?: (repoPath: string) => void | Promise<void>
+) {
   return async (refKind: RefKind, fullPath: string) => {
     const path = repoPath()
     if (!path) {
@@ -11,6 +14,7 @@ export function useCheckoutRef(repoPath: () => string | null) {
     try {
       const result = await window.electronAPI.checkoutRef(path, refKind, fullPath)
       if (result._tag === 'Ok') {
+        await onCheckedOut?.(path)
         toast.success(`Switched to ${result.checkedOut}`)
       } else if (result._tag === 'GitError') {
         toast.error('Checkout failed', { description: result.message })

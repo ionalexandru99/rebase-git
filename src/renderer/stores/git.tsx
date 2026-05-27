@@ -383,18 +383,19 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
   }
 
+  const applyLocalBranches = (path: string, local: LocalBranches) => {
+    setState('branches', (previous) => mergeBranches(previous, local))
+    if (local.current) {
+      setState('currentBranch', local.current)
+    }
+    const branches = mergeBranches(readSnapshot(path)?.branches ?? null, local)
+    queryClient.setQueryData(repoQueryKeys(tabId, path).localBranches, local)
+    writeSnapshot(path, { branches })
+  }
+
   const refreshLocalBranches = async (path: string) => {
-    const queryKeys = repoQueryKeys(tabId, path)
-    await queryClient.fetchQuery({
-      queryKey: queryKeys.localBranches,
-      queryFn: async () => {
-        const local = await fetchLocalBranches(path)
-        writeSnapshot(path, {
-          branches: mergeBranches(readSnapshot(path)?.branches ?? null, local)
-        })
-        return local
-      }
-    })
+    const local = await fetchLocalBranches(path)
+    applyLocalBranches(path, local)
   }
 
   const refreshBranchesOnly = async (path: string) => {
@@ -403,22 +404,28 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
   }
 
-  const refreshStatus = async (path: string) => {
+  const refreshAfterCheckout = async (path: string) => {
     const queryKeys = repoQueryKeys(tabId, path)
-    await queryClient.fetchQuery({
-      queryKey: queryKeys.status,
-      queryFn: async () => {
-        const response = await sidecarFetch('get-status', { repoPath: path }, StatusResponseSchema)
-        if (response._tag === 'Ok') {
-          writeSnapshot(path, { status: response.status, currentBranch: response.status.current })
-          return response.status
-        }
-        if (response._tag === 'GitError') {
-          throw new Error(response.message)
-        }
-        throw new Error('Repository not open')
-      }
-    })
+    await Promise.all([
+      queryClient.cancelQueries({ queryKey: queryKeys.status }),
+      queryClient.cancelQueries({ queryKey: queryKeys.localBranches })
+    ])
+    await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
+  }
+
+  const refreshStatus = async (path: string) => {
+    const response = await sidecarFetch('get-status', { repoPath: path }, StatusResponseSchema)
+    if (response._tag === 'Ok') {
+      setState('status', response.status)
+      setState('currentBranch', response.status.current)
+      queryClient.setQueryData(repoQueryKeys(tabId, path).status, response.status)
+      writeSnapshot(path, { status: response.status, currentBranch: response.status.current })
+      return
+    }
+    if (response._tag === 'GitError') {
+      throw new Error(response.message)
+    }
+    throw new Error('Repository not open')
   }
 
   const restartLogStream = async (
@@ -773,6 +780,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     unstageFile: (file: string) => unstageMutation.mutateAsync(file),
     commit: (message: string) => commitMutation.mutateAsync(message),
     fetchNow,
+    refreshAfterCheckout,
     loadMoreHistory,
     invalidateRepoQueries
   }

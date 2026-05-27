@@ -204,6 +204,29 @@ describe('useGitStore — parallel repo loading', () => {
     resolveRefetch()
   })
 
+  it('refreshAfterCheckout updates the current branch from fresh sidecar reads', async () => {
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+
+    await waitFor(() => {
+      expect(git.state.currentBranch).toBe('main')
+    })
+
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: { ...statusOk.status, current: 'dev' }
+    })
+    sidecarMock.getLocalBranches.mockResolvedValue({
+      _tag: 'Ok',
+      branches: { current: 'dev', all: ['main', 'dev'] }
+    })
+
+    await git.refreshAfterCheckout(repoPath)
+
+    expect(git.state.currentBranch).toBe('dev')
+    expect(git.state.branches?.current).toBe('dev')
+  })
+
   it('log flush skipped when tab inactive', async () => {
     vi.useFakeTimers()
     const stream = setupLogStream()

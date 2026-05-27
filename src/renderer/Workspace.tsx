@@ -83,7 +83,10 @@ export function Workspace(props: WorkspaceProps) {
     })
   })
 
-  const handleCheckoutRef = useCheckoutRef(() => git.state.repoPath)
+  const handleCheckoutRef = useCheckoutRef(
+    () => git.state.repoPath,
+    (repoPath) => git.refreshAfterCheckout(repoPath)
+  )
 
   const handleToggleTimelineVisibility = (refKind: RefKind, fullPath: string) => {
     if (refKind === 'tag') {

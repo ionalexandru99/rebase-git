@@ -1,5 +1,5 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
-import { fireEvent, screen, waitFor } from '@solidjs/testing-library'
+import { fireEvent, screen, waitFor, within } from '@solidjs/testing-library'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderApp } from '@/../test/render-app'
 import { mockBranchResponses, setupLogStream, sidecarMock } from '@/../test/setup'
@@ -439,6 +439,66 @@ describe('App — workspace (repo open)', () => {
       expect(screen.getAllByText('my-app').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('feature/ui').length).toBeGreaterThanOrEqual(1)
       expect(screen.getByText(/4 changes/)).toBeInTheDocument()
+    })
+  })
+
+  it('refreshes the sidebar current branch after double-click checkout', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/my-app']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
+    vi.mocked(sidecarMock.getStatus)
+      .mockResolvedValueOnce({
+        ...statusMock,
+        status: { ...statusMock.status, current: 'develop' }
+      })
+      .mockResolvedValue({
+        ...statusMock,
+        status: { ...statusMock.status, current: 'main' }
+      })
+    vi.mocked(sidecarMock.getLocalBranches)
+      .mockResolvedValueOnce({
+        _tag: 'Ok',
+        branches: { current: 'develop', all: ['main', 'develop'] }
+      })
+      .mockResolvedValue({
+        _tag: 'Ok',
+        branches: { current: 'main', all: ['main', 'develop'] }
+      })
+    vi.mocked(sidecarMock.getRemoteRefs).mockResolvedValue({
+      _tag: 'Ok',
+      refs: { remotes: [], tags: [] }
+    })
+    vi.mocked(window.electronAPI.checkoutRef).mockResolvedValue({
+      _tag: 'Ok',
+      checkedOut: 'main'
+    })
+    setupLogStream()
+
+    renderApp()
+
+    fireEvent.click(await screen.findByText('/home/user/projects/my-app'))
+    const developRow = (await screen.findByTitle('develop')).closest(
+      '[data-testid="ref-tree-leaf-row"]'
+    )
+    expect(developRow).toBeTruthy()
+
+    fireEvent.dblClick(screen.getByTitle('main'))
+
+    await waitFor(() => {
+      expect(window.electronAPI.checkoutRef).toHaveBeenCalledWith(
+        '/home/user/projects/my-app',
+        'local',
+        'main'
+      )
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledTimes(2)
+    })
+
+    await waitFor(() => {
+      const mainRow = screen.getByTitle('main').closest('[data-testid="ref-tree-leaf-row"]')
+      expect(mainRow).toBeTruthy()
+      expect(within(mainRow as HTMLElement).getByTestId('current-ref-check')).toBeInTheDocument()
     })
   })
 
