@@ -12,22 +12,34 @@ const SIDEBAR_WIDTH_MIN = 200
 const SIDEBAR_WIDTH_MAX = 520
 const SIDEBAR_WIDTH_DEFAULT = 256
 
-interface ShellProps {
+export interface RepoChrome {
   repoName: string
   repoPath: string | null
   branch: string
+  changes: number
+}
+
+export interface BranchBrowser {
   localBranches: string[]
   remoteBranches: string[]
   tags: string[]
   branchesLoading?: boolean
-  changes: number
-  activeView: SidebarView
   tracking?: Record<string, BranchTracking>
   visibleTimelineRefs?: ReadonlySet<string>
-  onSelectView: (view: SidebarView) => void
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
-  onFetch?: () => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
+}
+
+export interface WorkspaceNavigation {
+  activeView: SidebarView
+  onSelectView: (view: SidebarView) => void
+}
+
+interface ShellProps {
+  repo: RepoChrome
+  branchBrowser: BranchBrowser
+  navigation: WorkspaceNavigation
+  onFetch?: () => void
   children: JSX.Element
 }
 
@@ -59,31 +71,27 @@ export function Shell(props: ShellProps) {
       style={{ '--sidebar-width': `${width()}px` }}
     >
       <AppSidebar
-        localBranches={props.localBranches}
-        remoteBranches={props.remoteBranches}
-        tags={props.tags}
-        currentBranch={props.branch}
-        branchesLoading={props.branchesLoading}
-        workingChanges={props.changes}
-        activeView={props.activeView}
-        tracking={props.tracking}
-        visibleTimelineRefs={props.visibleTimelineRefs}
-        onSelectView={props.onSelectView}
-        onToggleTimelineVisibility={props.onToggleTimelineVisibility}
+        navigation={props.navigation}
+        branchBrowser={props.branchBrowser}
+        currentBranch={props.repo.branch}
+        workingChanges={props.repo.changes}
         onResizeStart={(event) => onResizeStart(event.nativeEvent)}
-        onCheckoutRef={props.onCheckoutRef}
       />
       <SidebarInset className="flex min-h-0 flex-col">
         <Topbar
-          repoName={props.repoName}
-          repoPath={props.repoPath}
-          branch={props.branch}
+          repoName={props.repo.repoName}
+          repoPath={props.repo.repoPath}
+          branch={props.repo.branch}
           onFetch={props.onFetch}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
           {props.children}
         </div>
-        <Statusbar branch={props.branch} changes={props.changes} directionLabel="History" />
+        <Statusbar
+          branch={props.repo.branch}
+          changes={props.repo.changes}
+          directionLabel="History"
+        />
       </SidebarInset>
     </SidebarProvider>
   )

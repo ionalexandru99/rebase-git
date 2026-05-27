@@ -6,9 +6,18 @@ export interface TabDescriptor {
   hasRepo: boolean
 }
 
-interface TabRecord {
+interface NewTabRecord {
   id: string
+  kind: 'new'
 }
+
+interface RepoTabRecord {
+  id: string
+  kind: 'repo'
+  repoPath: string
+}
+
+export type TabRecord = NewTabRecord | RepoTabRecord
 
 export interface PersistedTabState {
   tabs: (string | null)[]
@@ -31,20 +40,17 @@ const sameRepoPath = (left: string, right: string): boolean =>
 function hydrateFromPersisted(persisted: PersistedTabState | undefined): {
   tabs: TabRecord[]
   activeTabId: string
-  tabRepos: Record<string, string | null>
 } {
   const sourcePaths =
     persisted && persisted.tabs.length > 0 ? persisted.tabs : ([null] as (string | null)[])
-  const tabs = sourcePaths.map(() => ({ id: nextTabId() }))
-  const tabRepos: Record<string, string | null> = {}
-  for (let i = 0; i < tabs.length; i++) {
-    tabRepos[tabs[i].id] = sourcePaths[i]
-  }
+  const tabs = sourcePaths.map<TabRecord>((path) =>
+    path ? { id: nextTabId(), kind: 'repo', repoPath: path } : { id: nextTabId(), kind: 'new' }
+  )
   const activeIdx =
     persisted && persisted.activeIndex >= 0 && persisted.activeIndex < tabs.length
       ? persisted.activeIndex
       : 0
-  return { tabs, activeTabId: tabs[activeIdx].id, tabRepos }
+  return { tabs, activeTabId: tabs[activeIdx].id }
 }
 
 export interface TabsStore {
@@ -54,30 +60,18 @@ export interface TabsStore {
   tabDescriptors: Accessor<TabDescriptor[]>
   newTab: () => void
   closeTab: (id: string) => void
-  reportTabRepo: (id: string, path: string | null) => void
-  requestOpenRepo: (sourceTabId: string, path: string) => boolean
+  openRepoInTab: (sourceTabId: string, path: string) => boolean
   persistedSnapshot: Accessor<PersistedTabState>
-  initialRepoPath: (id: string) => string | null
 }
 
 export function useTabs(persisted?: PersistedTabState): TabsStore {
   const initial = hydrateFromPersisted(persisted)
   const [tabs, setTabs] = createSignal<TabRecord[]>(initial.tabs)
   const [activeTabId, setActiveTabId] = createSignal<string>(initial.activeTabId)
-  const [tabRepos, setTabRepos] = createSignal<Record<string, string | null>>(initial.tabRepos)
-
-  const reportTabRepo = (id: string, path: string | null) => {
-    setTabRepos((prev) => {
-      if (prev[id] === path) {
-        return prev
-      }
-      return { ...prev, [id]: path }
-    })
-  }
 
   const newTab = () => {
     const id = nextTabId()
-    setTabs((prev) => [...prev, { id }])
+    setTabs((prev) => [...prev, { id, kind: 'new' }])
     setActiveTabId(id)
   }
 
@@ -85,15 +79,8 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
     const current = tabs()
     if (current.length <= 1) {
       const freshId = nextTabId()
-      setTabs([{ id: freshId }])
+      setTabs([{ id: freshId, kind: 'new' }])
       setActiveTabId(freshId)
-      setTabRepos((prev) => {
-        if (!(id in prev)) {
-          return prev
-        }
-        const { [id]: _removed, ...rest } = prev
-        return rest
-      })
       return
     }
     const idx = current.findIndex((tab) => tab.id === id)
@@ -102,33 +89,31 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
     if (activeTabId() === id) {
       setActiveTabId(next[Math.min(idx, next.length - 1)].id)
     }
-    setTabRepos((prev) => {
-      if (!(id in prev)) {
-        return prev
-      }
-      const { [id]: _removed, ...rest } = prev
-      return rest
-    })
   }
 
-  const requestOpenRepo = (sourceTabId: string, path: string): boolean => {
-    const match = Object.entries(tabRepos()).find(
-      ([id, recorded]) => recorded !== null && sameRepoPath(recorded, path) && id !== sourceTabId
+  const openRepoInTab = (sourceTabId: string, path: string): boolean => {
+    const match = tabs().find(
+      (tab) => tab.kind === 'repo' && sameRepoPath(tab.repoPath, path) && tab.id !== sourceTabId
     )
-    if (!match) {
-      return false
+    if (match) {
+      setActiveTabId(match.id)
+      setTabs((prev) => prev.filter((tab) => tab.id !== sourceTabId))
+      return true
     }
-    const [existingId] = match
-    setActiveTabId(existingId)
-    setTabs((prev) => prev.filter((tab) => tab.id !== sourceTabId))
-    setTabRepos((prev) => {
-      if (!(sourceTabId in prev)) {
-        return prev
-      }
-      const { [sourceTabId]: _removed, ...rest } = prev
-      return rest
+
+    setTabs((prev) => {
+      let found = false
+      const next = prev.map((tab) => {
+        if (tab.id !== sourceTabId) {
+          return tab
+        }
+        found = true
+        return { id: tab.id, kind: 'repo', repoPath: path } satisfies RepoTabRecord
+      })
+      return found ? next : prev
     })
-    return true
+    setActiveTabId(sourceTabId)
+    return false
   }
 
   const cycleTab = (direction: 1 | -1) => {
@@ -176,25 +161,23 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   })
 
   const tabDescriptors = createMemo<TabDescriptor[]>(() => {
-    const repos = tabRepos()
     return tabs().map((tab) => {
-      const path = repos[tab.id] ?? null
-      const title = path ? (path.split('/').filter(Boolean).at(-1) ?? 'New tab') : 'New tab'
-      return { id: tab.id, title, hasRepo: Boolean(path) }
+      const title =
+        tab.kind === 'repo'
+          ? (tab.repoPath.split('/').filter(Boolean).at(-1) ?? 'New tab')
+          : 'New tab'
+      return { id: tab.id, title, hasRepo: tab.kind === 'repo' }
     })
   })
 
   const persistedSnapshot = createMemo<PersistedTabState>(() => {
-    const repos = tabRepos()
-    const paths = tabs().map((tab) => repos[tab.id] ?? null)
+    const paths = tabs().map((tab) => (tab.kind === 'repo' ? tab.repoPath : null))
     const activeIndex = Math.max(
       0,
       tabs().findIndex((tab) => tab.id === activeTabId())
     )
     return { tabs: paths, activeIndex }
   })
-
-  const initialRepoPath = (id: string): string | null => initial.tabRepos[id] ?? null
 
   return {
     tabs,
@@ -203,9 +186,7 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
     tabDescriptors,
     newTab,
     closeTab,
-    reportTabRepo,
-    requestOpenRepo,
-    persistedSnapshot,
-    initialRepoPath
+    openRepoInTab,
+    persistedSnapshot
   }
 }

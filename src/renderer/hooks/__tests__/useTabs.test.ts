@@ -90,9 +90,9 @@ describe('useTabs persistence', () => {
     expect(result.current.tabs()).toHaveLength(3)
     expect(result.current.tabDescriptors().map((tab) => tab.title)).toEqual(['a', 'New tab', 'b'])
     expect(result.current.activeTabId()).toBe(result.current.tabs()[2].id)
-    expect(result.current.initialRepoPath(result.current.tabs()[0].id)).toBe('/repo/a')
-    expect(result.current.initialRepoPath(result.current.tabs()[1].id)).toBe(null)
-    expect(result.current.initialRepoPath(result.current.tabs()[2].id)).toBe('/repo/b')
+    expect(result.current.tabs()[0]).toMatchObject({ kind: 'repo', repoPath: '/repo/a' })
+    expect(result.current.tabs()[1]).toMatchObject({ kind: 'new' })
+    expect(result.current.tabs()[2]).toMatchObject({ kind: 'repo', repoPath: '/repo/b' })
   })
 
   it('updates persistedSnapshot when tabs change', () => {
@@ -106,7 +106,7 @@ describe('useTabs persistence', () => {
     expect(result.current.persistedSnapshot().activeIndex).toBe(1)
 
     act(() => {
-      result.current.reportTabRepo(result.current.tabs()[1].id, '/repo/b')
+      result.current.openRepoInTab(result.current.tabs()[1].id, '/repo/b')
     })
     expect(result.current.persistedSnapshot().tabs).toEqual(['/repo/a', '/repo/b'])
   })
@@ -119,6 +119,20 @@ describe('useTabs persistence', () => {
   it('falls back to a single empty tab when persisted state is empty', () => {
     const { result } = renderHook(() => useTabs({ tabs: [], activeIndex: 0 }))
     expect(result.current.tabs()).toHaveLength(1)
-    expect(result.current.initialRepoPath(result.current.tabs()[0].id)).toBe(null)
+    expect(result.current.tabs()[0]).toMatchObject({ kind: 'new' })
+  })
+
+  it('switches to an existing repo tab and removes the source tab for duplicate opens', () => {
+    const { result } = renderHook(() => useTabs({ tabs: ['/repo/a', null], activeIndex: 1 }))
+    const sourceTabId = result.current.tabs()[1].id
+
+    act(() => {
+      const redirected = result.current.openRepoInTab(sourceTabId, '/repo/a/')
+      expect(redirected).toBe(true)
+    })
+
+    expect(result.current.tabs()).toHaveLength(1)
+    expect(result.current.tabs()[0]).toMatchObject({ kind: 'repo', repoPath: '/repo/a' })
+    expect(result.current.activeTabId()).toBe(result.current.tabs()[0].id)
   })
 })

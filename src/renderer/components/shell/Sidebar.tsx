@@ -1,7 +1,6 @@
 import { FileDiffIcon, HistoryIcon } from 'lucide-react'
 import type { MouseEvent } from 'react'
-import { Show } from '@/lib/react-compat'
-import type { BranchTracking, RefKind } from '@/lib/ref-tree'
+import { Dynamic, Show } from '@/lib/react-compat'
 import {
   Sidebar as ShadSidebar,
   SidebarContent,
@@ -13,23 +12,21 @@ import {
   SidebarMenuItem
 } from '../ui/sidebar'
 import { RefTreePanel } from './RefTreePanel'
+import type { BranchBrowser, WorkspaceNavigation } from './Shell'
 
-export type SidebarView = 'history' | 'local-changes'
+const workspaceNavItems = [
+  { view: 'local-changes', label: 'Local changes', icon: FileDiffIcon, badge: 'workingChanges' },
+  { view: 'history', label: 'History', icon: HistoryIcon }
+] as const
+
+export type SidebarView = (typeof workspaceNavItems)[number]['view']
 
 interface AppSidebarProps {
-  localBranches: string[]
-  remoteBranches: string[]
-  tags: string[]
+  navigation: WorkspaceNavigation
+  branchBrowser: BranchBrowser
   currentBranch: string
-  branchesLoading?: boolean
   workingChanges: number
-  activeView: SidebarView
-  tracking?: Record<string, BranchTracking>
-  visibleTimelineRefs?: ReadonlySet<string>
-  onSelectView: (view: SidebarView) => void
-  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onResizeStart?: (event: MouseEvent<HTMLSpanElement>) => void
-  onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
 }
 
 export function AppSidebar(props: AppSidebarProps) {
@@ -49,27 +46,24 @@ export function AppSidebar(props: AppSidebarProps) {
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={props.activeView === 'local-changes'}
-                onClick={() => props.onSelectView('local-changes')}
-              >
-                <FileDiffIcon />
-                <span>Local changes</span>
-              </SidebarMenuButton>
-              <Show when={props.workingChanges > 0}>
-                <SidebarMenuBadge>{props.workingChanges}</SidebarMenuBadge>
-              </Show>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={props.activeView === 'history'}
-                onClick={() => props.onSelectView('history')}
-              >
-                <HistoryIcon />
-                <span>History</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            {workspaceNavItems.map((item) => {
+              const badge =
+                'badge' in item && item.badge === 'workingChanges' ? props.workingChanges : 0
+              return (
+                <SidebarMenuItem key={item.view}>
+                  <SidebarMenuButton
+                    isActive={props.navigation.activeView === item.view}
+                    onClick={() => props.navigation.onSelectView(item.view)}
+                  >
+                    <Dynamic component={item.icon} />
+                    <span>{item.label}</span>
+                  </SidebarMenuButton>
+                  <Show when={badge > 0}>
+                    <SidebarMenuBadge>{badge}</SidebarMenuBadge>
+                  </Show>
+                </SidebarMenuItem>
+              )
+            })}
           </SidebarMenu>
         </SidebarGroup>
 
@@ -77,15 +71,15 @@ export function AppSidebar(props: AppSidebarProps) {
           <SidebarGroupLabel className="px-2 pb-1">Branches</SidebarGroupLabel>
 
           <RefTreePanel
-            localBranches={props.localBranches}
-            remoteBranches={props.remoteBranches}
-            tags={props.tags}
+            localBranches={props.branchBrowser.localBranches}
+            remoteBranches={props.branchBrowser.remoteBranches}
+            tags={props.branchBrowser.tags}
             currentBranch={props.currentBranch}
-            loading={props.branchesLoading}
-            tracking={props.tracking}
-            visibleTimelineRefs={props.visibleTimelineRefs}
-            onToggleTimelineVisibility={props.onToggleTimelineVisibility}
-            onCheckoutRef={props.onCheckoutRef}
+            loading={props.branchBrowser.branchesLoading}
+            tracking={props.branchBrowser.tracking}
+            visibleTimelineRefs={props.branchBrowser.visibleTimelineRefs}
+            onToggleTimelineVisibility={props.branchBrowser.onToggleTimelineVisibility}
+            onCheckoutRef={props.branchBrowser.onCheckoutRef}
           />
         </SidebarGroup>
       </SidebarContent>

@@ -5,6 +5,7 @@ import { TabBar } from './components/TabBar'
 import { Toaster } from './components/ui/sonner'
 import { useOnboarding } from './hooks/useOnboarding'
 import { useTabs } from './hooks/useTabs'
+import type { WorkspaceCatalog } from './NewTab'
 import { TabView } from './TabView'
 
 export default function App() {
@@ -72,10 +73,8 @@ function TabsShell(props: TabsShellProps) {
     tabDescriptors,
     newTab,
     closeTab,
-    reportTabRepo,
-    requestOpenRepo,
-    persistedSnapshot,
-    initialRepoPath
+    openRepoInTab,
+    persistedSnapshot
   } = useTabs(props.persisted)
   const [recentRepos, setRecentRepos] = createSignal<string[]>([])
 
@@ -93,6 +92,16 @@ function TabsShell(props: TabsShellProps) {
     window.electronAPI.setPersistedTabs(persistedSnapshot()).catch((error: unknown) => {
       console.warn('[app] failed to persist tab state', error)
     })
+  })
+
+  const workspaceCatalog = (): WorkspaceCatalog => ({
+    recentRepos: recentRepos(),
+    discoveredRepos: props.onboarding.discoveredRepos(),
+    workspaces: props.onboarding.workspaces(),
+    activeWorkspace: props.onboarding.activeWorkspace(),
+    switchWorkspace: props.onboarding.switchWorkspace,
+    addWorkspace: props.onboarding.addWorkspace,
+    removeWorkspace: props.onboarding.removeWorkspace
   })
 
   return (
@@ -118,18 +127,10 @@ function TabsShell(props: TabsShellProps) {
               aria-hidden={tab.id !== activeTabId()}
             >
               <TabView
-                tabId={tab.id}
+                tab={tab}
                 tabActive={() => tab.id === activeTabId()}
-                initialRepoPath={initialRepoPath(tab.id)}
-                recentRepos={recentRepos()}
-                discoveredRepos={props.onboarding.discoveredRepos()}
-                workspaces={props.onboarding.workspaces()}
-                activeWorkspace={props.onboarding.activeWorkspace()}
-                onSwitchWorkspace={props.onboarding.switchWorkspace}
-                onAddWorkspace={props.onboarding.addWorkspace}
-                onRemoveWorkspace={props.onboarding.removeWorkspace}
-                onReportRepo={reportTabRepo}
-                onRequestOpenRepo={requestOpenRepo}
+                catalog={workspaceCatalog()}
+                onOpenRepo={openRepoInTab}
               />
             </div>
           )}
