@@ -360,6 +360,31 @@ describe('App — persisted tabs', () => {
       )
     })
   })
+
+  it('keeps the repo picker available and skips persistence when repo open fails', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/stale-repo']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'NotARepo'
+    })
+    setupLogStream()
+
+    renderApp()
+    fireEvent.click(await screen.findByText('/home/user/projects/stale-repo'))
+
+    await screen.findByText('Not a git repository')
+    expect(screen.getByText('Open a repository')).toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: /Search repositories/i })).toBeInTheDocument()
+
+    await waitFor(() => {
+      const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
+      expect(
+        setCalls.some(([state]) => state.tabs.includes('/home/user/projects/stale-repo'))
+      ).toBe(false)
+    })
+  })
 })
 
 describe('App — workspace (repo open)', () => {

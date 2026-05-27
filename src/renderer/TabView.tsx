@@ -7,12 +7,20 @@ interface TabViewProps {
   tabActive: () => boolean
   catalog: WorkspaceCatalog
   onOpenRepo: (sourceTabId: string, path: string) => void
+  onRepoOpened: (tabId: string, path: string) => void
 }
 
 export function TabView(props: TabViewProps) {
-  if (props.tab.kind === 'repo') {
+  if (props.tab.kind === 'repo' || props.tab.kind === 'opening-repo') {
     return (
-      <RepoTab tabId={props.tab.id} tabActive={props.tabActive} repoPath={props.tab.repoPath} />
+      <RepoTab
+        tabId={props.tab.id}
+        tabActive={props.tabActive}
+        repoPath={props.tab.repoPath}
+        catalog={props.catalog}
+        onOpenRepo={(path) => props.onOpenRepo(props.tab.id, path)}
+        onRepoOpened={(path) => props.onRepoOpened(props.tab.id, path)}
+      />
     )
   }
 

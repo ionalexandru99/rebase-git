@@ -95,6 +95,12 @@ describe('useTabs persistence', () => {
     expect(result.current.tabs()[2]).toMatchObject({ kind: 'repo', repoPath: '/repo/b' })
   })
 
+  it('uses the final Windows path segment for repo tab titles', () => {
+    const { result } = renderHook(() => useTabs({ tabs: ['C:\\work\\repo-name'], activeIndex: 0 }))
+
+    expect(result.current.tabDescriptors().map((tab) => tab.title)).toEqual(['repo-name'])
+  })
+
   it('updates persistedSnapshot when tabs change', () => {
     const { result } = renderHook(() => useTabs({ tabs: ['/repo/a'], activeIndex: 0 }))
     expect(result.current.persistedSnapshot()).toEqual({ tabs: ['/repo/a'], activeIndex: 0 })
@@ -108,6 +114,13 @@ describe('useTabs persistence', () => {
     act(() => {
       result.current.openRepoInTab(result.current.tabs()[1].id, '/repo/b')
     })
+    expect(result.current.tabs()[1]).toMatchObject({ kind: 'opening-repo', repoPath: '/repo/b' })
+    expect(result.current.persistedSnapshot().tabs).toEqual(['/repo/a', null])
+
+    act(() => {
+      result.current.confirmRepoOpen(result.current.tabs()[1].id, '/repo/b')
+    })
+    expect(result.current.tabs()[1]).toMatchObject({ kind: 'repo', repoPath: '/repo/b' })
     expect(result.current.persistedSnapshot().tabs).toEqual(['/repo/a', '/repo/b'])
   })
 

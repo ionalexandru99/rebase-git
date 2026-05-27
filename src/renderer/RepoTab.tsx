@@ -1,6 +1,7 @@
 import { AlertCircleIcon } from 'lucide-react'
-import { type JSX, onMount, Show } from '@/lib/react-compat'
+import { createEffect, type JSX, onMount, Show } from '@/lib/react-compat'
 import { Alert, AlertDescription } from './components/ui/alert'
+import { NewTab, type WorkspaceCatalog } from './NewTab'
 import { useGitStore } from './stores/git'
 import { Workspace } from './Workspace'
 
@@ -8,6 +9,9 @@ interface RepoTabProps {
   tabId: string
   tabActive: () => boolean
   repoPath: string
+  catalog: WorkspaceCatalog
+  onOpenRepo: (path: string) => void
+  onRepoOpened: (path: string) => void
 }
 
 export function RepoTab(props: RepoTabProps) {
@@ -15,6 +19,12 @@ export function RepoTab(props: RepoTabProps) {
 
   onMount(() => {
     git.openRepo(props.repoPath)
+  })
+
+  createEffect(() => {
+    if (git.state.repoPath) {
+      props.onRepoOpened(git.state.repoPath)
+    }
   })
 
   const errorBanner = (): JSX.Element => (
@@ -35,14 +45,23 @@ export function RepoTab(props: RepoTabProps) {
         <>
           {errorBanner()}
           <Show when={git.state.opening}>
-            <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
-              Opening repository...
-            </div>
+            <OpeningRepoState />
+          </Show>
+          <Show when={!git.state.opening && git.state.error}>
+            <NewTab catalog={props.catalog} onOpenRepo={props.onOpenRepo} />
           </Show>
         </>
       }
     >
       <Workspace git={git} tabActive={props.tabActive} errorBanner={errorBanner()} />
     </Show>
+  )
+}
+
+function OpeningRepoState() {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
+      Opening repository...
+    </div>
   )
 }

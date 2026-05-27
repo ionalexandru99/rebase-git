@@ -74,6 +74,7 @@ function TabsShell(props: TabsShellProps) {
     newTab,
     closeTab,
     openRepoInTab,
+    confirmRepoOpen,
     persistedSnapshot
   } = useTabs(props.persisted)
   const [recentRepos, setRecentRepos] = createSignal<string[]>([])
@@ -131,6 +132,7 @@ function TabsShell(props: TabsShellProps) {
                 tabActive={() => tab.id === activeTabId()}
                 catalog={workspaceCatalog()}
                 onOpenRepo={openRepoInTab}
+                onRepoOpened={confirmRepoOpen}
               />
             </div>
           )}

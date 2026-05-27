@@ -17,7 +17,13 @@ interface RepoTabRecord {
   repoPath: string
 }
 
-export type TabRecord = NewTabRecord | RepoTabRecord
+interface OpeningRepoTabRecord {
+  id: string
+  kind: 'opening-repo'
+  repoPath: string
+}
+
+export type TabRecord = NewTabRecord | RepoTabRecord | OpeningRepoTabRecord
 
 export interface PersistedTabState {
   tabs: (string | null)[]
@@ -61,6 +67,7 @@ export interface TabsStore {
   newTab: () => void
   closeTab: (id: string) => void
   openRepoInTab: (sourceTabId: string, path: string) => boolean
+  confirmRepoOpen: (id: string, path: string) => void
   persistedSnapshot: Accessor<PersistedTabState>
 }
 
@@ -93,7 +100,10 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
 
   const openRepoInTab = (sourceTabId: string, path: string): boolean => {
     const match = tabs().find(
-      (tab) => tab.kind === 'repo' && sameRepoPath(tab.repoPath, path) && tab.id !== sourceTabId
+      (tab) =>
+        (tab.kind === 'repo' || tab.kind === 'opening-repo') &&
+        sameRepoPath(tab.repoPath, path) &&
+        tab.id !== sourceTabId
     )
     if (match) {
       setActiveTabId(match.id)
@@ -108,12 +118,29 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
           return tab
         }
         found = true
-        return { id: tab.id, kind: 'repo', repoPath: path } satisfies RepoTabRecord
+        return { id: tab.id, kind: 'opening-repo', repoPath: path } satisfies OpeningRepoTabRecord
       })
       return found ? next : prev
     })
     setActiveTabId(sourceTabId)
     return false
+  }
+
+  const confirmRepoOpen = (id: string, path: string) => {
+    setTabs((prev) => {
+      let changed = false
+      const next = prev.map((tab) => {
+        if (tab.id !== id) {
+          return tab
+        }
+        if (tab.kind === 'repo' && sameRepoPath(tab.repoPath, path)) {
+          return tab
+        }
+        changed = true
+        return { id, kind: 'repo', repoPath: path } satisfies RepoTabRecord
+      })
+      return changed ? next : prev
+    })
   }
 
   const cycleTab = (direction: 1 | -1) => {
@@ -163,10 +190,10 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   const tabDescriptors = createMemo<TabDescriptor[]>(() => {
     return tabs().map((tab) => {
       const title =
-        tab.kind === 'repo'
-          ? (tab.repoPath.split('/').filter(Boolean).at(-1) ?? 'New tab')
+        tab.kind === 'repo' || tab.kind === 'opening-repo'
+          ? (tab.repoPath.split(/[/\\]/).filter(Boolean).at(-1) ?? 'New tab')
           : 'New tab'
-      return { id: tab.id, title, hasRepo: tab.kind === 'repo' }
+      return { id: tab.id, title, hasRepo: tab.kind === 'repo' || tab.kind === 'opening-repo' }
     })
   })
 
@@ -187,6 +214,7 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
     newTab,
     closeTab,
     openRepoInTab,
+    confirmRepoOpen,
     persistedSnapshot
   }
 }
