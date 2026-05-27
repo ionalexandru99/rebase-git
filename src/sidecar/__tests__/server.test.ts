@@ -13,7 +13,19 @@ let repoPath: string
 let server: ReturnType<typeof createSidecarServer>
 
 function git(cwd: string, args: string[]): void {
-  execFileSync('git', args, { cwd, stdio: 'ignore' })
+  const commandArgs =
+    args[0] === 'commit'
+      ? [
+          '-c',
+          'commit.gpgsign=false',
+          '-c',
+          'gc.auto=0',
+          'commit',
+          '--no-gpg-sign',
+          ...args.slice(1)
+        ]
+      : args
+  execFileSync('git', commandArgs, { cwd, stdio: 'ignore' })
 }
 
 function createFixtureRepo(commitCount: number): string {
