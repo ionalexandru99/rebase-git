@@ -1,5 +1,5 @@
 import { AlertCircleIcon } from 'lucide-react'
-import { createEffect, type JSX, onMount, Show } from '@/lib/react-compat'
+import { createEffect, createSignal, type JSX, Show } from '@/lib/react-compat'
 import { Alert, AlertDescription } from './components/ui/alert'
 import { NewTab, type WorkspaceCatalog } from './NewTab'
 import { useGitStore } from './stores/git'
@@ -16,13 +16,17 @@ interface RepoTabProps {
 
 export function RepoTab(props: RepoTabProps) {
   const git = useGitStore(props.tabId, props.tabActive)
+  const [lastRepoPathRequested, setLastRepoPathRequested] = createSignal<string | null>(null)
 
-  onMount(() => {
-    git.openRepo(props.repoPath)
+  createEffect(() => {
+    if (props.repoPath !== lastRepoPathRequested()) {
+      setLastRepoPathRequested(props.repoPath)
+      void git.openRepo(props.repoPath)
+    }
   })
 
   createEffect(() => {
-    if (git.state.repoPath) {
+    if (git.state.repoPath === props.repoPath) {
       props.onRepoOpened(git.state.repoPath)
     }
   })
