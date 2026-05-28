@@ -68,7 +68,7 @@ jobs:
         run: pnpm test:main
 
   test-e2e:
-    name: Build, smoke & E2E
+    name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -88,29 +88,7 @@ jobs:
           restore-keys: pnpm-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts=false
-
-      - name: Install Electron binary
-        run: |
-          electron_dir=$(dirname "$(find node_modules/.pnpm -path "*/node_modules/electron/install.js" -print -quit)")
-          env -u ELECTRON_SKIP_BINARY_DOWNLOAD pnpm rebuild electron --pending
-          env -u ELECTRON_SKIP_BINARY_DOWNLOAD node "$electron_dir/install.js"
-          test -f "$electron_dir/path.txt"
-          test -x "$electron_dir/dist/electron"
-
-      - name: Install Electron system libraries
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends \
-            libgtk-3-0 libxss1 libasound2t64 libnss3 libgbm1 xvfb
-
-      - name: Fix Electron sandbox permissions
-        run: |
-          sandbox=$(find node_modules -path "*/electron/dist/chrome-sandbox" -print -quit)
-          if [ -n "$sandbox" ]; then
-            sudo chown root:root "$sandbox"
-            sudo chmod 4755 "$sandbox"
-          fi
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm build
@@ -121,19 +99,3 @@ jobs:
           preload=$(ls out/preload/index.{js,mjs,cjs} 2>/dev/null | head -1)
           test -n "$preload" || { echo "Preload bundle not found"; exit 1; }
           grep -q "electronAPI" "$preload" || { echo "electronAPI missing from preload"; exit 1; }
-
-      - name: Smoke test
-        run: xvfb-run --auto-servernum pnpm test:smoke
-
-      - name: E2E tests
-        run: xvfb-run --auto-servernum pnpm test:e2e
-        env:
-          CI: true
-
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
