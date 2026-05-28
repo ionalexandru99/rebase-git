@@ -432,6 +432,44 @@ describe('App — persisted tabs', () => {
       expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('my-app')
     })
   })
+
+  it('persists the canonical path returned by a successful repo open', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/link-to-my-app']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/real/repos/my-app', remotes: {}, defaultBranch: 'main' }
+    })
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+    setupLogStream()
+
+    renderApp()
+    fireEvent.click(await screen.findByText('/home/user/projects/link-to-my-app'))
+
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/link-to-my-app')
+    })
+    await waitFor(() => {
+      const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
+      expect(setCalls.some(([state]) => state.tabs.includes('/real/repos/my-app'))).toBe(true)
+    })
+    expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('my-app')
+  })
 })
 
 describe('App — workspace (repo open)', () => {

@@ -20,14 +20,14 @@ export function RepoTab(props: RepoTabProps) {
 
   createEffect(() => {
     if (props.repoPath !== lastRepoPathRequested()) {
-      setLastRepoPathRequested(props.repoPath)
-      void git.openRepo(props.repoPath)
-    }
-  })
-
-  createEffect(() => {
-    if (git.state.repoPath === props.repoPath) {
-      props.onRepoOpened(git.state.repoPath)
+      const requestedPath = props.repoPath
+      setLastRepoPathRequested(requestedPath)
+      void git.openRepo(requestedPath).then(() => {
+        if (lastRepoPathRequested() === requestedPath && git.state.repoPath && !git.state.error) {
+          setLastRepoPathRequested(git.state.repoPath)
+          props.onRepoOpened(git.state.repoPath)
+        }
+      })
     }
   })
 
