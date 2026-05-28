@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button'
 import { EmptyState } from '../components/ui/empty-state'
 import { Input } from '../components/ui/input'
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher'
-import { RepoGroup } from './RepoGroup'
+import { RepoGroup, RepoGroupEmpty, RepoGroupHeader, RepoGroupList } from './RepoGroup'
 
 interface RepoPickerProps {
   recentRepos: string[]
@@ -86,40 +86,52 @@ export function RepoPicker(props: RepoPickerProps) {
             />
           </div>
 
-          <RepoGroup
-            label="Recent"
-            repos={filteredRecent()}
-            emptyText={
-              hasQuery()
-                ? 'No matches'
-                : props.recentRepos.length === 0
-                  ? 'No recent repositories'
-                  : undefined
-            }
-            onSelect={props.onOpenRepo}
-          />
+          <RepoGroup>
+            <RepoGroupHeader label="Recent" />
+            <Show
+              when={filteredRecent().length > 0}
+              fallback={
+                <RepoGroupEmpty>
+                  {hasQuery()
+                    ? 'No matches'
+                    : props.recentRepos.length === 0
+                      ? 'No recent repositories'
+                      : undefined}
+                </RepoGroupEmpty>
+              }
+            >
+              <RepoGroupList repos={filteredRecent()} onSelect={props.onOpenRepo} />
+            </Show>
+          </RepoGroup>
 
-          <RepoGroup
-            label="Workspace"
-            trailing={
-              <WorkspaceSwitcher
-                workspaces={props.workspaces}
-                activeWorkspace={props.activeWorkspace}
-                onSwitch={props.onSwitchWorkspace}
-                onAdd={props.onAddWorkspace}
-                onRemove={props.onRemoveWorkspace}
-              />
-            }
-            repos={filteredDiscovered()}
-            emptyText={
-              hasQuery()
-                ? 'No matches'
-                : props.discoveredRepos.length === 0
-                  ? 'No repositories detected in this workspace'
-                  : undefined
-            }
-            onSelect={props.onOpenRepo}
-          />
+          <RepoGroup>
+            <RepoGroupHeader
+              label="Workspace"
+              trailing={
+                <WorkspaceSwitcher
+                  workspaces={props.workspaces}
+                  activeWorkspace={props.activeWorkspace}
+                  onSwitch={props.onSwitchWorkspace}
+                  onAdd={props.onAddWorkspace}
+                  onRemove={props.onRemoveWorkspace}
+                />
+              }
+            />
+            <Show
+              when={filteredDiscovered().length > 0}
+              fallback={
+                <RepoGroupEmpty>
+                  {hasQuery()
+                    ? 'No matches'
+                    : props.discoveredRepos.length === 0
+                      ? 'No repositories detected in this workspace'
+                      : undefined}
+                </RepoGroupEmpty>
+              }
+            >
+              <RepoGroupList repos={filteredDiscovered()} onSelect={props.onOpenRepo} />
+            </Show>
+          </RepoGroup>
         </div>
       </div>
     </Show>

@@ -1,28 +1,22 @@
 import { useEffect } from 'react'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
-import { createMemo, createSignal, type JSX, Show } from '@/lib/react-compat'
+import { createMemo, createSignal, type JSX } from '@/lib/react-compat'
 import {
   defaultVisibleTimelineRefs,
   effectiveVisibleTimelineRefs,
   toggleVisibleTimelineRef
 } from '@/lib/timeline-visible-refs'
-import { CommitPanel } from './components/CommitPanel'
-import { HistoryPanel } from './components/HistoryPanel'
-import { StatusPanel } from './components/StatusPanel'
 import { Shell } from './components/shell/Shell'
 import type { SidebarView } from './components/shell/Sidebar'
 import { useCheckoutRef } from './hooks/git/useCheckoutRef'
 import type { RefKind } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
 import type { GitStore } from './stores/git'
+import { WorkspaceViewRenderer } from './WorkspaceViews'
 
 interface WorkspaceProps {
   git: GitStore
   tabActive?: () => boolean
-  modifiedCount: number
-  stagedCount: number
-  untrackedCount: number
-  totalChanges: number
   errorBanner: JSX.Element
 }
 
@@ -31,6 +25,10 @@ export function Workspace(props: WorkspaceProps) {
   const repoPath = git.state.repoPath
   const repoName = () => repoDisplayName(repoPath)
   const branch = () => git.state.currentBranch || 'no-branch'
+  const modifiedCount = () => git.state.status?.modified.length ?? 0
+  const stagedCount = () => git.state.status?.staged.length ?? 0
+  const untrackedCount = () => git.state.status?.not_added.length ?? 0
+  const totalChanges = createMemo(() => modifiedCount() + stagedCount() + untrackedCount())
   const [activeView, setActiveView] = createSignal<SidebarView>('history')
   const [visibleTimelineRefs, setVisibleTimelineRefs] = createSignal<Set<string>>(new Set())
 
@@ -114,59 +112,42 @@ export function Workspace(props: WorkspaceProps) {
 
   return (
     <Shell
-      repoName={repoName()}
-      repoPath={repoPath}
-      branch={branch()}
-      localBranches={localBranches}
-      remoteBranches={remoteBranches}
-      tags={sidebarTags()}
-      branchesLoading={git.state.branchesLoading}
-      changes={props.totalChanges}
-      activeView={activeView()}
-      onSelectView={setActiveView}
+      repo={{
+        repoName: repoName(),
+        repoPath,
+        branch: branch(),
+        changes: totalChanges()
+      }}
+      navigation={{
+        activeView: activeView(),
+        onSelectView: setActiveView
+      }}
+      branchBrowser={{
+        localBranches,
+        remoteBranches,
+        tags: sidebarTags(),
+        branchesLoading: git.state.branchesLoading,
+        tracking: sidebarTracking(),
+        visibleTimelineRefs: timelineFilterRefs(),
+        onToggleTimelineVisibility: handleToggleTimelineVisibility,
+        onCheckoutRef: handleCheckoutRef
+      }}
       onFetch={git.fetchNow}
-      onCheckoutRef={handleCheckoutRef}
-      tracking={sidebarTracking()}
-      visibleTimelineRefs={timelineFilterRefs()}
-      onToggleTimelineVisibility={handleToggleTimelineVisibility}
     >
       {props.errorBanner}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
-        <Show when={activeView() === 'local-changes'}>
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(21rem,0.85fr)_minmax(0,1.15fr)]">
-            <div className="min-h-0 overflow-hidden">
-              <StatusPanel
-                status={git.state.status}
-                onStage={git.stageFile}
-                onUnstage={git.unstageFile}
-                loading={git.loading() || git.state.statusLoading}
-              />
-            </div>
-            <div className="min-h-0 overflow-hidden">
-              <CommitPanel onCommit={git.commit} loading={git.loading()} />
-            </div>
-          </div>
-        </Show>
-        <Show when={(props.tabActive?.() ?? true) && activeView() === 'history'}>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <HistoryPanel
-              log={git.state.log}
-              loading={git.state.logLoading}
-              loadingMore={git.state.logLoadingMore}
-              hasMore={git.state.logHasMore}
-              onLoadMore={() => void git.loadMoreHistory()}
-              repoPath={repoPath}
-              remotes={git.state.remotes}
-              currentBranch={git.state.currentBranch}
-              remoteBranches={remoteBranches}
-              visibleBranchRefs={timelineFilterRefs()}
-            />
-          </div>
-        </Show>
+        <WorkspaceViewRenderer
+          activeView={activeView()}
+          git={git}
+          repoPath={repoPath}
+          remoteBranches={remoteBranches}
+          visibleBranchRefs={timelineFilterRefs()}
+          tabActive={() => props.tabActive?.() ?? true}
+        />
       </div>
 
       <span className="sr-only">
-        {props.modifiedCount} modified, {props.stagedCount} staged, {props.untrackedCount} untracked
+        {modifiedCount()} modified, {stagedCount()} staged, {untrackedCount()} untracked
       </span>
     </Shell>
   )

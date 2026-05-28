@@ -360,6 +360,116 @@ describe('App — persisted tabs', () => {
       )
     })
   })
+
+  it('keeps the repo picker available and skips persistence when repo open fails', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/stale-repo']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'NotARepo'
+    })
+    setupLogStream()
+
+    renderApp()
+    fireEvent.click(await screen.findByText('/home/user/projects/stale-repo'))
+
+    await screen.findByText('Not a git repository')
+    expect(screen.getByText('Open a repository')).toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: /Search repositories/i })).toBeInTheDocument()
+
+    await waitFor(() => {
+      expect(window.electronAPI.setPersistedTabs).toHaveBeenCalled()
+    })
+    const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
+    expect(setCalls.some(([state]) => state.tabs.includes('/home/user/projects/stale-repo'))).toBe(
+      false
+    )
+  })
+
+  it('can open a different repo in the same tab after repo open fails', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/stale-repo', '/home/user/projects/my-app']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockImplementation((path) => {
+      if (path === '/home/user/projects/stale-repo') {
+        return Promise.resolve({ _tag: 'NotARepo' })
+      }
+      return Promise.resolve({
+        _tag: 'Ok',
+        result: { path, remotes: {}, defaultBranch: 'main' }
+      })
+    })
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+    setupLogStream()
+
+    renderApp()
+    fireEvent.click(await screen.findByText('/home/user/projects/stale-repo'))
+    await screen.findByText('Not a git repository')
+
+    fireEvent.click(screen.getByText('/home/user/projects/my-app'))
+
+    await waitFor(() => {
+      expect(vi.mocked(window.electronAPI.openRepo).mock.calls.map(([path]) => path)).toContain(
+        '/home/user/projects/my-app'
+      )
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('my-app')
+    })
+  })
+
+  it('persists the canonical path returned by a successful repo open', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/link-to-my-app']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/real/repos/my-app', remotes: {}, defaultBranch: 'main' }
+    })
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+    setupLogStream()
+
+    renderApp()
+    fireEvent.click(await screen.findByText('/home/user/projects/link-to-my-app'))
+
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/link-to-my-app')
+    })
+    await waitFor(() => {
+      const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
+      expect(setCalls.some(([state]) => state.tabs.includes('/real/repos/my-app'))).toBe(true)
+    })
+    expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('my-app')
+  })
 })
 
 describe('App — workspace (repo open)', () => {
