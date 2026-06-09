@@ -215,6 +215,47 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       }
       return operations.unstageFile(repoPath, relative)
     }
+    case SidecarOp.getDiff: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.diff()
+      }
+      const file = requiredString(body, 'file')
+      if (!file) {
+        return BAD_REQUEST
+      }
+      const relative = resolveRepoRelativeFile(repoPath, file)
+      if (!relative) {
+        return operations.invalidRepoPath.diff()
+      }
+      return operations.getDiff(repoPath, relative, body.staged === true)
+    }
+    case SidecarOp.stageHunk:
+    case SidecarOp.unstageHunk: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.stageHunk()
+      }
+      const file = requiredString(body, 'file')
+      const hunkHeader = requiredString(body, 'hunkHeader')
+      if (!file || !hunkHeader) {
+        return BAD_REQUEST
+      }
+      const relative = resolveRepoRelativeFile(repoPath, file)
+      if (!relative) {
+        return operations.invalidRepoPath.stageHunk()
+      }
+      if (op === SidecarOp.stageHunk) {
+        return operations.stageHunk(repoPath, relative, hunkHeader)
+      }
+      return operations.unstageHunk(repoPath, relative, hunkHeader)
+    }
     case SidecarOp.commit: {
       const repoPath = safeRepoPath(body)
       if (repoPath === BAD_REQUEST) {

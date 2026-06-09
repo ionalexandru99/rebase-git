@@ -1,7 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { GitStatus } from '@/types'
-import { StatusPanel } from '../StatusPanel'
+import { type SelectedFile, StatusPanel } from '../StatusPanel'
+
+type Code = { path: string; index: string; working_dir: string }
+
+const code = (path: string, index: string, working_dir: string): Code => ({
+  path,
+  index,
+  working_dir
+})
 
 function emptyStatus(overrides: Partial<GitStatus> = {}): GitStatus {
   return {
@@ -13,12 +21,15 @@ function emptyStatus(overrides: Partial<GitStatus> = {}): GitStatus {
     deleted: [],
     created: [],
     renamed: [],
+    files: [],
     ...overrides
   }
 }
 
 function renderPanel(props: {
   status: GitStatus | null
+  selected?: SelectedFile | null
+  onSelect?: (file: string) => void
   onStage?: (file: string) => void
   onUnstage?: (file: string) => void
   loading?: boolean
@@ -26,6 +37,8 @@ function renderPanel(props: {
   return render(
     <StatusPanel
       status={props.status}
+      selected={props.selected ?? null}
+      onSelect={props.onSelect ?? vi.fn()}
       onStage={props.onStage ?? vi.fn()}
       onUnstage={props.onUnstage ?? vi.fn()}
       loading={props.loading ?? false}
@@ -36,120 +49,122 @@ function renderPanel(props: {
 describe('StatusPanel', () => {
   it('renders nothing when status is null', () => {
     renderPanel({ status: null })
-    expect(screen.queryByText('Working Directory')).not.toBeInTheDocument()
+    expect(screen.queryByText('Changes')).not.toBeInTheDocument()
   })
 
-  it('renders the section titles and counts when status has files', () => {
+  it('lists every change in one flat list with a staged count', () => {
     renderPanel({
       status: emptyStatus({
-        modified: ['a.ts', 'b.ts'],
-        staged: ['c.ts'],
-        not_added: ['d.ts']
+        files: [
+          code('a.ts', ' ', 'M'),
+          code('b.ts', ' ', 'M'),
+          code('c.ts', 'M', ' '),
+          code('d.ts', '?', '?')
+        ]
       })
     })
 
-    expect(screen.getByText('Working Directory')).toBeInTheDocument()
-    expect(screen.getByText(/4 pending changes/)).toBeInTheDocument()
-    expect(screen.getByText('Changes')).toBeInTheDocument()
-    expect(screen.getByText('Staged')).toBeInTheDocument()
-    expect(screen.getByText('Untracked')).toBeInTheDocument()
+    expect(screen.getByText('4 files · 1 staged')).toBeInTheDocument()
     expect(screen.getByText('a.ts')).toBeInTheDocument()
     expect(screen.getByText('c.ts')).toBeInTheDocument()
     expect(screen.getByText('d.ts')).toBeInTheDocument()
+    expect(screen.queryByText('Staged')).not.toBeInTheDocument()
+    expect(screen.queryByText('Untracked')).not.toBeInTheDocument()
   })
 
-  it('surfaces conflicted files in their own section with a destructive badge', () => {
-    renderPanel({
-      status: emptyStatus({ conflicted: ['merge.ts', 'other.ts'] })
-    })
-
-    expect(screen.getByText('Conflicted')).toBeInTheDocument()
-    expect(screen.getByText('merge.ts')).toBeInTheDocument()
-    expect(screen.getByText('other.ts')).toBeInTheDocument()
-    expect(screen.getByText('2 conflicts')).toBeInTheDocument()
-  })
-
-  it('uses singular copy for a single conflict', () => {
-    renderPanel({ status: emptyStatus({ conflicted: ['merge.ts'] }) })
-    expect(screen.getByText('1 conflict')).toBeInTheDocument()
-  })
-
-  it('renders deleted files in the Changes section with a D badge', () => {
-    renderPanel({
-      status: emptyStatus({ deleted: ['gone.ts'] })
-    })
-
+  it('renders a deleted file with a D badge', () => {
+    renderPanel({ status: emptyStatus({ files: [code('gone.ts', ' ', 'D')] }) })
     expect(screen.getByText('gone.ts')).toBeInTheDocument()
-    expect(screen.getAllByLabelText('deleted').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByLabelText('deleted')).toBeInTheDocument()
   })
 
   it('renders renamed files as "from → to"', () => {
     renderPanel({
-      status: emptyStatus({ renamed: [{ from: 'old.ts', to: 'new.ts' }] })
+      status: emptyStatus({
+        renamed: [{ from: 'old.ts', to: 'new.ts' }],
+        files: [code('new.ts', 'R', ' ')]
+      })
     })
-
     expect(screen.getByText('old.ts → new.ts')).toBeInTheDocument()
     expect(screen.getByLabelText('renamed')).toBeInTheDocument()
   })
 
-  it('counts created files alongside staged ones', () => {
-    renderPanel({
-      status: emptyStatus({ staged: ['s.ts'], created: ['c.ts'] })
-    })
-
-    expect(screen.getAllByText(/Staged/i)[0]).toBeInTheDocument()
-    expect(screen.getByText('s.ts')).toBeInTheDocument()
-    expect(screen.getByText('c.ts')).toBeInTheDocument()
-  })
-
-  it('shows the clean badge and empty placeholders when nothing has changed', () => {
-    renderPanel({ status: emptyStatus() })
-
-    expect(screen.getByText('Clean working tree')).toBeInTheDocument()
-    expect(screen.getByText('Clean')).toBeInTheDocument()
-    expect(screen.getByText('Staged')).toBeInTheDocument()
-    expect(screen.getByText('Changes')).toBeInTheDocument()
-    expect(screen.getByText('Untracked')).toBeInTheDocument()
-  })
-
-  it('shows a loading badge when loading and hides the clean badge', () => {
+  it('shows a loading badge while loading', () => {
     renderPanel({ status: emptyStatus(), loading: true })
-
     expect(screen.getByText('Loading')).toBeInTheDocument()
-    expect(screen.queryByText('Clean')).not.toBeInTheDocument()
   })
 
-  it('invokes onStage when the Stage button is clicked', () => {
+  it('stages an unstaged file through its checkbox', () => {
     const onStage = vi.fn()
-    renderPanel({
-      status: emptyStatus({ modified: ['index.ts'] }),
-      onStage
-    })
+    renderPanel({ status: emptyStatus({ files: [code('index.ts', ' ', 'M')] }), onStage })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stage' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Stage index.ts' }))
     expect(onStage).toHaveBeenCalledWith('index.ts')
   })
 
-  it('invokes onUnstage when the Unstage button is clicked', () => {
+  it('unstages a staged file through its checkbox', () => {
     const onUnstage = vi.fn()
-    renderPanel({
-      status: emptyStatus({ staged: ['index.ts'] }),
-      onUnstage
-    })
+    renderPanel({ status: emptyStatus({ files: [code('index.ts', 'M', ' ')] }), onUnstage })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Unstage' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Unstage index.ts' }))
     expect(onUnstage).toHaveBeenCalledWith('index.ts')
   })
 
-  it('shows singular pending-change copy', () => {
-    renderPanel({ status: emptyStatus({ modified: ['a.ts'] }) })
+  it('renders a partially-staged file as indeterminate and stages the rest on click', () => {
+    const onStage = vi.fn()
+    renderPanel({ status: emptyStatus({ files: [code('index.ts', 'M', 'M')] }), onStage })
 
-    expect(screen.getByText('1 pending change')).toBeInTheDocument()
+    const checkbox = screen.getByRole('checkbox', { name: 'Stage index.ts' }) as HTMLInputElement
+    expect(checkbox.indeterminate).toBe(true)
+    fireEvent.click(checkbox)
+    expect(onStage).toHaveBeenCalledWith('index.ts')
+  })
+
+  it('selects a file when its row is clicked', () => {
+    const onSelect = vi.fn()
+    renderPanel({ status: emptyStatus({ files: [code('index.ts', ' ', 'M')] }), onSelect })
+
+    fireEvent.click(screen.getByText('index.ts'))
+    expect(onSelect).toHaveBeenCalledWith('index.ts')
+  })
+
+  it('highlights the selected file row', () => {
+    renderPanel({
+      status: emptyStatus({ files: [code('index.ts', ' ', 'M')] }),
+      selected: { file: 'index.ts' }
+    })
+
+    const row = screen.getByText('index.ts').closest('[data-testid="status-file-row"]')
+    expect(row?.className).toMatch(/brand-soft/)
+  })
+
+  it('stages every file via the master checkbox', () => {
+    const onStage = vi.fn()
+    renderPanel({
+      status: emptyStatus({ files: [code('a.ts', ' ', 'M'), code('b.ts', '?', '?')] }),
+      onStage
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Stage all files' }))
+    expect(onStage).toHaveBeenCalledWith('a.ts')
+    expect(onStage).toHaveBeenCalledWith('b.ts')
+  })
+
+  it('unstages everything via the master checkbox when all staged', () => {
+    const onUnstage = vi.fn()
+    renderPanel({
+      status: emptyStatus({ files: [code('a.ts', 'M', ' '), code('b.ts', 'M', ' ')] }),
+      onUnstage
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Unstage all files' }))
+    expect(onUnstage).toHaveBeenCalledWith('a.ts')
+    expect(onUnstage).toHaveBeenCalledWith('b.ts')
   })
 
   it('truncates long file names and exposes the full path as a title attribute', () => {
     const longPath = 'src/very/deep/nested/path/component.tsx'
-    renderPanel({ status: emptyStatus({ modified: [longPath] }) })
+    renderPanel({ status: emptyStatus({ files: [code(longPath, ' ', 'M')] }) })
     const fileSpan = screen.getByText(longPath)
     expect(fileSpan.className).toMatch(/truncate/)
     expect(fileSpan).toHaveAttribute('title', longPath)

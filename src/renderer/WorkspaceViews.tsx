@@ -1,34 +1,142 @@
+import { CheckIcon } from 'lucide-react'
 import { CommitPanel } from './components/CommitPanel'
+import { DiffPanel } from './components/DiffPanel'
 import { HistoryPanel } from './components/HistoryPanel'
-import { StatusPanel } from './components/StatusPanel'
-import type { SidebarView } from './components/shell/Sidebar'
-import { type Component, Dynamic, type JSX, Show } from './lib/react-compat'
+import { type SelectedFile, StatusPanel } from './components/StatusPanel'
+import type { WorkspaceView } from './components/shell/Topbar'
+import { useDraggableWidth } from './hooks/useDraggableWidth'
+import {
+  type Component,
+  createEffect,
+  createMemo,
+  createSignal,
+  Dynamic,
+  type JSX,
+  Show
+} from './lib/react-compat'
+import type { RefKind } from './lib/ref-tree'
+import { buildUnifiedFileRows } from './lib/status-file-rows'
 import type { GitStore } from './stores/git'
+
+const FILES_PANEL_WIDTH_MIN = 240
+const FILES_PANEL_WIDTH_MAX = 620
+const FILES_PANEL_WIDTH_DEFAULT = 320
+const FILES_PANEL_WIDTH_KEY = 'rebase:local-files-width'
+
+const loadFilesPanelWidth = async () => {
+  const stored = Number(localStorage.getItem(FILES_PANEL_WIDTH_KEY))
+  return {
+    open: true,
+    width: Number.isFinite(stored) && stored > 0 ? stored : FILES_PANEL_WIDTH_DEFAULT
+  }
+}
+
+const saveFilesPanelWidth = (state: { width: number }) => {
+  try {
+    localStorage.setItem(FILES_PANEL_WIDTH_KEY, String(state.width))
+  } catch {}
+}
 
 interface WorkspaceViewProps {
   git: GitStore
   repoPath: string | null
   remoteBranches: string[]
   visibleBranchRefs: ReadonlySet<string>
+  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   tabActive: () => boolean
 }
 
 function LocalChangesView(props: WorkspaceViewProps) {
   const git = props.git
+  const [selected, setSelected] = createSignal<SelectedFile | null>(null)
+  const { width: filesWidth, onResizeStart } = useDraggableWidth({
+    min: FILES_PANEL_WIDTH_MIN,
+    max: FILES_PANEL_WIDTH_MAX,
+    defaultWidth: FILES_PANEL_WIDTH_DEFAULT,
+    load: loadFilesPanelWidth,
+    save: saveFilesPanelWidth
+  })
+
+  const status = () => git.state.status
+  const totalChanges = createMemo(() => {
+    const current = status()
+    if (!current) {
+      return 0
+    }
+    return (
+      current.modified.length +
+      current.staged.length +
+      current.not_added.length +
+      current.conflicted.length +
+      current.deleted.length +
+      current.created.length +
+      current.renamed.length
+    )
+  })
+  const stagedCount = () => (status()?.staged.length ?? 0) + (status()?.created.length ?? 0)
+
+  const fileEntries = createMemo<SelectedFile[]>(() => {
+    const current = status()
+    if (!current) {
+      return []
+    }
+    return buildUnifiedFileRows(current).map((row) => ({ file: row.file }))
+  })
+
+  createEffect(() => {
+    const entries = fileEntries()
+    const current = selected()
+    const stillExists = current && entries.some((entry) => entry.file === current.file)
+    if (!stillExists) {
+      setSelected(entries[0] ?? null)
+    }
+  })
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 overflow-hidden xl:grid-cols-[minmax(21rem,0.85fr)_minmax(0,1.15fr)]">
-      <div className="min-h-0 overflow-hidden">
-        <StatusPanel
-          status={git.state.status}
-          onStage={git.stageFile}
-          onUnstage={git.unstageFile}
-          loading={git.loading() || git.state.statusLoading}
+    <Show when={totalChanges() > 0} fallback={<CleanWorkingTree />}>
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+        <div
+          className="grid min-h-0 overflow-hidden"
+          style={{ gridTemplateColumns: `${filesWidth()}px minmax(0, 1fr)` }}
+        >
+          <div className="relative min-h-0 min-w-0">
+            <StatusPanel
+              status={git.state.status}
+              selected={selected()}
+              onSelect={(file) => setSelected({ file })}
+              onStage={git.stageFile}
+              onUnstage={git.unstageFile}
+              loading={git.loading() || git.state.statusLoading}
+            />
+            <span
+              onMouseDown={(event) => onResizeStart(event.nativeEvent)}
+              aria-hidden="true"
+              className="group/files-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+            >
+              <span className="w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/60" />
+            </span>
+          </div>
+          <DiffPanel git={git} selected={selected()} />
+        </div>
+        <CommitPanel
+          onCommit={git.commit}
+          loading={git.loading()}
+          branch={git.state.currentBranch || 'no-branch'}
+          stagedCount={stagedCount()}
         />
       </div>
-      <div className="min-h-0 overflow-hidden">
-        <CommitPanel onCommit={git.commit} loading={git.loading()} />
-      </div>
+    </Show>
+  )
+}
+
+function CleanWorkingTree() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2.5 text-center text-muted-foreground">
+      <span className="flex size-[52px] items-center justify-center rounded-full bg-green/15 text-green">
+        <CheckIcon className="size-6" strokeWidth={2.4} />
+      </span>
+      <div className="text-[15px] font-semibold text-foreground">Working tree clean</div>
+      <div className="text-sm">Nothing to commit — every change is on a branch.</div>
     </div>
   )
 }
@@ -50,6 +158,7 @@ function HistoryView(props: WorkspaceViewProps) {
           currentBranch={git.state.currentBranch}
           remoteBranches={props.remoteBranches}
           visibleBranchRefs={props.visibleBranchRefs}
+          onToggleTimelineVisibility={props.onToggleTimelineVisibility}
         />
       </div>
     </Show>
@@ -59,10 +168,10 @@ function HistoryView(props: WorkspaceViewProps) {
 const workspaceViewComponents = {
   history: HistoryView,
   'local-changes': LocalChangesView
-} satisfies Record<SidebarView, Component<WorkspaceViewProps>>
+} satisfies Record<WorkspaceView, Component<WorkspaceViewProps>>
 
 interface WorkspaceViewRendererProps extends WorkspaceViewProps {
-  activeView: SidebarView
+  activeView: WorkspaceView
 }
 
 export function WorkspaceViewRenderer(props: WorkspaceViewRendererProps): JSX.Element {

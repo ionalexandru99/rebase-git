@@ -1,7 +1,8 @@
 import type { PersistedTabs } from '@shared/schemas/ipc'
 import { createEffect, createSignal, For, onMount, Show } from '@/lib/react-compat'
 import { OnboardingScreen } from './components/OnboardingScreen'
-import { TabBar } from './components/TabBar'
+import { RepoRail } from './components/shell/RepoRail'
+import { Titlebar } from './components/shell/Titlebar'
 import { Toaster } from './components/ui/sonner'
 import { useOnboarding } from './hooks/useOnboarding'
 import { useTabs } from './hooks/useTabs'
@@ -106,37 +107,41 @@ function TabsShell(props: TabsShellProps) {
   })
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col bg-chrome text-foreground">
       <Toaster richColors position="bottom-right" />
-      <TabBar
-        tabs={tabDescriptors()}
-        activeTabId={activeTabId()}
-        onSelect={setActiveTabId}
-        onClose={closeTab}
-        onNew={newTab}
-      />
+      <Titlebar />
 
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        <For each={tabs()}>
-          {(tab) => (
-            <div
-              className={
-                tab.id === activeTabId()
-                  ? 'flex min-h-0 flex-1 flex-col'
-                  : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
-              }
-              aria-hidden={tab.id !== activeTabId()}
-            >
-              <TabView
-                tab={tab}
-                tabActive={() => tab.id === activeTabId()}
-                catalog={workspaceCatalog()}
-                onOpenRepo={openRepoInTab}
-                onRepoOpened={confirmRepoOpen}
-              />
-            </div>
-          )}
-        </For>
+      <div className="grid min-h-0 flex-1 grid-cols-[64px_minmax(0,1fr)]">
+        <RepoRail
+          tabs={tabDescriptors()}
+          activeTabId={activeTabId()}
+          onSelect={setActiveTabId}
+          onClose={closeTab}
+          onNew={newTab}
+        />
+
+        <div className="relative flex min-h-0 flex-col overflow-hidden">
+          <For each={tabs()}>
+            {(tab) => (
+              <div
+                className={
+                  tab.id === activeTabId()
+                    ? 'flex h-full min-h-0 flex-col'
+                    : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
+                }
+                aria-hidden={tab.id !== activeTabId()}
+              >
+                <TabView
+                  tab={tab}
+                  tabActive={() => tab.id === activeTabId()}
+                  catalog={workspaceCatalog()}
+                  onOpenRepo={openRepoInTab}
+                  onRepoOpened={confirmRepoOpen}
+                />
+              </div>
+            )}
+          </For>
+        </div>
       </div>
     </div>
   )

@@ -51,7 +51,7 @@ export function WorkspaceSwitcher(props: WorkspaceSwitcherProps) {
         />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent className="min-w-[var(--kb-popper-anchor-width)] border-border bg-popover text-sm">
+      <DropdownMenuContent className="w-[18rem] max-w-[80vw] border-border bg-popover text-sm">
         <Show when={props.workspaces.length > 0}>
           <DropdownMenuLabel className="px-2 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             Workspaces

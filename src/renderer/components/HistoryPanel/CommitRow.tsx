@@ -28,7 +28,7 @@ export function CommitRow(props: CommitRowProps) {
 
   return (
     <div
-      className="group/row absolute inset-x-0 z-10 grid items-center gap-1 bg-card px-0 hover:bg-muted"
+      className="group/row absolute inset-x-0 z-10 grid items-center gap-2 border-b bg-card px-0 hover:bg-muted"
       style={{
         top: `${props.top}px`,
         height: `${ROW_H}px`,
@@ -38,9 +38,9 @@ export function CommitRow(props: CommitRowProps) {
       }}
     >
       <span aria-hidden="true" />
-      <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-sm">
+      <span className="flex min-w-0 items-center gap-1 overflow-hidden text-sm">
         <Show when={isMerge()}>
-          <GitMergeIcon aria-label="merge commit" className="size-3 shrink-0 text-emerald-500" />
+          <GitMergeIcon aria-label="merge commit" className="size-3 shrink-0 text-green" />
         </Show>
         <For each={refs()}>
           {(parsedRef) => (
@@ -51,15 +51,15 @@ export function CommitRow(props: CommitRowProps) {
       </span>
 
       <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-        <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground/80">
+        <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground/80">
           {initials(commit().author_name)}
         </span>
         <span className="min-w-0 truncate">{commit().author_name}</span>
       </span>
 
-      <code className="cursor-default truncate text-xs tabular-nums text-muted-foreground">
+      <span className="cursor-default truncate text-xs tabular-nums text-muted-foreground">
         {commit().hash.slice(0, 7)}
-      </code>
+      </span>
 
       <time className="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground">
         {formatCommitDate(commit().date)}

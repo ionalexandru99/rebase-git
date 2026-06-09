@@ -4,13 +4,13 @@ import { cn } from '@/lib/utils'
 import { RemoteProviderIcon } from '../RemoteProviderIcon'
 import { Badge } from '../ui/badge'
 
-const BASE_CLASS = 'h-6 shrink-0 rounded-md border px-2.5 text-xs font-medium tracking-tight'
+const BASE_CLASS =
+  'h-5 shrink-0 rounded-[var(--r-xs)] border-0 px-1.5 text-[11px] font-semibold tracking-tight'
 
 function pillStyle(kind: ParsedRef['kind'], laneHex: string): JSX.CSSProperties | undefined {
   if (kind === 'branch' || kind === 'remote') {
     return {
-      borderColor: `${laneHex}66`,
-      backgroundColor: `${laneHex}1f`,
+      backgroundColor: `color-mix(in oklch, ${laneHex} 16%, transparent)`,
       color: laneHex
     }
   }

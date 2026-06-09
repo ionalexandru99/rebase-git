@@ -60,15 +60,16 @@ describe('App — onboarding gate', () => {
 })
 
 describe('App — tab shell', () => {
-  it('renders the Rebase brand in the tab bar after onboarding', async () => {
+  it('renders the repo rail with a new-tab button and theme toggle after onboarding', async () => {
     mockBaseAPI()
 
     renderApp()
 
     await waitFor(() => {
-      expect(screen.getByText('Rebase')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Dark theme/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Light theme/i })).toBeInTheDocument()
   })
 
   it('starts with a single empty tab that shows the repo picker', async () => {
@@ -83,107 +84,30 @@ describe('App — tab shell', () => {
     expect(screen.queryByRole('button', { name: /Open from disk/i })).not.toBeInTheDocument()
   })
 
-  it('clicking "New tab" adds a tab and switches to it', async () => {
+  it('shows no repo tabs while only a blank tab is open and marks the new-tab button active', async () => {
     mockBaseAPI()
 
     renderApp()
 
     await screen.findByRole('button', { name: /Open new tab/i })
-    expect(screen.getAllByRole('tab')).toHaveLength(1)
-
-    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
-
-    expect(screen.getAllByRole('tab')).toHaveLength(2)
+    expect(screen.queryAllByRole('tab')).toHaveLength(0)
+    expect(screen.getByRole('button', { name: /Open new tab/i })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
   })
 
-  it('closes a tab when its close button is clicked', async () => {
-    mockBaseAPI()
-
-    renderApp()
-
-    await screen.findByRole('button', { name: /Open new tab/i })
-    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
-    expect(screen.getAllByRole('tab')).toHaveLength(2)
-
-    const closeButtons = screen.getAllByRole('button', { name: /Close tab/i })
-    fireEvent.click(closeButtons[0])
-
-    expect(screen.getAllByRole('tab')).toHaveLength(1)
-  })
-
-  it('closing the active middle tab selects the right neighbour', async () => {
-    mockBaseAPI()
+  it('clicking the new-tab button keeps a single blank tab instead of stacking blanks', async () => {
+    mockBaseAPI({ workingDirectory: '/home/user/repos' })
 
     renderApp()
 
     await screen.findByRole('button', { name: /Open new tab/i })
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
-    expect(screen.getAllByRole('tab')).toHaveLength(3)
 
-    const middleTab = screen.getAllByRole('tab')[1]
-    fireEvent.click(middleTab)
-    expect(middleTab).toHaveAttribute('aria-selected', 'true')
-
-    const closeButtons = screen.getAllByRole('button', { name: /Close tab/i })
-    fireEvent.click(closeButtons[1])
-
-    const tabsAfter = screen.getAllByRole('tab')
-    expect(tabsAfter).toHaveLength(2)
-    expect(tabsAfter[1]).toHaveAttribute('aria-selected', 'true')
-    expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'false')
-  })
-
-  it('closing the active rightmost tab selects the left neighbour', async () => {
-    mockBaseAPI()
-
-    renderApp()
-
-    await screen.findByRole('button', { name: /Open new tab/i })
-    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
-    expect(screen.getAllByRole('tab')).toHaveLength(2)
-
-    const tabs = screen.getAllByRole('tab')
-    expect(tabs[1]).toHaveAttribute('aria-selected', 'true')
-
-    fireEvent.click(screen.getAllByRole('button', { name: /Close tab/i })[1])
-
-    const tabsAfter = screen.getAllByRole('tab')
-    expect(tabsAfter).toHaveLength(1)
-    expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'true')
-  })
-
-  it('closing an inactive tab leaves the current selection alone', async () => {
-    mockBaseAPI()
-
-    renderApp()
-
-    await screen.findByRole('button', { name: /Open new tab/i })
-    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
-    expect(screen.getAllByRole('tab')).toHaveLength(2)
-
-    fireEvent.click(screen.getAllByRole('tab')[0])
-    fireEvent.click(screen.getAllByRole('button', { name: /Close tab/i })[1])
-
-    const tabsAfter = screen.getAllByRole('tab')
-    expect(tabsAfter).toHaveLength(1)
-    expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'true')
-  })
-
-  it('closing the only remaining tab replaces it with a fresh selected tab', async () => {
-    mockBaseAPI()
-
-    renderApp()
-
-    await screen.findByRole('button', { name: /Open new tab/i })
-    const initialTab = screen.getByRole('tab')
-
-    fireEvent.click(screen.getByRole('button', { name: /Close tab/i }))
-
-    const tabsAfter = screen.getAllByRole('tab')
-    expect(tabsAfter).toHaveLength(1)
-    expect(tabsAfter[0]).not.toBe(initialTab)
-    expect(tabsAfter[0]).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryAllByRole('tab')).toHaveLength(0)
+    expect(await screen.findByText('Open a repository')).toBeInTheDocument()
   })
 })
 
@@ -429,7 +353,7 @@ describe('App — persisted tabs', () => {
       )
     })
     await waitFor(() => {
-      expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('my-app')
+      expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('my-app')
     })
   })
 
@@ -468,7 +392,7 @@ describe('App — persisted tabs', () => {
       const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
       expect(setCalls.some(([state]) => state.tabs.includes('/real/repos/my-app'))).toBe(true)
     })
-    expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('my-app')
+    expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('my-app')
   })
 })
 
@@ -549,7 +473,7 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(screen.getAllByText('my-app').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('feature/ui').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getByText(/4 changes/)).toBeInTheDocument()
+      expect(screen.getByText(/1 modified, 2 staged, 1 untracked/)).toBeInTheDocument()
     })
   })
 
@@ -613,18 +537,17 @@ describe('App — workspace (repo open)', () => {
     })
   })
 
-  it('defaults to the history view and swaps to the local-changes view from the sidebar', async () => {
+  it('defaults to the history view and swaps to the local-changes view from the topbar', async () => {
     await renderWithRepo()
 
     expect(await screen.findByText('Timeline')).toBeVisible()
     expect(await screen.findByText('Initial commit')).toBeVisible()
-    expect(screen.queryByText('Working Directory')).not.toBeInTheDocument()
-    expect(screen.queryByText('Commit')).not.toBeInTheDocument()
+    expect(screen.queryByText(/files · /)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
 
-    expect(await screen.findByText('Working Directory')).toBeVisible()
-    expect(screen.getByText('Commit')).toBeVisible()
+    expect(await screen.findByText('4 files · 2 staged')).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Commit message' })).toBeVisible()
     expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
   })
 
@@ -635,7 +558,7 @@ describe('App — workspace (repo open)', () => {
     expect(screen.queryByRole('button', { name: /Switch repository/i })).not.toBeInTheDocument()
   })
 
-  it('shows the clean badge when no changes are pending', async () => {
+  it('shows the clean working-tree state when no changes are pending', async () => {
     mockBaseAPI({
       workingDirectory: '/workspace',
       scanRepos: ['/workspace/repo']
@@ -666,7 +589,7 @@ describe('App — workspace (repo open)', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Local changes/i }))
     await waitFor(() => {
-      expect(screen.getAllByText('Clean').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('Working tree clean')).toBeInTheDocument()
     })
   })
 
@@ -702,11 +625,11 @@ describe('App — workspace (repo open)', () => {
     fireEvent.click(await screen.findByText('/projects/repo-a'))
     await waitFor(() => {
       expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/projects/repo-a')
-      expect(screen.getByRole('tab', { selected: true })).toHaveTextContent('repo-a')
+      expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('repo-a')
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
-    expect(screen.getAllByRole('tab')).toHaveLength(2)
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
     const repoBMatches = await screen.findAllByText('/projects/repo-b')
     const repoBPickerRow = repoBMatches
       .map((el) => el.closest('button'))
@@ -717,7 +640,7 @@ describe('App — workspace (repo open)', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
-    expect(screen.getAllByRole('tab')).toHaveLength(3)
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
     const repoAPickerRow = (await screen.findAllByText('/projects/repo-a'))
       .map((el) => el.closest('button'))
       .filter((b): b is HTMLButtonElement => !!b)
@@ -726,13 +649,13 @@ describe('App — workspace (repo open)', () => {
     fireEvent.click(repoAPickerRow as HTMLButtonElement)
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(2)
+      expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('repo-a')
     })
     const remainingTabs = screen.getAllByRole('tab')
-    expect(remainingTabs[0]).toHaveAttribute('aria-selected', 'true')
-    expect(remainingTabs[0]).toHaveTextContent('repo-a')
+    expect(remainingTabs).toHaveLength(2)
+    expect(remainingTabs[0]).toHaveAccessibleName('repo-a')
     expect(remainingTabs[1]).toHaveAttribute('aria-selected', 'false')
-    expect(remainingTabs[1]).toHaveTextContent('repo-b')
+    expect(remainingTabs[1]).toHaveAccessibleName('repo-b')
     expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(2)
   })
 
@@ -760,7 +683,7 @@ describe('App — workspace (repo open)', () => {
         maxCount: LOG_PAGE_SIZE
       })
     })
-    await screen.findAllByText('feature/ui')
+    await screen.findByTitle('main')
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     const repoBPickerRow = (await screen.findAllByText('/projects/repo-b'))
@@ -802,18 +725,24 @@ describe('App — workspace (repo open)', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
-    expect(screen.getAllByRole('tab')).toHaveLength(2)
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /Open new tab/i })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
 
     const matches = await screen.findAllByText('/home/user/projects/my-app')
     const pickerRow = matches
       .map((el) => el.closest('button'))
-      .find((b): b is HTMLButtonElement => !!b)
+      .filter((b): b is HTMLButtonElement => !!b)
+      .at(-1)
     expect(pickerRow).toBeTruthy()
     fireEvent.click(pickerRow as HTMLButtonElement)
 
     await waitFor(() => {
-      expect(screen.getAllByRole('tab')).toHaveLength(1)
+      expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('my-app')
     })
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
     expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(1)
   })
 

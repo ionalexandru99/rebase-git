@@ -38,15 +38,13 @@ function renderRow(
 }
 
 describe('RefTreeRow leaf', () => {
-  it('renders the left accent bar and Check icon when isCurrent', () => {
+  it('renders the current pill when isCurrent', () => {
     renderRow(leaf({ isCurrent: true }))
-    expect(screen.getByTestId('current-ref-bar')).toBeInTheDocument()
-    expect(screen.getByTestId('current-ref-check')).toBeInTheDocument()
+    expect(screen.getByTestId('current-ref-check')).toHaveTextContent('current')
   })
 
-  it('does not render the indicators when not current', () => {
+  it('does not render the current pill when not current', () => {
     renderRow(leaf({ isCurrent: false }))
-    expect(screen.queryByTestId('current-ref-bar')).not.toBeInTheDocument()
     expect(screen.queryByTestId('current-ref-check')).not.toBeInTheDocument()
   })
 

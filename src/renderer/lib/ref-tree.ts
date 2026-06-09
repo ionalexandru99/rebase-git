@@ -50,7 +50,7 @@ export interface RefSkeletonRow {
 
 export type RefRow = RefLeafRow | RefFolderRow | RefSectionRow | RefEmptyRow | RefSkeletonRow
 
-export const REF_TREE_ROW_HEIGHT = 28
+export const REF_TREE_ROW_HEIGHT = 30
 
 import { REF_TREE_OVERSCAN as REF_TREE_OVERSCAN_VALUE } from '@/lib/virtual-config'
 

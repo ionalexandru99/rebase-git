@@ -6,6 +6,13 @@ export const RenamedFileSchema = z.object({
 })
 export type RenamedFile = z.infer<typeof RenamedFileSchema>
 
+export const StatusFileCodeSchema = z.object({
+  path: z.string(),
+  index: z.string(),
+  working_dir: z.string()
+})
+export type StatusFileCode = z.infer<typeof StatusFileCodeSchema>
+
 export const GitStatusSchema = z.object({
   current: z.string(),
   modified: z.array(z.string()),
@@ -14,7 +21,8 @@ export const GitStatusSchema = z.object({
   conflicted: z.array(z.string()),
   deleted: z.array(z.string()),
   created: z.array(z.string()),
-  renamed: z.array(RenamedFileSchema)
+  renamed: z.array(RenamedFileSchema),
+  files: z.array(StatusFileCodeSchema).optional()
 })
 export type GitStatus = z.infer<typeof GitStatusSchema>
 
@@ -68,6 +76,31 @@ export const RepoOpenSuccessSchema = z.object({
   path: z.string()
 })
 export type RepoOpenSuccess = z.infer<typeof RepoOpenSuccessSchema>
+
+export const DiffLineSchema = z.object({
+  kind: z.enum(['context', 'add', 'del', 'meta']),
+  text: z.string(),
+  oldLine: z.number().nullable(),
+  newLine: z.number().nullable()
+})
+export type DiffLine = z.infer<typeof DiffLineSchema>
+
+export const DiffHunkSchema = z.object({
+  header: z.string(),
+  oldStart: z.number(),
+  oldCount: z.number(),
+  newStart: z.number(),
+  newCount: z.number(),
+  lines: z.array(DiffLineSchema)
+})
+export type DiffHunk = z.infer<typeof DiffHunkSchema>
+
+export const FileDiffSchema = z.object({
+  filePath: z.string(),
+  binary: z.boolean(),
+  hunks: z.array(DiffHunkSchema)
+})
+export type FileDiff = z.infer<typeof FileDiffSchema>
 
 export const CommitSummarySchema = z.object({
   commit: z.string(),

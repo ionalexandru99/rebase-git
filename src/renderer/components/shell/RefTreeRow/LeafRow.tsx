@@ -1,14 +1,6 @@
-import {
-  CheckIcon,
-  CloudIcon,
-  EyeIcon,
-  EyeOffIcon,
-  GitBranchIcon,
-  type LucideProps,
-  TagIcon
-} from 'lucide-react'
+import { EyeIcon, EyeOffIcon } from 'lucide-react'
 import type { MouseEvent } from 'react'
-import { type Component, Dynamic, type JSX, Show } from '@/lib/react-compat'
+import { type JSX, Show } from '@/lib/react-compat'
 import { REF_TREE_INDENT_PX, type RefKind, type RefLeafRow } from '@/lib/ref-tree'
 import { cn } from '@/lib/utils'
 import {
@@ -27,15 +19,8 @@ interface LeafRowProps {
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
 }
 
-const iconFor: Record<RefKind, Component<LucideProps>> = {
-  local: GitBranchIcon,
-  remote: CloudIcon,
-  tag: TagIcon
-}
-
 export function LeafRow(props: LeafRowProps) {
-  const icon = () => iconFor[props.row.refKind]
-  const padLeft = () => 6 + props.row.depth * REF_TREE_INDENT_PX + 14
+  const padLeft = () => 22 + (props.row.depth - 1) * REF_TREE_INDENT_PX
   const showTimelineEye = () => props.row.refKind === 'local' || props.row.refKind === 'remote'
 
   const handleToggleVisibility = (event: MouseEvent<HTMLButtonElement>) => {
@@ -48,10 +33,8 @@ export function LeafRow(props: LeafRowProps) {
     <ContextMenu>
       <div
         className={cn(
-          'group/branch-row absolute inset-x-0 flex items-center rounded-sm pr-1 hover:bg-sidebar-accent/60',
-          props.row.isCurrent
-            ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
-            : 'text-foreground/90'
+          'group/branch-row absolute inset-x-0 flex items-center rounded-[var(--r-sm)] pr-1 transition-colors hover:bg-muted hover:text-foreground',
+          props.row.isCurrent ? 'text-foreground' : 'text-muted-foreground'
         )}
         style={props.style}
         data-testid="ref-tree-leaf-row"
@@ -60,27 +43,24 @@ export function LeafRow(props: LeafRowProps) {
           as="button"
           type="button"
           onDoubleClick={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}
-          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm py-0 pr-0 text-sm"
+          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--r-sm)] py-0 pr-0 text-sm"
           style={{ paddingLeft: `${padLeft()}px` }}
           title={props.row.fullPath}
         >
+          <span
+            className={cn('min-w-0 truncate text-left', props.row.isCurrent && 'font-semibold')}
+          >
+            {props.row.name}
+          </span>
           <Show when={props.row.isCurrent}>
             <span
-              aria-hidden="true"
-              data-testid="current-ref-bar"
-              className="pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-sm bg-sidebar-primary"
-            />
-          </Show>
-          <Dynamic component={icon()} className="size-3.5 shrink-0 opacity-70" />
-          <span className="min-w-0 truncate text-left">{props.row.name}</span>
-          <AheadBehindBadge ahead={props.row.ahead} behind={props.row.behind} />
-          <Show when={props.row.isCurrent}>
-            <CheckIcon
-              aria-hidden="true"
               data-testid="current-ref-check"
-              className="ml-auto size-3.5 shrink-0 text-sidebar-primary"
-            />
+              className="inline-flex h-[18px] shrink-0 items-center rounded-[var(--r-xs)] bg-green/15 px-1.5 text-[11px] font-semibold lowercase leading-none text-green"
+            >
+              current
+            </span>
           </Show>
+          <AheadBehindBadge ahead={props.row.ahead} behind={props.row.behind} />
         </ContextMenuTrigger>
 
         <Show when={showTimelineEye()}>
@@ -88,7 +68,7 @@ export function LeafRow(props: LeafRowProps) {
             type="button"
             data-testid="timeline-visibility-toggle"
             className={cn(
-              'mr-0.5 flex size-7 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground',
+              'mr-0.5 flex size-7 shrink-0 items-center justify-center rounded-[var(--r-xs)] text-muted-foreground hover:text-foreground',
               props.timelineVisible
                 ? 'opacity-100'
                 : 'opacity-0 group-hover/branch-row:opacity-100 group-focus-within/branch-row:opacity-100 focus-visible:opacity-100'

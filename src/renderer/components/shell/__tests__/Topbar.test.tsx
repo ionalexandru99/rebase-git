@@ -1,36 +1,25 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { SidebarProvider } from '../../ui/sidebar'
 import { Topbar } from '../Topbar'
 
 function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
   return render(
-    <SidebarProvider>
-      <Topbar
-        repoName={overrides.repoName ?? 'my-repo'}
-        repoPath={'repoPath' in overrides ? (overrides.repoPath ?? null) : '/home/user/my-repo'}
-        branch={overrides.branch ?? 'main'}
-        onFetch={overrides.onFetch}
-      />
-    </SidebarProvider>
+    <Topbar
+      repoName={overrides.repoName ?? 'my-repo'}
+      repoPath={'repoPath' in overrides ? (overrides.repoPath ?? null) : '/home/user/my-repo'}
+      activeView={overrides.activeView ?? 'history'}
+      onSelectView={overrides.onSelectView ?? vi.fn()}
+      workspaceContext={overrides.workspaceContext}
+      onFetch={overrides.onFetch}
+    />
   )
 }
 
 describe('Topbar', () => {
-  it('renders the repo name and branch', () => {
-    renderTopbar({ repoName: 'acme', branch: 'feature/login' })
+  it('renders the repo name and path', () => {
+    renderTopbar({ repoName: 'acme' })
     expect(screen.getByText('acme')).toBeInTheDocument()
-    expect(screen.getByText('feature/login')).toBeInTheDocument()
-  })
-
-  it('shows the first letter of the repo name in the icon', () => {
-    renderTopbar({ repoName: 'zebra' })
-    expect(screen.getByText('Z')).toBeInTheDocument()
-  })
-
-  it('shows the repo path', () => {
-    renderTopbar({ repoPath: '/projects/acme' })
-    expect(screen.getByText('/projects/acme')).toBeInTheDocument()
+    expect(screen.getByText('/home/user/my-repo')).toBeInTheDocument()
   })
 
   it('hides the repo path when repoPath is null', () => {
@@ -38,9 +27,36 @@ describe('Topbar', () => {
     expect(screen.queryByText('/home/user/my-repo')).not.toBeInTheDocument()
   })
 
-  it('renders the repo chip as a non-interactive display, not a button', () => {
-    renderTopbar({ repoName: 'acme' })
-    expect(screen.queryByRole('button', { name: /repository/i })).not.toBeInTheDocument()
+  it('copies the path and shows feedback when the path is clicked', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    renderTopbar({ repoPath: '/projects/acme' })
+
+    fireEvent.click(screen.getByRole('button', { name: '/projects/acme' }))
+
+    expect(writeText).toHaveBeenCalledWith('/projects/acme')
+    expect(screen.getByText('Copied path')).toBeInTheDocument()
+  })
+
+  it('renders History and Local changes view tabs with the active one pressed', () => {
+    renderTopbar({ activeView: 'history' })
+    expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Local changes' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+  })
+
+  it('fires onSelectView when a view tab is clicked', () => {
+    const onSelectView = vi.fn()
+    renderTopbar({ activeView: 'history', onSelectView })
+    fireEvent.click(screen.getByRole('button', { name: 'Local changes' }))
+    expect(onSelectView).toHaveBeenCalledWith('local-changes')
+  })
+
+  it('shows the workspace context when provided', () => {
+    renderTopbar({ workspaceContext: 'Fetched 3m ago' })
+    expect(screen.getByText('Fetched 3m ago')).toBeInTheDocument()
   })
 
   it('fires onFetch when Fetch is clicked', () => {
@@ -54,11 +70,5 @@ describe('Topbar', () => {
     renderTopbar()
     expect(screen.queryByRole('button', { name: /Pull/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Push/i })).not.toBeInTheDocument()
-  })
-
-  it('truncates long branch names', () => {
-    renderTopbar({ branch: 'feature/very-long-branch-name' })
-    const branchText = screen.getByText('feature/very-long-branch-name')
-    expect(branchText.className).toMatch(/truncate/)
   })
 })

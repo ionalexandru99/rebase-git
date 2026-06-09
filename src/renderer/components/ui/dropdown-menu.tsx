@@ -27,7 +27,11 @@ function useMenuContext() {
 
 function DropdownMenu(props: { children?: ReactNode }) {
   const [open, setOpen] = useState(false)
-  return <MenuContext.Provider value={{ open, setOpen }}>{props.children}</MenuContext.Provider>
+  return (
+    <MenuContext.Provider value={{ open, setOpen }}>
+      <div className="relative w-full">{props.children}</div>
+    </MenuContext.Provider>
+  )
 }
 
 function DropdownMenuTrigger(
@@ -64,21 +68,30 @@ function DropdownMenuGroup(props: HTMLAttributes<HTMLDivElement>) {
 }
 
 function DropdownMenuContent(props: HTMLAttributes<HTMLDivElement> & { gutter?: number }) {
-  const { open } = useMenuContext()
+  const { open, setOpen } = useMenuContext()
   const { className, gutter: _gutter, ...rest } = props
   if (!open) {
     return null
   }
   return (
-    <div
-      data-slot="dropdown-menu-content"
-      role="menu"
-      className={cn(
-        'z-50 min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
-        className
-      )}
-      {...rest}
-    />
+    <>
+      <button
+        type="button"
+        aria-label="Close menu"
+        tabIndex={-1}
+        className="fixed inset-0 z-40 cursor-default"
+        onClick={() => setOpen(false)}
+      />
+      <div
+        data-slot="dropdown-menu-content"
+        role="menu"
+        className={cn(
+          'absolute right-0 top-[calc(100%+4px)] z-50 max-h-[60vh] min-w-[12rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
+          className
+        )}
+        {...rest}
+      />
+    </>
   )
 }
 

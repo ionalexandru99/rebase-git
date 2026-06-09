@@ -2,7 +2,6 @@ import { Show } from '@/lib/react-compat'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { LoadingBadge } from '../ui/loading-badge'
-import { PanelActions, PanelHeader, PanelHeaderGroup, PanelSubtitle, PanelTitle } from '../ui/panel'
 
 interface HistoryHeaderProps {
   total?: number
@@ -37,36 +36,35 @@ function subtitle(props: HistoryHeaderProps): string {
 
 export function HistoryHeader(props: HistoryHeaderProps) {
   return (
-    <PanelHeader className="gap-3">
-      <PanelHeaderGroup>
-        <PanelTitle className="text-foreground">Timeline</PanelTitle>
-        <PanelSubtitle>{subtitle(props)}</PanelSubtitle>
-      </PanelHeaderGroup>
-
-      <PanelActions>
-        <Show when={props.hasMore && props.onLoadMore}>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7"
-            disabled={props.loadingMore || props.loading}
-            onClick={() => props.onLoadMore?.()}
-          >
-            {props.loadingMore ? 'Loading…' : 'Load more'}
-          </Button>
-        </Show>
-        <Show when={props.showFilter}>
-          <Input
-            value={props.filter}
-            onChange={(event) => props.onFilterChange(event.currentTarget.value)}
-            placeholder="filter commits…"
-            className="h-7 w-40"
-          />
-        </Show>
-        <Show when={props.loading || props.loadingMore}>
-          <LoadingBadge />
-        </Show>
-      </PanelActions>
-    </PanelHeader>
+    <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
+      <div className="min-w-0">
+        <div className="text-[15px] font-semibold">Timeline</div>
+        <div className="truncate text-[13px] text-muted-foreground">{subtitle(props)}</div>
+      </div>
+      <div className="flex-1" />
+      <Show when={props.loading || props.loadingMore}>
+        <LoadingBadge />
+      </Show>
+      <Show when={props.hasMore && props.onLoadMore}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8"
+          disabled={props.loadingMore || props.loading}
+          onClick={() => props.onLoadMore?.()}
+        >
+          {props.loadingMore ? 'Loading…' : 'Load more'}
+        </Button>
+      </Show>
+      <Show when={props.showFilter}>
+        <Input
+          value={props.filter}
+          onChange={(event) => props.onFilterChange(event.currentTarget.value)}
+          placeholder="Filter commits…"
+          aria-label="Filter commits"
+          className="h-[34px] w-60 rounded-[var(--r-sm)] bg-background"
+        />
+      </Show>
+    </div>
   )
 }

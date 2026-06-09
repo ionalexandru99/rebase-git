@@ -3,10 +3,8 @@ import { SidebarPrefsSchema } from '@shared/schemas/ipc'
 import type { JSX } from '@/lib/react-compat'
 import type { BranchTracking, RefKind } from '@/lib/ref-tree'
 import { useDraggableWidth } from '../../hooks/useDraggableWidth'
-import { SidebarInset, SidebarProvider } from '../ui/sidebar'
-import { AppSidebar, type SidebarView } from './Sidebar'
-import { Statusbar } from './Statusbar'
-import { Topbar } from './Topbar'
+import { AppSidebar } from './Sidebar'
+import { Topbar, type WorkspaceView } from './Topbar'
 
 const SIDEBAR_WIDTH_MIN = 200
 const SIDEBAR_WIDTH_MAX = 520
@@ -31,14 +29,15 @@ export interface BranchBrowser {
 }
 
 export interface WorkspaceNavigation {
-  activeView: SidebarView
-  onSelectView: (view: SidebarView) => void
+  activeView: WorkspaceView
+  onSelectView: (view: WorkspaceView) => void
 }
 
 interface ShellProps {
   repo: RepoChrome
   branchBrowser: BranchBrowser
   navigation: WorkspaceNavigation
+  workspaceContext?: string
   onFetch?: () => void
   children: JSX.Element
 }
@@ -53,7 +52,7 @@ const logSidebarPrefsError = (err: unknown) => {
 }
 
 export function Shell(props: ShellProps) {
-  const { width, isOpen, setOpen, onResizeStart } = useDraggableWidth({
+  const { width, onResizeStart } = useDraggableWidth({
     min: SIDEBAR_WIDTH_MIN,
     max: SIDEBAR_WIDTH_MAX,
     defaultWidth: SIDEBAR_WIDTH_DEFAULT,
@@ -64,35 +63,27 @@ export function Shell(props: ShellProps) {
   })
 
   return (
-    <SidebarProvider
-      open={isOpen()}
-      onOpenChange={setOpen}
-      className="!min-h-0 h-full"
-      style={{ '--sidebar-width': `${width()}px` }}
+    <div
+      className="grid h-full min-h-0 gap-1.5 bg-chrome p-1.5"
+      style={{ gridTemplateColumns: `${width()}px minmax(0, 1fr)` }}
     >
       <AppSidebar
-        navigation={props.navigation}
         branchBrowser={props.branchBrowser}
         currentBranch={props.repo.branch}
-        workingChanges={props.repo.changes}
         onResizeStart={(event) => onResizeStart(event.nativeEvent)}
       />
-      <SidebarInset className="flex min-h-0 flex-col">
+
+      <section className="relative z-[1] grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[var(--r-sm)] border bg-card shadow-[var(--shadow)]">
         <Topbar
           repoName={props.repo.repoName}
           repoPath={props.repo.repoPath}
-          branch={props.repo.branch}
+          activeView={props.navigation.activeView}
+          onSelectView={props.navigation.onSelectView}
+          workspaceContext={props.workspaceContext}
           onFetch={props.onFetch}
         />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
-          {props.children}
-        </div>
-        <Statusbar
-          branch={props.repo.branch}
-          changes={props.repo.changes}
-          directionLabel="History"
-        />
-      </SidebarInset>
-    </SidebarProvider>
+        <div className="flex min-h-0 flex-col overflow-hidden">{props.children}</div>
+      </section>
+    </div>
   )
 }
