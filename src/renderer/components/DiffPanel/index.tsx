@@ -317,28 +317,23 @@ function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
     )
   }
   const lineNumberClass = cn(
-    'select-none pr-2 text-right',
-    line.kind === 'context' ? 'text-muted-foreground/60' : 'text-muted-foreground'
+    'select-none pr-2.5 text-right tabular-nums',
+    line.kind === 'add' && 'text-add',
+    line.kind === 'del' && 'text-del',
+    line.kind === 'context' && 'text-muted-foreground/60'
   )
   return (
-    <div
-      className={cn(
-        'grid grid-cols-[44px_44px_16px_minmax(0,1fr)] items-baseline whitespace-pre-wrap break-words font-mono text-[14px] leading-[24px]',
-        line.kind === 'add' && 'bg-[var(--add-bg)] shadow-[inset_2px_0_0_var(--add)]',
-        line.kind === 'del' && 'bg-[var(--del-bg)] shadow-[inset_2px_0_0_var(--del)]'
-      )}
-    >
-      <span className={lineNumberClass}>{line.oldLine ?? ''}</span>
-      <span className={lineNumberClass}>{line.newLine ?? ''}</span>
+    <div className="grid grid-cols-[5px_44px_44px_minmax(0,1fr)] items-baseline whitespace-pre-wrap break-words font-mono text-[14px] leading-[24px]">
       <span
         className={cn(
-          'select-none text-center',
-          line.kind === 'add' && 'text-add',
-          line.kind === 'del' && 'text-del'
+          'self-stretch',
+          line.kind === 'add' && 'bg-add',
+          line.kind === 'del' &&
+            'bg-[repeating-linear-gradient(315deg,var(--del)_0_2px,transparent_2px_5px)]'
         )}
-      >
-        {line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ''}
-      </span>
+      />
+      <span className={lineNumberClass}>{line.oldLine ?? ''}</span>
+      <span className={lineNumberClass}>{line.newLine ?? ''}</span>
       <span>
         <Show when={props.tokens} fallback={line.text}>
           {(tokens) => (

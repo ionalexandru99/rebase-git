@@ -87,8 +87,8 @@ describe('highlightHunk', () => {
     expect(rebuilt).toEqual(lines.map((diffLine) => diffLine.text))
     const addLine = result?.[2]
     const keyword = addLine?.find((token) => token.content === 'const')
-    expect(keyword?.lightColor).toBe('#A626A4')
-    expect(keyword?.darkColor).toBe('#C678DD')
+    expect(keyword?.lightColor).toBe('#A631BE')
+    expect(keyword?.darkColor).toBe('#D568EA')
   })
 })
 

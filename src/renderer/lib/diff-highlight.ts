@@ -1,9 +1,12 @@
+import pierreDark from '@pierre/theme/pierre-dark'
+import pierreLight from '@pierre/theme/pierre-light'
 import type { DiffHunk, DiffLine } from '@shared/schemas/git'
 import {
   bundledLanguages,
   createHighlighter,
   createJavaScriptRegexEngine,
-  type HighlighterGeneric
+  type HighlighterGeneric,
+  type ThemeRegistrationRaw
 } from 'shiki'
 
 export interface TokenSpan {
@@ -14,8 +17,8 @@ export interface TokenSpan {
 
 export type LineTokens = TokenSpan[]
 
-const LIGHT_THEME = 'one-light'
-const DARK_THEME = 'one-dark-pro'
+const LIGHT_THEME = pierreLight.name ?? 'Pierre Light'
+const DARK_THEME = pierreDark.name ?? 'Pierre Dark'
 const MAX_HIGHLIGHT_LINE_LENGTH = 2000
 
 const EXTENSION_LANGUAGE_OVERRIDES: Record<string, string> = {
@@ -75,7 +78,7 @@ const loadedLanguages = new Set<string>()
 
 function getHighlighter(): Promise<DiffHighlighter> {
   highlighterPromise ??= createHighlighter({
-    themes: [LIGHT_THEME, DARK_THEME],
+    themes: [pierreLight, pierreDark] as unknown as ThemeRegistrationRaw[],
     langs: [],
     engine: createJavaScriptRegexEngine({ forgiving: true })
   }) as Promise<DiffHighlighter>
