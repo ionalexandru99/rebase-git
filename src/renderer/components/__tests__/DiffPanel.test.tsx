@@ -44,6 +44,10 @@ function mockDiffOn(side: 'unstaged' | 'staged') {
   )
 }
 
+// Highlighted lines are split into token spans, so match on the cell's full textContent.
+const getRenderedDiffLine = (text: string) =>
+  screen.getAllByText((_, element) => element?.textContent === text)[0]
+
 const hunkAt = (header: string, oldStart: number, newStart: number) => ({
   header,
   oldStart,
@@ -147,8 +151,8 @@ describe('DiffPanel', () => {
       expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/app.ts', false)
       expect(screen.getByText('@@ -1,3 +1,4 @@')).toBeInTheDocument()
     })
-    expect(screen.getByText('line two added')).toBeInTheDocument()
-    expect(screen.getByText('line removed')).toBeInTheDocument()
+    expect(getRenderedDiffLine('line two added')).toBeInTheDocument()
+    expect(getRenderedDiffLine('line removed')).toBeInTheDocument()
     expect(screen.getByText('+1')).toBeInTheDocument()
     expect(screen.getByText('−1')).toBeInTheDocument()
   })
@@ -291,6 +295,89 @@ describe('DiffPanel', () => {
     await waitFor(() => {
       expect(sidecarMock.stageFile).toHaveBeenCalledWith(repoPath, 'src/app.ts')
     })
+  })
+
+  it('syntax-highlights diff lines for known languages', async () => {
+    sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
+      staged
+        ? emptyDiff
+        : {
+            _tag: 'Ok' as const,
+            diff: {
+              filePath: 'src/app.ts',
+              binary: false,
+              hunks: [
+                {
+                  header: '@@ -1,1 +1,2 @@',
+                  oldStart: 1,
+                  oldCount: 1,
+                  newStart: 1,
+                  newCount: 2,
+                  lines: [
+                    { kind: 'context' as const, text: 'const base = 1', oldLine: 1, newLine: 1 },
+                    { kind: 'add' as const, text: 'const added = 2', oldLine: null, newLine: 2 }
+                  ]
+                }
+              ]
+            }
+          }
+    )
+    await renderDiffPanel({ file: 'src/app.ts' })
+
+    await waitFor(() => {
+      const keywords = screen
+        .getAllByText('const')
+        .filter((element) => element.getAttribute('style')?.includes('--shiki-dark'))
+      expect(keywords).toHaveLength(2)
+    })
+  })
+
+  it('renders plain text for files without a known language', async () => {
+    sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
+      staged
+        ? { _tag: 'Ok' as const, diff: { filePath: 'NOTES', binary: false, hunks: [] } }
+        : {
+            _tag: 'Ok' as const,
+            diff: {
+              filePath: 'NOTES',
+              binary: false,
+              hunks: [
+                {
+                  header: '@@ -1,1 +1,1 @@',
+                  oldStart: 1,
+                  oldCount: 1,
+                  newStart: 1,
+                  newCount: 1,
+                  lines: [
+                    {
+                      kind: 'add' as const,
+                      text: 'const looks like code',
+                      oldLine: null,
+                      newLine: 1
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+    )
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: ['NOTES'],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
+    })
+    await renderDiffPanel({ file: 'NOTES' })
+
+    const plainLine = await screen.findByText('const looks like code')
+    expect(plainLine.querySelector('span')).toBeNull()
   })
 
   it('renders a binary notice instead of hunks', async () => {

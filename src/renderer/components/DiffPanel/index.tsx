@@ -2,6 +2,12 @@ import type { DiffHunk, DiffLine, FileDiff } from '@shared/schemas/git'
 import { GetDiffResponseSchema } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { FileDiffIcon } from 'lucide-react'
+import {
+  highlightHunk,
+  hunkHighlightKey,
+  type LineTokens,
+  languageForFile
+} from '@/lib/diff-highlight'
 import { createMemo, For, Show } from '@/lib/react-compat'
 import { createQuery } from '@/lib/react-query-compat'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
@@ -194,6 +200,7 @@ export function DiffPanel(props: DiffPanelProps) {
                   {(entry) => (
                     <HunkCard
                       hunk={entry.display}
+                      filePath={props.selected?.file ?? ''}
                       opHeader={entry.hunk.header}
                       staged={entry.staged}
                       hunkActionsEnabled={entry.staged || !isUntracked()}
@@ -254,6 +261,7 @@ function DiffError(props: { message?: string }) {
 
 interface HunkCardProps {
   hunk: DiffHunk
+  filePath: string
   opHeader: string
   staged: boolean
   hunkActionsEnabled: boolean
@@ -270,6 +278,14 @@ function HunkCard(props: HunkCardProps) {
     }
   }
 
+  const highlightQuery = createQuery<Array<LineTokens | null> | null>(() => ({
+    queryKey: ['hunk-highlight', props.filePath, hunkHighlightKey(props.hunk)],
+    enabled: languageForFile(props.filePath) !== null,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+    queryFn: () => highlightHunk(props.filePath, props.hunk.lines)
+  }))
+
   return (
     <div className="mb-3 overflow-hidden rounded-[10px] border" data-testid="diff-hunk">
       <div className="flex h-8 items-center gap-2.5 border-b bg-card-2 px-2.5">
@@ -284,22 +300,26 @@ function HunkCard(props: HunkCardProps) {
           {props.hunk.header}
         </span>
       </div>
-      <For each={props.hunk.lines}>{(line) => <DiffLineRow line={line} />}</For>
+      <For each={props.hunk.lines}>
+        {(line, index) => (
+          <DiffLineRow line={line} tokens={highlightQuery.data?.[index()] ?? null} />
+        )}
+      </For>
     </div>
   )
 }
 
-function DiffLineRow(props: { line: DiffLine }) {
+function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
   const line = props.line
   if (line.kind === 'meta') {
     return (
-      <div className="px-2 py-0.5 font-mono text-[13px] text-muted-foreground">{line.text}</div>
+      <div className="px-2 py-0.5 font-mono text-[14px] text-muted-foreground">{line.text}</div>
     )
   }
   return (
     <div
       className={cn(
-        'grid grid-cols-[40px_40px_16px_minmax(0,1fr)] items-baseline whitespace-pre-wrap break-words font-mono text-[13px] leading-[22px]',
+        'grid grid-cols-[44px_44px_16px_minmax(0,1fr)] items-baseline whitespace-pre-wrap break-words font-mono text-[14px] leading-[24px]',
         line.kind === 'add' && 'bg-[var(--add-bg)]',
         line.kind === 'del' && 'bg-[var(--del-bg)]'
       )}
@@ -319,7 +339,22 @@ function DiffLineRow(props: { line: DiffLine }) {
       >
         {line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ''}
       </span>
-      <span>{line.text}</span>
+      <span>
+        <Show when={props.tokens} fallback={line.text}>
+          {(tokens) => (
+            <For each={tokens()}>
+              {(token) => (
+                <span
+                  className="text-(--shiki-light) dark:text-(--shiki-dark)"
+                  style={{ '--shiki-light': token.lightColor, '--shiki-dark': token.darkColor }}
+                >
+                  {token.content}
+                </span>
+              )}
+            </For>
+          )}
+        </Show>
+      </span>
     </div>
   )
 }

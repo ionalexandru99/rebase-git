@@ -109,10 +109,10 @@
   --brand-strong: color-mix(in oklch, var(--blue) 80%, #fff);
   --add: var(--green);
   --del: var(--destructive);
-  --add-bg: color-mix(in oklch, var(--add) 14%, transparent);
-  --add-word: color-mix(in oklch, var(--add) 30%, transparent);
-  --del-bg: color-mix(in oklch, var(--del) 13%, transparent);
-  --del-word: color-mix(in oklch, var(--del) 26%, transparent);
+  --add-bg: color-mix(in oklch, var(--add) 22%, transparent);
+  --add-word: color-mix(in oklch, var(--add) 38%, transparent);
+  --del-bg: color-mix(in oklch, var(--del) 20%, transparent);
+  --del-word: color-mix(in oklch, var(--del) 34%, transparent);
   --tint: 16%;
   --r-xs: 6px;
   --r-sm: 8px;
