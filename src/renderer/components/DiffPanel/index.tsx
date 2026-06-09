@@ -328,8 +328,7 @@ function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
         className={cn(
           'self-stretch',
           line.kind === 'add' && 'bg-add',
-          line.kind === 'del' &&
-            'bg-[repeating-linear-gradient(315deg,var(--del)_0_2px,transparent_2px_5px)]'
+          line.kind === 'del' && 'bg-del'
         )}
       />
       <span className={lineNumberClass}>{line.oldLine ?? ''}</span>
