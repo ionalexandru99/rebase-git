@@ -16,7 +16,7 @@ export function Titlebar() {
   }
 
   return (
-    <header className="drag-region flex h-[34px] items-center gap-2 bg-chrome pl-[78px] pr-2.5">
+    <header className="drag-region flex h-[34px] shrink-0 items-center gap-2 bg-chrome pl-[78px] pr-2.5">
       <div className="drag-region flex-1" />
       <div className="no-drag flex items-center gap-1">
         {SWATCHES.map((swatch) => (

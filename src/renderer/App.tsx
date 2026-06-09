@@ -107,11 +107,11 @@ function TabsShell(props: TabsShellProps) {
   })
 
   return (
-    <div className="grid h-screen grid-rows-[34px_minmax(0,1fr)] bg-chrome text-foreground">
+    <div className="flex h-screen flex-col bg-chrome text-foreground">
       <Toaster richColors position="bottom-right" />
       <Titlebar />
 
-      <div className="grid min-h-0 grid-cols-[64px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-[64px_minmax(0,1fr)]">
         <RepoRail
           tabs={tabDescriptors()}
           activeTabId={activeTabId()}
