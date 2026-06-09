@@ -286,7 +286,7 @@ describe('DiffPanel', () => {
     sidecarMock.stageFile.mockResolvedValue({ _tag: 'Ok' })
     await renderDiffPanel({ file: 'src/app.ts' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Stage file' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Stage src/app.ts' }))
 
     await waitFor(() => {
       expect(sidecarMock.stageFile).toHaveBeenCalledWith(repoPath, 'src/app.ts')
@@ -322,6 +322,5 @@ describe('DiffPanel', () => {
     await screen.findByText('@@ -1,3 +1,4 @@')
     expect(screen.queryByRole('checkbox', { name: 'Stage hunk' })).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Stage src/app.ts' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Stage file' })).toBeInTheDocument()
   })
 })

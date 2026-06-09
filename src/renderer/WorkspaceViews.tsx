@@ -106,6 +106,8 @@ function LocalChangesView(props: WorkspaceViewProps) {
               onSelect={(file) => setSelected({ file })}
               onStage={git.stageFile}
               onUnstage={git.unstageFile}
+              onStageAll={git.stageAll}
+              onUnstageAll={git.unstageAll}
               loading={git.loading() || git.state.statusLoading}
             />
             <span

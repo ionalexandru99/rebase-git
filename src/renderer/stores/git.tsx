@@ -725,6 +725,72 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
   }))
 
+  const stageAllMutation = createMutation(() => ({
+    mutationFn: async (files: string[]) => {
+      const path = repoPath()
+      if (!path || files.length === 0) {
+        return
+      }
+      const previous = readSnapshot(path)?.status
+      if (previous) {
+        const optimistic = files.reduce((status, file) => applyStage(status, file), previous)
+        statusRequestSeq.current++
+        writeSnapshot(path, { status: optimistic })
+        setState('status', optimistic)
+      }
+      const response = await sidecarFetch(
+        'stage-all',
+        { repoPath: path, files },
+        StageResponseSchema
+      )
+      if (response._tag === 'Ok') {
+        await refreshStatus(path)
+        invalidateDiffs(path)
+        return
+      }
+      if (previous) {
+        writeSnapshot(path, { status: previous })
+        setState('status', previous)
+      }
+      if (response._tag === 'GitError') {
+        setState('error', response.message)
+      }
+    }
+  }))
+
+  const unstageAllMutation = createMutation(() => ({
+    mutationFn: async (files: string[]) => {
+      const path = repoPath()
+      if (!path || files.length === 0) {
+        return
+      }
+      const previous = readSnapshot(path)?.status
+      if (previous) {
+        const optimistic = files.reduce((status, file) => applyUnstage(status, file), previous)
+        statusRequestSeq.current++
+        writeSnapshot(path, { status: optimistic })
+        setState('status', optimistic)
+      }
+      const response = await sidecarFetch(
+        'unstage-all',
+        { repoPath: path, files },
+        UnstageResponseSchema
+      )
+      if (response._tag === 'Ok') {
+        await refreshStatus(path)
+        invalidateDiffs(path)
+        return
+      }
+      if (previous) {
+        writeSnapshot(path, { status: previous })
+        setState('status', previous)
+      }
+      if (response._tag === 'GitError') {
+        setState('error', response.message)
+      }
+    }
+  }))
+
   const applyHunkMutation = async (
     op: typeof SidecarOp.stageHunk | typeof SidecarOp.unstageHunk,
     file: string,
@@ -879,6 +945,8 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     closeRepo,
     stageFile: (file: string) => stageMutation.mutateAsync(file),
     unstageFile: (file: string) => unstageMutation.mutateAsync(file),
+    stageAll: (files: string[]) => stageAllMutation.mutateAsync(files),
+    unstageAll: (files: string[]) => unstageAllMutation.mutateAsync(files),
     stageHunk: (file: string, hunkHeader: string) =>
       applyHunkMutation(SidecarOp.stageHunk, file, hunkHeader),
     unstageHunk: (file: string, hunkHeader: string) =>

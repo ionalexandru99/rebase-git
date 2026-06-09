@@ -132,6 +132,28 @@ describe('sidecar server', () => {
     expect(log.log.all[0].message).toBe('add new.txt')
   })
 
+  it('stages and unstages many files in one call', async () => {
+    fs.writeFileSync(path.join(repoPath, 'one.txt'), 'one\n')
+    fs.writeFileSync(path.join(repoPath, 'two.txt'), 'two\n')
+
+    const staged = await (
+      await call('stage-all', { repoPath, files: ['one.txt', 'two.txt'] })
+    ).json()
+    expect(staged._tag).toBe('Ok')
+
+    const afterStage = await (await call('get-status', { repoPath })).json()
+    expect(afterStage.status.staged).toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
+
+    const unstaged = await (
+      await call('unstage-all', { repoPath, files: ['one.txt', 'two.txt'] })
+    ).json()
+    expect(unstaged._tag).toBe('Ok')
+
+    const afterUnstage = await (await call('get-status', { repoPath })).json()
+    expect(afterUnstage.status.staged).not.toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
+    expect(afterUnstage.status.not_added).toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
+  })
+
   it('lists branches', async () => {
     const body = await (await call('get-branches', { repoPath })).json()
     expect(body._tag).toBe('Ok')

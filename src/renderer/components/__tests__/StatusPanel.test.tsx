@@ -32,6 +32,8 @@ function renderPanel(props: {
   onSelect?: (file: string) => void
   onStage?: (file: string) => void
   onUnstage?: (file: string) => void
+  onStageAll?: (files: string[]) => void
+  onUnstageAll?: (files: string[]) => void
   loading?: boolean
 }) {
   return render(
@@ -41,6 +43,8 @@ function renderPanel(props: {
       onSelect={props.onSelect ?? vi.fn()}
       onStage={props.onStage ?? vi.fn()}
       onUnstage={props.onUnstage ?? vi.fn()}
+      onStageAll={props.onStageAll ?? vi.fn()}
+      onUnstageAll={props.onUnstageAll ?? vi.fn()}
       loading={props.loading ?? false}
     />
   )
@@ -138,28 +142,30 @@ describe('StatusPanel', () => {
     expect(row?.className).toMatch(/brand-soft/)
   })
 
-  it('stages every file via the master checkbox', () => {
-    const onStage = vi.fn()
+  it('stages every unstaged file in one call via the "Stage all" button', () => {
+    const onStageAll = vi.fn()
     renderPanel({
-      status: emptyStatus({ files: [code('a.ts', ' ', 'M'), code('b.ts', '?', '?')] }),
-      onStage
+      status: emptyStatus({
+        files: [code('a.ts', ' ', 'M'), code('b.ts', '?', '?'), code('c.ts', 'M', ' ')]
+      }),
+      onStageAll
     })
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Stage all files' }))
-    expect(onStage).toHaveBeenCalledWith('a.ts')
-    expect(onStage).toHaveBeenCalledWith('b.ts')
+    fireEvent.click(screen.getByRole('button', { name: 'Stage all' }))
+    expect(onStageAll).toHaveBeenCalledTimes(1)
+    expect(onStageAll).toHaveBeenCalledWith(['a.ts', 'b.ts'])
   })
 
-  it('unstages everything via the master checkbox when all staged', () => {
-    const onUnstage = vi.fn()
+  it('unstages everything in one call via the "Unstage all" button when all staged', () => {
+    const onUnstageAll = vi.fn()
     renderPanel({
       status: emptyStatus({ files: [code('a.ts', 'M', ' '), code('b.ts', 'M', ' ')] }),
-      onUnstage
+      onUnstageAll
     })
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Unstage all files' }))
-    expect(onUnstage).toHaveBeenCalledWith('a.ts')
-    expect(onUnstage).toHaveBeenCalledWith('b.ts')
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage all' }))
+    expect(onUnstageAll).toHaveBeenCalledTimes(1)
+    expect(onUnstageAll).toHaveBeenCalledWith(['a.ts', 'b.ts'])
   })
 
   it('truncates long file names and exposes the full path as a title attribute', () => {

@@ -77,19 +77,6 @@ export function DiffPanel(props: DiffPanelProps) {
     return { adds, dels }
   })
 
-  const fileButton = () => {
-    if (unstagedHunks().length > 0 || isUntracked()) {
-      return { label: 'Stage file', action: () => void git.stageFile(props.selected?.file ?? '') }
-    }
-    if (stagedHunks().length > 0) {
-      return {
-        label: 'Unstage file',
-        action: () => void git.unstageFile(props.selected?.file ?? '')
-      }
-    }
-    return null
-  }
-
   // Both diffs share the index as a coordinate system: the staged diff's "new" side and
   // the unstaged diff's "old" side are the index. Sorting on those keeps document order,
   // and remapping the index side to HEAD/worktree coordinates keeps the displayed line
@@ -172,17 +159,6 @@ export function DiffPanel(props: DiffPanelProps) {
               <span className="text-del">−{totals().dels}</span>
             </span>
             <div className="flex-1" />
-            <Show when={fileButton()}>
-              {(button) => (
-                <button
-                  type="button"
-                  onClick={button().action}
-                  className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
-                >
-                  {button().label}
-                </button>
-              )}
-            </Show>
           </div>
         )}
       </Show>

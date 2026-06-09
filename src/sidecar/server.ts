@@ -43,6 +43,25 @@ function safeRepoPath(body: Body): string | null | typeof BAD_REQUEST {
   return resolveExistingRepoRoot(raw)
 }
 
+const resolveRepoRelativeFiles = (repoPath: string, body: Body): string[] | null => {
+  const value = body.files
+  if (!Array.isArray(value)) {
+    return null
+  }
+  const resolved: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') {
+      return null
+    }
+    const relative = resolveRepoRelativeFile(repoPath, entry)
+    if (!relative) {
+      return null
+    }
+    resolved.push(relative)
+  }
+  return resolved
+}
+
 const invalidScanDirectoryResponse = (): ScanForReposResponse =>
   parseOrThrow(ScanForReposResponseSchema, {
     _tag: 'GitError',
@@ -214,6 +233,34 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
         return operations.invalidRepoPath.unstage()
       }
       return operations.unstageFile(repoPath, relative)
+    }
+    case SidecarOp.stageAll: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.stage()
+      }
+      const files = resolveRepoRelativeFiles(repoPath, body)
+      if (!files) {
+        return BAD_REQUEST
+      }
+      return operations.stageAll(repoPath, files)
+    }
+    case SidecarOp.unstageAll: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.unstage()
+      }
+      const files = resolveRepoRelativeFiles(repoPath, body)
+      if (!files) {
+        return BAD_REQUEST
+      }
+      return operations.unstageAll(repoPath, files)
     }
     case SidecarOp.getDiff: {
       const repoPath = safeRepoPath(body)

@@ -238,6 +238,42 @@ export async function unstageFile(repoPath: string, file: string): Promise<Unsta
   })
 }
 
+export async function stageAll(repoPath: string, files: string[]): Promise<StageResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(StageResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (files.length === 0) {
+    return parseOrThrow(StageResponseSchema, { _tag: 'Ok' })
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.add(files)
+      return parseOrThrow(StageResponseSchema, { _tag: 'Ok' })
+    } catch (error) {
+      return parseOrThrow(StageResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
+    }
+  })
+}
+
+export async function unstageAll(repoPath: string, files: string[]): Promise<UnstageResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(UnstageResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (files.length === 0) {
+    return parseOrThrow(UnstageResponseSchema, { _tag: 'Ok' })
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.reset(['HEAD', '--', ...files])
+      return parseOrThrow(UnstageResponseSchema, { _tag: 'Ok' })
+    } catch (error) {
+      return parseOrThrow(UnstageResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
+    }
+  })
+}
+
 const DIFF_BASE_ARGS = ['--no-color', '--no-ext-diff', '--unified=3']
 
 async function readFileDiff(repoPath: string, file: string, staged: boolean): Promise<string> {
