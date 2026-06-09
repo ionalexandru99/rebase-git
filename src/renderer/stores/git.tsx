@@ -62,6 +62,7 @@ export interface GitState {
   logLoading: boolean
   logLoadingMore: boolean
   logHasMore: boolean
+  lastFetchedAt: number | null
   error: string | null
 }
 
@@ -80,6 +81,7 @@ const initialState: GitState = {
   logLoading: false,
   logLoadingMore: false,
   logHasMore: false,
+  lastFetchedAt: null,
   error: null
 }
 
@@ -503,8 +505,11 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
 
   const runFetchAndRefresh = async (path: string) => {
     const response = await sidecarFetch('fetch-repo', { repoPath: path }, FetchResponseSchema)
-    if (response._tag === 'Ok' && tabActive()) {
-      await refreshBranchesOnly(path)
+    if (response._tag === 'Ok') {
+      setState('lastFetchedAt', Date.now())
+      if (tabActive()) {
+        await refreshBranchesOnly(path)
+      }
     } else if (response._tag === 'GitError') {
       setState('error', response.message)
     }

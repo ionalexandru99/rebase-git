@@ -7,8 +7,9 @@ import {
   toggleVisibleTimelineRef
 } from '@/lib/timeline-visible-refs'
 import { Shell } from './components/shell/Shell'
-import type { SidebarView } from './components/shell/Sidebar'
+import type { WorkspaceView } from './components/shell/Topbar'
 import { useCheckoutRef } from './hooks/git/useCheckoutRef'
+import { formatRelativeTime } from './lib/format'
 import type { RefKind } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
 import type { GitStore } from './stores/git'
@@ -29,7 +30,7 @@ export function Workspace(props: WorkspaceProps) {
   const stagedCount = () => git.state.status?.staged.length ?? 0
   const untrackedCount = () => git.state.status?.not_added.length ?? 0
   const totalChanges = createMemo(() => modifiedCount() + stagedCount() + untrackedCount())
-  const [activeView, setActiveView] = createSignal<SidebarView>('history')
+  const [activeView, setActiveView] = createSignal<WorkspaceView>('history')
   const [visibleTimelineRefs, setVisibleTimelineRefs] = createSignal<Set<string>>(new Set())
 
   const sidebarLocalBranches = createMemo(() => git.state.branches?.all ?? [])
@@ -132,10 +133,15 @@ export function Workspace(props: WorkspaceProps) {
         onToggleTimelineVisibility: handleToggleTimelineVisibility,
         onCheckoutRef: handleCheckoutRef
       }}
+      workspaceContext={
+        git.state.lastFetchedAt
+          ? `Fetched ${formatRelativeTime(git.state.lastFetchedAt, Date.now())}`
+          : undefined
+      }
       onFetch={git.fetchNow}
     >
       {props.errorBanner}
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden p-2.5">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <WorkspaceViewRenderer
           activeView={activeView()}
           git={git}

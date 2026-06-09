@@ -473,7 +473,7 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(screen.getAllByText('my-app').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('feature/ui').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getByText(/4 changes/)).toBeInTheDocument()
+      expect(screen.getByText(/1 modified, 2 staged, 1 untracked/)).toBeInTheDocument()
     })
   })
 
@@ -684,7 +684,7 @@ describe('App — workspace (repo open)', () => {
         maxCount: LOG_PAGE_SIZE
       })
     })
-    await screen.findAllByText('feature/ui')
+    await screen.findByTitle('main')
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     const repoBPickerRow = (await screen.findAllByText('/projects/repo-b'))
@@ -735,7 +735,8 @@ describe('App — workspace (repo open)', () => {
     const matches = await screen.findAllByText('/home/user/projects/my-app')
     const pickerRow = matches
       .map((el) => el.closest('button'))
-      .find((b): b is HTMLButtonElement => !!b)
+      .filter((b): b is HTMLButtonElement => !!b)
+      .at(-1)
     expect(pickerRow).toBeTruthy()
     fireEvent.click(pickerRow as HTMLButtonElement)
 

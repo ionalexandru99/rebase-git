@@ -1,7 +1,7 @@
 import { CommitPanel } from './components/CommitPanel'
 import { HistoryPanel } from './components/HistoryPanel'
 import { StatusPanel } from './components/StatusPanel'
-import type { SidebarView } from './components/shell/Sidebar'
+import type { WorkspaceView } from './components/shell/Topbar'
 import { type Component, Dynamic, type JSX, Show } from './lib/react-compat'
 import type { GitStore } from './stores/git'
 
@@ -59,10 +59,10 @@ function HistoryView(props: WorkspaceViewProps) {
 const workspaceViewComponents = {
   history: HistoryView,
   'local-changes': LocalChangesView
-} satisfies Record<SidebarView, Component<WorkspaceViewProps>>
+} satisfies Record<WorkspaceView, Component<WorkspaceViewProps>>
 
 interface WorkspaceViewRendererProps extends WorkspaceViewProps {
-  activeView: SidebarView
+  activeView: WorkspaceView
 }
 
 export function WorkspaceViewRenderer(props: WorkspaceViewRendererProps): JSX.Element {
