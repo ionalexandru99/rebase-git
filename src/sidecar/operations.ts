@@ -622,9 +622,17 @@ export async function pushRepo(repoPath: string): Promise<PushResponse> {
   if (!gitInstances.has(key)) {
     return parseOrThrow(PushResponseSchema, { _tag: 'RepoNotOpen' })
   }
-  return withRepoLock(key, async () =>
-    parseOrThrow(PushResponseSchema, await runGitCommand(key, ['push']))
-  )
+  return withRepoLock(key, async () => {
+    const upstream = await runGitCommand(key, [
+      'rev-parse',
+      '--abbrev-ref',
+      '--symbolic-full-name',
+      '@{upstream}'
+    ])
+    const pushArgs =
+      upstream._tag === 'Ok' ? ['push'] : ['push', '--set-upstream', 'origin', 'HEAD']
+    return parseOrThrow(PushResponseSchema, await runGitCommand(key, pushArgs))
+  })
 }
 
 export async function pullRepo(repoPath: string): Promise<PullResponse> {
