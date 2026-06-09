@@ -4,6 +4,7 @@ export interface TabDescriptor {
   id: string
   title: string
   hasRepo: boolean
+  repoPath: string | null
 }
 
 interface NewTabRecord {
@@ -189,11 +190,12 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
 
   const tabDescriptors = createMemo<TabDescriptor[]>(() => {
     return tabs().map((tab) => {
-      const title =
-        tab.kind === 'repo' || tab.kind === 'opening-repo'
-          ? (tab.repoPath.split(/[/\\]/).filter(Boolean).at(-1) ?? 'New tab')
-          : 'New tab'
-      return { id: tab.id, title, hasRepo: tab.kind === 'repo' || tab.kind === 'opening-repo' }
+      const hasRepo = tab.kind === 'repo' || tab.kind === 'opening-repo'
+      const repoPath = hasRepo ? tab.repoPath : null
+      const title = repoPath
+        ? (repoPath.split(/[/\\]/).filter(Boolean).at(-1) ?? 'New tab')
+        : 'New tab'
+      return { id: tab.id, title, hasRepo, repoPath }
     })
   })
 
