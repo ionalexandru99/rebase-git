@@ -9,10 +9,10 @@ function getRootFontPx(): number {
 }
 const ROOT_PX = getRootFontPx()
 
-export const ROW_H = Math.round(ROOT_PX * 2)
+export const ROW_H = Math.round(ROOT_PX * 2.5)
 export const COL_W = Math.round(ROOT_PX)
 export const RAIL_PAD = Math.round(ROOT_PX * 0.875)
-export const DOT_R = ROOT_PX * 0.25
+export const DOT_R = ROOT_PX * 0.3125
 
 import { HISTORY_OVERSCAN } from '@/lib/virtual-config'
 
@@ -80,7 +80,7 @@ export function drawGraphRow(
   const dotX = laneX(row.commitLane)
   const edgeAlpha = dim ? 0.2 : 0.85
 
-  ctx.lineWidth = 1.5
+  ctx.lineWidth = 2
   ctx.globalAlpha = edgeAlpha
 
   if (!isFirst) {

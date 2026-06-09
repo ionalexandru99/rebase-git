@@ -10,14 +10,15 @@ import {
   For,
   Show
 } from '@/lib/react-compat'
+import type { RefKind } from '@/lib/ref-tree'
 import type { GitLog, GitLogEntry } from '@/types'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
 import { buildDisplayRows, useGraphLayoutWorker } from '../../hooks/useGraphLayoutWorker'
 import { useThemeNonce } from '../../hooks/useThemeNonce'
 import { EmptyState } from '../ui/empty-state'
-import { Panel } from '../ui/panel'
 import { CommitGraphCanvas } from './CommitGraphCanvas'
 import { CommitRow } from './CommitRow'
+import { FocusRail } from './FocusRail'
 import { HistoryHeader } from './HistoryHeader'
 import { SkeletonRows } from './SkeletonRows'
 import {
@@ -37,12 +38,13 @@ interface HistoryPanelProps {
   currentBranch?: string
   remoteBranches?: string[]
   visibleBranchRefs?: ReadonlySet<string>
+  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   repoPath?: string | null
 }
 
 const COL_AUTHOR_REM = 12
 const COL_SHA_REM = 4.5
-const COL_DATE_REM = 6.5
+const COL_DATE_REM = 7.5
 const HISTORY_SCROLL_CACHE_LIMIT = 32
 const historyScrollPositions = new Map<string, number>()
 
@@ -195,7 +197,8 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const showSkeleton = () => props.loading && !hasCommits()
 
   return (
-    <Panel className="h-full">
+    <div className="flex h-full min-h-0 flex-col">
+      <FocusRail visibleRefs={visibleBranchRefs()} onToggleRef={props.onToggleTimelineVisibility} />
       <HistoryHeader
         total={props.log?.total}
         visibleTotal={commits().length}
@@ -211,7 +214,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
 
       <Show when={commits().length > 0}>
         <div
-          className="grid h-7 shrink-0 items-center gap-1 border-b bg-muted/30 px-0 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+          className="grid h-[30px] shrink-0 items-center gap-1 border-b bg-history-head px-0 text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground"
           style={{ gridTemplateColumns: headerGridTemplate() }}
         >
           <span aria-hidden="true" />
@@ -290,7 +293,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
           </div>
         </Show>
       </div>
-    </Panel>
+    </div>
   )
 }
 

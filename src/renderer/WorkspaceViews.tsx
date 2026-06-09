@@ -3,6 +3,7 @@ import { HistoryPanel } from './components/HistoryPanel'
 import { StatusPanel } from './components/StatusPanel'
 import type { WorkspaceView } from './components/shell/Topbar'
 import { type Component, Dynamic, type JSX, Show } from './lib/react-compat'
+import type { RefKind } from './lib/ref-tree'
 import type { GitStore } from './stores/git'
 
 interface WorkspaceViewProps {
@@ -10,6 +11,7 @@ interface WorkspaceViewProps {
   repoPath: string | null
   remoteBranches: string[]
   visibleBranchRefs: ReadonlySet<string>
+  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   tabActive: () => boolean
 }
 
@@ -50,6 +52,7 @@ function HistoryView(props: WorkspaceViewProps) {
           currentBranch={git.state.currentBranch}
           remoteBranches={props.remoteBranches}
           visibleBranchRefs={props.visibleBranchRefs}
+          onToggleTimelineVisibility={props.onToggleTimelineVisibility}
         />
       </div>
     </Show>

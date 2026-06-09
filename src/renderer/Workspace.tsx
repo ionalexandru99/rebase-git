@@ -148,6 +148,7 @@ export function Workspace(props: WorkspaceProps) {
           repoPath={repoPath}
           remoteBranches={remoteBranches}
           visibleBranchRefs={timelineFilterRefs()}
+          onToggleTimelineVisibility={handleToggleTimelineVisibility}
           tabActive={() => props.tabActive?.() ?? true}
         />
       </div>
