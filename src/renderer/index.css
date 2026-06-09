@@ -107,12 +107,12 @@
   --brand-soft: color-mix(in oklch, var(--blue) 16%, transparent);
   --brand-line: color-mix(in oklch, var(--blue) 40%, transparent);
   --brand-strong: color-mix(in oklch, var(--blue) 80%, #fff);
-  --add: var(--green);
-  --del: var(--destructive);
-  --add-bg: color-mix(in oklch, var(--add) 14%, transparent);
-  --add-word: color-mix(in oklch, var(--add) 30%, transparent);
-  --del-bg: color-mix(in oklch, var(--del) 13%, transparent);
-  --del-word: color-mix(in oklch, var(--del) 26%, transparent);
+  --add: oklch(0.55 0.16 150);
+  --del: oklch(0.55 0.17 26);
+  --add-bg: color-mix(in oklch, var(--add) 16%, transparent);
+  --add-word: color-mix(in oklch, var(--add) 36%, transparent);
+  --del-bg: color-mix(in oklch, var(--del) 15%, transparent);
+  --del-word: color-mix(in oklch, var(--del) 32%, transparent);
   --tint: 16%;
   --r-xs: 6px;
   --r-sm: 8px;
@@ -165,6 +165,9 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  --add: oklch(0.72 0.2 149);
+  --del: oklch(0.71 0.18 25);
 
   --card-2: oklch(0.225 0 0);
   --border-strong: oklch(1 0 0 / 20%);
