@@ -316,20 +316,20 @@ function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
       <div className="px-2 py-0.5 font-mono text-[14px] text-muted-foreground">{line.text}</div>
     )
   }
+  const lineNumberClass = cn(
+    'select-none pr-2 text-right',
+    line.kind === 'context' ? 'text-muted-foreground/60' : 'text-muted-foreground'
+  )
   return (
     <div
       className={cn(
         'grid grid-cols-[44px_44px_16px_minmax(0,1fr)] items-baseline whitespace-pre-wrap break-words font-mono text-[14px] leading-[24px]',
-        line.kind === 'add' && 'bg-[var(--add-bg)]',
-        line.kind === 'del' && 'bg-[var(--del-bg)]'
+        line.kind === 'add' && 'bg-[var(--add-bg)] shadow-[inset_2px_0_0_var(--add)]',
+        line.kind === 'del' && 'bg-[var(--del-bg)] shadow-[inset_2px_0_0_var(--del)]'
       )}
     >
-      <span className="select-none pr-2 text-right text-muted-foreground/60">
-        {line.oldLine ?? ''}
-      </span>
-      <span className="select-none pr-2 text-right text-muted-foreground/60">
-        {line.newLine ?? ''}
-      </span>
+      <span className={lineNumberClass}>{line.oldLine ?? ''}</span>
+      <span className={lineNumberClass}>{line.newLine ?? ''}</span>
       <span
         className={cn(
           'select-none text-center',
