@@ -40,6 +40,25 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-card-2: var(--card-2);
+  --color-border-strong: var(--border-strong);
+  --color-chrome: var(--chrome);
+  --color-history-head: var(--history-head);
+  --color-blue: var(--blue);
+  --color-cyan: var(--cyan);
+  --color-orange: var(--orange);
+  --color-green: var(--green);
+  --color-purple: var(--purple);
+  --color-yellow: var(--yellow);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-add: var(--add);
+  --color-del: var(--del);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    sans-serif;
 }
 
 :root {
@@ -75,25 +94,61 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  --blue: #7c8cff;
+  --cyan: #5fb4e4;
+  --orange: #e6804c;
+  --green: #6ec48a;
+  --purple: #c97cd1;
+  --yellow: #d9c356;
+  --brand: var(--blue);
+  --brand-foreground: #fff;
+  --brand-soft: color-mix(in oklch, var(--blue) 16%, transparent);
+  --brand-line: color-mix(in oklch, var(--blue) 40%, transparent);
+  --brand-strong: color-mix(in oklch, var(--blue) 80%, #fff);
+  --add: var(--green);
+  --del: var(--destructive);
+  --add-bg: color-mix(in oklch, var(--add) 14%, transparent);
+  --add-word: color-mix(in oklch, var(--add) 30%, transparent);
+  --del-bg: color-mix(in oklch, var(--del) 13%, transparent);
+  --del-word: color-mix(in oklch, var(--del) 26%, transparent);
+  --tint: 16%;
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  --card-2: oklch(0.985 0 0);
+  --border-strong: oklch(0.86 0 0);
+  --chrome: oklch(0.945 0 0);
+  --history-head: oklch(0.965 0 0);
+  --lane: oklch(0.79 0.05 264);
+  --focus: oklch(0.92 0 0);
+  --staged-bg: oklch(0.94 0.035 150);
+  --modified-bg: oklch(0.94 0.035 45);
+  --untracked-bg: oklch(0.94 0.035 245);
+  --deleted-bg: oklch(0.94 0.035 25);
+  --shadow: 0 18px 44px oklch(0.2 0 0 / 10%);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --background: oklch(0.205 0 0);
+  --foreground: oklch(0.96 0 0);
+  --card: oklch(0.245 0 0);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.245 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.9 0 0);
+  --primary-foreground: oklch(0.22 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --muted: oklch(0.285 0 0);
+  --muted-foreground: oklch(0.76 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
+  --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.488 0.243 264.376);
@@ -109,6 +164,18 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  --card-2: oklch(0.225 0 0);
+  --border-strong: oklch(1 0 0 / 20%);
+  --chrome: oklch(0.185 0 0);
+  --history-head: oklch(0.275 0 0);
+  --lane: oklch(0.43 0.055 264);
+  --focus: oklch(0.38 0 0);
+  --staged-bg: oklch(0.32 0.035 150);
+  --modified-bg: oklch(0.32 0.035 45);
+  --untracked-bg: oklch(0.32 0.035 245);
+  --deleted-bg: oklch(0.32 0.035 25);
+  --shadow: 0 12px 32px oklch(0 0 0 / 16%);
 }
 
 @layer base {
