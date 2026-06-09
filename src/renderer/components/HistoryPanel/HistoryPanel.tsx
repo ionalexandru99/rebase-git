@@ -228,7 +228,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
       <div
         ref={attachScroll}
         onScroll={handleScroll}
-        className="min-h-0 min-h-[480px] flex-1 overflow-auto"
+        className="min-h-0 flex-1 overflow-auto"
         data-testid="history-scroll"
       >
         <Show

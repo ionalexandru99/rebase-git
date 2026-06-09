@@ -205,11 +205,6 @@ body {
   -webkit-app-region: no-drag;
 }
 
-body[data-sidebar-resizing="true"] [data-slot="sidebar-gap"],
-body[data-sidebar-resizing="true"] [data-slot="sidebar-container"] {
-  transition: none;
-}
-
 * {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
