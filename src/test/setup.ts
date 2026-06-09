@@ -4,9 +4,11 @@ import type {
   BranchesResponse,
   CommitResponse,
   FetchResponse,
+  GetDiffResponse,
   LocalBranchesResponse,
   LogResponse,
   RemoteRefsResponse,
+  StageHunkResponse,
   StageResponse,
   StatusResponse,
   UnstageResponse
@@ -24,7 +26,12 @@ export const sidecarMock = {
   stageFile: vi.fn<(repoPath: string, file: string) => Promise<StageResponse>>(),
   unstageFile: vi.fn<(repoPath: string, file: string) => Promise<UnstageResponse>>(),
   commit: vi.fn<(repoPath: string, message: string) => Promise<CommitResponse>>(),
-  fetchRepo: vi.fn<(repoPath: string) => Promise<FetchResponse>>()
+  fetchRepo: vi.fn<(repoPath: string) => Promise<FetchResponse>>(),
+  getDiff: vi.fn<(repoPath: string, file: string, staged: boolean) => Promise<GetDiffResponse>>(),
+  stageHunk:
+    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
+  unstageHunk:
+    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>()
 }
 ;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
 
@@ -69,6 +76,19 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             break
           case 'fetch-repo':
             payload = await mock.fetchRepo(repoPath)
+            break
+          case 'get-diff':
+            payload = await mock.getDiff(repoPath, body.file as string, body.staged === true)
+            break
+          case 'stage-hunk':
+            payload = await mock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
+            break
+          case 'unstage-hunk':
+            payload = await mock.unstageHunk(
+              repoPath,
+              body.file as string,
+              body.hunkHeader as string
+            )
             break
           default:
             throw new Error(`unhandled sidecar op in test: ${op}`)

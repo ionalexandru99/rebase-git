@@ -537,18 +537,17 @@ describe('App — workspace (repo open)', () => {
     })
   })
 
-  it('defaults to the history view and swaps to the local-changes view from the sidebar', async () => {
+  it('defaults to the history view and swaps to the local-changes view from the topbar', async () => {
     await renderWithRepo()
 
     expect(await screen.findByText('Timeline')).toBeVisible()
     expect(await screen.findByText('Initial commit')).toBeVisible()
-    expect(screen.queryByText('Working Directory')).not.toBeInTheDocument()
-    expect(screen.queryByText('Commit')).not.toBeInTheDocument()
+    expect(screen.queryByText(/files · /)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
 
-    expect(await screen.findByText('Working Directory')).toBeVisible()
-    expect(screen.getByText('Commit')).toBeVisible()
+    expect(await screen.findByText('4 files · 2 staged')).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Commit message' })).toBeVisible()
     expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
   })
 
@@ -559,7 +558,7 @@ describe('App — workspace (repo open)', () => {
     expect(screen.queryByRole('button', { name: /Switch repository/i })).not.toBeInTheDocument()
   })
 
-  it('shows the clean badge when no changes are pending', async () => {
+  it('shows the clean working-tree state when no changes are pending', async () => {
     mockBaseAPI({
       workingDirectory: '/workspace',
       scanRepos: ['/workspace/repo']
@@ -590,7 +589,7 @@ describe('App — workspace (repo open)', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Local changes/i }))
     await waitFor(() => {
-      expect(screen.getAllByText('Clean').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('Working tree clean')).toBeInTheDocument()
     })
   })
 

@@ -8,6 +8,7 @@ import {
   LocalBranchesResponseSchema,
   OpenRepoResponseSchema,
   RemoteRefsResponseSchema,
+  StageHunkResponseSchema,
   StageResponseSchema,
   StartLogStreamResponseSchema,
   StatusResponseSchema,
@@ -680,6 +681,28 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
   }))
 
+  const applyHunkMutation = async (
+    op: typeof SidecarOp.stageHunk | typeof SidecarOp.unstageHunk,
+    file: string,
+    hunkHeader: string
+  ): Promise<boolean> => {
+    const path = repoPath()
+    if (!path) {
+      return false
+    }
+    const response = await sidecarFetch(
+      op,
+      { repoPath: path, file, hunkHeader },
+      StageHunkResponseSchema
+    )
+    if (response._tag === 'GitError') {
+      setState('error', response.message)
+    }
+    await refreshStatus(path)
+    void queryClient.invalidateQueries({ queryKey: repoQueryKeys(tabId, path).diffRoot })
+    return response._tag === 'Ok'
+  }
+
   const commitMutation = createMutation(() => ({
     mutationFn: async (message: string) => {
       const path = repoPath()
@@ -810,6 +833,16 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     closeRepo,
     stageFile: (file: string) => stageMutation.mutateAsync(file),
     unstageFile: (file: string) => unstageMutation.mutateAsync(file),
+    stageHunk: (file: string, hunkHeader: string) =>
+      applyHunkMutation(SidecarOp.stageHunk, file, hunkHeader),
+    unstageHunk: (file: string, hunkHeader: string) =>
+      applyHunkMutation(SidecarOp.unstageHunk, file, hunkHeader),
+    diffQueryKey: (file: string, staged: boolean) => {
+      const queryKeys = keys()
+      return queryKeys
+        ? queryKeys.diff(file, staged)
+        : (['tab', tabId, 'idle', 'diff', file, staged] as const)
+    },
     commit: (message: string) => commitMutation.mutateAsync(message),
     fetchNow,
     refreshAfterCheckout,
