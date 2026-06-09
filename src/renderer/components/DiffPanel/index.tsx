@@ -8,6 +8,7 @@ import { sidecarFetch } from '@/lib/sidecar-fetch'
 import { cn } from '@/lib/utils'
 import type { GitStore } from '@/stores/git'
 import type { SelectedFile } from '../StatusPanel'
+import { Checkbox } from '../ui/checkbox'
 import { EmptyState } from '../ui/empty-state'
 
 interface DiffPanelProps {
@@ -20,42 +21,51 @@ export function DiffPanel(props: DiffPanelProps) {
   const repoPath = () => git.state.repoPath
 
   const isUntracked = () =>
-    props.selected !== null &&
-    !props.selected.staged &&
-    (git.state.status?.not_added.includes(props.selected.file) ?? false)
+    props.selected !== null && (git.state.status?.not_added.includes(props.selected.file) ?? false)
 
-  const diffQuery = createQuery(() => {
-    const path = repoPath()
-    const selected = props.selected
-    return {
-      queryKey: selected ? git.diffQueryKey(selected.file, selected.staged) : ['diff', 'none'],
-      enabled: Boolean(path && selected),
-      queryFn: async (): Promise<FileDiff> => {
-        if (!path || !selected) {
-          throw new Error('No file selected')
+  const makeDiffQuery = (staged: boolean) =>
+    createQuery(() => {
+      const path = repoPath()
+      const selected = props.selected
+      return {
+        queryKey: selected ? git.diffQueryKey(selected.file, staged) : ['diff', 'none', staged],
+        enabled: Boolean(path && selected),
+        queryFn: async (): Promise<FileDiff> => {
+          if (!path || !selected) {
+            throw new Error('No file selected')
+          }
+          const response = await sidecarFetch(
+            SidecarOp.getDiff,
+            { repoPath: path, file: selected.file, staged },
+            GetDiffResponseSchema
+          )
+          if (response._tag === 'Ok') {
+            return response.diff
+          }
+          if (response._tag === 'GitError') {
+            throw new Error(response.message)
+          }
+          throw new Error('Repository not open')
         }
-        const response = await sidecarFetch(
-          SidecarOp.getDiff,
-          { repoPath: path, file: selected.file, staged: selected.staged },
-          GetDiffResponseSchema
-        )
-        if (response._tag === 'Ok') {
-          return response.diff
-        }
-        if (response._tag === 'GitError') {
-          throw new Error(response.message)
-        }
-        throw new Error('Repository not open')
       }
-    }
-  })
+    })
 
-  const diff = () => (props.selected ? (diffQuery.data ?? null) : null)
+  const unstagedQuery = makeDiffQuery(false)
+  const stagedQuery = makeDiffQuery(true)
+
+  const unstagedDiff = () => (props.selected ? (unstagedQuery.data ?? null) : null)
+  const stagedDiff = () => (props.selected ? (stagedQuery.data ?? null) : null)
+
+  const unstagedHunks = () => unstagedDiff()?.hunks ?? []
+  const stagedHunks = () => stagedDiff()?.hunks ?? []
+  const isBinary = () => Boolean(unstagedDiff()?.binary || stagedDiff()?.binary)
+  const hasError = () => unstagedQuery.isError || stagedQuery.isError
+  const errorMessage = () => unstagedQuery.error?.message ?? stagedQuery.error?.message
+
   const totals = createMemo(() => {
-    const current = diff()
     let adds = 0
     let dels = 0
-    for (const hunk of current?.hunks ?? []) {
+    for (const hunk of [...unstagedHunks(), ...stagedHunks()]) {
       for (const line of hunk.lines) {
         if (line.kind === 'add') {
           adds++
@@ -67,15 +77,73 @@ export function DiffPanel(props: DiffPanelProps) {
     return { adds, dels }
   })
 
+  const fileButton = () => {
+    if (unstagedHunks().length > 0 || isUntracked()) {
+      return { label: 'Stage file', action: () => void git.stageFile(props.selected?.file ?? '') }
+    }
+    if (stagedHunks().length > 0) {
+      return {
+        label: 'Unstage file',
+        action: () => void git.unstageFile(props.selected?.file ?? '')
+      }
+    }
+    return null
+  }
+
+  // Both diffs share the index as a coordinate system: the staged diff's "new" side and
+  // the unstaged diff's "old" side are the index. Sorting on those keeps document order,
+  // and remapping the index side to HEAD/worktree coordinates keeps the displayed line
+  // numbers stable when a hunk moves between staged and unstaged.
+  const mergedHunks = createMemo<HunkEntry[]>(() => {
+    const staged = stagedHunks()
+    const unstaged = unstagedHunks()
+    const headShiftAt = (indexLine: number) =>
+      staged.reduce(
+        (shift, hunk) =>
+          hunk.newStart < indexLine ? shift + (hunk.oldCount - hunk.newCount) : shift,
+        0
+      )
+    const worktreeShiftAt = (indexLine: number) =>
+      unstaged.reduce(
+        (shift, hunk) =>
+          hunk.oldStart < indexLine ? shift + (hunk.newCount - hunk.oldCount) : shift,
+        0
+      )
+    const entries: HunkEntry[] = [
+      ...staged.map((hunk) => ({
+        hunk,
+        display: remapHunk(hunk, 0, worktreeShiftAt(hunk.newStart)),
+        staged: true,
+        indexStart: hunk.newStart
+      })),
+      ...unstaged.map((hunk) => ({
+        hunk,
+        display: remapHunk(hunk, headShiftAt(hunk.oldStart), 0),
+        staged: false,
+        indexStart: hunk.oldStart
+      }))
+    ]
+    return entries.sort((left, right) => left.indexStart - right.indexStart)
+  })
+
+  const hasAnyHunks = () => mergedHunks().length > 0
+
+  const fileStageState = () => {
+    if (stagedHunks().length === 0) {
+      return 'unstaged'
+    }
+    return unstagedHunks().length > 0 ? 'partial' : 'staged'
+  }
+
   const toggleFileStaged = () => {
-    const selected = props.selected
-    if (!selected) {
+    const file = props.selected?.file
+    if (!file) {
       return
     }
-    if (selected.staged) {
-      void git.unstageFile(selected.file)
+    if (fileStageState() === 'staged') {
+      void git.unstageFile(file)
     } else {
-      void git.stageFile(selected.file)
+      void git.stageFile(file)
     }
   }
 
@@ -84,6 +152,18 @@ export function DiffPanel(props: DiffPanelProps) {
       <Show when={props.selected} fallback={<div className="border-b" />}>
         {(selected) => (
           <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
+            <Show when={hasAnyHunks() && !isBinary()}>
+              <Checkbox
+                checked={fileStageState() === 'staged'}
+                indeterminate={fileStageState() === 'partial'}
+                aria-label={
+                  fileStageState() === 'staged'
+                    ? `Unstage ${selected().file}`
+                    : `Stage ${selected().file}`
+                }
+                onChange={toggleFileStaged}
+              />
+            </Show>
             <span className="min-w-0 truncate text-sm font-semibold" title={selected().file}>
               {selected().file}
             </span>
@@ -92,13 +172,17 @@ export function DiffPanel(props: DiffPanelProps) {
               <span className="text-del">−{totals().dels}</span>
             </span>
             <div className="flex-1" />
-            <button
-              type="button"
-              onClick={toggleFileStaged}
-              className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
-            >
-              {selected().staged ? 'Unstage file' : 'Stage file'}
-            </button>
+            <Show when={fileButton()}>
+              {(button) => (
+                <button
+                  type="button"
+                  onClick={button().action}
+                  className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
+                >
+                  {button().label}
+                </button>
+              )}
+            </Show>
           </div>
         )}
       </Show>
@@ -115,52 +199,73 @@ export function DiffPanel(props: DiffPanelProps) {
             />
           }
         >
-          <Show
-            when={!diffQuery.isError}
-            fallback={<DiffError message={diffQuery.error?.message} />}
-          >
-            <Show when={diff()}>
-              {(loadedDiff) => (
-                <Show
-                  when={!loadedDiff().binary}
-                  fallback={
-                    <div className="px-2 py-4 text-sm text-muted-foreground">
-                      Binary file — no preview available.
-                    </div>
-                  }
-                >
-                  <Show
-                    when={loadedDiff().hunks.length > 0}
-                    fallback={
-                      <div className="px-2 py-4 text-sm text-muted-foreground">
-                        No changes to show.
-                      </div>
-                    }
-                  >
-                    <For each={loadedDiff().hunks}>
-                      {(hunk) => (
-                        <HunkCard
-                          hunk={hunk}
-                          staged={props.selected?.staged ?? false}
-                          hunkActionsEnabled={!isUntracked()}
-                          onStageHunk={(header) =>
-                            void git.stageHunk(props.selected?.file ?? '', header)
-                          }
-                          onUnstageHunk={(header) =>
-                            void git.unstageHunk(props.selected?.file ?? '', header)
-                          }
-                        />
-                      )}
-                    </For>
-                  </Show>
-                </Show>
-              )}
+          <Show when={!hasError()} fallback={<DiffError message={errorMessage()} />}>
+            <Show
+              when={!isBinary()}
+              fallback={
+                <div className="px-2 py-4 text-sm text-muted-foreground">
+                  Binary file — no preview available.
+                </div>
+              }
+            >
+              <Show
+                when={hasAnyHunks()}
+                fallback={
+                  <div className="px-2 py-4 text-sm text-muted-foreground">No changes to show.</div>
+                }
+              >
+                <For each={mergedHunks()}>
+                  {(entry) => (
+                    <HunkCard
+                      hunk={entry.display}
+                      opHeader={entry.hunk.header}
+                      staged={entry.staged}
+                      hunkActionsEnabled={entry.staged || !isUntracked()}
+                      onStageHunk={(header) =>
+                        void git.stageHunk(props.selected?.file ?? '', header)
+                      }
+                      onUnstageHunk={(header) =>
+                        void git.unstageHunk(props.selected?.file ?? '', header)
+                      }
+                    />
+                  )}
+                </For>
+              </Show>
             </Show>
           </Show>
         </Show>
       </div>
     </section>
   )
+}
+
+interface HunkEntry {
+  hunk: DiffHunk
+  display: DiffHunk
+  staged: boolean
+  indexStart: number
+}
+
+const HUNK_RANGE_RE = /^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/
+
+function remapHunk(hunk: DiffHunk, oldShift: number, newShift: number): DiffHunk {
+  if (oldShift === 0 && newShift === 0) {
+    return hunk
+  }
+  const oldStart = hunk.oldStart + oldShift
+  const newStart = hunk.newStart + newShift
+  const tail = hunk.header.replace(HUNK_RANGE_RE, '')
+  return {
+    ...hunk,
+    oldStart,
+    newStart,
+    header: `@@ -${oldStart},${hunk.oldCount} +${newStart},${hunk.newCount} @@${tail}`,
+    lines: hunk.lines.map((line) => ({
+      ...line,
+      oldLine: line.oldLine === null ? null : line.oldLine + oldShift,
+      newLine: line.newLine === null ? null : line.newLine + newShift
+    }))
+  }
 }
 
 function DiffError(props: { message?: string }) {
@@ -173,6 +278,7 @@ function DiffError(props: { message?: string }) {
 
 interface HunkCardProps {
   hunk: DiffHunk
+  opHeader: string
   staged: boolean
   hunkActionsEnabled: boolean
   onStageHunk: (header: string) => void
@@ -182,26 +288,25 @@ interface HunkCardProps {
 function HunkCard(props: HunkCardProps) {
   const toggle = () => {
     if (props.staged) {
-      props.onUnstageHunk(props.hunk.header)
+      props.onUnstageHunk(props.opHeader)
     } else {
-      props.onStageHunk(props.hunk.header)
+      props.onStageHunk(props.opHeader)
     }
   }
 
   return (
     <div className="mb-3 overflow-hidden rounded-[10px] border" data-testid="diff-hunk">
       <div className="flex h-8 items-center gap-2.5 border-b bg-card-2 px-2.5">
-        <span className="min-w-0 truncate text-xs text-muted-foreground">{props.hunk.header}</span>
-        <div className="flex-1" />
         <Show when={props.hunkActionsEnabled}>
-          <button
-            type="button"
-            onClick={toggle}
-            className="h-[22px] shrink-0 rounded-[var(--r-xs)] bg-[var(--brand-soft)] px-2 text-[11px] font-semibold text-brand transition-colors hover:bg-brand/25"
-          >
-            {props.staged ? 'Unstage hunk' : 'Stage hunk'}
-          </button>
+          <Checkbox
+            checked={props.staged}
+            onChange={toggle}
+            aria-label={props.staged ? 'Unstage hunk' : 'Stage hunk'}
+          />
         </Show>
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+          {props.hunk.header}
+        </span>
       </div>
       <For each={props.hunk.lines}>{(line) => <DiffLineRow line={line} />}</For>
     </div>
@@ -211,12 +316,14 @@ function HunkCard(props: HunkCardProps) {
 function DiffLineRow(props: { line: DiffLine }) {
   const line = props.line
   if (line.kind === 'meta') {
-    return <div className="px-2 py-0.5 text-xs text-muted-foreground">{line.text}</div>
+    return (
+      <div className="px-2 py-0.5 font-mono text-[13px] text-muted-foreground">{line.text}</div>
+    )
   }
   return (
     <div
       className={cn(
-        'grid grid-cols-[40px_40px_16px_minmax(0,1fr)] items-baseline whitespace-pre-wrap break-words text-xs leading-5',
+        'grid grid-cols-[40px_40px_16px_minmax(0,1fr)] items-baseline whitespace-pre-wrap break-words font-mono text-[13px] leading-[22px]',
         line.kind === 'add' && 'bg-[var(--add-bg)]',
         line.kind === 'del' && 'bg-[var(--del-bg)]'
       )}

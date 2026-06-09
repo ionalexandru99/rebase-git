@@ -4,6 +4,7 @@ import { DiffPanel } from './components/DiffPanel'
 import { HistoryPanel } from './components/HistoryPanel'
 import { type SelectedFile, StatusPanel } from './components/StatusPanel'
 import type { WorkspaceView } from './components/shell/Topbar'
+import { useDraggableWidth } from './hooks/useDraggableWidth'
 import {
   type Component,
   createEffect,
@@ -14,7 +15,27 @@ import {
   Show
 } from './lib/react-compat'
 import type { RefKind } from './lib/ref-tree'
+import { buildUnifiedFileRows } from './lib/status-file-rows'
 import type { GitStore } from './stores/git'
+
+const FILES_PANEL_WIDTH_MIN = 240
+const FILES_PANEL_WIDTH_MAX = 620
+const FILES_PANEL_WIDTH_DEFAULT = 320
+const FILES_PANEL_WIDTH_KEY = 'rebase:local-files-width'
+
+const loadFilesPanelWidth = async () => {
+  const stored = Number(localStorage.getItem(FILES_PANEL_WIDTH_KEY))
+  return {
+    open: true,
+    width: Number.isFinite(stored) && stored > 0 ? stored : FILES_PANEL_WIDTH_DEFAULT
+  }
+}
+
+const saveFilesPanelWidth = (state: { width: number }) => {
+  try {
+    localStorage.setItem(FILES_PANEL_WIDTH_KEY, String(state.width))
+  } catch {}
+}
 
 interface WorkspaceViewProps {
   git: GitStore
@@ -28,6 +49,13 @@ interface WorkspaceViewProps {
 function LocalChangesView(props: WorkspaceViewProps) {
   const git = props.git
   const [selected, setSelected] = createSignal<SelectedFile | null>(null)
+  const { width: filesWidth, onResizeStart } = useDraggableWidth({
+    min: FILES_PANEL_WIDTH_MIN,
+    max: FILES_PANEL_WIDTH_MAX,
+    defaultWidth: FILES_PANEL_WIDTH_DEFAULT,
+    load: loadFilesPanelWidth,
+    save: saveFilesPanelWidth
+  })
 
   const status = () => git.state.status
   const totalChanges = createMemo(() => {
@@ -52,23 +80,13 @@ function LocalChangesView(props: WorkspaceViewProps) {
     if (!current) {
       return []
     }
-    return [
-      ...current.conflicted.map((file) => ({ file, staged: false })),
-      ...current.staged.map((file) => ({ file, staged: true })),
-      ...current.created.map((file) => ({ file, staged: true })),
-      ...current.modified.map((file) => ({ file, staged: false })),
-      ...current.deleted.map((file) => ({ file, staged: false })),
-      ...current.renamed.map((entry) => ({ file: entry.to, staged: false })),
-      ...current.not_added.map((file) => ({ file, staged: false }))
-    ]
+    return buildUnifiedFileRows(current).map((row) => ({ file: row.file }))
   })
 
   createEffect(() => {
     const entries = fileEntries()
     const current = selected()
-    const stillExists =
-      current &&
-      entries.some((entry) => entry.file === current.file && entry.staged === current.staged)
+    const stillExists = current && entries.some((entry) => entry.file === current.file)
     if (!stillExists) {
       setSelected(entries[0] ?? null)
     }
@@ -77,15 +95,27 @@ function LocalChangesView(props: WorkspaceViewProps) {
   return (
     <Show when={totalChanges() > 0} fallback={<CleanWorkingTree />}>
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-        <div className="grid min-h-0 grid-cols-[minmax(280px,340px)_minmax(0,1fr)] overflow-hidden">
-          <StatusPanel
-            status={git.state.status}
-            selected={selected()}
-            onSelect={(file, staged) => setSelected({ file, staged })}
-            onStage={git.stageFile}
-            onUnstage={git.unstageFile}
-            loading={git.loading() || git.state.statusLoading}
-          />
+        <div
+          className="grid min-h-0 overflow-hidden"
+          style={{ gridTemplateColumns: `${filesWidth()}px minmax(0, 1fr)` }}
+        >
+          <div className="relative min-h-0 min-w-0">
+            <StatusPanel
+              status={git.state.status}
+              selected={selected()}
+              onSelect={(file) => setSelected({ file })}
+              onStage={git.stageFile}
+              onUnstage={git.unstageFile}
+              loading={git.loading() || git.state.statusLoading}
+            />
+            <span
+              onMouseDown={(event) => onResizeStart(event.nativeEvent)}
+              aria-hidden="true"
+              className="group/files-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+            >
+              <span className="w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/60" />
+            </span>
+          </div>
           <DiffPanel git={git} selected={selected()} />
         </div>
         <CommitPanel

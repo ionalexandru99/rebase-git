@@ -2,7 +2,7 @@ export type Theme = 'dark' | 'light'
 
 const BACKGROUND: Record<Theme, string> = {
   dark: '#131313',
-  light: '#ededed'
+  light: '#d9dbe0'
 }
 
 export function getStoredTheme(): Theme {

@@ -187,19 +187,44 @@ const withoutFile = (files: string[], file: string): string[] => files.filter((f
 const withFile = (files: string[], file: string): string[] =>
   files.includes(file) ? files : [...files, file]
 
+const stageCodes = (index: string, workingDir: string): { index: string; working_dir: string } => {
+  if (index === '?' || workingDir === '?') {
+    return { index: 'A', working_dir: ' ' }
+  }
+  return { index: workingDir !== ' ' ? workingDir : index, working_dir: ' ' }
+}
+
+const unstageCodes = (index: string): { index: string; working_dir: string } => {
+  if (index === 'A') {
+    return { index: '?', working_dir: '?' }
+  }
+  return { index: ' ', working_dir: index !== ' ' ? index : 'M' }
+}
+
+type StatusFileCode = NonNullable<GitStatus['files']>[number]
+
+const mapFileCodes = (
+  status: GitStatus,
+  file: string,
+  next: (entry: StatusFileCode) => { index: string; working_dir: string }
+): StatusFileCode[] =>
+  (status.files ?? []).map((entry) => (entry.path === file ? { ...entry, ...next(entry) } : entry))
+
 const applyStage = (status: GitStatus, file: string): GitStatus => ({
   ...status,
   staged: withFile(status.staged, file),
   modified: withoutFile(status.modified, file),
   not_added: withoutFile(status.not_added, file),
   created: withoutFile(status.created, file),
-  deleted: withoutFile(status.deleted, file)
+  deleted: withoutFile(status.deleted, file),
+  files: mapFileCodes(status, file, (entry) => stageCodes(entry.index, entry.working_dir))
 })
 
 const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
   ...status,
   staged: withoutFile(status.staged, file),
-  modified: withFile(status.modified, file)
+  modified: withFile(status.modified, file),
+  files: mapFileCodes(status, file, (entry) => unstageCodes(entry.index))
 })
 
 export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
@@ -210,6 +235,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const logBuffer = useRef<GitLogEntry[]>([])
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const openGeneration = useRef(0)
+  const statusRequestSeq = useRef(0)
 
   const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
     logFlushTimer.current = null
@@ -286,14 +312,11 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         if (!path) {
           throw new Error('Repository path missing')
         }
-        const response = await sidecarFetch('get-status', { repoPath: path }, StatusResponseSchema)
-        if (response._tag === 'Ok') {
-          return response.status
+        const { status, stale } = await fetchStatusOrdered(path)
+        if (stale) {
+          return state.status ?? status
         }
-        if (response._tag === 'GitError') {
-          throw new Error(response.message)
-        }
-        throw new Error('Repository not open')
+        return status
       }
     }
   })
@@ -436,19 +459,32 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
   }
 
-  const refreshStatus = async (path: string) => {
+  // Status responses can resolve out of order (mutation refresh vs watcher refresh vs query
+  // refetch); a snapshot requested before a stage/apply finished must never overwrite a newer
+  // one, so a result is marked stale when a later request started while it was in flight.
+  const fetchStatusOrdered = async (
+    path: string
+  ): Promise<{ status: GitStatus; stale: boolean }> => {
+    const seq = ++statusRequestSeq.current
     const response = await sidecarFetch('get-status', { repoPath: path }, StatusResponseSchema)
-    if (response._tag === 'Ok') {
-      setState('status', response.status)
-      setState('currentBranch', response.status.current)
-      queryClient.setQueryData(repoQueryKeys(tabId, path).status, response.status)
-      writeSnapshot(path, { status: response.status, currentBranch: response.status.current })
-      return
-    }
     if (response._tag === 'GitError') {
       throw new Error(response.message)
     }
-    throw new Error('Repository not open')
+    if (response._tag !== 'Ok') {
+      throw new Error('Repository not open')
+    }
+    return { status: response.status, stale: seq !== statusRequestSeq.current }
+  }
+
+  const refreshStatus = async (path: string) => {
+    const { status, stale } = await fetchStatusOrdered(path)
+    if (stale || state.repoPath !== path) {
+      return
+    }
+    setState('status', status)
+    setState('currentBranch', status.current)
+    queryClient.setQueryData(repoQueryKeys(tabId, path).status, status)
+    writeSnapshot(path, { status, currentBranch: status.current })
   }
 
   const restartLogStream = async (
@@ -619,6 +655,10 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     reset()
   }
 
+  const invalidateDiffs = (path: string) => {
+    void queryClient.invalidateQueries({ queryKey: repoQueryKeys(tabId, path).diffRoot })
+  }
+
   const stageMutation = createMutation(() => ({
     mutationFn: async (file: string) => {
       const path = repoPath()
@@ -628,6 +668,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       const previous = readSnapshot(path)?.status
       if (previous) {
         const optimistic = applyStage(previous, file)
+        statusRequestSeq.current++
         writeSnapshot(path, { status: optimistic })
         setState('status', optimistic)
       }
@@ -638,6 +679,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       )
       if (response._tag === 'Ok') {
         await refreshStatus(path)
+        invalidateDiffs(path)
         return
       }
       if (previous) {
@@ -659,6 +701,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       const previous = readSnapshot(path)?.status
       if (previous) {
         const optimistic = applyUnstage(previous, file)
+        statusRequestSeq.current++
         writeSnapshot(path, { status: optimistic })
         setState('status', optimistic)
       }
@@ -669,6 +712,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       )
       if (response._tag === 'Ok') {
         await refreshStatus(path)
+        invalidateDiffs(path)
         return
       }
       if (previous) {
@@ -699,7 +743,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       setState('error', response.message)
     }
     await refreshStatus(path)
-    void queryClient.invalidateQueries({ queryKey: repoQueryKeys(tabId, path).diffRoot })
+    invalidateDiffs(path)
     return response._tag === 'Ok'
   }
 
@@ -718,6 +762,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         )
         if (response._tag === 'Ok') {
           await refreshStatus(path)
+          invalidateDiffs(path)
           await restartLogStream(path)
           return true
         }
@@ -769,6 +814,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         void refreshBranchesOnly(path)
       } else {
         void refreshStatus(path)
+        invalidateDiffs(path)
       }
     })
 

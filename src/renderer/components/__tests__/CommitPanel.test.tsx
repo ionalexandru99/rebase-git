@@ -51,11 +51,6 @@ describe('CommitPanel', () => {
     expect(screen.getByText('↑2')).toBeInTheDocument()
   })
 
-  it('renders a disabled Suggest message stub', () => {
-    renderPanel()
-    expect(screen.getByRole('button', { name: /Suggest message/i })).toBeDisabled()
-  })
-
   it('invokes onCommit with the trimmed message and clears the textarea on success', async () => {
     const onCommit = vi.fn().mockResolvedValue(true)
     renderPanel({ onCommit })

@@ -1,5 +1,7 @@
-import { Show } from '@/lib/react-compat'
+import { createMemo, Show } from '@/lib/react-compat'
+import { buildUnifiedFileRows } from '@/lib/status-file-rows'
 import type { GitStatus } from '@/types'
+import { Checkbox } from '../ui/checkbox'
 import { LoadingBadge } from '../ui/loading-badge'
 import { StatusPanelSkeleton } from './Skeleton'
 import { type SelectedFile, VirtualFileList } from './VirtualFileList'
@@ -9,7 +11,7 @@ export type { SelectedFile } from './VirtualFileList'
 interface StatusPanelProps {
   status: GitStatus | null
   selected: SelectedFile | null
-  onSelect: (file: string, staged: boolean) => void
+  onSelect: (file: string) => void
   onStage: (file: string) => void
   onUnstage: (file: string) => void
   loading: boolean
@@ -26,27 +28,32 @@ export function StatusPanel(props: StatusPanelProps) {
       }
     >
       {(status) => {
-        const totalChanges = () =>
-          status().modified.length +
-          status().staged.length +
-          status().not_added.length +
-          status().conflicted.length +
-          status().deleted.length +
-          status().created.length +
-          status().renamed.length
-        const stagedCount = () => status().staged.length + status().created.length
-        const unstagedFiles = () => [
-          ...status().conflicted,
-          ...status().modified,
-          ...status().deleted,
-          ...status().not_added
-        ]
+        const rows = createMemo(() => buildUnifiedFileRows(status()))
+        const stageable = createMemo(() => rows().filter((row) => !row.isConflicted))
+        const stagedCount = () => stageable().filter((row) => row.stageState !== 'unstaged').length
+        const allStaged = () =>
+          stageable().length > 0 && stageable().every((row) => row.stageState === 'staged')
+        const anyStaged = () => stageable().some((row) => row.stageState !== 'unstaged')
 
-        const subtitle = () => `${totalChanges()} files · ${stagedCount()} staged`
+        const subtitle = () => `${rows().length} files · ${stagedCount()} staged`
+
+        const toggleAll = () => {
+          if (allStaged()) {
+            for (const row of stageable()) {
+              props.onUnstage(row.file)
+            }
+            return
+          }
+          for (const row of stageable()) {
+            if (row.stageState !== 'staged') {
+              props.onStage(row.file)
+            }
+          }
+        }
 
         return (
           <section className="flex h-full min-h-0 flex-col overflow-hidden border-r">
-            <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
+            <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-3">
               <div className="min-w-0">
                 <div className="text-[15px] font-semibold">Changes</div>
                 <div className="truncate text-[13px] text-muted-foreground">{subtitle()}</div>
@@ -55,18 +62,13 @@ export function StatusPanel(props: StatusPanelProps) {
               <Show when={props.loading}>
                 <LoadingBadge />
               </Show>
-              <Show when={unstagedFiles().length > 0}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    for (const file of unstagedFiles()) {
-                      props.onStage(file)
-                    }
-                  }}
-                  className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
-                >
-                  Stage all
-                </button>
+              <Show when={stageable().length > 0}>
+                <Checkbox
+                  checked={allStaged()}
+                  indeterminate={!allStaged() && anyStaged()}
+                  aria-label={allStaged() ? 'Unstage all files' : 'Stage all files'}
+                  onChange={toggleAll}
+                />
               </Show>
             </div>
 

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 
 const SWATCHES: { theme: Theme; label: string; background: string }[] = [
   { theme: 'dark', label: 'Dark theme', background: 'oklch(0.245 0 0)' },
-  { theme: 'light', label: 'Light theme', background: 'oklch(0.96 0 0)' }
+  { theme: 'light', label: 'Light theme', background: 'oklch(0.91 0.006 260)' }
 ]
 
 export function Titlebar() {

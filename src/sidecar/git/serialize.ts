@@ -5,6 +5,12 @@ interface RenamedFile {
   to: string
 }
 
+interface StatusFileCode {
+  path: string
+  index: string
+  working_dir: string
+}
+
 export interface SerializableStatus {
   current: string
   modified: string[]
@@ -14,6 +20,7 @@ export interface SerializableStatus {
   deleted: string[]
   created: string[]
   renamed: RenamedFile[]
+  files: StatusFileCode[]
 }
 
 export interface BranchTracking {
@@ -40,7 +47,12 @@ export function serializeStatus(
     conflicted: [...status.conflicted],
     deleted: [...status.deleted],
     created: [...status.created],
-    renamed: status.renamed.map((entry) => ({ from: entry.from, to: entry.to }))
+    renamed: status.renamed.map((entry) => ({ from: entry.from, to: entry.to })),
+    files: status.files.map((entry) => ({
+      path: entry.path,
+      index: entry.index,
+      working_dir: entry.working_dir
+    }))
   }
 }
 

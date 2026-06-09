@@ -31,6 +31,41 @@ const sampleDiff = {
   }
 }
 
+const emptyDiff = {
+  _tag: 'Ok' as const,
+  diff: { filePath: 'src/app.ts', binary: false, hunks: [] }
+}
+
+// The panel fetches both the unstaged (staged=false) and staged (staged=true)
+// diff for a file; route the sample to one side and leave the other empty.
+function mockDiffOn(side: 'unstaged' | 'staged') {
+  sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
+    staged === (side === 'staged') ? sampleDiff : emptyDiff
+  )
+}
+
+const hunkAt = (header: string, oldStart: number, newStart: number) => ({
+  header,
+  oldStart,
+  oldCount: 2,
+  newStart,
+  newCount: 2,
+  lines: [{ kind: 'context' as const, text: `at ${header}`, oldLine: oldStart, newLine: newStart }]
+})
+
+function mockPartiallyStagedDiff() {
+  sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) => ({
+    _tag: 'Ok' as const,
+    diff: {
+      filePath: 'src/app.ts',
+      binary: false,
+      hunks: staged
+        ? [hunkAt('@@ -1,2 +1,2 @@ staged-first', 1, 1)]
+        : [hunkAt('@@ -30,2 +30,2 @@ unstaged-second', 30, 30)]
+    }
+  }))
+}
+
 interface HarnessProps {
   tabActive: Accessor<boolean>
   selected: Accessor<SelectedFile | null>
@@ -94,7 +129,7 @@ beforeEach(() => {
     _tag: 'Ok',
     refs: { remotes: [], tags: [] }
   })
-  sidecarMock.getDiff.mockResolvedValue(sampleDiff)
+  mockDiffOn('unstaged')
   sidecarMock.stageHunk.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.unstageHunk.mockResolvedValue({ _tag: 'Ok' })
 })
@@ -106,7 +141,7 @@ describe('DiffPanel', () => {
   })
 
   it('loads and renders hunks with line numbers and +/- totals', async () => {
-    await renderDiffPanel({ file: 'src/app.ts', staged: false })
+    await renderDiffPanel({ file: 'src/app.ts' })
 
     await waitFor(() => {
       expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/app.ts', false)
@@ -118,33 +153,138 @@ describe('DiffPanel', () => {
     expect(screen.getByText('−1')).toBeInTheDocument()
   })
 
-  it('stages a hunk from the unstaged diff', async () => {
-    await renderDiffPanel({ file: 'src/app.ts', staged: false })
+  it('renders no per-hunk buttons, only checkboxes', async () => {
+    await renderDiffPanel({ file: 'src/app.ts' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Stage hunk' }))
+    await screen.findByText('@@ -1,3 +1,4 @@')
+    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Unstage hunk' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Stage hunk' })).toBeInTheDocument()
+  })
 
+  it('renders staged and unstaged hunks as one list in document order', async () => {
+    mockPartiallyStagedDiff()
+    await renderDiffPanel({ file: 'src/app.ts' })
+
+    await screen.findByText('@@ -30,2 +30,2 @@ unstaged-second')
+    const stagedHunkCheckbox = screen.getByRole('checkbox', { name: 'Unstage hunk' })
+    const unstagedHunkCheckbox = screen.getByRole('checkbox', { name: 'Stage hunk' })
+    expect((stagedHunkCheckbox as HTMLInputElement).checked).toBe(true)
+    expect((unstagedHunkCheckbox as HTMLInputElement).checked).toBe(false)
+    expect(
+      stagedHunkCheckbox.compareDocumentPosition(unstagedHunkCheckbox) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(screen.queryByText('Unstaged')).not.toBeInTheDocument()
+    expect(screen.queryByText('Staged')).not.toBeInTheDocument()
+  })
+
+  it('remaps displayed line numbers to HEAD coordinates and keeps the original header for ops', async () => {
+    sidecarMock.getDiff.mockImplementation(
+      async (_repo: string, _file: string, staged: boolean) => ({
+        _tag: 'Ok' as const,
+        diff: {
+          filePath: 'src/app.ts',
+          binary: false,
+          hunks: staged
+            ? [
+                {
+                  header: '@@ -1,3 +1,4 @@',
+                  oldStart: 1,
+                  oldCount: 3,
+                  newStart: 1,
+                  newCount: 4,
+                  lines: [{ kind: 'add' as const, text: 'import added', oldLine: null, newLine: 1 }]
+                }
+              ]
+            : [
+                {
+                  header: '@@ -7,18 +7,19 @@ interface FileRowProps {',
+                  oldStart: 7,
+                  oldCount: 18,
+                  newStart: 7,
+                  newCount: 19,
+                  lines: [
+                    { kind: 'context' as const, text: 'file: string', oldLine: 7, newLine: 7 }
+                  ]
+                }
+              ]
+        }
+      })
+    )
+    await renderDiffPanel({ file: 'src/app.ts' })
+
+    // The staged hunk above adds one line to the index, so the unstaged hunk's index-side
+    // numbers shift back to HEAD coordinates: -7,18 displays as -6,18.
+    await screen.findByText('@@ -6,18 +7,19 @@ interface FileRowProps {')
+    expect(screen.queryByText('@@ -7,18 +7,19 @@ interface FileRowProps {')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Stage hunk' }))
     await waitFor(() => {
-      expect(sidecarMock.stageHunk).toHaveBeenCalledWith(repoPath, 'src/app.ts', '@@ -1,3 +1,4 @@')
+      expect(sidecarMock.stageHunk).toHaveBeenCalledWith(
+        repoPath,
+        'src/app.ts',
+        '@@ -7,18 +7,19 @@ interface FileRowProps {'
+      )
     })
   })
 
-  it('unstages a hunk from the staged diff', async () => {
-    await renderDiffPanel({ file: 'src/app.ts', staged: true })
+  it('shows a tri-state file checkbox in the header that stages the remaining hunks', async () => {
+    mockPartiallyStagedDiff()
+    sidecarMock.stageFile.mockResolvedValue({ _tag: 'Ok' })
+    await renderDiffPanel({ file: 'src/app.ts' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Unstage hunk' }))
+    const fileCheckbox = await screen.findByRole('checkbox', { name: 'Stage src/app.ts' })
+    expect((fileCheckbox as HTMLInputElement).indeterminate).toBe(true)
+    expect((fileCheckbox as HTMLInputElement).checked).toBe(false)
 
+    fireEvent.click(fileCheckbox)
+    await waitFor(() => {
+      expect(sidecarMock.stageFile).toHaveBeenCalledWith(repoPath, 'src/app.ts')
+    })
+  })
+
+  it('shows a checked file checkbox when every hunk is staged and unstages on click', async () => {
+    mockDiffOn('staged')
+    sidecarMock.unstageFile.mockResolvedValue({ _tag: 'Ok' })
+    await renderDiffPanel({ file: 'src/app.ts' })
+
+    const fileCheckbox = await screen.findByRole('checkbox', { name: 'Unstage src/app.ts' })
+    expect((fileCheckbox as HTMLInputElement).checked).toBe(true)
+    expect((fileCheckbox as HTMLInputElement).indeterminate).toBe(false)
+
+    fireEvent.click(fileCheckbox)
+    await waitFor(() => {
+      expect(sidecarMock.unstageFile).toHaveBeenCalledWith(repoPath, 'src/app.ts')
+    })
+  })
+
+  it('toggles hunk staging through the hunk checkbox', async () => {
+    mockPartiallyStagedDiff()
+    await renderDiffPanel({ file: 'src/app.ts' })
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Stage hunk' }))
+    await waitFor(() => {
+      expect(sidecarMock.stageHunk).toHaveBeenCalledWith(
+        repoPath,
+        'src/app.ts',
+        '@@ -30,2 +30,2 @@ unstaged-second'
+      )
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Unstage hunk' }))
     await waitFor(() => {
       expect(sidecarMock.unstageHunk).toHaveBeenCalledWith(
         repoPath,
         'src/app.ts',
-        '@@ -1,3 +1,4 @@'
+        '@@ -1,2 +1,2 @@ staged-first'
       )
     })
   })
 
   it('offers a whole-file stage action for unstaged files', async () => {
     sidecarMock.stageFile.mockResolvedValue({ _tag: 'Ok' })
-    await renderDiffPanel({ file: 'src/app.ts', staged: false })
+    await renderDiffPanel({ file: 'src/app.ts' })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Stage file' }))
 
@@ -158,7 +298,7 @@ describe('DiffPanel', () => {
       _tag: 'Ok',
       diff: { filePath: 'logo.png', binary: true, hunks: [] }
     })
-    await renderDiffPanel({ file: 'logo.png', staged: false })
+    await renderDiffPanel({ file: 'logo.png' })
 
     expect(await screen.findByText(/Binary file/)).toBeInTheDocument()
   })
@@ -177,10 +317,11 @@ describe('DiffPanel', () => {
         renamed: []
       }
     })
-    await renderDiffPanel({ file: 'src/app.ts', staged: false })
+    await renderDiffPanel({ file: 'src/app.ts' })
 
     await screen.findByText('@@ -1,3 +1,4 @@')
-    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Stage src/app.ts' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Stage file' })).toBeInTheDocument()
   })
 })

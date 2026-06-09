@@ -6,6 +6,13 @@ export const RenamedFileSchema = z.object({
 })
 export type RenamedFile = z.infer<typeof RenamedFileSchema>
 
+export const StatusFileCodeSchema = z.object({
+  path: z.string(),
+  index: z.string(),
+  working_dir: z.string()
+})
+export type StatusFileCode = z.infer<typeof StatusFileCodeSchema>
+
 export const GitStatusSchema = z.object({
   current: z.string(),
   modified: z.array(z.string()),
@@ -14,7 +21,8 @@ export const GitStatusSchema = z.object({
   conflicted: z.array(z.string()),
   deleted: z.array(z.string()),
   created: z.array(z.string()),
-  renamed: z.array(RenamedFileSchema)
+  renamed: z.array(RenamedFileSchema),
+  files: z.array(StatusFileCodeSchema).optional()
 })
 export type GitStatus = z.infer<typeof GitStatusSchema>
 

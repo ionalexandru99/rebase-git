@@ -322,6 +322,61 @@ describe('useGitStore — parallel repo loading', () => {
     vi.useRealTimers()
   })
 
+  it('discards an out-of-order status response that resolves after a newer one', async () => {
+    const partialStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        modified: ['a.ts'],
+        staged: ['a.ts'],
+        files: [{ path: 'a.ts', index: 'M', working_dir: 'M' }]
+      }
+    }
+    const stagedStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        staged: ['a.ts'],
+        files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
+      }
+    }
+
+    let repoChanged: (event: { repoPath: string; kind: 'refs' | 'workingTree' }) => void = () => {}
+    vi.mocked(window.electronAPI.onRepoChanged).mockImplementation((callback) => {
+      repoChanged = callback
+      return () => {}
+    })
+    sidecarMock.stageHunk.mockResolvedValue({ _tag: 'Ok' })
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status).not.toBeNull()
+    })
+
+    let resolveStale: () => void = () => {}
+    sidecarMock.getStatus
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveStale = () => resolve(partialStatus)
+          })
+      )
+      .mockResolvedValue(stagedStatus)
+
+    repoChanged({ repoPath, kind: 'workingTree' })
+    await git.stageHunk('a.ts', '@@ -1,1 +1,1 @@')
+
+    await waitFor(() => {
+      expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+    })
+
+    resolveStale()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+  })
+
   it('loadMoreHistory requests the next page without clearing existing commits', async () => {
     const stream = setupLogStream()
     const { git } = renderGitStore()

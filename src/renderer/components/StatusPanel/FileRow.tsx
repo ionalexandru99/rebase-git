@@ -1,3 +1,4 @@
+import type { FileStageState } from '@/lib/status-file-rows'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '../ui/checkbox'
 import { StatusBadge, type StatusKind } from './StatusBadge'
@@ -6,18 +7,19 @@ interface FileRowProps {
   file: string
   display?: string
   kind: StatusKind
-  isStaged: boolean
+  stageState: FileStageState
   isSelected: boolean
-  onSelect: (file: string, staged: boolean) => void
+  onSelect: (file: string) => void
   onStage?: (file: string) => void
   onUnstage?: (file: string) => void
 }
 
 export function FileRow(props: FileRowProps) {
   const label = () => props.display ?? props.file
+  const isStaged = () => props.stageState === 'staged'
 
   const toggleStaged = () => {
-    if (props.isStaged) {
+    if (isStaged()) {
       props.onUnstage?.(props.file)
       return
     }
@@ -33,14 +35,15 @@ export function FileRow(props: FileRowProps) {
       data-testid="status-file-row"
     >
       <Checkbox
-        checked={props.isStaged}
-        aria-label={props.isStaged ? `Unstage ${label()}` : `Stage ${label()}`}
+        checked={isStaged()}
+        indeterminate={props.stageState === 'partial'}
+        aria-label={isStaged() ? `Unstage ${label()}` : `Stage ${label()}`}
         onChange={() => toggleStaged()}
       />
       <StatusBadge kind={props.kind} />
       <button
         type="button"
-        onClick={() => props.onSelect(props.file, props.isStaged)}
+        onClick={() => props.onSelect(props.file)}
         className="flex h-full min-w-0 items-center text-left"
       >
         <span className="min-w-0 truncate text-sm" title={label()}>

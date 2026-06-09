@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { closeRepo, getDiff, openRepo, stageHunk, unstageHunk } from '../operations'
+import { closeRepo, getDiff, getStatus, openRepo, stageHunk, unstageHunk } from '../operations'
 
 let repoDir: string
 
@@ -90,6 +90,39 @@ describe('diff operations against a real repository', () => {
       throw new Error(`expected Ok, got ${unstagedAfter._tag}`)
     }
     expect(unstagedAfter.diff.hunks).toHaveLength(2)
+  })
+
+  it('reports a fully staged file once every hunk is staged individually', async () => {
+    const unstaged = await getDiff(repoDir, 'sample.txt', false)
+    if (unstaged._tag !== 'Ok') {
+      throw new Error(`expected Ok, got ${unstaged._tag}`)
+    }
+    expect(unstaged.diff.hunks).toHaveLength(2)
+
+    for (const hunk of unstaged.diff.hunks) {
+      const refreshed = await getDiff(repoDir, 'sample.txt', false)
+      if (refreshed._tag !== 'Ok') {
+        throw new Error(`expected Ok, got ${refreshed._tag}`)
+      }
+      const liveHunk = refreshed.diff.hunks.find((candidate) =>
+        candidate.lines.some((line) => hunk.lines.some((other) => other.text === line.text))
+      )
+      expect(liveHunk).toBeDefined()
+      if (!liveHunk) {
+        return
+      }
+      const staging = await stageHunk(repoDir, 'sample.txt', liveHunk.header)
+      expect(staging._tag).toBe('Ok')
+    }
+
+    const status = await getStatus(repoDir)
+    if (status._tag !== 'Ok') {
+      throw new Error(`expected Ok, got ${status._tag}`)
+    }
+    const entry = status.status.files?.find((candidate) => candidate.path === 'sample.txt')
+    expect(entry).toEqual({ path: 'sample.txt', index: 'M', working_dir: ' ' })
+
+    git('reset', 'HEAD', 'sample.txt')
   })
 
   it('returns HunkNotFound for a stale hunk header', async () => {

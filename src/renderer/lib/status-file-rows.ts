@@ -2,100 +2,170 @@ import type { GitStatus } from '@/types'
 
 export type StatusFileKind =
   | 'conflicted'
-  | 'staged'
   | 'created'
   | 'modified'
   | 'deleted'
   | 'renamed'
   | 'untracked'
 
-export type StatusSectionKind = 'conflicted' | 'staged' | 'changes' | 'untracked'
+export type FileStageState = 'staged' | 'partial' | 'unstaged'
 
-export type StatusFileRow =
-  | {
-      kind: 'section'
-      sectionKind: StatusSectionKind
-      label: string
-      count: number
-      files: string[]
+export interface UnifiedFileRow {
+  file: string
+  display?: string
+  fileKind: StatusFileKind
+  stageState: FileStageState
+  isConflicted: boolean
+  isUntracked: boolean
+}
+
+const isUntrackedCode = (index: string, workingDir: string): boolean =>
+  index === '?' || workingDir === '?'
+
+function kindFromCodes(index: string, workingDir: string): StatusFileKind {
+  const code = index !== ' ' && index !== '?' ? index : workingDir
+  switch (code) {
+    case 'A':
+      return 'created'
+    case 'D':
+      return 'deleted'
+    case 'R':
+    case 'C':
+      return 'renamed'
+    default:
+      return 'modified'
+  }
+}
+
+function buildFromCodes(status: GitStatus): UnifiedFileRow[] {
+  const conflictedSet = new Set(status.conflicted)
+  const renameDisplay = new Map(
+    status.renamed.map((entry) => [entry.to, `${entry.from} → ${entry.to}`])
+  )
+
+  const rows: UnifiedFileRow[] = []
+  for (const entry of status.files ?? []) {
+    const conflicted = conflictedSet.has(entry.path)
+    const untracked = isUntrackedCode(entry.index, entry.working_dir)
+
+    let stageState: FileStageState
+    if (conflicted || untracked) {
+      stageState = 'unstaged'
+    } else {
+      const hasStaged = entry.index !== ' '
+      const hasUnstaged = entry.working_dir !== ' '
+      stageState = hasStaged && hasUnstaged ? 'partial' : hasStaged ? 'staged' : 'unstaged'
     }
-  | {
-      kind: 'file'
-      file: string
-      display?: string
-      fileKind: StatusFileKind
-      isStaged: boolean
-    }
 
-export function buildStatusFileRows(status: GitStatus): StatusFileRow[] {
-  const rows: StatusFileRow[] = []
+    const fileKind: StatusFileKind = conflicted
+      ? 'conflicted'
+      : untracked
+        ? 'untracked'
+        : kindFromCodes(entry.index, entry.working_dir)
 
-  if (status.conflicted.length > 0) {
     rows.push({
-      kind: 'section',
-      sectionKind: 'conflicted',
-      label: 'Conflicts',
-      count: status.conflicted.length,
-      files: [...status.conflicted]
+      file: entry.path,
+      display: renameDisplay.get(entry.path),
+      fileKind,
+      stageState,
+      isConflicted: conflicted,
+      isUntracked: untracked
     })
-    for (const file of status.conflicted) {
-      rows.push({ kind: 'file', file, fileKind: 'conflicted', isStaged: false })
+  }
+  return rows
+}
+
+function buildFromBuckets(status: GitStatus): UnifiedFileRow[] {
+  const rows: UnifiedFileRow[] = []
+  const seen = new Set<string>()
+  const push = (row: UnifiedFileRow) => {
+    if (seen.has(row.file)) {
+      return
     }
+    seen.add(row.file)
+    rows.push(row)
   }
 
-  const stagedFiles = [...status.staged, ...status.created]
-  rows.push({
-    kind: 'section',
-    sectionKind: 'staged',
-    label: 'Staged',
-    count: stagedFiles.length,
-    files: stagedFiles
-  })
-  for (const file of status.staged) {
-    rows.push({ kind: 'file', file, fileKind: 'staged', isStaged: true })
+  const stagedSet = new Set([...status.staged, ...status.created])
+  const unstagedSet = new Set([...status.modified, ...status.deleted])
+
+  for (const file of status.conflicted) {
+    push({
+      file,
+      fileKind: 'conflicted',
+      stageState: 'unstaged',
+      isConflicted: true,
+      isUntracked: false
+    })
   }
   for (const file of status.created) {
-    rows.push({ kind: 'file', file, fileKind: 'created', isStaged: true })
+    push({
+      file,
+      fileKind: 'created',
+      stageState: unstagedSet.has(file) ? 'partial' : 'staged',
+      isConflicted: false,
+      isUntracked: false
+    })
   }
-
-  const changedFiles = [
-    ...status.modified,
-    ...status.deleted,
-    ...status.renamed.map((entry) => entry.to)
-  ]
-  rows.push({
-    kind: 'section',
-    sectionKind: 'changes',
-    label: 'Changes',
-    count: changedFiles.length,
-    files: changedFiles
-  })
+  for (const file of status.staged) {
+    push({
+      file,
+      fileKind: 'modified',
+      stageState: unstagedSet.has(file) ? 'partial' : 'staged',
+      isConflicted: false,
+      isUntracked: false
+    })
+  }
   for (const file of status.modified) {
-    rows.push({ kind: 'file', file, fileKind: 'modified', isStaged: false })
+    push({
+      file,
+      fileKind: 'modified',
+      stageState: stagedSet.has(file) ? 'partial' : 'unstaged',
+      isConflicted: false,
+      isUntracked: false
+    })
   }
   for (const file of status.deleted) {
-    rows.push({ kind: 'file', file, fileKind: 'deleted', isStaged: false })
+    push({
+      file,
+      fileKind: 'deleted',
+      stageState: stagedSet.has(file) ? 'partial' : 'unstaged',
+      isConflicted: false,
+      isUntracked: false
+    })
   }
   for (const entry of status.renamed) {
-    rows.push({
-      kind: 'file',
+    push({
       file: entry.to,
       display: `${entry.from} → ${entry.to}`,
       fileKind: 'renamed',
-      isStaged: false
+      stageState: 'staged',
+      isConflicted: false,
+      isUntracked: false
     })
   }
-
-  rows.push({
-    kind: 'section',
-    sectionKind: 'untracked',
-    label: 'Untracked',
-    count: status.not_added.length,
-    files: [...status.not_added]
-  })
   for (const file of status.not_added) {
-    rows.push({ kind: 'file', file, fileKind: 'untracked', isStaged: false })
+    push({
+      file,
+      fileKind: 'untracked',
+      stageState: 'unstaged',
+      isConflicted: false,
+      isUntracked: true
+    })
   }
-
   return rows
+}
+
+let warnedMissingFileCodes = false
+
+export function buildUnifiedFileRows(status: GitStatus): UnifiedFileRow[] {
+  const hasCodes = (status.files?.length ?? 0) > 0
+  const rows = hasCodes ? buildFromCodes(status) : buildFromBuckets(status)
+  if (!hasCodes && rows.length > 0 && !warnedMissingFileCodes) {
+    warnedMissingFileCodes = true
+    console.warn(
+      '[status] response has no raw porcelain file codes; staged/partial states are approximate. Is the sidecar build outdated?'
+    )
+  }
+  return rows.sort((left, right) => left.file.localeCompare(right.file))
 }

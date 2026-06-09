@@ -1,4 +1,4 @@
-import { Loader2Icon, SparklesIcon } from 'lucide-react'
+import { Loader2Icon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { createSignal, Show } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
@@ -46,15 +46,6 @@ export function CommitPanel(props: CommitPanelProps) {
           className="max-h-36 min-h-[50px] w-full resize-none border-0 bg-transparent px-1.5 py-1 text-sm text-foreground outline-none"
         />
         <div className="flex items-center gap-2 px-1 pb-0.5 pt-1.5">
-          <button
-            type="button"
-            disabled
-            title="Coming soon"
-            className="inline-flex h-8 items-center gap-1.5 rounded-[var(--r-sm)] bg-[var(--brand-soft)] px-2.5 text-sm font-semibold text-brand opacity-60"
-          >
-            <SparklesIcon className="size-3.5" />
-            Suggest message
-          </button>
           <div className="flex items-center gap-1.5">
             <MetaChip color="var(--blue)">{props.branch}</MetaChip>
             <Show when={props.stagedCount > 0}>
