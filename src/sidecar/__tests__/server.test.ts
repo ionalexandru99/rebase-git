@@ -154,6 +154,48 @@ describe('sidecar server', () => {
     expect(afterUnstage.status.not_added).toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
   })
 
+  it('returns RepoNotOpen for push and pull before open', async () => {
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-unopened-'))
+    expect((await (await call('push-repo', { repoPath: other })).json())._tag).toBe('RepoNotOpen')
+    expect((await (await call('pull-repo', { repoPath: other })).json())._tag).toBe('RepoNotOpen')
+    fs.rmSync(other, { recursive: true, force: true })
+  })
+
+  it('pushes a commit to its upstream and pulls it into another clone', async () => {
+    const remote = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-remote-'))
+    execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
+
+    const clone = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-clone-'))
+    execFileSync('git', ['clone', remote, clone], { stdio: 'ignore' })
+    git(clone, ['config', 'user.email', 'test@example.com'])
+    git(clone, ['config', 'user.name', 'Test'])
+    fs.writeFileSync(path.join(clone, 'a.txt'), 'a\n')
+    git(clone, ['add', '.'])
+    git(clone, ['commit', '-m', 'first'])
+    git(clone, ['push', '-u', 'origin', 'main'])
+
+    const downstream = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-downstream-'))
+    execFileSync('git', ['clone', remote, downstream], { stdio: 'ignore' })
+
+    fs.writeFileSync(path.join(clone, 'b.txt'), 'b\n')
+    git(clone, ['add', '.'])
+    git(clone, ['commit', '-m', 'second'])
+    await call('open-repo', { repoPath: clone })
+    const pushed = await (await call('push-repo', { repoPath: clone })).json()
+    expect(pushed._tag).toBe('Ok')
+
+    await call('open-repo', { repoPath: downstream })
+    const pulled = await (await call('pull-repo', { repoPath: downstream })).json()
+    expect(pulled._tag).toBe('Ok')
+
+    const log = await (await call('get-log', { repoPath: downstream })).json()
+    expect(log.log.all[0].message).toBe('second')
+
+    for (const dir of [remote, clone, downstream]) {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('lists branches', async () => {
     const body = await (await call('get-branches', { repoPath })).json()
     expect(body._tag).toBe('Ok')

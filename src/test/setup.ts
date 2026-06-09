@@ -7,6 +7,8 @@ import type {
   GetDiffResponse,
   LocalBranchesResponse,
   LogResponse,
+  PullResponse,
+  PushResponse,
   RemoteRefsResponse,
   StageHunkResponse,
   StageResponse,
@@ -27,6 +29,8 @@ export const sidecarMock = {
   unstageFile: vi.fn<(repoPath: string, file: string) => Promise<UnstageResponse>>(),
   commit: vi.fn<(repoPath: string, message: string) => Promise<CommitResponse>>(),
   fetchRepo: vi.fn<(repoPath: string) => Promise<FetchResponse>>(),
+  pushRepo: vi.fn<(repoPath: string) => Promise<PushResponse>>(),
+  pullRepo: vi.fn<(repoPath: string) => Promise<PullResponse>>(),
   getDiff: vi.fn<(repoPath: string, file: string, staged: boolean) => Promise<GetDiffResponse>>(),
   stageHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
@@ -76,6 +80,12 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             break
           case 'fetch-repo':
             payload = await mock.fetchRepo(repoPath)
+            break
+          case 'push-repo':
+            payload = await mock.pushRepo(repoPath)
+            break
+          case 'pull-repo':
+            payload = await mock.pullRepo(repoPath)
             break
           case 'get-diff':
             payload = await mock.getDiff(repoPath, body.file as string, body.staged === true)

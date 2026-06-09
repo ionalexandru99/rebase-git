@@ -39,6 +39,10 @@ interface ShellProps {
   navigation: WorkspaceNavigation
   workspaceContext?: string
   onFetch?: () => void
+  onPull?: () => void
+  onPush?: () => void
+  pulling?: boolean
+  pushing?: boolean
   children: JSX.Element
 }
 
@@ -81,6 +85,10 @@ export function Shell(props: ShellProps) {
           onSelectView={props.navigation.onSelectView}
           workspaceContext={props.workspaceContext}
           onFetch={props.onFetch}
+          onPull={props.onPull}
+          onPush={props.onPush}
+          pulling={props.pulling}
+          pushing={props.pushing}
         />
         <div className="flex min-h-0 flex-col overflow-hidden">{props.children}</div>
       </section>

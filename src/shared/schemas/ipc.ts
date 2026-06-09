@@ -97,6 +97,20 @@ export const FetchResponseSchema = z.discriminatedUnion('_tag', [
 ])
 export type FetchResponse = z.infer<typeof FetchResponseSchema>
 
+export const PushResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok') }),
+  repoNotOpen,
+  gitError
+])
+export type PushResponse = z.infer<typeof PushResponseSchema>
+
+export const PullResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok') }),
+  repoNotOpen,
+  gitError
+])
+export type PullResponse = z.infer<typeof PullResponseSchema>
+
 export const StartLogStreamResponseSchema = z.discriminatedUnion('_tag', [
   z.object({ _tag: z.literal('Ok') }),
   gitError

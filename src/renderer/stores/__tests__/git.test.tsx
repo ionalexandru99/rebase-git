@@ -433,3 +433,73 @@ describe('useGitStore — parallel repo loading', () => {
     })
   })
 })
+
+describe('useGitStore — push and pull', () => {
+  beforeEach(() => {
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
+    vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
+    vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
+    vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
+    setupLogStream()
+    sidecarMock.getStatus.mockResolvedValue(statusOk)
+    sidecarMock.getLocalBranches.mockResolvedValue(localBranchesOk)
+    sidecarMock.getRemoteRefs.mockResolvedValue(remoteRefsOk)
+  })
+
+  it('pushNow refreshes branches and clears the pushing flag on success', async () => {
+    sidecarMock.pushRepo.mockResolvedValue({ _tag: 'Ok' })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    sidecarMock.getLocalBranches.mockClear()
+    await git.pushNow()
+
+    expect(sidecarMock.pushRepo).toHaveBeenCalledWith(repoPath)
+    expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+    expect(git.state.pushing).toBe(false)
+    expect(git.state.error).toBeNull()
+  })
+
+  it('pushNow surfaces a GitError as state.error', async () => {
+    sidecarMock.pushRepo.mockResolvedValue({ _tag: 'GitError', message: 'no upstream' })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    await git.pushNow()
+
+    expect(git.state.error).toBe('no upstream')
+    expect(git.state.pushing).toBe(false)
+  })
+
+  it('pullNow refreshes status and restarts the log stream on success', async () => {
+    sidecarMock.pullRepo.mockResolvedValue({ _tag: 'Ok' })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    sidecarMock.getStatus.mockClear()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+    await git.pullNow()
+
+    expect(sidecarMock.pullRepo).toHaveBeenCalledWith(repoPath)
+    expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+    expect(git.state.pulling).toBe(false)
+    expect(git.state.error).toBeNull()
+  })
+
+  it('pullNow surfaces a GitError as state.error', async () => {
+    sidecarMock.pullRepo.mockResolvedValue({ _tag: 'GitError', message: 'not fast-forward' })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    await git.pullNow()
+
+    expect(git.state.error).toBe('not fast-forward')
+    expect(git.state.pulling).toBe(false)
+  })
+})

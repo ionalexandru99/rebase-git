@@ -14,6 +14,8 @@ export const SidecarOp = {
   stageHunk: 'stage-hunk',
   unstageHunk: 'unstage-hunk',
   fetchRepo: 'fetch-repo',
+  pushRepo: 'push-repo',
+  pullRepo: 'pull-repo',
   getLog: 'get-log',
   checkoutRef: 'checkout-ref',
   scanForRepos: 'scan-for-repos'

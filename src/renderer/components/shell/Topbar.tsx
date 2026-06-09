@@ -1,3 +1,4 @@
+import { Loader2Icon } from 'lucide-react'
 import { createSignal, onCleanup, Show } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
 
@@ -15,7 +16,14 @@ interface TopbarProps {
   onSelectView: (view: WorkspaceView) => void
   workspaceContext?: string
   onFetch?: () => void
+  onPull?: () => void
+  onPush?: () => void
+  pulling?: boolean
+  pushing?: boolean
 }
+
+const actionButtonClass =
+  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[var(--r-sm)] bg-muted px-2.5 transition-colors hover:bg-border-strong disabled:cursor-default disabled:opacity-50'
 
 const COPY_FEEDBACK_MS = 1100
 
@@ -60,12 +68,30 @@ export function Topbar(props: TopbarProps) {
           </button>
         </Show>
         <div className="flex-1" />
+        <button type="button" onClick={() => props.onFetch?.()} className={actionButtonClass}>
+          Fetch
+        </button>
         <button
           type="button"
-          onClick={() => props.onFetch?.()}
-          className="h-8 shrink-0 rounded-[var(--r-sm)] bg-muted px-2.5 transition-colors hover:bg-border-strong"
+          onClick={() => props.onPull?.()}
+          disabled={props.pulling}
+          className={actionButtonClass}
         >
-          Fetch
+          <Show when={props.pulling}>
+            <Loader2Icon className="size-3.5 animate-spin" />
+          </Show>
+          Pull
+        </button>
+        <button
+          type="button"
+          onClick={() => props.onPush?.()}
+          disabled={props.pushing}
+          className={actionButtonClass}
+        >
+          <Show when={props.pushing}>
+            <Loader2Icon className="size-3.5 animate-spin" />
+          </Show>
+          Push
         </button>
       </div>
 

@@ -17,6 +17,10 @@ import {
   LogResponseSchema,
   type OpenRepoResponse,
   OpenRepoResponseSchema,
+  type PullResponse,
+  PullResponseSchema,
+  type PushResponse,
+  PushResponseSchema,
   type RemoteRefsResponse,
   RemoteRefsResponseSchema,
   type StageHunkResponse,
@@ -70,6 +74,8 @@ export const invalidRepoPath = {
   commit: () =>
     parseOrThrow(CommitResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   fetch: () => parseOrThrow(FetchResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  push: () => parseOrThrow(PushResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  pull: () => parseOrThrow(PullResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   log: () => parseOrThrow(LogResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   stage: () => parseOrThrow(StageResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   status: () =>
@@ -573,4 +579,60 @@ export async function fetchRepo(repoPath: string): Promise<FetchResponse> {
     }
     return result
   })
+}
+
+function runGitCommand(
+  key: string,
+  args: string[]
+): Promise<{ _tag: 'Ok' } | { _tag: 'GitError'; message: string }> {
+  return new Promise((resolve) => {
+    const proc = spawn('git', ['-C', key, ...args], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+    })
+
+    let stderrBuf = ''
+    proc.stderr?.setEncoding('utf8')
+    proc.stderr?.on('data', (chunk: string) => {
+      stderrBuf += chunk
+      if (stderrBuf.length > 4096) {
+        stderrBuf = stderrBuf.slice(-4096)
+      }
+    })
+
+    proc.on('error', (err) => {
+      resolve({ _tag: 'GitError', message: err.message })
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ _tag: 'Ok' })
+      } else {
+        resolve({
+          _tag: 'GitError',
+          message: stderrBuf.trim() || `git ${args[0]} exited with code ${code}`
+        })
+      }
+    })
+  })
+}
+
+export async function pushRepo(repoPath: string): Promise<PushResponse> {
+  const key = normalizeRepoPath(repoPath)
+  if (!gitInstances.has(key)) {
+    return parseOrThrow(PushResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  return withRepoLock(key, async () =>
+    parseOrThrow(PushResponseSchema, await runGitCommand(key, ['push']))
+  )
+}
+
+export async function pullRepo(repoPath: string): Promise<PullResponse> {
+  const key = normalizeRepoPath(repoPath)
+  if (!gitInstances.has(key)) {
+    return parseOrThrow(PullResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  return withRepoLock(key, async () =>
+    parseOrThrow(PullResponseSchema, await runGitCommand(key, ['pull', '--ff-only']))
+  )
 }

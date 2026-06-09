@@ -12,7 +12,7 @@
     "node": "24"
   },
   "scripts": {
-    "dev": "electron-vite dev --watch",
+    "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-builder",

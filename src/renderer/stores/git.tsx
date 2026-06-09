@@ -7,6 +7,8 @@ import {
   FetchResponseSchema,
   LocalBranchesResponseSchema,
   OpenRepoResponseSchema,
+  PullResponseSchema,
+  PushResponseSchema,
   RemoteRefsResponseSchema,
   StageHunkResponseSchema,
   StageResponseSchema,
@@ -58,6 +60,8 @@ export interface GitState {
   currentBranch: string
   opening: boolean
   committing: boolean
+  pushing: boolean
+  pulling: boolean
   statusLoading: boolean
   branchesLoading: boolean
   logLoading: boolean
@@ -77,6 +81,8 @@ const initialState: GitState = {
   currentBranch: '',
   opening: false,
   committing: false,
+  pushing: false,
+  pulling: false,
   statusLoading: false,
   branchesLoading: false,
   logLoading: false,
@@ -938,6 +944,55 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
   }
 
+  const pushNow = async () => {
+    const path = state.repoPath
+    if (!path || state.pushing) {
+      return
+    }
+    setState('pushing', true)
+    try {
+      const response = await sidecarFetch(
+        SidecarOp.pushRepo,
+        { repoPath: path },
+        PushResponseSchema
+      )
+      if (response._tag === 'Ok') {
+        await refreshBranchesOnly(path)
+      } else if (response._tag === 'GitError') {
+        setState('error', response.message)
+      }
+    } catch (error) {
+      setState('error', formatCause(error))
+    } finally {
+      setState('pushing', false)
+    }
+  }
+
+  const pullNow = async () => {
+    const path = state.repoPath
+    if (!path || state.pulling) {
+      return
+    }
+    setState('pulling', true)
+    try {
+      const response = await sidecarFetch(
+        SidecarOp.pullRepo,
+        { repoPath: path },
+        PullResponseSchema
+      )
+      if (response._tag === 'Ok') {
+        await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
+        await restartLogStream(path)
+      } else if (response._tag === 'GitError') {
+        setState('error', response.message)
+      }
+    } catch (error) {
+      setState('error', formatCause(error))
+    } finally {
+      setState('pulling', false)
+    }
+  }
+
   return {
     state,
     loading: () => state.opening || state.committing,
@@ -959,6 +1014,8 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     },
     commit: (message: string) => commitMutation.mutateAsync(message),
     fetchNow,
+    pushNow,
+    pullNow,
     refreshAfterCheckout,
     loadMoreHistory,
     invalidateRepoQueries

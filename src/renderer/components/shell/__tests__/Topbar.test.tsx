@@ -11,6 +11,10 @@ function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
       onSelectView={overrides.onSelectView ?? vi.fn()}
       workspaceContext={overrides.workspaceContext}
       onFetch={overrides.onFetch}
+      onPull={overrides.onPull}
+      onPush={overrides.onPush}
+      pulling={overrides.pulling}
+      pushing={overrides.pushing}
     />
   )
 }
@@ -66,9 +70,27 @@ describe('Topbar', () => {
     expect(onFetch).toHaveBeenCalledOnce()
   })
 
-  it('does not render Pull or Push (not yet implemented)', () => {
-    renderTopbar()
-    expect(screen.queryByRole('button', { name: /Pull/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Push/i })).not.toBeInTheDocument()
+  it('fires onPull when Pull is clicked', () => {
+    const onPull = vi.fn()
+    renderTopbar({ onPull })
+    fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
+    expect(onPull).toHaveBeenCalledOnce()
+  })
+
+  it('fires onPush when Push is clicked', () => {
+    const onPush = vi.fn()
+    renderTopbar({ onPush })
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    expect(onPush).toHaveBeenCalledOnce()
+  })
+
+  it('disables Pull and Push while in flight', () => {
+    const onPull = vi.fn()
+    const onPush = vi.fn()
+    renderTopbar({ onPull, onPush, pulling: true, pushing: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    expect(onPull).not.toHaveBeenCalled()
+    expect(onPush).not.toHaveBeenCalled()
   })
 })

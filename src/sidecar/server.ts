@@ -327,6 +327,26 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       }
       return operations.fetchRepo(repoPath)
     }
+    case SidecarOp.pushRepo: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.push()
+      }
+      return operations.pushRepo(repoPath)
+    }
+    case SidecarOp.pullRepo: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.pull()
+      }
+      return operations.pullRepo(repoPath)
+    }
     case SidecarOp.getLog: {
       const repoPath = safeRepoPath(body)
       if (repoPath === BAD_REQUEST) {

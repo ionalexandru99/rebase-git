@@ -139,6 +139,10 @@ export function Workspace(props: WorkspaceProps) {
           : undefined
       }
       onFetch={git.fetchNow}
+      onPull={git.pullNow}
+      onPush={git.pushNow}
+      pulling={git.state.pulling}
+      pushing={git.state.pushing}
     >
       {props.errorBanner}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
