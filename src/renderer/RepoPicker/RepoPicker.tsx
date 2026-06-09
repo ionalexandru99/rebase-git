@@ -1,12 +1,17 @@
-import { FolderPlusIcon, GitBranchIcon, SearchIcon } from 'lucide-react'
+import { FolderPlusIcon, SearchIcon } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
 import { fuzzyFilter } from '@/lib/fuzzy'
 import { createMemo, createSignal, Show } from '@/lib/react-compat'
 import { Button } from '../components/ui/button'
 import { EmptyState } from '../components/ui/empty-state'
-import { Input } from '../components/ui/input'
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher'
-import { RepoGroup, RepoGroupEmpty, RepoGroupHeader, RepoGroupList } from './RepoGroup'
+import {
+  RepoCardGrid,
+  RepoGroup,
+  RepoGroupEmpty,
+  RepoGroupHeader,
+  RepoGroupList
+} from './RepoGroup'
 
 interface RepoPickerProps {
   recentRepos: string[]
@@ -25,6 +30,7 @@ export function RepoPicker(props: RepoPickerProps) {
 
   const filteredDiscovered = createMemo(() => fuzzyFilter(query(), props.discoveredRepos))
   const filteredRecent = createMemo(() => fuzzyFilter(query(), props.recentRepos))
+  const enterTarget = () => filteredRecent()[0] ?? filteredDiscovered()[0] ?? null
 
   const hasAnyWorkspace = () => props.workspaces.length > 0 || !!props.activeWorkspace
 
@@ -32,7 +38,7 @@ export function RepoPicker(props: RepoPickerProps) {
     if (event.key !== 'Enter') {
       return
     }
-    const first = filteredRecent()[0] ?? filteredDiscovered()[0]
+    const first = enterTarget()
     if (first) {
       props.onOpenRepo(first)
     }
@@ -42,7 +48,7 @@ export function RepoPicker(props: RepoPickerProps) {
     <Show
       when={hasAnyWorkspace()}
       fallback={
-        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <div className="flex min-h-0 flex-1 items-center justify-center bg-card p-6">
           <EmptyState
             size="lg"
             icon={FolderPlusIcon}
@@ -58,80 +64,83 @@ export function RepoPicker(props: RepoPickerProps) {
         </div>
       }
     >
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10">
-          <div className="flex items-center gap-3">
-            <div className="rounded-md border bg-card p-2">
-              <GitBranchIcon className="size-4 text-muted-foreground" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold">Open a repository</h2>
-              <p className="text-sm text-muted-foreground">
-                Pick a repository from your workspace or recents.
-              </p>
-            </div>
+      <div className="m-1.5 min-h-0 flex-1 overflow-auto rounded-[var(--r-sm)] border bg-card shadow-[var(--shadow)]">
+        <div className="mx-auto w-full max-w-3xl px-8 pb-10 pt-14">
+          <div className="mb-6">
+            <h2 className="mb-1 text-[22px] font-bold tracking-[-0.01em]">Open a repository</h2>
+            <p className="text-sm text-muted-foreground">
+              Pick a recent repository or browse your workspace.
+            </p>
           </div>
 
-          <div className="relative">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+          <div className="mb-7 flex h-11 items-center gap-2.5 rounded-[var(--r-md)] border bg-background px-3.5 text-muted-foreground transition-shadow focus-within:border-[var(--brand-line)] focus-within:shadow-[0_0_0_3px_var(--brand-soft)]">
+            <SearchIcon className="size-4 shrink-0" />
+            <input
               type="search"
               value={query()}
               onChange={(event) => setQuery(event.currentTarget.value)}
               onKeyDown={handleKeyDown}
               placeholder="Search repositories…"
-              className="pl-9"
+              className="min-w-0 flex-1 border-0 bg-transparent text-sm text-foreground outline-none"
               aria-label="Search repositories"
+              // biome-ignore lint/a11y/noAutofocus: the picker is a search-first screen; focusing the query field is the expected entry point
               autoFocus
             />
+            <kbd className="rounded-[var(--r-xs)] border px-1.5 py-0.5 text-xs">↵</kbd>
           </div>
 
-          <RepoGroup>
-            <RepoGroupHeader label="Recent" />
-            <Show
-              when={filteredRecent().length > 0}
-              fallback={
-                <RepoGroupEmpty>
-                  {hasQuery()
-                    ? 'No matches'
-                    : props.recentRepos.length === 0
-                      ? 'No recent repositories'
-                      : undefined}
-                </RepoGroupEmpty>
-              }
-            >
-              <RepoGroupList repos={filteredRecent()} onSelect={props.onOpenRepo} />
-            </Show>
-          </RepoGroup>
-
-          <RepoGroup>
-            <RepoGroupHeader
-              label="Workspace"
-              trailing={
-                <WorkspaceSwitcher
-                  workspaces={props.workspaces}
-                  activeWorkspace={props.activeWorkspace}
-                  onSwitch={props.onSwitchWorkspace}
-                  onAdd={props.onAddWorkspace}
-                  onRemove={props.onRemoveWorkspace}
+          <div className="flex flex-col gap-6">
+            <RepoGroup>
+              <RepoGroupHeader label="Recent" />
+              <Show
+                when={filteredRecent().length > 0}
+                fallback={
+                  <RepoGroupEmpty>
+                    {hasQuery()
+                      ? 'No matches'
+                      : props.recentRepos.length === 0
+                        ? 'No recent repositories'
+                        : undefined}
+                  </RepoGroupEmpty>
+                }
+              >
+                <RepoCardGrid
+                  repos={filteredRecent()}
+                  enterTarget={enterTarget()}
+                  onSelect={props.onOpenRepo}
                 />
-              }
-            />
-            <Show
-              when={filteredDiscovered().length > 0}
-              fallback={
-                <RepoGroupEmpty>
-                  {hasQuery()
-                    ? 'No matches'
-                    : props.discoveredRepos.length === 0
-                      ? 'No repositories detected in this workspace'
-                      : undefined}
-                </RepoGroupEmpty>
-              }
-            >
-              <RepoGroupList repos={filteredDiscovered()} onSelect={props.onOpenRepo} />
-            </Show>
-          </RepoGroup>
+              </Show>
+            </RepoGroup>
+
+            <RepoGroup>
+              <RepoGroupHeader
+                label="Workspace"
+                trailing={
+                  <WorkspaceSwitcher
+                    workspaces={props.workspaces}
+                    activeWorkspace={props.activeWorkspace}
+                    onSwitch={props.onSwitchWorkspace}
+                    onAdd={props.onAddWorkspace}
+                    onRemove={props.onRemoveWorkspace}
+                  />
+                }
+              />
+              <Show
+                when={filteredDiscovered().length > 0}
+                fallback={
+                  <RepoGroupEmpty>
+                    {hasQuery()
+                      ? 'No matches'
+                      : props.discoveredRepos.length === 0
+                        ? 'No repositories detected in this workspace'
+                        : undefined}
+                  </RepoGroupEmpty>
+                }
+              >
+                <RepoGroupList repos={filteredDiscovered()} onSelect={props.onOpenRepo} />
+              </Show>
+            </RepoGroup>
+          </div>
         </div>
       </div>
     </Show>
