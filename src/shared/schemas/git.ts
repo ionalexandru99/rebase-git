@@ -69,6 +69,31 @@ export const RepoOpenSuccessSchema = z.object({
 })
 export type RepoOpenSuccess = z.infer<typeof RepoOpenSuccessSchema>
 
+export const DiffLineSchema = z.object({
+  kind: z.enum(['context', 'add', 'del', 'meta']),
+  text: z.string(),
+  oldLine: z.number().nullable(),
+  newLine: z.number().nullable()
+})
+export type DiffLine = z.infer<typeof DiffLineSchema>
+
+export const DiffHunkSchema = z.object({
+  header: z.string(),
+  oldStart: z.number(),
+  oldCount: z.number(),
+  newStart: z.number(),
+  newCount: z.number(),
+  lines: z.array(DiffLineSchema)
+})
+export type DiffHunk = z.infer<typeof DiffHunkSchema>
+
+export const FileDiffSchema = z.object({
+  filePath: z.string(),
+  binary: z.boolean(),
+  hunks: z.array(DiffHunkSchema)
+})
+export type FileDiff = z.infer<typeof FileDiffSchema>
+
 export const CommitSummarySchema = z.object({
   commit: z.string(),
   branch: z.string(),

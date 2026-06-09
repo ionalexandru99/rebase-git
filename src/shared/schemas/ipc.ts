@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   CommitSummarySchema,
+  FileDiffSchema,
   GitBranchesSchema,
   GitLogSchema,
   GitStatusSchema,
@@ -65,6 +66,21 @@ export type StageResponse = z.infer<typeof StageResponseSchema>
 
 export const UnstageResponseSchema = StageResponseSchema
 export type UnstageResponse = z.infer<typeof UnstageResponseSchema>
+
+export const GetDiffResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), diff: FileDiffSchema }),
+  repoNotOpen,
+  gitError
+])
+export type GetDiffResponse = z.infer<typeof GetDiffResponseSchema>
+
+export const StageHunkResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok') }),
+  z.object({ _tag: z.literal('HunkNotFound') }),
+  repoNotOpen,
+  gitError
+])
+export type StageHunkResponse = z.infer<typeof StageHunkResponseSchema>
 
 export const CommitResponseSchema = z.discriminatedUnion('_tag', [
   z.object({ _tag: z.literal('Ok'), result: CommitSummarySchema }),

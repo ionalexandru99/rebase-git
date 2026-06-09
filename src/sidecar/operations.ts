@@ -9,6 +9,8 @@ import {
   CommitResponseSchema,
   type FetchResponse,
   FetchResponseSchema,
+  type GetDiffResponse,
+  GetDiffResponseSchema,
   type LocalBranchesResponse,
   LocalBranchesResponseSchema,
   type LogResponse,
@@ -17,6 +19,8 @@ import {
   OpenRepoResponseSchema,
   type RemoteRefsResponse,
   RemoteRefsResponseSchema,
+  type StageHunkResponse,
+  StageHunkResponseSchema,
   type StageResponse,
   StageResponseSchema,
   type StatusResponse,
@@ -27,6 +31,7 @@ import {
 import { fetchSemaphoreFor, releaseFetchSemaphore } from './fetch-semaphore'
 import { deriveLocalShortName } from './git/checkout'
 import { resolveDefaultBranch } from './git/defaultBranch'
+import { buildHunkPatch, parseUnifiedDiff, toFileDiff } from './git/diff'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { LOG_FORMAT, parseGitLogOutput } from './git/log-format'
 import {
@@ -70,7 +75,10 @@ export const invalidRepoPath = {
   status: () =>
     parseOrThrow(StatusResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   unstage: () =>
-    parseOrThrow(UnstageResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH })
+    parseOrThrow(UnstageResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  diff: () => parseOrThrow(GetDiffResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  stageHunk: () =>
+    parseOrThrow(StageHunkResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH })
 }
 
 export async function openRepo(repoPath: string): Promise<OpenRepoResponse> {
@@ -230,6 +238,99 @@ export async function unstageFile(repoPath: string, file: string): Promise<Unsta
   })
 }
 
+const DIFF_BASE_ARGS = ['--no-color', '--no-ext-diff', '--unified=3']
+
+async function readFileDiff(repoPath: string, file: string, staged: boolean): Promise<string> {
+  const args = ['-C', repoPath, 'diff', ...DIFF_BASE_ARGS]
+  if (staged) {
+    args.push('--cached')
+  }
+  args.push('--', file)
+  return runGit(args)
+}
+
+async function isUntracked(repoPath: string, file: string): Promise<boolean> {
+  const out = await runGit(['-C', repoPath, 'status', '--porcelain', '--', file])
+  return out.startsWith('??')
+}
+
+async function readUntrackedDiff(repoPath: string, file: string): Promise<string> {
+  return runGit(
+    ['-C', repoPath, 'diff', ...DIFF_BASE_ARGS, '--no-index', '--', '/dev/null', file],
+    { okExitCodes: [0, 1] }
+  )
+}
+
+export async function getDiff(
+  repoPath: string,
+  file: string,
+  staged: boolean
+): Promise<GetDiffResponse> {
+  if (!lookupGit(gitInstances, repoPath)) {
+    return parseOrThrow(GetDiffResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  try {
+    let raw = await readFileDiff(repoPath, file, staged)
+    if (!raw && !staged && (await isUntracked(repoPath, file))) {
+      raw = await readUntrackedDiff(repoPath, file)
+    }
+    return parseOrThrow(GetDiffResponseSchema, {
+      _tag: 'Ok',
+      diff: toFileDiff(file, parseUnifiedDiff(raw))
+    })
+  } catch (error) {
+    return parseOrThrow(GetDiffResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
+  }
+}
+
+async function applyHunk(
+  repoPath: string,
+  file: string,
+  hunkHeader: string,
+  direction: 'stage' | 'unstage'
+): Promise<StageHunkResponse> {
+  if (!lookupGit(gitInstances, repoPath)) {
+    return parseOrThrow(StageHunkResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      const raw = await readFileDiff(repoPath, file, direction === 'unstage')
+      const patch = buildHunkPatch(parseUnifiedDiff(raw), hunkHeader)
+      if (!patch) {
+        return parseOrThrow(StageHunkResponseSchema, { _tag: 'HunkNotFound' })
+      }
+      const applyArgs = ['-C', repoPath, 'apply', '--cached', '--whitespace=nowarn']
+      if (direction === 'unstage') {
+        applyArgs.push('-R')
+      }
+      applyArgs.push('-')
+      await runGit(applyArgs, { stdin: patch })
+      return parseOrThrow(StageHunkResponseSchema, { _tag: 'Ok' })
+    } catch (error) {
+      return parseOrThrow(StageHunkResponseSchema, {
+        _tag: 'GitError',
+        message: errorMessage(error)
+      })
+    }
+  })
+}
+
+export async function stageHunk(
+  repoPath: string,
+  file: string,
+  hunkHeader: string
+): Promise<StageHunkResponse> {
+  return applyHunk(repoPath, file, hunkHeader, 'stage')
+}
+
+export async function unstageHunk(
+  repoPath: string,
+  file: string,
+  hunkHeader: string
+): Promise<StageHunkResponse> {
+  return applyHunk(repoPath, file, hunkHeader, 'unstage')
+}
+
 export async function commit(repoPath: string, message: string): Promise<CommitResponse> {
   const git = lookupGit(gitInstances, repoPath)
   if (!git) {
@@ -252,9 +353,17 @@ export async function commit(repoPath: string, message: string): Promise<CommitR
   })
 }
 
-function runGit(args: string[]): Promise<string> {
+interface RunGitOptions {
+  okExitCodes?: number[]
+  stdin?: string
+}
+
+function runGit(args: string[], options?: RunGitOptions): Promise<string> {
+  const okExitCodes = options?.okExitCodes ?? [0]
   return new Promise((resolve, reject) => {
-    const proc = spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const proc = spawn('git', args, {
+      stdio: [options?.stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe']
+    })
     let stdout = ''
     let stderr = ''
 
@@ -271,9 +380,13 @@ function runGit(args: string[]): Promise<string> {
       }
     })
 
+    if (options?.stdin !== undefined) {
+      proc.stdin?.end(options.stdin)
+    }
+
     proc.on('error', reject)
     proc.on('close', (code) => {
-      if (code === 0) {
+      if (code !== null && okExitCodes.includes(code)) {
         resolve(stdout)
         return
       }
