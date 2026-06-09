@@ -1,0 +1,2840 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rebase Workspace Mockup</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --background: oklch(0.205 0 0);
+        --foreground: oklch(0.96 0 0);
+        --card: oklch(0.245 0 0);
+        --card-2: oklch(0.225 0 0);
+        --muted: oklch(0.285 0 0);
+        --muted-foreground: oklch(0.76 0 0);
+        --border: oklch(1 0 0 / 12%);
+        --border-strong: oklch(1 0 0 / 20%);
+        --primary: oklch(0.9 0 0);
+        --primary-foreground: oklch(0.22 0 0);
+        --destructive: oklch(0.704 0.191 22.216);
+        --blue: #7c8cff;
+        --cyan: #5fb4e4;
+        --orange: #e6804c;
+        --green: #6ec48a;
+        --purple: #c97cd1;
+        --yellow: #d9c356;
+        --history-head: oklch(0.275 0 0);
+        --lane: oklch(0.43 0.055 264);
+        --focus: oklch(0.38 0 0);
+        --staged-bg: oklch(0.32 0.035 150);
+        --modified-bg: oklch(0.32 0.035 45);
+        --untracked-bg: oklch(0.32 0.035 245);
+        --deleted-bg: oklch(0.32 0.035 25);
+        --shadow: 0 12px 32px oklch(0 0 0 / 16%);
+        --chrome: oklch(0.185 0 0);
+        --accent: var(--blue);
+        --accent-strong: color-mix(in oklch, var(--blue) 80%, #fff);
+        --accent-soft: color-mix(in oklch, var(--blue) 16%, transparent);
+        --accent-line: color-mix(in oklch, var(--blue) 40%, transparent);
+        --add: var(--green);
+        --del: var(--destructive);
+        --add-bg: color-mix(in oklch, var(--add) 14%, transparent);
+        --add-word: color-mix(in oklch, var(--add) 30%, transparent);
+        --del-bg: color-mix(in oklch, var(--del) 13%, transparent);
+        --del-word: color-mix(in oklch, var(--del) 26%, transparent);
+        --tint: 16%;
+        --r-xs: 6px;
+        --r-sm: 8px;
+        --r-md: 12px;
+        --r-lg: 14px;
+        --r-pill: 999px;
+        --font:
+          ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+          sans-serif;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --background: oklch(1 0 0);
+          --foreground: oklch(0.145 0 0);
+          --card: oklch(1 0 0);
+          --card-2: oklch(0.985 0 0);
+          --muted: oklch(0.97 0 0);
+          --muted-foreground: oklch(0.556 0 0);
+          --border: oklch(0.922 0 0);
+          --border-strong: oklch(0.86 0 0);
+          --primary: oklch(0.205 0 0);
+          --primary-foreground: oklch(0.985 0 0);
+          --destructive: oklch(0.577 0.245 27.325);
+          --history-head: oklch(0.965 0 0);
+          --lane: oklch(0.79 0.05 264);
+          --focus: oklch(0.92 0 0);
+          --staged-bg: oklch(0.94 0.035 150);
+          --modified-bg: oklch(0.94 0.035 45);
+          --untracked-bg: oklch(0.94 0.035 245);
+          --deleted-bg: oklch(0.94 0.035 25);
+          --shadow: 0 18px 44px oklch(0.2 0 0 / 10%);
+          --chrome: oklch(0.945 0 0);
+        }
+      }
+
+      [data-theme="neutral"] {
+        --background: oklch(0.205 0 0);
+        --foreground: oklch(0.96 0 0);
+        --card: oklch(0.245 0 0);
+        --card-2: oklch(0.225 0 0);
+        --muted: oklch(0.285 0 0);
+        --muted-foreground: oklch(0.76 0 0);
+        --border: oklch(1 0 0 / 12%);
+        --border-strong: oklch(1 0 0 / 20%);
+        --primary: oklch(0.9 0 0);
+        --primary-foreground: oklch(0.22 0 0);
+        --history-head: oklch(0.275 0 0);
+        --focus: oklch(0.38 0 0);
+        --chrome: oklch(0.185 0 0);
+      }
+
+      [data-theme="graphite"] {
+        --background: oklch(0.24 0.012 260);
+        --foreground: oklch(0.96 0.004 260);
+        --card: oklch(0.285 0.012 260);
+        --card-2: oklch(0.26 0.012 260);
+        --muted: oklch(0.325 0.012 260);
+        --muted-foreground: oklch(0.77 0.018 260);
+        --border: oklch(0.88 0.018 260 / 13%);
+        --border-strong: oklch(0.88 0.018 260 / 22%);
+        --primary: oklch(0.86 0.045 260);
+        --primary-foreground: oklch(0.21 0.018 260);
+        --blue: #8ca0ff;
+        --cyan: #73c3ed;
+        --history-head: oklch(0.315 0.012 260);
+        --focus: oklch(0.39 0.018 260);
+        --chrome: oklch(0.215 0.012 260);
+      }
+
+      [data-theme="soft-dark"] {
+        --background: oklch(0.235 0.006 245);
+        --foreground: oklch(0.93 0.004 245);
+        --card: oklch(0.275 0.007 245);
+        --card-2: oklch(0.255 0.006 245);
+        --muted: oklch(0.315 0.008 245);
+        --muted-foreground: oklch(0.735 0.012 245);
+        --border: oklch(0.88 0.012 245 / 11%);
+        --border-strong: oklch(0.88 0.012 245 / 19%);
+        --primary: oklch(0.82 0.016 245);
+        --primary-foreground: oklch(0.22 0.007 245);
+        --blue: #8896e8;
+        --cyan: #78b8d0;
+        --orange: #d28a62;
+        --green: #7fc894;
+        --purple: #c18bc9;
+        --yellow: #caba6a;
+        --history-head: oklch(0.305 0.008 245);
+        --focus: oklch(0.37 0.01 245);
+        --staged-bg: oklch(0.335 0.03 150);
+        --modified-bg: oklch(0.335 0.03 45);
+        --untracked-bg: oklch(0.335 0.03 245);
+        --deleted-bg: oklch(0.335 0.03 25);
+        --shadow: 0 10px 28px oklch(0 0 0 / 12%);
+        --chrome: oklch(0.21 0.006 245);
+      }
+
+      [data-theme="forest"] {
+        --background: oklch(0.225 0.018 160);
+        --foreground: oklch(0.96 0.01 160);
+        --card: oklch(0.27 0.02 160);
+        --card-2: oklch(0.248 0.018 160);
+        --muted: oklch(0.315 0.022 160);
+        --muted-foreground: oklch(0.77 0.03 160);
+        --border: oklch(0.88 0.035 160 / 14%);
+        --border-strong: oklch(0.88 0.035 160 / 24%);
+        --primary: oklch(0.82 0.08 155);
+        --primary-foreground: oklch(0.19 0.02 160);
+        --blue: #77a9ff;
+        --cyan: #62c7bd;
+        --green: #82d99b;
+        --history-head: oklch(0.3 0.02 160);
+        --focus: oklch(0.38 0.025 160);
+        --chrome: oklch(0.205 0.018 160);
+      }
+
+      [data-theme="indigo"] {
+        --background: oklch(0.22 0.025 282);
+        --foreground: oklch(0.965 0.008 282);
+        --card: oklch(0.265 0.028 282);
+        --card-2: oklch(0.245 0.025 282);
+        --muted: oklch(0.31 0.03 282);
+        --muted-foreground: oklch(0.78 0.035 282);
+        --border: oklch(0.88 0.04 282 / 14%);
+        --border-strong: oklch(0.88 0.04 282 / 24%);
+        --primary: oklch(0.84 0.075 282);
+        --primary-foreground: oklch(0.2 0.028 282);
+        --blue: #9aa4ff;
+        --cyan: #78c6ee;
+        --purple: #d193e4;
+        --history-head: oklch(0.3 0.028 282);
+        --focus: oklch(0.38 0.035 282);
+        --chrome: oklch(0.2 0.025 282);
+      }
+
+      [data-theme="light"] {
+        color-scheme: light;
+        --background: oklch(0.985 0 0);
+        --foreground: oklch(0.18 0 0);
+        --card: oklch(1 0 0);
+        --card-2: oklch(0.96 0 0);
+        --muted: oklch(0.935 0 0);
+        --muted-foreground: oklch(0.48 0 0);
+        --border: oklch(0.87 0 0);
+        --border-strong: oklch(0.78 0 0);
+        --primary: oklch(0.28 0 0);
+        --primary-foreground: oklch(0.98 0 0);
+        --history-head: oklch(0.955 0 0);
+        --focus: oklch(0.9 0 0);
+        --staged-bg: oklch(0.94 0.035 150);
+        --modified-bg: oklch(0.94 0.035 45);
+        --untracked-bg: oklch(0.94 0.035 245);
+        --deleted-bg: oklch(0.94 0.035 25);
+        --shadow: 0 12px 32px oklch(0.2 0 0 / 8%);
+        --chrome: oklch(0.915 0 0);
+      }
+
+      [data-theme="soft-light"] {
+        color-scheme: light;
+        --background: oklch(0.955 0.004 260);
+        --foreground: oklch(0.2 0.006 260);
+        --card: oklch(0.982 0.003 260);
+        --card-2: oklch(0.93 0.006 260);
+        --muted: oklch(0.905 0.007 260);
+        --muted-foreground: oklch(0.5 0.012 260);
+        --border: oklch(0.835 0.009 260);
+        --border-strong: oklch(0.745 0.012 260);
+        --primary: oklch(0.32 0.012 260);
+        --primary-foreground: oklch(0.975 0.003 260);
+        --history-head: oklch(0.925 0.006 260);
+        --focus: oklch(0.875 0.008 260);
+        --staged-bg: oklch(0.91 0.032 150);
+        --modified-bg: oklch(0.91 0.032 45);
+        --untracked-bg: oklch(0.91 0.032 245);
+        --deleted-bg: oklch(0.91 0.032 25);
+        --shadow: 0 12px 30px oklch(0.25 0.01 260 / 7%);
+        --chrome: oklch(0.888 0.008 260);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font);
+        font-size: 14px;
+        letter-spacing: 0;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        color: inherit;
+      }
+
+      .app {
+        display: grid;
+        grid-template-rows: 34px minmax(0, 1fr);
+        height: 100vh;
+        background: var(--chrome);
+      }
+
+      .titlebar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        background: var(--chrome);
+      }
+
+      .app-body {
+        display: grid;
+        grid-template-columns: 64px minmax(0, 1fr);
+        min-height: 0;
+      }
+
+      .repo-rail {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr);
+        gap: 8px;
+        padding: 12px;
+        background: var(--chrome);
+      }
+
+      .traffic {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .theme-switcher {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: auto;
+      }
+
+      .tweak-switcher {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding-left: 8px;
+        border-left: 1px solid var(--border);
+      }
+
+      .tweak-button {
+        height: 22px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        background: var(--card-2);
+        color: var(--muted-foreground);
+        padding: 0 7px;
+        font-size: 11px;
+      }
+
+      .tweak-button.active {
+        border-color: var(--border-strong);
+        background: var(--foreground);
+        color: var(--background);
+      }
+
+      .theme-button {
+        width: 18px;
+        height: 18px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        background: var(--card-2);
+      }
+
+      .theme-button.active {
+        box-shadow: inset 0 0 0 2px var(--primary);
+      }
+
+      .theme-button[data-theme-target="neutral"] {
+        background: oklch(0.245 0 0);
+      }
+
+      .theme-button[data-theme-target="graphite"] {
+        background: oklch(0.285 0.012 260);
+      }
+
+      .theme-button[data-theme-target="soft-dark"] {
+        background: oklch(0.275 0.007 245);
+      }
+
+      .theme-button[data-theme-target="forest"] {
+        background: oklch(0.3 0.04 160);
+      }
+
+      .theme-button[data-theme-target="indigo"] {
+        background: oklch(0.31 0.05 282);
+      }
+
+      .theme-button[data-theme-target="light"] {
+        background: oklch(0.96 0 0);
+      }
+
+      .theme-button[data-theme-target="soft-light"] {
+        background: oklch(0.91 0.006 260);
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+      }
+
+      .red {
+        background: #ff5f57;
+      }
+
+      .yellow {
+        background: #ffbd2e;
+      }
+
+      .green {
+        background: #28c840;
+      }
+
+      .repo-tabs {
+        display: flex;
+        min-height: 0;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+      }
+
+      .repo-tab {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 46px;
+        padding: 3px;
+        border: 1px solid transparent;
+        border-radius: var(--r-lg);
+        background: transparent;
+        color: var(--foreground);
+        font-size: 13px;
+        font-weight: 700;
+        transition:
+          border-color 120ms ease,
+          background-color 120ms ease;
+      }
+
+      .repo-tab.active {
+        border: 2px solid var(--primary);
+        padding: 2px;
+      }
+
+      .repo-tab:not(.active):hover {
+        border-color: var(--border);
+        background: var(--card-2);
+      }
+
+      .repo-tab.has-changes::after {
+        position: absolute;
+        right: 2px;
+        bottom: 2px;
+        width: 8px;
+        height: 8px;
+        border: 1px solid var(--chrome);
+        border-radius: 50%;
+        background: var(--orange);
+        content: "";
+      }
+
+      .repo-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        border-radius: 10px;
+        color: white;
+      }
+
+      .new-tab {
+        width: 46px;
+        height: 46px;
+        border: 0;
+        border-radius: var(--r-lg);
+        background: none;
+        color: var(--muted-foreground);
+        font-size: 15px;
+        font-weight: 400;
+      }
+
+      .new-tab:hover {
+        background: var(--card-2);
+        color: var(--foreground);
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 256px minmax(0, 1fr);
+        gap: 6px;
+        min-height: 0;
+        margin: 6px;
+        background: none;
+        overflow: visible;
+      }
+
+      .sidebar {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr);
+        min-height: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        background: var(--card-2);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .ref-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 7px;
+        height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: var(--r-sm);
+        background: none;
+        color: var(--muted-foreground);
+        text-align: left;
+        width: 100%;
+      }
+
+      .ref-row.current {
+        color: var(--foreground);
+      }
+
+      .ref-row:hover {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+
+      .label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 18px;
+        padding: 0 6px;
+        border: 0;
+        border-radius: var(--r-pill);
+        background: color-mix(in oklch, var(--muted-foreground) 14%, transparent);
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tracking-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: 3px;
+        vertical-align: -1px;
+        font-size: 12px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tracking-badge.ahead {
+        color: var(--add);
+      }
+
+      .tracking-badge.behind {
+        color: var(--del);
+      }
+
+      .tracking-icon {
+        width: 12px;
+        height: 12px;
+        flex: 0 0 12px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .current-marker {
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      .current-marker.pill {
+        display: inline-flex;
+        align-items: center;
+        height: 18px;
+        padding: 0 6px;
+        border: 0;
+        border-radius: var(--r-xs);
+        background: var(--muted);
+        color: var(--foreground);
+        font-size: 11px;
+        font-weight: 650;
+        line-height: 1;
+      }
+
+      .current-marker.text {
+        background: color-mix(in oklch, var(--add) var(--tint), transparent);
+        color: var(--add);
+      }
+
+      .current-marker.text {
+        text-transform: lowercase;
+      }
+
+      .ref-tree {
+        min-height: 0;
+        overflow: auto;
+        padding: 12px 8px 8px;
+      }
+
+      .ref-section {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        height: 30px;
+        padding: 0 8px;
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .section-arrow {
+        position: relative;
+        width: 12px;
+        height: 12px;
+        flex: 0 0 12px;
+      }
+
+      .section-arrow::before {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 5px;
+        height: 5px;
+        border-right: 1.5px solid var(--muted-foreground);
+        border-bottom: 1.5px solid var(--muted-foreground);
+        transform: rotate(45deg);
+      }
+
+      .section-arrow.collapsed::before {
+        left: 2px;
+        transform: rotate(-45deg);
+      }
+
+      .ref-row {
+        height: 30px;
+        --tree-indent: 0px;
+        padding-left: calc(22px + var(--tree-indent));
+        padding-right: 8px;
+        border-radius: var(--r-sm);
+        overflow: visible;
+      }
+
+      .ref-folder {
+        color: var(--foreground);
+      }
+
+      .folder-label {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+        overflow: visible;
+      }
+
+      .folder-arrow {
+        position: absolute;
+        left: -16px;
+        width: 12px;
+        height: 12px;
+        color: transparent;
+        font-size: 0;
+      }
+
+      .folder-arrow::before {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 5px;
+        height: 5px;
+        border-right: 1.5px solid var(--muted-foreground);
+        border-bottom: 1.5px solid var(--muted-foreground);
+        transform: rotate(45deg);
+      }
+
+      .folder-arrow.collapsed::before {
+        left: 2px;
+        transform: rotate(-45deg);
+      }
+
+      .folder-count {
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .ref-row.current .label {
+        font-weight: 650;
+      }
+
+      .indent-1 {
+        --tree-indent: 18px;
+      }
+
+      .indent-2 {
+        --tree-indent: 36px;
+      }
+
+      .eye {
+        width: 8px;
+        height: 8px;
+        border-radius: 3px;
+        background: var(--ref-color, var(--border-strong));
+      }
+
+      .eye.off {
+        background: var(--border-strong);
+      }
+
+      .main {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        background: var(--card);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-rows: 40px 40px;
+        min-width: 0;
+        padding: 4px;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+      }
+
+      .topbar-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        padding: 0 8px;
+      }
+
+      .repo-name {
+        font-weight: 650;
+      }
+
+      .repo-path {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border: 0;
+        background: none;
+        color: var(--muted-foreground);
+        cursor: pointer;
+        font-size: 13px;
+        padding: 2px 4px;
+        border-radius: var(--r-xs);
+      }
+
+      .repo-path:hover {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+
+      .repo-path.copied {
+        color: var(--green);
+      }
+
+      .toolbar-spacer {
+        flex: 1;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: var(--r-sm);
+        background: var(--muted);
+        transition:
+          background-color 120ms ease,
+          border-color 120ms ease;
+      }
+
+      .button:hover {
+        background: var(--border-strong);
+      }
+
+      .tweak-button,
+      .theme-button,
+      .ghost-button,
+      .view-tab,
+      .conflict-pick,
+      .suggest-button,
+      .commit-button,
+      .ws-switcher,
+      .repo-item,
+      .ref-row,
+      .file-row,
+      .repo-path,
+      .new-tab,
+      .hunk-stage {
+        transition:
+          background-color 120ms ease,
+          border-color 120ms ease,
+          color 120ms ease;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr);
+        min-height: 0;
+        overflow: hidden;
+        padding: 0;
+        background: transparent;
+      }
+
+      .workspace-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        box-shadow: none;
+      }
+
+      .view-tabs {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .view-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 36px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: var(--r-sm);
+        background: none;
+        color: var(--muted-foreground);
+      }
+
+      .view-tab.active {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+
+      .workspace-context {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+
+      .workspace-content {
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .focus-rail {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        overflow: hidden;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .focus-pill {
+        --pill: var(--ref-color, var(--muted-foreground));
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 24px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: var(--r-pill);
+        background: color-mix(in oklch, var(--pill) var(--tint), transparent);
+        color: var(--pill);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .focus-pill.active {
+        background: color-mix(in oklch, var(--pill) 24%, transparent);
+        box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--pill) 38%, transparent);
+      }
+
+      .focus-prefix {
+        color: var(--muted-foreground);
+        font-weight: 500;
+        margin-right: 1px;
+      }
+
+      .view {
+        display: none;
+        height: 100%;
+        min-height: 0;
+      }
+
+      .view.active {
+        display: grid;
+      }
+
+      .history-view {
+        grid-template-rows: auto auto auto minmax(0, 1fr);
+        background: transparent;
+        overflow: hidden;
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 46px;
+        padding: 0 8px 0 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .panel-title {
+        font-size: 15px;
+        font-weight: 650;
+      }
+
+      .panel-subtitle {
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+
+      .filter {
+        width: 240px;
+        height: 34px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        background: var(--background);
+        color: var(--foreground);
+        padding: 0 9px;
+        outline: 0;
+      }
+
+      .history-head,
+      .commit-row {
+        display: grid;
+        grid-template-columns: 152px minmax(0, 1fr) 12rem 4.5rem 7.5rem;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .history-head {
+        height: 30px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--history-head);
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .history-head span:last-child {
+        padding-right: 12px;
+        text-align: right;
+      }
+
+      .history-scroll {
+        min-height: 0;
+        overflow: auto;
+      }
+
+      .commit-row {
+        height: 40px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .commit-row:hover {
+        background: var(--muted);
+      }
+
+      .graph {
+        display: block;
+        width: 152px;
+        height: 100%;
+      }
+
+      .graph svg {
+        display: block;
+        width: 152px;
+        height: 38px;
+      }
+
+      .graph-line {
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+
+      .graph-dot {
+        stroke: var(--card);
+        stroke-width: 2;
+      }
+
+      .ref-label {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        margin-right: 4px;
+        padding: 0 6px;
+        border: 0;
+        border-radius: var(--r-xs);
+        background: color-mix(in oklch, var(--ref-color, var(--card)) var(--tint), transparent);
+        color: var(--ref-color, var(--muted-foreground));
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .ref-label:last-of-type {
+        margin-right: 8px;
+      }
+
+      .ref-main {
+        --ref-color: var(--blue);
+      }
+
+      .ref-origin {
+        --ref-color: var(--cyan);
+      }
+
+      .ref-feature {
+        --ref-color: var(--green);
+      }
+
+      .ref-ui {
+        --ref-color: var(--orange);
+      }
+
+      .ref-release {
+        --ref-color: var(--purple);
+      }
+
+      .sha,
+      .date {
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .sha {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .author {
+        color: var(--muted-foreground);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        font-size: 14px;
+      }
+
+      .author-initials {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+        border-radius: var(--r-pill);
+        background: var(--muted);
+        color: color-mix(in oklch, var(--foreground) 80%, transparent);
+        font-size: 10px;
+        font-weight: 650;
+      }
+
+      .author-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .date {
+        padding-right: 12px;
+        text-align: right;
+      }
+
+      .local-view {
+        grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
+        gap: 0;
+        background: transparent;
+      }
+
+      .filter:focus {
+        border-color: var(--accent-line);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .files-panel {
+        grid-row: 1;
+        grid-column: 1;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-height: 0;
+        border-right: 1px solid var(--border);
+        overflow: hidden;
+      }
+
+      .diff-panel {
+        grid-row: 1;
+        grid-column: 2;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .ghost-button {
+        height: 28px;
+        padding: 0 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        background: var(--card-2);
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .ghost-button:hover {
+        border-color: var(--border-strong);
+        color: var(--foreground);
+      }
+
+      .status-scroll {
+        min-height: 0;
+        overflow: auto;
+        padding: 6px;
+      }
+
+      .file-section {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 30px;
+        padding: 0 8px 0 6px;
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .section-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+
+      .section-count {
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .check {
+        appearance: none;
+        width: 15px;
+        height: 15px;
+        flex: 0 0 15px;
+        margin: 0;
+        border: 1.5px solid var(--border-strong);
+        border-radius: var(--r-xs);
+        background: var(--card);
+        display: inline-grid;
+        place-content: center;
+        cursor: pointer;
+        transition:
+          background-color 120ms ease,
+          border-color 120ms ease;
+      }
+
+      .check:checked,
+      .check:indeterminate {
+        border-color: var(--accent);
+        background: var(--accent);
+      }
+
+      .check:checked::after {
+        content: "";
+        width: 4px;
+        height: 8px;
+        margin-top: -2px;
+        border: solid #fff;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+      }
+
+      .check:indeterminate::after {
+        content: "";
+        width: 8px;
+        height: 2px;
+        border-radius: 1px;
+        background: #fff;
+      }
+
+      .file-row {
+        display: grid;
+        grid-template-columns: 15px 18px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 9px;
+        height: 32px;
+        padding: 0 8px;
+        border-radius: var(--r-sm);
+        cursor: pointer;
+      }
+
+      .file-row:hover {
+        background: var(--muted);
+      }
+
+      .file-row.active {
+        background: var(--accent-soft);
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: var(--r-xs);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .staged {
+        background: var(--staged-bg);
+        color: var(--add);
+      }
+
+      .modified {
+        background: var(--modified-bg);
+        color: var(--orange);
+      }
+
+      .untracked {
+        background: var(--untracked-bg);
+        color: var(--blue);
+      }
+
+      .deleted {
+        background: var(--deleted-bg);
+        color: var(--del);
+      }
+
+      .conflict {
+        background: color-mix(in oklch, var(--orange) 30%, transparent);
+        color: var(--orange);
+      }
+
+      .stat {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .stat-add {
+        color: var(--add);
+      }
+
+      .stat-del {
+        color: var(--del);
+      }
+
+      .stat-bar {
+        display: inline-flex;
+        width: 34px;
+        height: 5px;
+        border-radius: 3px;
+        overflow: hidden;
+        background: var(--muted);
+      }
+
+      .stat-bar-add {
+        background: var(--add);
+      }
+
+      .stat-bar-del {
+        background: var(--del);
+      }
+
+      .conflict-actions {
+        display: inline-flex;
+        gap: 4px;
+      }
+
+      .conflict-pick {
+        height: 22px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-xs);
+        background: var(--card);
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+
+      .conflict-pick:hover {
+        border-color: var(--border-strong);
+        color: var(--foreground);
+      }
+
+      .diff-header {
+        gap: 10px;
+        padding-left: 14px;
+      }
+
+      .diff-file {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 650;
+      }
+
+      .diff-body {
+        min-height: 0;
+        overflow: auto;
+        padding: 8px;
+      }
+
+      .hunk {
+        margin-bottom: 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .hunk-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 32px;
+        padding: 0 10px;
+        background: var(--card-2);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .hunk-range {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted-foreground);
+        font-family:
+          "SF Mono", "Cascadia Code", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+
+      .hunk-stage {
+        height: 22px;
+        padding: 0 9px;
+        border: 0;
+        border-radius: var(--r-xs);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .diff-line {
+        display: grid;
+        grid-template-columns: 40px 40px 16px minmax(0, 1fr);
+        align-items: baseline;
+        font-family:
+          "SF Mono", "Cascadia Code", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12px;
+        line-height: 20px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .diff-line .ln {
+        padding-right: 8px;
+        color: var(--muted-foreground);
+        text-align: right;
+        opacity: 0.6;
+        user-select: none;
+      }
+
+      .diff-line .sign {
+        text-align: center;
+        user-select: none;
+      }
+
+      .diff-line.add {
+        background: var(--add-bg);
+      }
+
+      .diff-line.add .sign {
+        color: var(--green);
+      }
+
+      .diff-line.del {
+        background: var(--del-bg);
+      }
+
+      .diff-line.del .sign {
+        color: var(--destructive);
+      }
+
+      .diff-line mark {
+        border-radius: 3px;
+        background: var(--add-word);
+        color: inherit;
+      }
+
+      .diff-line.del mark {
+        background: var(--del-word);
+      }
+
+      .commit-dock {
+        grid-row: 2;
+        grid-column: 1 / -1;
+        padding: 10px 12px 12px;
+        border-top: 1px solid var(--border);
+      }
+
+      .composer {
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        background: var(--background);
+        padding: 8px;
+        transition:
+          border-color 120ms ease,
+          box-shadow 120ms ease;
+      }
+
+      .composer:focus-within {
+        border-color: var(--accent-line);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .composer-input {
+        width: 100%;
+        min-height: 50px;
+        max-height: 140px;
+        resize: none;
+        border: 0;
+        background: none;
+        color: var(--foreground);
+        padding: 4px 6px;
+        outline: 0;
+      }
+
+      .composer-input:focus {
+        border: 0;
+        box-shadow: none;
+      }
+
+      .composer-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 4px 2px;
+      }
+
+      .suggest-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 32px;
+        padding: 0 11px;
+        border: 0;
+        border-radius: var(--r-sm);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 650;
+      }
+
+      .suggest-button:hover {
+        background: color-mix(in oklch, var(--accent) 24%, transparent);
+      }
+
+      .suggest-button svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+      }
+
+      .composer-meta {
+        display: inline-flex;
+        gap: 6px;
+      }
+
+      .meta-chip {
+        --pill: var(--muted-foreground);
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 24px;
+        padding: 0 10px;
+        border-radius: var(--r-pill);
+        background: color-mix(in oklch, var(--pill) var(--tint), transparent);
+        color: var(--pill);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .meta-chip.branch {
+        --pill: var(--blue);
+      }
+
+      .meta-chip.staged {
+        --pill: var(--green);
+      }
+
+      .meta-chip.ahead {
+        --pill: var(--green);
+      }
+
+      .char-count {
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .commit-button {
+        height: 32px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: var(--r-sm);
+        background: var(--accent);
+        color: #fff;
+        font-weight: 650;
+      }
+
+      .commit-button:hover {
+        background: var(--accent-strong);
+      }
+
+      .clean-state {
+        display: none;
+        grid-row: 1 / -1;
+        grid-column: 1 / -1;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: var(--muted-foreground);
+        text-align: center;
+      }
+
+      .clean-check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 52px;
+        height: 52px;
+        border-radius: var(--r-pill);
+        background: color-mix(in oklch, var(--green) 16%, transparent);
+        color: var(--green);
+      }
+
+      .clean-check svg {
+        width: 26px;
+        height: 26px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .clean-title {
+        color: var(--foreground);
+        font-size: 15px;
+        font-weight: 650;
+      }
+
+      .local-view[data-state="clean"] .files-panel,
+      .local-view[data-state="clean"] .diff-panel,
+      .local-view[data-state="clean"] .commit-dock {
+        display: none;
+      }
+
+      .local-view[data-state="clean"] .clean-state {
+        display: flex;
+      }
+
+      .picker {
+        display: none;
+        grid-column: 2;
+        grid-row: 1;
+        min-width: 0;
+        min-height: 0;
+        margin: 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        background: var(--card);
+        box-shadow: var(--shadow);
+        overflow: auto;
+      }
+
+      .app-body.picker-open .shell {
+        display: none;
+      }
+
+      .app-body.picker-open .picker {
+        display: block;
+      }
+
+      .new-tab.active {
+        background: var(--card-2);
+        color: var(--foreground);
+      }
+
+      .picker-panel {
+        width: min(720px, 100%);
+        margin: 0 auto;
+        padding: 56px 32px 40px;
+      }
+
+      .picker-head {
+        margin-bottom: 22px;
+      }
+
+      .picker-title {
+        margin: 0 0 4px;
+        font-size: 22px;
+        font-weight: 680;
+        letter-spacing: -0.01em;
+      }
+
+      .picker-subtitle {
+        color: var(--muted-foreground);
+        font-size: 14px;
+      }
+
+      .picker-search {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 44px;
+        margin-bottom: 26px;
+        padding: 0 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        background: var(--background);
+        color: var(--muted-foreground);
+      }
+
+      .picker-search:focus-within {
+        border-color: var(--accent-line);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .picker-search input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        background: none;
+        color: var(--foreground);
+        outline: 0;
+      }
+
+      .picker-search kbd {
+        padding: 2px 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-xs);
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .search-icon {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+
+      .picker-section {
+        margin-bottom: 24px;
+      }
+
+      .picker-section-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+        padding: 0 2px;
+      }
+
+      .picker-section-title {
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .ws-switcher {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 26px;
+        margin-left: auto;
+        padding: 0 9px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-pill);
+        background: var(--card-2);
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .ws-switcher:hover {
+        border-color: var(--border-strong);
+        color: var(--foreground);
+      }
+
+      .ws-switcher .chev {
+        width: 12px;
+        height: 12px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .repo-cards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .repo-card {
+        position: relative;
+        display: grid;
+        grid-template-columns: 38px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        padding: 11px 13px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        background: var(--card-2);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color 120ms ease,
+          background-color 120ms ease;
+      }
+
+      .repo-card:hover {
+        border-color: var(--border-strong);
+        background: var(--card);
+      }
+
+      .repo-card.selected {
+        border-color: var(--accent-line);
+        background: var(--accent-soft);
+      }
+
+      .repo-card-enter {
+        position: absolute;
+        top: 9px;
+        right: 11px;
+        display: none;
+        padding: 1px 6px;
+        border-radius: var(--r-xs);
+        background: color-mix(in oklch, var(--accent) 22%, transparent);
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .repo-card.selected .repo-card-enter {
+        display: inline-block;
+      }
+
+      .repo-card-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .repo-card-body {
+        min-width: 0;
+      }
+
+      .repo-card-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 650;
+      }
+
+      .repo-card-path {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .repo-card-meta {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 5px;
+      }
+
+      .repo-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .repo-item {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 11px;
+        height: 44px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 10px;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .repo-item:hover {
+        background: var(--muted);
+      }
+
+      .repo-item-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .repo-item-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 600;
+      }
+
+      .repo-item-path {
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .repo-item .chev {
+        width: 14px;
+        height: 14px;
+        color: var(--muted-foreground);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0;
+      }
+
+      .repo-item:hover .chev {
+        opacity: 1;
+      }
+
+      .picker-foot {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 30px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+      }
+
+      .picker-foot-hint {
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .picker-foot-hint kbd {
+        padding: 1px 5px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-xs);
+        font-size: 11px;
+      }
+
+      @media (max-width: 1040px) {
+        .shell {
+          grid-template-columns: 220px minmax(0, 1fr);
+        }
+
+        .local-view {
+          grid-template-columns: 1fr;
+          grid-template-rows: minmax(220px, 0.8fr) minmax(0, 1.2fr) auto;
+          overflow: hidden;
+        }
+
+        .files-panel {
+          grid-row: 1;
+          grid-column: 1;
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .diff-panel {
+          grid-row: 2;
+          grid-column: 1;
+        }
+      }
+
+      @media (max-width: 760px) {
+        body {
+          overflow: auto;
+        }
+
+        .app {
+          height: auto;
+          min-height: 100vh;
+        }
+
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          min-height: 360px;
+        }
+
+        .main {
+          margin-top: -1px;
+          margin-left: 0;
+        }
+
+        .history-head,
+        .commit-row {
+          grid-template-columns: 96px minmax(0, 1fr) 4.5rem;
+        }
+
+        .graph,
+        .graph svg {
+          width: 96px;
+        }
+
+        .author,
+        .history-head span:nth-child(3) {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body data-theme="neutral" data-current-marker="current">
+    <div class="app">
+      <header class="titlebar">
+        <div class="traffic" aria-hidden="true">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <div class="theme-switcher" aria-label="Theme variants">
+          <button
+            class="theme-button active"
+            type="button"
+            data-theme-target="neutral"
+            aria-label="Neutral theme"
+          ></button>
+          <button
+            class="theme-button"
+            type="button"
+            data-theme-target="soft-light"
+            aria-label="Soft light theme"
+          ></button>
+        </div>
+        <div class="tweak-switcher" aria-label="Local changes state">
+          <button class="tweak-button active" type="button" data-local-state="changes">
+            changes
+          </button>
+          <button class="tweak-button" type="button" data-local-state="clean">clean</button>
+        </div>
+      </header>
+
+      <div class="app-body">
+        <nav class="repo-rail" aria-label="Open repositories">
+          <div class="repo-tabs">
+            <button
+              class="repo-tab repo-r active has-changes"
+              type="button"
+              aria-label="rebase-git"
+            >
+              <span class="repo-avatar" style="background: #7c8cff">RG</span>
+            </button>
+            <button class="repo-tab repo-e" type="button" aria-label="electron-shell">
+              <span class="repo-avatar" style="background: #5fb4e4">ES</span>
+            </button>
+            <button
+              class="repo-tab"
+              type="button"
+              aria-label="design-system"
+            >
+              <span class="repo-avatar" style="background: var(--green)">DS</span>
+            </button>
+            <button class="new-tab" type="button" aria-label="New tab">+</button>
+          </div>
+        </nav>
+
+        <main class="shell">
+        <aside class="sidebar" aria-label="Workspace sidebar">
+          <div class="ref-tree" aria-label="Branches">
+            <div class="ref-section">
+              <span class="section-arrow"></span>Local branches <span class="badge">5</span>
+            </div>
+            <button class="ref-row current" type="button">
+              <span class="label">
+                main <span class="current-marker pill text">current</span>
+                <span class="tracking-badge ahead" title="2 commits to push">
+                  <svg class="tracking-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m5 12 7-7 7 7"></path>
+                    <path d="M12 19V5"></path>
+                  </svg>
+                  2
+                </span>
+              </span>
+            </button>
+            <button class="ref-row ref-folder" type="button">
+              <span class="label folder-label"><span class="folder-arrow"></span>feature</span>
+              <span class="folder-count">2</span>
+            </button>
+            <button class="ref-row indent-1" type="button">
+              <span class="label">
+                sidecar-health
+                <span class="tracking-badge behind" title="1 commit to pull">
+                  <svg class="tracking-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14"></path>
+                    <path d="m19 12-7 7-7-7"></path>
+                  </svg>
+                  1
+                </span>
+              </span>
+            </button>
+            <button class="ref-row indent-1" type="button">
+              <span class="label">onboarding</span>
+            </button>
+            <button class="ref-row ref-folder" type="button">
+              <span class="label folder-label"><span class="folder-arrow"></span>ui</span>
+              <span class="folder-count">1</span>
+            </button>
+            <button class="ref-row indent-1" type="button">
+              <span class="label">history-ref-tree</span>
+            </button>
+            <button class="ref-row ref-folder" type="button">
+              <span class="label folder-label"><span class="folder-arrow collapsed"></span>release</span>
+              <span class="folder-count">1</span>
+            </button>
+
+            <div class="ref-section">
+              <span class="section-arrow"></span>Remote branches <span class="badge">9</span>
+            </div>
+            <button class="ref-row ref-folder indent-1" type="button">
+              <span class="label folder-label"><span class="folder-arrow"></span>origin</span>
+              <span class="folder-count">6</span>
+            </button>
+            <button class="ref-row indent-2" type="button">
+              <span class="label">main</span>
+            </button>
+            <button class="ref-row indent-2" type="button">
+              <span class="label">beta</span>
+            </button>
+            <button class="ref-row ref-folder indent-2" type="button">
+              <span class="label folder-label"><span class="folder-arrow"></span>feature</span>
+              <span class="folder-count">2</span>
+            </button>
+            <button class="ref-row indent-2" type="button">
+              <span class="label">onboarding</span>
+            </button>
+            <button class="ref-row indent-2" type="button">
+              <span class="label">sidecar-health</span>
+            </button>
+
+            <div class="ref-section">
+              <span class="section-arrow collapsed"></span>Tags <span class="badge">41</span>
+            </div>
+          </div>
+        </aside>
+
+        <section class="main">
+          <div class="topbar">
+            <div class="topbar-row">
+              <span class="repo-name">rebase-git</span>
+              <button
+                class="repo-path"
+                type="button"
+                data-copy-path="/home/aion/.t3/worktrees/rebase-git/t3code-dfa525a7"
+                title="Copy path"
+              >
+                /home/aion/.t3/worktrees/rebase-git/t3code-dfa525a7
+              </button>
+              <div class="toolbar-spacer"></div>
+              <button class="button" type="button">Fetch</button>
+            </div>
+            <div class="topbar-row">
+              <div class="workspace-controls">
+                <div class="view-tabs" aria-label="Workspace views">
+                  <button class="view-tab active" type="button" data-view-button="history">
+                    <span>History</span>
+                  </button>
+                  <button class="view-tab" type="button" data-view-button="local">
+                    <span>Local changes</span>
+                  </button>
+                </div>
+                <span class="workspace-context">Fetched 3m ago</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="workspace">
+            <div class="workspace-content">
+              <section class="view history-view active" data-view="history" aria-label="History">
+              <div class="focus-rail">
+                <span class="focus-pill ref-main">
+                  <span class="focus-prefix">Visible:</span><span class="eye"></span>main
+                </span>
+                <span class="focus-pill ref-origin"><span class="eye"></span>origin/main</span>
+                <span class="focus-pill ref-feature"><span class="eye"></span>feature/sidecar-health</span>
+              </div>
+
+              <div class="panel-header">
+                <div>
+                  <div class="panel-title">History</div>
+                  <div class="panel-subtitle">2,416 commits</div>
+                </div>
+                <div class="toolbar-spacer"></div>
+                <input class="filter" type="search" value="sidecar" aria-label="Filter commits" />
+              </div>
+
+              <div class="history-head">
+                <span></span>
+                <span>Subject</span>
+                <span>Author</span>
+                <span>SHA</span>
+                <span>Date</span>
+              </div>
+
+              <div class="history-scroll">
+                <div class="commit-row">
+                  <div class="graph">
+                    <svg viewBox="0 0 152 38" aria-hidden="true">
+                      <path class="graph-line" d="M18 0 V38" stroke="var(--blue)" />
+                      <path class="graph-line" d="M42 0 V38" stroke="var(--cyan)" />
+                      <path class="graph-line" d="M66 0 V38" stroke="var(--orange)" />
+                      <path class="graph-line" d="M90 0 V38" stroke="var(--green)" />
+                      <path class="graph-line" d="M114 0 V38" stroke="var(--purple)" />
+                      <circle class="graph-dot" cx="18" cy="19" r="5" fill="var(--blue)" />
+                    </svg>
+                  </div>
+                  <span class="label">
+                    <span class="ref-label ref-main">main</span>
+                    <span class="ref-label ref-origin">origin/main</span>
+                    Stream log requests through repo-scoped sidecar keys
+                  </span>
+                  <span class="author">
+                    <span class="author-initials">A</span><span class="author-name">Aion</span>
+                  </span>
+                  <span class="sha">9f41a2c</span>
+                  <span class="date">28 May 2026</span>
+                </div>
+                <div class="commit-row">
+                  <div class="graph">
+                    <svg viewBox="0 0 152 38" aria-hidden="true">
+                      <path class="graph-line" d="M18 0 V38" stroke="var(--blue)" />
+                      <path class="graph-line" d="M42 0 V38" stroke="var(--cyan)" />
+                      <path class="graph-line" d="M66 0 V38" stroke="var(--orange)" />
+                      <path class="graph-line" d="M90 0 C90 15 42 12 42 38" stroke="var(--green)" />
+                      <path class="graph-line" d="M114 0 V38" stroke="var(--purple)" />
+                      <circle class="graph-dot" cx="42" cy="19" r="5" fill="var(--cyan)" />
+                    </svg>
+                  </div>
+                  <span class="label">
+                    <span class="ref-label ref-feature">feature/ref-tree</span>
+                    Persist ref tree expansion preferences
+                  </span>
+                  <span class="author">
+                    <span class="author-initials">A</span><span class="author-name">Aion</span>
+                  </span>
+                  <span class="sha">b7c19aa</span>
+                  <span class="date">28 May 2026</span>
+                </div>
+                <div class="commit-row">
+                  <div class="graph">
+                    <svg viewBox="0 0 152 38" aria-hidden="true">
+                      <path class="graph-line" d="M18 0 V38" stroke="var(--blue)" />
+                      <path class="graph-line" d="M42 0 V38" stroke="var(--cyan)" />
+                      <path class="graph-line" d="M66 0 V38" stroke="var(--orange)" />
+                      <path class="graph-line" d="M90 0 V38" stroke="var(--green)" />
+                      <path class="graph-line" d="M114 0 V38" stroke="var(--purple)" />
+                      <path class="graph-line" d="M138 0 C138 12 114 13 114 38" stroke="var(--yellow)" />
+                      <circle class="graph-dot" cx="66" cy="19" r="5" fill="var(--orange)" />
+                    </svg>
+                  </div>
+                  <span class="label">
+                    <span class="ref-label ref-ui">ui/perf</span>
+                    Virtualize status files and timeline rows
+                  </span>
+                  <span class="author">
+                    <span class="author-initials">M</span><span class="author-name">Mira</span>
+                  </span>
+                  <span class="sha">0d73e18</span>
+                  <span class="date">28 May 2026</span>
+                </div>
+                <div class="commit-row">
+                  <div class="graph">
+                    <svg viewBox="0 0 152 38" aria-hidden="true">
+                      <path class="graph-line" d="M18 0 V38" stroke="var(--blue)" />
+                      <path class="graph-line" d="M42 0 V38" stroke="var(--cyan)" />
+                      <path class="graph-line" d="M66 0 C66 18 18 16 18 38" stroke="var(--orange)" />
+                      <path class="graph-line" d="M90 0 V38" stroke="var(--green)" />
+                      <path class="graph-line" d="M114 0 V38" stroke="var(--purple)" />
+                      <circle class="graph-dot" cx="18" cy="19" r="5" fill="var(--blue)" />
+                    </svg>
+                  </div>
+                  <span class="label">Add branch visibility filtering for history</span>
+                  <span class="author">
+                    <span class="author-initials">A</span><span class="author-name">Aion</span>
+                  </span>
+                  <span class="sha">63b20ad</span>
+                  <span class="date">27 May 2026</span>
+                </div>
+                <div class="commit-row">
+                  <div class="graph">
+                    <svg viewBox="0 0 152 38" aria-hidden="true">
+                      <path class="graph-line" d="M18 0 V38" stroke="var(--blue)" />
+                      <path class="graph-line" d="M42 0 V38" stroke="var(--cyan)" />
+                      <path class="graph-line" d="M66 0 V38" stroke="var(--orange)" />
+                      <path class="graph-line" d="M90 0 V38" stroke="var(--green)" />
+                      <path class="graph-line" d="M114 0 C114 18 42 16 42 38" stroke="var(--purple)" />
+                      <circle class="graph-dot" cx="42" cy="19" r="5" fill="var(--cyan)" />
+                    </svg>
+                  </div>
+                  <span class="label">
+                    <span class="ref-label ref-origin">origin/beta</span>
+                    Handle checkout from local and remote refs
+                  </span>
+                  <span class="author">
+                    <span class="author-initials">S</span><span class="author-name">Sam</span>
+                  </span>
+                  <span class="sha">aae4810</span>
+                  <span class="date">26 May 2026</span>
+                </div>
+                <div class="commit-row">
+                  <div class="graph">
+                    <svg viewBox="0 0 152 38" aria-hidden="true">
+                      <path class="graph-line" d="M18 0 V38" stroke="var(--blue)" />
+                      <path class="graph-line" d="M42 0 V38" stroke="var(--cyan)" />
+                      <path class="graph-line" d="M66 0 V38" stroke="var(--orange)" />
+                      <path class="graph-line" d="M90 0 V38" stroke="var(--green)" />
+                      <path class="graph-line" d="M114 0 V38" stroke="var(--purple)" />
+                      <circle class="graph-dot" cx="90" cy="19" r="5" fill="var(--green)" />
+                    </svg>
+                  </div>
+                  <span class="label">Cache repo snapshots between refreshes</span>
+                  <span class="author">
+                    <span class="author-initials">M</span><span class="author-name">Mira</span>
+                  </span>
+                  <span class="sha">7249e4f</span>
+                  <span class="date">25 May 2026</span>
+                </div>
+                <div class="commit-row">
+                  <div class="graph">
+                    <svg viewBox="0 0 152 38" aria-hidden="true">
+                      <path class="graph-line" d="M18 0 V38" stroke="var(--blue)" />
+                      <path class="graph-line" d="M42 0 V38" stroke="var(--cyan)" />
+                      <path class="graph-line" d="M66 0 C66 14 114 14 114 38" stroke="var(--orange)" />
+                      <path class="graph-line" d="M90 0 V38" stroke="var(--green)" />
+                      <path class="graph-line" d="M114 0 V38" stroke="var(--purple)" />
+                      <circle class="graph-dot" cx="114" cy="19" r="5" fill="var(--purple)" />
+                    </svg>
+                  </div>
+                  <span class="label">
+                    <span class="ref-label ref-release">release/0.4</span>
+                    Merge branch 'release/0.4' into main
+                  </span>
+                  <span class="author">
+                    <span class="author-initials">N</span><span class="author-name">Nora</span>
+                  </span>
+                  <span class="sha">c391f02</span>
+                  <span class="date">22 May 2026</span>
+                </div>
+                <div class="commit-row">
+                  <div class="graph">
+                    <svg viewBox="0 0 152 38" aria-hidden="true">
+                      <path class="graph-line" d="M18 0 V38" stroke="var(--blue)" />
+                      <path class="graph-line" d="M42 0 V38" stroke="var(--cyan)" />
+                      <path class="graph-line" d="M66 0 V38" stroke="var(--orange)" />
+                      <path class="graph-line" d="M90 0 V38" stroke="var(--green)" />
+                      <path class="graph-line" d="M114 0 V38" stroke="var(--purple)" />
+                      <path class="graph-line" d="M138 0 V38" stroke="var(--yellow)" />
+                      <circle class="graph-dot" cx="138" cy="19" r="5" fill="var(--yellow)" />
+                    </svg>
+                  </div>
+                  <span class="label">Prototype command palette grouping</span>
+                  <span class="author">
+                    <span class="author-initials">A</span><span class="author-name">Aion</span>
+                  </span>
+                  <span class="sha">6fd92aa</span>
+                  <span class="date">21 May 2026</span>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="view local-view"
+              data-view="local"
+              data-state="changes"
+              aria-label="Local changes"
+            >
+              <section class="files-panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="panel-title">Changes</div>
+                    <div class="panel-subtitle">12 files · 4 staged</div>
+                  </div>
+                  <div class="toolbar-spacer"></div>
+                  <button class="ghost-button" type="button">Stage all</button>
+                </div>
+
+                <div class="status-scroll">
+                  <div class="file-section">
+                    <label class="section-check">
+                      <input type="checkbox" class="check" aria-label="Resolve all conflicts" />
+                      <span>Conflicts</span>
+                    </label>
+                    <span class="section-count">1</span>
+                  </div>
+                  <div class="file-row">
+                    <input type="checkbox" class="check" aria-label="Stage file" />
+                    <span class="status-badge conflict">!</span>
+                    <span class="label">src/main/ipc/log-stream.ts</span>
+                    <span class="conflict-actions">
+                      <button class="conflict-pick" type="button">Ours</button>
+                      <button class="conflict-pick" type="button">Theirs</button>
+                      <button class="conflict-pick" type="button">Merge</button>
+                    </span>
+                  </div>
+
+                  <div class="file-section">
+                    <label class="section-check">
+                      <input
+                        type="checkbox"
+                        class="check"
+                        checked
+                        aria-label="Unstage staged files"
+                      />
+                      <span>Staged</span>
+                    </label>
+                    <span class="section-count">4</span>
+                  </div>
+                  <div class="file-row">
+                    <input type="checkbox" class="check" checked aria-label="Unstage file" />
+                    <span class="status-badge staged">M</span>
+                    <span class="label">src/renderer/Workspace.tsx</span>
+                    <span class="stat">
+                      <span class="stat-add">+18</span>
+                      <span class="stat-del">−4</span>
+                      <span class="stat-bar"
+                        ><span class="stat-bar-add" style="flex: 18"></span
+                        ><span class="stat-bar-del" style="flex: 4"></span
+                      ></span>
+                    </span>
+                  </div>
+                  <div class="file-row active">
+                    <input type="checkbox" class="check" checked aria-label="Unstage file" />
+                    <span class="status-badge staged">A</span>
+                    <span class="label">src/renderer/components/shell/CommandBar.tsx</span>
+                    <span class="stat">
+                      <span class="stat-add">+96</span>
+                      <span class="stat-del">−0</span>
+                      <span class="stat-bar"
+                        ><span class="stat-bar-add" style="flex: 96"></span
+                      ></span>
+                    </span>
+                  </div>
+
+                  <div class="file-section">
+                    <label class="section-check">
+                      <input type="checkbox" class="check" aria-label="Stage changed files" />
+                      <span>Changes</span>
+                    </label>
+                    <span class="section-count">6</span>
+                  </div>
+                  <div class="file-row">
+                    <input type="checkbox" class="check" aria-label="Stage file" />
+                    <span class="status-badge modified">M</span>
+                    <span class="label">src/renderer/components/StatusPanel/index.tsx</span>
+                    <span class="stat">
+                      <span class="stat-add">+24</span>
+                      <span class="stat-del">−3</span>
+                      <span class="stat-bar"
+                        ><span class="stat-bar-add" style="flex: 24"></span
+                        ><span class="stat-bar-del" style="flex: 3"></span
+                      ></span>
+                    </span>
+                  </div>
+                  <div class="file-row">
+                    <input type="checkbox" class="check" aria-label="Stage file" />
+                    <span class="status-badge modified">M</span>
+                    <span class="label">src/renderer/components/HistoryPanel/HistoryHeader.tsx</span>
+                    <span class="stat">
+                      <span class="stat-add">+7</span>
+                      <span class="stat-del">−7</span>
+                      <span class="stat-bar"
+                        ><span class="stat-bar-add" style="flex: 7"></span
+                        ><span class="stat-bar-del" style="flex: 7"></span
+                      ></span>
+                    </span>
+                  </div>
+                  <div class="file-row">
+                    <input type="checkbox" class="check" aria-label="Stage file" />
+                    <span class="status-badge deleted">D</span>
+                    <span class="label">src/renderer/components/OldSidebar.tsx</span>
+                    <span class="stat">
+                      <span class="stat-del">−212</span>
+                      <span class="stat-bar"
+                        ><span class="stat-bar-del" style="flex: 1"></span
+                      ></span>
+                    </span>
+                  </div>
+
+                  <div class="file-section">
+                    <label class="section-check">
+                      <input type="checkbox" class="check" aria-label="Stage untracked files" />
+                      <span>Untracked</span>
+                    </label>
+                    <span class="section-count">1</span>
+                  </div>
+                  <div class="file-row">
+                    <input type="checkbox" class="check" aria-label="Stage file" />
+                    <span class="status-badge untracked">U</span>
+                    <span class="label">mockups/rebase-claude-macos-mockup.html</span>
+                    <span class="stat">
+                      <span class="stat-add">+842</span>
+                      <span class="stat-bar"
+                        ><span class="stat-bar-add" style="flex: 1"></span
+                      ></span>
+                    </span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="diff-panel">
+                <div class="panel-header diff-header">
+                  <span class="diff-file">src/renderer/components/shell/CommandBar.tsx</span>
+                  <span class="stat">
+                    <span class="stat-add">+96</span>
+                    <span class="stat-del">−0</span>
+                  </span>
+                  <div class="toolbar-spacer"></div>
+                  <button class="ghost-button" type="button">Unstage file</button>
+                </div>
+
+                <div class="diff-body">
+                  <div class="hunk">
+                    <div class="hunk-head">
+                      <label class="section-check">
+                        <input type="checkbox" class="check" checked aria-label="Stage hunk" />
+                        <span class="hunk-range">@@ -1,4 +1,18 @@ import { createSignal }</span>
+                      </label>
+                      <div class="toolbar-spacer"></div>
+                      <button class="hunk-stage" type="button">Unstage hunk</button>
+                    </div>
+                    <div class="diff-line">
+                      <span class="ln">1</span><span class="ln">1</span><span class="sign"></span
+                      ><span class="code">import { createSignal, For } from 'solid-js'</span>
+                    </div>
+                    <div class="diff-line add">
+                      <span class="ln"></span><span class="ln">2</span><span class="sign">+</span
+                      ><span class="code"
+                        >import { <mark>useCommandPalette</mark> } from './useCommandPalette'</span
+                      >
+                    </div>
+                    <div class="diff-line">
+                      <span class="ln">2</span><span class="ln">3</span><span class="sign"></span
+                      ><span class="code"></span>
+                    </div>
+                    <div class="diff-line del">
+                      <span class="ln">3</span><span class="ln"></span><span class="sign">−</span
+                      ><span class="code">export function CommandBar() {</span>
+                    </div>
+                    <div class="diff-line add">
+                      <span class="ln"></span><span class="ln">4</span><span class="sign">+</span
+                      ><span class="code"
+                        >export function CommandBar(<mark>props: CommandBarProps</mark>) {</span
+                      >
+                    </div>
+                    <div class="diff-line add">
+                      <span class="ln"></span><span class="ln">5</span><span class="sign">+</span
+                      ><span class="code">  const [query, setQuery] = createSignal('')</span>
+                    </div>
+                    <div class="diff-line add">
+                      <span class="ln"></span><span class="ln">6</span><span class="sign">+</span
+                      ><span class="code">  const groups = useCommandPalette(query)</span>
+                    </div>
+                  </div>
+
+                  <div class="hunk">
+                    <div class="hunk-head">
+                      <label class="section-check">
+                        <input type="checkbox" class="check" aria-label="Stage hunk" />
+                        <span class="hunk-range">@@ -22,3 +36,9 @@ return (</span>
+                      </label>
+                      <div class="toolbar-spacer"></div>
+                      <button class="hunk-stage" type="button">Stage hunk</button>
+                    </div>
+                    <div class="diff-line">
+                      <span class="ln">22</span><span class="ln">36</span><span class="sign"></span
+                      ><span class="code">    &lt;div class="command"&gt;</span>
+                    </div>
+                    <div class="diff-line add">
+                      <span class="ln"></span><span class="ln">37</span><span class="sign">+</span
+                      ><span class="code"
+                        >      &lt;<mark>CommandResults groups={groups()}</mark> /&gt;</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div class="commit-dock">
+                <div class="composer">
+                  <textarea class="composer-input" aria-label="Commit message">
+Redesign Local changes into a focused diff workspace</textarea
+                  >
+                  <div class="composer-bar">
+                    <button class="suggest-button" type="button">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M12 2.5l1.9 4.6 4.6 1.9-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.9L12 2.5zM18.5 14l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1z"
+                        />
+                      </svg>
+                      Suggest message
+                    </button>
+                    <div class="composer-meta">
+                      <span class="meta-chip branch">main</span>
+                      <span class="meta-chip staged">4 staged</span>
+                      <span class="meta-chip ahead">↑2</span>
+                    </div>
+                    <div class="toolbar-spacer"></div>
+                    <span class="char-count">52 / 72</span>
+                    <button class="commit-button" type="button">Commit 4 files</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="clean-state">
+                <span class="clean-check">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m5 13 4 4L19 7"></path>
+                  </svg>
+                </span>
+                <div class="clean-title">Working tree clean</div>
+                <div>Nothing to commit — every change is on a branch.</div>
+              </div>
+            </section>
+            </div>
+          </div>
+        </section>
+        </main>
+
+        <section class="picker" aria-label="Open a project">
+          <div class="picker-panel">
+            <div class="picker-head">
+              <h1 class="picker-title">Open a project</h1>
+              <p class="picker-subtitle">Pick a recent repository or browse your workspace.</p>
+            </div>
+
+            <div class="picker-search">
+              <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="m20 20-3.5-3.5"></path>
+              </svg>
+              <input type="search" placeholder="Search repositories…" aria-label="Search repositories" />
+              <kbd>⌘K</kbd>
+            </div>
+
+            <div class="picker-section">
+              <div class="picker-section-head">
+                <span class="picker-section-title">Recent</span>
+              </div>
+              <div class="repo-cards">
+                <button class="repo-card selected" type="button">
+                  <span class="repo-card-enter">↵</span>
+                  <span class="repo-card-avatar" style="background: #7c8cff">RG</span>
+                  <span class="repo-card-body">
+                    <span class="repo-card-name">rebase-git</span>
+                    <span class="repo-card-path">~/.t3/worktrees/rebase-git</span>
+                    <span class="repo-card-meta">
+                      <span class="meta-chip branch">main</span>
+                      <span class="meta-chip ahead">12 changes</span>
+                    </span>
+                  </span>
+                </button>
+                <button class="repo-card" type="button">
+                  <span class="repo-card-avatar" style="background: #5fb4e4">ES</span>
+                  <span class="repo-card-body">
+                    <span class="repo-card-name">electron-shell</span>
+                    <span class="repo-card-path">~/dev/electron-shell</span>
+                    <span class="repo-card-meta">
+                      <span class="meta-chip branch">develop</span>
+                      <span class="repo-card-path">yesterday</span>
+                    </span>
+                  </span>
+                </button>
+                <button class="repo-card" type="button">
+                  <span class="repo-card-avatar" style="background: #6ec48a">DS</span>
+                  <span class="repo-card-body">
+                    <span class="repo-card-name">design-system</span>
+                    <span class="repo-card-path">~/dev/design-system</span>
+                    <span class="repo-card-meta">
+                      <span class="meta-chip branch">feat/tokens</span>
+                      <span class="repo-card-path">3 days ago</span>
+                    </span>
+                  </span>
+                </button>
+                <button class="repo-card" type="button">
+                  <span class="repo-card-avatar" style="background: #e6804c">SP</span>
+                  <span class="repo-card-body">
+                    <span class="repo-card-name">sidecar-proto</span>
+                    <span class="repo-card-path">~/dev/sidecar-proto</span>
+                    <span class="repo-card-meta">
+                      <span class="meta-chip branch">main</span>
+                      <span class="repo-card-path">last week</span>
+                    </span>
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div class="picker-section">
+              <div class="picker-section-head">
+                <span class="picker-section-title">Workspace</span>
+                <button class="ws-switcher" type="button">
+                  ~/dev
+                  <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m6 9 6 6 6-6"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="repo-list">
+                <button class="repo-item" type="button">
+                  <span class="repo-item-avatar" style="background: #c97cd1">AG</span>
+                  <span class="repo-item-name">api-gateway</span>
+                  <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m9 6 6 6-6 6"></path>
+                  </svg>
+                </button>
+                <button class="repo-item" type="button">
+                  <span class="repo-item-avatar" style="background: #5fb4e4">DC</span>
+                  <span class="repo-item-name">docs-site</span>
+                  <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m9 6 6 6-6 6"></path>
+                  </svg>
+                </button>
+                <button class="repo-item" type="button">
+                  <span class="repo-item-avatar" style="background: #d9c356">CT</span>
+                  <span class="repo-item-name">cli-tools</span>
+                  <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m9 6 6 6-6 6"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="picker-foot">
+              <button class="ghost-button" type="button">Open folder…</button>
+              <span class="picker-foot-hint"><kbd>↵</kbd> open · <kbd>⌘T</kbd> new tab</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const buttons = document.querySelectorAll('[data-view-button]')
+      const views = document.querySelectorAll('[data-view]')
+      const themeButtons = document.querySelectorAll('[data-theme-target]')
+      const localStateButtons = document.querySelectorAll('[data-local-state]')
+      const copyPathButtons = document.querySelectorAll('[data-copy-path]')
+      const localView = document.querySelector('.local-view')
+      const appBody = document.querySelector('.app-body')
+      const newTabButton = document.querySelector('.new-tab')
+      const repoTabButtons = document.querySelectorAll('.repo-tab')
+      const pickerRepos = document.querySelectorAll('.repo-card, .repo-item')
+
+      const openPicker = () => {
+        appBody.classList.add('picker-open')
+        newTabButton.classList.add('active')
+        for (const tab of repoTabButtons) {
+          tab.classList.remove('active')
+        }
+      }
+
+      const closePicker = () => {
+        appBody.classList.remove('picker-open')
+        newTabButton.classList.remove('active')
+      }
+
+      newTabButton?.addEventListener('click', openPicker)
+
+      for (const tab of repoTabButtons) {
+        tab.addEventListener('click', () => {
+          closePicker()
+          for (const item of repoTabButtons) {
+            item.classList.toggle('active', item === tab)
+          }
+        })
+      }
+
+      for (const repo of pickerRepos) {
+        repo.addEventListener('click', closePicker)
+      }
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closePicker()
+        }
+      })
+
+      for (const button of buttons) {
+        button.addEventListener('click', () => {
+          const next = button.dataset.viewButton
+          for (const item of buttons) {
+            item.classList.toggle('active', item === button)
+          }
+          for (const view of views) {
+            view.classList.toggle('active', view.dataset.view === next)
+          }
+        })
+      }
+
+      for (const button of themeButtons) {
+        button.addEventListener('click', () => {
+          document.body.dataset.theme = button.dataset.themeTarget
+          for (const item of themeButtons) {
+            item.classList.toggle('active', item === button)
+          }
+        })
+      }
+
+      for (const button of localStateButtons) {
+        button.addEventListener('click', () => {
+          if (localView) {
+            localView.dataset.state = button.dataset.localState
+          }
+          for (const item of localStateButtons) {
+            item.classList.toggle('active', item === button)
+          }
+        })
+      }
+
+      const fileRows = document.querySelectorAll('.file-row')
+      for (const row of fileRows) {
+        row.addEventListener('click', (event) => {
+          if (event.target.closest('.check, .conflict-pick')) {
+            return
+          }
+          for (const item of fileRows) {
+            item.classList.toggle('active', item === row)
+          }
+        })
+      }
+
+      const sections = document.querySelectorAll('.status-scroll .file-section')
+      for (const section of sections) {
+        const sectionCheck = section.querySelector('.check')
+        if (!sectionCheck) {
+          continue
+        }
+        const rowChecks = []
+        let sibling = section.nextElementSibling
+        while (sibling && sibling.classList.contains('file-row')) {
+          const rowCheck = sibling.querySelector('.check')
+          if (rowCheck) {
+            rowChecks.push(rowCheck)
+          }
+          sibling = sibling.nextElementSibling
+        }
+
+        const syncSection = () => {
+          const checkedCount = rowChecks.filter((check) => check.checked).length
+          sectionCheck.checked = checkedCount === rowChecks.length
+          sectionCheck.indeterminate = checkedCount > 0 && checkedCount < rowChecks.length
+        }
+
+        sectionCheck.addEventListener('change', () => {
+          for (const rowCheck of rowChecks) {
+            rowCheck.checked = sectionCheck.checked
+          }
+        })
+
+        for (const rowCheck of rowChecks) {
+          rowCheck.addEventListener('change', syncSection)
+        }
+
+        syncSection()
+      }
+
+      for (const button of copyPathButtons) {
+        button.addEventListener('click', async () => {
+          const path = button.dataset.copyPath
+          if (!path) {
+            return
+          }
+
+          await navigator.clipboard?.writeText(path)
+          button.classList.add('copied')
+          button.textContent = 'Copied path'
+          window.setTimeout(() => {
+            button.classList.remove('copied')
+            button.textContent = path
+          }, 1100)
+        })
+      }
+    </script>
+  </body>
+</html>
