@@ -65,6 +65,24 @@ describe('pruneAncestorTips', () => {
     ]
     expect(pruneAncestorTips(commits, ['main-tip', 'feature-tip'])).toEqual(['main-tip'])
   })
+
+  it('drops ancestor tips regardless of their order in the input', () => {
+    const commits = [
+      entry({ hash: 'main-tip', refs: 'main', parents: ['feature-tip'] }),
+      entry({ hash: 'feature-tip', refs: 'feature', parents: ['shared'] }),
+      entry({ hash: 'shared', refs: '', parents: [] })
+    ]
+    expect(pruneAncestorTips(commits, ['feature-tip', 'main-tip'])).toEqual(['main-tip'])
+  })
+
+  it('keeps diverged tips in their input order', () => {
+    const commits = [
+      entry({ hash: 'a1', refs: 'alpha', parents: ['shared'] }),
+      entry({ hash: 'b1', refs: 'beta', parents: ['shared'] }),
+      entry({ hash: 'shared', refs: '', parents: [] })
+    ]
+    expect(pruneAncestorTips(commits, ['b1', 'a1'])).toEqual(['b1', 'a1'])
+  })
 })
 
 describe('computeBranchFilterSet', () => {

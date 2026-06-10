@@ -1,15 +1,8 @@
 import { GitCommitHorizontalIcon } from 'lucide-react'
 import type { UIEvent } from 'react'
-import { useCallback } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { computeGraphRailWidth, OVERSCAN, ROW_H } from '@/lib/git-graph/canvas'
-import {
-  createDeferred,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Show
-} from '@/lib/react-compat'
+import { Show } from '@/lib/react-compat'
 import type { RefKind } from '@/lib/ref-tree'
 import type { GitLog, GitLogEntry } from '@/types'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
@@ -48,6 +41,10 @@ const COL_DATE_REM = 7.5
 const HISTORY_SCROLL_CACHE_LIMIT = 32
 const historyScrollPositions = new Map<string, number>()
 
+const EMPTY_COMMITS: GitLogEntry[] = []
+const EMPTY_REMOTES: Record<string, string> = {}
+const EMPTY_REF_SET: ReadonlySet<string> = new Set()
+
 function rememberHistoryScroll(repoPath: string, scrollTop: number) {
   historyScrollPositions.delete(repoPath)
   historyScrollPositions.set(repoPath, scrollTop)
@@ -61,58 +58,62 @@ function rememberHistoryScroll(repoPath: string, scrollTop: number) {
 }
 
 export function HistoryPanel(props: HistoryPanelProps) {
-  const [filter, setFilter] = createSignal('')
-  const deferredFilter = createDeferred(filter)
-  const remotes = () => props.remotes ?? {}
-  const remoteNames = createMemo(() => new Set(Object.keys(remotes())))
+  const [filter, setFilter] = useState('')
+  const deferredFilter = useDeferredValue(filter)
+  const remotes = props.remotes ?? EMPTY_REMOTES
+  const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
 
-  const allCommits = createMemo<GitLogEntry[]>(() => props.log?.all ?? [])
+  const allCommits = props.log?.all ?? EMPTY_COMMITS
+  const visibleBranchRefs = props.visibleBranchRefs ?? EMPTY_REF_SET
+  const remoteBranches = props.remoteBranches
 
-  const visibleBranchRefs = () => props.visibleBranchRefs ?? new Set<string>()
+  const visibleBranchCount = useMemo(
+    () => countVisibleBranchRefs(visibleBranchRefs, remoteBranches, remoteNames),
+    [visibleBranchRefs, remoteBranches, remoteNames]
+  )
 
-  const hasVisibleBranches = () => visibleBranchRefs().size > 0
-
-  const visibleBranchCount = () =>
-    countVisibleBranchRefs(visibleBranchRefs(), props.remoteBranches, remoteNames())
-
-  const branchFilteredSet = createMemo(() => {
-    if (!hasVisibleBranches()) {
+  const branchFilteredSet = useMemo(() => {
+    if (visibleBranchRefs.size === 0) {
       return new Set<string>()
     }
     return (
-      computeBranchFilterSet(
-        allCommits(),
-        visibleBranchRefs(),
-        props.remoteBranches,
-        remoteNames()
-      ) ?? new Set()
+      computeBranchFilterSet(allCommits, visibleBranchRefs, remoteBranches, remoteNames) ??
+      new Set<string>()
     )
-  })
+  }, [allCommits, visibleBranchRefs, remoteBranches, remoteNames])
 
-  const onCurrentBranchSet = createMemo(() =>
-    computeOnBranchSet(allCommits(), remoteNames(), props.currentBranch)
+  const currentBranch = props.currentBranch
+  const onCurrentBranchSet = useMemo(
+    () => computeOnBranchSet(allCommits, remoteNames, currentBranch),
+    [allCommits, remoteNames, currentBranch]
   )
 
-  const commits = createMemo<GitLogEntry[]>(() => {
-    if (!hasVisibleBranches()) {
-      return []
+  const commits = useMemo<GitLogEntry[]>(() => {
+    if (branchFilteredSet.size === 0) {
+      return EMPTY_COMMITS
     }
-    return allCommits().filter((commit) => branchFilteredSet().has(commit.hash))
-  })
+    return allCommits.filter((commit) => branchFilteredSet.has(commit.hash))
+  }, [allCommits, branchFilteredSet])
 
   const graphLayout = useGraphLayoutWorker({
-    commits,
+    commits: () => commits,
     loading: () => props.loading || !!props.loadingMore,
-    enabled: () => commits().length > 0
+    enabled: () => commits.length > 0
   })
+  const layout = graphLayout.layout()
+  const laidOutThroughIndex = graphLayout.laidOutThroughIndex()
 
-  const rows = createMemo(() =>
-    buildDisplayRows(commits(), graphLayout.layout(), graphLayout.laidOutThroughIndex())
+  const rows = useMemo(
+    () => buildDisplayRows(commits, layout, laidOutThroughIndex),
+    [commits, layout, laidOutThroughIndex]
   )
 
-  const visibleSet = createMemo(() => computeVisibleSet(deferredFilter(), commits()))
+  const visibleSet = useMemo(
+    () => computeVisibleSet(deferredFilter, commits),
+    [deferredFilter, commits]
+  )
 
-  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>()
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement>()
   const {
     setScrollRef,
     onScroll,
@@ -123,7 +124,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
     totalHeight,
     scrollTop
   } = useFixedVirtualizer({
-    count: () => rows().length,
+    count: () => rows.length,
     rowHeight: ROW_H,
     overscan: OVERSCAN
   })
@@ -139,17 +140,16 @@ export function HistoryPanel(props: HistoryPanelProps) {
         element.scrollTop = historyScrollPositions.get(repoPath) ?? 0
       }
     },
-    [props.repoPath, setScrollEl, setScrollRef]
+    [props.repoPath, setScrollRef]
   )
 
-  createEffect(() => {
-    const element = scrollEl()
+  useEffect(() => {
     const repoPath = props.repoPath
-    if (!element || !repoPath) {
+    if (!scrollEl || !repoPath) {
       return
     }
-    element.scrollTop = historyScrollPositions.get(repoPath) ?? 0
-  })
+    scrollEl.scrollTop = historyScrollPositions.get(repoPath) ?? 0
+  }, [scrollEl, props.repoPath])
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const repoPath = props.repoPath
@@ -159,63 +159,53 @@ export function HistoryPanel(props: HistoryPanelProps) {
     onScroll(event)
   }
 
-  let lastAutoLoadCount = 0
-  createEffect(() => {
-    const total = rows().length
-    const nearEnd = endIndex() >= total - 3
-    if (
-      !nearEnd ||
-      !props.hasMore ||
-      props.loading ||
-      props.loadingMore ||
-      !props.onLoadMore ||
-      total === 0
-    ) {
+  const items = virtualItems()
+  const endIndexValue = endIndex()
+  const lastAutoLoadCount = useRef(0)
+  const { hasMore, loading, loadingMore, onLoadMore } = props
+  useEffect(() => {
+    const total = rows.length
+    const nearEnd = endIndexValue >= total - 3
+    if (!nearEnd || !hasMore || loading || loadingMore || !onLoadMore || total === 0) {
       return
     }
-    if (lastAutoLoadCount === total) {
+    if (lastAutoLoadCount.current === total) {
       return
     }
-    lastAutoLoadCount = total
-    props.onLoadMore()
-  })
+    lastAutoLoadCount.current = total
+    onLoadMore()
+  }, [rows.length, endIndexValue, hasMore, loading, loadingMore, onLoadMore])
 
-  const graphRailWidth = createMemo(() => {
-    const layout = graphLayout.layout()
-    if (!layout) {
-      return computeGraphRailWidth(1)
-    }
-    return computeGraphRailWidth(layout.maxLanes)
-  })
+  const graphRailWidth = computeGraphRailWidth(layout ? layout.maxLanes : 1)
 
   const themeNonce = useThemeNonce()
 
   const gridTail = `${COL_AUTHOR_REM}rem ${COL_SHA_REM}rem ${COL_DATE_REM}rem`
-  const headerGridTemplate = () => `${graphRailWidth()}px minmax(0,1fr) ${gridTail}`
+  const headerGridTemplate = `${graphRailWidth}px minmax(0,1fr) ${gridTail}`
 
-  const hasCommits = () => allCommits().length > 0
-  const showSkeleton = () => props.loading && !hasCommits()
+  const hasCommits = allCommits.length > 0
+  const showSkeleton = props.loading && !hasCommits
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <FocusRail visibleRefs={visibleBranchRefs()} onToggleRef={props.onToggleTimelineVisibility} />
+      <FocusRail visibleRefs={visibleBranchRefs} onToggleRef={props.onToggleTimelineVisibility} />
       <HistoryHeader
         total={props.log?.total}
-        visibleTotal={commits().length}
+        visibleTotal={commits.length}
         loading={props.loading || graphLayout.layoutPending()}
         loadingMore={props.loadingMore}
         hasMore={props.hasMore}
         onLoadMore={props.onLoadMore}
-        filter={filter()}
+        filter={filter}
         onFilterChange={setFilter}
-        showFilter={allCommits().length > 0}
-        visibleBranchCount={visibleBranchCount()}
+        showFilter={hasCommits}
+        visibleBranchCount={visibleBranchCount}
       />
 
-      <Show when={commits().length > 0}>
+      <Show when={commits.length > 0}>
         <div
           className="grid h-[30px] shrink-0 items-center gap-1 border-b bg-history-head px-0 text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground"
-          style={{ gridTemplateColumns: headerGridTemplate() }}
+          style={{ gridTemplateColumns: headerGridTemplate }}
         >
           <span aria-hidden="true" />
           <span>Subject</span>
@@ -232,18 +222,18 @@ export function HistoryPanel(props: HistoryPanelProps) {
         data-testid="history-scroll"
       >
         <Show
-          when={props.log && commits().length > 0}
+          when={props.log && commits.length > 0}
           fallback={
             <Show
-              when={showSkeleton()}
+              when={showSkeleton}
               fallback={
-                <Show when={allCommits().length > 0} fallback={<HistoryEmptyState />}>
+                <Show when={hasCommits} fallback={<HistoryEmptyState />}>
                   <FilteredEmptyState />
                 </Show>
               }
             >
               <SkeletonRows
-                graphRailWidth={graphRailWidth()}
+                graphRailWidth={graphRailWidth}
                 gridTail={gridTail}
                 viewportHeight={viewportHeight()}
               />
@@ -255,41 +245,36 @@ export function HistoryPanel(props: HistoryPanelProps) {
             style={{ height: `${totalHeight()}px`, '--row-grid-tail': gridTail }}
           >
             <CommitGraphCanvas
-              rows={rows()}
-              scrollContainer={scrollEl}
+              rows={rows}
+              scrollContainer={() => scrollEl}
               viewportHeight={viewportHeight()}
-              visibleSet={visibleSet()}
-              railWidth={graphRailWidth()}
+              visibleSet={visibleSet}
+              railWidth={graphRailWidth}
               themeNonce={themeNonce()}
               scrollTop={scrollTop()}
               startIndex={startIndex()}
-              endIndex={endIndex()}
-              graphLayoutEndIndex={graphLayout.laidOutThroughIndex()}
+              endIndex={endIndexValue}
+              graphLayoutEndIndex={laidOutThroughIndex}
             />
 
-            <For each={virtualItems()}>
-              {(virtualItem) => {
-                const row = () => rows()[virtualItem.index]
-                return (
-                  <Show when={row()}>
-                    {(layoutRow) => (
-                      <CommitRow
-                        row={layoutRow()}
-                        top={virtualItem.start}
-                        dim={!!(visibleSet() && !visibleSet()?.has(layoutRow().commit.hash))}
-                        offBranch={
-                          !!onCurrentBranchSet() &&
-                          !onCurrentBranchSet()?.has(layoutRow().commit.hash)
-                        }
-                        gridTail={gridTail}
-                        remotes={remotes()}
-                        remoteNames={remoteNames()}
-                      />
-                    )}
-                  </Show>
-                )
-              }}
-            </For>
+            {items.map((virtualItem) => {
+              const row = rows[virtualItem.index]
+              if (!row) {
+                return null
+              }
+              return (
+                <CommitRow
+                  key={virtualItem.index}
+                  row={row}
+                  top={virtualItem.start}
+                  dim={!!(visibleSet && !visibleSet.has(row.commit.hash))}
+                  offBranch={!!onCurrentBranchSet && !onCurrentBranchSet.has(row.commit.hash)}
+                  gridTail={gridTail}
+                  remotes={remotes}
+                  remoteNames={remoteNames}
+                />
+              )
+            })}
           </div>
         </Show>
       </div>

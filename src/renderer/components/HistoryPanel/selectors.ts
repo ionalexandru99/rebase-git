@@ -28,33 +28,97 @@ export function parseFilterRefKey(key: string): FilterRef | null {
   return { kind, fullPath }
 }
 
-function buildCommitByHash(commits: GitLogEntry[]): Map<string, GitLogEntry> {
-  const byHash = new Map<string, GitLogEntry>()
-  for (const commit of commits) {
-    byHash.set(commit.hash, commit)
-  }
-  return byHash
+interface CommitIndex {
+  byHash: Map<string, GitLogEntry>
+  positionByHash: Map<string, number>
 }
 
-function computeReachableSet(commits: GitLogEntry[], tipHashes: string[]): Set<string> {
-  const byHash = buildCommitByHash(commits)
-  const reachable = new Set<string>()
-  const stack = [...tipHashes]
-  while (stack.length > 0) {
-    const hash = stack.pop() as string
-    if (reachable.has(hash)) {
+let commitIndexCache: { commits: GitLogEntry[]; index: CommitIndex } | null = null
+
+function getCommitIndex(commits: GitLogEntry[]): CommitIndex {
+  if (commitIndexCache?.commits === commits) {
+    return commitIndexCache.index
+  }
+  const byHash = new Map<string, GitLogEntry>()
+  const positionByHash = new Map<string, number>()
+  for (let position = 0; position < commits.length; position++) {
+    const commit = commits[position]
+    byHash.set(commit.hash, commit)
+    positionByHash.set(commit.hash, position)
+  }
+  const index = { byHash, positionByHash }
+  commitIndexCache = { commits, index }
+  return index
+}
+
+interface RefTipIndex {
+  tipByRefKey: Map<string, string>
+  headTip: string | undefined
+}
+
+let refTipIndexCache: {
+  commits: GitLogEntry[]
+  remoteNames: ReadonlySet<string> | undefined
+  index: RefTipIndex
+} | null = null
+
+function hasHeadMarker(refs: string): boolean {
+  return refs.split(',').some((part) => {
+    const trimmed = part.trim()
+    return trimmed === 'HEAD' || trimmed.startsWith('HEAD -> ')
+  })
+}
+
+function getRefTipIndex(commits: GitLogEntry[], remoteNames?: Set<string>): RefTipIndex {
+  if (refTipIndexCache?.commits === commits && refTipIndexCache.remoteNames === remoteNames) {
+    return refTipIndexCache.index
+  }
+  const tipByRefKey = new Map<string, string>()
+  let headTip: string | undefined
+  for (const commit of commits) {
+    if (!commit.refs) {
       continue
     }
-    reachable.add(hash)
+    if (headTip === undefined && hasHeadMarker(commit.refs)) {
+      headTip = commit.hash
+    }
+    for (const ref of parseRefs(commit.refs, remoteNames)) {
+      if (ref.kind !== 'branch' && ref.kind !== 'remote') {
+        continue
+      }
+      const key = refFilterKey(ref.kind === 'branch' ? 'local' : 'remote', ref.label)
+      if (!tipByRefKey.has(key)) {
+        tipByRefKey.set(key, commit.hash)
+      }
+    }
+  }
+  const index = { tipByRefKey, headTip }
+  refTipIndexCache = { commits, remoteNames, index }
+  return index
+}
+
+function walkAncestors(
+  byHash: Map<string, GitLogEntry>,
+  startHash: string,
+  visited: Set<string>
+): void {
+  const stack = [startHash]
+  while (stack.length > 0) {
+    const hash = stack.pop() as string
+    if (visited.has(hash)) {
+      continue
+    }
+    visited.add(hash)
     const commit = byHash.get(hash)
     if (!commit) {
       continue
     }
     for (const parent of commit.parents) {
-      stack.push(parent)
+      if (!visited.has(parent)) {
+        stack.push(parent)
+      }
     }
   }
-  return reachable
 }
 
 export function findRefTip(
@@ -63,21 +127,10 @@ export function findRefTip(
   fullPath: string,
   remoteNames: Set<string>
 ): string | undefined {
-  for (const commit of commits) {
-    if (!commit.refs) {
-      continue
-    }
-    const parsed = parseRefs(commit.refs, remoteNames)
-    for (const ref of parsed) {
-      if (refKind === 'local' && ref.kind === 'branch' && ref.label === fullPath) {
-        return commit.hash
-      }
-      if (refKind === 'remote' && ref.kind === 'remote' && ref.label === fullPath) {
-        return commit.hash
-      }
-    }
+  if (refKind === 'tag') {
+    return undefined
   }
-  return undefined
+  return getRefTipIndex(commits, remoteNames).tipByRefKey.get(refFilterKey(refKind, fullPath))
 }
 
 export function resolveTrackingRemoteBranches(
@@ -159,22 +212,25 @@ export function countVisibleBranchRefs(
   return count
 }
 
+// Relies on commits being topo-ordered (children before parents), which the log stream
+// guarantees: walking tips most-descendant-first means any tip already visited when its
+// turn comes is an ancestor of an earlier tip. One shared visited set bounds the total
+// walk at O(commits) regardless of tip count.
 export function pruneAncestorTips(commits: GitLogEntry[], tipHashes: string[]): string[] {
-  const reachability = new Map<string, Set<string>>()
-  for (const tip of tipHashes) {
-    reachability.set(tip, computeReachableSet(commits, [tip]))
-  }
-  return tipHashes.filter((tip) => {
-    for (const other of tipHashes) {
-      if (tip === other) {
-        continue
-      }
-      if (reachability.get(other)?.has(tip)) {
-        return false
-      }
+  const { byHash, positionByHash } = getCommitIndex(commits)
+  const ordered = [...tipHashes].sort(
+    (left, right) => (positionByHash.get(left) ?? 0) - (positionByHash.get(right) ?? 0)
+  )
+  const visited = new Set<string>()
+  const kept = new Set<string>()
+  for (const tip of ordered) {
+    if (visited.has(tip)) {
+      continue
     }
-    return true
-  })
+    kept.add(tip)
+    walkAncestors(byHash, tip, visited)
+  }
+  return tipHashes.filter((tip) => kept.has(tip))
 }
 
 function collectTimelineTips(
@@ -183,6 +239,7 @@ function collectTimelineTips(
   remoteBranches: readonly string[],
   remoteNames: Set<string>
 ): string[] {
+  const { tipByRefKey } = getRefTipIndex(commits, remoteNames)
   const tips: string[] = []
   const seen = new Set<string>()
 
@@ -199,7 +256,7 @@ function collectTimelineTips(
     if (!parsed || parsed.kind === 'tag') {
       continue
     }
-    addTip(findRefTip(commits, parsed.kind, parsed.fullPath, remoteNames))
+    addTip(tipByRefKey.get(refFilterKey(parsed.kind, parsed.fullPath)))
   }
 
   for (const key of selectedRefs) {
@@ -207,7 +264,7 @@ function collectTimelineTips(
     if (!parsed || parsed.kind !== 'local') {
       continue
     }
-    const localTip = findRefTip(commits, 'local', parsed.fullPath, remoteNames)
+    const localTip = tipByRefKey.get(refFilterKey('local', parsed.fullPath))
     if (!localTip) {
       continue
     }
@@ -220,14 +277,14 @@ function collectTimelineTips(
       if (selectedRefs.has(remoteKey)) {
         continue
       }
-      const remoteTip = findRefTip(commits, 'remote', trackingPath, remoteNames)
+      const remoteTip = tipByRefKey.get(remoteKey)
       if (remoteTip === localTip) {
         addTip(remoteTip)
       }
     }
   }
 
-  return pruneAncestorTips(commits, tips)
+  return tips
 }
 
 export function computeBranchFilterSet(
@@ -244,7 +301,12 @@ export function computeBranchFilterSet(
   if (tipHashes.length === 0) {
     return new Set()
   }
-  return computeReachableSet(commits, tipHashes)
+  const { byHash } = getCommitIndex(commits)
+  const reachable = new Set<string>()
+  for (const tip of tipHashes) {
+    walkAncestors(byHash, tip, reachable)
+  }
+  return reachable
 }
 
 export function computeOnBranchSet(
@@ -252,37 +314,19 @@ export function computeOnBranchSet(
   remoteNames: Set<string>,
   currentBranch: string | undefined
 ): Set<string> | null {
-  let tip: string | undefined
-  for (const commit of commits) {
-    if (!commit.refs) {
-      continue
-    }
-    const hasHead = commit.refs.split(',').some((part) => {
-      const trimmed = part.trim()
-      return trimmed === 'HEAD' || trimmed.startsWith('HEAD -> ')
-    })
-    if (hasHead) {
-      tip = commit.hash
-      break
-    }
-  }
+  const { tipByRefKey, headTip } = getRefTipIndex(commits, remoteNames)
+  let tip = headTip
   if (!tip && currentBranch) {
-    for (const commit of commits) {
-      if (!commit.refs) {
-        continue
-      }
-      const parsed = parseRefs(commit.refs, remoteNames)
-      if (parsed.some((ref) => ref.kind === 'branch' && ref.label === currentBranch)) {
-        tip = commit.hash
-        break
-      }
-    }
+    tip = tipByRefKey.get(refFilterKey('local', currentBranch))
   }
   if (!tip) {
     return null
   }
 
-  return computeReachableSet(commits, [tip])
+  const { byHash } = getCommitIndex(commits)
+  const reachable = new Set<string>()
+  walkAncestors(byHash, tip, reachable)
+  return reachable
 }
 
 export function computeVisibleSet(filter: string, commits: GitLogEntry[]): Set<string> | null {

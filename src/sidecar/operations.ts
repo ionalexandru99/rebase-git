@@ -38,15 +38,15 @@ import { resolveDefaultBranch } from './git/defaultBranch'
 import { buildHunkPatch, parseUnifiedDiff, toFileDiff } from './git/diff'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { LOG_FORMAT, parseGitLogOutput } from './git/log-format'
+import { serializeRemotes, serializeStatus } from './git/serialize'
 import {
-  serializeLocalBranches,
-  serializeRemoteBranchNames,
-  serializeRemotes,
-  serializeStatus
-} from './git/serialize'
-import { parseAheadBehind } from './git/tracking'
+  LOCAL_BRANCH_FORMAT,
+  parseLocalBranchRefs,
+  parseRemoteAndTagRefs,
+  REMOTE_AND_TAG_FORMAT
+} from './git/tracking'
 import { withRepoLock } from './repo-lock'
-import { activeFetches, gitInstances } from './state'
+import { activeFetches, commitGraphWrites, gitInstances } from './state'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -87,6 +87,28 @@ export const invalidRepoPath = {
     parseOrThrow(StageHunkResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH })
 }
 
+const commitGraphWritten = new Set<string>()
+
+// Generation numbers from a commit-graph file make `git log --topo-order` stream
+// incrementally instead of walking the full history before the first row.
+function ensureCommitGraph(key: string): void {
+  if (commitGraphWritten.has(key)) {
+    return
+  }
+  commitGraphWritten.add(key)
+  const proc = spawn('git', ['-C', key, 'commit-graph', 'write', '--reachable', '--split'], {
+    stdio: 'ignore',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+  })
+  commitGraphWrites.set(key, proc)
+  proc.on('error', () => {
+    commitGraphWrites.delete(key)
+  })
+  proc.on('close', () => {
+    commitGraphWrites.delete(key)
+  })
+}
+
 export async function openRepo(repoPath: string): Promise<OpenRepoResponse> {
   const key = normalizeRepoPath(repoPath)
   try {
@@ -96,8 +118,11 @@ export async function openRepo(repoPath: string): Promise<OpenRepoResponse> {
       gitInstances.delete(key)
       return parseOrThrow(OpenRepoResponseSchema, { _tag: 'NotARepo' })
     }
-    const remotes = await git.getRemotes(true)
-    const defaultBranch = await resolveDefaultBranch(git, undefined)
+    ensureCommitGraph(key)
+    const [remotes, defaultBranch] = await Promise.all([
+      git.getRemotes(true),
+      resolveDefaultBranch(git, undefined)
+    ])
     return parseOrThrow(OpenRepoResponseSchema, {
       _tag: 'Ok',
       result: { remotes: serializeRemotes(remotes), defaultBranch, path: key }
@@ -115,6 +140,11 @@ export async function closeRepo(repoPath: string): Promise<Record<string, never>
     proc.kill()
   }
   activeFetches.delete(key)
+  const graphProc = commitGraphWrites.get(key)
+  if (graphProc && !graphProc.killed) {
+    graphProc.kill()
+  }
+  commitGraphWrites.delete(key)
   releaseFetchSemaphore(key)
   return {}
 }
@@ -125,14 +155,10 @@ export async function getLocalBranches(repoPath: string): Promise<LocalBranchesR
     return parseOrThrow(LocalBranchesResponseSchema, { _tag: 'RepoNotOpen' })
   }
   try {
-    const [branches, trackingRaw] = await Promise.all([
-      git.branch(),
-      git.raw(['for-each-ref', 'refs/heads', '--format=%(refname:short)|%(upstream:track)'])
-    ])
-    const tracking = parseAheadBehind(trackingRaw)
+    const raw = await git.raw(['for-each-ref', 'refs/heads', `--format=${LOCAL_BRANCH_FORMAT}`])
     return parseOrThrow(LocalBranchesResponseSchema, {
       _tag: 'Ok',
-      branches: serializeLocalBranches(branches, tracking)
+      branches: parseLocalBranchRefs(raw)
     })
   } catch (error) {
     return parseOrThrow(LocalBranchesResponseSchema, {
@@ -148,13 +174,15 @@ export async function getRemoteRefs(repoPath: string): Promise<RemoteRefsRespons
     return parseOrThrow(RemoteRefsResponseSchema, { _tag: 'RepoNotOpen' })
   }
   try {
-    const [branches, tags] = await Promise.all([git.branch(['-r']), git.tags()])
+    const raw = await git.raw([
+      'for-each-ref',
+      'refs/remotes',
+      'refs/tags',
+      `--format=${REMOTE_AND_TAG_FORMAT}`
+    ])
     return parseOrThrow(RemoteRefsResponseSchema, {
       _tag: 'Ok',
-      refs: {
-        remotes: serializeRemoteBranchNames(branches),
-        tags: [...tags.all]
-      }
+      refs: parseRemoteAndTagRefs(raw)
     })
   } catch (error) {
     return parseOrThrow(RemoteRefsResponseSchema, {
@@ -526,10 +554,14 @@ export async function checkoutRef(
 
 function runFetch(key: string): Promise<FetchResponse> {
   return new Promise((resolve) => {
-    const proc = spawn('git', ['-C', key, 'fetch', '--prune'], {
-      stdio: ['ignore', 'ignore', 'pipe'],
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-    })
+    const proc = spawn(
+      'git',
+      ['-c', 'fetch.writeCommitGraph=true', '-C', key, 'fetch', '--prune'],
+      {
+        stdio: ['ignore', 'ignore', 'pipe'],
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+      }
+    )
     activeFetches.set(key, proc)
 
     let stderrBuf = ''
