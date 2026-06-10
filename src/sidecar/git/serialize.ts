@@ -23,19 +23,6 @@ export interface SerializableStatus {
   files: StatusFileCode[]
 }
 
-export interface BranchTracking {
-  ahead: number
-  behind: number
-}
-
-export interface SerializableBranches {
-  current: string
-  all: string[]
-  remotes: string[]
-  tags: string[]
-  tracking?: Record<string, BranchTracking>
-}
-
 export function serializeStatus(
   status: Awaited<ReturnType<ReturnType<typeof simpleGit>['status']>>
 ): SerializableStatus {
@@ -53,71 +40,6 @@ export function serializeStatus(
       index: entry.index,
       working_dir: entry.working_dir
     }))
-  }
-}
-
-export function partitionBranchNames(names: readonly string[]): {
-  local: string[]
-  remotes: string[]
-} {
-  const local: string[] = []
-  const remotes: string[] = []
-  for (const name of names) {
-    if (name.startsWith('remotes/')) {
-      const stripped = name.slice('remotes/'.length)
-      if (stripped.includes(' -> ')) {
-        continue
-      }
-      remotes.push(stripped)
-    } else {
-      local.push(name)
-    }
-  }
-  return { local, remotes }
-}
-
-export function serializeLocalBranches(
-  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>,
-  tracking?: Record<string, BranchTracking>
-): Pick<SerializableBranches, 'current' | 'all' | 'tracking'> {
-  const { local } = partitionBranchNames(branches.all)
-  return {
-    current: branches.current ?? '',
-    all: local,
-    tracking
-  }
-}
-
-export function serializeRemoteBranchNames(
-  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>
-): string[] {
-  const remotes: string[] = []
-  for (const name of branches.all) {
-    if (name.startsWith('remotes/')) {
-      const stripped = name.slice('remotes/'.length)
-      if (stripped.includes(' -> ')) {
-        continue
-      }
-      remotes.push(stripped)
-    } else {
-      remotes.push(name)
-    }
-  }
-  return remotes
-}
-
-export function serializeBranches(
-  branches: Awaited<ReturnType<ReturnType<typeof simpleGit>['branch']>>,
-  tags: Awaited<ReturnType<ReturnType<typeof simpleGit>['tags']>>,
-  tracking?: Record<string, BranchTracking>
-): SerializableBranches {
-  const { local, remotes } = partitionBranchNames(branches.all)
-  return {
-    current: branches.current ?? '',
-    all: local,
-    remotes,
-    tags: [...tags.all],
-    tracking
   }
 }
 

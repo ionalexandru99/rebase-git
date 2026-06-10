@@ -19,7 +19,7 @@ import {
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useEffect, useRef } from 'react'
 import { repoQueryKeys } from '@/lib/query-keys'
-import { type Accessor, batch, createSignal } from '@/lib/react-compat'
+import { type Accessor, createSignal } from '@/lib/react-compat'
 import { createMutation, createQuery, useQueryClient } from '@/lib/react-query-compat'
 import { createStore } from '@/lib/react-store-compat'
 import { readSnapshot, writeSnapshot } from '@/lib/repo-snapshot-cache'
@@ -254,16 +254,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       return
     }
 
-    if (previous.length === 0 || nextLength < previous.length) {
-      setState('log', { all: [...logBuffer.current], total: nextLength })
-    } else {
-      batch(() => {
-        for (let index = previous.length; index < nextLength; index++) {
-          setState('log', 'all', index, logBuffer.current[index])
-        }
-        setState('log', 'total', nextLength)
-      })
-    }
+    setState('log', { all: [...logBuffer.current], total: nextLength })
 
     const path = state.repoPath
     if (path) {
@@ -578,14 +569,6 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     generation: number,
     options?: { clearLogOnStream?: boolean }
   ) => {
-    runIfCurrent(generation, path, 'refreshStatus', async () => {
-      await refreshStatus(path)
-    })
-
-    runIfCurrent(generation, path, 'refreshLocalBranches', async () => {
-      await refreshLocalBranches(path)
-    })
-
     runIfCurrent(generation, path, 'restartLogStream', async () => {
       await restartLogStream(path, { clearLog: options?.clearLogOnStream ?? true })
     })
@@ -638,6 +621,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         logBuffer.current = [...cached.log.all]
       }
 
+      // Mark before the render that subscribes the per-path queries: cached entries refetch
+      // exactly once on mount, fresh entries fetch once — no imperative duplicate.
+      invalidateRepoQueries(opened.path)
       startRepoRefresh(opened.path, generation, { clearLogOnStream: !cached?.log })
     } catch (error) {
       if (generation !== openGeneration.current) {
@@ -896,19 +882,19 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
   }, [])
 
+  const repoPathValue = state.repoPath
+  const fetchTickValue = fetchTick()
   useEffect(() => {
-    const path = state.repoPath
-    fetchTick()
-    if (!path || !tabActive()) {
+    if (!repoPathValue) {
       return
     }
     const handle = window.setInterval(() => {
       if (tabActive()) {
-        void runFetchAndRefresh(path)
+        void runFetchAndRefresh(repoPathValue)
       }
     }, AUTO_FETCH_INTERVAL_MS)
     return () => window.clearInterval(handle)
-  })
+  }, [repoPathValue, fetchTickValue])
 
   useEffect(() => {
     return () => {

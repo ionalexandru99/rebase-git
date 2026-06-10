@@ -4,5 +4,6 @@ import { fetchSemaphoreFor, fetchSemaphoreSize, releaseFetchSemaphore } from './
 
 export const gitInstances = new Map<string, SimpleGit>()
 export const activeFetches = new Map<string, ChildProcess>()
+export const commitGraphWrites = new Map<string, ChildProcess>()
 
 export { fetchSemaphoreFor, fetchSemaphoreSize, releaseFetchSemaphore }

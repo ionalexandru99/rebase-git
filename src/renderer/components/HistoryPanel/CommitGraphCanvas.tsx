@@ -15,18 +15,6 @@ interface CommitGraphCanvasProps {
   graphLayoutEndIndex: number
 }
 
-function visibleSetRevision(visibleSet: Set<string> | null): string {
-  if (!visibleSet) {
-    return 'all'
-  }
-  if (visibleSet.size === 0) {
-    return 'none'
-  }
-  const hashes = [...visibleSet]
-  hashes.sort()
-  return `${visibleSet.size}:${hashes[0]}:${hashes[hashes.length - 1]}`
-}
-
 export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
   let canvas: HTMLCanvasElement | undefined
   let drawFrame: number | null = null
@@ -96,23 +84,6 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
   }
 
   createEffect(() => {
-    void props.themeNonce
-    void props.scrollTop
-    void props.startIndex
-    void props.endIndex
-    void props.viewportHeight
-    void props.railWidth
-    void props.rows.length
-    void props.graphLayoutEndIndex
-    if (props.graphLayoutEndIndex > 0) {
-      const end = Math.min(props.endIndex, props.graphLayoutEndIndex)
-      for (let index = props.startIndex; index < end; index++) {
-        void props.rows[index]?.commitLane
-        void props.rows[index]?.incoming.length
-        void props.rows[index]?.outgoing.length
-      }
-    }
-    visibleSetRevision(props.visibleSet)
     scheduleDraw()
   })
 

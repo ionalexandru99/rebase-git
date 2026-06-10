@@ -1,6 +1,6 @@
 import { GRAPH_LAYOUT_DEBOUNCE_MS } from '@shared/graph-config'
-import type { LayoutResultMessage } from '@shared/graph-layout-protocol'
-import { attachCommitsToLayoutRows, type LayoutResult, layoutCommits } from '@/lib/git-graph/layout'
+import { useRef } from 'react'
+import { type LayoutResult, layoutCommits } from '@/lib/git-graph/layout'
 import { type Accessor, createEffect, createSignal, onCleanup, untrack } from '@/lib/react-compat'
 import type { GitLogEntry } from '@/types'
 
@@ -36,96 +36,61 @@ export function useGraphLayoutWorker(options: UseGraphLayoutWorkerOptions) {
   const debounceMs = options.debounceMs ?? GRAPH_LAYOUT_DEBOUNCE_MS
 
   const [state, setState] = createSignal<GraphLayoutState>(createEmptyState())
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const layoutedCommits = useRef<GitLogEntry[] | null>(null)
 
-  const applyLayoutResult = (commits: GitLogEntry[], message: LayoutResultMessage) => {
-    const rows = attachCommitsToLayoutRows(commits, message.rows)
+  const runLayout = (commits: GitLogEntry[]) => {
+    const snapshot = untrack(() => state())
+    const prevCommits = snapshot.layout?.commits ?? []
+    const sameSequence =
+      prevCommits.length === commits.length &&
+      commits.every((commit, index) => commit.hash === prevCommits[index]?.hash)
+
+    layoutedCommits.current = commits
+    if (sameSequence && snapshot.layout) {
+      if (snapshot.layoutPending) {
+        setState((current) => ({ ...current, layoutPending: false }))
+      }
+      return
+    }
+
+    const extendable =
+      sameLayoutPrefix(commits, snapshot.layout) &&
+      commits.length > prevCommits.length &&
+      prevCommits.every((commit, index) => commit.hash === commits[index]?.hash)
+
+    const result = layoutCommits(commits, extendable ? (snapshot.layout ?? undefined) : undefined)
     setState({
-      layout: {
-        rows,
-        maxLanes: message.maxLanes,
-        lanesAfter: [...message.lanesAfter],
-        commits: commits.slice(0, message.toIndex),
-        laidOutThroughIndex: message.toIndex
-      },
+      layout: result,
       layoutPending: false,
-      laidOutThroughIndex: message.toIndex
+      laidOutThroughIndex: result.laidOutThroughIndex
     })
-  }
-
-  const runLayoutSync = (
-    commits: GitLogEntry[],
-    targetEnd: number,
-    prev?: LayoutResult | null
-  ): LayoutResultMessage => {
-    const extending = prev && targetEnd > prev.laidOutThroughIndex && prev.rows.length > 0
-    const result = layoutCommits(commits, extending ? prev : undefined, {
-      startIndex: extending ? prev.laidOutThroughIndex : undefined,
-      endIndex: targetEnd
-    })
-    return {
-      type: 'layout-result',
-      generation: 0,
-      rows: result.rows.map((row) => ({
-        commitLane: row.commitLane,
-        incoming: row.incoming,
-        outgoing: row.outgoing
-      })),
-      maxLanes: result.maxLanes,
-      lanesAfter: result.lanesAfter,
-      fromIndex: extending ? prev.laidOutThroughIndex : 0,
-      toIndex: result.laidOutThroughIndex
-    }
-  }
-
-  const layoutToTarget = (commits: GitLogEntry[], targetEnd: number, reset: boolean) => {
-    const prev = reset ? null : state().layout
-    if (reset) {
-      setState(createEmptyState())
-    } else {
-      setState((current) => ({ ...current, layoutPending: true }))
-    }
-
-    const message = runLayoutSync(commits, targetEnd, prev)
-    applyLayoutResult(commits, message)
   }
 
   const scheduleLayout = (commits: GitLogEntry[], immediate: boolean) => {
-    if (debounceTimer !== null) {
-      clearTimeout(debounceTimer)
-      debounceTimer = null
+    if (debounceTimer.current !== null) {
+      clearTimeout(debounceTimer.current)
+      debounceTimer.current = null
     }
 
     if (commits.length === 0) {
-      setState(createEmptyState())
-      return
-    }
-
-    const run = () => {
-      const snapshot = untrack(() => state())
-      const prevCommits = snapshot.layout?.commits ?? []
-      const sameSequence =
-        prevCommits.length === commits.length &&
-        commits.every((commit, index) => commit.hash === prevCommits[index]?.hash)
-
-      if (sameSequence && snapshot.layout) {
-        return
+      layoutedCommits.current = commits
+      if (untrack(() => state()).layout !== null) {
+        setState(createEmptyState())
       }
-
-      const extendable =
-        sameLayoutPrefix(commits, snapshot.layout) &&
-        commits.length > prevCommits.length &&
-        prevCommits.every((commit, index) => commit.hash === commits[index]?.hash)
-
-      layoutToTarget(commits, commits.length, !extendable)
+      return
     }
 
     if (immediate) {
-      run()
+      runLayout(commits)
       return
     }
 
-    debounceTimer = setTimeout(run, debounceMs)
+    setState((current) => (current.layoutPending ? current : { ...current, layoutPending: true }))
+    debounceTimer.current = setTimeout(() => {
+      debounceTimer.current = null
+      runLayout(commits)
+    }, debounceMs)
   }
 
   createEffect(() => {
@@ -133,14 +98,17 @@ export function useGraphLayoutWorker(options: UseGraphLayoutWorkerOptions) {
       return
     }
     const commits = options.commits()
+    if (layoutedCommits.current === commits && debounceTimer.current === null) {
+      return
+    }
     const loading = options.loading()
-    const needsInitialLayout = commits.length > 0 && untrack(() => state().layout) === null
+    const needsInitialLayout = commits.length > 0 && untrack(() => state()).layout === null
     scheduleLayout(commits, !loading || needsInitialLayout)
   })
 
   onCleanup(() => {
-    if (debounceTimer !== null) {
-      clearTimeout(debounceTimer)
+    if (debounceTimer.current !== null) {
+      clearTimeout(debounceTimer.current)
     }
   })
 

@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
-import { createMemo, createSignal, type JSX } from '@/lib/react-compat'
+import { createSignal, type JSX } from '@/lib/react-compat'
 import {
   defaultVisibleTimelineRefs,
   effectiveVisibleTimelineRefs,
@@ -21,6 +21,8 @@ interface WorkspaceProps {
   errorBanner: JSX.Element
 }
 
+const EMPTY_BRANCH_NAMES: string[] = []
+
 export function Workspace(props: WorkspaceProps) {
   const git = props.git
   const repoPath = git.state.repoPath
@@ -29,26 +31,28 @@ export function Workspace(props: WorkspaceProps) {
   const modifiedCount = () => git.state.status?.modified.length ?? 0
   const stagedCount = () => git.state.status?.staged.length ?? 0
   const untrackedCount = () => git.state.status?.not_added.length ?? 0
-  const totalChanges = createMemo(() => modifiedCount() + stagedCount() + untrackedCount())
+  const totalChanges = () => modifiedCount() + stagedCount() + untrackedCount()
   const [activeView, setActiveView] = createSignal<WorkspaceView>('history')
   const [visibleTimelineRefs, setVisibleTimelineRefs] = createSignal<Set<string>>(new Set())
 
-  const sidebarLocalBranches = createMemo(() => git.state.branches?.all ?? [])
-  const sidebarRemoteBranches = createMemo(() => git.state.branches?.remotes ?? [])
-  const sidebarTags = createMemo(() => git.state.branches?.tags ?? [])
-  const sidebarTracking = createMemo(() => git.state.branches?.tracking)
-  const localBranches = sidebarLocalBranches()
-  const remoteBranches = sidebarRemoteBranches()
+  const sidebarTags = () => git.state.branches?.tags ?? EMPTY_BRANCH_NAMES
+  const sidebarTracking = () => git.state.branches?.tracking
+  const localBranches = git.state.branches?.all ?? EMPTY_BRANCH_NAMES
+  const remoteBranches = git.state.branches?.remotes ?? EMPTY_BRANCH_NAMES
 
-  const timelineFilterRefs = createMemo(() =>
-    effectiveVisibleTimelineRefs(
-      visibleTimelineRefs(),
-      localBranches,
-      remoteBranches,
-      git.state.defaultBranch,
-      git.state.currentBranch,
-      new Set(Object.keys(git.state.remotes))
-    )
+  const selectedTimelineRefs = visibleTimelineRefs()
+  const { defaultBranch, currentBranch, remotes } = git.state
+  const timelineFilterRefs = useMemo(
+    () =>
+      effectiveVisibleTimelineRefs(
+        selectedTimelineRefs,
+        localBranches,
+        remoteBranches,
+        defaultBranch,
+        currentBranch,
+        new Set(Object.keys(remotes))
+      ),
+    [selectedTimelineRefs, localBranches, remoteBranches, defaultBranch, currentBranch, remotes]
   )
 
   useEffect(() => {
@@ -129,7 +133,7 @@ export function Workspace(props: WorkspaceProps) {
         tags: sidebarTags(),
         branchesLoading: git.state.branchesLoading,
         tracking: sidebarTracking(),
-        visibleTimelineRefs: timelineFilterRefs(),
+        visibleTimelineRefs: timelineFilterRefs,
         onToggleTimelineVisibility: handleToggleTimelineVisibility,
         onCheckoutRef: handleCheckoutRef
       }}
@@ -151,7 +155,7 @@ export function Workspace(props: WorkspaceProps) {
           git={git}
           repoPath={repoPath}
           remoteBranches={remoteBranches}
-          visibleBranchRefs={timelineFilterRefs()}
+          visibleBranchRefs={timelineFilterRefs}
           onToggleTimelineVisibility={handleToggleTimelineVisibility}
           tabActive={() => props.tabActive?.() ?? true}
         />
