@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ignoreWorkingTree, startDebouncedDrain } from '../repoWatcher'
+import { ignoreWorkingTree, startDebouncedDrain, WORKING_TREE_WATCH_DEPTH } from '../repoWatcher'
 
 describe('ignoreWorkingTree', () => {
+  it('keeps the working-tree watcher shallow to avoid large-repo file descriptor exhaustion', () => {
+    expect(WORKING_TREE_WATCH_DEPTH).toBe(0)
+  })
+
   it('ignores the .git directory', () => {
     expect(ignoreWorkingTree('/repo/.git/HEAD')).toBe(true)
   })

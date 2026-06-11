@@ -1,5 +1,5 @@
 import type { PersistedTabs } from '@shared/schemas/ipc'
-import { createEffect, createSignal, For, onMount, Show } from '@/lib/react-compat'
+import { createEffect, createMemo, createSignal, For, onMount, Show } from '@/lib/react-compat'
 import { OnboardingScreen } from './components/OnboardingScreen'
 import { RepoRail } from './components/shell/RepoRail'
 import { Titlebar } from './components/shell/Titlebar'
@@ -79,6 +79,7 @@ function TabsShell(props: TabsShellProps) {
     persistedSnapshot
   } = useTabs(props.persisted)
   const [recentRepos, setRecentRepos] = createSignal<string[]>([])
+  const [activatedTabIds, setActivatedTabIds] = createSignal<Set<string>>(new Set([activeTabId()]))
 
   onMount(() => {
     window.electronAPI
@@ -94,6 +95,25 @@ function TabsShell(props: TabsShellProps) {
     window.electronAPI.setPersistedTabs(persistedSnapshot()).catch((error: unknown) => {
       console.warn('[app] failed to persist tab state', error)
     })
+  })
+
+  createEffect(() => {
+    const id = activeTabId()
+    setActivatedTabIds((previous) => {
+      if (previous.has(id)) {
+        return previous
+      }
+      return new Set([...previous, id])
+    })
+  })
+
+  const loadedTabDescriptors = createMemo(() => {
+    const activated = activatedTabIds()
+    const active = activeTabId()
+    return tabDescriptors().map((tab) => ({
+      ...tab,
+      loaded: !tab.hasRepo || tab.id === active || activated.has(tab.id)
+    }))
   })
 
   const workspaceCatalog = (): WorkspaceCatalog => ({
@@ -113,7 +133,7 @@ function TabsShell(props: TabsShellProps) {
 
       <div className="grid min-h-0 flex-1 grid-cols-[64px_minmax(0,1fr)]">
         <RepoRail
-          tabs={tabDescriptors()}
+          tabs={loadedTabDescriptors()}
           activeTabId={activeTabId()}
           onSelect={setActiveTabId}
           onClose={closeTab}
@@ -122,24 +142,30 @@ function TabsShell(props: TabsShellProps) {
 
         <div className="relative flex min-h-0 flex-col overflow-hidden">
           <For each={tabs()}>
-            {(tab) => (
-              <div
-                className={
-                  tab.id === activeTabId()
-                    ? 'flex h-full min-h-0 flex-col'
-                    : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
-                }
-                aria-hidden={tab.id !== activeTabId()}
-              >
-                <TabView
-                  tab={tab}
-                  tabActive={() => tab.id === activeTabId()}
-                  catalog={workspaceCatalog()}
-                  onOpenRepo={openRepoInTab}
-                  onRepoOpened={confirmRepoOpen}
-                />
-              </div>
-            )}
+            {(tab) => {
+              const tabActive = () => tab.id === activeTabId()
+              const tabLoaded = () => tabActive() || activatedTabIds().has(tab.id)
+              return (
+                <div
+                  className={
+                    tabActive()
+                      ? 'flex h-full min-h-0 flex-col'
+                      : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
+                  }
+                  aria-hidden={!tabActive()}
+                >
+                  <Show when={tabLoaded()}>
+                    <TabView
+                      tab={tab}
+                      tabActive={tabActive}
+                      catalog={workspaceCatalog()}
+                      onOpenRepo={openRepoInTab}
+                      onRepoOpened={confirmRepoOpen}
+                    />
+                  </Show>
+                </div>
+              )
+            }}
           </For>
         </div>
       </div>

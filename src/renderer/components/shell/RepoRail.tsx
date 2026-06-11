@@ -69,14 +69,16 @@ interface RepoTabButtonProps {
 
 function RepoTabButton(props: RepoTabButtonProps) {
   const colorKey = () => props.tab.repoPath ?? props.tab.title
+  const loaded = () => props.tab.loaded ?? true
+  const label = () => (loaded() ? props.tab.title : `${props.tab.title} - not loaded yet`)
   return (
     <div className="group relative">
       <button
         type="button"
         role="tab"
         aria-selected={props.isActive}
-        aria-label={props.tab.title}
-        title={props.tab.title}
+        aria-label={label()}
+        title={label()}
         onClick={() => props.onSelect()}
         onAuxClick={(event) => {
           if (event.button === 1) {
@@ -86,14 +88,18 @@ function RepoTabButton(props: RepoTabButtonProps) {
         }}
         className={cn(
           'flex size-[46px] items-center justify-center rounded-[var(--r-lg)] border transition-colors',
+          !loaded() && !props.isActive && 'opacity-60',
           props.isActive
             ? 'border-2 border-primary p-0.5'
             : 'border-transparent p-[3px] hover:border-border hover:bg-card-2'
         )}
       >
         <span
-          className="flex size-full items-center justify-center rounded-[10px] text-[13px] font-bold text-white"
-          style={{ background: avatarColor(colorKey()) }}
+          className={cn(
+            'flex size-full items-center justify-center rounded-[10px] text-[13px] font-bold',
+            loaded() ? 'text-white' : 'bg-muted text-muted-foreground'
+          )}
+          style={loaded() ? { background: avatarColor(colorKey()) } : undefined}
         >
           {avatarInitials(props.tab.title)}
         </span>

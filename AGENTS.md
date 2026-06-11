@@ -89,17 +89,17 @@ Biome enforces formatting and lint rules — run `pnpm check:fix` before committ
 
 ## Investigation Notes
 
-When discussing, diagnosing, debugging, or exploring implementation details, keep a browser-openable handoff document in `.agent-investigations/`.
+When discussing, diagnosing, debugging, or exploring implementation details, keep a Markdown handoff document in `.agent-investigations/`.
 
-- Use one HTML file per investigation, named with the date and a short slug, for example `.agent-investigations/2026-06-11-sidecar-startup-debug.html`.
+- Use one Markdown file per investigation, named with the date and a short slug, for example `.agent-investigations/2026-06-11-sidecar-startup-debug.md`.
 - Create the file early for any non-trivial debugging or architectural discussion, then update it as new facts are discovered.
 - Do not begin implementation for diagnostic/debugging work until the user has reviewed and approved the investigation file.
-- Write self-contained HTML that can be opened directly in a browser. Do not require a build step, external assets, or network access.
-- The investigation file must be a purpose-built browser document, not Markdown-equivalent prose wrapped in HTML. Include meaningful layout, visual hierarchy, and multiple visual artifacts that would not render well as plain Markdown.
+- Write self-contained Markdown that renders well in GitHub-style viewers. Do not require a build step, external assets, or network access.
+- Include meaningful structure, visual hierarchy, and multiple visual artifacts. Prefer Mermaid code blocks, Markdown tables, ASCII diagrams, and fenced code blocks over external diagram dependencies.
 - Include the current problem statement, timeline of investigation, files inspected, commands run, evidence gathered, hypotheses, confirmed findings, discarded leads, and the current status.
-- Include diagrams, sequence flows, graphs, tables, and structured sections whenever they make the investigation easier to understand. Prefer inline SVG, Mermaid source shown in a `<pre>` block, ASCII diagrams, and HTML tables over external diagram dependencies.
+- Include diagrams, sequence flows, graphs, tables, and structured sections whenever they make the investigation easier to understand.
 - Include enough context for a future agent to resume after context reset: repo state assumptions, relevant code paths, decisions made, next steps, open questions, and verification still needed.
 - Keep the document factual. Distinguish confirmed facts from hypotheses and guesses.
 - If code changes are made during the investigation, summarize each changed file and the reason for the change.
-- Before ending the session, update the HTML file with the final outcome, tests run, remaining risks, and recommended next action.
+- Before ending the session, update the Markdown file with the final outcome, tests run, remaining risks, and recommended next action.
 - Mention the investigation file path in the final response so the user can reopen it or provide it to a future agent.

@@ -16,6 +16,7 @@ interface Watcher {
 
 const watchers = new Map<string, Watcher>()
 const DEBOUNCE_MS = 300
+export const WORKING_TREE_WATCH_DEPTH = 0
 
 export const IGNORED_DIRS = new Set([
   '.git',
@@ -87,6 +88,7 @@ export function startWatching(repoPath: string, webContents: WebContents): void 
     ignored: ignoreWorkingTree,
     ignoreInitial: true,
     persistent: true,
+    depth: WORKING_TREE_WATCH_DEPTH,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 }
   })
   workingTree.on('all', () => workingTreeDrain.push())

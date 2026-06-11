@@ -249,6 +249,74 @@ describe('App — persisted tabs', () => {
     })
   })
 
+  it('defers inactive restored repos until the user selects them', async () => {
+    mockBaseAPI({ workingDirectory: '/home/user/projects' })
+    vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({
+      tabs: [
+        '/home/user/projects/repo-a',
+        '/home/user/projects/repo-b',
+        '/home/user/projects/repo-c'
+      ],
+      activeIndex: 1
+    })
+    vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
+      Promise.resolve({
+        _tag: 'Ok',
+        result: { path, remotes: {}, defaultBranch: 'main' }
+      })
+    )
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+    setupLogStream()
+
+    renderApp()
+
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/repo-b')
+    })
+    await waitFor(() => {
+      expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/repo-b', {
+        skip: 0,
+        maxCount: LOG_PAGE_SIZE
+      })
+    })
+
+    expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(1)
+    expect(window.electronAPI.startLogStream).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('tab', { name: 'repo-a - not loaded yet' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'repo-c - not loaded yet' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'repo-a - not loaded yet' }))
+
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/repo-a')
+    })
+    await waitFor(() => {
+      expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/repo-a', {
+        skip: 0,
+        maxCount: LOG_PAGE_SIZE
+      })
+    })
+
+    expect(window.electronAPI.openRepo).not.toHaveBeenCalledWith('/home/user/projects/repo-c')
+    expect(window.electronAPI.startLogStream).not.toHaveBeenCalledWith(
+      '/home/user/projects/repo-c',
+      expect.anything()
+    )
+  })
+
   it('persists the current tab state when a tab opens a repo', async () => {
     mockBaseAPI({
       workingDirectory: '/home/user/projects',

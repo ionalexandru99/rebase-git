@@ -5,6 +5,7 @@ export interface TabDescriptor {
   title: string
   hasRepo: boolean
   repoPath: string | null
+  loaded?: boolean
 }
 
 interface NewTabRecord {
