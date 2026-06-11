@@ -93,9 +93,11 @@ When discussing, diagnosing, debugging, or exploring implementation details, kee
 
 - Use one HTML file per investigation, named with the date and a short slug, for example `.agent-investigations/2026-06-11-sidecar-startup-debug.html`.
 - Create the file early for any non-trivial debugging or architectural discussion, then update it as new facts are discovered.
-- Write plain self-contained HTML that can be opened directly in a browser. Do not require a build step, external assets, or network access.
+- Do not begin implementation for diagnostic/debugging work until the user has reviewed and approved the investigation file.
+- Write self-contained HTML that can be opened directly in a browser. Do not require a build step, external assets, or network access.
+- The investigation file must be a purpose-built browser document, not Markdown-equivalent prose wrapped in HTML. Include meaningful layout, visual hierarchy, and multiple visual artifacts that would not render well as plain Markdown.
 - Include the current problem statement, timeline of investigation, files inspected, commands run, evidence gathered, hypotheses, confirmed findings, discarded leads, and the current status.
-- Add diagrams, graphs, tables, and structured sections whenever they make the investigation easier to understand. Prefer inline SVG, Mermaid source shown in a `<pre>` block, ASCII diagrams, and HTML tables over external diagram dependencies.
+- Include diagrams, sequence flows, graphs, tables, and structured sections whenever they make the investigation easier to understand. Prefer inline SVG, Mermaid source shown in a `<pre>` block, ASCII diagrams, and HTML tables over external diagram dependencies.
 - Include enough context for a future agent to resume after context reset: repo state assumptions, relevant code paths, decisions made, next steps, open questions, and verification still needed.
 - Keep the document factual. Distinguish confirmed facts from hypotheses and guesses.
 - If code changes are made during the investigation, summarize each changed file and the reason for the change.

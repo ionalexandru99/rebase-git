@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Restored Tabs Performance Investigation</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #142033;
+        --muted: #607089;
+        --page: #f5f7fb;
+        --panel: #ffffff;
+        --panel-2: #eef4ff;
+        --line: #cad6e6;
+        --primary: #2667ff;
+        --primary-soft: #dbe7ff;
+        --warning: #a65f00;
+        --warning-soft: #fff3d6;
+        --danger: #b42318;
+        --danger-soft: #ffe4df;
+        --ok: #147a45;
+        --ok-soft: #dff7ea;
+        --code: #eef2f8;
+        --shadow: 0 16px 50px rgba(20, 32, 51, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(38, 103, 255, 0.16), transparent 30rem),
+          linear-gradient(180deg, #f9fbff 0%, var(--page) 30rem);
+      }
+
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          monospace;
+      }
+
+      .page {
+        width: min(1280px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 48px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+        gap: 20px;
+        align-items: stretch;
+      }
+
+      .card {
+        border: 1px solid rgba(202, 214, 230, 0.9);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: var(--shadow);
+      }
+
+      .hero-main {
+        padding: 30px;
+      }
+
+      .eyebrow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 5px 10px;
+        color: var(--muted);
+        background: #fff;
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0.01em;
+      }
+
+      .pill.warning {
+        border-color: #efc46f;
+        color: var(--warning);
+        background: var(--warning-soft);
+      }
+
+      .pill.danger {
+        border-color: #f4aaa2;
+        color: var(--danger);
+        background: var(--danger-soft);
+      }
+
+      .pill.ok {
+        border-color: #9ed9b9;
+        color: var(--ok);
+        background: var(--ok-soft);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 900px;
+        margin-bottom: 14px;
+        font-size: clamp(34px, 5vw, 62px);
+        line-height: 0.95;
+        letter-spacing: -0.06em;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: 22px;
+        letter-spacing: -0.025em;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+      }
+
+      .lead {
+        max-width: 760px;
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .approval-card {
+        display: grid;
+        gap: 14px;
+        padding: 24px;
+        border-color: #efc46f;
+        background: linear-gradient(180deg, #fff9e8, #fff);
+      }
+
+      .approval-card strong {
+        color: var(--warning);
+      }
+
+      .approval-card p {
+        margin-bottom: 0;
+        color: #604317;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 20px;
+        margin-top: 20px;
+      }
+
+      .span-4 {
+        grid-column: span 4;
+      }
+
+      .span-5 {
+        grid-column: span 5;
+      }
+
+      .span-6 {
+        grid-column: span 6;
+      }
+
+      .span-7 {
+        grid-column: span 7;
+      }
+
+      .span-8 {
+        grid-column: span 8;
+      }
+
+      .span-12 {
+        grid-column: span 12;
+      }
+
+      .section {
+        padding: 22px;
+      }
+
+      .section p:last-child,
+      .section ul:last-child,
+      .section ol:last-child {
+        margin-bottom: 0;
+      }
+
+      .metric-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        background: #fff;
+      }
+
+      .metric .value {
+        margin-bottom: 2px;
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+      }
+
+      .metric .label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+        text-transform: uppercase;
+      }
+
+      .metric.warning .value {
+        color: var(--warning);
+      }
+
+      .metric.danger .value {
+        color: var(--danger);
+      }
+
+      .metric.ok .value {
+        color: var(--ok);
+      }
+
+      .diagram-frame {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: #fbfdff;
+      }
+
+      .diagram-frame svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--primary);
+      }
+
+      .dot.warning {
+        background: #f4a62a;
+      }
+
+      .dot.danger {
+        background: #ef6357;
+      }
+
+      .dot.ok {
+        background: #22a06b;
+      }
+
+      .sequence {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(120px, 1fr));
+        gap: 12px;
+        overflow-x: auto;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: #fbfdff;
+      }
+
+      .lane {
+        min-height: 310px;
+        border-radius: 14px;
+        background: linear-gradient(180deg, #f7faff, #ffffff);
+        border: 1px solid #dde7f5;
+        padding: 10px;
+      }
+
+      .lane-title {
+        margin-bottom: 12px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .event {
+        margin-bottom: 10px;
+        border-radius: 12px;
+        padding: 9px;
+        background: var(--primary-soft);
+        color: #153e9b;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .event.warning {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .event.danger {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .event.ok {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+
+      .workload-chart {
+        display: grid;
+        gap: 14px;
+        padding: 8px 2px 2px;
+      }
+
+      .bar-row {
+        display: grid;
+        grid-template-columns: 155px minmax(0, 1fr) 42px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .bar-label {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .bar-track {
+        height: 22px;
+        overflow: hidden;
+        border: 1px solid #d8e1ee;
+        border-radius: 999px;
+        background: #eef2f8;
+      }
+
+      .bar {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #2667ff, #7ca1ff);
+      }
+
+      .bar.warning {
+        background: linear-gradient(90deg, #f4a62a, #ffd27d);
+      }
+
+      .bar.danger {
+        background: linear-gradient(90deg, #ef6357, #ffaaa3);
+      }
+
+      .bar-value {
+        font-weight: 800;
+        text-align: right;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 14px;
+        font-size: 13px;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--panel-2);
+        color: #28415f;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      td {
+        background: rgba(255, 255, 255, 0.75);
+      }
+
+      .evidence-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .evidence-list li {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px;
+        background: #fff;
+      }
+
+      .file-path {
+        display: inline-flex;
+        margin-bottom: 6px;
+        border-radius: 8px;
+        padding: 3px 6px;
+        background: var(--code);
+        color: #2a3b52;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      pre {
+        overflow: auto;
+        margin: 0;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        background: #0f172a;
+        color: #dbeafe;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .timeline {
+        position: relative;
+        display: grid;
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .timeline li {
+        display: grid;
+        grid-template-columns: 120px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+
+      .timeline time {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .timeline .body {
+        border-left: 3px solid var(--primary-soft);
+        padding-left: 12px;
+      }
+
+      .callout {
+        border: 1px solid #efc46f;
+        border-radius: 16px;
+        padding: 14px;
+        background: var(--warning-soft);
+        color: #5f4213;
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .grid,
+        .metric-row,
+        .evidence-list {
+          grid-template-columns: 1fr;
+        }
+
+        .span-4,
+        .span-5,
+        .span-6,
+        .span-7,
+        .span-8,
+        .span-12 {
+          grid-column: span 1;
+        }
+
+        .bar-row {
+          grid-template-columns: 1fr;
+        }
+
+        .bar-value {
+          text-align: left;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div class="card hero-main">
+          <div class="eyebrow">
+            <span class="pill ok">Status: hypothesis confirmed</span>
+            <span class="pill">Date: 2026-06-11</span>
+            <span class="pill">Area: renderer tab restore</span>
+            <span class="pill danger">Implementation not started</span>
+          </div>
+          <h1>Restored inactive tabs start heavy Git work at launch.</h1>
+          <p class="lead">
+            Rebase correctly restores multiple tabs from the previous session. The primary
+            performance fault is confirmed: CSS-hidden inactive tabs are still mounted and open
+            repos plus log streams while the selected tab is trying to become interactive.
+          </p>
+        </div>
+
+        <aside class="card approval-card">
+          <h2>Diagnostic Result</h2>
+          <p>
+            A temporary renderer diagnostic test confirmed the startup fan-out. Implementation has
+            not started in this diagnostic pass; the temporary bug-encoding test was deleted after
+            it produced the evidence below.
+          </p>
+          <div class="metric-row">
+            <div class="metric warning">
+              <div class="value">4</div>
+              <div class="label">ranked hypotheses</div>
+            </div>
+            <div class="metric danger">
+              <div class="value">0</div>
+              <div class="label">fix files changed</div>
+            </div>
+            <div class="metric ok">
+              <div class="value">1</div>
+              <div class="label">diagnostic test passed</div>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="grid">
+        <article class="card section span-7">
+          <h2>Current Mount Graph</h2>
+          <div class="diagram-frame" aria-label="Current restored tab mount graph">
+            <svg viewBox="0 0 920 520" role="img">
+              <defs>
+                <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#607089" />
+                </marker>
+                <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#142033" flood-opacity="0.14" />
+                </filter>
+              </defs>
+
+              <rect x="32" y="34" width="856" height="452" rx="28" fill="#f8fbff" stroke="#cad6e6" />
+              <text x="54" y="70" fill="#142033" font-size="18" font-weight="800">Startup with persisted tabs [A, B, C], selected B</text>
+              <text x="54" y="96" fill="#607089" font-size="13">Confirmed from renderer code inspection. Width and color show relative startup fan-out, not measured timing.</text>
+
+              <g filter="url(#softShadow)">
+                <rect x="72" y="140" width="160" height="64" rx="18" fill="#ffffff" stroke="#cad6e6" />
+                <text x="152" y="166" text-anchor="middle" fill="#142033" font-size="14" font-weight="800">App</text>
+                <text x="152" y="187" text-anchor="middle" fill="#607089" font-size="12">getPersistedTabs</text>
+              </g>
+
+              <g filter="url(#softShadow)">
+                <rect x="304" y="140" width="180" height="64" rx="18" fill="#ffffff" stroke="#cad6e6" />
+                <text x="394" y="166" text-anchor="middle" fill="#142033" font-size="14" font-weight="800">TabsShell</text>
+                <text x="394" y="187" text-anchor="middle" fill="#607089" font-size="12">For each tab</text>
+              </g>
+
+              <path d="M232 172 H304" stroke="#607089" stroke-width="2" marker-end="url(#arrow)" />
+
+              <g>
+                <rect x="585" y="86" width="230" height="86" rx="18" fill="#ffe4df" stroke="#f4aaa2" />
+                <text x="700" y="114" text-anchor="middle" fill="#b42318" font-size="14" font-weight="800">RepoTab A</text>
+                <text x="700" y="136" text-anchor="middle" fill="#7f2a20" font-size="12">inactive, hidden div</text>
+                <text x="700" y="154" text-anchor="middle" fill="#7f2a20" font-size="12">openRepo + store work</text>
+
+                <rect x="585" y="206" width="230" height="86" rx="18" fill="#dff7ea" stroke="#9ed9b9" />
+                <text x="700" y="234" text-anchor="middle" fill="#147a45" font-size="14" font-weight="800">RepoTab B</text>
+                <text x="700" y="256" text-anchor="middle" fill="#276249" font-size="12">active, visible</text>
+                <text x="700" y="274" text-anchor="middle" fill="#276249" font-size="12">openRepo + store work</text>
+
+                <rect x="585" y="326" width="230" height="86" rx="18" fill="#ffe4df" stroke="#f4aaa2" />
+                <text x="700" y="354" text-anchor="middle" fill="#b42318" font-size="14" font-weight="800">RepoTab C</text>
+                <text x="700" y="376" text-anchor="middle" fill="#7f2a20" font-size="12">inactive, hidden div</text>
+                <text x="700" y="394" text-anchor="middle" fill="#7f2a20" font-size="12">openRepo + store work</text>
+              </g>
+
+              <path d="M484 172 C530 172 535 128 585 128" stroke="#ef6357" stroke-width="4" fill="none" marker-end="url(#arrow)" />
+              <path d="M484 172 C530 172 535 249 585 249" stroke="#22a06b" stroke-width="4" fill="none" marker-end="url(#arrow)" />
+              <path d="M484 172 C530 172 535 369 585 369" stroke="#ef6357" stroke-width="4" fill="none" marker-end="url(#arrow)" />
+
+              <g>
+                <rect x="110" y="300" width="315" height="130" rx="20" fill="#ffffff" stroke="#cad6e6" />
+                <text x="132" y="330" fill="#142033" font-size="14" font-weight="800">Observed gating boundary</text>
+                <text x="132" y="358" fill="#607089" font-size="12">History DOM rendering checks tabActive.</text>
+                <text x="132" y="382" fill="#607089" font-size="12">Repo open, status queries, branches, and log stream</text>
+                <text x="132" y="404" fill="#607089" font-size="12">startup are not gated by tabActive in inspected code.</text>
+              </g>
+            </svg>
+          </div>
+          <div class="legend">
+            <span><i class="dot ok"></i>selected tab work</span>
+            <span><i class="dot danger"></i>inactive tab work competing at startup</span>
+          </div>
+        </article>
+
+        <article class="card section span-5">
+          <h2>Startup Work Fan-Out</h2>
+          <p>
+            This graph shows the confirmed <code>openRepo</code> and <code>startLogStream</code>
+            fan-out for three restored repo tabs under the inspected current path. Status and branch
+            counts are code-path evidence from the same mount path, not profiler timings.
+          </p>
+          <div class="workload-chart" role="img" aria-label="Expected startup work counts">
+            <div class="bar-row">
+              <div class="bar-label">Visible tab shells</div>
+              <div class="bar-track"><div class="bar" style="width: 33%"></div></div>
+              <div class="bar-value">1</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-label">Mounted RepoTab</div>
+              <div class="bar-track"><div class="bar danger" style="width: 100%"></div></div>
+              <div class="bar-value">3</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-label">openRepo calls</div>
+              <div class="bar-track"><div class="bar danger" style="width: 100%"></div></div>
+              <div class="bar-value">3</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-label">status queries</div>
+              <div class="bar-track"><div class="bar warning" style="width: 100%"></div></div>
+              <div class="bar-value">3</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-label">branch queries</div>
+              <div class="bar-track"><div class="bar warning" style="width: 100%"></div></div>
+              <div class="bar-value">3</div>
+            </div>
+            <div class="bar-row">
+              <div class="bar-label">log streams</div>
+              <div class="bar-track"><div class="bar danger" style="width: 100%"></div></div>
+              <div class="bar-value">3</div>
+            </div>
+          </div>
+          <div class="callout" style="margin-top: 16px">
+            The diagnostic test passed by observing <code>openRepo</code> and
+            <code>startLogStream</code> calls for inactive restored paths during initial render.
+          </div>
+        </article>
+
+        <article class="card section span-12">
+          <h2>Current Startup Sequence</h2>
+          <div class="sequence" aria-label="Sequence flow for restored tab startup">
+            <div class="lane">
+              <div class="lane-title">App</div>
+              <div class="event">mount</div>
+              <div class="event">getPersistedTabs returns A, B, C</div>
+              <div class="event ok">activeIndex selects B</div>
+            </div>
+            <div class="lane">
+              <div class="lane-title">TabsShell</div>
+              <div class="event">hydrate TabRecord list</div>
+              <div class="event warning">render For each tab</div>
+              <div class="event danger">CSS hides inactive wrappers only</div>
+            </div>
+            <div class="lane">
+              <div class="lane-title">RepoTab A/C</div>
+              <div class="event danger">mount inactive tab component</div>
+              <div class="event danger">create Git store</div>
+              <div class="event danger">effect calls openRepo(path)</div>
+            </div>
+            <div class="lane">
+              <div class="lane-title">RepoTab B</div>
+              <div class="event ok">mount active tab component</div>
+              <div class="event ok">create Git store</div>
+              <div class="event ok">effect calls openRepo(path)</div>
+            </div>
+            <div class="lane">
+              <div class="lane-title">Main + Sidecar</div>
+              <div class="event warning">open repo IPC for each mounted repo</div>
+              <div class="event warning">status and branch reads</div>
+              <div class="event danger">log stream startup for each repo</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card section span-6">
+          <h2>Hypothesis Matrix</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Hypothesis</th>
+                <th>Prediction</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>Inactive restored <code>RepoTab</code>s eagerly call <code>openRepo</code>.</td>
+                <td>Initial render with tabs A, B, C selected B calls <code>openRepo</code> for all three paths.</td>
+                <td><span class="pill ok">test-confirmed</span></td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>Inactive tabs run TanStack queries because <code>enabled</code> checks only path.</td>
+                <td>Status and branch mocks receive calls for inactive paths after their stores get repo paths.</td>
+                <td><span class="pill warning">code-confirmed</span></td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>Inactive tabs start log streams despite hidden history UI.</td>
+                <td><code>startLogStream</code> is called for inactive restored paths.</td>
+                <td><span class="pill ok">test-confirmed</span></td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>Hidden workspaces still execute branch and timeline memo work.</td>
+                <td>After cached branch data arrives, inactive <code>Workspace</code> logic still computes sidebar inputs.</td>
+                <td><span class="pill">secondary</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card section span-6">
+          <h2>Evidence Cards</h2>
+          <ul class="evidence-list">
+            <li>
+              <span class="file-path">src/renderer/App.tsx</span>
+              <p>
+                Every tab is rendered in a <code>For</code>. Inactive tabs receive an invisible absolute
+                wrapper, so their child components remain mounted.
+              </p>
+            </li>
+            <li>
+              <span class="file-path">src/renderer/RepoTab.tsx</span>
+              <p>
+                <code>useGitStore</code> is created immediately, and an effect calls
+                <code>git.openRepo(props.repoPath)</code> when the path differs from the last request.
+              </p>
+            </li>
+            <li>
+              <span class="file-path">src/renderer/stores/git.tsx</span>
+              <p>
+                Status, local branch, and remote ref queries are enabled by repo path. Log stream
+                restart runs during <code>openRepo</code>.
+              </p>
+            </li>
+            <li>
+              <span class="file-path">src/renderer/WorkspaceViews.tsx</span>
+              <p>
+                <code>HistoryView</code> checks <code>tabActive</code> before rendering the panel, which
+                protects the DOM but not the earlier Git startup work.
+              </p>
+            </li>
+          </ul>
+        </article>
+
+        <article class="card section span-7">
+          <h2>Mermaid Sequence Source</h2>
+          <p>
+            Mermaid is not loaded because the file must work offline, but this source captures the
+            same flow for future rendering in tools that support Mermaid.
+          </p>
+          <pre>sequenceDiagram
+  participant App
+  participant TabsShell
+  participant Active as RepoTab B active
+  participant Inactive as RepoTab A/C inactive
+  participant Main
+  participant Sidecar
+
+  App-&gt;&gt;App: getPersistedTabs() returns [A, B, C], activeIndex=1
+  App-&gt;&gt;TabsShell: render hydrated tab list
+  TabsShell-&gt;&gt;Active: mount visible tab
+  TabsShell-&gt;&gt;Inactive: mount hidden tabs
+  Active-&gt;&gt;Main: openRepo(B)
+  Inactive-&gt;&gt;Main: openRepo(A), openRepo(C)
+  Main-&gt;&gt;Sidecar: status, branches, log stream for each repo
+  Sidecar--&gt;&gt;Active: selected tab data competes with inactive tab work</pre>
+        </article>
+
+        <article class="card section span-5">
+          <h2>Investigation Timeline</h2>
+          <ol class="timeline">
+            <li>
+              <time>Step 1</time>
+              <div class="body">Searched renderer tab restore, active-tab, and sidecar query paths.</div>
+            </li>
+            <li>
+              <time>Step 2</time>
+              <div class="body">Inspected <code>App</code>, <code>TabView</code>, <code>RepoTab</code>, <code>Workspace</code>, <code>WorkspaceViews</code>, and <code>useGitStore</code>.</div>
+            </li>
+            <li>
+              <time>Step 3</time>
+              <div class="body">Confirmed inactive tabs are hidden with CSS but remain mounted.</div>
+            </li>
+            <li>
+              <time>Step 4</time>
+              <div class="body">Confirmed implementation is paused until this file is approved.</div>
+            </li>
+            <li>
+              <time>Step 5</time>
+              <div class="body">Ran a temporary renderer diagnostic test. It confirmed <code>openRepo</code> and <code>startLogStream</code> are called for inactive restored repos at boot.</div>
+            </li>
+          </ol>
+        </article>
+
+        <article class="card section span-12">
+          <h2>Files, Commands, and Resume Notes</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Files inspected</td>
+                <td>
+                  <code>src/renderer/App.tsx</code>, <code>src/renderer/TabView.tsx</code>,
+                  <code>src/renderer/RepoTab.tsx</code>, <code>src/renderer/Workspace.tsx</code>,
+                  <code>src/renderer/WorkspaceViews.tsx</code>,
+                  <code>src/renderer/stores/git.tsx</code>,
+                  <code>src/renderer/__tests__/App.test.tsx</code>,
+                  <code>src/test/setup.ts</code>, <code>src/test/render-app.tsx</code>
+                </td>
+              </tr>
+              <tr>
+                <td>Commands and tools run</td>
+                <td>
+                  Used repository file search and content search for tab restore, active tab, query,
+                  and log stream paths. Read the relevant renderer and test files. Ran
+                  <code>pnpm vitest run --config vitest.config.ts "src/renderer/__tests__/restored-tabs-hypothesis.test.tsx"</code>,
+                  which passed and confirmed the current eager inactive-tab behavior.
+                </td>
+              </tr>
+              <tr>
+                <td>Changed files so far</td>
+                <td>
+                  <code>AGENTS.md</code> was updated to require approval before implementation and to
+                  require richer browser-native investigation documents. This HTML file was expanded
+                  for the current investigation. A temporary diagnostic test file was added, run, and
+                  deleted after confirming the hypothesis. No product-code implementation files were
+                  changed.
+                </td>
+              </tr>
+              <tr>
+                <td>Next test seam</td>
+                <td>
+                  Add an App-level renderer test with persisted tabs <code>[A, B, C]</code> and
+                  <code>activeIndex = 1</code>. The expected post-fix behavior is only
+                  <code>openRepo(B)</code> at boot, then <code>openRepo(A)</code> or <code>openRepo(C)</code>
+                  only when the user selects that tab.
+                </td>
+              </tr>
+              <tr>
+                <td>Open questions</td>
+                <td>
+                  Whether inactive restored tabs should render a lightweight placeholder until first
+                  activation, or whether the store should exist but keep all sidecar-backed work
+                  disabled until active. The minimal expected fix is likely lazy activation at the
+                  <code>RepoTab</code> boundary.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
