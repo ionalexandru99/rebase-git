@@ -86,3 +86,18 @@ Biome enforces formatting and lint rules — run `pnpm check:fix` before committ
 - Single quotes (JS), double quotes (JSX), no semicolons, 2-space indent, 100-column lines, `useImportType` as error.
 - Default to **no comments** unless the WHY is non-obvious (same rule as Core Principles §1).
 - Use descriptive variable names; avoid terse abbreviations except loop indices (`i`/`j`), event params (`e`), and `_` for unused bindings.
+
+## Investigation Notes
+
+When discussing, diagnosing, debugging, or exploring implementation details, keep a browser-openable handoff document in `.agent-investigations/`.
+
+- Use one HTML file per investigation, named with the date and a short slug, for example `.agent-investigations/2026-06-11-sidecar-startup-debug.html`.
+- Create the file early for any non-trivial debugging or architectural discussion, then update it as new facts are discovered.
+- Write plain self-contained HTML that can be opened directly in a browser. Do not require a build step, external assets, or network access.
+- Include the current problem statement, timeline of investigation, files inspected, commands run, evidence gathered, hypotheses, confirmed findings, discarded leads, and the current status.
+- Add diagrams, graphs, tables, and structured sections whenever they make the investigation easier to understand. Prefer inline SVG, Mermaid source shown in a `<pre>` block, ASCII diagrams, and HTML tables over external diagram dependencies.
+- Include enough context for a future agent to resume after context reset: repo state assumptions, relevant code paths, decisions made, next steps, open questions, and verification still needed.
+- Keep the document factual. Distinguish confirmed facts from hypotheses and guesses.
+- If code changes are made during the investigation, summarize each changed file and the reason for the change.
+- Before ending the session, update the HTML file with the final outcome, tests run, remaining risks, and recommended next action.
+- Mention the investigation file path in the final response so the user can reopen it or provide it to a future agent.
