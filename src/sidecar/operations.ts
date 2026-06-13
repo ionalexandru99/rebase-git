@@ -7,10 +7,14 @@ import {
   CheckoutResponseSchema,
   type CommitResponse,
   CommitResponseSchema,
+  type ConflictableMutationResponse,
+  ConflictableMutationResponseSchema,
   type FetchResponse,
   FetchResponseSchema,
   type GetDiffResponse,
   GetDiffResponseSchema,
+  type GitMutationResponse,
+  GitMutationResponseSchema,
   type LocalBranchesResponse,
   LocalBranchesResponseSchema,
   type LogResponse,
@@ -23,6 +27,7 @@ import {
   PushResponseSchema,
   type RemoteRefsResponse,
   RemoteRefsResponseSchema,
+  type ResetMode,
   type StageHunkResponse,
   StageHunkResponseSchema,
   type StageResponse,
@@ -84,7 +89,14 @@ export const invalidRepoPath = {
     parseOrThrow(UnstageResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   diff: () => parseOrThrow(GetDiffResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
   stageHunk: () =>
-    parseOrThrow(StageHunkResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH })
+    parseOrThrow(StageHunkResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  mutation: () =>
+    parseOrThrow(GitMutationResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH }),
+  conflictable: () =>
+    parseOrThrow(ConflictableMutationResponseSchema, {
+      _tag: 'GitError',
+      message: INVALID_REPO_PATH
+    })
 }
 
 const commitGraphWritten = new Set<string>()
@@ -675,4 +687,245 @@ export async function pullRepo(repoPath: string): Promise<PullResponse> {
   return withRepoLock(key, async () =>
     parseOrThrow(PullResponseSchema, await runGitCommand(key, ['pull', '--ff-only']))
   )
+}
+
+// Reject anything that could be read as an option flag (leading '-') or smuggle a NUL. Arguments
+// are passed as an array to git (never a shell), so this is the only injection surface that matters.
+function isSafeRefArg(value: string): boolean {
+  return value.length > 0 && !value.includes('\0') && !value.startsWith('-')
+}
+
+type RawGit = { raw: (args: string[]) => Promise<string> }
+
+async function workingTreeHasConflicts(git: RawGit): Promise<boolean> {
+  const out = await git.raw(['diff', '--name-only', '--diff-filter=U'])
+  return out.trim().length > 0
+}
+
+function mutationOk(): GitMutationResponse {
+  return parseOrThrow(GitMutationResponseSchema, { _tag: 'Ok' })
+}
+
+function mutationError(message: string): GitMutationResponse {
+  return parseOrThrow(GitMutationResponseSchema, { _tag: 'GitError', message })
+}
+
+export async function createBranch(
+  repoPath: string,
+  name: string,
+  startPoint?: string,
+  checkout?: boolean
+): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(name) || (startPoint !== undefined && !isSafeRefArg(startPoint))) {
+    return mutationError('invalid branch name')
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      const args = checkout ? ['checkout', '-b', name] : ['branch', name]
+      if (startPoint) {
+        args.push(startPoint)
+      }
+      await git.raw(args)
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+export async function deleteBranch(
+  repoPath: string,
+  name: string,
+  force?: boolean
+): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(name)) {
+    return mutationError('invalid branch name')
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.raw(['branch', force ? '-D' : '-d', name])
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+export async function renameBranch(
+  repoPath: string,
+  oldName: string,
+  newName: string
+): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(oldName) || !isSafeRefArg(newName)) {
+    return mutationError('invalid branch name')
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.raw(['branch', '-m', oldName, newName])
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+// merge/revert/cherry-pick leave the tree conflicted on failure, but simple-git's `raw` does NOT
+// reject for a conflicting merge (it resolves while the index holds unmerged entries). So the
+// classification has to inspect the index for unmerged paths rather than trusting the thrown error.
+async function runWithConflictDetection(
+  repoPath: string,
+  git: RawGit,
+  args: string[]
+): Promise<ConflictableMutationResponse> {
+  return withRepoLock(repoPath, async () => {
+    let failure: string | null = null
+    try {
+      await git.raw(args)
+    } catch (error) {
+      failure = errorMessage(error)
+    }
+    if (await workingTreeHasConflicts(git)) {
+      return parseOrThrow(ConflictableMutationResponseSchema, {
+        _tag: 'Conflict',
+        message: failure ?? `${args[0]} stopped on conflicts`
+      })
+    }
+    if (failure !== null) {
+      return parseOrThrow(ConflictableMutationResponseSchema, {
+        _tag: 'GitError',
+        message: failure
+      })
+    }
+    return parseOrThrow(ConflictableMutationResponseSchema, { _tag: 'Ok' })
+  })
+}
+
+export async function mergeBranch(
+  repoPath: string,
+  ref: string
+): Promise<ConflictableMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(ConflictableMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(ref)) {
+    return parseOrThrow(ConflictableMutationResponseSchema, {
+      _tag: 'GitError',
+      message: 'invalid ref name'
+    })
+  }
+  return runWithConflictDetection(repoPath, git, ['merge', '--no-edit', ref])
+}
+
+export async function resetToCommit(
+  repoPath: string,
+  sha: string,
+  mode: ResetMode
+): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(sha)) {
+    return mutationError('invalid commit')
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.raw(['reset', `--${mode}`, sha])
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+export async function revertCommit(
+  repoPath: string,
+  sha: string
+): Promise<ConflictableMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(ConflictableMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(sha)) {
+    return parseOrThrow(ConflictableMutationResponseSchema, {
+      _tag: 'GitError',
+      message: 'invalid commit'
+    })
+  }
+  return runWithConflictDetection(repoPath, git, ['revert', '--no-edit', sha])
+}
+
+export async function cherryPick(
+  repoPath: string,
+  sha: string
+): Promise<ConflictableMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(ConflictableMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(sha)) {
+    return parseOrThrow(ConflictableMutationResponseSchema, {
+      _tag: 'GitError',
+      message: 'invalid commit'
+    })
+  }
+  return runWithConflictDetection(repoPath, git, ['cherry-pick', sha])
+}
+
+export async function createTag(
+  repoPath: string,
+  name: string,
+  ref?: string,
+  message?: string
+): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(name) || (ref !== undefined && !isSafeRefArg(ref))) {
+    return mutationError('invalid tag name')
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      const args = message ? ['tag', '-a', name, '-m', message] : ['tag', name]
+      if (ref) {
+        args.push(ref)
+      }
+      await git.raw(args)
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+export async function deleteTag(repoPath: string, name: string): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (!isSafeRefArg(name)) {
+    return mutationError('invalid tag name')
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.raw(['tag', '-d', name])
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
 }

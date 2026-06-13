@@ -136,6 +136,46 @@ export const CheckoutResponseSchema = z.discriminatedUnion('_tag', [
 ])
 export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>
 
+const okTag = z.object({ _tag: z.literal('Ok') })
+const conflictTag = z.object({ _tag: z.literal('Conflict'), message: z.string() })
+
+// Ok / RepoNotOpen / GitError — shared by the simple write operations (branch create/delete/rename,
+// reset, tag create/delete, discard, stash mutations) that have no extra success payload.
+export const GitMutationResponseSchema = z.discriminatedUnion('_tag', [
+  okTag,
+  repoNotOpen,
+  gitError
+])
+export type GitMutationResponse = z.infer<typeof GitMutationResponseSchema>
+
+// Adds a Conflict tag for operations that can leave the working tree in a conflicted state
+// (merge, revert, cherry-pick).
+export const ConflictableMutationResponseSchema = z.discriminatedUnion('_tag', [
+  okTag,
+  conflictTag,
+  repoNotOpen,
+  gitError
+])
+export type ConflictableMutationResponse = z.infer<typeof ConflictableMutationResponseSchema>
+
+export const ResetModeSchema = z.enum(['soft', 'mixed', 'hard'])
+export type ResetMode = z.infer<typeof ResetModeSchema>
+
+export const StashEntrySchema = z.object({
+  index: z.number(),
+  ref: z.string(),
+  message: z.string(),
+  branch: z.string()
+})
+export type StashEntry = z.infer<typeof StashEntrySchema>
+
+export const StashListResponseSchema = z.discriminatedUnion('_tag', [
+  z.object({ _tag: z.literal('Ok'), stashes: z.array(StashEntrySchema) }),
+  repoNotOpen,
+  gitError
+])
+export type StashListResponse = z.infer<typeof StashListResponseSchema>
+
 export const SidebarPrefsSchema = z.object({
   open: z.boolean(),
   width: z.number()

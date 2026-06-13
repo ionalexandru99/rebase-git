@@ -18,6 +18,22 @@ export const SidecarOp = {
   pullRepo: 'pull-repo',
   getLog: 'get-log',
   checkoutRef: 'checkout-ref',
+  createBranch: 'create-branch',
+  deleteBranch: 'delete-branch',
+  renameBranch: 'rename-branch',
+  mergeBranch: 'merge-branch',
+  resetToCommit: 'reset-to-commit',
+  revertCommit: 'revert-commit',
+  cherryPick: 'cherry-pick',
+  createTag: 'create-tag',
+  deleteTag: 'delete-tag',
+  stashList: 'stash-list',
+  stashPush: 'stash-push',
+  stashApply: 'stash-apply',
+  stashPop: 'stash-pop',
+  stashDrop: 'stash-drop',
+  discardChanges: 'discard-changes',
+  discardAll: 'discard-all',
   scanForRepos: 'scan-for-repos'
 } as const
 

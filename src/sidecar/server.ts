@@ -4,6 +4,7 @@ import path from 'node:path'
 import { parseOrThrow } from '@shared/codec'
 import {
   RefKindSchema,
+  ResetModeSchema,
   type ScanForReposResponse,
   ScanForReposResponseSchema
 } from '@shared/schemas/ipc'
@@ -377,6 +378,140 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
         return BAD_REQUEST
       }
       return operations.checkoutRef(repoPath, refKind.data, fullPath)
+    }
+    case SidecarOp.createBranch: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      const name = requiredString(body, 'name')
+      if (!name) {
+        return BAD_REQUEST
+      }
+      const startPoint = requiredString(body, 'startPoint') ?? undefined
+      return operations.createBranch(repoPath, name, startPoint, body.checkout === true)
+    }
+    case SidecarOp.deleteBranch: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      const name = requiredString(body, 'name')
+      if (!name) {
+        return BAD_REQUEST
+      }
+      return operations.deleteBranch(repoPath, name, body.force === true)
+    }
+    case SidecarOp.renameBranch: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      const oldName = requiredString(body, 'oldName')
+      const newName = requiredString(body, 'newName')
+      if (!oldName || !newName) {
+        return BAD_REQUEST
+      }
+      return operations.renameBranch(repoPath, oldName, newName)
+    }
+    case SidecarOp.mergeBranch: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.conflictable()
+      }
+      const ref = requiredString(body, 'ref')
+      if (!ref) {
+        return BAD_REQUEST
+      }
+      return operations.mergeBranch(repoPath, ref)
+    }
+    case SidecarOp.resetToCommit: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      const sha = requiredString(body, 'sha')
+      if (!sha) {
+        return BAD_REQUEST
+      }
+      const mode = ResetModeSchema.safeParse(body.mode)
+      if (!mode.success) {
+        return BAD_REQUEST
+      }
+      return operations.resetToCommit(repoPath, sha, mode.data)
+    }
+    case SidecarOp.revertCommit: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.conflictable()
+      }
+      const sha = requiredString(body, 'sha')
+      if (!sha) {
+        return BAD_REQUEST
+      }
+      return operations.revertCommit(repoPath, sha)
+    }
+    case SidecarOp.cherryPick: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.conflictable()
+      }
+      const sha = requiredString(body, 'sha')
+      if (!sha) {
+        return BAD_REQUEST
+      }
+      return operations.cherryPick(repoPath, sha)
+    }
+    case SidecarOp.createTag: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      const name = requiredString(body, 'name')
+      if (!name) {
+        return BAD_REQUEST
+      }
+      const ref = requiredString(body, 'ref') ?? undefined
+      const message = requiredString(body, 'message') ?? undefined
+      return operations.createTag(repoPath, name, ref, message)
+    }
+    case SidecarOp.deleteTag: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      const name = requiredString(body, 'name')
+      if (!name) {
+        return BAD_REQUEST
+      }
+      return operations.deleteTag(repoPath, name)
     }
     default:
       return undefined
