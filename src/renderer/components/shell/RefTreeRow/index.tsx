@@ -1,4 +1,5 @@
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
+import type { BranchAction } from '@/lib/git-actions'
 import { type JSX, Match, Switch } from '@/lib/react-compat'
 import { REF_TREE_ROW_HEIGHT, type RefKind, type RefRow } from '@/lib/ref-tree'
 import { EmptyRow } from './EmptyRow'
@@ -11,10 +12,12 @@ interface RefTreeRowProps {
   row: RefRow
   top: number
   localLoading: boolean
+  currentBranch?: string
   visibleTimelineRefs?: ReadonlySet<string>
   onToggleCollapsed: (key: string) => void
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
+  onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
 }
 
 export function RefTreeRow(props: RefTreeRowProps) {
@@ -55,6 +58,8 @@ export function RefTreeRow(props: RefTreeRowProps) {
         <LeafRow
           row={props.row as Extract<RefRow, { kind: 'leaf' }>}
           style={baseStyle()}
+          currentBranch={props.currentBranch}
+          onBranchAction={props.onBranchAction}
           timelineVisible={
             props.visibleTimelineRefs?.has(
               refFilterKey(

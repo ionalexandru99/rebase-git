@@ -1,5 +1,6 @@
 import { EyeIcon, EyeOffIcon } from 'lucide-react'
 import type { MouseEvent } from 'react'
+import type { BranchAction } from '@/lib/git-actions'
 import { type JSX, Show } from '@/lib/react-compat'
 import { REF_TREE_INDENT_PX, type RefKind, type RefLeafRow } from '@/lib/ref-tree'
 import { cn } from '@/lib/utils'
@@ -7,6 +8,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger
 } from '../../ui/context-menu'
 import { AheadBehindBadge } from './AheadBehindBadge'
@@ -14,10 +16,22 @@ import { AheadBehindBadge } from './AheadBehindBadge'
 interface LeafRowProps {
   row: RefLeafRow
   style: JSX.CSSProperties
+  currentBranch?: string
   timelineVisible?: boolean
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
+  onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
 }
+
+type MenuEntry =
+  | { kind: 'separator' }
+  | {
+      kind: 'item'
+      label: string
+      onSelect: () => void
+      variant?: 'destructive'
+      disabled?: boolean
+    }
 
 export function LeafRow(props: LeafRowProps) {
   const padLeft = () => 22 + (props.row.depth - 1) * REF_TREE_INDENT_PX
@@ -27,6 +41,57 @@ export function LeafRow(props: LeafRowProps) {
     event.stopPropagation()
     event.preventDefault()
     props.onToggleTimelineVisibility?.(props.row.refKind, props.row.fullPath)
+  }
+
+  const checkout = () => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)
+  const act = (action: BranchAction) =>
+    props.onBranchAction?.(action, props.row.refKind, props.row.fullPath)
+
+  const menuEntries = (): MenuEntry[] => {
+    const { refKind, isCurrent } = props.row
+    const current = props.currentBranch
+    const mergeLabel = current ? `Merge into ${current}` : 'Merge into current branch'
+    if (refKind === 'tag') {
+      return [
+        { kind: 'item', label: 'Checkout', onSelect: checkout },
+        { kind: 'item', label: 'New branch from here', onSelect: () => act('new-branch') },
+        { kind: 'separator' },
+        { kind: 'item', label: 'Copy tag name', onSelect: () => act('copy-name') },
+        {
+          kind: 'item',
+          label: 'Delete tag',
+          onSelect: () => act('delete-tag'),
+          variant: 'destructive'
+        }
+      ]
+    }
+    const entries: MenuEntry[] = [
+      { kind: 'item', label: 'Checkout', onSelect: checkout, disabled: isCurrent },
+      {
+        kind: 'item',
+        label: mergeLabel,
+        onSelect: () => act('merge'),
+        disabled: isCurrent || !current
+      },
+      { kind: 'separator' },
+      { kind: 'item', label: 'New branch from here', onSelect: () => act('new-branch') },
+      { kind: 'item', label: 'Create tag here', onSelect: () => act('create-tag') }
+    ]
+    if (refKind === 'local') {
+      entries.push({ kind: 'item', label: 'Rename…', onSelect: () => act('rename') })
+    }
+    entries.push({ kind: 'separator' })
+    entries.push({ kind: 'item', label: 'Copy branch name', onSelect: () => act('copy-name') })
+    if (refKind === 'local') {
+      entries.push({
+        kind: 'item',
+        label: 'Delete',
+        onSelect: () => act('delete'),
+        variant: 'destructive',
+        disabled: isCurrent
+      })
+    }
+    return entries
   }
 
   return (
@@ -42,7 +107,7 @@ export function LeafRow(props: LeafRowProps) {
         <ContextMenuTrigger
           as="button"
           type="button"
-          onDoubleClick={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}
+          onDoubleClick={() => checkout()}
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--r-sm)] py-0 pr-0 text-sm"
           style={{ paddingLeft: `${padLeft()}px` }}
           title={props.row.fullPath}
@@ -91,11 +156,21 @@ export function LeafRow(props: LeafRowProps) {
         </Show>
       </div>
       <ContextMenuContent>
-        <ContextMenuItem
-          onSelect={() => props.onCheckoutLeaf?.(props.row.refKind, props.row.fullPath)}
-        >
-          Checkout
-        </ContextMenuItem>
+        {menuEntries().map((entry, index) =>
+          entry.kind === 'separator' ? (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static menu, order is stable
+            <ContextMenuSeparator key={`sep-${index}`} />
+          ) : (
+            <ContextMenuItem
+              key={entry.label}
+              variant={entry.variant}
+              disabled={entry.disabled}
+              onSelect={entry.onSelect}
+            >
+              {entry.label}
+            </ContextMenuItem>
+          )
+        )}
       </ContextMenuContent>
     </ContextMenu>
   )

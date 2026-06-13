@@ -1,6 +1,7 @@
 import { GitCommitHorizontalIcon } from 'lucide-react'
 import type { UIEvent } from 'react'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import type { CommitAction } from '@/lib/git-actions'
 import { computeGraphRailWidth, OVERSCAN, ROW_H } from '@/lib/git-graph/canvas'
 import { Show } from '@/lib/react-compat'
 import type { RefKind } from '@/lib/ref-tree'
@@ -32,6 +33,7 @@ interface HistoryPanelProps {
   remoteBranches?: string[]
   visibleBranchRefs?: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
+  onCommitAction?: (action: CommitAction, sha: string, message: string) => void
   repoPath?: string | null
 }
 
@@ -272,6 +274,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
                   gridTail={gridTail}
                   remotes={remotes}
                   remoteNames={remoteNames}
+                  onCommitAction={props.onCommitAction}
                 />
               )
             })}

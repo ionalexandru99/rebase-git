@@ -5,6 +5,7 @@ import { HistoryPanel } from './components/HistoryPanel'
 import { type SelectedFile, StatusPanel } from './components/StatusPanel'
 import type { WorkspaceView } from './components/shell/Topbar'
 import { useDraggableWidth } from './hooks/useDraggableWidth'
+import type { CommitAction } from './lib/git-actions'
 import {
   type Component,
   createEffect,
@@ -43,6 +44,7 @@ interface WorkspaceViewProps {
   remoteBranches: string[]
   visibleBranchRefs: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
+  onCommitAction?: (action: CommitAction, sha: string, message: string) => void
   tabActive: () => boolean
 }
 
@@ -161,6 +163,7 @@ function HistoryView(props: WorkspaceViewProps) {
           remoteBranches={props.remoteBranches}
           visibleBranchRefs={props.visibleBranchRefs}
           onToggleTimelineVisibility={props.onToggleTimelineVisibility}
+          onCommitAction={props.onCommitAction}
         />
       </div>
     </Show>

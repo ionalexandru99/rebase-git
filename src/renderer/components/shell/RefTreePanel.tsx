@@ -1,6 +1,7 @@
 import { parseOrThrow } from '@shared/codec'
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import { RefTreeTogglesSchema } from '@shared/schemas/ipc'
+import type { BranchAction } from '@/lib/git-actions'
 import {
   type Accessor,
   createMemo,
@@ -33,6 +34,7 @@ interface RefTreePanelProps {
   visibleTimelineRefs?: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
+  onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
 }
 
 interface VirtualRefTreeRowProps {
@@ -40,10 +42,12 @@ interface VirtualRefTreeRowProps {
   top: number
   rows: Accessor<RefRow[]>
   localLoading: boolean
+  currentBranch: string
   visibleTimelineRefs?: ReadonlySet<string>
   onToggleCollapsed: (key: string) => void
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
+  onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
 }
 
 function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
@@ -55,10 +59,12 @@ function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
           row={definedRow()}
           top={props.top}
           localLoading={props.localLoading}
+          currentBranch={props.currentBranch}
           visibleTimelineRefs={props.visibleTimelineRefs}
           onToggleCollapsed={props.onToggleCollapsed}
           onToggleTimelineVisibility={props.onToggleTimelineVisibility}
           onCheckoutLeaf={props.onCheckoutRef}
+          onBranchAction={props.onBranchAction}
         />
       )}
     </Show>
@@ -141,10 +147,12 @@ export function RefTreePanel(props: RefTreePanelProps) {
               top={virtualItem.start}
               rows={rows}
               localLoading={props.loading ?? false}
+              currentBranch={props.currentBranch}
               visibleTimelineRefs={props.visibleTimelineRefs}
               onToggleCollapsed={toggle}
               onToggleTimelineVisibility={props.onToggleTimelineVisibility}
               onCheckoutRef={props.onCheckoutRef}
+              onBranchAction={props.onBranchAction}
             />
           )}
         </For>

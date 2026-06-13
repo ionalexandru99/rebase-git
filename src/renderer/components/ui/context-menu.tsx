@@ -64,6 +64,25 @@ function ContextMenuTrigger(
   )
 }
 
+// A non-button trigger for cases where the right-clickable element must stay a plain element
+// (grid rows, list items) rather than a <button>.
+function ContextMenuTriggerArea(props: HTMLAttributes<HTMLDivElement> & { children?: ReactNode }) {
+  const { openAt } = useContextMenu()
+  const { onContextMenu, ...rest } = props
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: contextmenu is a right-click affordance layered on an existing element; keyboard users reach the same actions elsewhere
+    <div
+      data-slot="context-menu-trigger"
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onContextMenu?.(event)
+        openAt({ x: event.clientX, y: event.clientY })
+      }}
+      {...rest}
+    />
+  )
+}
+
 function ContextMenuGroup(props: HTMLAttributes<HTMLDivElement>) {
   return <div data-slot="context-menu-group" {...props} />
 }
@@ -328,5 +347,6 @@ export {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuTrigger
+  ContextMenuTrigger,
+  ContextMenuTriggerArea
 }

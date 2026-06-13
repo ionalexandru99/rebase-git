@@ -72,6 +72,63 @@ describe('RefTreeRow leaf', () => {
     expect(onCheckoutLeaf).toHaveBeenCalledWith('remote', 'origin/main')
   })
 
+  it.each<[string, string]>([
+    ['Merge into main', 'merge'],
+    ['New branch from here', 'new-branch'],
+    ['Create tag here', 'create-tag'],
+    ['Rename…', 'rename'],
+    ['Copy branch name', 'copy-name'],
+    ['Delete', 'delete']
+  ])('fires onBranchAction %s on a local branch', async (label, action) => {
+    const onBranchAction = vi.fn()
+    render(
+      <RefTreeRow
+        row={leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' })}
+        top={0}
+        localLoading={false}
+        currentBranch="main"
+        onToggleCollapsed={() => {}}
+        onBranchAction={onBranchAction}
+      />
+    )
+    fireEvent.contextMenu(screen.getByTitle('feature'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: label }))
+    expect(onBranchAction).toHaveBeenCalledWith(action, 'local', 'feature')
+  })
+
+  it('disables Delete and Checkout on the current branch', async () => {
+    const onBranchAction = vi.fn()
+    render(
+      <RefTreeRow
+        row={leaf({ refKind: 'local', fullPath: 'main', name: 'main', isCurrent: true })}
+        top={0}
+        localLoading={false}
+        currentBranch="main"
+        onToggleCollapsed={() => {}}
+        onBranchAction={onBranchAction}
+      />
+    )
+    fireEvent.contextMenu(screen.getByTitle('main'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    expect(onBranchAction).not.toHaveBeenCalled()
+  })
+
+  it('offers Delete tag on a tag row', async () => {
+    const onBranchAction = vi.fn()
+    render(
+      <RefTreeRow
+        row={leaf({ refKind: 'tag', fullPath: 'v1.0', name: 'v1.0' })}
+        top={0}
+        localLoading={false}
+        onToggleCollapsed={() => {}}
+        onBranchAction={onBranchAction}
+      />
+    )
+    fireEvent.contextMenu(screen.getByTitle('v1.0'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete tag' }))
+    expect(onBranchAction).toHaveBeenCalledWith('delete-tag', 'tag', 'v1.0')
+  })
+
   it('shows ahead/behind badges when tracking data is present', () => {
     renderRow(leaf({ ahead: 2, behind: 1 }))
     const ahead = screen.getByTestId('ref-ahead')

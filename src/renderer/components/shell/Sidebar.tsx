@@ -25,6 +25,7 @@ export function AppSidebar(props: AppSidebarProps) {
         visibleTimelineRefs={props.branchBrowser.visibleTimelineRefs}
         onToggleTimelineVisibility={props.branchBrowser.onToggleTimelineVisibility}
         onCheckoutRef={props.branchBrowser.onCheckoutRef}
+        onBranchAction={props.branchBrowser.onBranchAction}
       />
 
       <Show when={props.onResizeStart}>
