@@ -1,8 +1,8 @@
 import { parseOrThrow } from '@shared/codec'
 import { SidebarPrefsSchema } from '@shared/schemas/ipc'
-import type { BranchAction } from '@/lib/git-actions'
+import type { BranchAction, StashAction } from '@/lib/git-actions'
 import type { JSX } from '@/lib/react-compat'
-import type { BranchTracking, RefKind } from '@/lib/ref-tree'
+import type { BranchTracking, RefKind, StashRowData } from '@/lib/ref-tree'
 import { useDraggableWidth } from '../../hooks/useDraggableWidth'
 import { AppSidebar } from './Sidebar'
 import { Topbar, type WorkspaceView } from './Topbar'
@@ -22,12 +22,14 @@ export interface BranchBrowser {
   localBranches: string[]
   remoteBranches: string[]
   tags: string[]
+  stashes?: StashRowData[]
   branchesLoading?: boolean
   tracking?: Record<string, BranchTracking>
   visibleTimelineRefs?: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
   onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
+  onStashAction?: (action: StashAction, index: number) => void
 }
 
 export interface WorkspaceNavigation {

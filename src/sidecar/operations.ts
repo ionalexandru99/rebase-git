@@ -981,11 +981,15 @@ export async function stashList(repoPath: string): Promise<StashListResponse> {
 export async function stashPush(
   repoPath: string,
   message?: string,
-  includeUntracked?: boolean
+  includeUntracked?: boolean,
+  files?: string[]
 ): Promise<GitMutationResponse> {
   const git = lookupGit(gitInstances, repoPath)
   if (!git) {
     return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (files?.some((file) => !isSafeRefArg(file))) {
+    return mutationError('invalid file path')
   }
   return withRepoLock(repoPath, async () => {
     try {
@@ -995,6 +999,9 @@ export async function stashPush(
       }
       if (message) {
         args.push('-m', message)
+      }
+      if (files && files.length > 0) {
+        args.push('--', ...files)
       }
       await git.raw(args)
       return mutationOk()

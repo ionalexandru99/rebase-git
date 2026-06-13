@@ -43,6 +43,60 @@ describe('ref-tree default section expansion', () => {
   })
 })
 
+describe('ref-tree stashes section', () => {
+  const stashes = [
+    { index: 0, ref: 'stash@{0}', message: 'wip', branch: 'main' },
+    { index: 1, ref: 'stash@{1}', message: 'older', branch: 'main' }
+  ]
+
+  it('omits the stashes section when there are no stashes', () => {
+    const rows = buildRefTreeRows({
+      localBranches: ['main'],
+      remoteBranches: [],
+      tags: [],
+      toggles: new Set(),
+      currentBranch: 'main',
+      localLoading: false,
+      stashes: []
+    })
+    expect(rows.some((row) => row.kind === 'section' && row.refKind === 'stash')).toBe(false)
+  })
+
+  it('renders an expanded stashes section with one row per stash', () => {
+    const rows = buildRefTreeRows({
+      localBranches: ['main'],
+      remoteBranches: [],
+      tags: [],
+      toggles: new Set(),
+      currentBranch: 'main',
+      localLoading: false,
+      stashes
+    })
+    const section = rows.find((row) => row.kind === 'section' && row.refKind === 'stash')
+    expect(section?.kind === 'section' && section.expanded).toBe(true)
+    expect(section?.kind === 'section' && section.count).toBe(2)
+    const stashRows = rows.filter((row) => row.kind === 'stash')
+    expect(stashRows).toHaveLength(2)
+    expect(stashRows[0].kind === 'stash' && stashRows[0].index).toBe(0)
+    expect(stashRows[0].kind === 'stash' && stashRows[0].message).toBe('wip')
+  })
+
+  it('collapses the stashes section when toggled', () => {
+    const rows = buildRefTreeRows({
+      localBranches: ['main'],
+      remoteBranches: [],
+      tags: [],
+      toggles: new Set(['section:stash']),
+      currentBranch: 'main',
+      localLoading: false,
+      stashes
+    })
+    const section = rows.find((row) => row.kind === 'section' && row.refKind === 'stash')
+    expect(section?.kind === 'section' && section.expanded).toBe(false)
+    expect(rows.some((row) => row.kind === 'stash')).toBe(false)
+  })
+})
+
 describe('ref-tree loading skeleton', () => {
   it('shows local skeleton only while remote and tags stay collapsed', () => {
     const rows = buildRefTreeRows({

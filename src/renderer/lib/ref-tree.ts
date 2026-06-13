@@ -1,6 +1,13 @@
 import { REF_TREE_REMOTE_SECTION_KEY, REF_TREE_TAG_SECTION_KEY } from '@shared/ref-tree-toggles'
 
-export type RefKind = 'local' | 'remote' | 'tag'
+export type RefKind = 'local' | 'remote' | 'tag' | 'stash'
+
+export interface StashRowData {
+  index: number
+  ref: string
+  message: string
+  branch: string
+}
 
 export interface BranchTracking {
   ahead: number
@@ -28,6 +35,15 @@ export interface RefFolderRow {
   childCount: number
 }
 
+export interface RefStashRow {
+  kind: 'stash'
+  refKind: 'stash'
+  index: number
+  ref: string
+  message: string
+  branch: string
+}
+
 export interface RefSectionRow {
   kind: 'section'
   refKind: RefKind
@@ -48,7 +64,13 @@ export interface RefSkeletonRow {
   idx: number
 }
 
-export type RefRow = RefLeafRow | RefFolderRow | RefSectionRow | RefEmptyRow | RefSkeletonRow
+export type RefRow =
+  | RefLeafRow
+  | RefFolderRow
+  | RefStashRow
+  | RefSectionRow
+  | RefEmptyRow
+  | RefSkeletonRow
 
 export const REF_TREE_ROW_HEIGHT = 30
 
@@ -64,6 +86,9 @@ export function sectionKey(refKind: RefKind): string {
   if (refKind === 'remote') {
     return REF_TREE_REMOTE_SECTION_KEY
   }
+  if (refKind === 'stash') {
+    return 'section:stash'
+  }
   return REF_TREE_TAG_SECTION_KEY
 }
 
@@ -73,7 +98,7 @@ export function folderKey(refKind: RefKind, fullPath: string): string {
 
 function isSectionExpanded(toggles: Set<string>, refKind: RefKind): boolean {
   const hasToggle = toggles.has(sectionKey(refKind))
-  return refKind === 'local' ? !hasToggle : hasToggle
+  return refKind === 'local' || refKind === 'stash' ? !hasToggle : hasToggle
 }
 
 function isFolderExpanded(toggles: Set<string>, refKind: RefKind, fullPath: string): boolean {
@@ -90,6 +115,9 @@ export function rowKey(row: RefRow): string {
   if (row.kind === 'skeleton') {
     return `sk:${row.refKind}:${row.idx}`
   }
+  if (row.kind === 'stash') {
+    return `stash:${row.ref}`
+  }
   return `${row.refKind}:${row.kind}:${row.fullPath}`
 }
 
@@ -101,6 +129,7 @@ interface BuildRowsOptions {
   currentBranch: string
   localLoading: boolean
   tracking?: Record<string, BranchTracking>
+  stashes?: StashRowData[]
 }
 
 export function buildRefTreeRows({
@@ -110,7 +139,8 @@ export function buildRefTreeRows({
   toggles,
   currentBranch,
   localLoading,
-  tracking
+  tracking,
+  stashes
 }: BuildRowsOptions): RefRow[] {
   const out: RefRow[] = []
   const noLocalData = localBranches.length === 0
@@ -121,7 +151,29 @@ export function buildRefTreeRows({
   }
   buildSection(out, 'remote', 'Remote branches', remoteBranches, toggles, currentBranch)
   buildSection(out, 'tag', 'Tags', tags, toggles, currentBranch)
+  buildStashSection(out, stashes ?? [], toggles)
   return out
+}
+
+function buildStashSection(out: RefRow[], stashes: StashRowData[], toggles: Set<string>): void {
+  if (stashes.length === 0) {
+    return
+  }
+  const expanded = isSectionExpanded(toggles, 'stash')
+  out.push({ kind: 'section', refKind: 'stash', label: 'Stashes', count: stashes.length, expanded })
+  if (!expanded) {
+    return
+  }
+  for (const stash of stashes) {
+    out.push({
+      kind: 'stash',
+      refKind: 'stash',
+      index: stash.index,
+      ref: stash.ref,
+      message: stash.message,
+      branch: stash.branch
+    })
+  }
 }
 
 function pushSkeletonSection(

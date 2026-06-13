@@ -103,6 +103,31 @@ describe('stash', () => {
     const result = await stashDrop(repoDir, -1)
     expect(result._tag).toBe('GitError')
   })
+
+  it('stashes only the given files, leaving others modified', async () => {
+    write('second.txt', 'second base\n')
+    git('add', '.')
+    git('commit', '-m', 'add second')
+
+    write('tracked.txt', 'changed-tracked\n')
+    write('second.txt', 'changed-second\n')
+
+    const pushed = await stashPush(repoDir, 'partial', false, ['tracked.txt'])
+    expect(pushed._tag).toBe('Ok')
+    expect(read('tracked.txt')).toBe('base\n')
+    expect(read('second.txt')).toBe('changed-second\n')
+
+    const popped = await stashPop(repoDir, 0)
+    expect(popped._tag).toBe('Ok')
+    expect(read('tracked.txt')).toBe('changed-tracked\n')
+
+    git('checkout', '--', 'tracked.txt', 'second.txt')
+  })
+
+  it('rejects an option-injecting file path', async () => {
+    const result = await stashPush(repoDir, undefined, false, ['--all'])
+    expect(result._tag).toBe('GitError')
+  })
 })
 
 describe('discard', () => {

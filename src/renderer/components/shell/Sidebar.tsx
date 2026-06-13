@@ -19,6 +19,7 @@ export function AppSidebar(props: AppSidebarProps) {
         localBranches={props.branchBrowser.localBranches}
         remoteBranches={props.branchBrowser.remoteBranches}
         tags={props.branchBrowser.tags}
+        stashes={props.branchBrowser.stashes}
         currentBranch={props.currentBranch}
         loading={props.branchBrowser.branchesLoading}
         tracking={props.branchBrowser.tracking}
@@ -26,6 +27,7 @@ export function AppSidebar(props: AppSidebarProps) {
         onToggleTimelineVisibility={props.branchBrowser.onToggleTimelineVisibility}
         onCheckoutRef={props.branchBrowser.onCheckoutRef}
         onBranchAction={props.branchBrowser.onBranchAction}
+        onStashAction={props.branchBrowser.onStashAction}
       />
 
       <Show when={props.onResizeStart}>

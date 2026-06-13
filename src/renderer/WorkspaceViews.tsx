@@ -4,10 +4,11 @@ import { CommitPanel } from './components/CommitPanel'
 import { DiffPanel } from './components/DiffPanel'
 import { HistoryPanel } from './components/HistoryPanel'
 import { type SelectedFile, StatusPanel } from './components/StatusPanel'
-import { StashMenu } from './components/StatusPanel/StashMenu'
+import { StashControl } from './components/StatusPanel/StashControl'
 import type { WorkspaceView } from './components/shell/Topbar'
 import { useDialogs } from './components/ui/prompt-dialog'
 import { useGitActions } from './hooks/git/useGitActions'
+import { useStashes } from './hooks/git/useStashes'
 import { useDraggableWidth } from './hooks/useDraggableWidth'
 import type { CommitAction, FileAction } from './lib/git-actions'
 import {
@@ -55,8 +56,31 @@ interface WorkspaceViewProps {
 function LocalChangesView(props: WorkspaceViewProps) {
   const git = props.git
   const actions = useGitActions(git)
-  const { confirm, dialogs } = useDialogs()
+  const stashList = useStashes(git.state.repoPath)
+  const { prompt, confirm, dialogs } = useDialogs()
   const [selected, setSelected] = createSignal<SelectedFile | null>(null)
+
+  const promptStash = (title: string, run: (message?: string) => Promise<boolean>) => {
+    prompt({
+      title,
+      label: 'Message (optional)',
+      placeholder: 'Describe these changes',
+      confirmText: 'Stash',
+      allowEmpty: true,
+      onConfirm: (message) => void run(message.trim() || undefined).then(stashList.refetch)
+    })
+  }
+
+  const stashSelected = (files: string[]) => {
+    if (files.length === 0) {
+      return
+    }
+    promptStash('Stash selected changes', (message) => actions.stashPush(message, true, files))
+  }
+
+  const stashAll = () => {
+    promptStash('Stash all changes', (message) => actions.stashPush(message, true))
+  }
 
   const handleFileAction = (action: FileAction, file: string) => {
     switch (action) {
@@ -127,6 +151,16 @@ function LocalChangesView(props: WorkspaceViewProps) {
     return buildUnifiedFileRows(current).map((row) => ({ file: row.file }))
   })
 
+  const stagedFiles = createMemo<string[]>(() => {
+    const current = status()
+    if (!current) {
+      return []
+    }
+    return buildUnifiedFileRows(current)
+      .filter((row) => !row.isConflicted && row.stageState !== 'unstaged')
+      .map((row) => row.file)
+  })
+
   createEffect(() => {
     const entries = fileEntries()
     const current = selected()
@@ -163,10 +197,11 @@ function LocalChangesView(props: WorkspaceViewProps) {
               onFileAction={handleFileAction}
               headerActions={
                 <>
-                  <StashMenu
-                    repoPath={git.state.repoPath}
-                    actions={actions}
+                  <StashControl
+                    stagedFiles={stagedFiles()}
                     hasChanges={totalChanges() > 0}
+                    onStashSelected={stashSelected}
+                    onStashAll={stashAll}
                   />
                   <button
                     type="button"

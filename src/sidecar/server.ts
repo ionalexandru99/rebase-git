@@ -532,7 +532,15 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
         return operations.invalidRepoPath.mutation()
       }
       const message = requiredString(body, 'message') ?? undefined
-      return operations.stashPush(repoPath, message, body.includeUntracked === true)
+      let stashFiles: string[] | undefined
+      if (body.files !== undefined) {
+        const resolved = resolveRepoRelativeFiles(repoPath, body)
+        if (!resolved) {
+          return BAD_REQUEST
+        }
+        stashFiles = resolved
+      }
+      return operations.stashPush(repoPath, message, body.includeUntracked === true, stashFiles)
     }
     case SidecarOp.stashApply:
     case SidecarOp.stashPop: {

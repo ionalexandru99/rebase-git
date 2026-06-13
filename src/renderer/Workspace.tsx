@@ -2,7 +2,12 @@ import { useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import { useDialogs } from '@/components/ui/prompt-dialog'
-import { type BranchAction, type CommitAction, RESET_MODE_BY_ACTION } from '@/lib/git-actions'
+import {
+  type BranchAction,
+  type CommitAction,
+  RESET_MODE_BY_ACTION,
+  type StashAction
+} from '@/lib/git-actions'
 import { createSignal, type JSX } from '@/lib/react-compat'
 import {
   defaultVisibleTimelineRefs,
@@ -13,6 +18,7 @@ import { Shell } from './components/shell/Shell'
 import type { WorkspaceView } from './components/shell/Topbar'
 import { useCheckoutRef } from './hooks/git/useCheckoutRef'
 import { useGitActions } from './hooks/git/useGitActions'
+import { useStashes } from './hooks/git/useStashes'
 import { formatRelativeTime } from './lib/format'
 import type { RefKind } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
@@ -121,7 +127,28 @@ export function Workspace(props: WorkspaceProps) {
   )
 
   const actions = useGitActions(git)
+  const stashList = useStashes(repoPath)
   const { prompt, confirm, dialogs } = useDialogs()
+
+  const handleStashAction = (action: StashAction, index: number) => {
+    switch (action) {
+      case 'apply':
+        void actions.stashApply(index).then(stashList.refetch)
+        return
+      case 'pop':
+        void actions.stashPop(index).then(stashList.refetch)
+        return
+      case 'drop':
+        confirm({
+          title: `Drop stash@{${index}}?`,
+          message: 'The stashed changes are permanently discarded.',
+          confirmText: 'Drop',
+          destructive: true,
+          onConfirm: () => void actions.stashDrop(index).then(stashList.refetch)
+        })
+        return
+    }
+  }
 
   const handleBranchAction = (action: BranchAction, refKind: RefKind, fullPath: string) => {
     const shortName = shortRefName(refKind, fullPath)
@@ -258,12 +285,14 @@ export function Workspace(props: WorkspaceProps) {
         localBranches,
         remoteBranches,
         tags: sidebarTags(),
+        stashes: stashList.stashes(),
         branchesLoading: git.state.branchesLoading,
         tracking: sidebarTracking(),
         visibleTimelineRefs: timelineFilterRefs,
         onToggleTimelineVisibility: handleToggleTimelineVisibility,
         onCheckoutRef: handleCheckoutRef,
-        onBranchAction: handleBranchAction
+        onBranchAction: handleBranchAction,
+        onStashAction: handleStashAction
       }}
       workspaceContext={
         git.state.lastFetchedAt

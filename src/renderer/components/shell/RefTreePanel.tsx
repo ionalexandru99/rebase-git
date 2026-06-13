@@ -1,7 +1,7 @@
 import { parseOrThrow } from '@shared/codec'
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import { RefTreeTogglesSchema } from '@shared/schemas/ipc'
-import type { BranchAction } from '@/lib/git-actions'
+import type { BranchAction, StashAction } from '@/lib/git-actions'
 import {
   type Accessor,
   createMemo,
@@ -17,7 +17,8 @@ import {
   REF_TREE_OVERSCAN,
   REF_TREE_ROW_HEIGHT,
   type RefKind,
-  type RefRow
+  type RefRow,
+  type StashRowData
 } from '@/lib/ref-tree'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
 import { RefTreeRow } from './RefTreeRow'
@@ -28,6 +29,7 @@ interface RefTreePanelProps {
   localBranches: string[]
   remoteBranches: string[]
   tags: string[]
+  stashes?: StashRowData[]
   currentBranch: string
   loading?: boolean
   tracking?: Record<string, BranchTracking>
@@ -35,6 +37,7 @@ interface RefTreePanelProps {
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
   onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
+  onStashAction?: (action: StashAction, index: number) => void
 }
 
 interface VirtualRefTreeRowProps {
@@ -48,6 +51,7 @@ interface VirtualRefTreeRowProps {
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
   onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
+  onStashAction?: (action: StashAction, index: number) => void
 }
 
 function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
@@ -65,6 +69,7 @@ function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
           onToggleTimelineVisibility={props.onToggleTimelineVisibility}
           onCheckoutLeaf={props.onCheckoutRef}
           onBranchAction={props.onBranchAction}
+          onStashAction={props.onStashAction}
         />
       )}
     </Show>
@@ -105,7 +110,8 @@ export function RefTreePanel(props: RefTreePanelProps) {
       toggles: toggles(),
       currentBranch: props.currentBranch,
       localLoading: props.loading ?? false,
-      tracking: props.tracking
+      tracking: props.tracking,
+      stashes: props.stashes
     })
   )
 
@@ -153,6 +159,7 @@ export function RefTreePanel(props: RefTreePanelProps) {
               onToggleTimelineVisibility={props.onToggleTimelineVisibility}
               onCheckoutRef={props.onCheckoutRef}
               onBranchAction={props.onBranchAction}
+              onStashAction={props.onStashAction}
             />
           )}
         </For>

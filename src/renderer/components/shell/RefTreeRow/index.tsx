@@ -1,5 +1,5 @@
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
-import type { BranchAction } from '@/lib/git-actions'
+import type { BranchAction, StashAction } from '@/lib/git-actions'
 import { type JSX, Match, Switch } from '@/lib/react-compat'
 import { REF_TREE_ROW_HEIGHT, type RefKind, type RefRow } from '@/lib/ref-tree'
 import { EmptyRow } from './EmptyRow'
@@ -7,6 +7,7 @@ import { FolderRow } from './FolderRow'
 import { LeafRow } from './LeafRow'
 import { SectionRow } from './SectionRow'
 import { SkeletonRowItem } from './SkeletonRow'
+import { StashRow } from './StashRow'
 
 interface RefTreeRowProps {
   row: RefRow
@@ -18,6 +19,7 @@ interface RefTreeRowProps {
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
   onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
+  onStashAction?: (action: StashAction, index: number) => void
 }
 
 export function RefTreeRow(props: RefTreeRowProps) {
@@ -52,6 +54,13 @@ export function RefTreeRow(props: RefTreeRowProps) {
           row={props.row as Extract<RefRow, { kind: 'folder' }>}
           style={baseStyle()}
           onToggleCollapsed={props.onToggleCollapsed}
+        />
+      </Match>
+      <Match when={props.row.kind === 'stash'}>
+        <StashRow
+          row={props.row as Extract<RefRow, { kind: 'stash' }>}
+          style={baseStyle()}
+          onStashAction={props.onStashAction}
         />
       </Match>
       <Match when={props.row.kind === 'leaf'}>

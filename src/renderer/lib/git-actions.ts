@@ -13,6 +13,8 @@ export type BranchAction =
 
 export type FileAction = 'stage' | 'unstage' | 'discard' | 'copy-path'
 
+export type StashAction = 'apply' | 'pop' | 'drop'
+
 export type CommitAction =
   | 'branch-here'
   | 'tag-here'

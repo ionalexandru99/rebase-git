@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
-import type { RefKind, RefLeafRow } from '@/lib/ref-tree'
+import type { RefKind, RefLeafRow, RefStashRow } from '@/lib/ref-tree'
 import { RefTreeRow } from '../RefTreeRow'
 
 function leaf(overrides: Partial<RefLeafRow> = {}): RefLeafRow {
@@ -182,5 +182,51 @@ describe('RefTreeRow leaf', () => {
       visibleTimelineRefs: new Set([refFilterKey('local', 'feature')])
     })
     expect(screen.getByTestId('timeline-visibility-toggle')).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('RefTreeRow stash', () => {
+  const stash: RefStashRow = {
+    kind: 'stash',
+    refKind: 'stash',
+    index: 1,
+    ref: 'stash@{1}',
+    message: 'wip on main',
+    branch: 'main'
+  }
+
+  function renderStash(onStashAction = vi.fn()) {
+    render(
+      <RefTreeRow
+        row={stash}
+        top={0}
+        localLoading={false}
+        onToggleCollapsed={() => {}}
+        onStashAction={onStashAction}
+      />
+    )
+    return onStashAction
+  }
+
+  it('renders the stash message', () => {
+    renderStash()
+    expect(screen.getByTestId('ref-tree-stash-row')).toHaveTextContent('wip on main')
+  })
+
+  it('applies the stash on double-click', () => {
+    const onStashAction = renderStash()
+    fireEvent.dblClick(screen.getByText('wip on main'))
+    expect(onStashAction).toHaveBeenCalledWith('apply', 1)
+  })
+
+  it.each<[string, string]>([
+    ['Apply', 'apply'],
+    ['Pop', 'pop'],
+    ['Drop', 'drop']
+  ])('fires %s from the context menu', async (label, action) => {
+    const onStashAction = renderStash()
+    fireEvent.contextMenu(screen.getByText('wip on main'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: label }))
+    expect(onStashAction).toHaveBeenCalledWith(action, 1)
   })
 })

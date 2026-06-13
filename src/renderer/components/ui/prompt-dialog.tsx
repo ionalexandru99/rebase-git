@@ -8,6 +8,7 @@ export interface PromptRequest {
   initialValue?: string
   placeholder?: string
   confirmText?: string
+  allowEmpty?: boolean
   validate?: (value: string) => string | null
   onConfirm: (value: string) => void
 }
@@ -73,7 +74,7 @@ export function PromptDialog(props: { request: PromptRequest | null; onClose: ()
   }
 
   const error = request.validate?.(value.trim()) ?? null
-  const canSubmit = value.trim().length > 0 && !error
+  const canSubmit = (request.allowEmpty || value.trim().length > 0) && !error
 
   const submit = () => {
     if (!canSubmit) {

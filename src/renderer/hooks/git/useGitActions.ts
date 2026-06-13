@@ -162,10 +162,10 @@ export function useGitActions(git: GitStore) {
     discardChanges: (files: string[], label: string) =>
       mutate(SidecarOp.discardChanges, { files }, label, refreshWorkingTree),
     discardAll: () => mutate(SidecarOp.discardAll, {}, 'Discarded all changes', refreshWorkingTree),
-    stashPush: (message?: string, includeUntracked?: boolean) =>
+    stashPush: (message?: string, includeUntracked?: boolean, files?: string[]) =>
       mutate(
         SidecarOp.stashPush,
-        { message, includeUntracked },
+        { message, includeUntracked, files },
         'Stashed changes',
         refreshWorkingTree
       ),
