@@ -27,7 +27,6 @@ export class FetchSemaphore {
       return await work();
     } finally {
       this.give();
-      console.log("test");
     }
   }
 
