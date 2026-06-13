@@ -57,6 +57,15 @@ const hunkAt = (header: string, oldStart: number, newStart: number) => ({
   lines: [{ kind: 'context' as const, text: `at ${header}`, oldLine: oldStart, newLine: newStart }]
 })
 
+const diffWith = (hunks: ReturnType<typeof hunkAt>[]) => ({
+  _tag: 'Ok' as const,
+  diff: {
+    filePath: 'src/app.ts',
+    binary: false,
+    hunks
+  }
+})
+
 function mockPartiallyStagedDiff() {
   sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) => ({
     _tag: 'Ok' as const,
@@ -284,6 +293,86 @@ describe('DiffPanel', () => {
         '@@ -1,2 +1,2 @@ staged-first'
       )
     })
+  })
+
+  it('keeps the last staged hunk single while staged and unstaged diffs refetch separately', async () => {
+    const lastHunk = hunkAt('@@ -30,2 +30,2 @@ last', 30, 30)
+    let stagedCalls = 0
+    let unstagedCalls = 0
+    let resolveStageHunk: () => void = () => {}
+    let resolveUnstagedRefetch: () => void = () => {}
+
+    sidecarMock.getStatus
+      .mockResolvedValueOnce({
+        _tag: 'Ok',
+        status: {
+          current: 'main',
+          modified: ['src/app.ts'],
+          staged: [],
+          not_added: [],
+          conflicted: [],
+          deleted: [],
+          created: [],
+          renamed: []
+        }
+      })
+      .mockResolvedValue({
+        _tag: 'Ok',
+        status: {
+          current: 'main',
+          modified: [],
+          staged: ['src/app.ts'],
+          not_added: [],
+          conflicted: [],
+          deleted: [],
+          created: [],
+          renamed: []
+        }
+      })
+    sidecarMock.getDiff.mockImplementation(
+      async (_repo: string, _file: string, staged: boolean) => {
+        if (staged) {
+          stagedCalls++
+          return stagedCalls === 1 ? emptyDiff : diffWith([lastHunk])
+        }
+        unstagedCalls++
+        if (unstagedCalls === 1) {
+          return diffWith([lastHunk])
+        }
+        return new Promise((resolve) => {
+          resolveUnstagedRefetch = () => resolve(emptyDiff)
+        })
+      }
+    )
+    sidecarMock.stageHunk.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStageHunk = () => resolve({ _tag: 'Ok' })
+        })
+    )
+
+    await renderDiffPanel({ file: 'src/app.ts' })
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Stage hunk' }))
+
+    const pendingCheckbox = await screen.findByRole('checkbox', { name: 'Unstage hunk' })
+    expect(pendingCheckbox).toBeDisabled()
+    expect(screen.getAllByTestId('diff-hunk')).toHaveLength(1)
+
+    resolveStageHunk()
+
+    await waitFor(() => {
+      expect(stagedCalls).toBeGreaterThan(1)
+    })
+    expect(screen.getAllByTestId('diff-hunk')).toHaveLength(1)
+    expect(screen.queryByRole('checkbox', { name: 'Stage hunk' })).not.toBeInTheDocument()
+
+    resolveUnstagedRefetch()
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Unstage hunk' })).not.toBeDisabled()
+    })
+    expect(screen.getAllByTestId('diff-hunk')).toHaveLength(1)
   })
 
   it('offers a whole-file stage action for unstaged files', async () => {

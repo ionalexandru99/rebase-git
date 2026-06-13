@@ -71,6 +71,11 @@ export interface GitState {
   error: string | null
 }
 
+interface HunkStageOptions {
+  fullyStagesFile?: boolean
+  fullyUnstagesFile?: boolean
+}
+
 const initialState: GitState = {
   repoPath: null,
   status: null,
@@ -648,7 +653,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }
 
   const invalidateDiffs = (path: string) => {
-    void queryClient.invalidateQueries({ queryKey: repoQueryKeys(tabId, path).diffRoot })
+    return queryClient.invalidateQueries({ queryKey: repoQueryKeys(tabId, path).diffRoot })
   }
 
   const stageMutation = createMutation(() => ({
@@ -671,7 +676,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       )
       if (response._tag === 'Ok') {
         await refreshStatus(path)
-        invalidateDiffs(path)
+        void invalidateDiffs(path)
         return
       }
       if (previous) {
@@ -704,7 +709,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       )
       if (response._tag === 'Ok') {
         await refreshStatus(path)
-        invalidateDiffs(path)
+        void invalidateDiffs(path)
         return
       }
       if (previous) {
@@ -737,7 +742,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       )
       if (response._tag === 'Ok') {
         await refreshStatus(path)
-        invalidateDiffs(path)
+        void invalidateDiffs(path)
         return
       }
       if (previous) {
@@ -770,7 +775,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       )
       if (response._tag === 'Ok') {
         await refreshStatus(path)
-        invalidateDiffs(path)
+        void invalidateDiffs(path)
         return
       }
       if (previous) {
@@ -786,11 +791,24 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const applyHunkMutation = async (
     op: typeof SidecarOp.stageHunk | typeof SidecarOp.unstageHunk,
     file: string,
-    hunkHeader: string
+    hunkHeader: string,
+    options: HunkStageOptions = {}
   ): Promise<boolean> => {
     const path = repoPath()
     if (!path) {
       return false
+    }
+    const previous = readSnapshot(path)?.status
+    const optimistic =
+      previous && op === SidecarOp.stageHunk && options.fullyStagesFile
+        ? applyStage(previous, file)
+        : previous && op === SidecarOp.unstageHunk && options.fullyUnstagesFile
+          ? applyUnstage(previous, file)
+          : null
+    if (optimistic) {
+      statusRequestSeq.current++
+      writeSnapshot(path, { status: optimistic })
+      setState('status', optimistic)
     }
     const response = await sidecarFetch(
       op,
@@ -798,10 +816,14 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       StageHunkResponseSchema
     )
     if (response._tag === 'GitError') {
+      if (previous && optimistic) {
+        writeSnapshot(path, { status: previous })
+        setState('status', previous)
+      }
       setState('error', response.message)
     }
     await refreshStatus(path)
-    invalidateDiffs(path)
+    await invalidateDiffs(path)
     return response._tag === 'Ok'
   }
 
@@ -820,7 +842,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         )
         if (response._tag === 'Ok') {
           await refreshStatus(path)
-          invalidateDiffs(path)
+          void invalidateDiffs(path)
           await restartLogStream(path)
           return true
         }
@@ -872,7 +894,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         void refreshBranchesOnly(path)
       } else {
         void refreshStatus(path)
-        invalidateDiffs(path)
+        void invalidateDiffs(path)
       }
     })
 
@@ -988,10 +1010,10 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     unstageFile: (file: string) => unstageMutation.mutateAsync(file),
     stageAll: (files: string[]) => stageAllMutation.mutateAsync(files),
     unstageAll: (files: string[]) => unstageAllMutation.mutateAsync(files),
-    stageHunk: (file: string, hunkHeader: string) =>
-      applyHunkMutation(SidecarOp.stageHunk, file, hunkHeader),
-    unstageHunk: (file: string, hunkHeader: string) =>
-      applyHunkMutation(SidecarOp.unstageHunk, file, hunkHeader),
+    stageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) =>
+      applyHunkMutation(SidecarOp.stageHunk, file, hunkHeader, options),
+    unstageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) =>
+      applyHunkMutation(SidecarOp.unstageHunk, file, hunkHeader, options),
     diffQueryKey: (file: string, staged: boolean) => {
       const queryKeys = keys()
       return queryKeys

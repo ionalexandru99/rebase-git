@@ -10,6 +10,7 @@ interface CheckboxProps {
   onClick?: (event: MouseEvent<HTMLInputElement>) => void
   'aria-label': string
   className?: string
+  disabled?: boolean
 }
 
 export function Checkbox(props: CheckboxProps) {
@@ -34,10 +35,11 @@ export function Checkbox(props: CheckboxProps) {
         }}
         type="checkbox"
         checked={props.checked}
+        disabled={props.disabled}
         onChange={props.onChange}
         onClick={props.onClick}
         aria-label={props['aria-label']}
-        className="size-[15px] cursor-pointer appearance-none rounded-[var(--r-xs)] border-[1.5px] border-border-strong bg-card transition-colors checked:border-brand checked:bg-brand indeterminate:border-brand indeterminate:bg-brand"
+        className="size-[15px] cursor-pointer appearance-none rounded-[var(--r-xs)] border-[1.5px] border-border-strong bg-card transition-colors checked:border-brand checked:bg-brand indeterminate:border-brand indeterminate:bg-brand disabled:cursor-not-allowed disabled:opacity-60"
       />
       <span className="pointer-events-none absolute inset-0 grid place-content-center">
         <Show when={props.indeterminate}>

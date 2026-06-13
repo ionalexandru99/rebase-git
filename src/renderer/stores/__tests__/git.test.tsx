@@ -377,6 +377,52 @@ describe('useGitStore — parallel repo loading', () => {
     expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
   })
 
+  it('optimistically marks a file staged when staging its final hunk', async () => {
+    const partialStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        modified: ['a.ts'],
+        staged: ['a.ts'],
+        files: [{ path: 'a.ts', index: 'M', working_dir: 'M' }]
+      }
+    }
+    const stagedStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        staged: ['a.ts'],
+        files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
+      }
+    }
+    let resolveStageHunk: () => void = () => {}
+
+    sidecarMock.getStatus.mockResolvedValueOnce(partialStatus).mockResolvedValue(stagedStatus)
+    sidecarMock.stageHunk.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStageHunk = () => resolve({ _tag: 'Ok' })
+        })
+    )
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: 'M' })
+    })
+
+    const stagePromise = git.stageHunk('a.ts', '@@ -1,1 +1,1 @@', { fullyStagesFile: true })
+
+    expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+    expect(git.state.status?.modified).toEqual([])
+    expect(git.state.status?.staged).toEqual(['a.ts'])
+
+    resolveStageHunk()
+    await stagePromise
+
+    expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+  })
+
   it('loadMoreHistory requests the next page without clearing existing commits', async () => {
     const stream = setupLogStream()
     const { git } = renderGitStore()

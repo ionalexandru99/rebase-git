@@ -8,7 +8,7 @@ import {
   type LineTokens,
   languageForFile
 } from '@/lib/diff-highlight'
-import { createMemo, For, Show } from '@/lib/react-compat'
+import { createMemo, createSignal, For, Show } from '@/lib/react-compat'
 import { createQuery } from '@/lib/react-query-compat'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import { cn } from '@/lib/utils'
@@ -58,6 +58,7 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const unstagedQuery = makeDiffQuery(false)
   const stagedQuery = makeDiffQuery(true)
+  const [pendingHunk, setPendingHunk] = createSignal<PendingHunk | null>(null)
 
   const unstagedDiff = () => (props.selected ? (unstagedQuery.data ?? null) : null)
   const stagedDiff = () => (props.selected ? (stagedQuery.data ?? null) : null)
@@ -68,26 +69,19 @@ export function DiffPanel(props: DiffPanelProps) {
   const hasError = () => unstagedQuery.isError || stagedQuery.isError
   const errorMessage = () => unstagedQuery.error?.message ?? stagedQuery.error?.message
 
-  const totals = createMemo(() => {
-    let adds = 0
-    let dels = 0
-    for (const hunk of [...unstagedHunks(), ...stagedHunks()]) {
-      for (const line of hunk.lines) {
-        if (line.kind === 'add') {
-          adds++
-        } else if (line.kind === 'del') {
-          dels++
-        }
-      }
+  const pendingForSelected = () => {
+    const pending = pendingHunk()
+    if (!pending || pending.file !== props.selected?.file) {
+      return null
     }
-    return { adds, dels }
-  })
+    return pending
+  }
 
   // Both diffs share the index as a coordinate system: the staged diff's "new" side and
   // the unstaged diff's "old" side are the index. Sorting on those keeps document order,
   // and remapping the index side to HEAD/worktree coordinates keeps the displayed line
   // numbers stable when a hunk moves between staged and unstaged.
-  const mergedHunks = createMemo<HunkEntry[]>(() => {
+  const actualMergedHunks = createMemo<HunkEntry[]>(() => {
     const staged = stagedHunks()
     const unstaged = unstagedHunks()
     const headShiftAt = (indexLine: number) =>
@@ -119,13 +113,116 @@ export function DiffPanel(props: DiffPanelProps) {
     return entries.sort((left, right) => left.indexStart - right.indexStart)
   })
 
+  const mergedHunks = createMemo<HunkEntry[]>(() => {
+    const pending = pendingForSelected()
+    if (!pending) {
+      return actualMergedHunks()
+    }
+    const targetStaged = pending.op === 'stage'
+    const entries = actualMergedHunks().filter(
+      (entry) => entry.staged === targetStaged || entry.hunk.header !== pending.opHeader
+    )
+    const hasTarget = entries.some(
+      (entry) =>
+        entry.staged === targetStaged &&
+        (entry.hunk.header === pending.opHeader || hunkHighlightKey(entry.hunk) === pending.key)
+    )
+    if (!hasTarget) {
+      entries.push({
+        hunk: pending.hunk,
+        display: pending.display,
+        staged: targetStaged,
+        indexStart: pending.indexStart
+      })
+    }
+    return entries.sort((left, right) => left.indexStart - right.indexStart)
+  })
+
+  const totals = createMemo(() => {
+    let adds = 0
+    let dels = 0
+    for (const entry of mergedHunks()) {
+      const hunk = entry.display
+      for (const line of hunk.lines) {
+        if (line.kind === 'add') {
+          adds++
+        } else if (line.kind === 'del') {
+          dels++
+        }
+      }
+    }
+    return { adds, dels }
+  })
+
   const hasAnyHunks = () => mergedHunks().length > 0
+  const stagedEntryCount = () => mergedHunks().filter((entry) => entry.staged).length
+  const unstagedEntryCount = () => mergedHunks().filter((entry) => !entry.staged).length
 
   const fileStageState = () => {
-    if (stagedHunks().length === 0) {
+    if (stagedEntryCount() === 0) {
       return 'unstaged'
     }
-    return unstagedHunks().length > 0 ? 'partial' : 'staged'
+    return unstagedEntryCount() > 0 ? 'partial' : 'staged'
+  }
+
+  const clearPendingHunk = (pending: PendingHunk) => {
+    setPendingHunk((current) => (current === pending ? null : current))
+  }
+
+  const stageHunk = async (entry: HunkEntry) => {
+    const file = props.selected?.file
+    if (!file) {
+      return
+    }
+    const fullyStagesFile = unstagedEntryCount() === 1
+    const pending: PendingHunk = {
+      file,
+      op: 'stage',
+      opHeader: entry.hunk.header,
+      hunk: entry.hunk,
+      display: entry.display,
+      staged: entry.staged,
+      indexStart: entry.indexStart,
+      key: hunkHighlightKey(entry.hunk)
+    }
+    setPendingHunk(pending)
+    try {
+      await git.stageHunk(file, entry.hunk.header, { fullyStagesFile })
+    } finally {
+      clearPendingHunk(pending)
+    }
+  }
+
+  const unstageHunk = async (entry: HunkEntry) => {
+    const file = props.selected?.file
+    if (!file) {
+      return
+    }
+    const fullyUnstagesFile = stagedEntryCount() === 1
+    const pending: PendingHunk = {
+      file,
+      op: 'unstage',
+      opHeader: entry.hunk.header,
+      hunk: entry.hunk,
+      display: entry.display,
+      staged: entry.staged,
+      indexStart: entry.indexStart,
+      key: hunkHighlightKey(entry.hunk)
+    }
+    setPendingHunk(pending)
+    try {
+      await git.unstageHunk(file, entry.hunk.header, { fullyUnstagesFile })
+    } finally {
+      clearPendingHunk(pending)
+    }
+  }
+
+  const isPendingEntry = (entry: HunkEntry) => {
+    const pending = pendingForSelected()
+    if (!pending) {
+      return false
+    }
+    return entry.hunk.header === pending.opHeader || hunkHighlightKey(entry.hunk) === pending.key
   }
 
   const toggleFileStaged = () => {
@@ -201,15 +298,11 @@ export function DiffPanel(props: DiffPanelProps) {
                     <HunkCard
                       hunk={entry.display}
                       filePath={props.selected?.file ?? ''}
-                      opHeader={entry.hunk.header}
                       staged={entry.staged}
+                      pending={isPendingEntry(entry)}
                       hunkActionsEnabled={entry.staged || !isUntracked()}
-                      onStageHunk={(header) =>
-                        void git.stageHunk(props.selected?.file ?? '', header)
-                      }
-                      onUnstageHunk={(header) =>
-                        void git.unstageHunk(props.selected?.file ?? '', header)
-                      }
+                      onStageHunk={() => void stageHunk(entry)}
+                      onUnstageHunk={() => void unstageHunk(entry)}
                     />
                   )}
                 </For>
@@ -227,6 +320,13 @@ interface HunkEntry {
   display: DiffHunk
   staged: boolean
   indexStart: number
+}
+
+interface PendingHunk extends HunkEntry {
+  file: string
+  op: 'stage' | 'unstage'
+  opHeader: string
+  key: string
 }
 
 const HUNK_RANGE_RE = /^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/
@@ -262,19 +362,22 @@ function DiffError(props: { message?: string }) {
 interface HunkCardProps {
   hunk: DiffHunk
   filePath: string
-  opHeader: string
   staged: boolean
+  pending: boolean
   hunkActionsEnabled: boolean
-  onStageHunk: (header: string) => void
-  onUnstageHunk: (header: string) => void
+  onStageHunk: () => void
+  onUnstageHunk: () => void
 }
 
 function HunkCard(props: HunkCardProps) {
   const toggle = () => {
+    if (props.pending) {
+      return
+    }
     if (props.staged) {
-      props.onUnstageHunk(props.opHeader)
+      props.onUnstageHunk()
     } else {
-      props.onStageHunk(props.opHeader)
+      props.onStageHunk()
     }
   }
 
@@ -292,6 +395,7 @@ function HunkCard(props: HunkCardProps) {
         <Show when={props.hunkActionsEnabled}>
           <Checkbox
             checked={props.staged}
+            disabled={props.pending}
             onChange={toggle}
             aria-label={props.staged ? 'Unstage hunk' : 'Stage hunk'}
           />
