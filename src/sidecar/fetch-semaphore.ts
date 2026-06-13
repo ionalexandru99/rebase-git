@@ -1,58 +1,58 @@
 export class FetchSemaphore {
-  private available = 1;
-  private waitQueue: Array<() => void> = [];
+  private available = 1
+  private waitQueue: Array<() => void> = []
 
   private take(): Promise<void> {
     if (this.available > 0) {
-      this.available--;
-      return Promise.resolve();
+      this.available--
+      return Promise.resolve()
     }
     return new Promise((resolve) => {
-      this.waitQueue.push(resolve);
-    });
+      this.waitQueue.push(resolve)
+    })
   }
 
   private give(): void {
-    const next = this.waitQueue.shift();
+    const next = this.waitQueue.shift()
     if (next) {
-      next();
+      next()
     } else {
-      this.available++;
+      this.available++
     }
   }
 
   async withPermits<T>(work: () => Promise<T>): Promise<T> {
-    await this.take();
+    await this.take()
     try {
-      return await work();
+      return await work()
     } finally {
-      this.give();
+      this.give()
     }
   }
 
   async withPermitsIfAvailable<T>(work: () => Promise<T>): Promise<T | null> {
     if (this.available <= 0) {
-      return null;
+      return null
     }
-    return this.withPermits(work);
+    return this.withPermits(work)
   }
 }
 
-const fetchSemaphores = new Map<string, FetchSemaphore>();
+const fetchSemaphores = new Map<string, FetchSemaphore>()
 
 export function fetchSemaphoreFor(repoPath: string): FetchSemaphore {
-  let semaphore = fetchSemaphores.get(repoPath);
+  let semaphore = fetchSemaphores.get(repoPath)
   if (!semaphore) {
-    semaphore = new FetchSemaphore();
-    fetchSemaphores.set(repoPath, semaphore);
+    semaphore = new FetchSemaphore()
+    fetchSemaphores.set(repoPath, semaphore)
   }
-  return semaphore;
+  return semaphore
 }
 
 export function releaseFetchSemaphore(repoPath: string): boolean {
-  return fetchSemaphores.delete(repoPath);
+  return fetchSemaphores.delete(repoPath)
 }
 
 export function fetchSemaphoreSize(): number {
-  return fetchSemaphores.size;
+  return fetchSemaphores.size
 }
