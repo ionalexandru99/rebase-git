@@ -14,7 +14,11 @@
       "biome.json",
       "package.json",
       "tsconfig.json",
-      "tsconfig.node.json"
+      "tsconfig.node.json",
+      "!!**/.claude",
+      "!!**/node_modules",
+      "!!**/out",
+      "!!**/release"
     ]
   },
   "formatter": {
