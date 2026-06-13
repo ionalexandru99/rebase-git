@@ -11,6 +11,8 @@ export type BranchAction =
   | 'delete-tag'
   | 'copy-name'
 
+export type FileAction = 'stage' | 'unstage' | 'discard' | 'copy-path'
+
 export type CommitAction =
   | 'branch-here'
   | 'tag-here'

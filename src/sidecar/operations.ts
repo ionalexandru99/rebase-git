@@ -32,6 +32,8 @@ import {
   StageHunkResponseSchema,
   type StageResponse,
   StageResponseSchema,
+  type StashListResponse,
+  StashListResponseSchema,
   type StatusResponse,
   StatusResponseSchema,
   type UnstageResponse,
@@ -96,7 +98,9 @@ export const invalidRepoPath = {
     parseOrThrow(ConflictableMutationResponseSchema, {
       _tag: 'GitError',
       message: INVALID_REPO_PATH
-    })
+    }),
+  stashList: () =>
+    parseOrThrow(StashListResponseSchema, { _tag: 'GitError', message: INVALID_REPO_PATH })
 }
 
 const commitGraphWritten = new Set<string>()
@@ -923,6 +927,190 @@ export async function deleteTag(repoPath: string, name: string): Promise<GitMuta
   return withRepoLock(repoPath, async () => {
     try {
       await git.raw(['tag', '-d', name])
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+const STASH_FIELD_SEP = '\x1f'
+
+interface ParsedStash {
+  index: number
+  ref: string
+  message: string
+  branch: string
+}
+
+function parseStashList(raw: string): ParsedStash[] {
+  const stashes: ParsedStash[] = []
+  for (const line of raw.split('\n')) {
+    if (!line) {
+      continue
+    }
+    const [ref, subject = ''] = line.split(STASH_FIELD_SEP)
+    const indexMatch = ref.match(/^stash@\{(\d+)\}$/)
+    if (!indexMatch) {
+      continue
+    }
+    const subjectMatch = subject.match(/^(?:WIP on|On) ([^:]+): (.*)$/)
+    stashes.push({
+      index: Number(indexMatch[1]),
+      ref,
+      branch: subjectMatch ? subjectMatch[1] : '',
+      message: subjectMatch ? subjectMatch[2] : subject
+    })
+  }
+  return stashes
+}
+
+export async function stashList(repoPath: string): Promise<StashListResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(StashListResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  try {
+    const raw = await git.raw(['stash', 'list', `--format=%gd${STASH_FIELD_SEP}%gs`])
+    return parseOrThrow(StashListResponseSchema, { _tag: 'Ok', stashes: parseStashList(raw) })
+  } catch (error) {
+    return parseOrThrow(StashListResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
+  }
+}
+
+export async function stashPush(
+  repoPath: string,
+  message?: string,
+  includeUntracked?: boolean
+): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      const args = ['stash', 'push']
+      if (includeUntracked) {
+        args.push('--include-untracked')
+      }
+      if (message) {
+        args.push('-m', message)
+      }
+      await git.raw(args)
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+function stashRef(index: number): string | null {
+  return Number.isInteger(index) && index >= 0 ? `stash@{${index}}` : null
+}
+
+export async function stashApply(
+  repoPath: string,
+  index: number
+): Promise<ConflictableMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(ConflictableMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  const ref = stashRef(index)
+  if (!ref) {
+    return parseOrThrow(ConflictableMutationResponseSchema, {
+      _tag: 'GitError',
+      message: 'invalid stash index'
+    })
+  }
+  return runWithConflictDetection(repoPath, git, ['stash', 'apply', ref])
+}
+
+export async function stashPop(
+  repoPath: string,
+  index: number
+): Promise<ConflictableMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(ConflictableMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  const ref = stashRef(index)
+  if (!ref) {
+    return parseOrThrow(ConflictableMutationResponseSchema, {
+      _tag: 'GitError',
+      message: 'invalid stash index'
+    })
+  }
+  return runWithConflictDetection(repoPath, git, ['stash', 'pop', ref])
+}
+
+export async function stashDrop(repoPath: string, index: number): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  const ref = stashRef(index)
+  if (!ref) {
+    return mutationError('invalid stash index')
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.raw(['stash', 'drop', ref])
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+// Discard local edits to the given paths: untracked paths are deleted, tracked paths are restored
+// to their committed/index baseline. The two cases need different git verbs, so classify first.
+export async function discardChanges(
+  repoPath: string,
+  files: string[]
+): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  if (files.length === 0) {
+    return mutationOk()
+  }
+  if (files.some((file) => !isSafeRefArg(file))) {
+    return mutationError('invalid file path')
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      const statusRaw = await git.raw(['status', '--porcelain', '--', ...files])
+      const untracked = new Set<string>()
+      for (const line of statusRaw.split('\n')) {
+        if (line.startsWith('??')) {
+          untracked.add(line.slice(3))
+        }
+      }
+      const tracked = files.filter((file) => !untracked.has(file))
+      if (tracked.length > 0) {
+        await git.raw(['restore', '--', ...tracked])
+      }
+      if (untracked.size > 0) {
+        await git.raw(['clean', '-fd', '--', ...untracked])
+      }
+      return mutationOk()
+    } catch (error) {
+      return mutationError(errorMessage(error))
+    }
+  })
+}
+
+export async function discardAll(repoPath: string): Promise<GitMutationResponse> {
+  const git = lookupGit(gitInstances, repoPath)
+  if (!git) {
+    return parseOrThrow(GitMutationResponseSchema, { _tag: 'RepoNotOpen' })
+  }
+  return withRepoLock(repoPath, async () => {
+    try {
+      await git.raw(['reset', '--hard', 'HEAD'])
+      await git.raw(['clean', '-fd'])
       return mutationOk()
     } catch (error) {
       return mutationError(errorMessage(error))

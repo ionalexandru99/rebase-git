@@ -1,3 +1,4 @@
+import type { FileAction } from '@/lib/git-actions'
 import { createMemo, For } from '@/lib/react-compat'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/lib/status-file-rows'
 import { STATUS_FILE_OVERSCAN, STATUS_FILE_ROW_HEIGHT } from '@/lib/virtual-config'
@@ -15,6 +16,7 @@ interface VirtualFileListProps {
   onSelect: (file: string) => void
   onStage: (file: string) => void
   onUnstage: (file: string) => void
+  onFileAction?: (action: FileAction, file: string) => void
 }
 
 function StatusVirtualRow(props: {
@@ -24,6 +26,7 @@ function StatusVirtualRow(props: {
   onSelect: (file: string) => void
   onStage: (file: string) => void
   onUnstage: (file: string) => void
+  onFileAction?: (action: FileAction, file: string) => void
 }) {
   const rowStyle = {
     top: '0',
@@ -42,6 +45,7 @@ function StatusVirtualRow(props: {
         onSelect={props.onSelect}
         onStage={props.onStage}
         onUnstage={props.onUnstage}
+        onFileAction={props.onFileAction}
       />
     </li>
   )
@@ -78,6 +82,7 @@ export function VirtualFileList(props: VirtualFileListProps) {
                 onSelect={props.onSelect}
                 onStage={props.onStage}
                 onUnstage={props.onUnstage}
+                onFileAction={props.onFileAction}
               />
             )
           }}

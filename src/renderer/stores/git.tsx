@@ -470,6 +470,13 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     await restartLogStream(path)
   }
 
+  // Working-tree-only operations (discard, stash apply/pop/push) change file state but not the
+  // commit graph, so the log stream is left alone.
+  const refreshWorkingTree = async (path: string) => {
+    await refreshStatus(path)
+    void invalidateDiffs(path)
+  }
+
   // Status responses can resolve out of order (mutation refresh vs watcher refresh vs query
   // refetch); a snapshot requested before a stage/apply finished must never overwrite a newer
   // one, so a result is marked stale when a later request started while it was in flight.
@@ -1035,6 +1042,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     pullNow,
     refreshAfterCheckout,
     refreshAfterMutation,
+    refreshWorkingTree,
     refreshBranchesOnly,
     loadMoreHistory,
     invalidateRepoQueries

@@ -91,6 +91,39 @@ export function useGitActions(git: GitStore) {
 
   const refreshBranches = (path: string) => git.refreshBranchesOnly(path)
   const refreshAll = (path: string) => git.refreshAfterMutation(path)
+  const refreshWorkingTree = (path: string) => git.refreshWorkingTree(path)
+
+  async function stashConflictable(op: string, index: number, label: string): Promise<boolean> {
+    const path = repoPath()
+    if (!path) {
+      toast.error('Repository is not open')
+      return false
+    }
+    const response = await sidecarFetch(
+      op,
+      { repoPath: path, index },
+      ConflictableMutationResponseSchema
+    ).catch((error: unknown) => {
+      toast.error(`${label} failed`, { description: describe(error) })
+      return null
+    })
+    if (!response) {
+      return false
+    }
+    if (response._tag === 'Ok' || response._tag === 'Conflict') {
+      await git.refreshWorkingTree(path)
+    }
+    if (response._tag === 'Ok') {
+      toast.success(label)
+      return true
+    }
+    if (response._tag === 'Conflict') {
+      toast.warning(`${label} hit conflicts`, { description: 'Resolve the conflicts to continue.' })
+    } else if (response._tag === 'GitError') {
+      toast.error(`${label} failed`, { description: response.message })
+    }
+    return false
+  }
 
   return {
     createBranch: (name: string, startPoint?: string, checkout?: boolean) =>
@@ -125,7 +158,21 @@ export function useGitActions(git: GitStore) {
     createTag: (name: string, ref?: string, message?: string) =>
       mutate(SidecarOp.createTag, { name, ref, message }, `Created tag ${name}`, refreshBranches),
     deleteTag: (name: string) =>
-      mutate(SidecarOp.deleteTag, { name }, `Deleted tag ${name}`, refreshBranches)
+      mutate(SidecarOp.deleteTag, { name }, `Deleted tag ${name}`, refreshBranches),
+    discardChanges: (files: string[], label: string) =>
+      mutate(SidecarOp.discardChanges, { files }, label, refreshWorkingTree),
+    discardAll: () => mutate(SidecarOp.discardAll, {}, 'Discarded all changes', refreshWorkingTree),
+    stashPush: (message?: string, includeUntracked?: boolean) =>
+      mutate(
+        SidecarOp.stashPush,
+        { message, includeUntracked },
+        'Stashed changes',
+        refreshWorkingTree
+      ),
+    stashApply: (index: number) => stashConflictable(SidecarOp.stashApply, index, 'Applied stash'),
+    stashPop: (index: number) => stashConflictable(SidecarOp.stashPop, index, 'Popped stash'),
+    stashDrop: (index: number) =>
+      mutate(SidecarOp.stashDrop, { index }, 'Dropped stash', async () => {})
   }
 }
 

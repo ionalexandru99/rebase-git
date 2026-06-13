@@ -56,6 +56,30 @@ describe('StatusPanel', () => {
     expect(screen.queryByText('Changes')).not.toBeInTheDocument()
   })
 
+  it('fires file actions from the row context menu', async () => {
+    const onFileAction = vi.fn()
+    render(
+      <StatusPanel
+        status={emptyStatus({ files: [code('a.ts', ' ', 'M')] })}
+        selected={null}
+        onSelect={vi.fn()}
+        onStage={vi.fn()}
+        onUnstage={vi.fn()}
+        onStageAll={vi.fn()}
+        onUnstageAll={vi.fn()}
+        onFileAction={onFileAction}
+        loading={false}
+      />
+    )
+    fireEvent.contextMenu(screen.getByText('a.ts'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Discard changes' }))
+    expect(onFileAction).toHaveBeenCalledWith('discard', 'a.ts')
+
+    fireEvent.contextMenu(screen.getByText('a.ts'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy path' }))
+    expect(onFileAction).toHaveBeenCalledWith('copy-path', 'a.ts')
+  })
+
   it('lists every change in one flat list with a staged count', () => {
     renderPanel({
       status: emptyStatus({

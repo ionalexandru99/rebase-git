@@ -1,4 +1,5 @@
-import { createMemo, Show } from '@/lib/react-compat'
+import type { FileAction } from '@/lib/git-actions'
+import { createMemo, type JSX, Show } from '@/lib/react-compat'
 import { buildUnifiedFileRows } from '@/lib/status-file-rows'
 import type { GitStatus } from '@/types'
 import { LoadingBadge } from '../ui/loading-badge'
@@ -15,6 +16,8 @@ interface StatusPanelProps {
   onUnstage: (file: string) => void
   onStageAll: (files: string[]) => void
   onUnstageAll: (files: string[]) => void
+  onFileAction?: (action: FileAction, file: string) => void
+  headerActions?: JSX.Element
   loading: boolean
 }
 
@@ -60,6 +63,7 @@ export function StatusPanel(props: StatusPanelProps) {
               <Show when={props.loading}>
                 <LoadingBadge />
               </Show>
+              {props.headerActions}
               <Show when={stageable().length > 0}>
                 <button
                   type="button"
@@ -77,6 +81,7 @@ export function StatusPanel(props: StatusPanelProps) {
               onSelect={props.onSelect}
               onStage={props.onStage}
               onUnstage={props.onUnstage}
+              onFileAction={props.onFileAction}
             />
           </section>
         )

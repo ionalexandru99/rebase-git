@@ -513,6 +513,81 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       }
       return operations.deleteTag(repoPath, name)
     }
+    case SidecarOp.stashList: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.stashList()
+      }
+      return operations.stashList(repoPath)
+    }
+    case SidecarOp.stashPush: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      const message = requiredString(body, 'message') ?? undefined
+      return operations.stashPush(repoPath, message, body.includeUntracked === true)
+    }
+    case SidecarOp.stashApply:
+    case SidecarOp.stashPop: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.conflictable()
+      }
+      if (typeof body.index !== 'number') {
+        return BAD_REQUEST
+      }
+      if (op === SidecarOp.stashApply) {
+        return operations.stashApply(repoPath, body.index)
+      }
+      return operations.stashPop(repoPath, body.index)
+    }
+    case SidecarOp.stashDrop: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      if (typeof body.index !== 'number') {
+        return BAD_REQUEST
+      }
+      return operations.stashDrop(repoPath, body.index)
+    }
+    case SidecarOp.discardChanges: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      const files = resolveRepoRelativeFiles(repoPath, body)
+      if (!files) {
+        return BAD_REQUEST
+      }
+      return operations.discardChanges(repoPath, files)
+    }
+    case SidecarOp.discardAll: {
+      const repoPath = safeRepoPath(body)
+      if (repoPath === BAD_REQUEST) {
+        return BAD_REQUEST
+      }
+      if (!repoPath) {
+        return operations.invalidRepoPath.mutation()
+      }
+      return operations.discardAll(repoPath)
+    }
     default:
       return undefined
   }
