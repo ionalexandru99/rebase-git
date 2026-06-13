@@ -461,6 +461,22 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
   }
 
+  // Operations that move HEAD or rewrite history (merge, reset, revert, cherry-pick, create+
+  // checkout) change which commits are reachable, so the log stream must be restarted on top of the
+  // status/branch refresh.
+  const refreshAfterMutation = async (path: string) => {
+    await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
+    void invalidateDiffs(path)
+    await restartLogStream(path)
+  }
+
+  // Working-tree-only operations (discard, stash apply/pop/push) change file state but not the
+  // commit graph, so the log stream is left alone.
+  const refreshWorkingTree = async (path: string) => {
+    await refreshStatus(path)
+    void invalidateDiffs(path)
+  }
+
   // Status responses can resolve out of order (mutation refresh vs watcher refresh vs query
   // refetch); a snapshot requested before a stage/apply finished must never overwrite a newer
   // one, so a result is marked stale when a later request started while it was in flight.
@@ -1025,6 +1041,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     pushNow,
     pullNow,
     refreshAfterCheckout,
+    refreshAfterMutation,
+    refreshWorkingTree,
+    refreshBranchesOnly,
     loadMoreHistory,
     invalidateRepoQueries
   }

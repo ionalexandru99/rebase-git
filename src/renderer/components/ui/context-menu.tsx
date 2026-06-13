@@ -5,13 +5,24 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
   useState
 } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+
+interface MenuPosition {
+  x: number
+  y: number
+}
 
 interface ContextMenuValue {
   open: boolean
-  setOpen: (open: boolean) => void
+  position: MenuPosition | null
+  openAt: (position: MenuPosition) => void
+  close: () => void
 }
 
 const ContextMenuContext = createContext<ContextMenuValue | null>(null)
@@ -25,18 +36,20 @@ function useContextMenu() {
 }
 
 function ContextMenu(props: { children?: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <ContextMenuContext.Provider value={{ open, setOpen }}>
-      {props.children}
-    </ContextMenuContext.Provider>
-  )
+  const [position, setPosition] = useState<MenuPosition | null>(null)
+  const value: ContextMenuValue = {
+    open: position !== null,
+    position,
+    openAt: (next) => setPosition(next),
+    close: () => setPosition(null)
+  }
+  return <ContextMenuContext.Provider value={value}>{props.children}</ContextMenuContext.Provider>
 }
 
 function ContextMenuTrigger(
   props: React.ButtonHTMLAttributes<HTMLButtonElement> & { as?: string; children?: ReactNode }
 ) {
-  const { setOpen } = useContextMenu()
+  const { openAt } = useContextMenu()
   const { as: _as, onContextMenu, ...rest } = props
   return (
     <button
@@ -44,7 +57,26 @@ function ContextMenuTrigger(
       onContextMenu={(event) => {
         event.preventDefault()
         onContextMenu?.(event)
-        setOpen(true)
+        openAt({ x: event.clientX, y: event.clientY })
+      }}
+      {...rest}
+    />
+  )
+}
+
+// A non-button trigger for cases where the right-clickable element must stay a plain element
+// (grid rows, list items) rather than a <button>.
+function ContextMenuTriggerArea(props: HTMLAttributes<HTMLDivElement> & { children?: ReactNode }) {
+  const { openAt } = useContextMenu()
+  const { onContextMenu, ...rest } = props
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: contextmenu is a right-click affordance layered on an existing element; keyboard users reach the same actions elsewhere
+    <div
+      data-slot="context-menu-trigger"
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onContextMenu?.(event)
+        openAt({ x: event.clientX, y: event.clientY })
       }}
       {...rest}
     />
@@ -55,22 +87,88 @@ function ContextMenuGroup(props: HTMLAttributes<HTMLDivElement>) {
   return <div data-slot="context-menu-group" {...props} />
 }
 
+const VIEWPORT_MARGIN = 6
+
 function ContextMenuContent(props: HTMLAttributes<HTMLDivElement>) {
-  const { open } = useContextMenu()
-  const { className, ...rest } = props
-  if (!open) {
+  const { open, position, close } = useContextMenu()
+  const { className, style, ...rest } = props
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const [resolved, setResolved] = useState<MenuPosition | null>(null)
+
+  useLayoutEffect(() => {
+    if (!open || !position) {
+      setResolved(null)
+      return
+    }
+    const element = contentRef.current
+    if (!element) {
+      setResolved(position)
+      return
+    }
+    const rect = element.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    let x = position.x
+    let y = position.y
+    if (rect.width > 0 && x + rect.width > viewportWidth) {
+      x = Math.max(VIEWPORT_MARGIN, viewportWidth - rect.width - VIEWPORT_MARGIN)
+    }
+    if (rect.height > 0 && y + rect.height > viewportHeight) {
+      y = Math.max(VIEWPORT_MARGIN, viewportHeight - rect.height - VIEWPORT_MARGIN)
+    }
+    setResolved({ x, y })
+  }, [open, position])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    const onPointerDown = (event: Event) => {
+      const target = event.target as Node | null
+      if (target && contentRef.current?.contains(target)) {
+        return
+      }
+      close()
+    }
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        close()
+      }
+    }
+    const onDismiss = () => close()
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('resize', onDismiss)
+    window.addEventListener('blur', onDismiss)
+    window.addEventListener('scroll', onDismiss, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('resize', onDismiss)
+      window.removeEventListener('blur', onDismiss)
+      window.removeEventListener('scroll', onDismiss, true)
+    }
+  }, [open, close])
+
+  if (!open || !position) {
     return null
   }
-  return (
+
+  const placement = resolved ?? position
+  return createPortal(
     <div
+      ref={contentRef}
       data-slot="context-menu-content"
       role="menu"
+      tabIndex={-1}
+      style={{ position: 'fixed', left: `${placement.x}px`, top: `${placement.y}px`, ...style }}
       className={cn(
-        'z-50 min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
+        'z-50 min-w-[10rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
         className
       )}
       {...rest}
-    />
+    />,
+    document.body
   )
 }
 
@@ -78,34 +176,51 @@ function ContextMenuItem(
   props: HTMLAttributes<HTMLDivElement> & {
     inset?: boolean
     variant?: 'default' | 'destructive'
+    disabled?: boolean
     onSelect?: () => void
   }
 ) {
-  const { setOpen } = useContextMenu()
-  const { className, inset, variant = 'default', onSelect, onClick, onKeyDown, ...rest } = props
+  const { close } = useContextMenu()
+  const {
+    className,
+    inset,
+    variant = 'default',
+    disabled,
+    onSelect,
+    onClick,
+    onKeyDown,
+    ...rest
+  } = props
+  const select = () => {
+    if (disabled) {
+      return
+    }
+    onSelect?.()
+    close()
+  }
   const selectFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
     onKeyDown?.(event)
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      onSelect?.()
-      setOpen(false)
+      select()
     }
   }
   return (
     <div
       role="menuitem"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
       data-slot="context-menu-item"
       data-inset={inset}
       data-variant={variant}
+      data-disabled={disabled ? '' : undefined}
+      aria-disabled={disabled}
       className={cn(
-        "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+        "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         className
       )}
       onClick={(event) => {
         onClick?.(event)
-        onSelect?.()
-        setOpen(false)
+        select()
       }}
       onKeyDown={selectFromKeyboard}
       {...rest}
@@ -151,7 +266,10 @@ function ContextMenuLabel(props: HTMLAttributes<HTMLDivElement> & { inset?: bool
     <div
       data-slot="context-menu-label"
       data-inset={inset}
-      className={cn('px-2 py-1.5 text-sm font-medium text-foreground data-[inset]:pl-8', className)}
+      className={cn(
+        'px-2 py-1.5 text-xs font-medium text-muted-foreground data-[inset]:pl-8',
+        className
+      )}
       {...rest}
     />
   )
@@ -229,5 +347,6 @@ export {
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuTrigger
+  ContextMenuTrigger,
+  ContextMenuTriggerArea
 }

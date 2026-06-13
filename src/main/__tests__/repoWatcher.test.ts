@@ -1,11 +1,11 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import type { WebContents } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ignoreWorkingTree, startDebouncedDrain, WORKING_TREE_WATCH_DEPTH } from '../repoWatcher'
+import { ignoreWorkingTree, startDebouncedDrain, startWatching, stopWatching } from '../repoWatcher'
 
 describe('ignoreWorkingTree', () => {
-  it('keeps the working-tree watcher shallow to avoid large-repo file descriptor exhaustion', () => {
-    expect(WORKING_TREE_WATCH_DEPTH).toBe(0)
-  })
-
   it('ignores the .git directory', () => {
     expect(ignoreWorkingTree('/repo/.git/HEAD')).toBe(true)
   })
@@ -95,5 +95,56 @@ describe('startDebouncedDrain', () => {
     vi.advanceTimersByTime(80)
 
     expect(onFire).not.toHaveBeenCalled()
+  })
+})
+
+describe('startWatching working-tree detection', () => {
+  let repoDir: string
+  const events: Array<{ repoPath: string; kind: string }> = []
+
+  const fakeWebContents = {
+    isDestroyed: () => false,
+    send: (channel: string, payload: { repoPath: string; kind: string }) => {
+      if (channel === 'repo-changed') {
+        events.push(payload)
+      }
+    },
+    once: () => {},
+    removeListener: () => {}
+  } as unknown as WebContents
+
+  const waitFor = async (predicate: () => boolean, timeoutMs = 4000) => {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      if (predicate()) {
+        return true
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    return predicate()
+  }
+
+  beforeEach(() => {
+    events.length = 0
+    repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-watch-test-')))
+    fs.mkdirSync(path.join(repoDir, '.git', 'refs'), { recursive: true })
+    fs.writeFileSync(path.join(repoDir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
+    fs.mkdirSync(path.join(repoDir, 'src'))
+  })
+
+  afterEach(async () => {
+    await stopWatching(repoDir)
+    fs.rmSync(repoDir, { recursive: true, force: true })
+  })
+
+  it('emits a workingTree change when a nested file is edited', async () => {
+    startWatching(repoDir, fakeWebContents)
+    // give chokidar time to finish its initial scan before mutating
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    fs.writeFileSync(path.join(repoDir, 'src', 'nested.ts'), 'export const x = 1\n')
+
+    const seen = await waitFor(() => events.some((event) => event.kind === 'workingTree'))
+    expect(seen).toBe(true)
   })
 })

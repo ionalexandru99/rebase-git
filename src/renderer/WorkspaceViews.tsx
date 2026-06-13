@@ -1,10 +1,15 @@
 import { CheckIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { CommitPanel } from './components/CommitPanel'
 import { DiffPanel } from './components/DiffPanel'
 import { HistoryPanel } from './components/HistoryPanel'
 import { type SelectedFile, StatusPanel } from './components/StatusPanel'
+import { StashMenu } from './components/StatusPanel/StashMenu'
 import type { WorkspaceView } from './components/shell/Topbar'
+import { useDialogs } from './components/ui/prompt-dialog'
+import { useGitActions } from './hooks/git/useGitActions'
 import { useDraggableWidth } from './hooks/useDraggableWidth'
+import type { CommitAction, FileAction } from './lib/git-actions'
 import {
   type Component,
   createEffect,
@@ -43,12 +48,51 @@ interface WorkspaceViewProps {
   remoteBranches: string[]
   visibleBranchRefs: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
+  onCommitAction?: (action: CommitAction, sha: string, message: string) => void
   tabActive: () => boolean
 }
 
 function LocalChangesView(props: WorkspaceViewProps) {
   const git = props.git
+  const actions = useGitActions(git)
+  const { confirm, dialogs } = useDialogs()
   const [selected, setSelected] = createSignal<SelectedFile | null>(null)
+
+  const handleFileAction = (action: FileAction, file: string) => {
+    switch (action) {
+      case 'stage':
+        void git.stageFile(file)
+        return
+      case 'unstage':
+        void git.unstageFile(file)
+        return
+      case 'discard':
+        confirm({
+          title: `Discard changes to ${file}?`,
+          message: 'Local edits to this file are lost. Untracked files are deleted.',
+          confirmText: 'Discard',
+          destructive: true,
+          onConfirm: () => void actions.discardChanges([file], `Discarded ${file}`)
+        })
+        return
+      case 'copy-path':
+        void navigator.clipboard
+          .writeText(file)
+          .then(() => toast.success('Copied path'))
+          .catch(() => toast.error('Copy failed'))
+        return
+    }
+  }
+
+  const discardAll = () => {
+    confirm({
+      title: 'Discard all changes?',
+      message: 'Every uncommitted change in the working tree is permanently lost.',
+      confirmText: 'Discard all',
+      destructive: true,
+      onConfirm: () => void actions.discardAll()
+    })
+  }
   const { width: filesWidth, onResizeStart } = useDraggableWidth({
     min: FILES_PANEL_WIDTH_MIN,
     max: FILES_PANEL_WIDTH_MAX,
@@ -93,7 +137,15 @@ function LocalChangesView(props: WorkspaceViewProps) {
   })
 
   return (
-    <Show when={totalChanges() > 0} fallback={<CleanWorkingTree />}>
+    <Show
+      when={totalChanges() > 0}
+      fallback={
+        <>
+          <CleanWorkingTree />
+          {dialogs()}
+        </>
+      }
+    >
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
         <div
           className="grid min-h-0 overflow-hidden"
@@ -108,6 +160,23 @@ function LocalChangesView(props: WorkspaceViewProps) {
               onUnstage={git.unstageFile}
               onStageAll={git.stageAll}
               onUnstageAll={git.unstageAll}
+              onFileAction={handleFileAction}
+              headerActions={
+                <>
+                  <StashMenu
+                    repoPath={git.state.repoPath}
+                    actions={actions}
+                    hasChanges={totalChanges() > 0}
+                  />
+                  <button
+                    type="button"
+                    onClick={discardAll}
+                    className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+                  >
+                    Discard all
+                  </button>
+                </>
+              }
               loading={git.loading() || git.state.statusLoading}
             />
             <span
@@ -127,6 +196,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
           stagedCount={stagedCount()}
         />
       </div>
+      {dialogs()}
     </Show>
   )
 }
@@ -161,6 +231,7 @@ function HistoryView(props: WorkspaceViewProps) {
           remoteBranches={props.remoteBranches}
           visibleBranchRefs={props.visibleBranchRefs}
           onToggleTimelineVisibility={props.onToggleTimelineVisibility}
+          onCommitAction={props.onCommitAction}
         />
       </div>
     </Show>

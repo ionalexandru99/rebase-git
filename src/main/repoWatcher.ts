@@ -16,7 +16,6 @@ interface Watcher {
 
 const watchers = new Map<string, Watcher>()
 const DEBOUNCE_MS = 300
-export const WORKING_TREE_WATCH_DEPTH = 0
 
 export const IGNORED_DIRS = new Set([
   '.git',
@@ -84,11 +83,13 @@ export function startWatching(repoPath: string, webContents: WebContents): void 
   refs.on('all', () => refsDrain.push())
   refs.on('error', (err) => console.warn('[repoWatcher] refs error', err))
 
+  // Watch the whole working tree (chokidar 4 uses native recursive fs.watch, so this no longer
+  // costs one descriptor per directory). `ignoreWorkingTree` prunes .git and heavy build dirs so
+  // edits to nested source files are detected without drowning in node_modules churn.
   const workingTree = chokidar.watch(repoPath, {
     ignored: ignoreWorkingTree,
     ignoreInitial: true,
     persistent: true,
-    depth: WORKING_TREE_WATCH_DEPTH,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 }
   })
   workingTree.on('all', () => workingTreeDrain.push())

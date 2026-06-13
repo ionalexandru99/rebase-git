@@ -1,14 +1,15 @@
 import contextMenu from 'electron-context-menu'
 
+// The renderer owns right-click for git actions (branch/commit/file menus). Keep the native OS
+// menu only where the renderer has nothing to offer: editable fields and selected text, so
+// copy/cut/paste still work. Without this guard electron-context-menu pops a native menu on every
+// right-click and visually clobbers the in-app context menus.
 export function setupContextMenu(): void {
   contextMenu({
     showSearchWithGoogle: false,
+    showSelectAll: true,
     showInspectElement: process.env.NODE_ENV !== 'production',
-    prepend: (_defaultActions, _params, _browserWindow) => [
-      {
-        label: 'Git GUI',
-        visible: false
-      }
-    ]
+    shouldShowMenu: (_event, parameters) =>
+      parameters.isEditable || parameters.selectionText.trim().length > 0
   })
 }

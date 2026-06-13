@@ -12,6 +12,7 @@ import type {
   RemoteRefsResponse,
   StageHunkResponse,
   StageResponse,
+  StashListResponse,
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
@@ -35,7 +36,8 @@ export const sidecarMock = {
   stageHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
   unstageHunk:
-    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>()
+    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
+  stashList: vi.fn<(repoPath: string) => Promise<StashListResponse>>()
 }
 ;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
 
@@ -99,6 +101,9 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
               body.file as string,
               body.hunkHeader as string
             )
+            break
+          case 'stash-list':
+            payload = await mock.stashList(repoPath)
             break
           default:
             throw new Error(`unhandled sidecar op in test: ${op}`)
@@ -293,6 +298,7 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.setPersistedTabs).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
+  sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })
   mockBranchResponses({ current: '', all: [], remotes: [], tags: [] })
 })
 

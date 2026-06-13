@@ -1,5 +1,6 @@
 import { parseOrThrow } from '@shared/codec'
 import { SidebarPrefsSchema } from '@shared/schemas/ipc'
+import type { BranchAction } from '@/lib/git-actions'
 import type { JSX } from '@/lib/react-compat'
 import type { BranchTracking, RefKind } from '@/lib/ref-tree'
 import { useDraggableWidth } from '../../hooks/useDraggableWidth'
@@ -26,6 +27,7 @@ export interface BranchBrowser {
   visibleTimelineRefs?: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
+  onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
 }
 
 export interface WorkspaceNavigation {
