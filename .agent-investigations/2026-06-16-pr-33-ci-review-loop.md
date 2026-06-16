@@ -31,6 +31,9 @@ User asked to check PR `#33` in a loop and fix failing pipelines and review comm
 | 2026-06-16 | User flagged concern with manual zip fix | Reassessed Electron install strategy |
 | 2026-06-16 | Implemented local fixes | Official Electron rebuild/verify path and packaged CSP meta injection |
 | 2026-06-16 | Ran local verification | Main/renderer tests, typecheck, check, build, E2E, smoke |
+| 2026-06-16 | Pushed commits and watched PR checks | `Build & integration` still failed; other checks passed |
+| 2026-06-16 | Inspected comparable repos | `anomalyco/opencode`, `pingdotgg/t3code` |
+| 2026-06-16 | Reworked Electron CI fix after comparison | Added `scripts/ensure-electron-runtime.mjs` modeled after T3 Code's ensure script |
 
 ## Evidence Gathered
 
@@ -79,6 +82,35 @@ After user feedback that the zip approach may be wrong, this session replaced th
 ```
 
 The `Build & integration` job also disables setup-node's automatic package-manager cache so this job does not restore cached package side effects before the Electron rebuild/verify step.
+
+After pushing that version, CI still failed:
+
+```text
+Rebuild Electron binary
+.../node_modules/electron postinstall$ node install.js
+.../node_modules/electron postinstall: Done
+
+Verify Electron binary
+Error: Electron failed to install correctly, please delete node_modules/electron and try installing again
+```
+
+That means `pnpm rebuild electron` can exit successfully while the package still lacks the runtime/path expected by `require('electron')`.
+
+### Comparable Repositories
+
+| Repository | Finding |
+| --- | --- |
+| `anomalyco/opencode` | Not a useful Electron runtime comparison for this failure path; CI is Bun-oriented and does not show an Electron binary install repair pattern. |
+| `pingdotgg/t3code` | Closest match. CI runs `vp run --filter @t3tools/desktop ensure:electron` after install. `apps/desktop/scripts/ensure-electron-runtime.mjs` validates Electron runtime paths, repairs `path.txt`, chmods the executable, and falls back to downloading `electron-v${version}-${platform}-${arch}.zip` only if the runtime is missing or invalid. |
+
+Current local CI fix now mirrors the T3 Code pattern:
+
+```yaml
+- name: Ensure Electron runtime
+  run: node scripts/ensure-electron-runtime.mjs
+```
+
+The local `scripts/ensure-electron-runtime.mjs` first tries Electron's own installer with skip-download env vars removed, then falls back to the official release zip if the runtime is still missing, and always repairs `path.txt`/executable permissions before returning the executable path.
 
 ### Review Comments
 
@@ -159,6 +191,8 @@ flowchart TD
 | Hypothesis | Status | Notes |
 | --- | --- | --- |
 | Manual zip commit fixes failed Electron binary check | Discarded | Replaced with `pnpm rebuild electron` plus package-reported executable verification. |
+| Plain `pnpm rebuild electron` is sufficient | Discarded | CI still failed because rebuild completed without making `require('electron')` resolvable. |
+| T3 Code-style ensure script is appropriate | Confirmed locally | Matches the closest comparable project and validates/repairs the actual runtime path. |
 | Codex CSP concern is valid | Confirmed | Current packaged path uses `loadFile(...)`; current strict policy is only attached as a response header. |
 | CodeRabbit comments still require changes | Discarded for now | Inline threads show addressed replies and CodeRabbit acknowledgements. |
 
@@ -172,6 +206,8 @@ flowchart TD
 | `electron.vite.config.ts` | Packaged renderer HTML transform. |
 | `src/renderer/index.html` | Renderer document and CSP/meta behavior. |
 | `src/main/__tests__/csp.test.ts` | Unit coverage for CSP policy and meta injection. |
+| `scripts/ensure-electron-runtime.mjs` | T3 Code-style Electron runtime validation/repair script for CI. |
+| `src/sidecar/__tests__/server.test.ts` | Increased the slow push/pull integration test timeout from 5s to 10s after local full-suite flakes. |
 
 ## Commands Run
 
@@ -194,6 +230,13 @@ node -e "const fs = require('node:fs'); const electron = require('electron'); fs
 pnpm test:renderer
 pnpm test:e2e
 pnpm test:smoke
+gh search repos opencode --limit 10
+gh search repos t3code --limit 10
+gh api -H "Accept: application/vnd.github.raw" repos/pingdotgg/t3code/contents/.github/workflows/ci.yml
+gh api -H "Accept: application/vnd.github.raw" repos/pingdotgg/t3code/contents/apps/desktop/package.json
+gh api -H "Accept: application/vnd.github.raw" repos/pingdotgg/t3code/contents/apps/desktop/scripts/ensure-electron-runtime.mjs
+gh api -H "Accept: application/vnd.github.raw" repos/anomalyco/opencode/contents/.github/workflows/test.yml
+node scripts/ensure-electron-runtime.mjs
 ```
 
 ## Current Status
@@ -205,7 +248,7 @@ Local fixes are implemented and verified. Changes are not pushed yet.
 | Command | Result | Notes |
 | --- | --- | --- |
 | `pnpm check:fix` | Passed | Fixed formatting in 2 files. |
-| `pnpm test:main` | Passed | 25 files, 159 tests. |
+| `pnpm test:main` | Passed after timeout adjustment | 25 files, 159 tests. A slow push/pull integration test timed out at 5s during full-suite local runs and now has a 10s timeout. |
 | `pnpm typecheck` | Passed | Renderer and node TS configs. |
 | `pnpm check` | Passed | Biome no fixes needed. |
 | `pnpm build` | Passed | Generated packaged CSP meta in `out/renderer/index.html`. |
@@ -222,7 +265,7 @@ Implemented the smallest change that preserves dev HMR and packaged strict CSP:
 1. Keep `onHeadersReceived` CSP for dev server responses.
 2. Inject a packaged-only strict meta CSP into built renderer HTML using Vite's `transformIndexHtml`.
 3. Avoid a custom protocol because it would touch more of the navigation and asset-loading surface.
-4. Avoid the manual Electron zip path; use `pnpm rebuild electron` and verify `require('electron')` instead.
+4. Avoid inline workflow zip downloads; use a dedicated T3 Code-style runtime ensure script that first tries the official installer and only falls back to the official release zip when validation fails.
 
 ## Next Steps
 

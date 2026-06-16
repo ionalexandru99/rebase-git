@@ -85,11 +85,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Rebuild Electron binary
-        run: pnpm rebuild electron
-
-      - name: Verify Electron binary
-        run: node -e "const fs = require('node:fs'); const electron = require('electron'); fs.accessSync(electron, fs.constants.X_OK); console.log(electron)"
+      - name: Ensure Electron runtime
+        run: node scripts/ensure-electron-runtime.mjs
 
       - name: Build
         run: pnpm build
