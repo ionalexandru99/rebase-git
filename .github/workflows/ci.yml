@@ -77,6 +77,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
+          package-manager-cache: false
 
       - name: Enable pnpm
         run: corepack enable && corepack prepare pnpm@11.2.2 --activate
@@ -84,21 +85,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Electron's own postinstall (extract-zip) intermittently leaves dist incomplete in CI,
-      # so electron.launch() fails. Fetch and unzip the matching binary deterministically.
-      - name: Install Electron binary
-        run: |
-          set -e
-          electron_version=$(node -p "require('electron/package.json').version")
-          url="https://github.com/electron/electron/releases/download/v${electron_version}/electron-v${electron_version}-linux-x64.zip"
-          echo "Fetching Electron ${electron_version}"
-          curl -fsSL -o /tmp/electron.zip "$url"
-          rm -rf node_modules/electron/dist node_modules/electron/path.txt
-          mkdir -p node_modules/electron/dist
-          unzip -q -o /tmp/electron.zip -d node_modules/electron/dist
-          printf 'electron' > node_modules/electron/path.txt
-          chmod +x node_modules/electron/dist/electron
-          test -x node_modules/electron/dist/electron
+      - name: Rebuild Electron binary
+        run: pnpm rebuild electron
+
+      - name: Verify Electron binary
+        run: node -e "const fs = require('node:fs'); const electron = require('electron'); fs.accessSync(electron, fs.constants.X_OK); console.log(electron)"
 
       - name: Build
         run: pnpm build

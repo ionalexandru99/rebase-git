@@ -3,9 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- CSP is enforced via the onHeadersReceived response header in src/main/index.ts
-         (dev-relaxed for Vite HMR, strict when packaged). A static meta tag here would be
-         applied identically in dev and would break HMR, so it is intentionally omitted. -->
+    <!-- Packaged builds inject a strict CSP meta tag in electron.vite.config.ts.
+         Source HTML stays meta-free so Vite HMR can use the relaxed dev header policy. -->
 
     <title>Rebase</title>
     <script src="./theme-init.js"></script>

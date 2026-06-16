@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, session } from 'electron'
 import windowStateKeeper from 'electron-window-state'
-
+import { buildContentSecurityPolicy } from './csp'
 import * as logStreamIpc from './ipc/log-stream'
 import * as repoIpc from './ipc/repo'
 import * as settingsIpc from './ipc/settings'
@@ -55,26 +55,11 @@ function hardenNavigation(win: BrowserWindow): void {
   })
 }
 
-function buildContentSecurityPolicy(): string {
-  const packaged =
-    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';"
-  if (app.isPackaged) {
-    return packaged
-  }
-  const devServer = process.env.ELECTRON_RENDERER_URL
-  const devOrigin = devServer ? new URL(devServer).origin : ''
-  return [
-    "default-src 'none'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${devOrigin}`.trim(),
-    `style-src 'self' 'unsafe-inline' ${devOrigin}`.trim(),
-    "img-src 'self' data:",
-    `font-src 'self' ${devOrigin}`.trim(),
-    `connect-src 'self' ws: wss: ${devOrigin}`.trim()
-  ].join('; ')
-}
-
 function applyContentSecurityPolicy(): void {
-  const policy = buildContentSecurityPolicy()
+  const policy = buildContentSecurityPolicy({
+    isPackaged: app.isPackaged,
+    devServer: process.env.ELECTRON_RENDERER_URL
+  })
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
