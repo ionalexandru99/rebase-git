@@ -115,6 +115,9 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             if (handler) {
               payload = handler(body)
             } else {
+              // The generic Ok fallback is intentional: mutation hooks under test that don't
+              // assert a specific response just need a success tag. Warn only in CI so local
+              // runs that deliberately lean on this fallback aren't spammed.
               if (process.env.CI) {
                 console.warn(`unregistered sidecar op in test: ${op}`)
               }
