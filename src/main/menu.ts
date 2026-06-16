@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import contextMenu from 'electron-context-menu'
 
 // The renderer owns right-click for git actions (branch/commit/file menus). Keep the native OS
@@ -8,7 +9,7 @@ export function setupContextMenu(): void {
   contextMenu({
     showSearchWithGoogle: false,
     showSelectAll: true,
-    showInspectElement: process.env.NODE_ENV !== 'production',
+    showInspectElement: !app.isPackaged,
     shouldShowMenu: (_event, parameters) =>
       parameters.isEditable || parameters.selectionText.trim().length > 0
   })
