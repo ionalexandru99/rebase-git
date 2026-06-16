@@ -31,8 +31,8 @@ describe('docs ground truth', () => {
 })
 
 const rendererDir = path.resolve(repoRoot, 'src/renderer')
-const shimFilePattern = /[/\\]src[/\\]renderer[/\\]lib[/\\]react-[a-z-]*-compat\.(ts|tsx)$/
-const compatImportPattern = /from\s+['"][^'"]*-compat['"]/
+const shimFilePattern = /[/\\]src[/\\]renderer[/\\]lib[/\\]react-[a-z-]*compat\.(ts|tsx)$/
+const compatImportPattern = /from\s+['"][^'"]*\/react-[a-z-]*compat['"]/
 
 function listSourceFiles(dir: string): string[] {
   const files: string[] = []
@@ -60,13 +60,14 @@ function countCompatImporters(): number {
   return count
 }
 
-// Snapshot of the current tree (computed by scanning src/renderer). The compat shim
-// is being removed in later remediation phases, so this number may only DECREASE —
-// never raise it. A higher count means new code took a fresh dependency on the shim.
+// Snapshot of the current tree (files importing a react-*-compat shim, computed by
+// scanning src/renderer). The compat shim is being removed in later remediation phases,
+// so this number may only DECREASE — never raise it. A higher count means new code took
+// a fresh dependency on the shim.
 const BASELINE = 65
 
 describe('react-compat shim usage', () => {
-  it('does not grow the number of files importing from a -compat shim', () => {
+  it('does not grow the number of files importing from a react-compat shim', () => {
     expect(countCompatImporters()).toBeLessThanOrEqual(BASELINE)
   })
 })
