@@ -81,14 +81,24 @@ jobs:
       - name: Enable pnpm
         run: corepack enable && corepack prepare pnpm@11.2.2 --activate
 
-      # No pnpm store cache here on purpose: a restored side-effects cache skips Electron's
-      # postinstall and leaves its binary unbuilt (dist missing), so electron.launch() fails.
-      # A clean install runs the postinstall and downloads the matching Electron binary.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify Electron binary
-        run: test -x node_modules/electron/dist/electron
+      # Electron's own postinstall (extract-zip) intermittently leaves dist incomplete in CI,
+      # so electron.launch() fails. Fetch and unzip the matching binary deterministically.
+      - name: Install Electron binary
+        run: |
+          set -e
+          electron_version=$(node -p "require('electron/package.json').version")
+          url="https://github.com/electron/electron/releases/download/v${electron_version}/electron-v${electron_version}-linux-x64.zip"
+          echo "Fetching Electron ${electron_version}"
+          curl -fsSL -o /tmp/electron.zip "$url"
+          rm -rf node_modules/electron/dist node_modules/electron/path.txt
+          mkdir -p node_modules/electron/dist
+          unzip -q -o /tmp/electron.zip -d node_modules/electron/dist
+          printf 'electron' > node_modules/electron/path.txt
+          chmod +x node_modules/electron/dist/electron
+          test -x node_modules/electron/dist/electron
 
       - name: Build
         run: pnpm build
