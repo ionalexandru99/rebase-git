@@ -68,7 +68,7 @@ jobs:
         run: pnpm test:main
 
   test-e2e:
-    name: Build
+    name: Build & integration
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -99,3 +99,12 @@ jobs:
           preload=$(ls out/preload/index.{js,mjs,cjs} 2>/dev/null | head -1)
           test -n "$preload" || { echo "Preload bundle not found"; exit 1; }
           grep -q "electronAPI" "$preload" || { echo "electronAPI missing from preload"; exit 1; }
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+      - name: Smoke test
+        run: pnpm test:smoke
