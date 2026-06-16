@@ -81,17 +81,14 @@ jobs:
       - name: Enable pnpm
         run: corepack enable && corepack prepare pnpm@11.2.2 --activate
 
-      - uses: actions/cache@v5
-        with:
-          path: ~/.local/share/pnpm/store
-          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-
-
+      # No pnpm store cache here on purpose: a restored side-effects cache skips Electron's
+      # postinstall and leaves its binary unbuilt (dist missing), so electron.launch() fails.
+      # A clean install runs the postinstall and downloads the matching Electron binary.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Electron binary
-        run: node node_modules/electron/install.js
+      - name: Verify Electron binary
+        run: test -x node_modules/electron/dist/electron
 
       - name: Build
         run: pnpm build
