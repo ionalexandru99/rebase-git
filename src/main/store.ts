@@ -1,36 +1,12 @@
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import Store from 'electron-store'
-
-interface StoreSchema {
-  recentRepos: string[]
-  theme: 'dark' | 'light'
-  workspaces: string[]
-  activeWorkspace: string | null
-  workingDirectory: string | null
-  onboardingComplete: boolean
-  sidebarOpen: boolean
-  sidebarWidth: number
-  sidebarRefTreeToggles: string[]
-  persistedTabRepoPaths: (string | null)[]
-  persistedActiveTabIndex: number
-}
-
-const SIDEBAR_WIDTH_DEFAULT = 244
+import type { StoreSchema } from './store-schema'
+import { storeDefaults, storeSchema } from './store-schema'
 
 export const store = new Store<StoreSchema>({
-  defaults: {
-    recentRepos: [],
-    theme: 'dark',
-    workspaces: [],
-    activeWorkspace: null,
-    workingDirectory: null,
-    onboardingComplete: false,
-    sidebarOpen: true,
-    sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
-    sidebarRefTreeToggles: [],
-    persistedTabRepoPaths: [null],
-    persistedActiveTabIndex: 0
-  }
+  defaults: storeDefaults,
+  schema: storeSchema,
+  clearInvalidConfig: true
 })
 
 function migrateLegacyWorkingDirectory(): void {
