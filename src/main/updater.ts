@@ -5,7 +5,7 @@ import electronUpdater from 'electron-updater'
 const { autoUpdater } = electronUpdater
 
 export function setupUpdater(): void {
-  if (!app.isPackaged) {
+  if (!app.isPackaged || process.env.REBASE_ENABLE_UPDATER !== '1') {
     return
   }
 
