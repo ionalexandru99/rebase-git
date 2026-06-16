@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, session } from 'electron'
 import windowStateKeeper from 'electron-window-state'
 
 import * as logStreamIpc from './ipc/log-stream'
@@ -52,6 +52,36 @@ function hardenNavigation(win: BrowserWindow): void {
     if (!isAllowedNavigation(targetUrl)) {
       event.preventDefault()
     }
+  })
+}
+
+function buildContentSecurityPolicy(): string {
+  const packaged =
+    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';"
+  if (app.isPackaged) {
+    return packaged
+  }
+  const devServer = process.env.ELECTRON_RENDERER_URL
+  const devOrigin = devServer ? new URL(devServer).origin : ''
+  return [
+    "default-src 'none'",
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${devOrigin}`.trim(),
+    `style-src 'self' 'unsafe-inline' ${devOrigin}`.trim(),
+    "img-src 'self' data:",
+    `font-src 'self' ${devOrigin}`.trim(),
+    `connect-src 'self' ws: wss: ${devOrigin}`.trim()
+  ].join('; ')
+}
+
+function applyContentSecurityPolicy(): void {
+  const policy = buildContentSecurityPolicy()
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [policy]
+      }
+    })
   })
 }
 
@@ -127,6 +157,7 @@ app.whenReady().then(async () => {
   }
   registerIpcHandlers()
   wireProcessRecovery()
+  applyContentSecurityPolicy()
   createWindow()
   setupUpdater()
   setupContextMenu()
