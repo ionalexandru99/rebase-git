@@ -90,6 +90,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+
       - name: Build
         run: pnpm build
 
@@ -104,7 +107,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: End-to-end tests
-        run: pnpm test:e2e
+        run: xvfb-run -a pnpm test:e2e
 
       - name: Smoke test
-        run: pnpm test:smoke
+        run: xvfb-run -a pnpm test:smoke
