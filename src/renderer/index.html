@@ -8,20 +8,7 @@
          applied identically in dev and would break HMR, so it is intentionally omitted. -->
 
     <title>Rebase</title>
-    <script>
-      // Keep colors in sync with src/main/theme.ts — runs before the bundle to avoid a flash.
-      ;(() => {
-        var theme = 'dark'
-        try {
-          if (localStorage.getItem('theme') === 'light') {
-            theme = 'light'
-          }
-        } catch {}
-        var root = document.documentElement
-        root.classList.toggle('dark', theme === 'dark')
-        root.style.backgroundColor = theme === 'light' ? '#ededed' : '#131313'
-      })()
-    </script>
+    <script src="./theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>
