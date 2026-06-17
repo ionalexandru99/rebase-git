@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { mutableArray } from '../codec'
+import { mutableArray, NonNaNNumber } from '../codec'
 import {
   CommitSummarySchema,
   FileDiffSchema,
@@ -149,7 +149,7 @@ export const ResetModeSchema = Schema.Literal('soft', 'mixed', 'hard')
 export type ResetMode = typeof ResetModeSchema.Type
 
 export const StashEntrySchema = Schema.Struct({
-  index: Schema.Number,
+  index: NonNaNNumber,
   ref: Schema.String,
   message: Schema.String,
   branch: Schema.String
@@ -165,7 +165,7 @@ export type StashListResponse = typeof StashListResponseSchema.Type
 
 export const SidebarPrefsSchema = Schema.Struct({
   open: Schema.Boolean,
-  width: Schema.Number
+  width: NonNaNNumber
 })
 export type SidebarPrefs = typeof SidebarPrefsSchema.Type
 
@@ -174,6 +174,6 @@ export type RefTreeToggles = typeof RefTreeTogglesSchema.Type
 
 export const PersistedTabsSchema = Schema.Struct({
   tabs: mutableArray(Schema.NullOr(Schema.String)),
-  activeIndex: Schema.Number
+  activeIndex: NonNaNNumber
 })
 export type PersistedTabs = typeof PersistedTabsSchema.Type

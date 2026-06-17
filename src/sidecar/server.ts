@@ -258,6 +258,11 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
       sendJson(res, 400, { error: 'bad request' })
       return
     }
+    // Unknown ops keep a plain 404 rather than a typed error: `op` is statically `SidecarOpName`
+    // end-to-end (the registry's AssertEqual + the exhaustive opHandlers map guarantee every op has
+    // an entry), and read ops are served by the RPC group, so this path is unreachable from the app
+    // and only fires for a foreign client or a bug. A bespoke error tag would bloat the response
+    // unions for a case the renderer cannot produce.
     if (result === undefined) {
       sendJson(res, 404, { error: `unknown op: ${match[1]}` })
       return

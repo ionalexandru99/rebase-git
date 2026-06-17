@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { mutableArray } from './codec'
+import { mutableArray, NonNaNNumber, RequiredString } from './codec'
 import {
   BranchesResponseSchema,
   CancelLogStreamResponseSchema,
@@ -26,9 +26,6 @@ import {
 } from './schemas/ipc'
 import { SidecarOp, type SidecarOpName } from './sidecar-ops'
 
-// Trims and rejects empty — mirrors the sidecar's legacy `requiredString` guard so the central
-// decode is faithful to the per-op `typeof`/trim checks it replaces.
-const RequiredString = Schema.Trim.pipe(Schema.minLength(1))
 const OptionalString = Schema.optional(Schema.String)
 const OptionalFlag = Schema.optional(Schema.Boolean)
 const FileList = mutableArray(Schema.String)
@@ -52,7 +49,7 @@ const FilesRequest = Schema.Struct({ repoPath: RequiredString, files: FileList }
 const CommitRequest = Schema.Struct({ repoPath: RequiredString, message: RequiredString })
 const GetLogRequest = Schema.Struct({
   repoPath: RequiredString,
-  maxCount: Schema.optional(Schema.Number)
+  maxCount: Schema.optional(NonNaNNumber)
 })
 const CheckoutRequest = Schema.Struct({
   repoPath: RequiredString,
@@ -95,7 +92,7 @@ const StashPushRequest = Schema.Struct({
   includeUntracked: OptionalFlag,
   files: Schema.optional(FileList)
 })
-const StashIndexRequest = Schema.Struct({ repoPath: RequiredString, index: Schema.Number })
+const StashIndexRequest = Schema.Struct({ repoPath: RequiredString, index: NonNaNNumber })
 const ScanRequest = Schema.Struct({ dirPath: RequiredString })
 
 export const sidecarRegistry = {

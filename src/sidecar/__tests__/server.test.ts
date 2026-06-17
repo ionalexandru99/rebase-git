@@ -217,9 +217,34 @@ describe('sidecar server', () => {
     expect(body.refs.tags).toEqual([])
   })
 
-  it('rejects an unknown op', async () => {
+  it('rejects an unknown op with a 404', async () => {
     const response = await call('nope', { repoPath })
     expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ error: 'unknown op: nope' })
+  })
+
+  it('rejects a malformed body via schema validation (wrong-typed numeric field)', async () => {
+    const response = await call('stash-apply', { repoPath, index: 'not-a-number' })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'bad request' })
+  })
+
+  it('rejects a malformed get-log body via schema validation (non-numeric maxCount)', async () => {
+    const response = await call('get-log', { repoPath, maxCount: 'lots' })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'bad request' })
+  })
+
+  it('rejects a malformed commit body via schema validation (non-string message)', async () => {
+    const response = await call('commit', { repoPath, message: 123 })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'bad request' })
+  })
+
+  it('rejects an unexpected-typed repoPath via schema validation', async () => {
+    const response = await call('get-status', { repoPath: 42 })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'bad request' })
   })
 
   it('streams log chunks over the sidecar stream endpoint', async () => {

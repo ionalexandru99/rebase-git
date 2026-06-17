@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { mutableArray } from '../codec'
+import { mutableArray, NonNaNNumber } from '../codec'
 
 export const RenamedFileSchema = Schema.Struct({
   from: Schema.String,
@@ -39,13 +39,13 @@ export type GitLogEntry = typeof GitLogEntrySchema.Type
 
 export const GitLogSchema = Schema.Struct({
   all: mutableArray(GitLogEntrySchema),
-  total: Schema.Number
+  total: NonNaNNumber
 })
 export type GitLog = typeof GitLogSchema.Type
 
 export const BranchTrackingSchema = Schema.Struct({
-  ahead: Schema.Number,
-  behind: Schema.Number
+  ahead: NonNaNNumber,
+  behind: NonNaNNumber
 })
 export type BranchTracking = typeof BranchTrackingSchema.Type
 
@@ -83,17 +83,17 @@ export type RepoOpenSuccess = typeof RepoOpenSuccessSchema.Type
 export const DiffLineSchema = Schema.Struct({
   kind: Schema.Literal('context', 'add', 'del', 'meta'),
   text: Schema.String,
-  oldLine: Schema.NullOr(Schema.Number),
-  newLine: Schema.NullOr(Schema.Number)
+  oldLine: Schema.NullOr(NonNaNNumber),
+  newLine: Schema.NullOr(NonNaNNumber)
 })
 export type DiffLine = typeof DiffLineSchema.Type
 
 export const DiffHunkSchema = Schema.Struct({
   header: Schema.String,
-  oldStart: Schema.Number,
-  oldCount: Schema.Number,
-  newStart: Schema.Number,
-  newCount: Schema.Number,
+  oldStart: NonNaNNumber,
+  oldCount: NonNaNNumber,
+  newStart: NonNaNNumber,
+  newCount: NonNaNNumber,
   lines: mutableArray(DiffLineSchema)
 })
 export type DiffHunk = typeof DiffHunkSchema.Type
@@ -109,9 +109,9 @@ export const CommitSummarySchema = Schema.Struct({
   commit: Schema.String,
   branch: Schema.String,
   summary: Schema.Struct({
-    changes: Schema.Number,
-    insertions: Schema.Number,
-    deletions: Schema.Number
+    changes: NonNaNNumber,
+    insertions: NonNaNNumber,
+    deletions: NonNaNNumber
   })
 })
 export type CommitSummary = typeof CommitSummarySchema.Type

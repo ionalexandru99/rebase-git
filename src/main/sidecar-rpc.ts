@@ -47,8 +47,52 @@ export function isRpcReadOp(op: string): op is RpcReadOp {
   return op in rpcReadOps
 }
 
-// Routes a read op through the sidecar's @effect/rpc group: the typed RPC error channel is mapped
-// back onto the `_tag` response union the renderer's registry schemas already validate.
+// Thrown for anything that is NOT a typed domain failure (transport error, RPC decode failure,
+// schema/contract drift, defect, interrupt). It rejects the IPC call so the renderer surfaces an
+// error rather than parsing it as a normal Git result, and carries no cause detail (which could
+// embed the bearer token) across the process boundary.
+export class SidecarRpcError extends Error {
+  override readonly name = 'SidecarRpcError'
+  constructor(op: string) {
+    super(`sidecar RPC '${op}' failed`)
+  }
+}
+
+const isTaggedError = (value: unknown, tag: string): boolean =>
+  typeof value === 'object' && value !== null && (value as { _tag?: unknown })._tag === tag
+
+const scrubToken = (text: string, token: string): string =>
+  token ? text.split(token).join('***') : text
+
+// Maps an RPC Exit back onto the legacy `_tag` response union — but ONLY for the typed domain
+// errors (`RepoNotOpen`, `GitError`) that the renderer's registry schemas validate. Every other
+// cause throws `SidecarRpcError`: collapsing them into `{ _tag: 'GitError' }` would let the
+// renderer treat infrastructure/contract failures as ordinary Git errors.
+export function classifyReadExit(
+  op: string,
+  exit: Exit.Exit<unknown, unknown>,
+  token: string
+): ReadResponse {
+  if (Exit.isSuccess(exit)) {
+    return { _tag: 'Ok', ...(exit.value as Record<string, unknown>) }
+  }
+  const failure = Cause.failureOption(exit.cause)
+  if (Option.isSome(failure)) {
+    const error = failure.value
+    if (isTaggedError(error, 'RepoNotOpen')) {
+      return { _tag: 'RepoNotOpen' }
+    }
+    const message = (error as { message?: unknown }).message
+    if (isTaggedError(error, 'GitError') && typeof message === 'string') {
+      return { _tag: 'GitError', message: scrubToken(message, token) }
+    }
+  }
+  console.error(`[sidecar-rpc] ${op} failed`, scrubToken(Cause.pretty(exit.cause), token))
+  throw new SidecarRpcError(op)
+}
+
+// Routes a read op through the sidecar's @effect/rpc group; see classifyReadExit for how the typed
+// RPC error channel maps back onto the renderer's `_tag` response union.
 export async function callRpcRead(
   op: RpcReadOp,
   baseUrl: string,
@@ -68,16 +112,5 @@ export async function callRpcRead(
       })
     )
   )
-  if (Exit.isSuccess(exit)) {
-    return { _tag: 'Ok', ...(exit.value as Record<string, unknown>) }
-  }
-  const failure = Cause.failureOption(exit.cause)
-  if (Option.isSome(failure)) {
-    const error = failure.value as { _tag?: string; message?: string }
-    if (error._tag === 'RepoNotOpen') {
-      return { _tag: 'RepoNotOpen' }
-    }
-    return { _tag: 'GitError', message: error.message ?? `git ${op} failed` }
-  }
-  return { _tag: 'GitError', message: Cause.pretty(exit.cause) }
+  return classifyReadExit(op, exit, token)
 }

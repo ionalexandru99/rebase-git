@@ -1,5 +1,6 @@
 import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
+import { NonNaNNumber, RequiredString } from './codec'
 import {
   FileDiffSchema,
   GitBranchesSchema,
@@ -20,39 +21,39 @@ export class GitError extends Schema.TaggedError<GitError>()('GitError', {
 const ReadError = Schema.Union(RepoNotOpen, GitError)
 
 export const GetStatus = Rpc.make('getStatus', {
-  payload: { repoPath: Schema.String },
+  payload: { repoPath: RequiredString },
   success: Schema.Struct({ status: GitStatusSchema }),
   error: ReadError
 })
 
 export const GetBranches = Rpc.make('getBranches', {
-  payload: { repoPath: Schema.String },
+  payload: { repoPath: RequiredString },
   success: Schema.Struct({ branches: GitBranchesSchema }),
   error: ReadError
 })
 
 export const GetLocalBranches = Rpc.make('getLocalBranches', {
-  payload: { repoPath: Schema.String },
+  payload: { repoPath: RequiredString },
   success: Schema.Struct({ branches: LocalBranchesSchema }),
   error: ReadError
 })
 
 export const GetRemoteRefs = Rpc.make('getRemoteRefs', {
-  payload: { repoPath: Schema.String },
+  payload: { repoPath: RequiredString },
   success: Schema.Struct({ refs: RemoteRefsSchema }),
   error: ReadError
 })
 
 export const GetLog = Rpc.make('getLog', {
-  payload: { repoPath: Schema.String, maxCount: Schema.optional(Schema.Number) },
+  payload: { repoPath: RequiredString, maxCount: Schema.optional(NonNaNNumber) },
   success: Schema.Struct({ log: GitLogSchema }),
   error: ReadError
 })
 
 export const GetDiff = Rpc.make('getDiff', {
   payload: {
-    repoPath: Schema.String,
-    file: Schema.String,
+    repoPath: RequiredString,
+    file: RequiredString,
     staged: Schema.optional(Schema.Boolean)
   },
   success: Schema.Struct({ diff: FileDiffSchema }),
@@ -60,7 +61,7 @@ export const GetDiff = Rpc.make('getDiff', {
 })
 
 export const StashList = Rpc.make('stashList', {
-  payload: { repoPath: Schema.String },
+  payload: { repoPath: RequiredString },
   success: Schema.Struct({ stashes: Schema.Array(StashEntrySchema) }),
   error: ReadError
 })

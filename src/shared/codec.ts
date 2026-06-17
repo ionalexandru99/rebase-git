@@ -14,3 +14,11 @@ export const formatParseError = (error: ParseResult.ParseError): string =>
 
 /** A mutable array schema, matching the `T[]` (not `readonly T[]`) shape callers expect. */
 export const mutableArray = <A, I>(item: Schema.Schema<A, I>) => Schema.mutable(Schema.Array(item))
+
+// `Schema.Number` accepts NaN; the Zod contracts this migration replaced rejected it. Use this for
+// persisted/wire numeric fields so a NaN can never round-trip into the store or the renderer.
+export const NonNaNNumber = Schema.NonNaN
+
+// Trims and rejects empty — the canonical non-empty request string shared by the sidecar HTTP
+// registry and the @effect/rpc payload schemas, so both validate request fields identically.
+export const RequiredString = Schema.Trim.pipe(Schema.minLength(1))
