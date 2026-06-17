@@ -1,12 +1,11 @@
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { arch, platform, tmpdir } from 'node:os'
+import { platform } from 'node:os'
 import { dirname, join } from 'node:path'
 
 const require = createRequire(import.meta.url)
 const hostPlatform = platform()
-const hostArch = arch()
 
 function getPlatformPath() {
   switch (hostPlatform) {
@@ -21,18 +20,6 @@ function getPlatformPath() {
     default:
       throw new Error(`Electron builds are not available on platform: ${hostPlatform}`)
   }
-}
-
-function runChecked(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    encoding: 'utf8',
-    stdio: 'inherit',
-    ...options
-  })
-  if (result.status === 0) {
-    return
-  }
-  throw new Error(`${command} ${args.join(' ')} failed with exit code ${result.status ?? 'unknown'}`)
 }
 
 function ensureExecutable(filePath) {
@@ -68,62 +55,14 @@ function runElectronInstaller(electronDir) {
   return result.status === 0
 }
 
-function extractZip(zipPath, destination) {
-  if (hostPlatform === 'darwin') {
-    runChecked('ditto', ['-x', '-k', zipPath, destination])
-    return
-  }
-  if (hostPlatform === 'win32') {
-    runChecked('powershell', [
-      '-NoProfile',
-      '-Command',
-      `Expand-Archive -LiteralPath ${JSON.stringify(zipPath)} -DestinationPath ${JSON.stringify(
-        destination
-      )} -Force`
-    ])
-    return
-  }
-  runChecked('python3', [
-    '-c',
-    'import os, sys, zipfile; os.makedirs(sys.argv[2], exist_ok=True); zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])',
-    zipPath,
-    destination
-  ])
-}
-
-function downloadElectronRuntime(electronDir, version) {
-  const tempDir = mkdtempSync(join(tmpdir(), 'rebase-electron-'))
-  const zipName = `electron-v${version}-${hostPlatform}-${hostArch}.zip`
-  const zipPath = join(tempDir, zipName)
-
-  try {
-    runChecked('curl', [
-      '-fsSL',
-      `https://github.com/electron/electron/releases/download/v${version}/${zipName}`,
-      '-o',
-      zipPath
-    ])
-    rmSync(join(electronDir, 'dist'), { recursive: true, force: true })
-    rmSync(join(electronDir, 'path.txt'), { force: true })
-    extractZip(zipPath, join(electronDir, 'dist'))
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true })
-  }
-}
-
 export function ensureElectronRuntime() {
   const electronPackageJsonPath = require.resolve('electron/package.json')
-  const electronPackageJson = JSON.parse(readFileSync(electronPackageJsonPath, 'utf8'))
   const electronDir = dirname(electronPackageJsonPath)
   const platformPath = getPlatformPath()
   const electronPath = join(electronDir, 'dist', platformPath)
 
   if (missingRuntimePaths(electronDir, platformPath).length > 0) {
     runElectronInstaller(electronDir)
-  }
-
-  if (missingRuntimePaths(electronDir, platformPath).length > 0) {
-    downloadElectronRuntime(electronDir, electronPackageJson.version)
   }
 
   const missingAfterInstall = missingRuntimePaths(electronDir, platformPath)
