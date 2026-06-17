@@ -34,7 +34,8 @@ async function runSmokeTest() {
   console.log(`Binary: ${electronBin}`)
   console.log(`Main: ${mainJs}`)
 
-  const args = electronBin === 'npx' ? ['electron', mainJs] : [mainJs]
+  const electronArgs = [mainJs, '--no-sandbox']
+  const args = electronBin === 'npx' ? ['electron', ...electronArgs] : electronArgs
 
   const child = spawn(electronBin, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
