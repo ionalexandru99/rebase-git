@@ -22,7 +22,6 @@ import { sidecarRegistry } from '@shared/sidecar-registry'
 import { cleanup } from '@testing-library/react'
 import type { Schema } from 'effect'
 import { afterEach, beforeEach, vi } from 'vitest'
-import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 
 const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown | Promise<unknown>>()
 
@@ -310,7 +309,6 @@ export function mockBranchResponses(
 beforeEach(() => {
   vi.resetAllMocks()
   opHandlers.clear()
-  clearAllSnapshots()
   vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
   vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({

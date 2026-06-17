@@ -4,38 +4,32 @@ import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import { OpenRepoResponseSchema, StartLogStreamResponseSchema } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { toast } from 'sonner'
 import { stashKey } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { type Accessor, createSignal } from '@/lib/react-compat'
 import { createStore } from '@/lib/react-store-compat'
-import { readSnapshot, writeSnapshot } from '@/lib/repo-snapshot-cache'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 const LOG_FLUSH_MS = 100
 
-const mergeBranches = (existing: GitBranches | null, patch: Partial<GitBranches>): GitBranches => {
-  const next = {
-    current: patch.current ?? existing?.current ?? '',
-    all: patch.all ?? existing?.all ?? [],
-    remotes: patch.remotes ?? existing?.remotes ?? [],
-    tags: patch.tags ?? existing?.tags ?? [],
-    tracking: patch.tracking ?? existing?.tracking
+const combineBranches = (
+  local: LocalBranches | undefined,
+  remote: RemoteRefs | undefined
+): GitBranches | null => {
+  if (!local && !remote) {
+    return null
   }
-  if (
-    existing &&
-    existing.current === next.current &&
-    existing.all === next.all &&
-    existing.remotes === next.remotes &&
-    existing.tags === next.tags &&
-    existing.tracking === next.tracking
-  ) {
-    return existing
+  return {
+    current: local?.current ?? '',
+    all: local?.all ?? [],
+    remotes: remote?.remotes ?? [],
+    tags: remote?.tags ?? [],
+    tracking: local?.tracking
   }
-  return next
 }
 
 export interface GitState {
@@ -64,25 +58,50 @@ interface HunkStageOptions {
   fullyUnstagesFile?: boolean
 }
 
-const initialState: GitState = {
+// Server state lives only in the TanStack Query cache. This store holds the imperative UI flags
+// (open/commit/push/pull progress, the push-based log-stream flags, the last error) that have no
+// natural query of their own.
+interface GitUiState {
+  repoPath: string | null
+  remotes: Record<string, string>
+  defaultBranch: string | undefined
+  opening: boolean
+  committing: boolean
+  pushing: boolean
+  pulling: boolean
+  logLoading: boolean
+  logLoadingMore: boolean
+  logHasMore: boolean
+  lastFetchedAt: number | null
+  error: string | null
+}
+
+const initialUiState: GitUiState = {
   repoPath: null,
-  status: null,
-  log: null,
-  branches: null,
   remotes: {},
   defaultBranch: undefined,
-  currentBranch: '',
   opening: false,
   committing: false,
   pushing: false,
   pulling: false,
-  statusLoading: false,
-  branchesLoading: false,
   logLoading: false,
   logLoadingMore: false,
   logHasMore: false,
   lastFetchedAt: null,
   error: null
+}
+
+type StatusMutationResult =
+  | { _tag: 'Ok' }
+  | { _tag: 'RepoNotOpen' }
+  | { _tag: 'GitError'; message: string }
+  | { _tag: 'HunkNotFound' }
+
+interface StatusMutationContext {
+  path: string
+  key: readonly unknown[]
+  previous: GitStatus | undefined
+  hadOptimistic: boolean
 }
 
 const formatCause = (error: unknown): string => {
@@ -212,40 +231,128 @@ const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
 
 export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const queryClient = useQueryClient()
-  const [state, setState] = createStore<GitState>({ ...initialState })
-  const [fetchTick, setFetchTick] = createSignal(0)
+  const [ui, setUi] = createStore<GitUiState>({ ...initialUiState })
 
-  // `createStore` now hands back a fresh state identity per update, so async closures (query fns,
-  // the IPC subscription, unmount cleanup) that need the live store must read it through this ref,
-  // refreshed every render, rather than the snapshot captured when they were created.
-  const liveState = useRef(state)
-  liveState.current = state
+  const path = ui.repoPath
+  const repoKeys = path ? repoQueryKeys(path) : null
+  const idleKey = (kind: string) => ['repo', 'idle', tabId, kind] as const
+
+  // Long-lived async closures (IPC subscription, unmount cleanup, query/mutation callbacks) must
+  // read the live repo, not the render-zero value, so they go through this ref refreshed each
+  // render.
+  const liveRepoPath = useRef(path)
+  liveRepoPath.current = path
+
+  const [fetchTick, setFetchTick] = createSignal(0)
 
   const logBuffer = useRef<GitLogEntry[]>([])
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const openGeneration = useRef(0)
-  const statusRequestSeq = useRef(0)
   const logStreamSeq = useRef(0)
+
+  const statusQuery = useQuery({
+    queryKey: repoKeys?.status ?? idleKey('status'),
+    enabled: Boolean(path),
+    queryFn: async () => {
+      const current = liveRepoPath.current
+      if (!current) {
+        throw new Error('Repository path missing')
+      }
+      const response = await sidecarFetch('get-status', { repoPath: current })
+      if (response._tag === 'GitError') {
+        throw new Error(response.message)
+      }
+      if (response._tag !== 'Ok') {
+        throw new Error('Repository not open')
+      }
+      return response.status
+    }
+  })
+
+  const localBranchesQuery = useQuery({
+    queryKey: repoKeys?.localBranches ?? idleKey('local-branches'),
+    enabled: Boolean(path),
+    queryFn: async () => {
+      const current = liveRepoPath.current
+      if (!current) {
+        throw new Error('Repository path missing')
+      }
+      return fetchLocalBranches(current)
+    }
+  })
+
+  const remoteRefsQuery = useQuery({
+    queryKey: repoKeys?.remoteRefs ?? idleKey('remote-refs'),
+    enabled: Boolean(path) && Boolean(localBranchesQuery.data),
+    queryFn: async () => {
+      const current = liveRepoPath.current
+      if (!current) {
+        throw new Error('Repository path missing')
+      }
+      return fetchRemoteRefs(current)
+    }
+  })
+
+  // The log is push-based: chunks arrive over IPC and are written into the Query cache via
+  // setQueryData. This disabled query subscribes the component to those cache writes — it never
+  // fetches on its own.
+  const logQuery = useQuery({
+    queryKey: repoKeys?.log ?? idleKey('log'),
+    enabled: false,
+    queryFn: () => Promise.resolve<GitLog | null>(null)
+  })
+
+  const status = statusQuery.data ?? null
+  const branches = useMemo(
+    () => combineBranches(localBranchesQuery.data, remoteRefsQuery.data),
+    [localBranchesQuery.data, remoteRefsQuery.data]
+  )
+  const log = logQuery.data ?? null
+  const currentBranch = status?.current ?? localBranchesQuery.data?.current ?? ''
+
+  const state: GitState = {
+    repoPath: ui.repoPath,
+    status,
+    log,
+    branches,
+    remotes: ui.remotes,
+    defaultBranch: ui.defaultBranch,
+    currentBranch,
+    opening: ui.opening,
+    committing: ui.committing,
+    pushing: ui.pushing,
+    pulling: ui.pulling,
+    statusLoading: statusQuery.isFetching && !statusQuery.data,
+    branchesLoading: localBranchesQuery.isFetching && !localBranchesQuery.data,
+    logLoading: ui.logLoading,
+    logLoadingMore: ui.logLoadingMore,
+    logHasMore: ui.logHasMore,
+    lastFetchedAt: ui.lastFetchedAt,
+    error: ui.error
+  }
+
+  useEffect(() => {
+    const error = statusQuery.error ?? localBranchesQuery.error ?? remoteRefsQuery.error
+    if (error) {
+      setUi('error', formatCause(error))
+    }
+  }, [statusQuery.error, localBranchesQuery.error, remoteRefsQuery.error])
 
   const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
     logFlushTimer.current = null
-    if (expectedGen !== openGeneration.current || expectedPath !== state.repoPath) {
+    if (expectedGen !== openGeneration.current || expectedPath !== liveRepoPath.current) {
       return
     }
+    if (!expectedPath) {
+      return
+    }
+    const logKey = repoQueryKeys(expectedPath).log
+    const previous = queryClient.getQueryData<GitLog>(logKey)
     const nextLength = logBuffer.current.length
-    const previous = state.log?.all ?? []
-    if (nextLength === previous.length && state.log?.total === nextLength) {
+    if (nextLength === (previous?.all.length ?? 0) && previous?.total === nextLength) {
       return
     }
-
-    const nextLog = { all: [...logBuffer.current], total: nextLength }
-    setState('log', nextLog)
-
-    const path = state.repoPath
-    if (path) {
-      queryClient.setQueryData(repoQueryKeys(tabId, path).log, nextLog)
-      writeSnapshot(path, { log: nextLog })
-    }
+    queryClient.setQueryData<GitLog>(logKey, { all: [...logBuffer.current], total: nextLength })
   }
 
   const scheduleLogFlush = () => {
@@ -253,7 +360,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       return
     }
     const expectedGen = openGeneration.current
-    const expectedPath = state.repoPath
+    const expectedPath = liveRepoPath.current
     logFlushTimer.current = setTimeout(() => {
       if (!tabActive()) {
         logFlushTimer.current = null
@@ -272,209 +379,61 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       clearTimeout(logFlushTimer.current)
       logFlushTimer.current = null
     }
-    setState({ ...initialState })
+    setUi({ ...initialUiState })
   }
 
-  const repoPath = () => state.repoPath
-  const keys = () => {
-    const path = repoPath()
-    return path ? repoQueryKeys(tabId, path) : null
-  }
-
-  const statusQuery = useQuery({
-    queryKey: keys()?.status ?? ['tab', tabId, 'idle', 'status'],
-    enabled: Boolean(repoPath()),
-    queryFn: async () => {
-      const path = repoPath()
-      if (!path) {
-        throw new Error('Repository path missing')
-      }
-      const { status, stale } = await fetchStatusOrdered(path)
-      if (stale) {
-        return liveState.current.status ?? status
-      }
-      return status
-    }
-  })
-
-  const localBranchesQuery = useQuery({
-    queryKey: keys()?.localBranches ?? ['tab', tabId, 'idle', 'local-branches'],
-    enabled: Boolean(repoPath()),
-    queryFn: async () => {
-      const path = repoPath()
-      if (!path) {
-        throw new Error('Repository path missing')
-      }
-      return fetchLocalBranches(path)
-    }
-  })
-
-  const remoteRefsQuery = useQuery({
-    queryKey: keys()?.remoteRefs ?? ['tab', tabId, 'idle', 'remote-refs'],
-    enabled: Boolean(repoPath()) && Boolean(localBranchesQuery.data),
-    queryFn: async () => {
-      const path = repoPath()
-      if (!path) {
-        throw new Error('Repository path missing')
-      }
-      return fetchRemoteRefs(path)
-    }
-  })
-
-  useEffect(() => {
-    const data = statusQuery.data
-    if (data) {
-      setState('status', data)
-      setState('currentBranch', data.current)
-      const path = repoPath()
-      if (path) {
-        writeSnapshot(path, { status: data, currentBranch: data.current })
-      }
-    }
-    setState('statusLoading', statusQuery.isFetching && !statusQuery.data)
-  }, [statusQuery.data, statusQuery.isFetching, state.repoPath])
-
-  useEffect(() => {
-    const error = statusQuery.error
-    if (error) {
-      setState('error', formatCause(error))
-    }
-  }, [statusQuery.error])
-
-  useEffect(() => {
-    const data = localBranchesQuery.data
-    if (data) {
-      setState('branches', (previous: GitBranches | null) => mergeBranches(previous, data))
-      if (data.current) {
-        setState('currentBranch', data.current)
-      }
-      const path = repoPath()
-      if (path) {
-        writeSnapshot(path, {
-          branches: mergeBranches(readSnapshot(path)?.branches ?? null, data)
-        })
-      }
-    }
-    setState('branchesLoading', localBranchesQuery.isFetching && !localBranchesQuery.data)
-  }, [localBranchesQuery.data, localBranchesQuery.isFetching, state.repoPath])
-
-  useEffect(() => {
-    const error = localBranchesQuery.error
-    if (error) {
-      setState('error', formatCause(error))
-    }
-  }, [localBranchesQuery.error])
-
-  useEffect(() => {
-    const data = remoteRefsQuery.data
-    if (data) {
-      setState('branches', (previous: GitBranches | null) => mergeBranches(previous, data))
-      const path = repoPath()
-      if (path) {
-        writeSnapshot(path, {
-          branches: mergeBranches(readSnapshot(path)?.branches ?? null, data)
-        })
-      }
-    }
-  }, [remoteRefsQuery.data, state.repoPath])
-
-  useEffect(() => {
-    const error = remoteRefsQuery.error
-    if (error) {
-      setState('error', formatCause(error))
-    }
-  }, [remoteRefsQuery.error])
-
-  useEffect(() => {
-    if (tabActive() && logBuffer.current.length > 0) {
-      scheduleLogFlush()
-    }
-  })
-
-  const invalidateRepoQueries = (path: string) => {
-    const queryKeys = repoQueryKeys(tabId, path)
+  const invalidateRepoQueries = (repoPath: string) => {
+    const queryKeys = repoQueryKeys(repoPath)
     void queryClient.invalidateQueries({ queryKey: queryKeys.status })
     void queryClient.invalidateQueries({ queryKey: queryKeys.localBranches })
     void queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
   }
 
-  const applyLocalBranches = (path: string, local: LocalBranches) => {
-    setState('branches', (previous: GitBranches | null) => mergeBranches(previous, local))
-    if (local.current) {
-      setState('currentBranch', local.current)
-    }
-    const branches = mergeBranches(readSnapshot(path)?.branches ?? null, local)
-    queryClient.setQueryData(repoQueryKeys(tabId, path).localBranches, local)
-    writeSnapshot(path, { branches })
+  const invalidateDiffs = (repoPath: string) =>
+    queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).diffRoot })
+
+  const invalidateStashes = (repoPath: string) =>
+    queryClient.invalidateQueries({ queryKey: stashKey(repoPath) })
+
+  const refreshStatus = (repoPath: string) =>
+    queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).status })
+
+  const refreshBranchesOnly = async (repoPath: string): Promise<void> => {
+    const queryKeys = repoQueryKeys(repoPath)
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.localBranches }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
+    ])
   }
 
-  const refreshLocalBranches = async (path: string) => {
-    const local = await fetchLocalBranches(path)
-    applyLocalBranches(path, local)
-  }
-
-  const refreshBranchesOnly = async (path: string) => {
-    await refreshLocalBranches(path)
-    const queryKeys = repoQueryKeys(tabId, path)
-    void queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
-  }
-
-  const refreshAfterCheckout = async (path: string) => {
-    const queryKeys = repoQueryKeys(tabId, path)
+  const refreshAfterCheckout = async (repoPath: string) => {
+    const queryKeys = repoQueryKeys(repoPath)
     await Promise.all([
       queryClient.cancelQueries({ queryKey: queryKeys.status }),
       queryClient.cancelQueries({ queryKey: queryKeys.localBranches })
     ])
-    await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
+    await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
   }
 
   // Operations that move HEAD or rewrite history (merge, reset, revert, cherry-pick, create+
   // checkout) change which commits are reachable, so the log stream must be restarted on top of the
   // status/branch refresh.
-  const refreshAfterMutation = async (path: string) => {
-    await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
-    void invalidateDiffs(path)
-    await restartLogStream(path)
+  const refreshAfterMutation = async (repoPath: string) => {
+    await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
+    void invalidateDiffs(repoPath)
+    await restartLogStream(repoPath)
   }
 
   // Working-tree-only operations (discard, stash apply/pop/push) change file state but not the
   // commit graph, so the log stream is left alone.
-  const refreshWorkingTree = async (path: string) => {
-    await refreshStatus(path)
-    void invalidateDiffs(path)
-    void invalidateStashes(path)
-  }
-
-  // Status responses can resolve out of order (mutation refresh vs watcher refresh vs query
-  // refetch); a snapshot requested before a stage/apply finished must never overwrite a newer
-  // one, so a result is marked stale when a later request started while it was in flight.
-  const fetchStatusOrdered = async (
-    path: string
-  ): Promise<{ status: GitStatus; stale: boolean }> => {
-    const seq = ++statusRequestSeq.current
-    const response = await sidecarFetch('get-status', { repoPath: path })
-    if (response._tag === 'GitError') {
-      throw new Error(response.message)
-    }
-    if (response._tag !== 'Ok') {
-      throw new Error('Repository not open')
-    }
-    return { status: response.status, stale: seq !== statusRequestSeq.current }
-  }
-
-  const refreshStatus = async (path: string) => {
-    const { status, stale } = await fetchStatusOrdered(path)
-    if (stale || state.repoPath !== path) {
-      return
-    }
-    setState('status', status)
-    setState('currentBranch', status.current)
-    queryClient.setQueryData(repoQueryKeys(tabId, path).status, status)
-    writeSnapshot(path, { status, currentBranch: status.current })
+  const refreshWorkingTree = async (repoPath: string) => {
+    await refreshStatus(repoPath)
+    void invalidateDiffs(repoPath)
+    void invalidateStashes(repoPath)
   }
 
   const restartLogStream = async (
-    path: string,
+    repoPath: string,
     options?: { clearLog?: boolean; skip?: number; maxCount?: number }
   ) => {
     const skip = options?.skip ?? 0
@@ -489,101 +448,90 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     if (!append) {
       logBuffer.current = []
       if (clearLog) {
-        setState('log', { all: [], total: 0 })
-        setState('logHasMore', false)
+        queryClient.setQueryData<GitLog>(repoQueryKeys(repoPath).log, { all: [], total: 0 })
+        setUi('logHasMore', false)
       }
-      setState('logLoading', true)
+      setUi('logLoading', true)
     } else {
-      setState('logLoadingMore', true)
+      setUi('logLoadingMore', true)
     }
 
     try {
-      await window.electronAPI.cancelLogStream(path).catch(() => {})
+      await window.electronAPI.cancelLogStream(repoPath).catch(() => {})
       const response = parseOrThrow(
         StartLogStreamResponseSchema,
-        await window.electronAPI.startLogStream(path, { skip, maxCount, streamId })
+        await window.electronAPI.startLogStream(repoPath, { skip, maxCount, streamId })
       )
       if (response._tag === 'GitError') {
-        setState('error', response.message)
-        if (append) {
-          setState('logLoadingMore', false)
-        } else {
-          setState('logLoading', false)
-        }
+        setUi('error', response.message)
+        setUi(append ? 'logLoadingMore' : 'logLoading', false)
       }
     } catch (error) {
-      setState('error', formatCause(error))
-      if (append) {
-        setState('logLoadingMore', false)
-      } else {
-        setState('logLoading', false)
-      }
+      setUi('error', formatCause(error))
+      setUi(append ? 'logLoadingMore' : 'logLoading', false)
     }
   }
 
   const loadMoreHistory = async () => {
-    const path = state.repoPath
-    if (!path || !state.logHasMore || state.logLoadingMore || state.logLoading) {
+    const repoPath = liveRepoPath.current
+    if (!repoPath || !ui.logHasMore || ui.logLoadingMore || ui.logLoading) {
       return
     }
-    // The store length is the last throttled flush; the buffer may already hold more commits still
+    // The cache holds the last throttled flush; the buffer may already hold more commits still
     // draining in. Skipping by the smaller of the two would re-request buffered commits or gap.
-    const skip = Math.max(logBuffer.current.length, state.log?.all.length ?? 0)
-    await restartLogStream(path, {
-      skip,
-      maxCount: LOG_PAGE_SIZE,
-      clearLog: false
-    })
+    const cached = queryClient.getQueryData<GitLog>(repoQueryKeys(repoPath).log)
+    const skip = Math.max(logBuffer.current.length, cached?.all.length ?? 0)
+    await restartLogStream(repoPath, { skip, maxCount: LOG_PAGE_SIZE, clearLog: false })
   }
 
-  const runFetchAndRefresh = async (path: string) => {
-    const response = await sidecarFetch('fetch-repo', { repoPath: path })
+  const runFetchAndRefresh = async (repoPath: string) => {
+    const response = await sidecarFetch('fetch-repo', { repoPath })
     if (response._tag === 'Ok') {
-      setState('lastFetchedAt', Date.now())
+      setUi('lastFetchedAt', Date.now())
       if (tabActive()) {
-        await refreshBranchesOnly(path)
+        await refreshBranchesOnly(repoPath)
       }
     } else if (response._tag === 'GitError') {
-      setState('error', response.message)
+      setUi('error', response.message)
     }
   }
 
   const runIfCurrent = (
     generation: number,
-    path: string,
+    repoPath: string,
     label: string,
     task: () => Promise<void>
   ) => {
     void task().catch((error: unknown) => {
-      if (generation !== openGeneration.current || state.repoPath !== path) {
+      if (generation !== openGeneration.current || liveRepoPath.current !== repoPath) {
         return
       }
-      console.error(`[git] ${label} failed for ${path}:`, formatCause(error))
-      setState('error', formatCause(error))
+      console.error(`[git] ${label} failed for ${repoPath}:`, formatCause(error))
+      setUi('error', formatCause(error))
     })
   }
 
   const startRepoRefresh = (
-    path: string,
+    repoPath: string,
     generation: number,
     options?: { clearLogOnStream?: boolean }
   ) => {
-    runIfCurrent(generation, path, 'restartLogStream', async () => {
-      await restartLogStream(path, {
+    runIfCurrent(generation, repoPath, 'restartLogStream', async () => {
+      await restartLogStream(repoPath, {
         clearLog: options?.clearLogOnStream ?? true
       })
     })
   }
 
-  const openRepo = async (path: string): Promise<string | null> => {
+  const openRepo = async (requestedPath: string): Promise<string | null> => {
     const generation = ++openGeneration.current
-    setState('opening', true)
-    setState('error', null)
+    setUi('opening', true)
+    setUi('error', null)
 
     try {
       const openResponse = parseOrThrow(
         OpenRepoResponseSchema,
-        await window.electronAPI.openRepo(path)
+        await window.electronAPI.openRepo(requestedPath)
       )
       if (generation !== openGeneration.current) {
         return null
@@ -592,262 +540,214 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       if (openResponse._tag !== 'Ok') {
         const errorMessage =
           openResponse._tag === 'NotARepo' ? 'Not a git repository' : openResponse.message
-        setState('error', errorMessage)
-        setState('opening', false)
+        setUi('error', errorMessage)
+        setUi('opening', false)
         return null
       }
 
       const opened = openResponse.result
-      writeSnapshot(opened.path, {
-        remotes: opened.remotes,
-        defaultBranch: opened.defaultBranch
-      })
-      const cached = readSnapshot(opened.path)
+      // status / branches / log paint instantly from the warm Query cache (keyed by repoPath); the
+      // invalidate + log-stream restart below replace them with fresh data.
+      const cachedLog = queryClient.getQueryData<GitLog>(repoQueryKeys(opened.path).log)
 
-      setState({
+      setUi({
         repoPath: opened.path,
         remotes: opened.remotes,
         defaultBranch: opened.defaultBranch,
-        currentBranch: cached?.status?.current ?? cached?.currentBranch ?? '',
-        status: cached?.status ?? null,
-        branches: cached?.branches ?? null,
-        log: cached?.log ?? null,
         opening: false,
-        statusLoading: !cached?.status,
-        branchesLoading: !cached?.branches?.all?.length,
-        logLoading: false
+        logLoading: false,
+        logLoadingMore: false,
+        logHasMore: false
       })
 
-      if (cached?.log?.all) {
-        logBuffer.current = [...cached.log.all]
-      }
+      logBuffer.current = cachedLog?.all ? [...cachedLog.all] : []
 
       // Mark before the render that subscribes the per-path queries: cached entries refetch
       // exactly once on mount, fresh entries fetch once — no imperative duplicate.
       invalidateRepoQueries(opened.path)
       startRepoRefresh(opened.path, generation, {
-        clearLogOnStream: !cached?.log
+        clearLogOnStream: !cachedLog
       })
       return opened.path
     } catch (error) {
       if (generation !== openGeneration.current) {
         return null
       }
-      setState('error', formatCause(error))
-      setState('opening', false)
-      setState({
-        statusLoading: false,
-        branchesLoading: false,
-        logLoading: false
-      })
+      setUi('error', formatCause(error))
+      setUi('opening', false)
       return null
     }
   }
 
   const closeRepo = async () => {
     openGeneration.current++
-    const path = state.repoPath
-    if (path) {
+    const repoPath = liveRepoPath.current
+    if (repoPath) {
       try {
-        await window.electronAPI.cancelLogStream(path).catch(() => {})
-        await window.electronAPI.closeRepo(path)
+        await window.electronAPI.cancelLogStream(repoPath).catch(() => {})
+        await window.electronAPI.closeRepo(repoPath)
       } catch {}
     }
     reset()
   }
 
-  const invalidateDiffs = (path: string) => {
-    return queryClient.invalidateQueries({
-      queryKey: repoQueryKeys(tabId, path).diffRoot
-    })
+  // A failed hunk op (notably HunkNotFound) means the diff the user acted on is stale, so status
+  // and diffs must be re-synced even on failure — whole-file stage/unstage have no such failure
+  // mode and only re-sync on success.
+  const resyncStatusAndDiffs = (context: StatusMutationContext) =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: context.key }),
+      invalidateDiffs(context.path)
+    ])
+
+  const statusMutationOptions = <Vars,>(
+    applyOptimistic: (current: GitStatus, vars: Vars) => GitStatus | null,
+    request: (repoPath: string, vars: Vars) => Promise<StatusMutationResult>,
+    config: { resyncOnFailure?: boolean } = {}
+  ) => ({
+    mutationFn: async (vars: Vars): Promise<StatusMutationResult | null> => {
+      const repoPath = liveRepoPath.current
+      if (!repoPath) {
+        return null
+      }
+      return request(repoPath, vars)
+    },
+    onMutate: async (vars: Vars): Promise<StatusMutationContext | undefined> => {
+      const repoPath = liveRepoPath.current
+      if (!repoPath) {
+        return undefined
+      }
+      const key = repoQueryKeys(repoPath).status
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData<GitStatus>(key)
+      const optimistic = previous ? applyOptimistic(previous, vars) : null
+      if (optimistic) {
+        queryClient.setQueryData<GitStatus>(key, optimistic)
+      }
+      return { path: repoPath, key, previous, hadOptimistic: Boolean(optimistic) }
+    },
+    onError: (error: unknown, _vars: Vars, context: StatusMutationContext | undefined) => {
+      if (context?.hadOptimistic && context.previous) {
+        queryClient.setQueryData<GitStatus>(context.key, context.previous)
+      }
+      setUi('error', formatCause(error))
+      if (config.resyncOnFailure && context) {
+        return resyncStatusAndDiffs(context)
+      }
+      return undefined
+    },
+    onSuccess: (
+      response: StatusMutationResult | null,
+      _vars: Vars,
+      context: StatusMutationContext | undefined
+    ) => {
+      if (!response || !context) {
+        return undefined
+      }
+      if (response._tag === 'Ok') {
+        return resyncStatusAndDiffs(context)
+      }
+      if (context.hadOptimistic && context.previous) {
+        queryClient.setQueryData<GitStatus>(context.key, context.previous)
+      }
+      if (response._tag === 'GitError') {
+        setUi('error', response.message)
+      }
+      if (config.resyncOnFailure) {
+        return resyncStatusAndDiffs(context)
+      }
+      return undefined
+    }
+  })
+
+  const stageMutation = useMutation(
+    statusMutationOptions<string>(
+      (current, file) => applyStage(current, file),
+      (repoPath, file) => sidecarFetch('stage-file', { repoPath, file })
+    )
+  )
+
+  const unstageMutation = useMutation(
+    statusMutationOptions<string>(
+      (current, file) => applyUnstage(current, file),
+      (repoPath, file) => sidecarFetch('unstage-file', { repoPath, file })
+    )
+  )
+
+  const stageAllMutation = useMutation(
+    statusMutationOptions<string[]>(
+      (current, files) => files.reduce((next, file) => applyStage(next, file), current),
+      (repoPath, files) => sidecarFetch('stage-all', { repoPath, files })
+    )
+  )
+
+  const unstageAllMutation = useMutation(
+    statusMutationOptions<string[]>(
+      (current, files) => files.reduce((next, file) => applyUnstage(next, file), current),
+      (repoPath, files) => sidecarFetch('unstage-all', { repoPath, files })
+    )
+  )
+
+  interface HunkMutationVars {
+    op: typeof SidecarOp.stageHunk | typeof SidecarOp.unstageHunk
+    file: string
+    hunkHeader: string
+    options: HunkStageOptions
   }
 
-  const invalidateStashes = (path: string) => {
-    return queryClient.invalidateQueries({ queryKey: stashKey(path) })
-  }
-
-  const stageMutation = useMutation({
-    mutationFn: async (file: string) => {
-      const path = repoPath()
-      if (!path) {
-        return
-      }
-      const previous = readSnapshot(path)?.status
-      if (previous) {
-        const optimistic = applyStage(previous, file)
-        statusRequestSeq.current++
-        writeSnapshot(path, { status: optimistic })
-        setState('status', optimistic)
-      }
-      const response = await sidecarFetch('stage-file', { repoPath: path, file })
-      if (response._tag === 'Ok') {
-        await refreshStatus(path)
-        void invalidateDiffs(path)
-        return
-      }
-      if (previous) {
-        writeSnapshot(path, { status: previous })
-        setState('status', previous)
-      }
-      if (response._tag === 'GitError') {
-        setState('error', response.message)
-      }
-    }
-  })
-
-  const unstageMutation = useMutation({
-    mutationFn: async (file: string) => {
-      const path = repoPath()
-      if (!path) {
-        return
-      }
-      const previous = readSnapshot(path)?.status
-      if (previous) {
-        const optimistic = applyUnstage(previous, file)
-        statusRequestSeq.current++
-        writeSnapshot(path, { status: optimistic })
-        setState('status', optimistic)
-      }
-      const response = await sidecarFetch('unstage-file', { repoPath: path, file })
-      if (response._tag === 'Ok') {
-        await refreshStatus(path)
-        void invalidateDiffs(path)
-        return
-      }
-      if (previous) {
-        writeSnapshot(path, { status: previous })
-        setState('status', previous)
-      }
-      if (response._tag === 'GitError') {
-        setState('error', response.message)
-      }
-    }
-  })
-
-  const stageAllMutation = useMutation({
-    mutationFn: async (files: string[]) => {
-      const path = repoPath()
-      if (!path || files.length === 0) {
-        return
-      }
-      const previous = readSnapshot(path)?.status
-      if (previous) {
-        const optimistic = files.reduce((status, file) => applyStage(status, file), previous)
-        statusRequestSeq.current++
-        writeSnapshot(path, { status: optimistic })
-        setState('status', optimistic)
-      }
-      const response = await sidecarFetch('stage-all', { repoPath: path, files })
-      if (response._tag === 'Ok') {
-        await refreshStatus(path)
-        void invalidateDiffs(path)
-        return
-      }
-      if (previous) {
-        writeSnapshot(path, { status: previous })
-        setState('status', previous)
-      }
-      if (response._tag === 'GitError') {
-        setState('error', response.message)
-      }
-    }
-  })
-
-  const unstageAllMutation = useMutation({
-    mutationFn: async (files: string[]) => {
-      const path = repoPath()
-      if (!path || files.length === 0) {
-        return
-      }
-      const previous = readSnapshot(path)?.status
-      if (previous) {
-        const optimistic = files.reduce((status, file) => applyUnstage(status, file), previous)
-        statusRequestSeq.current++
-        writeSnapshot(path, { status: optimistic })
-        setState('status', optimistic)
-      }
-      const response = await sidecarFetch('unstage-all', { repoPath: path, files })
-      if (response._tag === 'Ok') {
-        await refreshStatus(path)
-        void invalidateDiffs(path)
-        return
-      }
-      if (previous) {
-        writeSnapshot(path, { status: previous })
-        setState('status', previous)
-      }
-      if (response._tag === 'GitError') {
-        setState('error', response.message)
-      }
-    }
-  })
-
-  const applyHunkMutation = async (
-    op: typeof SidecarOp.stageHunk | typeof SidecarOp.unstageHunk,
-    file: string,
-    hunkHeader: string,
-    options: HunkStageOptions = {}
-  ): Promise<boolean> => {
-    const path = repoPath()
-    if (!path) {
-      return false
-    }
-    const previous = readSnapshot(path)?.status
-    const optimistic =
-      previous && op === SidecarOp.stageHunk && options.fullyStagesFile
-        ? applyStage(previous, file)
-        : previous && op === SidecarOp.unstageHunk && options.fullyUnstagesFile
-          ? applyUnstage(previous, file)
-          : null
-    if (optimistic) {
-      statusRequestSeq.current++
-      writeSnapshot(path, { status: optimistic })
-      setState('status', optimistic)
-    }
-    const response = await sidecarFetch(op, { repoPath: path, file, hunkHeader })
-    if (response._tag === 'GitError') {
-      if (previous && optimistic) {
-        writeSnapshot(path, { status: previous })
-        setState('status', previous)
-      }
-      setState('error', response.message)
-    }
-    await refreshStatus(path)
-    await invalidateDiffs(path)
-    return response._tag === 'Ok'
-  }
+  const hunkMutation = useMutation(
+    statusMutationOptions<HunkMutationVars>(
+      (current, vars) => {
+        if (vars.op === SidecarOp.stageHunk && vars.options.fullyStagesFile) {
+          return applyStage(current, vars.file)
+        }
+        if (vars.op === SidecarOp.unstageHunk && vars.options.fullyUnstagesFile) {
+          return applyUnstage(current, vars.file)
+        }
+        return null
+      },
+      (repoPath, vars) =>
+        sidecarFetch(vars.op, { repoPath, file: vars.file, hunkHeader: vars.hunkHeader }),
+      { resyncOnFailure: true }
+    )
+  )
 
   const commitMutation = useMutation({
     mutationFn: async (message: string) => {
-      const path = repoPath()
-      if (!path) {
+      const repoPath = liveRepoPath.current
+      if (!repoPath) {
         return false
       }
-      setState('committing', true)
+      setUi('committing', true)
       try {
-        const response = await sidecarFetch('commit', { repoPath: path, message })
+        const response = await sidecarFetch('commit', { repoPath, message })
         if (response._tag === 'Ok') {
-          await refreshStatus(path)
-          void invalidateDiffs(path)
-          await restartLogStream(path)
+          await Promise.all([refreshStatus(repoPath), invalidateDiffs(repoPath)])
+          await restartLogStream(repoPath)
           return true
         }
         if (response._tag === 'GitError') {
-          setState('error', response.message)
+          setUi('error', response.message)
         }
         return false
       } catch (error) {
-        setState('error', formatCause(error))
+        setUi('error', formatCause(error))
         return false
       } finally {
-        setState('committing', false)
+        setUi('committing', false)
       }
+    }
+  })
+
+  useEffect(() => {
+    if (tabActive() && logBuffer.current.length > 0) {
+      scheduleLogFlush()
     }
   })
 
   // The IPC subscription and unmount cleanup below register once (`[]` deps) and must read the
   // current helpers, not render-zero closures. The helpers are recreated each render, so the
-  // subscription reads them through this ref (and the live store through `liveState`).
+  // subscription reads them through this ref (and the live repo through `liveRepoPath`).
   const latest = useRef({
     tabActive,
     scheduleLogFlush,
@@ -874,8 +774,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   useEffect(() => {
     const unsubLog = window.electronAPI.onLogChunk((chunk) => {
       const { tabActive, scheduleLogFlush, flushLogToStore } = latest.current
-      const state = liveState.current
-      if (chunk.repoPath !== state.repoPath) {
+      if (chunk.repoPath !== liveRepoPath.current) {
         return
       }
       if (chunk.streamId !== undefined && chunk.streamId !== logStreamSeq.current) {
@@ -888,16 +787,16 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         scheduleLogFlush()
       }
       if (chunk.error) {
-        setState('error', chunk.error)
+        setUi('error', chunk.error)
       }
       if (chunk.done) {
         if (chunk.hasMore !== undefined) {
-          setState('logHasMore', chunk.hasMore)
+          setUi('logHasMore', chunk.hasMore)
         }
-        setState('logLoading', false)
-        setState('logLoadingMore', false)
+        setUi('logLoading', false)
+        setUi('logLoadingMore', false)
         if (tabActive()) {
-          flushLogToStore(openGeneration.current, state.repoPath)
+          flushLogToStore(openGeneration.current, liveRepoPath.current)
         }
       }
     })
@@ -910,33 +809,33 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         invalidateStashes,
         restartLogStream
       } = latest.current
-      if (event.repoPath !== liveState.current.repoPath) {
+      if (event.repoPath !== liveRepoPath.current) {
         return
       }
-      const path = event.repoPath
+      const repoPath = event.repoPath
       if (event.kind === 'refs') {
         // External ref moves (CLI commit/rebase/amend, another GUI) change which commits are
         // reachable, so the graph must be re-streamed, not just relabelled. The watcher debounce
         // coalesces a multi-step rebase; the stream generation drops any old in-flight chunks.
-        void refreshBranchesOnly(path)
-        void restartLogStream(path)
+        void refreshBranchesOnly(repoPath)
+        void restartLogStream(repoPath)
       } else {
-        void refreshStatus(path)
-        void invalidateDiffs(path)
+        void refreshStatus(repoPath)
+        void invalidateDiffs(repoPath)
       }
-      void invalidateStashes(path)
+      void invalidateStashes(repoPath)
     })
 
     const unsubRestarted = window.electronAPI.onSidecarRestarted(() => {
       const { openRepo, tabActive } = latest.current
-      const path = liveState.current.repoPath
-      if (!path) {
+      const repoPath = liveRepoPath.current
+      if (!repoPath) {
         return
       }
       if (tabActive()) {
         toast.info('Reconnecting git engine…')
       }
-      void openRepo(path)
+      void openRepo(repoPath)
     })
 
     return () => {
@@ -946,7 +845,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
   }, [])
 
-  const repoPathValue = state.repoPath
+  const repoPathValue = ui.repoPath
   const fetchTickValue = fetchTick()
   useEffect(() => {
     if (!repoPathValue) {
@@ -968,91 +867,94 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         logFlushTimer.current = null
       }
       logBuffer.current = []
-      setState('log', null)
 
-      const path = liveState.current.repoPath
-      if (!path) {
+      const repoPath = liveRepoPath.current
+      if (!repoPath) {
         return
       }
       setTimeout(() => {
-        Promise.resolve(window.electronAPI.cancelLogStream(path)).catch(() => {})
-        Promise.resolve(window.electronAPI.closeRepo(path)).catch(() => {})
+        Promise.resolve(window.electronAPI.cancelLogStream(repoPath)).catch(() => {})
+        Promise.resolve(window.electronAPI.closeRepo(repoPath)).catch(() => {})
       }, 0)
     }
   }, [])
 
   const fetchNow = async () => {
-    const path = state.repoPath
-    if (!path) {
+    const repoPath = liveRepoPath.current
+    if (!repoPath) {
       return
     }
     setFetchTick((tick) => tick + 1)
     try {
-      await runFetchAndRefresh(path)
+      await runFetchAndRefresh(repoPath)
     } catch (error) {
-      setState('error', formatCause(error))
+      setUi('error', formatCause(error))
     }
   }
 
   const pushNow = async () => {
-    const path = state.repoPath
-    if (!path || state.pushing) {
+    const repoPath = liveRepoPath.current
+    if (!repoPath || ui.pushing) {
       return
     }
-    setState('pushing', true)
+    setUi('pushing', true)
     try {
-      const response = await sidecarFetch(SidecarOp.pushRepo, { repoPath: path })
+      const response = await sidecarFetch(SidecarOp.pushRepo, { repoPath })
       if (response._tag === 'Ok') {
-        await refreshBranchesOnly(path)
+        await refreshBranchesOnly(repoPath)
       } else if (response._tag === 'GitError') {
-        setState('error', response.message)
+        setUi('error', response.message)
       }
     } catch (error) {
-      setState('error', formatCause(error))
+      setUi('error', formatCause(error))
     } finally {
-      setState('pushing', false)
+      setUi('pushing', false)
     }
   }
 
   const pullNow = async () => {
-    const path = state.repoPath
-    if (!path || state.pulling) {
+    const repoPath = liveRepoPath.current
+    if (!repoPath || ui.pulling) {
       return
     }
-    setState('pulling', true)
+    setUi('pulling', true)
     try {
-      const response = await sidecarFetch(SidecarOp.pullRepo, { repoPath: path })
+      const response = await sidecarFetch(SidecarOp.pullRepo, { repoPath })
       if (response._tag === 'Ok') {
-        await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
-        await restartLogStream(path)
+        await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
+        await restartLogStream(repoPath)
       } else if (response._tag === 'GitError') {
-        setState('error', response.message)
+        setUi('error', response.message)
       }
     } catch (error) {
-      setState('error', formatCause(error))
+      setUi('error', formatCause(error))
     } finally {
-      setState('pulling', false)
+      setUi('pulling', false)
     }
   }
 
   return {
     state,
-    loading: () => state.opening || state.committing,
+    loading: () => ui.opening || ui.committing,
     openRepo,
     closeRepo,
     stageFile: (file: string) => stageMutation.mutateAsync(file),
     unstageFile: (file: string) => unstageMutation.mutateAsync(file),
     stageAll: (files: string[]) => stageAllMutation.mutateAsync(files),
     unstageAll: (files: string[]) => unstageAllMutation.mutateAsync(files),
-    stageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) =>
-      applyHunkMutation(SidecarOp.stageHunk, file, hunkHeader, options),
-    unstageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) =>
-      applyHunkMutation(SidecarOp.unstageHunk, file, hunkHeader, options),
+    stageHunk: (file: string, hunkHeader: string, options: HunkStageOptions = {}) =>
+      hunkMutation
+        .mutateAsync({ op: SidecarOp.stageHunk, file, hunkHeader, options })
+        .then((response) => response?._tag === 'Ok'),
+    unstageHunk: (file: string, hunkHeader: string, options: HunkStageOptions = {}) =>
+      hunkMutation
+        .mutateAsync({ op: SidecarOp.unstageHunk, file, hunkHeader, options })
+        .then((response) => response?._tag === 'Ok'),
     diffQueryKey: (file: string, staged: boolean) => {
-      const queryKeys = keys()
-      return queryKeys
-        ? queryKeys.diff(file, staged)
-        : (['tab', tabId, 'idle', 'diff', file, staged] as const)
+      const repoPath = ui.repoPath
+      return repoPath
+        ? repoQueryKeys(repoPath).diff(file, staged)
+        : (['repo', 'idle', tabId, 'diff', file, staged] as const)
     },
     commit: (message: string) => commitMutation.mutateAsync(message),
     fetchNow,

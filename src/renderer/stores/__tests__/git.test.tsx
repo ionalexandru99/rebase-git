@@ -272,8 +272,10 @@ describe('useGitStore — parallel repo loading', () => {
 
     await git.refreshAfterCheckout(repoPath)
 
-    expect(git.state.currentBranch).toBe('dev')
-    expect(git.state.branches?.current).toBe('dev')
+    await waitFor(() => {
+      expect(git.state.currentBranch).toBe('dev')
+      expect(git.state.branches?.current).toBe('dev')
+    })
   })
 
   it('log flush skipped when tab inactive', async () => {
@@ -479,10 +481,12 @@ describe('useGitStore — parallel repo loading', () => {
       stagePromise = git.stageHunk('a.ts', '@@ -1,1 +1,1 @@', { fullyStagesFile: true })
     })
 
-    expect(git.state.status?.files?.[0]).toEqual({
-      path: 'a.ts',
-      index: 'M',
-      working_dir: ' '
+    await waitFor(() => {
+      expect(git.state.status?.files?.[0]).toEqual({
+        path: 'a.ts',
+        index: 'M',
+        working_dir: ' '
+      })
     })
     expect(git.state.status?.modified).toEqual([])
     expect(git.state.status?.staged).toEqual(['a.ts'])
@@ -495,6 +499,121 @@ describe('useGitStore — parallel repo loading', () => {
       index: 'M',
       working_dir: ' '
     })
+  })
+
+  it('stageFile optimistically stages then confirms from the sidecar', async () => {
+    const modifiedStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        modified: ['a.ts'],
+        files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
+      }
+    }
+    const stagedStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        staged: ['a.ts'],
+        files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
+      }
+    }
+    sidecarMock.getStatus.mockResolvedValueOnce(modifiedStatus).mockResolvedValue(stagedStatus)
+    let resolveStage: () => void = () => {}
+    sidecarMock.stageFile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStage = () => resolve({ _tag: 'Ok' })
+        })
+    )
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: ' ', working_dir: 'M' })
+    })
+
+    let stagePromise: Promise<unknown> | undefined
+    await act(async () => {
+      stagePromise = git.stageFile('a.ts')
+    })
+
+    await waitFor(() => {
+      expect(git.state.status?.staged).toEqual(['a.ts'])
+      expect(git.state.status?.modified).toEqual([])
+    })
+
+    resolveStage()
+    await stagePromise
+    await waitFor(() => {
+      expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+    })
+  })
+
+  it('rolls the optimistic stage back when the sidecar rejects it', async () => {
+    const modifiedStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        modified: ['a.ts'],
+        files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
+      }
+    }
+    sidecarMock.getStatus.mockResolvedValue(modifiedStatus)
+    sidecarMock.stageFile.mockResolvedValue({ _tag: 'GitError', message: 'cannot stage' })
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status?.modified).toEqual(['a.ts'])
+    })
+
+    await git.stageFile('a.ts')
+
+    await waitFor(() => {
+      expect(git.state.error).toBe('cannot stage')
+    })
+    expect(git.state.status?.staged).toEqual([])
+    expect(git.state.status?.modified).toEqual(['a.ts'])
+  })
+
+  it('re-syncs status after a failed hunk op (stale diff)', async () => {
+    sidecarMock.stageHunk.mockResolvedValue({ _tag: 'GitError', message: 'hunk gone' })
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status).not.toBeNull()
+    })
+
+    sidecarMock.getStatus.mockClear()
+    const ok = await git.stageHunk('a.ts', '@@ -1,1 +1,1 @@')
+
+    expect(ok).toBe(false)
+    await waitFor(() => {
+      expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    })
+    expect(git.state.error).toBe('hunk gone')
+  })
+
+  it('keeps server state in the query cache, not a stable mutable store object', async () => {
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+    })
+
+    const before = git.state
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: { ...statusOk.status, modified: ['x.ts'] }
+    })
+    await git.refreshWorkingTree(repoPath)
+
+    await waitFor(() => {
+      expect(git.state.status?.modified).toEqual(['x.ts'])
+    })
+    expect(git.state).not.toBe(before)
   })
 
   it('loadMoreHistory requests the next page without clearing existing commits', async () => {
