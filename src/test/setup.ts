@@ -178,6 +178,7 @@ const mockElectronAPI = {
   cancelLogStream: vi.fn(),
   onLogChunk: vi.fn(),
   onRepoChanged: vi.fn(),
+  onSidecarRestarted: vi.fn(),
   getRecentRepos: vi.fn(),
   getSidebarPrefs: vi.fn(),
   setSidebarPrefs: vi.fn(),
@@ -215,6 +216,7 @@ export interface LogStreamHandle {
     done?: boolean
     hasMore?: boolean
     error?: string
+    streamId?: number
   }) => void
   fireDone: (repoPath: string, hasMore?: boolean) => void
 }
@@ -247,7 +249,7 @@ export function setupLogStream(): LogStreamHandle {
 }
 
 export interface RepoChangedHandle {
-  fire: (evt: { repoPath: string; kind: 'refs' | 'workingTree' }) => void
+  fire: (evt: { repoPath: string; kind: 'refs' | 'workingTree' | 'index' }) => void
 }
 
 export function setupRepoChanged(): RepoChangedHandle {

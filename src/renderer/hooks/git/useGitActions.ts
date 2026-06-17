@@ -172,7 +172,7 @@ export function useGitActions(git: GitStore) {
     stashApply: (index: number) => stashConflictable(SidecarOp.stashApply, index, 'Applied stash'),
     stashPop: (index: number) => stashConflictable(SidecarOp.stashPop, index, 'Popped stash'),
     stashDrop: (index: number) =>
-      mutate(SidecarOp.stashDrop, { index }, 'Dropped stash', async () => {})
+      mutate(SidecarOp.stashDrop, { index }, 'Dropped stash', (path) => git.refreshStashes(path))
   }
 }
 

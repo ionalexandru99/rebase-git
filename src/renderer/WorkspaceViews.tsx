@@ -7,9 +7,6 @@ import { HistoryPanel } from './components/HistoryPanel'
 import { type SelectedFile, StatusPanel } from './components/StatusPanel'
 import { StashControl } from './components/StatusPanel/StashControl'
 import type { WorkspaceView } from './components/shell/Topbar'
-import { useDialogs } from './components/ui/prompt-dialog'
-import { useGitActions } from './hooks/git/useGitActions'
-import { useStashes } from './hooks/git/useStashes'
 import { useDraggableWidth } from './hooks/useDraggableWidth'
 import type { CommitAction, FileAction } from './lib/git-actions'
 import {
@@ -23,6 +20,7 @@ import {
 import type { RefKind } from './lib/ref-tree'
 import { buildUnifiedFileRows } from './lib/status-file-rows'
 import type { GitStore } from './stores/git'
+import { useWorkspaceContext } from './WorkspaceContext'
 
 const FILES_PANEL_WIDTH_MIN = 240
 const FILES_PANEL_WIDTH_MAX = 620
@@ -55,9 +53,7 @@ interface WorkspaceViewProps {
 
 function LocalChangesView(props: WorkspaceViewProps) {
   const git = props.git
-  const actions = useGitActions(git)
-  const stashList = useStashes(git.state.repoPath)
-  const { prompt, confirm, dialogs } = useDialogs()
+  const { actions, prompt, confirm } = useWorkspaceContext()
   const [selected, setSelected] = createSignal<SelectedFile | null>(null)
 
   const promptStash = (title: string, run: (message?: string) => Promise<boolean>) => {
@@ -67,7 +63,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
       placeholder: 'Describe these changes',
       confirmText: 'Stash',
       allowEmpty: true,
-      onConfirm: (message) => void run(message.trim() || undefined).then(stashList.refetch)
+      onConfirm: (message) => void run(message.trim() || undefined)
     })
   }
 
@@ -168,15 +164,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
   })
 
   return (
-    <Show
-      when={totalChanges > 0}
-      fallback={
-        <>
-          <CleanWorkingTree />
-          {dialogs()}
-        </>
-      }
-    >
+    <Show when={totalChanges > 0} fallback={<CleanWorkingTree />}>
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
         <div
           className="grid min-h-0 overflow-hidden"
@@ -228,7 +216,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
           stagedCount={stagedCount}
         />
       </div>
-      {dialogs()}
     </Show>
   )
 }

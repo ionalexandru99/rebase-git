@@ -2,7 +2,8 @@ import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import { act, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
-import { setupLogStream, sidecarMock } from '@/../test/setup'
+import { setupLogStream, setupRepoChanged, sidecarMock } from '@/../test/setup'
+import { useStashes } from '@/hooks/git/useStashes'
 import { type Accessor, createSignal } from '@/lib/react-compat'
 import { type GitStore, useGitStore } from '@/stores/git'
 
@@ -149,7 +150,8 @@ describe('useGitStore — parallel repo loading', () => {
     expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
     expect(window.electronAPI.startLogStream).toHaveBeenCalledWith(repoPath, {
       skip: 0,
-      maxCount: LOG_PAGE_SIZE
+      maxCount: LOG_PAGE_SIZE,
+      streamId: expect.any(Number)
     })
 
     resolveLogStart()
@@ -524,7 +526,8 @@ describe('useGitStore — parallel repo loading', () => {
 
     expect(window.electronAPI.startLogStream).toHaveBeenCalledWith(repoPath, {
       skip: 1,
-      maxCount: LOG_PAGE_SIZE
+      maxCount: LOG_PAGE_SIZE,
+      streamId: expect.any(Number)
     })
     expect(git.state.logLoadingMore).toBe(true)
 
@@ -650,5 +653,125 @@ describe('useGitStore — push and pull', () => {
 
     expect(git.state.error).toBe('not fast-forward')
     expect(git.state.pulling).toBe(false)
+  })
+})
+
+const makeCommit = (hash: string, message: string, parents: string[] = []) => ({
+  hash,
+  message,
+  author_name: 'Test',
+  date: '2026-01-01T00:00:00Z',
+  parents,
+  refs: ''
+})
+
+function StashHarness(props: { onGit: (git: GitStore) => void }) {
+  const [active] = createSignal(true)
+  const git = useGitStore('test-tab', active)
+  useStashes(git.state.repoPath)
+  props.onGit(git)
+  return null
+}
+
+describe('useGitStore — Phase 2 streaming + watcher', () => {
+  beforeEach(() => {
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
+    vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
+    vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
+    setupLogStream()
+    sidecarMock.getStatus.mockResolvedValue(statusOk)
+    sidecarMock.getLocalBranches.mockResolvedValue(localBranchesOk)
+    sidecarMock.getRemoteRefs.mockResolvedValue(remoteRefsOk)
+    sidecarMock.pullRepo.mockResolvedValue({ _tag: 'Ok' })
+  })
+
+  it('restarts the log stream and refreshes branches on an external refs change', async () => {
+    const repoChanged = setupRepoChanged()
+    setupLogStream()
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+    sidecarMock.getLocalBranches.mockClear()
+    repoChanged.fire({ repoPath, kind: 'refs' })
+
+    await waitFor(() => {
+      expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+    })
+  })
+
+  it('drops log chunks from a superseded stream generation', async () => {
+    const stream = setupLogStream()
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    stream.fire({ repoPath, streamId: 1, commits: [makeCommit('c1', 'first')] })
+    stream.fireDone(repoPath, false)
+    await waitFor(() => {
+      expect(git.state.log?.all.map((commit) => commit.message)).toEqual(['first'])
+    })
+
+    // pullNow restarts the stream, bumping the generation and clearing the log.
+    await git.pullNow()
+
+    stream.fire({ repoPath, streamId: 1, commits: [makeCommit('stale', 'stale-generation')] })
+    stream.fire({ repoPath, streamId: 2, commits: [makeCommit('c2', 'second')] })
+    stream.fireDone(repoPath, false)
+
+    await waitFor(() => {
+      expect(git.state.log?.all.map((commit) => commit.message)).toEqual(['second'])
+    })
+  })
+
+  it('computes load-more skip from the buffer when the store flush lags', async () => {
+    vi.useFakeTimers()
+    const stream = setupLogStream()
+    const tabActive = createSignal(true)
+    const { git, tabActive: active } = renderGitStore(tabActive)
+    await git.openRepo(repoPath)
+
+    active[1](false)
+    stream.fire({ repoPath, commits: [makeCommit('a', 'A'), makeCommit('b', 'B')] })
+    stream.fireDone(repoPath, true)
+    await advanceTimers(200)
+
+    expect(git.state.log?.all.length ?? 0).toBe(0)
+
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+    await git.loadMoreHistory()
+
+    expect(window.electronAPI.startLogStream).toHaveBeenCalledWith(repoPath, {
+      skip: 2,
+      maxCount: LOG_PAGE_SIZE,
+      streamId: expect.any(Number)
+    })
+
+    active[1](true)
+    vi.useRealTimers()
+  })
+
+  it('invalidates the stash list on a working-tree change', async () => {
+    const repoChanged = setupRepoChanged()
+    setupLogStream()
+    let latestGit: GitStore | undefined
+    renderWithQuery(() => <StashHarness onGit={(git) => (latestGit = git)} />)
+
+    await act(async () => {
+      await latestGit?.openRepo(repoPath)
+    })
+    await waitFor(() => {
+      expect(sidecarMock.stashList).toHaveBeenCalledWith(repoPath)
+    })
+
+    const callsAfterOpen = sidecarMock.stashList.mock.calls.length
+    repoChanged.fire({ repoPath, kind: 'workingTree' })
+
+    await waitFor(() => {
+      expect(sidecarMock.stashList.mock.calls.length).toBeGreaterThan(callsAfterOpen)
+    })
   })
 })

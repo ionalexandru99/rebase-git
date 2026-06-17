@@ -19,6 +19,8 @@ import {
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
+import { toast } from 'sonner'
+import { stashKey } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { type Accessor, createSignal } from '@/lib/react-compat'
 import { createStore } from '@/lib/react-store-compat'
@@ -253,6 +255,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const openGeneration = useRef(0)
   const statusRequestSeq = useRef(0)
+  const logStreamSeq = useRef(0)
 
   const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
     logFlushTimer.current = null
@@ -469,6 +472,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const refreshWorkingTree = async (path: string) => {
     await refreshStatus(path)
     void invalidateDiffs(path)
+    void invalidateStashes(path)
   }
 
   // Status responses can resolve out of order (mutation refresh vs watcher refresh vs query
@@ -508,6 +512,10 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     const append = skip > 0
     const clearLog = options?.clearLog ?? !append
 
+    // Stamp this start so in-flight chunks from a previous stream (same repoPath, older id) are
+    // dropped by onLogChunk instead of landing in the freshly-cleared buffer.
+    const streamId = ++logStreamSeq.current
+
     if (!append) {
       logBuffer.current = []
       if (clearLog) {
@@ -523,7 +531,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       await window.electronAPI.cancelLogStream(path).catch(() => {})
       const response = parseOrThrow(
         StartLogStreamResponseSchema,
-        await window.electronAPI.startLogStream(path, { skip, maxCount })
+        await window.electronAPI.startLogStream(path, { skip, maxCount, streamId })
       )
       if (response._tag === 'GitError') {
         setState('error', response.message)
@@ -548,7 +556,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     if (!path || !state.logHasMore || state.logLoadingMore || state.logLoading) {
       return
     }
-    const skip = state.log?.all.length ?? logBuffer.current.length
+    // The store length is the last throttled flush; the buffer may already hold more commits still
+    // draining in. Skipping by the smaller of the two would re-request buffered commits or gap.
+    const skip = Math.max(logBuffer.current.length, state.log?.all.length ?? 0)
     await restartLogStream(path, {
       skip,
       maxCount: LOG_PAGE_SIZE,
@@ -680,6 +690,10 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     return queryClient.invalidateQueries({
       queryKey: repoQueryKeys(tabId, path).diffRoot
     })
+  }
+
+  const invalidateStashes = (path: string) => {
+    return queryClient.invalidateQueries({ queryKey: stashKey(path) })
   }
 
   const stageMutation = useMutation({
@@ -894,7 +908,10 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     flushLogToStore,
     refreshStatus,
     refreshBranchesOnly,
-    invalidateDiffs
+    invalidateDiffs,
+    invalidateStashes,
+    restartLogStream,
+    openRepo
   })
   latest.current = {
     tabActive,
@@ -902,7 +919,10 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     flushLogToStore,
     refreshStatus,
     refreshBranchesOnly,
-    invalidateDiffs
+    invalidateDiffs,
+    invalidateStashes,
+    restartLogStream,
+    openRepo
   }
 
   useEffect(() => {
@@ -910,6 +930,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       const { tabActive, scheduleLogFlush, flushLogToStore } = latest.current
       const state = liveState.current
       if (chunk.repoPath !== state.repoPath) {
+        return
+      }
+      if (chunk.streamId !== undefined && chunk.streamId !== logStreamSeq.current) {
         return
       }
       if (chunk.commits.length > 0) {
@@ -934,22 +957,46 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     })
 
     const unsubChanged = window.electronAPI.onRepoChanged((event) => {
-      const { refreshStatus, refreshBranchesOnly, invalidateDiffs } = latest.current
+      const {
+        refreshStatus,
+        refreshBranchesOnly,
+        invalidateDiffs,
+        invalidateStashes,
+        restartLogStream
+      } = latest.current
       if (event.repoPath !== liveState.current.repoPath) {
         return
       }
       const path = event.repoPath
       if (event.kind === 'refs') {
+        // External ref moves (CLI commit/rebase/amend, another GUI) change which commits are
+        // reachable, so the graph must be re-streamed, not just relabelled. The watcher debounce
+        // coalesces a multi-step rebase; the stream generation drops any old in-flight chunks.
         void refreshBranchesOnly(path)
+        void restartLogStream(path)
       } else {
         void refreshStatus(path)
         void invalidateDiffs(path)
       }
+      void invalidateStashes(path)
+    })
+
+    const unsubRestarted = window.electronAPI.onSidecarRestarted(() => {
+      const { openRepo, tabActive } = latest.current
+      const path = liveState.current.repoPath
+      if (!path) {
+        return
+      }
+      if (tabActive()) {
+        toast.info('Reconnecting git engine…')
+      }
+      void openRepo(path)
     })
 
     return () => {
       unsubLog?.()
       unsubChanged?.()
+      unsubRestarted?.()
     }
   }, [])
 
@@ -1077,6 +1124,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     refreshAfterMutation,
     refreshWorkingTree,
     refreshBranchesOnly,
+    refreshStashes: invalidateStashes,
     loadMoreHistory,
     invalidateRepoQueries
   }
