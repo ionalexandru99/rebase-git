@@ -3,6 +3,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { platform } from 'node:os'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const hostPlatform = platform()
@@ -80,6 +81,6 @@ export function ensureElectronRuntime() {
   return electronPath
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   process.stdout.write(`${ensureElectronRuntime()}\n`)
 }
