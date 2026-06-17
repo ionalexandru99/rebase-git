@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import App from '@/App'
 import type { JSX } from '@/lib/react-compat'
@@ -11,9 +12,9 @@ export function renderApp() {
   )
 }
 
-export function renderWithQuery(ui: () => JSX.Element) {
+export function renderWithQuery(ui: () => JSX.Element, client?: QueryClient) {
   return render(
-    <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+    <QueryProvider client={client ?? createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
       {ui()}
     </QueryProvider>
   )

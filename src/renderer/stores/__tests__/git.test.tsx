@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
 import { setupLogStream, setupRepoChanged, sidecarMock } from '@/../test/setup'
 import { useStashes } from '@/hooks/git/useStashes'
+import { repoQueryKeys } from '@/lib/query-keys'
 import { type Accessor, createSignal } from '@/lib/react-compat'
+import { createQueryClient } from '@/providers/QueryProvider'
 import { type GitStore, useGitStore } from '@/stores/git'
 
 const repoPath = '/home/user/project'
@@ -61,10 +63,12 @@ function GitStoreHarness(props: HarnessProps) {
 }
 
 function renderGitStore(tabActive = createSignal(true)) {
+  const queryClient = createQueryClient({ gcTime: Number.POSITIVE_INFINITY })
   let latestGit: GitStore | undefined
-  renderWithQuery(() => (
-    <GitStoreHarness tabActive={tabActive[0]} onGit={(store) => (latestGit = store)} />
-  ))
+  renderWithQuery(
+    () => <GitStoreHarness tabActive={tabActive[0]} onGit={(store) => (latestGit = store)} />,
+    queryClient
+  )
   if (!latestGit) {
     throw new Error('git store not initialized')
   }
@@ -99,7 +103,7 @@ function renderGitStore(tabActive = createSignal(true)) {
       }
     }
   })
-  return { git, tabActive }
+  return { git, tabActive, queryClient }
 }
 
 // Advance fake timers and commit the re-render the fired flush schedules, so the captured store
@@ -596,24 +600,108 @@ describe('useGitStore — parallel repo loading', () => {
     expect(git.state.error).toBe('hunk gone')
   })
 
-  it('keeps server state in the query cache, not a stable mutable store object', async () => {
+  it('reads server state from the query cache (cache is the source of truth)', async () => {
+    const { git, queryClient } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+    })
+
+    // The facade is a projection of the cache: writing the status key directly must surface in
+    // git.state with no separate mirror to keep in sync.
+    const before = git.state
+    act(() => {
+      queryClient.setQueryData(repoQueryKeys(repoPath).status, {
+        ...statusOk.status,
+        modified: ['only-in-cache.ts']
+      })
+    })
+
+    await waitFor(() => {
+      expect(git.state.status?.modified).toEqual(['only-in-cache.ts'])
+    })
+    expect(git.state).not.toBe(before)
+    expect(queryClient.getQueryData(repoQueryKeys(repoPath).status)).toBe(git.state.status)
+  })
+
+  it('repaints from the warm cache when a repo is closed and reopened', async () => {
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status).not.toBeNull()
+      expect(git.state.branches?.all).toEqual(['main', 'dev'])
+    })
+
+    await git.closeRepo()
+    await waitFor(() => {
+      expect(git.state.repoPath).toBeNull()
+    })
+
+    // The fresh fetches hang on reopen, so only the warm cache (kept past close via gcTime) can
+    // paint status and branches.
+    sidecarMock.getStatus.mockImplementation(() => new Promise(() => {}))
+    sidecarMock.getLocalBranches.mockImplementation(() => new Promise(() => {}))
+    void git.openRepo(repoPath)
+
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+      expect(git.state.status).not.toBeNull()
+      expect(git.state.branches?.all).toEqual(['main', 'dev'])
+    })
+  })
+
+  it('commit refreshes status and restarts the log stream on success', async () => {
+    sidecarMock.commit.mockResolvedValue({
+      _tag: 'Ok',
+      result: {
+        commit: 'abc1234',
+        branch: 'main',
+        summary: { changes: 1, insertions: 1, deletions: 0 }
+      }
+    })
+
     const { git } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => {
       expect(git.state.repoPath).toBe(repoPath)
     })
 
-    const before = git.state
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: { ...statusOk.status, modified: ['x.ts'] }
+    sidecarMock.getStatus.mockClear()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+    const committed = await git.commit('a message')
+
+    expect(committed).toBe(true)
+    expect(sidecarMock.commit).toHaveBeenCalledWith(repoPath, 'a message')
+    expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+    expect(git.state.committing).toBe(false)
+  })
+
+  it('rolls back and surfaces the error when staging throws', async () => {
+    const modifiedStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        modified: ['a.ts'],
+        files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
+      }
+    }
+    sidecarMock.getStatus.mockResolvedValue(modifiedStatus)
+    sidecarMock.stageFile.mockRejectedValue(new Error('network down'))
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status?.modified).toEqual(['a.ts'])
     })
-    await git.refreshWorkingTree(repoPath)
+
+    await git.stageFile('a.ts').catch(() => {})
 
     await waitFor(() => {
-      expect(git.state.status?.modified).toEqual(['x.ts'])
+      expect(git.state.error).toBe('network down')
     })
-    expect(git.state).not.toBe(before)
+    expect(git.state.status?.staged).toEqual([])
+    expect(git.state.status?.modified).toEqual(['a.ts'])
   })
 
   it('loadMoreHistory requests the next page without clearing existing commits', async () => {

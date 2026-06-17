@@ -15,6 +15,10 @@ import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 const LOG_FLUSH_MS = 100
+// Closed repos keep their status/branches/log cached this long so reopening repaints instantly —
+// the role the per-repo snapshot Map used to play. Scoped to these queries (not the global default)
+// so transient diff/hunk-highlight queries still expire on the normal schedule.
+const WARM_REOPEN_GC_TIME_MS = 30 * 60 * 1000
 
 const combineBranches = (
   local: LocalBranches | undefined,
@@ -250,15 +254,16 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const openGeneration = useRef(0)
   const logStreamSeq = useRef(0)
 
+  // The queryFn fetches the repo encoded in its own key, not `liveRepoPath`: a refetch already in
+  // flight when this tab is redirected to another repo must still resolve against the repo it was
+  // started for, never write another repo's data under this key.
   const statusQuery = useQuery({
     queryKey: repoKeys?.status ?? idleKey('status'),
     enabled: Boolean(path),
-    queryFn: async () => {
-      const current = liveRepoPath.current
-      if (!current) {
-        throw new Error('Repository path missing')
-      }
-      const response = await sidecarFetch('get-status', { repoPath: current })
+    gcTime: WARM_REOPEN_GC_TIME_MS,
+    queryFn: async ({ queryKey }) => {
+      const repoPath = queryKey[1] as string
+      const response = await sidecarFetch('get-status', { repoPath })
       if (response._tag === 'GitError') {
         throw new Error(response.message)
       }
@@ -272,25 +277,15 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const localBranchesQuery = useQuery({
     queryKey: repoKeys?.localBranches ?? idleKey('local-branches'),
     enabled: Boolean(path),
-    queryFn: async () => {
-      const current = liveRepoPath.current
-      if (!current) {
-        throw new Error('Repository path missing')
-      }
-      return fetchLocalBranches(current)
-    }
+    gcTime: WARM_REOPEN_GC_TIME_MS,
+    queryFn: ({ queryKey }) => fetchLocalBranches(queryKey[1] as string)
   })
 
   const remoteRefsQuery = useQuery({
     queryKey: repoKeys?.remoteRefs ?? idleKey('remote-refs'),
     enabled: Boolean(path) && Boolean(localBranchesQuery.data),
-    queryFn: async () => {
-      const current = liveRepoPath.current
-      if (!current) {
-        throw new Error('Repository path missing')
-      }
-      return fetchRemoteRefs(current)
-    }
+    gcTime: WARM_REOPEN_GC_TIME_MS,
+    queryFn: ({ queryKey }) => fetchRemoteRefs(queryKey[1] as string)
   })
 
   // The log is push-based: chunks arrive over IPC and are written into the Query cache via
@@ -299,6 +294,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const logQuery = useQuery({
     queryKey: repoKeys?.log ?? idleKey('log'),
     enabled: false,
+    gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: () => Promise.resolve<GitLog | null>(null)
   })
 
@@ -591,19 +587,20 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     reset()
   }
 
-  // A failed hunk op (notably HunkNotFound) means the diff the user acted on is stale, so status
-  // and diffs must be re-synced even on failure — whole-file stage/unstage have no such failure
-  // mode and only re-sync on success.
   const resyncStatusAndDiffs = (context: StatusMutationContext) =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: context.key }),
       invalidateDiffs(context.path)
     ])
 
+  // Every mutation re-syncs status+diffs from the sidecar after it settles, success or failure.
+  // On failure the optimistic write is first rolled back to the snapshot, but the snapshot can
+  // itself be a concurrent same-file mutation's optimistic value (the rollback target is captured
+  // in onMutate), so the authoritative refetch is what guarantees the cache converges — and it also
+  // corrects a stale diff behind a HunkNotFound.
   const statusMutationOptions = <Vars,>(
     applyOptimistic: (current: GitStatus, vars: Vars) => GitStatus | null,
-    request: (repoPath: string, vars: Vars) => Promise<StatusMutationResult>,
-    config: { resyncOnFailure?: boolean } = {}
+    request: (repoPath: string, vars: Vars) => Promise<StatusMutationResult>
   ) => ({
     mutationFn: async (vars: Vars): Promise<StatusMutationResult | null> => {
       const repoPath = liveRepoPath.current
@@ -631,7 +628,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         queryClient.setQueryData<GitStatus>(context.key, context.previous)
       }
       setUi('error', formatCause(error))
-      if (config.resyncOnFailure && context) {
+      if (context) {
         return resyncStatusAndDiffs(context)
       }
       return undefined
@@ -653,10 +650,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       if (response._tag === 'GitError') {
         setUi('error', response.message)
       }
-      if (config.resyncOnFailure) {
-        return resyncStatusAndDiffs(context)
-      }
-      return undefined
+      return resyncStatusAndDiffs(context)
     }
   })
 
@@ -707,8 +701,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         return null
       },
       (repoPath, vars) =>
-        sidecarFetch(vars.op, { repoPath, file: vars.file, hunkHeader: vars.hunkHeader }),
-      { resyncOnFailure: true }
+        sidecarFetch(vars.op, { repoPath, file: vars.file, hunkHeader: vars.hunkHeader })
     )
   )
 
