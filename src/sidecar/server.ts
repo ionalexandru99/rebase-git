@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import path from 'node:path'
-import { parseOrThrow } from '@shared/codec'
+import { parseEither, parseOrThrow } from '@shared/codec'
 import {
   RefKindSchema,
   ResetModeSchema,
@@ -9,11 +9,14 @@ import {
   ScanForReposResponseSchema
 } from '@shared/schemas/ipc'
 import { LogStreamRequestSchema } from '@shared/schemas/log-stream'
+import { isSidecarOpName, SidecarOp, type SidecarOpName } from '@shared/sidecar-ops'
+import { getSidecarRequestSchema } from '@shared/sidecar-registry'
+import type { Schema } from 'effect'
+import { Either } from 'effect'
 import { simpleGit } from 'simple-git'
 import { streamGitLog } from './log-stream'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
-import { SidecarOp } from './protocol'
 import { storeValidatedScanRoot, takeValidatedScanRoot } from './scan-root-registry'
 
 type Body = Record<string, unknown>
@@ -62,6 +65,15 @@ const resolveRepoRelativeFiles = (repoPath: string, body: Body): string[] | null
     resolved.push(relative)
   }
   return resolved
+}
+
+function parseOperationBody(op: SidecarOpName, value: unknown): Body | typeof BAD_REQUEST {
+  const schema = getSidecarRequestSchema(op) as unknown as Schema.Schema<Body, unknown, never>
+  const result = parseEither(schema, value)
+  if (Either.isLeft(result)) {
+    return BAD_REQUEST
+  }
+  return result.right
 }
 
 const invalidScanDirectoryResponse = (): ScanForReposResponse =>
@@ -137,7 +149,7 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
   }
 }
 
-async function dispatch(op: string, body: Body): Promise<unknown> {
+async function dispatch(op: SidecarOpName, body: Body): Promise<unknown> {
   switch (op) {
     case SidecarOp.openRepo: {
       const raw = requiredString(body, 'repoPath')
@@ -374,11 +386,8 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       if (!fullPath) {
         return BAD_REQUEST
       }
-      const refKind = RefKindSchema.safeParse(body.refKind)
-      if (!refKind.success) {
-        return BAD_REQUEST
-      }
-      return operations.checkoutRef(repoPath, refKind.data, fullPath)
+      const refKind = parseOrThrow(RefKindSchema, body.refKind)
+      return operations.checkoutRef(repoPath, refKind, fullPath)
     }
     case SidecarOp.createBranch: {
       const repoPath = safeRepoPath(body)
@@ -450,11 +459,8 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       if (!sha) {
         return BAD_REQUEST
       }
-      const mode = ResetModeSchema.safeParse(body.mode)
-      if (!mode.success) {
-        return BAD_REQUEST
-      }
-      return operations.resetToCommit(repoPath, sha, mode.data)
+      const mode = parseOrThrow(ResetModeSchema, body.mode)
+      return operations.resetToCommit(repoPath, sha, mode)
     }
     case SidecarOp.revertCommit: {
       const repoPath = safeRepoPath(body)
@@ -602,7 +608,7 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
   }
 }
 
-function readBody(req: IncomingMessage): Promise<Body> {
+function readBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let total = 0
@@ -630,7 +636,7 @@ function readBody(req: IncomingMessage): Promise<Body> {
         return resolve({})
       }
       try {
-        resolve(JSON.parse(raw) as Body)
+        resolve(JSON.parse(raw) as unknown)
       } catch (error) {
         reject(error)
       }
@@ -666,23 +672,19 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
 
   if (url.pathname === '/stream/log' && req.method === 'POST') {
     try {
-      const body = await readBody(req)
+      const rawBody = await readBody(req)
+      const parsed = parseEither(LogStreamRequestSchema, rawBody)
+      if (Either.isLeft(parsed)) {
+        sendJson(res, 400, { error: 'bad request' })
+        return
+      }
+      const body = parsed.right as Body
       const repoPath = safeRepoPath(body)
       if (repoPath === BAD_REQUEST || !repoPath) {
         sendJson(res, 400, { error: 'bad request' })
         return
       }
-      const parsed = LogStreamRequestSchema.safeParse({
-        repoPath,
-        skip: body.skip,
-        maxCount: body.maxCount,
-        streamId: body.streamId
-      })
-      if (!parsed.success) {
-        sendJson(res, 400, { error: 'bad request' })
-        return
-      }
-      const { skip, maxCount, streamId } = parsed.data
+      const { skip, maxCount, streamId } = parsed.right
       streamGitLog(repoPath, res, { skip, maxCount, streamId })
     } catch (error) {
       console.error('[sidecar] request error', error)
@@ -702,8 +704,17 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
   }
 
   try {
-    const body = await readBody(req)
     const operation = match[1]
+    if (!isSidecarOpName(operation)) {
+      sendJson(res, 404, { error: `unknown op: ${match[1]}` })
+      return
+    }
+    const rawBody = await readBody(req)
+    const body = parseOperationBody(operation, rawBody)
+    if (body === BAD_REQUEST) {
+      sendJson(res, 400, { error: 'bad request' })
+      return
+    }
     if (operation === SidecarOp.scanForRepos) {
       const dirPath = requiredString(body, 'dirPath')
       if (!dirPath) {

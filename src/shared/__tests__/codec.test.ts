@@ -1,10 +1,10 @@
+import { Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
-import { z } from 'zod'
 import { parseOrThrow } from '../codec'
 
-const PersonSchema = z.object({
-  name: z.string(),
-  age: z.number()
+const PersonSchema = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number
 })
 
 describe('parseOrThrow', () => {
@@ -19,16 +19,14 @@ describe('parseOrThrow', () => {
   })
 
   it('throws when a required field is missing', () => {
-    expect(() => parseOrThrow(PersonSchema, { name: 'Ada' })).toThrow(/schema validation/)
+    expect(() => parseOrThrow(PersonSchema, { name: 'Ada' })).toThrow(/age/)
   })
 
   it('throws when a field has the wrong type', () => {
-    expect(() => parseOrThrow(PersonSchema, { name: 'Ada', age: 'old' })).toThrow(
-      /schema validation/
-    )
+    expect(() => parseOrThrow(PersonSchema, { name: 'Ada', age: 'old' })).toThrow(/number/)
   })
 
   it('throws on a non-object payload', () => {
-    expect(() => parseOrThrow(PersonSchema, 'not-an-object')).toThrow(/schema validation/)
+    expect(() => parseOrThrow(PersonSchema, 'not-an-object')).toThrow(/object/)
   })
 })

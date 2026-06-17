@@ -2,6 +2,7 @@ packages:
   - "."
 
 allowBuilds:
+  '@parcel/watcher': false
   '@tailwindcss/oxide': true
   electron: true
   electron-winstaller: false

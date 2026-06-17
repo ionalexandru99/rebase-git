@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest'
+import { parseOrThrow } from '@shared/codec'
 import type { GitBranches } from '@shared/schemas/git'
 import type {
   BranchesResponse,
@@ -16,7 +17,10 @@ import type {
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
+import type { SidecarOpName } from '@shared/sidecar-ops'
+import { getSidecarResponseSchema } from '@shared/sidecar-registry'
 import { cleanup } from '@testing-library/react'
+import type { Schema } from 'effect'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 
@@ -51,80 +55,73 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
 
   return {
     ...actual,
-    sidecarFetch: vi.fn(
-      async (
-        op: string,
-        body: Record<string, unknown>,
-        schema: { parse: (v: unknown) => unknown }
-      ) => {
-        const mock = (globalThis as Record<string, unknown>).__sidecarMock as typeof sidecarMock
-        const repoPath = body.repoPath as string
-        let payload: unknown
-        switch (op) {
-          case 'get-status':
-            payload = await mock.getStatus(repoPath)
-            break
-          case 'get-branches':
-            payload = await mock.getBranches(repoPath)
-            break
-          case 'get-local-branches':
-            payload = await mock.getLocalBranches(repoPath)
-            break
-          case 'get-remote-refs':
-            payload = await mock.getRemoteRefs(repoPath)
-            break
-          case 'get-log':
-            payload = await mock.getLog(repoPath)
-            break
-          case 'stage-file':
-            payload = await mock.stageFile(repoPath, body.file as string)
-            break
-          case 'unstage-file':
-            payload = await mock.unstageFile(repoPath, body.file as string)
-            break
-          case 'commit':
-            payload = await mock.commit(repoPath, body.message as string)
-            break
-          case 'fetch-repo':
-            payload = await mock.fetchRepo(repoPath)
-            break
-          case 'push-repo':
-            payload = await mock.pushRepo(repoPath)
-            break
-          case 'pull-repo':
-            payload = await mock.pullRepo(repoPath)
-            break
-          case 'get-diff':
-            payload = await mock.getDiff(repoPath, body.file as string, body.staged === true)
-            break
-          case 'stage-hunk':
-            payload = await mock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
-            break
-          case 'unstage-hunk':
-            payload = await mock.unstageHunk(
-              repoPath,
-              body.file as string,
-              body.hunkHeader as string
+    sidecarFetch: vi.fn(async (op: SidecarOpName, body: Record<string, unknown>) => {
+      const mock = (globalThis as Record<string, unknown>).__sidecarMock as typeof sidecarMock
+      const repoPath = body.repoPath as string
+      let payload: unknown
+      switch (op) {
+        case 'get-status':
+          payload = await mock.getStatus(repoPath)
+          break
+        case 'get-branches':
+          payload = await mock.getBranches(repoPath)
+          break
+        case 'get-local-branches':
+          payload = await mock.getLocalBranches(repoPath)
+          break
+        case 'get-remote-refs':
+          payload = await mock.getRemoteRefs(repoPath)
+          break
+        case 'get-log':
+          payload = await mock.getLog(repoPath)
+          break
+        case 'stage-file':
+          payload = await mock.stageFile(repoPath, body.file as string)
+          break
+        case 'unstage-file':
+          payload = await mock.unstageFile(repoPath, body.file as string)
+          break
+        case 'commit':
+          payload = await mock.commit(repoPath, body.message as string)
+          break
+        case 'fetch-repo':
+          payload = await mock.fetchRepo(repoPath)
+          break
+        case 'push-repo':
+          payload = await mock.pushRepo(repoPath)
+          break
+        case 'pull-repo':
+          payload = await mock.pullRepo(repoPath)
+          break
+        case 'get-diff':
+          payload = await mock.getDiff(repoPath, body.file as string, body.staged === true)
+          break
+        case 'stage-hunk':
+          payload = await mock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
+          break
+        case 'unstage-hunk':
+          payload = await mock.unstageHunk(repoPath, body.file as string, body.hunkHeader as string)
+          break
+        case 'stash-list':
+          payload = await mock.stashList(repoPath)
+          break
+        default: {
+          const handler = opHandlers.get(op)
+          if (!handler) {
+            throw new Error(
+              `Unregistered sidecar op in test: "${op}". Register it with ` +
+                `sidecarMock.respond('${op}', ...) or add a case in src/test/setup.ts.`
             )
-            break
-          case 'stash-list':
-            payload = await mock.stashList(repoPath)
-            break
-          default: {
-            const handler = opHandlers.get(op)
-            if (!handler) {
-              throw new Error(
-                `Unregistered sidecar op in test: "${op}". Register it with ` +
-                  `sidecarMock.respond('${op}', ...) or add a case in src/test/setup.ts.`
-              )
-            }
-            payload = await handler(body)
-            break
           }
+          payload = await handler(body)
+          break
         }
-        return schema.parse(payload)
       }
-    )
+      return parseOrThrow(
+        getSidecarResponseSchema(op) as unknown as Schema.Schema<unknown, unknown, never>,
+        payload
+      )
+    })
   }
 })
 

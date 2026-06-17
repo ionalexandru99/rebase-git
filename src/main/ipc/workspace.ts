@@ -1,4 +1,4 @@
-import { Channel, type ScanForReposResponse } from '@shared/schemas/ipc'
+import { Channel } from '@shared/schemas/ipc'
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
 import { SidecarOp } from '../../sidecar/protocol'
 import { sidecarRequest } from '../sidecar'
@@ -40,6 +40,6 @@ export function register(getMainWindow: () => BrowserWindow | null): void {
   )
 
   ipcMain.handle(Channel.scanForRepos, (_, dirPath: string) =>
-    sidecarRequest<ScanForReposResponse>(SidecarOp.scanForRepos, { dirPath })
+    sidecarRequest(SidecarOp.scanForRepos, { dirPath })
   )
 }

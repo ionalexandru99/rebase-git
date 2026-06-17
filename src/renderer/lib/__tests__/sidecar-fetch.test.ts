@@ -1,4 +1,4 @@
-import { StatusResponseSchema } from '@shared/schemas/ipc'
+import { SidecarOp } from '@shared/sidecar-ops'
 import { describe, expect, it, vi } from 'vitest'
 import { sidecarMock } from '@/../test/setup'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
@@ -15,12 +15,13 @@ describe('sidecarFetch', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     }
     vi.mocked(sidecarMock.getStatus).mockResolvedValue(payload)
 
-    const result = await sidecarFetch('get-status', { repoPath: '/repo' }, StatusResponseSchema)
+    const result = await sidecarFetch(SidecarOp.getStatus, { repoPath: '/repo' })
 
     expect(sidecarMock.getStatus).toHaveBeenCalledWith('/repo')
     expect(result).toEqual(payload)
@@ -29,8 +30,14 @@ describe('sidecarFetch', () => {
   it('propagates sidecar errors', async () => {
     vi.mocked(sidecarMock.getStatus).mockRejectedValue(new Error('sidecar failed'))
 
-    await expect(
-      sidecarFetch('get-status', { repoPath: '/repo' }, StatusResponseSchema)
-    ).rejects.toThrow('sidecar failed')
+    await expect(sidecarFetch(SidecarOp.getStatus, { repoPath: '/repo' })).rejects.toThrow(
+      'sidecar failed'
+    )
+  })
+
+  it('rejects payloads that do not match the op response contract', async () => {
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({ _tag: 'Ok' } as never)
+
+    await expect(sidecarFetch(SidecarOp.getStatus, { repoPath: '/repo' })).rejects.toThrow()
   })
 })

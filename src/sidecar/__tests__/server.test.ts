@@ -379,6 +379,28 @@ describe('sidecar server', () => {
     expect(await scan.json()).toEqual({ error: 'bad request' })
   })
 
+  it('returns 400 when request bodies fail the operation registry schema', async () => {
+    const nullBody = await fetch(`${baseUrl}/op/get-status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: 'null'
+    })
+    expect(nullBody.status).toBe(400)
+    expect(await nullBody.json()).toEqual({ error: 'bad request' })
+
+    const arrayBody = await fetch(`${baseUrl}/op/get-status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: '[]'
+    })
+    expect(arrayBody.status).toBe(400)
+    expect(await arrayBody.json()).toEqual({ error: 'bad request' })
+
+    const wrongFieldType = await call('stage-file', { repoPath, file: 1 })
+    expect(wrongFieldType.status).toBe(400)
+    expect(await wrongFieldType.json()).toEqual({ error: 'bad request' })
+  })
+
   it('returns 413 when the request body exceeds the size limit', async () => {
     const response = await fetch(`${baseUrl}/op/get-status`, {
       method: 'POST',

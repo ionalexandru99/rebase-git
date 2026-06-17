@@ -86,7 +86,7 @@ function getHighlighter(): Promise<DiffHighlighter> {
 }
 
 export function alignHunkTokens(
-  lines: DiffLine[],
+  lines: readonly DiffLine[],
   oldSideTokens: LineTokens[],
   newSideTokens: LineTokens[]
 ): Array<LineTokens | null> {
@@ -109,7 +109,7 @@ export function alignHunkTokens(
 
 export async function highlightHunk(
   filePath: string,
-  lines: DiffLine[]
+  lines: readonly DiffLine[]
 ): Promise<Array<LineTokens | null> | null> {
   const language = languageForFile(filePath)
   if (!language) {
@@ -124,7 +124,7 @@ export async function highlightHunk(
     await highlighter.loadLanguage(language)
     loadedLanguages.add(language)
   }
-  const tokenizeSide = (sideLines: DiffLine[]): LineTokens[] => {
+  const tokenizeSide = (sideLines: readonly DiffLine[]): LineTokens[] => {
     if (sideLines.length === 0) {
       return []
     }

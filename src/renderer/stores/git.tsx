@@ -1,21 +1,7 @@
 import { parseOrThrow } from '@shared/codec'
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
-import {
-  BranchesResponseSchema,
-  CommitResponseSchema,
-  FetchResponseSchema,
-  LocalBranchesResponseSchema,
-  OpenRepoResponseSchema,
-  PullResponseSchema,
-  PushResponseSchema,
-  RemoteRefsResponseSchema,
-  StageHunkResponseSchema,
-  StageResponseSchema,
-  StartLogStreamResponseSchema,
-  StatusResponseSchema,
-  UnstageResponseSchema
-} from '@shared/schemas/ipc'
+import { OpenRepoResponseSchema, StartLogStreamResponseSchema } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
@@ -143,21 +129,13 @@ const parseRemoteRefsResponse = (response: {
 
 const fetchLocalBranches = async (path: string): Promise<LocalBranches> => {
   try {
-    const response = await sidecarFetch(
-      SidecarOp.getLocalBranches,
-      { repoPath: path },
-      LocalBranchesResponseSchema
-    )
+    const response = await sidecarFetch(SidecarOp.getLocalBranches, { repoPath: path })
     return parseLocalBranchesResponse(response)
   } catch (error) {
     if (!isInvalidSidecarRequest(error)) {
       throw error
     }
-    const response = await sidecarFetch(
-      SidecarOp.getBranches,
-      { repoPath: path },
-      BranchesResponseSchema
-    )
+    const response = await sidecarFetch(SidecarOp.getBranches, { repoPath: path })
     if (response._tag === 'Ok') {
       return {
         current: response.branches.current,
@@ -171,21 +149,13 @@ const fetchLocalBranches = async (path: string): Promise<LocalBranches> => {
 
 const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
   try {
-    const response = await sidecarFetch(
-      SidecarOp.getRemoteRefs,
-      { repoPath: path },
-      RemoteRefsResponseSchema
-    )
+    const response = await sidecarFetch(SidecarOp.getRemoteRefs, { repoPath: path })
     return parseRemoteRefsResponse(response)
   } catch (error) {
     if (!isInvalidSidecarRequest(error)) {
       throw error
     }
-    const response = await sidecarFetch(
-      SidecarOp.getBranches,
-      { repoPath: path },
-      BranchesResponseSchema
-    )
+    const response = await sidecarFetch(SidecarOp.getBranches, { repoPath: path })
     if (response._tag === 'Ok') {
       return {
         remotes: response.branches.remotes,
@@ -196,9 +166,10 @@ const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
   }
 }
 
-const withoutFile = (files: string[], file: string): string[] => files.filter((f) => f !== file)
-const withFile = (files: string[], file: string): string[] =>
-  files.includes(file) ? files : [...files, file]
+const withoutFile = (files: readonly string[], file: string): string[] =>
+  files.filter((f) => f !== file)
+const withFile = (files: readonly string[], file: string): string[] =>
+  files.includes(file) ? [...files] : [...files, file]
 
 const stageCodes = (index: string, workingDir: string): { index: string; working_dir: string } => {
   if (index === '?' || workingDir === '?') {
@@ -482,7 +453,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     path: string
   ): Promise<{ status: GitStatus; stale: boolean }> => {
     const seq = ++statusRequestSeq.current
-    const response = await sidecarFetch('get-status', { repoPath: path }, StatusResponseSchema)
+    const response = await sidecarFetch(SidecarOp.getStatus, { repoPath: path })
     if (response._tag === 'GitError') {
       throw new Error(response.message)
     }
@@ -567,7 +538,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }
 
   const runFetchAndRefresh = async (path: string) => {
-    const response = await sidecarFetch('fetch-repo', { repoPath: path }, FetchResponseSchema)
+    const response = await sidecarFetch(SidecarOp.fetchRepo, { repoPath: path })
     if (response._tag === 'Ok') {
       setState('lastFetchedAt', Date.now())
       if (tabActive()) {
@@ -709,11 +680,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         writeSnapshot(path, { status: optimistic })
         setState('status', optimistic)
       }
-      const response = await sidecarFetch(
-        'stage-file',
-        { repoPath: path, file },
-        StageResponseSchema
-      )
+      const response = await sidecarFetch(SidecarOp.stageFile, { repoPath: path, file })
       if (response._tag === 'Ok') {
         await refreshStatus(path)
         void invalidateDiffs(path)
@@ -742,11 +709,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         writeSnapshot(path, { status: optimistic })
         setState('status', optimistic)
       }
-      const response = await sidecarFetch(
-        'unstage-file',
-        { repoPath: path, file },
-        UnstageResponseSchema
-      )
+      const response = await sidecarFetch(SidecarOp.unstageFile, { repoPath: path, file })
       if (response._tag === 'Ok') {
         await refreshStatus(path)
         void invalidateDiffs(path)
@@ -775,11 +738,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         writeSnapshot(path, { status: optimistic })
         setState('status', optimistic)
       }
-      const response = await sidecarFetch(
-        'stage-all',
-        { repoPath: path, files },
-        StageResponseSchema
-      )
+      const response = await sidecarFetch(SidecarOp.stageAll, { repoPath: path, files })
       if (response._tag === 'Ok') {
         await refreshStatus(path)
         void invalidateDiffs(path)
@@ -808,11 +767,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         writeSnapshot(path, { status: optimistic })
         setState('status', optimistic)
       }
-      const response = await sidecarFetch(
-        'unstage-all',
-        { repoPath: path, files },
-        UnstageResponseSchema
-      )
+      const response = await sidecarFetch(SidecarOp.unstageAll, { repoPath: path, files })
       if (response._tag === 'Ok') {
         await refreshStatus(path)
         void invalidateDiffs(path)
@@ -850,11 +805,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       writeSnapshot(path, { status: optimistic })
       setState('status', optimistic)
     }
-    const response = await sidecarFetch(
-      op,
-      { repoPath: path, file, hunkHeader },
-      StageHunkResponseSchema
-    )
+    const response = await sidecarFetch(op, { repoPath: path, file, hunkHeader })
     if (response._tag === 'GitError') {
       if (previous && optimistic) {
         writeSnapshot(path, { status: previous })
@@ -875,11 +826,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       }
       setState('committing', true)
       try {
-        const response = await sidecarFetch(
-          'commit',
-          { repoPath: path, message },
-          CommitResponseSchema
-        )
+        const response = await sidecarFetch(SidecarOp.commit, { repoPath: path, message })
         if (response._tag === 'Ok') {
           await refreshStatus(path)
           void invalidateDiffs(path)
@@ -1055,11 +1002,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
     setState('pushing', true)
     try {
-      const response = await sidecarFetch(
-        SidecarOp.pushRepo,
-        { repoPath: path },
-        PushResponseSchema
-      )
+      const response = await sidecarFetch(SidecarOp.pushRepo, { repoPath: path })
       if (response._tag === 'Ok') {
         await refreshBranchesOnly(path)
       } else if (response._tag === 'GitError') {
@@ -1079,11 +1022,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     }
     setState('pulling', true)
     try {
-      const response = await sidecarFetch(
-        SidecarOp.pullRepo,
-        { repoPath: path },
-        PullResponseSchema
-      )
+      const response = await sidecarFetch(SidecarOp.pullRepo, { repoPath: path })
       if (response._tag === 'Ok') {
         await Promise.all([refreshStatus(path), refreshBranchesOnly(path)])
         await restartLogStream(path)

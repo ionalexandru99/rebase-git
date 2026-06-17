@@ -1,5 +1,5 @@
 import { normalizeRepoPath } from '@shared/repo-path'
-import { Channel, type CheckoutResponse, type OpenRepoResponse } from '@shared/schemas/ipc'
+import { Channel } from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
 import { SidecarOp } from '../../sidecar/protocol'
 import { startWatching, stopWatching } from '../repoWatcher'
@@ -8,7 +8,7 @@ import { addRecentRepo } from '../store'
 
 export function register(): void {
   ipcMain.handle(Channel.openRepo, async (event, repoPath: string) => {
-    const response = await sidecarRequest<OpenRepoResponse>(SidecarOp.openRepo, { repoPath })
+    const response = await sidecarRequest(SidecarOp.openRepo, { repoPath })
     if (response._tag === 'Ok') {
       addRecentRepo(response.result.path)
       startWatching(response.result.path, event.sender, {
@@ -30,6 +30,6 @@ export function register(): void {
   ipcMain.handle(
     Channel.checkoutRef,
     (_, repoPath: string, refKind: 'local' | 'remote' | 'tag', fullPath: string) =>
-      sidecarRequest<CheckoutResponse>(SidecarOp.checkoutRef, { repoPath, refKind, fullPath })
+      sidecarRequest(SidecarOp.checkoutRef, { repoPath, refKind, fullPath })
   )
 }

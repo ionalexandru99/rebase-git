@@ -38,3 +38,9 @@ export const SidecarOp = {
 } as const
 
 export type SidecarOpName = (typeof SidecarOp)[keyof typeof SidecarOp]
+
+const sidecarOpNames = new Set<string>(Object.values(SidecarOp))
+
+export function isSidecarOpName(value: unknown): value is SidecarOpName {
+  return typeof value === 'string' && sidecarOpNames.has(value)
+}

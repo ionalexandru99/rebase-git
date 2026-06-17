@@ -5,6 +5,13 @@ import { fileURLToPath } from 'node:url'
 import { parseOrThrow } from '@shared/codec'
 import { type LogChunk, LogChunkSchema } from '@shared/schemas/git'
 import type { SidecarOpName } from '@shared/sidecar-ops'
+import {
+  getSidecarRequestSchema,
+  getSidecarResponseSchema,
+  type SidecarRequest,
+  type SidecarResponse
+} from '@shared/sidecar-registry'
+import type { Schema } from 'effect'
 import { type UtilityProcess, utilityProcess } from 'electron'
 import type { SidecarMessage } from '../sidecar/protocol'
 
@@ -162,20 +169,31 @@ export async function restartSidecar(): Promise<void> {
   }
 }
 
-export async function sidecarRequest<T>(
-  op: SidecarOpName,
-  body: Record<string, unknown>
-): Promise<T> {
+export async function sidecarRequest<Op extends SidecarOpName>(
+  op: Op,
+  body: SidecarRequest<Op>
+): Promise<SidecarResponse<Op>> {
+  const requestSchema = getSidecarRequestSchema(op) as unknown as Schema.Schema<
+    SidecarRequest<Op>,
+    unknown,
+    never
+  >
+  const responseSchema = getSidecarResponseSchema(op) as unknown as Schema.Schema<
+    SidecarResponse<Op>,
+    unknown,
+    never
+  >
+  const request = parseOrThrow(requestSchema, body)
   const { baseUrl, token } = await ensureSidecar()
   const response = await fetch(`${baseUrl}/op/${op}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify(body)
+    body: JSON.stringify(request)
   })
   if (!response.ok) {
     throw new Error(`sidecar ${op} failed with status ${response.status}`)
   }
-  return (await response.json()) as T
+  return parseOrThrow(responseSchema, await response.json())
 }
 
 export interface LogStreamOptions {

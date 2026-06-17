@@ -1,9 +1,6 @@
-import {
-  ConflictableMutationResponseSchema,
-  GitMutationResponseSchema,
-  type ResetMode
-} from '@shared/schemas/ipc'
+import type { ResetMode } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
+import type { SidecarRequest, SidecarResponse } from '@shared/sidecar-registry'
 import { toast } from 'sonner'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitStore } from '@/stores/git'
@@ -12,11 +9,37 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+type GitMutationOp =
+  | typeof SidecarOp.createBranch
+  | typeof SidecarOp.deleteBranch
+  | typeof SidecarOp.renameBranch
+  | typeof SidecarOp.resetToCommit
+  | typeof SidecarOp.createTag
+  | typeof SidecarOp.deleteTag
+  | typeof SidecarOp.discardChanges
+  | typeof SidecarOp.discardAll
+  | typeof SidecarOp.stashPush
+  | typeof SidecarOp.stashDrop
+
+type ConflictableMutationOp =
+  | typeof SidecarOp.mergeBranch
+  | typeof SidecarOp.revertCommit
+  | typeof SidecarOp.cherryPick
+  | typeof SidecarOp.stashApply
+  | typeof SidecarOp.stashPop
+
+async function fetchAction<Op extends GitMutationOp | ConflictableMutationOp>(
+  op: Op,
+  body: Record<string, unknown>
+): Promise<SidecarResponse<Op>> {
+  return sidecarFetch(op, body as SidecarRequest<Op>)
+}
+
 export function useGitActions(git: GitStore) {
   const repoPath = () => git.state.repoPath
 
   async function mutate(
-    op: string,
+    op: GitMutationOp,
     body: Record<string, unknown>,
     label: string,
     refresh: (path: string) => Promise<void>
@@ -27,11 +50,7 @@ export function useGitActions(git: GitStore) {
       return false
     }
     try {
-      const response = await sidecarFetch(
-        op,
-        { repoPath: path, ...body },
-        GitMutationResponseSchema
-      )
+      const response = await fetchAction(op, { repoPath: path, ...body })
       if (response._tag === 'Ok') {
         await refresh(path)
         toast.success(label)
@@ -50,7 +69,7 @@ export function useGitActions(git: GitStore) {
   }
 
   async function mutateConflictable(
-    op: string,
+    op: ConflictableMutationOp,
     body: Record<string, unknown>,
     label: string
   ): Promise<boolean> {
@@ -60,11 +79,7 @@ export function useGitActions(git: GitStore) {
       return false
     }
     try {
-      const response = await sidecarFetch(
-        op,
-        { repoPath: path, ...body },
-        ConflictableMutationResponseSchema
-      )
+      const response = await fetchAction(op, { repoPath: path, ...body })
       if (response._tag === 'Ok') {
         await git.refreshAfterMutation(path)
         toast.success(label)
@@ -93,17 +108,17 @@ export function useGitActions(git: GitStore) {
   const refreshAll = (path: string) => git.refreshAfterMutation(path)
   const refreshWorkingTree = (path: string) => git.refreshWorkingTree(path)
 
-  async function stashConflictable(op: string, index: number, label: string): Promise<boolean> {
+  async function stashConflictable(
+    op: typeof SidecarOp.stashApply | typeof SidecarOp.stashPop,
+    index: number,
+    label: string
+  ): Promise<boolean> {
     const path = repoPath()
     if (!path) {
       toast.error('Repository is not open')
       return false
     }
-    const response = await sidecarFetch(
-      op,
-      { repoPath: path, index },
-      ConflictableMutationResponseSchema
-    ).catch((error: unknown) => {
+    const response = await fetchAction(op, { repoPath: path, index }).catch((error: unknown) => {
       toast.error(`${label} failed`, { description: describe(error) })
       return null
     })

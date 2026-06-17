@@ -5,7 +5,8 @@ import {
   RefTreeTogglesSchema,
   SidebarPrefsSchema
 } from '@shared/schemas/ipc'
-import { SidecarOp, type SidecarOpName } from '@shared/sidecar-ops'
+import { isSidecarOpName } from '@shared/sidecar-ops'
+import type { SidecarRequest } from '@shared/sidecar-registry'
 import { ipcMain } from 'electron'
 import { sidecarRequest } from '../sidecar'
 import {
@@ -17,12 +18,6 @@ import {
   setSidebarPrefs
 } from '../store'
 
-const sidecarOps = new Set<string>(Object.values(SidecarOp))
-
-function isSidecarOpName(value: unknown): value is SidecarOpName {
-  return typeof value === 'string' && sidecarOps.has(value)
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -32,7 +27,7 @@ export function register(): void {
     if (!isSidecarOpName(op) || !isRecord(body)) {
       throw new Error('invalid sidecar request')
     }
-    return sidecarRequest(op, body)
+    return sidecarRequest(op, body as SidecarRequest<typeof op>)
   })
 
   ipcMain.handle(Channel.getSidebarPrefs, () => parseOrThrow(SidebarPrefsSchema, getSidebarPrefs()))

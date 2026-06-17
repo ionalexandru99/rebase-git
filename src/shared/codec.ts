@@ -1,10 +1,9 @@
-import type { z } from 'zod'
+import { Schema } from 'effect'
 
-/** Validate an IPC/HTTP payload against a Zod schema; throws on mismatch. */
-export function parseOrThrow<T>(schema: z.ZodType<T>, value: unknown): T {
-  const result = schema.safeParse(value)
-  if (result.success) {
-    return result.data
-  }
-  throw new Error(`IPC payload failed schema validation: ${result.error.message}`)
+export function parseOrThrow<A, I>(schema: Schema.Schema<A, I, never>, value: unknown): A {
+  return Schema.decodeUnknownSync(schema)(value)
+}
+
+export function parseEither<A, I>(schema: Schema.Schema<A, I, never>, value: unknown) {
+  return Schema.decodeUnknownEither(schema)(value)
 }
