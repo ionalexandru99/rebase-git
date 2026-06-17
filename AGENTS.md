@@ -4,7 +4,7 @@
 
 This is **Rebase**, a Git GUI built with **Electron + TypeScript**. It's a desktop-only application for managing Git repositories with a fast, native-feeling UI.
 
-> Git work runs in a forked HTTP **sidecar**; the SolidJS renderer uses **TanStack Query** + native `fetch` (Zod contracts in `src/shared/`). Commit history streams over IPC.
+> Git work runs in a forked HTTP **sidecar**; the React 19 renderer uses **@tanstack/react-query** and reaches the sidecar over IPC (`window.electronAPI.sidecarRequest`), not directly (Zod contracts in `src/shared/`). Commit history streams over IPC.
 
 ## Core Principles
 
@@ -13,7 +13,7 @@ This is **Rebase**, a Git GUI built with **Electron + TypeScript**. It's a deskt
 This app must feel fast. Users open repos, stage files, and commit hundreds of times per day. Every interaction should be snappy.
 
 - **Avoid unnecessary abstractions.** Don't add layers that don't solve a real problem.
-- **The main thread must never block on Git.** Git work runs in a forked `utilityProcess` sidecar exposing an HTTP server on loopback (`127.0.0.1:<random-port>`, bearer-token auth). The main process only manages window lifecycle, dialogs, the store, deep links, the updater, and the sidecar's spawn/health/kill — it does **not** call `simple-git`. The renderer reaches the sidecar via `sidecarFetch` (native `fetch` + Zod).
+- **The main thread must never block on Git.** Git work runs in a forked `utilityProcess` sidecar exposing an HTTP server on loopback (`127.0.0.1:<random-port>`, bearer-token auth). The main process manages window lifecycle, dialogs, the store, the updater, the sidecar's spawn/health/kill, and proxies every Git IPC to the sidecar over loopback HTTP — it does **not** call `simple-git`. The renderer reaches the sidecar via `sidecarFetch`, which calls `window.electronAPI.sidecarRequest` (IPC) → main → loopback HTTP → sidecar; the sidecar URL and bearer token never reach the renderer or preload.
 - **Keep bundle size small.** Don't pull in heavy dependencies unless they're essential.
 - **Profile before optimizing, but don't write slow code.** Prefer fine-grained reactivity over broad re-renders. Virtualize unbounded lists.
 - **Git operations are blocking by nature.** Keep the UI responsive with clear loading states. Don't freeze the renderer.
@@ -29,7 +29,7 @@ We have 4 test layers. Use the right one for the change:
 
 | Layer | When to Use | How to Run |
 |-------|-------------|------------|
-| **Renderer unit tests** | Solid components, hooks, UI state logic | `pnpm test:renderer` |
+| **Renderer unit tests** | React components, hooks, UI state logic | `pnpm test:renderer` |
 | **Main process unit tests** | Pure functions, store logic, data transformations | `pnpm test:main` |
 | **Smoke tests** | Build sanity, startup checks, preload path resolution | `pnpm test:smoke` |
 | **E2E tests** | Critical user flows, IPC contracts, full app integration | `pnpm test:e2e` |
@@ -47,11 +47,11 @@ We have 4 test layers. Use the right one for the change:
 ## Architecture
 
 
-- `src/main/` — Electron main process. Window lifecycle, splash, dialogs, `electron-store`, deep links, updater, menu, and the sidecar's spawn/health/kill. **No Git logic.**
+- `src/main/` — Electron main process. Window lifecycle, splash, dialogs, `electron-store`, updater, menu, the sidecar's spawn/health/kill, and proxying every Git IPC to the sidecar over loopback HTTP. **No Git logic.**
 - `src/sidecar/` — forked `utilityProcess` running a Node HTTP server on loopback. Owns all `simple-git` work and the `Map<repoPath, SimpleGit>`.
-- `src/preload/` — Safe `contextBridge` bridge. Exposes window/OS IPC (dialogs, store, zoom, deep links) plus the sidecar URL+token to the renderer.
+- `src/preload/` — Safe `contextBridge` bridge. Exposes window/OS IPC (dialogs, store, zoom) plus a `sidecarRequest` IPC channel. The sidecar URL and bearer token stay inside main + sidecar and are never exposed to the renderer or preload.
 - `src/shared/` — Zod schemas shared by sidecar, main IPC, and renderer (HTTP + IPC wire shapes).
-- `src/renderer/` — SolidJS UI. Git reads/writes via TanStack Query + `sidecarFetch`; log stream and repo open/close stay imperative over IPC.
+- `src/renderer/` — React 19 UI. Git reads/writes via @tanstack/react-query + `sidecarFetch`, which IPCs to main (`window.electronAPI.sidecarRequest`) and never touches the sidecar HTTP server directly; log stream and repo open/close stay imperative over IPC. `src/renderer/lib/*-compat.*` is a transitional shim that mimics the old Solid-era reactive API, scheduled for removal (see REMEDIATION_PLAN.md Phase 1/5). Do not add new imports from it.
 
 Keep this architecture clean. The renderer is Electron-native, not a general web app — but the sidecar boundary is HTTP, so domain logic stays browser-portable.
 
@@ -68,9 +68,9 @@ All dependencies in `package.json` must use exact versions — **no `^` or `~` p
 
 - **Electron** 41.x with `electron-vite`
 - **Zod** for shared contracts (`src/shared/schemas/`, `codec.ts`)
-- **`@tanstack/solid-query`** for sidecar data (status, branches, mutations) with per-tab `queryKey` prefixes
-- **`@tanstack/solid-virtual`** for unbounded lists (history, ref tree, status files)
-- **SolidJS** (+ Kobalte) for the renderer
+- **`@tanstack/react-query`** for sidecar data (status, branches, mutations) with per-tab `queryKey` prefixes
+- **`@tanstack/react-virtual`** for unbounded lists (history, ref tree, status files)
+- **React 19** for the renderer
 - **Tailwind CSS** 4.x
 - **simple-git** for Git operations (inside the sidecar)
 - **electron-store** for persistent settings

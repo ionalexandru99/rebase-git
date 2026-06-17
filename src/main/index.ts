@@ -1,9 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, session } from 'electron'
 import windowStateKeeper from 'electron-window-state'
-
+import { buildContentSecurityPolicy } from './csp'
 import * as logStreamIpc from './ipc/log-stream'
 import * as repoIpc from './ipc/repo'
 import * as settingsIpc from './ipc/settings'
@@ -52,6 +52,21 @@ function hardenNavigation(win: BrowserWindow): void {
     if (!isAllowedNavigation(targetUrl)) {
       event.preventDefault()
     }
+  })
+}
+
+function applyContentSecurityPolicy(): void {
+  const policy = buildContentSecurityPolicy({
+    isPackaged: app.isPackaged,
+    devServer: process.env.ELECTRON_RENDERER_URL
+  })
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [policy]
+      }
+    })
   })
 }
 
@@ -127,6 +142,7 @@ app.whenReady().then(async () => {
   }
   registerIpcHandlers()
   wireProcessRecovery()
+  applyContentSecurityPolicy()
   createWindow()
   setupUpdater()
   setupContextMenu()

@@ -11,6 +11,12 @@ export default defineConfig({
       'src/sidecar/**/*.test.{ts,tsx}',
       'src/shared/**/*.test.{ts,tsx}'
     ],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      reportsDirectory: './coverage/main',
+      include: ['src/main/**', 'src/sidecar/**', 'src/shared/**'],
+    },
   },
   resolve: {
     alias: {

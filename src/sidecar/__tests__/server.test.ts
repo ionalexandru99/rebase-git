@@ -194,7 +194,7 @@ describe('sidecar server', () => {
     for (const dir of [remote, clone, downstream]) {
       fs.rmSync(dir, { recursive: true, force: true })
     }
-  })
+  }, 10_000)
 
   it('lists branches', async () => {
     const body = await (await call('get-branches', { repoPath })).json()

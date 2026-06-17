@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Rebase** — a desktop Git GUI built with Electron 41 + TypeScript + Tailwind 4. `pnpm` is the package manager.
 
-> Git work runs in a forked HTTP **sidecar** (main thread never blocks). The **SolidJS** renderer uses **TanStack Query** + `sidecarFetch` (Zod contracts in `src/shared/`). Commit history streams over IPC. See **`AGENTS.md`** for binding rules.
+> Git work runs in a forked HTTP **sidecar** (main thread never blocks). The **React 19** renderer uses **@tanstack/react-query** + `@tanstack/react-virtual`, and reaches the sidecar over IPC via `sidecarFetch` (Zod contracts in `src/shared/`). Commit history streams over IPC. See **`AGENTS.md`** for binding rules.
 
 `AGENTS.md` contains the binding rules: main thread never blocks on Git, tests required for every behaviour change, exact dependency versions (no `^`/`~`), restricted postinstall scripts (`pnpm.onlyBuiltDependencies`).
 
@@ -47,10 +47,10 @@ A `pre-push` hook in `.githooks/pre-push` runs `pnpm typecheck` and `pnpm check`
 
 Four processes, hard boundary between them:
 
-- `src/main/` — Node/Electron. Owns window lifecycle, dialogs, `electron-store` persistence, deep links, updater/menu, and sidecar spawn/health/kill. **No Git logic.**
-- `src/sidecar/` — forked `utilityProcess` HTTP server on loopback; owns all `simple-git` work.
-- `src/preload/` — typed `window.electronAPI` bridge for OS/window concerns and sidecar bootstrap config (`getSidecarConfig`). Context isolation is enabled; the renderer has no Node access.
-- `src/renderer/` — SolidJS UI; TanStack Query + `sidecarFetch` for Git ops; TanStack Virtual for long lists. Vite alias `@` → `src/renderer`.
+- `src/main/` — Node/Electron. Owns window lifecycle, dialogs, `electron-store` persistence, updater/menu, sidecar spawn/health/kill, and proxies every Git IPC to the sidecar over loopback HTTP. **No Git logic.**
+- `src/sidecar/` — forked `utilityProcess` HTTP server on loopback (`127.0.0.1:<random-port>`, bearer-token auth); owns all `simple-git` work.
+- `src/preload/` — typed `window.electronAPI` bridge for OS/window concerns plus a `sidecarRequest` IPC channel. Context isolation is enabled; the renderer has no Node access. The sidecar URL and bearer token stay inside main + sidecar and never reach the renderer or preload.
+- `src/renderer/` — React 19 UI; @tanstack/react-query + `sidecarFetch` for Git ops; @tanstack/react-virtual for long lists. `sidecarFetch` does NOT hit the network directly — it calls `window.electronAPI.sidecarRequest`, which IPCs to main, which forwards over loopback HTTP to the sidecar. Vite alias `@` → `src/renderer`. `src/renderer/lib/*-compat.*` is a transitional shim that mimics the old Solid-era reactive API, scheduled for removal (see REMEDIATION_PLAN.md Phase 1/5). Do not add new imports from it.
 
 Before changing architecture, read **`AGENTS.md`** (tests, exact dependency versions, `pnpm.onlyBuiltDependencies`).
 

@@ -1,10 +1,12 @@
 export default {
-  appId: 'com.example.git-gui',
-  productName: 'Git GUI',
+  appId: 'com.rebase-git.app',
+  productName: 'Rebase',
   directories: {
     output: 'release'
   },
   files: ['out'],
+  // TODO: code-signing/notarization (mac: hardenedRuntime: true + entitlements + notarize;
+  // win: signing) is out of scope until a signed release feed exists.
   mac: {
     target: ['dmg', 'zip']
   },
@@ -16,7 +18,7 @@ export default {
   },
   publish: {
     provider: 'github',
-    owner: 'your-github-username',
-    repo: 'git-gui'
+    owner: 'ionalexandru99',
+    repo: 'rebase-git'
   }
 }

@@ -6,3 +6,6 @@ pnpm typecheck
 
 echo "[pre-push] biome (lint + format)"
 pnpm check
+
+echo "[pre-push] unit tests"
+pnpm test:main

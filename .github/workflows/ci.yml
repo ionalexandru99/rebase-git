@@ -68,7 +68,7 @@ jobs:
         run: pnpm test:main
 
   test-e2e:
-    name: Build
+    name: Build & integration
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -77,18 +77,16 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
+          package-manager-cache: false
 
       - name: Enable pnpm
         run: corepack enable && corepack prepare pnpm@11.2.2 --activate
 
-      - uses: actions/cache@v5
-        with:
-          path: ~/.local/share/pnpm/store
-          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Ensure Electron runtime
+        run: node scripts/ensure-electron-runtime.mjs
 
       - name: Build
         run: pnpm build
@@ -99,3 +97,12 @@ jobs:
           preload=$(ls out/preload/index.{js,mjs,cjs} 2>/dev/null | head -1)
           test -n "$preload" || { echo "Preload bundle not found"; exit 1; }
           grep -q "electronAPI" "$preload" || { echo "electronAPI missing from preload"; exit 1; }
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: xvfb-run -a pnpm test:e2e
+
+      - name: Smoke test
+        run: xvfb-run -a pnpm test:smoke

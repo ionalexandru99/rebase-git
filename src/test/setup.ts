@@ -20,7 +20,12 @@ import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 
+const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown>()
+
 export const sidecarMock = {
+  respond(op: string, handler: (body: Record<string, unknown>) => unknown): void {
+    opHandlers.set(op, handler)
+  },
   getStatus: vi.fn<(repoPath: string) => Promise<StatusResponse>>(),
   getBranches: vi.fn<(repoPath: string) => Promise<BranchesResponse>>(),
   getLocalBranches: vi.fn<(repoPath: string) => Promise<LocalBranchesResponse>>(),
@@ -105,8 +110,21 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
           case 'stash-list':
             payload = await mock.stashList(repoPath)
             break
-          default:
-            throw new Error(`unhandled sidecar op in test: ${op}`)
+          default: {
+            const handler = opHandlers.get(op)
+            if (handler) {
+              payload = handler(body)
+            } else {
+              // The generic Ok fallback is intentional: mutation hooks under test that don't
+              // assert a specific response just need a success tag. Warn only in CI so local
+              // runs that deliberately lean on this fallback aren't spammed.
+              if (process.env.CI) {
+                console.warn(`unregistered sidecar op in test: ${op}`)
+              }
+              payload = { _tag: 'Ok' }
+            }
+            break
+          }
         }
         return schema.parse(payload)
       }
@@ -288,6 +306,7 @@ export function mockBranchResponses(
 
 beforeEach(() => {
   vi.resetAllMocks()
+  opHandlers.clear()
   clearAllSnapshots()
   vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])

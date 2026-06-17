@@ -2,9 +2,19 @@ import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import type { Plugin } from 'vite'
+import { injectContentSecurityPolicyMeta } from './src/main/csp'
 
 const sharedAlias = {
   '@shared': path.resolve('src/shared')
+}
+
+function packagedCspPlugin(): Plugin {
+  return {
+    name: 'rebase-packaged-csp',
+    apply: 'build',
+    transformIndexHtml: injectContentSecurityPolicyMeta
+  }
 }
 
 export default defineConfig({
@@ -37,7 +47,7 @@ export default defineConfig({
     }
   },
   renderer: {
-    plugins: [tailwindcss(), react()],
+    plugins: [packagedCspPlugin(), tailwindcss(), react()],
     resolve: {
       alias: {
         '@': path.resolve('src/renderer'),

@@ -17,6 +17,12 @@ export default defineConfig({
     globals: true,
     include: ['src/renderer/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      reportsDirectory: './coverage/renderer',
+      include: ['src/renderer/**'],
+    },
     server: {
       deps: {
         inline: [/react/, /@testing-library\/react/, /sonner/, /lucide-react/],
