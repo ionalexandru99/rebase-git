@@ -20,6 +20,7 @@ interface Sidecar {
 
 let sidecar: Sidecar | null = null
 let startup: Promise<Sidecar> | null = null
+let isShuttingDown = false
 
 function allocatePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -100,6 +101,9 @@ async function spawn(): Promise<Sidecar> {
 }
 
 export function startSidecar(): Promise<Sidecar> {
+  if (isShuttingDown) {
+    return Promise.reject(new Error('sidecar is shutting down'))
+  }
   if (startup) {
     return startup
   }
@@ -120,10 +124,22 @@ export function startSidecar(): Promise<Sidecar> {
 }
 
 async function ensureSidecar(): Promise<Sidecar> {
+  if (isShuttingDown) {
+    return Promise.reject(new Error('sidecar is shutting down'))
+  }
   if (sidecar) {
     return sidecar
   }
   return startSidecar()
+}
+
+export async function restartSidecar(): Promise<void> {
+  if (isShuttingDown) {
+    return
+  }
+  sidecar = null
+  startup = null
+  await startSidecar()
 }
 
 export async function sidecarRequest<T>(
@@ -145,6 +161,7 @@ export async function sidecarRequest<T>(
 export interface LogStreamOptions {
   skip?: number
   maxCount?: number
+  streamId?: number
 }
 
 export async function sidecarLogStream(
@@ -161,7 +178,8 @@ export async function sidecarLogStream(
     body: JSON.stringify({
       repoPath,
       skip: options?.skip,
-      maxCount: options?.maxCount
+      maxCount: options?.maxCount,
+      streamId: options?.streamId
     }),
     signal
   })
@@ -200,6 +218,7 @@ export async function sidecarLogStream(
 }
 
 export async function killSidecar(): Promise<void> {
+  isShuttingDown = true
   const current = sidecar
   sidecar = null
   startup = null

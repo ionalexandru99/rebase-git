@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { shouldRespawnSidecar } from '../recovery'
 import {
   RECOVERY_BUTTONS,
   recoveryActionForResponse,
@@ -29,5 +30,28 @@ describe('shouldPromptOnRenderGone', () => {
     expect(shouldPromptOnRenderGone('crashed')).toBe(true)
     expect(shouldPromptOnRenderGone('oom')).toBe(true)
     expect(shouldPromptOnRenderGone('clean-exit')).toBe(false)
+  })
+})
+
+describe('shouldRespawnSidecar', () => {
+  it('respawns when the gone child is the named git sidecar', () => {
+    expect(shouldRespawnSidecar({ type: 'Utility', serviceName: 'rebase git sidecar' })).toBe(true)
+  })
+
+  it('respawns a utility child with no service name', () => {
+    expect(shouldRespawnSidecar({ type: 'Utility' })).toBe(true)
+  })
+
+  it('does not respawn for a GPU process', () => {
+    expect(shouldRespawnSidecar({ type: 'GPU' })).toBe(false)
+  })
+
+  it('does not respawn for an unrelated named utility service', () => {
+    expect(shouldRespawnSidecar({ type: 'Utility', serviceName: 'Network Service' })).toBe(false)
+  })
+
+  it('does not respawn for a zygote or unknown child without a service name', () => {
+    expect(shouldRespawnSidecar({ type: 'Zygote' })).toBe(false)
+    expect(shouldRespawnSidecar({})).toBe(false)
   })
 })
