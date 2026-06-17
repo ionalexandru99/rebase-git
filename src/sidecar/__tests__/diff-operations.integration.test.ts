@@ -142,6 +142,18 @@ describe('diff operations against a real repository', () => {
     expect(diff.diff.hunks[0].lines.every((line) => line.kind === 'add')).toBe(true)
   })
 
+  it('produces a synthetic diff for an untracked unicode-named file', async () => {
+    writeLines('café.txt', ['gamma', 'delta'])
+
+    const diff = await getDiff(repoDir, 'café.txt', false)
+    if (diff._tag !== 'Ok') {
+      throw new Error(`expected Ok, got ${diff._tag}`)
+    }
+    expect(diff.diff.hunks).toHaveLength(1)
+    expect(diff.diff.hunks[0].lines.map((line) => line.text)).toEqual(['gamma', 'delta'])
+    expect(diff.diff.hunks[0].lines.every((line) => line.kind === 'add')).toBe(true)
+  })
+
   it('returns an empty diff for a clean tracked file', async () => {
     git('checkout', '--', 'sample.txt')
     git('reset', 'HEAD', 'sample.txt')

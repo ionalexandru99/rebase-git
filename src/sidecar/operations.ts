@@ -336,7 +336,7 @@ async function readFileDiff(repoPath: string, file: string, staged: boolean): Pr
 }
 
 async function isUntracked(repoPath: string, file: string): Promise<boolean> {
-  const out = await runGit(['-C', repoPath, 'status', '--porcelain', '--', file])
+  const out = await runGit(['-C', repoPath, 'status', '--porcelain', '-z', '--', file])
   return out.startsWith('??')
 }
 
@@ -619,14 +619,12 @@ export async function fetchRepo(repoPath: string): Promise<FetchResponse> {
   if (!gitInstances.has(key)) {
     return parseOrThrow(FetchResponseSchema, { _tag: 'RepoNotOpen' })
   }
-  return withRepoLock(key, async () => {
-    const semaphore = fetchSemaphoreFor(key)
-    const result = await semaphore.withPermitsIfAvailable(() => runFetch(key))
-    if (result === null) {
-      return parseOrThrow(FetchResponseSchema, { _tag: 'FetchSkipped' })
-    }
-    return result
-  })
+  const semaphore = fetchSemaphoreFor(key)
+  const result = await semaphore.withPermitsIfAvailable(() => runFetch(key))
+  if (result === null) {
+    return parseOrThrow(FetchResponseSchema, { _tag: 'FetchSkipped' })
+  }
+  return result
 }
 
 function runGitCommand(
@@ -1088,11 +1086,11 @@ export async function discardChanges(
   }
   return withRepoLock(repoPath, async () => {
     try {
-      const statusRaw = await git.raw(['status', '--porcelain', '--', ...files])
+      const statusRaw = await git.raw(['status', '--porcelain', '-z', '--', ...files])
       const untracked = new Set<string>()
-      for (const line of statusRaw.split('\n')) {
-        if (line.startsWith('??')) {
-          untracked.add(line.slice(3))
+      for (const entry of statusRaw.split('\0')) {
+        if (entry.startsWith('??')) {
+          untracked.add(entry.slice(3))
         }
       }
       const tracked = files.filter((file) => !untracked.has(file))

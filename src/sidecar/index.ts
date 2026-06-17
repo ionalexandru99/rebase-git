@@ -2,6 +2,10 @@ import type { Server } from 'node:http'
 import type { SidecarCommand, SidecarMessage, SidecarStartMessage } from './protocol'
 import { createSidecarServer } from './server'
 
+// The sidecar runs git non-interactively; without this a credentialed fetch/commit/checkout can
+// block forever on a terminal prompt. Set process-wide so both simple-git and raw spawns inherit it.
+process.env.GIT_TERMINAL_PROMPT = '0'
+
 const parentPort = process.parentPort
 let server: Server | undefined
 

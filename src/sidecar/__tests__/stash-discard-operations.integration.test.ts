@@ -150,6 +150,37 @@ describe('discard', () => {
     expect(result._tag).toBe('GitError')
   })
 
+  it('restores a tracked file whose name has a space', async () => {
+    write('a b.txt', 'space base\n')
+    git('add', 'a b.txt')
+    git('commit', '-m', 'add spaced file')
+    write('a b.txt', 'dirty space\n')
+
+    const result = await discardChanges(repoDir, ['a b.txt'])
+    expect(result._tag).toBe('Ok')
+    expect(read('a b.txt')).toBe('space base\n')
+  })
+
+  it('restores a tracked unicode-named file and deletes an untracked unicode-named file', async () => {
+    write('café.txt', 'unicode base\n')
+    git('add', 'café.txt')
+    git('commit', '-m', 'add unicode file')
+    write('café.txt', 'dirty unicode\n')
+    write('résumé.txt', 'temp unicode\n')
+
+    const result = await discardChanges(repoDir, ['café.txt', 'résumé.txt'])
+    expect(result._tag).toBe('Ok')
+    expect(read('café.txt')).toBe('unicode base\n')
+    expect(fs.existsSync(path.join(repoDir, 'résumé.txt'))).toBe(false)
+  })
+
+  it('deletes an untracked unicode-named file instead of restoring it', async () => {
+    write('naïve.txt', 'temp\n')
+    const result = await discardChanges(repoDir, ['naïve.txt'])
+    expect(result._tag).toBe('Ok')
+    expect(fs.existsSync(path.join(repoDir, 'naïve.txt'))).toBe(false)
+  })
+
   it('discards everything with discardAll', async () => {
     write('tracked.txt', 'dirty again\n')
     write('another-untracked.txt', 'junk\n')
