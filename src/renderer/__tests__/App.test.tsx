@@ -174,7 +174,8 @@ describe('App — repo picker (no repo open)', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
@@ -236,7 +237,8 @@ describe('App — persisted tabs', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
@@ -275,7 +277,8 @@ describe('App — persisted tabs', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
@@ -338,7 +341,8 @@ describe('App — persisted tabs', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
@@ -405,7 +409,8 @@ describe('App — persisted tabs', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
@@ -446,7 +451,8 @@ describe('App — persisted tabs', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
@@ -485,7 +491,8 @@ describe('App — workspace (repo open)', () => {
       conflicted: [],
       deleted: [],
       created: [],
-      renamed: []
+      renamed: [],
+      files: []
     }
   }
   const branchesMock = {
@@ -648,7 +655,8 @@ describe('App — workspace (repo open)', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
@@ -685,7 +693,8 @@ describe('App — workspace (repo open)', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })

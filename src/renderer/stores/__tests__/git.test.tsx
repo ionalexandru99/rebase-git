@@ -28,7 +28,8 @@ const statusOk = {
     conflicted: [],
     deleted: [],
     created: [],
-    renamed: []
+    renamed: [],
+    files: []
   }
 }
 

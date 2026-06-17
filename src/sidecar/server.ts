@@ -9,6 +9,7 @@ import {
   ScanForReposResponseSchema
 } from '@shared/schemas/ipc'
 import { LogStreamRequestSchema } from '@shared/schemas/log-stream'
+import { Either, Schema } from 'effect'
 import { simpleGit } from 'simple-git'
 import { streamGitLog } from './log-stream'
 import * as operations from './operations'
@@ -374,11 +375,11 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       if (!fullPath) {
         return BAD_REQUEST
       }
-      const refKind = RefKindSchema.safeParse(body.refKind)
-      if (!refKind.success) {
+      const refKind = Schema.decodeUnknownEither(RefKindSchema)(body.refKind)
+      if (Either.isLeft(refKind)) {
         return BAD_REQUEST
       }
-      return operations.checkoutRef(repoPath, refKind.data, fullPath)
+      return operations.checkoutRef(repoPath, refKind.right, fullPath)
     }
     case SidecarOp.createBranch: {
       const repoPath = safeRepoPath(body)
@@ -450,11 +451,11 @@ async function dispatch(op: string, body: Body): Promise<unknown> {
       if (!sha) {
         return BAD_REQUEST
       }
-      const mode = ResetModeSchema.safeParse(body.mode)
-      if (!mode.success) {
+      const mode = Schema.decodeUnknownEither(ResetModeSchema)(body.mode)
+      if (Either.isLeft(mode)) {
         return BAD_REQUEST
       }
-      return operations.resetToCommit(repoPath, sha, mode.data)
+      return operations.resetToCommit(repoPath, sha, mode.right)
     }
     case SidecarOp.revertCommit: {
       const repoPath = safeRepoPath(body)
@@ -672,17 +673,17 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
         sendJson(res, 400, { error: 'bad request' })
         return
       }
-      const parsed = LogStreamRequestSchema.safeParse({
+      const parsed = Schema.decodeUnknownEither(LogStreamRequestSchema)({
         repoPath,
         skip: body.skip,
         maxCount: body.maxCount,
         streamId: body.streamId
       })
-      if (!parsed.success) {
+      if (Either.isLeft(parsed)) {
         sendJson(res, 400, { error: 'bad request' })
         return
       }
-      const { skip, maxCount, streamId } = parsed.data
+      const { skip, maxCount, streamId } = parsed.right
       streamGitLog(repoPath, res, { skip, maxCount, streamId })
     } catch (error) {
       console.error('[sidecar] request error', error)

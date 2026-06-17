@@ -15,7 +15,8 @@ describe('sidecarFetch', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     }
     vi.mocked(sidecarMock.getStatus).mockResolvedValue(payload)
