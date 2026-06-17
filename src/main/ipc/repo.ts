@@ -11,7 +11,7 @@ export function register(): void {
     const response = await sidecarRequest<OpenRepoResponse>(SidecarOp.openRepo, { repoPath })
     if (response._tag === 'Ok') {
       addRecentRepo(response.result.path)
-      startWatching(response.result.path, event.sender)
+      void startWatching(response.result.path, event.sender)
     }
     return response
   })

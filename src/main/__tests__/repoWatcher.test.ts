@@ -146,7 +146,7 @@ describe('startWatching working-tree detection', () => {
   })
 
   it('emits a workingTree change when a nested file is edited', async () => {
-    startWatching(repoDir, fakeWebContents)
+    await startWatching(repoDir, fakeWebContents)
     // give chokidar time to finish its initial scan before mutating
     await new Promise((resolve) => setTimeout(resolve, 400))
 
@@ -206,8 +206,8 @@ describe('resolveGitDirs', () => {
     fs.rmSync(repoDir, { recursive: true, force: true })
   })
 
-  it('resolves a normal repo to its own .git directory', () => {
-    const { gitDir, commonDir } = resolveGitDirs(repoDir)
+  it('resolves a normal repo to its own .git directory', async () => {
+    const { gitDir, commonDir } = await resolveGitDirs(repoDir)
     expect(path.isAbsolute(gitDir)).toBe(true)
     expect(path.isAbsolute(commonDir)).toBe(true)
     expect(fs.realpathSync.native(gitDir)).toBe(fs.realpathSync.native(path.join(repoDir, '.git')))
@@ -216,11 +216,11 @@ describe('resolveGitDirs', () => {
     )
   })
 
-  it('resolves a linked worktree to a distinct gitdir and a shared common dir', () => {
+  it('resolves a linked worktree to a distinct gitdir and a shared common dir', async () => {
     const worktreeDir = `${repoDir}-wt`
     execFileSync('git', ['-C', repoDir, 'worktree', 'add', worktreeDir, '-b', 'feature'])
     try {
-      const { gitDir, commonDir } = resolveGitDirs(worktreeDir)
+      const { gitDir, commonDir } = await resolveGitDirs(worktreeDir)
       expect(path.isAbsolute(gitDir)).toBe(true)
       expect(path.isAbsolute(commonDir)).toBe(true)
       // For a worktree, .git is a file pointing into the main repo's .git/worktrees/<name>.
@@ -251,7 +251,7 @@ describe('startWatching index detection', () => {
   })
 
   it('emits an index change when a file is staged via the git CLI', async () => {
-    startWatching(repoDir, fakeWebContents)
+    await startWatching(repoDir, fakeWebContents)
     await new Promise((resolve) => setTimeout(resolve, 400))
 
     fs.writeFileSync(path.join(repoDir, 'staged.ts'), 'export const staged = 1\n')
@@ -283,7 +283,7 @@ describe('startWatching linked-worktree refs detection', () => {
   })
 
   it('emits a refs change when a commit moves HEAD in the worktree', async () => {
-    startWatching(worktreeDir, fakeWebContents)
+    await startWatching(worktreeDir, fakeWebContents)
     await new Promise((resolve) => setTimeout(resolve, 400))
 
     fs.writeFileSync(path.join(worktreeDir, 'feature.ts'), 'export const feature = 1\n')

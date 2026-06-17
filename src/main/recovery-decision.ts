@@ -16,3 +16,12 @@ export function recoveryActionForResponse(response: number): RecoveryAction {
 export function shouldPromptOnRenderGone(reason: string): boolean {
   return reason !== 'clean-exit'
 }
+
+const SIDECAR_SERVICE_NAME = 'rebase git sidecar'
+
+export function shouldRespawnSidecar(details: { type?: string; serviceName?: string }): boolean {
+  if (details.serviceName === SIDECAR_SERVICE_NAME) {
+    return true
+  }
+  return details.type === 'Utility' && !details.serviceName
+}

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { shouldRespawnSidecar } from '../recovery'
 import {
   RECOVERY_BUTTONS,
   recoveryActionForResponse,
-  shouldPromptOnRenderGone
+  shouldPromptOnRenderGone,
+  shouldRespawnSidecar
 } from '../recovery-decision'
 
 describe('recoveryActionForResponse', () => {

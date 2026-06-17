@@ -686,8 +686,13 @@ export async function pullRepo(repoPath: string): Promise<PullResponse> {
   if (!gitInstances.has(key)) {
     return parseOrThrow(PullResponseSchema, { _tag: 'RepoNotOpen' })
   }
+  // `git pull` fetches, so it must hold the fetch semaphore that standalone fetchRepo uses —
+  // otherwise a concurrent fetch and this pull race to write FETCH_HEAD/remote refs and one
+  // dies on a git lock. withPermits waits for an in-flight fetch instead of skipping.
   return withRepoLock(key, async () =>
-    parseOrThrow(PullResponseSchema, await runGitCommand(key, ['pull', '--ff-only']))
+    fetchSemaphoreFor(key).withPermits(async () =>
+      parseOrThrow(PullResponseSchema, await runGitCommand(key, ['pull', '--ff-only']))
+    )
   )
 }
 
