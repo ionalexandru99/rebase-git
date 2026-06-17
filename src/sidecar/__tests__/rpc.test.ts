@@ -45,11 +45,14 @@ const protocolLayer = () =>
   }).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(RpcSerialization.layerNdjson))
 
 async function call(op: string, body: Record<string, unknown>): Promise<void> {
-  await fetch(`${baseUrl}/op/${op}`, {
+  const response = await fetch(`${baseUrl}/op/${op}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
     body: JSON.stringify(body)
   })
+  if (!response.ok) {
+    throw new Error(`setup call failed: ${op} -> ${response.status} ${await response.text()}`)
+  }
 }
 
 beforeAll(async () => {
