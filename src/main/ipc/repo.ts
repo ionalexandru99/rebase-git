@@ -16,12 +16,11 @@ export function register(): void {
     return response
   })
 
-  ipcMain.handle(Channel.closeRepo, async (_, repoPath: string) => {
-    const normalized = normalizeRepoPath(repoPath)
+  ipcMain.handle(Channel.closeRepo, async (event, repoPath: string) => {
     try {
       await sidecarRequest(SidecarOp.closeRepo, { repoPath })
     } finally {
-      await stopWatching(normalized)
+      await stopWatching(normalizeRepoPath(repoPath), event.sender.id)
     }
   })
 
