@@ -7,6 +7,7 @@ import { type LogChunk, LogChunkSchema } from '@shared/schemas/git'
 import type { SidecarOpName } from '@shared/sidecar-ops'
 import { type UtilityProcess, utilityProcess } from 'electron'
 import type { SidecarMessage } from '../sidecar/protocol'
+import { callRpcRead, disposeRpcRuntime, isRpcReadOp } from './sidecar-rpc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const START_TIMEOUT_MS = 30_000
@@ -167,6 +168,9 @@ export async function sidecarRequest<T>(
   body: Record<string, unknown>
 ): Promise<T> {
   const { baseUrl, token } = await ensureSidecar()
+  if (isRpcReadOp(op)) {
+    return callRpcRead(op, baseUrl, token, body) as Promise<T>
+  }
   const response = await fetch(`${baseUrl}/op/${op}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
@@ -239,6 +243,7 @@ export async function sidecarLogStream(
 
 export async function killSidecar(): Promise<void> {
   isShuttingDown = true
+  disposeRpcRuntime()
   const current = sidecar
   sidecar = null
   startup = null

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 import { parseOrThrow } from '@shared/codec'
 import { type ScanForReposResponse, ScanForReposResponseSchema } from '@shared/schemas/ipc'
 import { LogStreamRequestSchema } from '@shared/schemas/log-stream'
@@ -10,6 +11,7 @@ import { BAD_REQUEST, dispatch } from './dispatch'
 import { streamGitLog } from './log-stream'
 import { resolveExistingRepoRoot } from './path-guards'
 import { SidecarOp } from './protocol'
+import { handleRpcRequest } from './rpc-handlers'
 import { storeValidatedScanRoot, takeValidatedScanRoot } from './scan-root-registry'
 
 type Body = Record<string, unknown>
@@ -113,7 +115,7 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
   }
 }
 
-function readBody(req: IncomingMessage): Promise<Body> {
+function readRawBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let total = 0
@@ -133,21 +135,17 @@ function readBody(req: IncomingMessage): Promise<Body> {
       chunks.push(chunk)
     })
     req.on('end', () => {
-      if (rejected) {
-        return
-      }
-      const raw = Buffer.concat(chunks).toString('utf8')
-      if (!raw) {
-        return resolve({})
-      }
-      try {
-        resolve(JSON.parse(raw) as Body)
-      } catch (error) {
-        reject(error)
+      if (!rejected) {
+        resolve(Buffer.concat(chunks).toString('utf8'))
       }
     })
     req.on('error', reject)
   })
+}
+
+async function readBody(req: IncomingMessage): Promise<Body> {
+  const raw = await readRawBody(req)
+  return raw ? (JSON.parse(raw) as Body) : {}
 }
 
 function sendJson(res: ServerResponse, status: number, payload: unknown): void {
@@ -172,6 +170,36 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
 
   if (url.pathname === '/health' && req.method === 'GET') {
     sendJson(res, 200, { ok: true })
+    return
+  }
+
+  if (url.pathname === '/rpc' && req.method === 'POST') {
+    try {
+      const rawBody = await readRawBody(req)
+      const request = new Request('http://localhost/rpc', {
+        method: 'POST',
+        headers: { 'content-type': req.headers['content-type'] ?? 'application/ndjson' },
+        body: rawBody
+      })
+      const response = await handleRpcRequest(request)
+      const headers: Record<string, string> = {}
+      response.headers.forEach((value, key) => {
+        headers[key] = value
+      })
+      res.writeHead(response.status, headers)
+      if (response.body) {
+        Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]).pipe(res)
+      } else {
+        res.end(await response.text())
+      }
+    } catch (error) {
+      console.error('[sidecar] rpc error', error)
+      if (error instanceof BodyTooLargeError) {
+        sendJson(res, 413, { error: 'payload too large' })
+        return
+      }
+      sendJson(res, 500, { error: 'internal error' })
+    }
     return
   }
 

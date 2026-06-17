@@ -40,6 +40,8 @@
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
+    "@effect/platform": "0.96.1",
+    "@effect/rpc": "0.75.1",
     "@pierre/theme": "1.0.3",
     "@tanstack/react-query": "5.28.9",
     "@tanstack/react-virtual": "3.5.0",
