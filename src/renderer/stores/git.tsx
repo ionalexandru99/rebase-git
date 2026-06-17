@@ -304,7 +304,11 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     [localBranchesQuery.data, remoteRefsQuery.data]
   )
   const log = logQuery.data ?? null
-  const currentBranch = status?.current ?? localBranchesQuery.data?.current ?? ''
+  // Prefer the dedicated branch source over status.current: a branch-only refresh (e.g. renaming
+  // the checked-out branch) updates localBranches but not status, and status.current would
+  // otherwise keep showing the old name until an unrelated status refetch. Falls back to
+  // status.current when there is no named branch (detached HEAD reports an empty current).
+  const currentBranch = localBranchesQuery.data?.current || status?.current || ''
 
   const state: GitState = {
     repoPath: ui.repoPath,

@@ -282,6 +282,28 @@ describe('useGitStore — parallel repo loading', () => {
     })
   })
 
+  it('reflects a renamed current branch from a branch-only refresh while status lags', async () => {
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.currentBranch).toBe('main')
+    })
+
+    // Renaming the checked-out branch refreshes branches only; status still reports the old name.
+    sidecarMock.getStatus.mockResolvedValue(statusOk)
+    sidecarMock.getLocalBranches.mockResolvedValue({
+      _tag: 'Ok',
+      branches: { current: 'renamed', all: ['renamed', 'dev'] }
+    })
+
+    await git.refreshBranchesOnly(repoPath)
+
+    await waitFor(() => {
+      expect(git.state.currentBranch).toBe('renamed')
+    })
+    expect(git.state.status?.current).toBe('main')
+  })
+
   it('log flush skipped when tab inactive', async () => {
     vi.useFakeTimers()
     const stream = setupLogStream()
