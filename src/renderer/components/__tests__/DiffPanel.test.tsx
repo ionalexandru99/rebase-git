@@ -131,7 +131,8 @@ beforeEach(() => {
       conflicted: [],
       deleted: [],
       created: [],
-      renamed: []
+      renamed: [],
+      files: []
     }
   })
   sidecarMock.getLocalBranches.mockResolvedValue({
@@ -313,7 +314,8 @@ describe('DiffPanel', () => {
           conflicted: [],
           deleted: [],
           created: [],
-          renamed: []
+          renamed: [],
+          files: []
         }
       })
       .mockResolvedValue({
@@ -326,7 +328,8 @@ describe('DiffPanel', () => {
           conflicted: [],
           deleted: [],
           created: [],
-          renamed: []
+          renamed: [],
+          files: []
         }
       })
     sidecarMock.getDiff.mockImplementation(
@@ -460,7 +463,8 @@ describe('DiffPanel', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     await renderDiffPanel({ file: 'NOTES' })
@@ -490,7 +494,8 @@ describe('DiffPanel', () => {
         conflicted: [],
         deleted: [],
         created: [],
-        renamed: []
+        renamed: [],
+        files: []
       }
     })
     await renderDiffPanel({ file: 'src/app.ts' })

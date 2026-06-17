@@ -1,135 +1,136 @@
-import { z } from 'zod'
+import { Schema } from 'effect'
+import { mutableArray, NonNaNNumber } from '../codec'
 
-export const RenamedFileSchema = z.object({
-  from: z.string(),
-  to: z.string()
+export const RenamedFileSchema = Schema.Struct({
+  from: Schema.String,
+  to: Schema.String
 })
-export type RenamedFile = z.infer<typeof RenamedFileSchema>
+export type RenamedFile = typeof RenamedFileSchema.Type
 
-export const StatusFileCodeSchema = z.object({
-  path: z.string(),
-  index: z.string(),
-  working_dir: z.string()
+export const StatusFileCodeSchema = Schema.Struct({
+  path: Schema.String,
+  index: Schema.String,
+  working_dir: Schema.String
 })
-export type StatusFileCode = z.infer<typeof StatusFileCodeSchema>
+export type StatusFileCode = typeof StatusFileCodeSchema.Type
 
-export const GitStatusSchema = z.object({
-  current: z.string(),
-  modified: z.array(z.string()),
-  staged: z.array(z.string()),
-  not_added: z.array(z.string()),
-  conflicted: z.array(z.string()),
-  deleted: z.array(z.string()),
-  created: z.array(z.string()),
-  renamed: z.array(RenamedFileSchema),
-  files: z.array(StatusFileCodeSchema).optional()
+export const GitStatusSchema = Schema.Struct({
+  current: Schema.String,
+  modified: mutableArray(Schema.String),
+  staged: mutableArray(Schema.String),
+  not_added: mutableArray(Schema.String),
+  conflicted: mutableArray(Schema.String),
+  deleted: mutableArray(Schema.String),
+  created: mutableArray(Schema.String),
+  renamed: mutableArray(RenamedFileSchema),
+  files: Schema.optionalWith(mutableArray(StatusFileCodeSchema), { default: () => [] })
 })
-export type GitStatus = z.infer<typeof GitStatusSchema>
+export type GitStatus = typeof GitStatusSchema.Type
 
-export const GitLogEntrySchema = z.object({
-  hash: z.string(),
-  message: z.string(),
-  author_name: z.string(),
-  date: z.string(),
-  parents: z.array(z.string()),
-  refs: z.string()
+export const GitLogEntrySchema = Schema.Struct({
+  hash: Schema.String,
+  message: Schema.String,
+  author_name: Schema.String,
+  date: Schema.String,
+  parents: mutableArray(Schema.String),
+  refs: Schema.String
 })
-export type GitLogEntry = z.infer<typeof GitLogEntrySchema>
+export type GitLogEntry = typeof GitLogEntrySchema.Type
 
-export const GitLogSchema = z.object({
-  all: z.array(GitLogEntrySchema),
-  total: z.number()
+export const GitLogSchema = Schema.Struct({
+  all: mutableArray(GitLogEntrySchema),
+  total: NonNaNNumber
 })
-export type GitLog = z.infer<typeof GitLogSchema>
+export type GitLog = typeof GitLogSchema.Type
 
-export const BranchTrackingSchema = z.object({
-  ahead: z.number(),
-  behind: z.number()
+export const BranchTrackingSchema = Schema.Struct({
+  ahead: NonNaNNumber,
+  behind: NonNaNNumber
 })
-export type BranchTracking = z.infer<typeof BranchTrackingSchema>
+export type BranchTracking = typeof BranchTrackingSchema.Type
 
-export const GitBranchesSchema = z.object({
-  current: z.string(),
-  all: z.array(z.string()),
-  remotes: z.array(z.string()),
-  tags: z.array(z.string()),
-  tracking: z.record(z.string(), BranchTrackingSchema).optional()
+export const GitBranchesSchema = Schema.Struct({
+  current: Schema.String,
+  all: mutableArray(Schema.String),
+  remotes: mutableArray(Schema.String),
+  tags: mutableArray(Schema.String),
+  tracking: Schema.optional(Schema.Record({ key: Schema.String, value: BranchTrackingSchema }))
 })
-export type GitBranches = z.infer<typeof GitBranchesSchema>
+export type GitBranches = typeof GitBranchesSchema.Type
 
-export const LocalBranchesSchema = z.object({
-  current: z.string(),
-  all: z.array(z.string()),
-  tracking: z.record(z.string(), BranchTrackingSchema).optional()
+export const LocalBranchesSchema = Schema.Struct({
+  current: Schema.String,
+  all: mutableArray(Schema.String),
+  tracking: Schema.optional(Schema.Record({ key: Schema.String, value: BranchTrackingSchema }))
 })
-export type LocalBranches = z.infer<typeof LocalBranchesSchema>
+export type LocalBranches = typeof LocalBranchesSchema.Type
 
-export const RemoteRefsSchema = z.object({
-  remotes: z.array(z.string()),
-  tags: z.array(z.string())
+export const RemoteRefsSchema = Schema.Struct({
+  remotes: mutableArray(Schema.String),
+  tags: mutableArray(Schema.String)
 })
-export type RemoteRefs = z.infer<typeof RemoteRefsSchema>
+export type RemoteRefs = typeof RemoteRefsSchema.Type
 
-export const RepoOpenSuccessSchema = z.object({
-  remotes: z.record(z.string(), z.string()),
-  defaultBranch: z.string().optional(),
-  path: z.string(),
-  gitDir: z.string().optional(),
-  commonDir: z.string().optional()
+export const RepoOpenSuccessSchema = Schema.Struct({
+  remotes: Schema.Record({ key: Schema.String, value: Schema.String }),
+  defaultBranch: Schema.optional(Schema.String),
+  path: Schema.String,
+  gitDir: Schema.optional(Schema.String),
+  commonDir: Schema.optional(Schema.String)
 })
-export type RepoOpenSuccess = z.infer<typeof RepoOpenSuccessSchema>
+export type RepoOpenSuccess = typeof RepoOpenSuccessSchema.Type
 
-export const DiffLineSchema = z.object({
-  kind: z.enum(['context', 'add', 'del', 'meta']),
-  text: z.string(),
-  oldLine: z.number().nullable(),
-  newLine: z.number().nullable()
+export const DiffLineSchema = Schema.Struct({
+  kind: Schema.Literal('context', 'add', 'del', 'meta'),
+  text: Schema.String,
+  oldLine: Schema.NullOr(NonNaNNumber),
+  newLine: Schema.NullOr(NonNaNNumber)
 })
-export type DiffLine = z.infer<typeof DiffLineSchema>
+export type DiffLine = typeof DiffLineSchema.Type
 
-export const DiffHunkSchema = z.object({
-  header: z.string(),
-  oldStart: z.number(),
-  oldCount: z.number(),
-  newStart: z.number(),
-  newCount: z.number(),
-  lines: z.array(DiffLineSchema)
+export const DiffHunkSchema = Schema.Struct({
+  header: Schema.String,
+  oldStart: NonNaNNumber,
+  oldCount: NonNaNNumber,
+  newStart: NonNaNNumber,
+  newCount: NonNaNNumber,
+  lines: mutableArray(DiffLineSchema)
 })
-export type DiffHunk = z.infer<typeof DiffHunkSchema>
+export type DiffHunk = typeof DiffHunkSchema.Type
 
-export const FileDiffSchema = z.object({
-  filePath: z.string(),
-  binary: z.boolean(),
-  hunks: z.array(DiffHunkSchema)
+export const FileDiffSchema = Schema.Struct({
+  filePath: Schema.String,
+  binary: Schema.Boolean,
+  hunks: mutableArray(DiffHunkSchema)
 })
-export type FileDiff = z.infer<typeof FileDiffSchema>
+export type FileDiff = typeof FileDiffSchema.Type
 
-export const CommitSummarySchema = z.object({
-  commit: z.string(),
-  branch: z.string(),
-  summary: z.object({
-    changes: z.number(),
-    insertions: z.number(),
-    deletions: z.number()
+export const CommitSummarySchema = Schema.Struct({
+  commit: Schema.String,
+  branch: Schema.String,
+  summary: Schema.Struct({
+    changes: NonNaNNumber,
+    insertions: NonNaNNumber,
+    deletions: NonNaNNumber
   })
 })
-export type CommitSummary = z.infer<typeof CommitSummarySchema>
+export type CommitSummary = typeof CommitSummarySchema.Type
 
-export const LogChunkSchema = z.object({
-  repoPath: z.string(),
-  commits: z.array(GitLogEntrySchema),
-  done: z.boolean(),
-  hasMore: z.boolean().optional(),
-  error: z.string().optional(),
-  streamId: z.number().int().optional()
+export const LogChunkSchema = Schema.Struct({
+  repoPath: Schema.String,
+  commits: mutableArray(GitLogEntrySchema),
+  done: Schema.Boolean,
+  hasMore: Schema.optional(Schema.Boolean),
+  error: Schema.optional(Schema.String),
+  streamId: Schema.optional(Schema.Int)
 })
-export type LogChunk = z.infer<typeof LogChunkSchema>
+export type LogChunk = typeof LogChunkSchema.Type
 
-export const RepoChangeKindSchema = z.enum(['refs', 'workingTree', 'index'])
-export type RepoChangeKind = z.infer<typeof RepoChangeKindSchema>
+export const RepoChangeKindSchema = Schema.Literal('refs', 'workingTree', 'index')
+export type RepoChangeKind = typeof RepoChangeKindSchema.Type
 
-export const RepoChangedEventSchema = z.object({
-  repoPath: z.string(),
+export const RepoChangedEventSchema = Schema.Struct({
+  repoPath: Schema.String,
   kind: RepoChangeKindSchema
 })
-export type RepoChangedEvent = z.infer<typeof RepoChangedEventSchema>
+export type RepoChangedEvent = typeof RepoChangedEventSchema.Type

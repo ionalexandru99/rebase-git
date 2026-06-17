@@ -1,10 +1,10 @@
+import { Either, Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
-import { z } from 'zod'
-import { parseOrThrow } from '../codec'
+import { parseEither, parseOrThrow } from '../codec'
 
-const PersonSchema = z.object({
-  name: z.string(),
-  age: z.number()
+const PersonSchema = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number
 })
 
 describe('parseOrThrow', () => {
@@ -19,16 +19,39 @@ describe('parseOrThrow', () => {
   })
 
   it('throws when a required field is missing', () => {
-    expect(() => parseOrThrow(PersonSchema, { name: 'Ada' })).toThrow(/schema validation/)
+    expect(() => parseOrThrow(PersonSchema, { name: 'Ada' })).toThrow()
   })
 
   it('throws when a field has the wrong type', () => {
-    expect(() => parseOrThrow(PersonSchema, { name: 'Ada', age: 'old' })).toThrow(
-      /schema validation/
-    )
+    expect(() => parseOrThrow(PersonSchema, { name: 'Ada', age: 'old' })).toThrow()
   })
 
   it('throws on a non-object payload', () => {
-    expect(() => parseOrThrow(PersonSchema, 'not-an-object')).toThrow(/schema validation/)
+    expect(() => parseOrThrow(PersonSchema, 'not-an-object')).toThrow()
+  })
+
+  it('throws a structured ParseError, not an opaque string', () => {
+    let caught: unknown
+    try {
+      parseOrThrow(PersonSchema, { name: 'Ada' })
+    } catch (error) {
+      caught = error
+    }
+    expect((caught as { _tag?: string } | undefined)?._tag).toBe('ParseError')
+  })
+})
+
+describe('parseEither', () => {
+  it('returns a Right with the decoded value on success', () => {
+    const result = parseEither(PersonSchema)({ name: 'Ada', age: 36 })
+    expect(Either.isRight(result)).toBe(true)
+    if (Either.isRight(result)) {
+      expect(result.right).toEqual({ name: 'Ada', age: 36 })
+    }
+  })
+
+  it('returns a Left on failure', () => {
+    const result = parseEither(PersonSchema)({ name: 'Ada' })
+    expect(Either.isLeft(result)).toBe(true)
   })
 })

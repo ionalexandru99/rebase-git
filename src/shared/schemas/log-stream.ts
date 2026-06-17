@@ -1,10 +1,10 @@
-import { z } from 'zod'
+import { Schema } from 'effect'
 
-export const LogStreamRequestSchema = z.object({
-  repoPath: z.string(),
-  skip: z.number().int().min(0).optional(),
-  maxCount: z.number().int().positive().optional(),
-  streamId: z.number().int().optional()
+export const LogStreamRequestSchema = Schema.Struct({
+  repoPath: Schema.String,
+  skip: Schema.optional(Schema.Int.pipe(Schema.nonNegative())),
+  maxCount: Schema.optional(Schema.Int.pipe(Schema.positive())),
+  streamId: Schema.optional(Schema.Int)
 })
-export type LogStreamRequest = z.infer<typeof LogStreamRequestSchema>
+export type LogStreamRequest = typeof LogStreamRequestSchema.Type
 export type LogStreamOptions = Pick<LogStreamRequest, 'skip' | 'maxCount' | 'streamId'>

@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest'
+import { parseOrThrow } from '@shared/codec'
 import type { GitBranches } from '@shared/schemas/git'
 import type {
   BranchesResponse,
@@ -16,7 +17,10 @@ import type {
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
+import type { SidecarOpName } from '@shared/sidecar-ops'
+import { sidecarRegistry } from '@shared/sidecar-registry'
 import { cleanup } from '@testing-library/react'
+import type { Schema } from 'effect'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 
@@ -55,7 +59,7 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
       async (
         op: string,
         body: Record<string, unknown>,
-        schema: { parse: (v: unknown) => unknown }
+        schema?: Schema.Schema<unknown, unknown>
       ) => {
         const mock = (globalThis as Record<string, unknown>).__sidecarMock as typeof sidecarMock
         const repoPath = body.repoPath as string
@@ -122,7 +126,8 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             break
           }
         }
-        return schema.parse(payload)
+        const responseSchema = schema ?? sidecarRegistry[op as SidecarOpName].response
+        return parseOrThrow(responseSchema as Schema.Schema<unknown, unknown>, payload)
       }
     )
   }
