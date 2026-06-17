@@ -11,7 +11,10 @@ export function register(): void {
     const response = await sidecarRequest<OpenRepoResponse>(SidecarOp.openRepo, { repoPath })
     if (response._tag === 'Ok') {
       addRecentRepo(response.result.path)
-      void startWatching(response.result.path, event.sender)
+      startWatching(response.result.path, event.sender, {
+        gitDir: response.result.gitDir,
+        commonDir: response.result.commonDir
+      })
     }
     return response
   })

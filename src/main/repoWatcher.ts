@@ -1,6 +1,4 @@
-import { execFile } from 'node:child_process'
 import path from 'node:path'
-import { promisify } from 'node:util'
 import { Channel } from '@shared/channels'
 import { parseOrThrow } from '@shared/codec'
 import { normalizeRepoPath } from '@shared/repo-path'
@@ -8,8 +6,6 @@ import { RepoChangedEventSchema, type RepoChangeKind } from '@shared/schemas/git
 import chokidar, { type FSWatcher } from 'chokidar'
 import type { WebContents } from 'electron'
 import { type DebouncedDrain, startDebouncedDrain } from './debounced-drain'
-
-const execFileAsync = promisify(execFile)
 
 interface Watcher {
   refs: FSWatcher
@@ -58,35 +54,19 @@ export function ignoreWorkingTree(targetPath: string): boolean {
 
 export { startDebouncedDrain } from './debounced-drain'
 
-interface ResolvedGitDirs {
-  gitDir: string
-  commonDir: string
-}
-
-// Resolved with async execFile, never execFileSync: startWatching runs in the Electron main
-// process, so a synchronous git on a slow/hung repo path would stall all window + IPC work.
-export async function resolveGitDirs(repoPath: string): Promise<ResolvedGitDirs> {
-  try {
-    const { stdout } = await execFileAsync(
-      'git',
-      ['-C', repoPath, 'rev-parse', '--git-dir', '--git-common-dir'],
-      { encoding: 'utf8' }
-    )
-    const lines = stdout.split('\n').filter((line) => line.trim().length > 0)
-    const gitDir = path.resolve(repoPath, lines[0].trim())
-    const commonDir = path.resolve(repoPath, lines[1].trim())
-    return { gitDir, commonDir }
-  } catch {
-    const gitDir = path.join(repoPath, '.git')
-    return { gitDir, commonDir: gitDir }
-  }
+export interface GitDirs {
+  gitDir?: string
+  commonDir?: string
 }
 
 function watcherKey(webContentsId: number, repoPath: string): string {
   return `${webContentsId}:${normalizeRepoPath(repoPath)}`
 }
 
-export async function startWatching(repoPath: string, webContents: WebContents): Promise<void> {
+// gitDir/commonDir come resolved from the sidecar's open response (git logic stays out of main);
+// they differ from `<repo>/.git` for linked worktrees and submodules. Fall back to the plain
+// layout when absent.
+export function startWatching(repoPath: string, webContents: WebContents, dirs?: GitDirs): void {
   const key = watcherKey(webContents.id, repoPath)
   const existing = watchers.get(key)
   if (existing) {
@@ -96,10 +76,8 @@ export async function startWatching(repoPath: string, webContents: WebContents):
     void stopWatching(repoPath, webContents.id)
   }
 
-  const { gitDir, commonDir } = await resolveGitDirs(repoPath)
-  if (webContents.isDestroyed()) {
-    return
-  }
+  const gitDir = dirs?.gitDir ?? path.join(repoPath, '.git')
+  const commonDir = dirs?.commonDir ?? gitDir
   const refsTargets = [
     path.join(gitDir, 'HEAD'),
     path.join(commonDir, 'refs'),

@@ -73,7 +73,9 @@ export type RemoteRefs = z.infer<typeof RemoteRefsSchema>
 export const RepoOpenSuccessSchema = z.object({
   remotes: z.record(z.string(), z.string()),
   defaultBranch: z.string().optional(),
-  path: z.string()
+  path: z.string(),
+  gitDir: z.string().optional(),
+  commonDir: z.string().optional()
 })
 export type RepoOpenSuccess = z.infer<typeof RepoOpenSuccessSchema>
 
@@ -119,7 +121,7 @@ export const LogChunkSchema = z.object({
   done: z.boolean(),
   hasMore: z.boolean().optional(),
   error: z.string().optional(),
-  streamId: z.number().optional()
+  streamId: z.number().int().optional()
 })
 export type LogChunk = z.infer<typeof LogChunkSchema>
 

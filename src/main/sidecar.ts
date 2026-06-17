@@ -21,6 +21,7 @@ interface Sidecar {
 let sidecar: Sidecar | null = null
 let startup: Promise<Sidecar> | null = null
 let isShuttingDown = false
+let restartPromise: Promise<void> | null = null
 
 function allocatePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -137,9 +138,28 @@ export async function restartSidecar(): Promise<void> {
   if (isShuttingDown) {
     return
   }
-  sidecar = null
-  startup = null
-  await startSidecar()
+  // Concurrent child-process-gone events (or a manual restart racing one) must not each spawn a
+  // sidecar; dedupe on the in-flight restart and stop the previous child before respawning so a
+  // still-alive process can't be orphaned.
+  if (restartPromise) {
+    return restartPromise
+  }
+  restartPromise = (async () => {
+    const previous = sidecar
+    sidecar = null
+    startup = null
+    if (previous) {
+      try {
+        previous.child.kill()
+      } catch {}
+    }
+    await startSidecar()
+  })()
+  try {
+    await restartPromise
+  } finally {
+    restartPromise = null
+  }
 }
 
 export async function sidecarRequest<T>(

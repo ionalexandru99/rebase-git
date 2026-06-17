@@ -4,13 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type { WebContents } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  ignoreWorkingTree,
-  resolveGitDirs,
-  startDebouncedDrain,
-  startWatching,
-  stopWatching
-} from '../repoWatcher'
+import { ignoreWorkingTree, startDebouncedDrain, startWatching, stopWatching } from '../repoWatcher'
 
 describe('ignoreWorkingTree', () => {
   it('ignores the .git directory', () => {
@@ -146,7 +140,7 @@ describe('startWatching working-tree detection', () => {
   })
 
   it('emits a workingTree change when a nested file is edited', async () => {
-    await startWatching(repoDir, fakeWebContents)
+    startWatching(repoDir, fakeWebContents)
     // give chokidar time to finish its initial scan before mutating
     await new Promise((resolve) => setTimeout(resolve, 400))
 
@@ -194,45 +188,18 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 5000) => {
   return predicate()
 }
 
-describe('resolveGitDirs', () => {
-  let repoDir: string
-
-  beforeEach(() => {
-    repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-resolve-test-')))
-    initRepo(repoDir)
-  })
-
-  afterEach(() => {
-    fs.rmSync(repoDir, { recursive: true, force: true })
-  })
-
-  it('resolves a normal repo to its own .git directory', async () => {
-    const { gitDir, commonDir } = await resolveGitDirs(repoDir)
-    expect(path.isAbsolute(gitDir)).toBe(true)
-    expect(path.isAbsolute(commonDir)).toBe(true)
-    expect(fs.realpathSync.native(gitDir)).toBe(fs.realpathSync.native(path.join(repoDir, '.git')))
-    expect(fs.realpathSync.native(commonDir)).toBe(
-      fs.realpathSync.native(path.join(repoDir, '.git'))
-    )
-  })
-
-  it('resolves a linked worktree to a distinct gitdir and a shared common dir', async () => {
-    const worktreeDir = `${repoDir}-wt`
-    execFileSync('git', ['-C', repoDir, 'worktree', 'add', worktreeDir, '-b', 'feature'])
-    try {
-      const { gitDir, commonDir } = await resolveGitDirs(worktreeDir)
-      expect(path.isAbsolute(gitDir)).toBe(true)
-      expect(path.isAbsolute(commonDir)).toBe(true)
-      // For a worktree, .git is a file pointing into the main repo's .git/worktrees/<name>.
-      expect(fs.realpathSync.native(gitDir)).not.toBe(fs.realpathSync.native(worktreeDir))
-      expect(fs.realpathSync.native(commonDir)).toBe(
-        fs.realpathSync.native(path.join(repoDir, '.git'))
-      )
-    } finally {
-      fs.rmSync(worktreeDir, { recursive: true, force: true })
-    }
-  })
-})
+function resolveGitDirsViaCli(repoPath: string): { gitDir: string; commonDir: string } {
+  const output = execFileSync(
+    'git',
+    ['-C', repoPath, 'rev-parse', '--git-dir', '--git-common-dir'],
+    { encoding: 'utf8' }
+  )
+  const lines = output.split('\n').filter((line) => line.trim().length > 0)
+  return {
+    gitDir: path.resolve(repoPath, lines[0].trim()),
+    commonDir: path.resolve(repoPath, lines[1].trim())
+  }
+}
 
 describe('startWatching index detection', () => {
   let repoDir: string
@@ -251,7 +218,7 @@ describe('startWatching index detection', () => {
   })
 
   it('emits an index change when a file is staged via the git CLI', async () => {
-    await startWatching(repoDir, fakeWebContents)
+    startWatching(repoDir, fakeWebContents)
     await new Promise((resolve) => setTimeout(resolve, 400))
 
     fs.writeFileSync(path.join(repoDir, 'staged.ts'), 'export const staged = 1\n')
@@ -283,7 +250,7 @@ describe('startWatching linked-worktree refs detection', () => {
   })
 
   it('emits a refs change when a commit moves HEAD in the worktree', async () => {
-    await startWatching(worktreeDir, fakeWebContents)
+    startWatching(worktreeDir, fakeWebContents, resolveGitDirsViaCli(worktreeDir))
     await new Promise((resolve) => setTimeout(resolve, 400))
 
     fs.writeFileSync(path.join(worktreeDir, 'feature.ts'), 'export const feature = 1\n')

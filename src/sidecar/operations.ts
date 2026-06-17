@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import path from 'node:path'
 import { parseOrThrow } from '@shared/codec'
 import {
   type BranchesResponse,
@@ -39,6 +40,7 @@ import {
   type UnstageResponse,
   UnstageResponseSchema
 } from '@shared/schemas/ipc'
+import type { SimpleGit } from 'simple-git'
 import { fetchSemaphoreFor, releaseFetchSemaphore } from './fetch-semaphore'
 import { deriveLocalShortName } from './git/checkout'
 import { resolveDefaultBranch } from './git/defaultBranch'
@@ -125,6 +127,24 @@ function ensureCommitGraph(key: string): void {
   })
 }
 
+// The real gitdir/common-dir so the main-process watcher can target HEAD/refs/index without
+// running git itself: for linked worktrees and submodules `.git` is a file pointing elsewhere.
+export async function resolveGitDirs(
+  key: string,
+  git: SimpleGit
+): Promise<{ gitDir: string; commonDir: string }> {
+  try {
+    const output = await git.raw(['rev-parse', '--git-dir', '--git-common-dir'])
+    const lines = output.split('\n').filter((line) => line.trim().length > 0)
+    const gitDir = path.resolve(key, lines[0].trim())
+    const commonDir = path.resolve(key, lines[1].trim())
+    return { gitDir, commonDir }
+  } catch {
+    const gitDir = path.join(key, '.git')
+    return { gitDir, commonDir: gitDir }
+  }
+}
+
 export async function openRepo(repoPath: string): Promise<OpenRepoResponse> {
   const key = normalizeRepoPath(repoPath)
   try {
@@ -135,13 +155,20 @@ export async function openRepo(repoPath: string): Promise<OpenRepoResponse> {
       return parseOrThrow(OpenRepoResponseSchema, { _tag: 'NotARepo' })
     }
     ensureCommitGraph(key)
-    const [remotes, defaultBranch] = await Promise.all([
+    const [remotes, defaultBranch, gitDirs] = await Promise.all([
       git.getRemotes(true),
-      resolveDefaultBranch(git, undefined)
+      resolveDefaultBranch(git, undefined),
+      resolveGitDirs(key, git)
     ])
     return parseOrThrow(OpenRepoResponseSchema, {
       _tag: 'Ok',
-      result: { remotes: serializeRemotes(remotes), defaultBranch, path: key }
+      result: {
+        remotes: serializeRemotes(remotes),
+        defaultBranch,
+        path: key,
+        gitDir: gitDirs.gitDir,
+        commonDir: gitDirs.commonDir
+      }
     })
   } catch (error) {
     return parseOrThrow(OpenRepoResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
