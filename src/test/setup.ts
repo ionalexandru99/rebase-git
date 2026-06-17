@@ -17,6 +17,8 @@ import type {
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
+import type { SidecarOpName } from '@shared/sidecar-ops'
+import { sidecarRegistry } from '@shared/sidecar-registry'
 import { cleanup } from '@testing-library/react'
 import type { Schema } from 'effect'
 import { afterEach, beforeEach, vi } from 'vitest'
@@ -57,7 +59,7 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
       async (
         op: string,
         body: Record<string, unknown>,
-        schema: Schema.Schema<unknown, unknown>
+        schema?: Schema.Schema<unknown, unknown>
       ) => {
         const mock = (globalThis as Record<string, unknown>).__sidecarMock as typeof sidecarMock
         const repoPath = body.repoPath as string
@@ -124,7 +126,8 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             break
           }
         }
-        return parseOrThrow(schema, payload)
+        const responseSchema = schema ?? sidecarRegistry[op as SidecarOpName].response
+        return parseOrThrow(responseSchema as Schema.Schema<unknown, unknown>, payload)
       }
     )
   }

@@ -1,5 +1,4 @@
 import type { DiffHunk, DiffLine, FileDiff } from '@shared/schemas/git'
-import { GetDiffResponseSchema } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useQuery } from '@tanstack/react-query'
 import { FileDiffIcon } from 'lucide-react'
@@ -40,11 +39,11 @@ export function DiffPanel(props: DiffPanelProps) {
         if (!path || !selected) {
           throw new Error('No file selected')
         }
-        const response = await sidecarFetch(
-          SidecarOp.getDiff,
-          { repoPath: path, file: selected.file, staged },
-          GetDiffResponseSchema
-        )
+        const response = await sidecarFetch(SidecarOp.getDiff, {
+          repoPath: path,
+          file: selected.file,
+          staged
+        })
         if (response._tag === 'Ok') {
           return response.diff
         }

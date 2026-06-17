@@ -1,4 +1,4 @@
-import { type StashEntry, StashListResponseSchema } from '@shared/schemas/ipc'
+import type { StashEntry } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
@@ -15,11 +15,7 @@ export function useStashes(repoPath: string | null) {
       if (!repoPath) {
         return []
       }
-      const response = await sidecarFetch(
-        SidecarOp.stashList,
-        { repoPath },
-        StashListResponseSchema
-      )
+      const response = await sidecarFetch(SidecarOp.stashList, { repoPath })
       return response._tag === 'Ok' ? response.stashes : []
     }
   })
