@@ -1,4 +1,5 @@
 import { CheckIcon } from 'lucide-react'
+import { useMemo } from 'react'
 import { toast } from 'sonner'
 import { CommitPanel } from './components/CommitPanel'
 import { DiffPanel } from './components/DiffPanel'
@@ -14,7 +15,6 @@ import type { CommitAction, FileAction } from './lib/git-actions'
 import {
   type Component,
   createEffect,
-  createMemo,
   createSignal,
   Dynamic,
   type JSX,
@@ -125,44 +125,41 @@ function LocalChangesView(props: WorkspaceViewProps) {
     save: saveFilesPanelWidth
   })
 
-  const status = () => git.state.status
-  const totalChanges = createMemo(() => {
-    const current = status()
-    if (!current) {
+  const status = git.state.status
+  const totalChanges = useMemo(() => {
+    if (!status) {
       return 0
     }
     return (
-      current.modified.length +
-      current.staged.length +
-      current.not_added.length +
-      current.conflicted.length +
-      current.deleted.length +
-      current.created.length +
-      current.renamed.length
+      status.modified.length +
+      status.staged.length +
+      status.not_added.length +
+      status.conflicted.length +
+      status.deleted.length +
+      status.created.length +
+      status.renamed.length
     )
-  })
-  const stagedCount = () => (status()?.staged.length ?? 0) + (status()?.created.length ?? 0)
+  }, [status])
+  const stagedCount = (status?.staged.length ?? 0) + (status?.created.length ?? 0)
 
-  const fileEntries = createMemo<SelectedFile[]>(() => {
-    const current = status()
-    if (!current) {
+  const fileEntries = useMemo<SelectedFile[]>(() => {
+    if (!status) {
       return []
     }
-    return buildUnifiedFileRows(current).map((row) => ({ file: row.file }))
-  })
+    return buildUnifiedFileRows(status).map((row) => ({ file: row.file }))
+  }, [status])
 
-  const stagedFiles = createMemo<string[]>(() => {
-    const current = status()
-    if (!current) {
+  const stagedFiles = useMemo<string[]>(() => {
+    if (!status) {
       return []
     }
-    return buildUnifiedFileRows(current)
+    return buildUnifiedFileRows(status)
       .filter((row) => !row.isConflicted && row.stageState !== 'unstaged')
       .map((row) => row.file)
-  })
+  }, [status])
 
   createEffect(() => {
-    const entries = fileEntries()
+    const entries = fileEntries
     const current = selected()
     const stillExists = current && entries.some((entry) => entry.file === current.file)
     if (!stillExists) {
@@ -172,7 +169,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
 
   return (
     <Show
-      when={totalChanges() > 0}
+      when={totalChanges > 0}
       fallback={
         <>
           <CleanWorkingTree />
@@ -198,8 +195,8 @@ function LocalChangesView(props: WorkspaceViewProps) {
               headerActions={
                 <>
                   <StashControl
-                    stagedFiles={stagedFiles()}
-                    hasChanges={totalChanges() > 0}
+                    stagedFiles={stagedFiles}
+                    hasChanges={totalChanges > 0}
                     onStashSelected={stashSelected}
                     onStashAll={stashAll}
                   />
@@ -228,7 +225,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
           onCommit={git.commit}
           loading={git.loading()}
           branch={git.state.currentBranch || 'no-branch'}
-          stagedCount={stagedCount()}
+          stagedCount={stagedCount}
         />
       </div>
       {dialogs()}

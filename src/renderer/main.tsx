@@ -1,4 +1,4 @@
-import { render } from '@/lib/react-dom-compat'
+import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 import { QueryProvider } from './providers/QueryProvider'
@@ -8,11 +8,8 @@ if (!rootElement) {
   throw new Error('Root element not found')
 }
 
-render(
-  () => (
-    <QueryProvider>
-      <App />
-    </QueryProvider>
-  ),
-  rootElement
+createRoot(rootElement).render(
+  <QueryProvider>
+    <App />
+  </QueryProvider>
 )

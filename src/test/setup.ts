@@ -20,7 +20,7 @@ import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 
-const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown>()
+const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown | Promise<unknown>>()
 
 export const sidecarMock = {
   respond(op: string, handler: (body: Record<string, unknown>) => unknown): void {
@@ -112,17 +112,13 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             break
           default: {
             const handler = opHandlers.get(op)
-            if (handler) {
-              payload = handler(body)
-            } else {
-              // The generic Ok fallback is intentional: mutation hooks under test that don't
-              // assert a specific response just need a success tag. Warn only in CI so local
-              // runs that deliberately lean on this fallback aren't spammed.
-              if (process.env.CI) {
-                console.warn(`unregistered sidecar op in test: ${op}`)
-              }
-              payload = { _tag: 'Ok' }
+            if (!handler) {
+              throw new Error(
+                `Unregistered sidecar op in test: "${op}". Register it with ` +
+                  `sidecarMock.respond('${op}', ...) or add a case in src/test/setup.ts.`
+              )
             }
+            payload = await handler(body)
             break
           }
         }

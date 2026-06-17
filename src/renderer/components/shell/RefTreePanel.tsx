@@ -1,16 +1,9 @@
 import { parseOrThrow } from '@shared/codec'
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import { RefTreeTogglesSchema } from '@shared/schemas/ipc'
+import { useMemo } from 'react'
 import type { BranchAction, StashAction } from '@/lib/git-actions'
-import {
-  type Accessor,
-  createMemo,
-  createSignal,
-  For,
-  onCleanup,
-  onMount,
-  Show
-} from '@/lib/react-compat'
+import { createSignal, For, onCleanup, onMount, Show } from '@/lib/react-compat'
 import {
   type BranchTracking,
   buildRefTreeRows,
@@ -43,7 +36,7 @@ interface RefTreePanelProps {
 interface VirtualRefTreeRowProps {
   index: number
   top: number
-  rows: Accessor<RefRow[]>
+  rows: RefRow[]
   localLoading: boolean
   currentBranch: string
   visibleTimelineRefs?: ReadonlySet<string>
@@ -55,9 +48,9 @@ interface VirtualRefTreeRowProps {
 }
 
 function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
-  const row = createMemo(() => props.rows()[props.index])
+  const row = props.rows[props.index]
   return (
-    <Show when={row()}>
+    <Show when={row}>
       {(definedRow) => (
         <RefTreeRow
           row={definedRow()}
@@ -102,21 +95,33 @@ export function RefTreePanel(props: RefTreePanelProps) {
     })
   })
 
-  const rows = createMemo(() =>
-    buildRefTreeRows({
-      localBranches: props.localBranches,
-      remoteBranches: props.remoteBranches,
-      tags: props.tags,
-      toggles: toggles(),
-      currentBranch: props.currentBranch,
-      localLoading: props.loading ?? false,
-      tracking: props.tracking,
-      stashes: props.stashes
-    })
+  const toggleSet = toggles()
+  const rows = useMemo(
+    () =>
+      buildRefTreeRows({
+        localBranches: props.localBranches,
+        remoteBranches: props.remoteBranches,
+        tags: props.tags,
+        toggles: toggleSet,
+        currentBranch: props.currentBranch,
+        localLoading: props.loading ?? false,
+        tracking: props.tracking,
+        stashes: props.stashes
+      }),
+    [
+      props.localBranches,
+      props.remoteBranches,
+      props.tags,
+      toggleSet,
+      props.currentBranch,
+      props.loading,
+      props.tracking,
+      props.stashes
+    ]
   )
 
   const { setScrollRef, onScroll, virtualItems, totalHeight, virtualizer } = useFixedVirtualizer({
-    count: () => rows().length,
+    count: () => rows.length,
     rowHeight: REF_TREE_ROW_HEIGHT,
     overscan: REF_TREE_OVERSCAN,
     initialViewportHeight: 400

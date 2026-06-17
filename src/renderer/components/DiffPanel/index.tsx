@@ -1,15 +1,16 @@
 import type { DiffHunk, DiffLine, FileDiff } from '@shared/schemas/git'
 import { GetDiffResponseSchema } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
+import { useQuery } from '@tanstack/react-query'
 import { FileDiffIcon } from 'lucide-react'
+import { useMemo } from 'react'
 import {
   highlightHunk,
   hunkHighlightKey,
   type LineTokens,
   languageForFile
 } from '@/lib/diff-highlight'
-import { createMemo, createSignal, For, Show } from '@/lib/react-compat'
-import { createQuery } from '@/lib/react-query-compat'
+import { createSignal, For, Show } from '@/lib/react-compat'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import { cn } from '@/lib/utils'
 import type { GitStore } from '@/stores/git'
@@ -29,61 +30,55 @@ export function DiffPanel(props: DiffPanelProps) {
   const isUntracked = () =>
     props.selected !== null && (git.state.status?.not_added.includes(props.selected.file) ?? false)
 
-  const makeDiffQuery = (staged: boolean) =>
-    createQuery(() => {
-      const path = repoPath()
-      const selected = props.selected
-      return {
-        queryKey: selected ? git.diffQueryKey(selected.file, staged) : ['diff', 'none', staged],
-        enabled: Boolean(path && selected),
-        queryFn: async (): Promise<FileDiff> => {
-          if (!path || !selected) {
-            throw new Error('No file selected')
-          }
-          const response = await sidecarFetch(
-            SidecarOp.getDiff,
-            { repoPath: path, file: selected.file, staged },
-            GetDiffResponseSchema
-          )
-          if (response._tag === 'Ok') {
-            return response.diff
-          }
-          if (response._tag === 'GitError') {
-            throw new Error(response.message)
-          }
-          throw new Error('Repository not open')
+  const buildDiffQueryOptions = (staged: boolean) => {
+    const path = repoPath()
+    const selected = props.selected
+    return {
+      queryKey: selected ? git.diffQueryKey(selected.file, staged) : ['diff', 'none', staged],
+      enabled: Boolean(path && selected),
+      queryFn: async (): Promise<FileDiff> => {
+        if (!path || !selected) {
+          throw new Error('No file selected')
         }
+        const response = await sidecarFetch(
+          SidecarOp.getDiff,
+          { repoPath: path, file: selected.file, staged },
+          GetDiffResponseSchema
+        )
+        if (response._tag === 'Ok') {
+          return response.diff
+        }
+        if (response._tag === 'GitError') {
+          throw new Error(response.message)
+        }
+        throw new Error('Repository not open')
       }
-    })
+    }
+  }
 
-  const unstagedQuery = makeDiffQuery(false)
-  const stagedQuery = makeDiffQuery(true)
+  const unstagedQuery = useQuery(buildDiffQueryOptions(false))
+  const stagedQuery = useQuery(buildDiffQueryOptions(true))
   const [pendingHunk, setPendingHunk] = createSignal<PendingHunk | null>(null)
 
   const unstagedDiff = () => (props.selected ? (unstagedQuery.data ?? null) : null)
   const stagedDiff = () => (props.selected ? (stagedQuery.data ?? null) : null)
 
-  const unstagedHunks = () => unstagedDiff()?.hunks ?? []
-  const stagedHunks = () => stagedDiff()?.hunks ?? []
   const isBinary = () => Boolean(unstagedDiff()?.binary || stagedDiff()?.binary)
   const hasError = () => unstagedQuery.isError || stagedQuery.isError
   const errorMessage = () => unstagedQuery.error?.message ?? stagedQuery.error?.message
 
-  const pendingForSelected = () => {
-    const pending = pendingHunk()
-    if (!pending || pending.file !== props.selected?.file) {
-      return null
-    }
-    return pending
-  }
+  const pendingValue = pendingHunk()
+  const activePending =
+    pendingValue && pendingValue.file === props.selected?.file ? pendingValue : null
 
   // Both diffs share the index as a coordinate system: the staged diff's "new" side and
   // the unstaged diff's "old" side are the index. Sorting on those keeps document order,
   // and remapping the index side to HEAD/worktree coordinates keeps the displayed line
   // numbers stable when a hunk moves between staged and unstaged.
-  const actualMergedHunks = createMemo<HunkEntry[]>(() => {
-    const staged = stagedHunks()
-    const unstaged = unstagedHunks()
+  const actualMergedHunks = useMemo<HunkEntry[]>(() => {
+    const selected = props.selected
+    const staged = selected ? (stagedQuery.data?.hunks ?? []) : []
+    const unstaged = selected ? (unstagedQuery.data?.hunks ?? []) : []
     const headShiftAt = (indexLine: number) =>
       staged.reduce(
         (shift, hunk) =>
@@ -111,37 +106,37 @@ export function DiffPanel(props: DiffPanelProps) {
       }))
     ]
     return entries.sort((left, right) => left.indexStart - right.indexStart)
-  })
+  }, [props.selected, stagedQuery.data, unstagedQuery.data])
 
-  const mergedHunks = createMemo<HunkEntry[]>(() => {
-    const pending = pendingForSelected()
-    if (!pending) {
-      return actualMergedHunks()
+  const mergedHunks = useMemo<HunkEntry[]>(() => {
+    if (!activePending) {
+      return actualMergedHunks
     }
-    const targetStaged = pending.op === 'stage'
-    const entries = actualMergedHunks().filter(
-      (entry) => entry.staged === targetStaged || entry.hunk.header !== pending.opHeader
+    const targetStaged = activePending.op === 'stage'
+    const entries = actualMergedHunks.filter(
+      (entry) => entry.staged === targetStaged || entry.hunk.header !== activePending.opHeader
     )
     const hasTarget = entries.some(
       (entry) =>
         entry.staged === targetStaged &&
-        (entry.hunk.header === pending.opHeader || hunkHighlightKey(entry.hunk) === pending.key)
+        (entry.hunk.header === activePending.opHeader ||
+          hunkHighlightKey(entry.hunk) === activePending.key)
     )
     if (!hasTarget) {
       entries.push({
-        hunk: pending.hunk,
-        display: pending.display,
+        hunk: activePending.hunk,
+        display: activePending.display,
         staged: targetStaged,
-        indexStart: pending.indexStart
+        indexStart: activePending.indexStart
       })
     }
     return entries.sort((left, right) => left.indexStart - right.indexStart)
-  })
+  }, [actualMergedHunks, activePending])
 
-  const totals = createMemo(() => {
+  const totals = useMemo(() => {
     let adds = 0
     let dels = 0
-    for (const entry of mergedHunks()) {
+    for (const entry of mergedHunks) {
       const hunk = entry.display
       for (const line of hunk.lines) {
         if (line.kind === 'add') {
@@ -152,11 +147,11 @@ export function DiffPanel(props: DiffPanelProps) {
       }
     }
     return { adds, dels }
-  })
+  }, [mergedHunks])
 
-  const hasAnyHunks = () => mergedHunks().length > 0
-  const stagedEntryCount = () => mergedHunks().filter((entry) => entry.staged).length
-  const unstagedEntryCount = () => mergedHunks().filter((entry) => !entry.staged).length
+  const hasAnyHunks = () => mergedHunks.length > 0
+  const stagedEntryCount = () => mergedHunks.filter((entry) => entry.staged).length
+  const unstagedEntryCount = () => mergedHunks.filter((entry) => !entry.staged).length
 
   const fileStageState = () => {
     if (stagedEntryCount() === 0) {
@@ -218,11 +213,13 @@ export function DiffPanel(props: DiffPanelProps) {
   }
 
   const isPendingEntry = (entry: HunkEntry) => {
-    const pending = pendingForSelected()
-    if (!pending) {
+    if (!activePending) {
       return false
     }
-    return entry.hunk.header === pending.opHeader || hunkHighlightKey(entry.hunk) === pending.key
+    return (
+      entry.hunk.header === activePending.opHeader ||
+      hunkHighlightKey(entry.hunk) === activePending.key
+    )
   }
 
   const toggleFileStaged = () => {
@@ -258,8 +255,8 @@ export function DiffPanel(props: DiffPanelProps) {
               {selected().file}
             </span>
             <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
-              <span className="text-add">+{totals().adds}</span>
-              <span className="text-del">−{totals().dels}</span>
+              <span className="text-add">+{totals.adds}</span>
+              <span className="text-del">−{totals.dels}</span>
             </span>
             <div className="flex-1" />
           </div>
@@ -293,7 +290,7 @@ export function DiffPanel(props: DiffPanelProps) {
                   <div className="px-2 py-4 text-sm text-muted-foreground">No changes to show.</div>
                 }
               >
-                <For each={mergedHunks()}>
+                <For each={mergedHunks}>
                   {(entry) => (
                     <HunkCard
                       hunk={entry.display}
@@ -381,13 +378,13 @@ function HunkCard(props: HunkCardProps) {
     }
   }
 
-  const highlightQuery = createQuery<Array<LineTokens | null> | null>(() => ({
+  const highlightQuery = useQuery<Array<LineTokens | null> | null>({
     queryKey: ['hunk-highlight', props.filePath, hunkHighlightKey(props.hunk)],
     enabled: languageForFile(props.filePath) !== null,
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
     queryFn: () => highlightHunk(props.filePath, props.hunk.lines)
-  }))
+  })
 
   return (
     <div className="mb-3 overflow-hidden rounded-[10px] border" data-testid="diff-hunk">
@@ -444,7 +441,10 @@ function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
               {(token) => (
                 <span
                   className="text-(--shiki-light) dark:text-(--shiki-dark)"
-                  style={{ '--shiki-light': token.lightColor, '--shiki-dark': token.darkColor }}
+                  style={{
+                    '--shiki-light': token.lightColor,
+                    '--shiki-dark': token.darkColor
+                  }}
                 >
                   {token.content}
                 </span>

@@ -17,10 +17,10 @@ import {
   UnstageResponseSchema
 } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { type Accessor, createSignal } from '@/lib/react-compat'
-import { createMutation, createQuery, useQueryClient } from '@/lib/react-query-compat'
 import { createStore } from '@/lib/react-store-compat'
 import { readSnapshot, writeSnapshot } from '@/lib/repo-snapshot-cache'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
@@ -243,6 +243,12 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const [state, setState] = createStore<GitState>({ ...initialState })
   const [fetchTick, setFetchTick] = createSignal(0)
 
+  // `createStore` now hands back a fresh state identity per update, so async closures (query fns,
+  // the IPC subscription, unmount cleanup) that need the live store must read it through this ref,
+  // refreshed every render, rather than the snapshot captured when they were created.
+  const liveState = useRef(state)
+  liveState.current = state
+
   const logBuffer = useRef<GitLogEntry[]>([])
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const openGeneration = useRef(0)
@@ -259,15 +265,13 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       return
     }
 
-    setState('log', { all: [...logBuffer.current], total: nextLength })
+    const nextLog = { all: [...logBuffer.current], total: nextLength }
+    setState('log', nextLog)
 
     const path = state.repoPath
     if (path) {
-      const log = state.log
-      if (log) {
-        queryClient.setQueryData(repoQueryKeys(tabId, path).log, log)
-        writeSnapshot(path, { log })
-      }
+      queryClient.setQueryData(repoQueryKeys(tabId, path).log, nextLog)
+      writeSnapshot(path, { log: nextLog })
     }
   }
 
@@ -304,53 +308,43 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     return path ? repoQueryKeys(tabId, path) : null
   }
 
-  const statusQuery = createQuery(() => {
-    const path = repoPath()
-    const queryKeys = keys()
-    return {
-      queryKey: queryKeys?.status ?? ['tab', tabId, 'idle', 'status'],
-      enabled: Boolean(path),
-      queryFn: async () => {
-        if (!path) {
-          throw new Error('Repository path missing')
-        }
-        const { status, stale } = await fetchStatusOrdered(path)
-        if (stale) {
-          return state.status ?? status
-        }
-        return status
+  const statusQuery = useQuery({
+    queryKey: keys()?.status ?? ['tab', tabId, 'idle', 'status'],
+    enabled: Boolean(repoPath()),
+    queryFn: async () => {
+      const path = repoPath()
+      if (!path) {
+        throw new Error('Repository path missing')
       }
+      const { status, stale } = await fetchStatusOrdered(path)
+      if (stale) {
+        return liveState.current.status ?? status
+      }
+      return status
     }
   })
 
-  const localBranchesQuery = createQuery(() => {
-    const path = repoPath()
-    const queryKeys = keys()
-    return {
-      queryKey: queryKeys?.localBranches ?? ['tab', tabId, 'idle', 'local-branches'],
-      enabled: Boolean(path),
-      queryFn: async () => {
-        if (!path) {
-          throw new Error('Repository path missing')
-        }
-        return fetchLocalBranches(path)
+  const localBranchesQuery = useQuery({
+    queryKey: keys()?.localBranches ?? ['tab', tabId, 'idle', 'local-branches'],
+    enabled: Boolean(repoPath()),
+    queryFn: async () => {
+      const path = repoPath()
+      if (!path) {
+        throw new Error('Repository path missing')
       }
+      return fetchLocalBranches(path)
     }
   })
 
-  const remoteRefsQuery = createQuery(() => {
-    const path = repoPath()
-    const queryKeys = keys()
-    const localReady = Boolean(localBranchesQuery.data)
-    return {
-      queryKey: queryKeys?.remoteRefs ?? ['tab', tabId, 'idle', 'remote-refs'],
-      enabled: Boolean(path) && localReady,
-      queryFn: async () => {
-        if (!path) {
-          throw new Error('Repository path missing')
-        }
-        return fetchRemoteRefs(path)
+  const remoteRefsQuery = useQuery({
+    queryKey: keys()?.remoteRefs ?? ['tab', tabId, 'idle', 'remote-refs'],
+    enabled: Boolean(repoPath()) && Boolean(localBranchesQuery.data),
+    queryFn: async () => {
+      const path = repoPath()
+      if (!path) {
+        throw new Error('Repository path missing')
       }
+      return fetchRemoteRefs(path)
     }
   })
 
@@ -555,7 +549,11 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       return
     }
     const skip = state.log?.all.length ?? logBuffer.current.length
-    await restartLogStream(path, { skip, maxCount: LOG_PAGE_SIZE, clearLog: false })
+    await restartLogStream(path, {
+      skip,
+      maxCount: LOG_PAGE_SIZE,
+      clearLog: false
+    })
   }
 
   const runFetchAndRefresh = async (path: string) => {
@@ -591,11 +589,13 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     options?: { clearLogOnStream?: boolean }
   ) => {
     runIfCurrent(generation, path, 'restartLogStream', async () => {
-      await restartLogStream(path, { clearLog: options?.clearLogOnStream ?? true })
+      await restartLogStream(path, {
+        clearLog: options?.clearLogOnStream ?? true
+      })
     })
   }
 
-  const openRepo = async (path: string) => {
+  const openRepo = async (path: string): Promise<string | null> => {
     const generation = ++openGeneration.current
     setState('opening', true)
     setState('error', null)
@@ -606,7 +606,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         await window.electronAPI.openRepo(path)
       )
       if (generation !== openGeneration.current) {
-        return
+        return null
       }
 
       if (openResponse._tag !== 'Ok') {
@@ -614,7 +614,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
           openResponse._tag === 'NotARepo' ? 'Not a git repository' : openResponse.message
         setState('error', errorMessage)
         setState('opening', false)
-        return
+        return null
       }
 
       const opened = openResponse.result
@@ -645,14 +645,22 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       // Mark before the render that subscribes the per-path queries: cached entries refetch
       // exactly once on mount, fresh entries fetch once — no imperative duplicate.
       invalidateRepoQueries(opened.path)
-      startRepoRefresh(opened.path, generation, { clearLogOnStream: !cached?.log })
+      startRepoRefresh(opened.path, generation, {
+        clearLogOnStream: !cached?.log
+      })
+      return opened.path
     } catch (error) {
       if (generation !== openGeneration.current) {
-        return
+        return null
       }
       setState('error', formatCause(error))
       setState('opening', false)
-      setState({ statusLoading: false, branchesLoading: false, logLoading: false })
+      setState({
+        statusLoading: false,
+        branchesLoading: false,
+        logLoading: false
+      })
+      return null
     }
   }
 
@@ -669,10 +677,12 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   }
 
   const invalidateDiffs = (path: string) => {
-    return queryClient.invalidateQueries({ queryKey: repoQueryKeys(tabId, path).diffRoot })
+    return queryClient.invalidateQueries({
+      queryKey: repoQueryKeys(tabId, path).diffRoot
+    })
   }
 
-  const stageMutation = createMutation(() => ({
+  const stageMutation = useMutation({
     mutationFn: async (file: string) => {
       const path = repoPath()
       if (!path) {
@@ -703,9 +713,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         setState('error', response.message)
       }
     }
-  }))
+  })
 
-  const unstageMutation = createMutation(() => ({
+  const unstageMutation = useMutation({
     mutationFn: async (file: string) => {
       const path = repoPath()
       if (!path) {
@@ -736,9 +746,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         setState('error', response.message)
       }
     }
-  }))
+  })
 
-  const stageAllMutation = createMutation(() => ({
+  const stageAllMutation = useMutation({
     mutationFn: async (files: string[]) => {
       const path = repoPath()
       if (!path || files.length === 0) {
@@ -769,9 +779,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         setState('error', response.message)
       }
     }
-  }))
+  })
 
-  const unstageAllMutation = createMutation(() => ({
+  const unstageAllMutation = useMutation({
     mutationFn: async (files: string[]) => {
       const path = repoPath()
       if (!path || files.length === 0) {
@@ -802,7 +812,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         setState('error', response.message)
       }
     }
-  }))
+  })
 
   const applyHunkMutation = async (
     op: typeof SidecarOp.stageHunk | typeof SidecarOp.unstageHunk,
@@ -843,7 +853,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     return response._tag === 'Ok'
   }
 
-  const commitMutation = createMutation(() => ({
+  const commitMutation = useMutation({
     mutationFn: async (message: string) => {
       const path = repoPath()
       if (!path) {
@@ -873,10 +883,32 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         setState('committing', false)
       }
     }
-  }))
+  })
+
+  // The IPC subscription and unmount cleanup below register once (`[]` deps) and must read the
+  // current helpers, not render-zero closures. The helpers are recreated each render, so the
+  // subscription reads them through this ref (and the live store through `liveState`).
+  const latest = useRef({
+    tabActive,
+    scheduleLogFlush,
+    flushLogToStore,
+    refreshStatus,
+    refreshBranchesOnly,
+    invalidateDiffs
+  })
+  latest.current = {
+    tabActive,
+    scheduleLogFlush,
+    flushLogToStore,
+    refreshStatus,
+    refreshBranchesOnly,
+    invalidateDiffs
+  }
 
   useEffect(() => {
     const unsubLog = window.electronAPI.onLogChunk((chunk) => {
+      const { tabActive, scheduleLogFlush, flushLogToStore } = latest.current
+      const state = liveState.current
       if (chunk.repoPath !== state.repoPath) {
         return
       }
@@ -902,7 +934,8 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     })
 
     const unsubChanged = window.electronAPI.onRepoChanged((event) => {
-      if (event.repoPath !== state.repoPath) {
+      const { refreshStatus, refreshBranchesOnly, invalidateDiffs } = latest.current
+      if (event.repoPath !== liveState.current.repoPath) {
         return
       }
       const path = event.repoPath
@@ -944,7 +977,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       logBuffer.current = []
       setState('log', null)
 
-      const path = state.repoPath
+      const path = liveState.current.repoPath
       if (!path) {
         return
       }
