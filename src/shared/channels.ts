@@ -22,5 +22,6 @@ export const Channel = {
   checkoutRef: 'checkout-ref',
   sidecarRequest: 'sidecar-request',
   logChunk: 'log-chunk',
-  repoChanged: 'repo-changed'
+  repoChanged: 'repo-changed',
+  sidecarRestarted: 'sidecar-restarted'
 } as const

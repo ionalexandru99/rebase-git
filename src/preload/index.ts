@@ -29,6 +29,7 @@ export interface IElectronAPI {
   cancelLogStream: (repoPath?: string) => Promise<CancelLogStreamResponse>
   onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
   onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => () => void
+  onSidecarRestarted: (cb: () => void) => () => void
   getRecentRepos: () => Promise<string[]>
   getSidebarPrefs: () => Promise<SidebarPrefs>
   setSidebarPrefs: (prefs: SidebarPrefs) => Promise<void>
@@ -66,6 +67,11 @@ const api: IElectronAPI = {
     const handler = (_event: unknown, evt: RepoChangedEvent) => cb(evt)
     ipcRenderer.on(Channel.repoChanged, handler)
     return () => ipcRenderer.off(Channel.repoChanged, handler)
+  },
+  onSidecarRestarted: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on(Channel.sidecarRestarted, handler)
+    return () => ipcRenderer.off(Channel.sidecarRestarted, handler)
   },
   getRecentRepos: () => ipcRenderer.invoke('get-recent-repos'),
   getSidebarPrefs: () => ipcRenderer.invoke(Channel.getSidebarPrefs),

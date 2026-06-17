@@ -118,11 +118,12 @@ export const LogChunkSchema = z.object({
   commits: z.array(GitLogEntrySchema),
   done: z.boolean(),
   hasMore: z.boolean().optional(),
-  error: z.string().optional()
+  error: z.string().optional(),
+  streamId: z.number().optional()
 })
 export type LogChunk = z.infer<typeof LogChunkSchema>
 
-export const RepoChangeKindSchema = z.enum(['refs', 'workingTree'])
+export const RepoChangeKindSchema = z.enum(['refs', 'workingTree', 'index'])
 export type RepoChangeKind = z.infer<typeof RepoChangeKindSchema>
 
 export const RepoChangedEventSchema = z.object({
