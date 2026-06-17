@@ -23,9 +23,9 @@ entirely.
 - t3code does the equivalent with Bun's `trustedDependencies: ["electron"]` —
   one `install`, no helper script, no `.npmrc` dance. This plan brings the same
   ergonomics to our pnpm setup.
-- `AGENTS.md` already references `pnpm.onlyBuiltDependencies` as the intended
-  mechanism for "restricted postinstall scripts", so this aligns the config with
-  the documented rule.
+- The docs currently disagree: `AGENTS.md` documents `allowBuilds` in
+  `pnpm-workspace.yaml`, while `CLAUDE.md` references `pnpm.onlyBuiltDependencies`.
+  This plan standardizes on `pnpm.onlyBuiltDependencies` and aligns both.
 
 ## Current state (as of PR #33)
 

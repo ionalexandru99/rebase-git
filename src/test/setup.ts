@@ -20,7 +20,7 @@ import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { clearAllSnapshots } from '@/lib/repo-snapshot-cache'
 
-const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown>()
+const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown | Promise<unknown>>()
 
 export const sidecarMock = {
   respond(op: string, handler: (body: Record<string, unknown>) => unknown): void {
@@ -118,7 +118,7 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
                   `sidecarMock.respond('${op}', ...) or add a case in src/test/setup.ts.`
               )
             }
-            payload = handler(body)
+            payload = await handler(body)
             break
           }
         }

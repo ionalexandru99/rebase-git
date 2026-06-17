@@ -243,6 +243,12 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   const [state, setState] = createStore<GitState>({ ...initialState })
   const [fetchTick, setFetchTick] = createSignal(0)
 
+  // `createStore` now hands back a fresh state identity per update, so async closures (query fns,
+  // the IPC subscription, unmount cleanup) that need the live store must read it through this ref,
+  // refreshed every render, rather than the snapshot captured when they were created.
+  const liveState = useRef(state)
+  liveState.current = state
+
   const logBuffer = useRef<GitLogEntry[]>([])
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const openGeneration = useRef(0)
@@ -312,7 +318,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       }
       const { status, stale } = await fetchStatusOrdered(path)
       if (stale) {
-        return state.status ?? status
+        return liveState.current.status ?? status
       }
       return status
     }
@@ -880,11 +886,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   })
 
   // The IPC subscription and unmount cleanup below register once (`[]` deps) and must read the
-  // live store + current helpers, not render-zero closures. `createStore` no longer hands back a
-  // stable mutable object (its identity changes per update), so the subscription reads through
-  // this ref, refreshed every render, instead of relying on that former accidental invariant.
+  // current helpers, not render-zero closures. The helpers are recreated each render, so the
+  // subscription reads them through this ref (and the live store through `liveState`).
   const latest = useRef({
-    state,
     tabActive,
     scheduleLogFlush,
     flushLogToStore,
@@ -893,7 +897,6 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     invalidateDiffs
   })
   latest.current = {
-    state,
     tabActive,
     scheduleLogFlush,
     flushLogToStore,
@@ -904,7 +907,8 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
 
   useEffect(() => {
     const unsubLog = window.electronAPI.onLogChunk((chunk) => {
-      const { state, tabActive, scheduleLogFlush, flushLogToStore } = latest.current
+      const { tabActive, scheduleLogFlush, flushLogToStore } = latest.current
+      const state = liveState.current
       if (chunk.repoPath !== state.repoPath) {
         return
       }
@@ -930,8 +934,8 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     })
 
     const unsubChanged = window.electronAPI.onRepoChanged((event) => {
-      const { state, refreshStatus, refreshBranchesOnly, invalidateDiffs } = latest.current
-      if (event.repoPath !== state.repoPath) {
+      const { refreshStatus, refreshBranchesOnly, invalidateDiffs } = latest.current
+      if (event.repoPath !== liveState.current.repoPath) {
         return
       }
       const path = event.repoPath
@@ -973,7 +977,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       logBuffer.current = []
       setState('log', null)
 
-      const path = latest.current.state.repoPath
+      const path = liveState.current.repoPath
       if (!path) {
         return
       }

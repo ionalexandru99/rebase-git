@@ -84,10 +84,16 @@ function renderGitStore(tabActive = createSignal(true)) {
         if (!(result instanceof Promise)) {
           return result
         }
-        return result.then(async (resolved) => {
-          await act(async () => {})
-          return resolved
-        })
+        return result.then(
+          async (resolved) => {
+            await act(async () => {})
+            return resolved
+          },
+          async (error) => {
+            await act(async () => {})
+            throw error
+          }
+        )
       }
     }
   })

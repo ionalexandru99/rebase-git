@@ -62,16 +62,17 @@ export function ensureElectronRuntime() {
   const platformPath = getPlatformPath()
   const electronPath = join(electronDir, 'dist', platformPath)
 
+  let installerOk = true
   if (missingRuntimePaths(electronDir, platformPath).length > 0) {
-    runElectronInstaller(electronDir)
+    installerOk = runElectronInstaller(electronDir)
   }
 
   const missingAfterInstall = missingRuntimePaths(electronDir, platformPath)
   if (missingAfterInstall.length > 0) {
     throw new Error(
-      `Electron runtime is incomplete after install:\n${missingAfterInstall
-        .map((runtimePath) => `- ${runtimePath}`)
-        .join('\n')}`
+      `Electron runtime is incomplete after install.js (installer exit ${
+        installerOk ? '0' : 'non-zero'
+      }):\n${missingAfterInstall.map((runtimePath) => `- ${runtimePath}`).join('\n')}`
     )
   }
 
