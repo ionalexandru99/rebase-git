@@ -8,6 +8,7 @@ export const STREAM_BATCH_SIZE = 500
 export interface LogStreamOptions {
   skip?: number
   maxCount?: number
+  streamId?: number
 }
 
 function writeChunk(res: ServerResponse, chunk: LogChunk): boolean {
@@ -64,6 +65,7 @@ export function streamGitLog(
   let pendingWrite = Promise.resolve()
   let totalEmitted = 0
   const pageSize = options?.maxCount
+  const streamId = options?.streamId
 
   const send = (done: boolean, error?: string) => {
     if (batch.length === 0 && !done && !error) {
@@ -73,7 +75,7 @@ export function streamGitLog(
     batch = []
     totalEmitted += commits.length
     pendingWrite = pendingWrite.then(async () => {
-      const canContinue = writeChunk(res, { repoPath, commits, done, error })
+      const canContinue = writeChunk(res, { repoPath, commits, done, error, streamId })
       if (!canContinue && !res.destroyed && !res.writableEnded) {
         proc.stdout?.pause()
         await waitForDrain(res)
@@ -90,7 +92,7 @@ export function streamGitLog(
     send(false)
     await pendingWrite
     const hasMore = typeof pageSize === 'number' && pageSize > 0 ? totalEmitted >= pageSize : false
-    writeChunk(res, { repoPath, commits: [], done: true, hasMore, error })
+    writeChunk(res, { repoPath, commits: [], done: true, hasMore, error, streamId })
     res.end()
   }
 

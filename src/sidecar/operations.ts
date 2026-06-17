@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import path from 'node:path'
 import { parseOrThrow } from '@shared/codec'
 import {
   type BranchesResponse,
@@ -39,6 +40,7 @@ import {
   type UnstageResponse,
   UnstageResponseSchema
 } from '@shared/schemas/ipc'
+import type { SimpleGit } from 'simple-git'
 import { fetchSemaphoreFor, releaseFetchSemaphore } from './fetch-semaphore'
 import { deriveLocalShortName } from './git/checkout'
 import { resolveDefaultBranch } from './git/defaultBranch'
@@ -125,6 +127,24 @@ function ensureCommitGraph(key: string): void {
   })
 }
 
+// The real gitdir/common-dir so the main-process watcher can target HEAD/refs/index without
+// running git itself: for linked worktrees and submodules `.git` is a file pointing elsewhere.
+export async function resolveGitDirs(
+  key: string,
+  git: SimpleGit
+): Promise<{ gitDir: string; commonDir: string }> {
+  try {
+    const output = await git.raw(['rev-parse', '--git-dir', '--git-common-dir'])
+    const lines = output.split('\n').filter((line) => line.trim().length > 0)
+    const gitDir = path.resolve(key, lines[0].trim())
+    const commonDir = path.resolve(key, lines[1].trim())
+    return { gitDir, commonDir }
+  } catch {
+    const gitDir = path.join(key, '.git')
+    return { gitDir, commonDir: gitDir }
+  }
+}
+
 export async function openRepo(repoPath: string): Promise<OpenRepoResponse> {
   const key = normalizeRepoPath(repoPath)
   try {
@@ -135,13 +155,20 @@ export async function openRepo(repoPath: string): Promise<OpenRepoResponse> {
       return parseOrThrow(OpenRepoResponseSchema, { _tag: 'NotARepo' })
     }
     ensureCommitGraph(key)
-    const [remotes, defaultBranch] = await Promise.all([
+    const [remotes, defaultBranch, gitDirs] = await Promise.all([
       git.getRemotes(true),
-      resolveDefaultBranch(git, undefined)
+      resolveDefaultBranch(git, undefined),
+      resolveGitDirs(key, git)
     ])
     return parseOrThrow(OpenRepoResponseSchema, {
       _tag: 'Ok',
-      result: { remotes: serializeRemotes(remotes), defaultBranch, path: key }
+      result: {
+        remotes: serializeRemotes(remotes),
+        defaultBranch,
+        path: key,
+        gitDir: gitDirs.gitDir,
+        commonDir: gitDirs.commonDir
+      }
     })
   } catch (error) {
     return parseOrThrow(OpenRepoResponseSchema, { _tag: 'GitError', message: errorMessage(error) })
@@ -336,7 +363,7 @@ async function readFileDiff(repoPath: string, file: string, staged: boolean): Pr
 }
 
 async function isUntracked(repoPath: string, file: string): Promise<boolean> {
-  const out = await runGit(['-C', repoPath, 'status', '--porcelain', '--', file])
+  const out = await runGit(['-C', repoPath, 'status', '--porcelain', '-z', '--', file])
   return out.startsWith('??')
 }
 
@@ -619,14 +646,12 @@ export async function fetchRepo(repoPath: string): Promise<FetchResponse> {
   if (!gitInstances.has(key)) {
     return parseOrThrow(FetchResponseSchema, { _tag: 'RepoNotOpen' })
   }
-  return withRepoLock(key, async () => {
-    const semaphore = fetchSemaphoreFor(key)
-    const result = await semaphore.withPermitsIfAvailable(() => runFetch(key))
-    if (result === null) {
-      return parseOrThrow(FetchResponseSchema, { _tag: 'FetchSkipped' })
-    }
-    return result
-  })
+  const semaphore = fetchSemaphoreFor(key)
+  const result = await semaphore.withPermitsIfAvailable(() => runFetch(key))
+  if (result === null) {
+    return parseOrThrow(FetchResponseSchema, { _tag: 'FetchSkipped' })
+  }
+  return result
 }
 
 function runGitCommand(
@@ -688,8 +713,13 @@ export async function pullRepo(repoPath: string): Promise<PullResponse> {
   if (!gitInstances.has(key)) {
     return parseOrThrow(PullResponseSchema, { _tag: 'RepoNotOpen' })
   }
+  // `git pull` fetches, so it must hold the fetch semaphore that standalone fetchRepo uses —
+  // otherwise a concurrent fetch and this pull race to write FETCH_HEAD/remote refs and one
+  // dies on a git lock. withPermits waits for an in-flight fetch instead of skipping.
   return withRepoLock(key, async () =>
-    parseOrThrow(PullResponseSchema, await runGitCommand(key, ['pull', '--ff-only']))
+    fetchSemaphoreFor(key).withPermits(async () =>
+      parseOrThrow(PullResponseSchema, await runGitCommand(key, ['pull', '--ff-only']))
+    )
   )
 }
 
@@ -1088,11 +1118,11 @@ export async function discardChanges(
   }
   return withRepoLock(repoPath, async () => {
     try {
-      const statusRaw = await git.raw(['status', '--porcelain', '--', ...files])
+      const statusRaw = await git.raw(['status', '--porcelain', '-z', '--', ...files])
       const untracked = new Set<string>()
-      for (const line of statusRaw.split('\n')) {
-        if (line.startsWith('??')) {
-          untracked.add(line.slice(3))
+      for (const entry of statusRaw.split('\0')) {
+        if (entry.startsWith('??')) {
+          untracked.add(entry.slice(3))
         }
       }
       const tracked = files.filter((file) => !untracked.has(file))

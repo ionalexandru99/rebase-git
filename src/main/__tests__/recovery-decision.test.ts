@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   RECOVERY_BUTTONS,
   recoveryActionForResponse,
-  shouldPromptOnRenderGone
+  shouldPromptOnRenderGone,
+  shouldRespawnSidecar
 } from '../recovery-decision'
 
 describe('recoveryActionForResponse', () => {
@@ -29,5 +30,44 @@ describe('shouldPromptOnRenderGone', () => {
     expect(shouldPromptOnRenderGone('crashed')).toBe(true)
     expect(shouldPromptOnRenderGone('oom')).toBe(true)
     expect(shouldPromptOnRenderGone('clean-exit')).toBe(false)
+  })
+})
+
+describe('shouldRespawnSidecar', () => {
+  it('respawns the git sidecar identified by its fork name (Electron details.name)', () => {
+    expect(
+      shouldRespawnSidecar({
+        type: 'Utility',
+        serviceName: 'node.mojom.NodeService',
+        name: 'rebase git sidecar'
+      })
+    ).toBe(true)
+  })
+
+  it('respawns when the label lands on serviceName instead', () => {
+    expect(shouldRespawnSidecar({ type: 'Utility', serviceName: 'rebase git sidecar' })).toBe(true)
+  })
+
+  it('respawns a utility child with no name or service name', () => {
+    expect(shouldRespawnSidecar({ type: 'Utility' })).toBe(true)
+  })
+
+  it('does not respawn for a GPU process', () => {
+    expect(shouldRespawnSidecar({ type: 'GPU' })).toBe(false)
+  })
+
+  it('does not respawn for an unrelated named utility service', () => {
+    expect(
+      shouldRespawnSidecar({
+        type: 'Utility',
+        serviceName: 'node.mojom.NodeService',
+        name: 'Network Service'
+      })
+    ).toBe(false)
+  })
+
+  it('does not respawn for a zygote or unknown child without a service name', () => {
+    expect(shouldRespawnSidecar({ type: 'Zygote' })).toBe(false)
+    expect(shouldRespawnSidecar({})).toBe(false)
   })
 })

@@ -20,6 +20,8 @@ interface Sidecar {
 
 let sidecar: Sidecar | null = null
 let startup: Promise<Sidecar> | null = null
+let isShuttingDown = false
+let restartPromise: Promise<void> | null = null
 
 function allocatePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -100,6 +102,9 @@ async function spawn(): Promise<Sidecar> {
 }
 
 export function startSidecar(): Promise<Sidecar> {
+  if (isShuttingDown) {
+    return Promise.reject(new Error('sidecar is shutting down'))
+  }
   if (startup) {
     return startup
   }
@@ -120,10 +125,41 @@ export function startSidecar(): Promise<Sidecar> {
 }
 
 async function ensureSidecar(): Promise<Sidecar> {
+  if (isShuttingDown) {
+    return Promise.reject(new Error('sidecar is shutting down'))
+  }
   if (sidecar) {
     return sidecar
   }
   return startSidecar()
+}
+
+export async function restartSidecar(): Promise<void> {
+  if (isShuttingDown) {
+    return
+  }
+  // Concurrent child-process-gone events (or a manual restart racing one) must not each spawn a
+  // sidecar; dedupe on the in-flight restart and stop the previous child before respawning so a
+  // still-alive process can't be orphaned.
+  if (restartPromise) {
+    return restartPromise
+  }
+  restartPromise = (async () => {
+    const previous = sidecar
+    sidecar = null
+    startup = null
+    if (previous) {
+      try {
+        previous.child.kill()
+      } catch {}
+    }
+    await startSidecar()
+  })()
+  try {
+    await restartPromise
+  } finally {
+    restartPromise = null
+  }
 }
 
 export async function sidecarRequest<T>(
@@ -145,6 +181,7 @@ export async function sidecarRequest<T>(
 export interface LogStreamOptions {
   skip?: number
   maxCount?: number
+  streamId?: number
 }
 
 export async function sidecarLogStream(
@@ -161,7 +198,8 @@ export async function sidecarLogStream(
     body: JSON.stringify({
       repoPath,
       skip: options?.skip,
-      maxCount: options?.maxCount
+      maxCount: options?.maxCount,
+      streamId: options?.streamId
     }),
     signal
   })
@@ -200,6 +238,7 @@ export async function sidecarLogStream(
 }
 
 export async function killSidecar(): Promise<void> {
+  isShuttingDown = true
   const current = sidecar
   sidecar = null
   startup = null

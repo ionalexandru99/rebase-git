@@ -1,10 +1,13 @@
-import { app, type BrowserWindow, dialog, shell } from 'electron'
+import { Channel } from '@shared/channels'
+import { app, type BrowserWindow, dialog, shell, webContents } from 'electron'
 import log from 'electron-log'
 import {
   RECOVERY_BUTTONS,
   recoveryActionForResponse,
-  shouldPromptOnRenderGone
+  shouldPromptOnRenderGone,
+  shouldRespawnSidecar
 } from './recovery-decision'
+import { restartSidecar } from './sidecar'
 
 const SAMPLE_INTERVAL_MS = 2000
 
@@ -105,8 +108,26 @@ export function wireWindowRecovery(win: BrowserWindow): void {
   })
 }
 
+function broadcastSidecarRestarted(): void {
+  for (const contents of webContents.getAllWebContents()) {
+    if (!contents.isDestroyed()) {
+      contents.send(Channel.sidecarRestarted)
+    }
+  }
+}
+
 export function wireProcessRecovery(): void {
   app.on('child-process-gone', (_event, details) => {
     log.error('[recovery] child process gone', details)
+    if (!shouldRespawnSidecar(details)) {
+      return
+    }
+    restartSidecar()
+      .then(() => {
+        broadcastSidecarRestarted()
+      })
+      .catch((error: unknown) => {
+        log.error('[recovery] sidecar respawn failed', error)
+      })
   })
 }

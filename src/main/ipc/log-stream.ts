@@ -69,7 +69,11 @@ function bindWebContentsCleanup(webContentsId: number): void {
 export function register(): void {
   ipcMain.handle(
     Channel.startLogStream,
-    async (event, repoPath: string, options?: { skip?: number; maxCount?: number }) => {
+    async (
+      event,
+      repoPath: string,
+      options?: { skip?: number; maxCount?: number; streamId?: number }
+    ) => {
       const key = normalizeRepoPath(repoPath)
       const webContents = event.sender
       const webContentsId = webContents.id
@@ -122,7 +126,8 @@ export function register(): void {
                 repoPath: key,
                 commits: [],
                 done: true,
-                error: message
+                error: message,
+                streamId: options?.streamId
               })
             }
             finishErr(message)

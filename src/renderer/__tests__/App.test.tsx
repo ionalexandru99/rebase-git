@@ -289,7 +289,8 @@ describe('App — persisted tabs', () => {
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/repo-b', {
         skip: 0,
-        maxCount: LOG_PAGE_SIZE
+        maxCount: LOG_PAGE_SIZE,
+        streamId: expect.any(Number)
       })
     })
 
@@ -306,7 +307,8 @@ describe('App — persisted tabs', () => {
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/repo-a', {
         skip: 0,
-        maxCount: LOG_PAGE_SIZE
+        maxCount: LOG_PAGE_SIZE,
+        streamId: expect.any(Number)
       })
     })
 
@@ -524,7 +526,8 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/my-app', {
         skip: 0,
-        maxCount: LOG_PAGE_SIZE
+        maxCount: LOG_PAGE_SIZE,
+        streamId: expect.any(Number)
       })
     })
 
@@ -748,7 +751,8 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/projects/repo-a', {
         skip: 0,
-        maxCount: LOG_PAGE_SIZE
+        maxCount: LOG_PAGE_SIZE,
+        streamId: expect.any(Number)
       })
     })
     await screen.findByTitle('main')
@@ -761,7 +765,8 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/projects/repo-b', {
         skip: 0,
-        maxCount: LOG_PAGE_SIZE
+        maxCount: LOG_PAGE_SIZE,
+        streamId: expect.any(Number)
       })
     })
 

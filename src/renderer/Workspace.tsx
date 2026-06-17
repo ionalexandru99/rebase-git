@@ -23,6 +23,7 @@ import { formatRelativeTime } from './lib/format'
 import type { RefKind } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
 import type { GitStore } from './stores/git'
+import { WorkspaceProvider } from './WorkspaceContext'
 import { WorkspaceViewRenderer } from './WorkspaceViews'
 
 function shortRefName(refKind: RefKind, fullPath: string): string {
@@ -133,10 +134,10 @@ export function Workspace(props: WorkspaceProps) {
   const handleStashAction = (action: StashAction, index: number) => {
     switch (action) {
       case 'apply':
-        void actions.stashApply(index).then(stashList.refetch)
+        void actions.stashApply(index)
         return
       case 'pop':
-        void actions.stashPop(index).then(stashList.refetch)
+        void actions.stashPop(index)
         return
       case 'drop':
         confirm({
@@ -144,11 +145,13 @@ export function Workspace(props: WorkspaceProps) {
           message: 'The stashed changes are permanently discarded.',
           confirmText: 'Drop',
           destructive: true,
-          onConfirm: () => void actions.stashDrop(index).then(stashList.refetch)
+          onConfirm: () => void actions.stashDrop(index)
         })
         return
     }
   }
+
+  const workspaceContextValue = { actions, stashList, prompt, confirm }
 
   const handleBranchAction = (action: BranchAction, refKind: RefKind, fullPath: string) => {
     const shortName = shortRefName(refKind, fullPath)
@@ -306,18 +309,20 @@ export function Workspace(props: WorkspaceProps) {
       pushing={git.state.pushing}
     >
       {props.errorBanner}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <WorkspaceViewRenderer
-          activeView={activeView()}
-          git={git}
-          repoPath={repoPath}
-          remoteBranches={remoteBranches}
-          visibleBranchRefs={timelineFilterRefs}
-          onToggleTimelineVisibility={handleToggleTimelineVisibility}
-          onCommitAction={handleCommitAction}
-          tabActive={() => props.tabActive?.() ?? true}
-        />
-      </div>
+      <WorkspaceProvider value={workspaceContextValue}>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <WorkspaceViewRenderer
+            activeView={activeView()}
+            git={git}
+            repoPath={repoPath}
+            remoteBranches={remoteBranches}
+            visibleBranchRefs={timelineFilterRefs}
+            onToggleTimelineVisibility={handleToggleTimelineVisibility}
+            onCommitAction={handleCommitAction}
+            tabActive={() => props.tabActive?.() ?? true}
+          />
+        </div>
+      </WorkspaceProvider>
 
       <span className="sr-only">
         {modifiedCount()} modified, {stagedCount()} staged, {untrackedCount()} untracked

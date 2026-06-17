@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -103,6 +104,7 @@ describe('startWatching working-tree detection', () => {
   const events: Array<{ repoPath: string; kind: string }> = []
 
   const fakeWebContents = {
+    id: 1,
     isDestroyed: () => false,
     send: (channel: string, payload: { repoPath: string; kind: string }) => {
       if (channel === 'repo-changed') {
@@ -133,7 +135,7 @@ describe('startWatching working-tree detection', () => {
   })
 
   afterEach(async () => {
-    await stopWatching(repoDir)
+    await stopWatching(repoDir, fakeWebContents.id)
     fs.rmSync(repoDir, { recursive: true, force: true })
   })
 
@@ -145,6 +147,117 @@ describe('startWatching working-tree detection', () => {
     fs.writeFileSync(path.join(repoDir, 'src', 'nested.ts'), 'export const x = 1\n')
 
     const seen = await waitFor(() => events.some((event) => event.kind === 'workingTree'))
+    expect(seen).toBe(true)
+  })
+})
+
+function initRepo(dir: string): void {
+  execFileSync('git', ['-C', dir, 'init', '-b', 'main'])
+  execFileSync('git', ['-C', dir, 'config', 'user.email', 'test@example.com'])
+  execFileSync('git', ['-C', dir, 'config', 'user.name', 'Test'])
+  fs.writeFileSync(path.join(dir, 'README.md'), '# test\n')
+  execFileSync('git', ['-C', dir, 'add', 'README.md'])
+  execFileSync('git', ['-C', dir, 'commit', '-m', 'initial'])
+}
+
+function makeFakeWebContents(
+  id: number,
+  events: Array<{ repoPath: string; kind: string }>
+): WebContents {
+  return {
+    id,
+    isDestroyed: () => false,
+    send: (channel: string, payload: { repoPath: string; kind: string }) => {
+      if (channel === 'repo-changed') {
+        events.push(payload)
+      }
+    },
+    once: () => {},
+    removeListener: () => {}
+  } as unknown as WebContents
+}
+
+const waitFor = async (predicate: () => boolean, timeoutMs = 5000) => {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return true
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  return predicate()
+}
+
+function resolveGitDirsViaCli(repoPath: string): { gitDir: string; commonDir: string } {
+  const output = execFileSync(
+    'git',
+    ['-C', repoPath, 'rev-parse', '--git-dir', '--git-common-dir'],
+    { encoding: 'utf8' }
+  )
+  const lines = output.split('\n').filter((line) => line.trim().length > 0)
+  return {
+    gitDir: path.resolve(repoPath, lines[0].trim()),
+    commonDir: path.resolve(repoPath, lines[1].trim())
+  }
+}
+
+describe('startWatching index detection', () => {
+  let repoDir: string
+  const events: Array<{ repoPath: string; kind: string }> = []
+  const fakeWebContents = makeFakeWebContents(2, events)
+
+  beforeEach(() => {
+    events.length = 0
+    repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-index-test-')))
+    initRepo(repoDir)
+  })
+
+  afterEach(async () => {
+    await stopWatching(repoDir, fakeWebContents.id)
+    fs.rmSync(repoDir, { recursive: true, force: true })
+  })
+
+  it('emits an index change when a file is staged via the git CLI', async () => {
+    startWatching(repoDir, fakeWebContents)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    fs.writeFileSync(path.join(repoDir, 'staged.ts'), 'export const staged = 1\n')
+    execFileSync('git', ['-C', repoDir, 'add', 'staged.ts'])
+
+    const seen = await waitFor(() => events.some((event) => event.kind === 'index'))
+    expect(seen).toBe(true)
+  })
+})
+
+describe('startWatching linked-worktree refs detection', () => {
+  let repoDir: string
+  let worktreeDir: string
+  const events: Array<{ repoPath: string; kind: string }> = []
+  const fakeWebContents = makeFakeWebContents(3, events)
+
+  beforeEach(() => {
+    events.length = 0
+    repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-wt-test-')))
+    initRepo(repoDir)
+    worktreeDir = `${repoDir}-wt`
+    execFileSync('git', ['-C', repoDir, 'worktree', 'add', worktreeDir, '-b', 'feature'])
+  })
+
+  afterEach(async () => {
+    await stopWatching(worktreeDir, fakeWebContents.id)
+    fs.rmSync(worktreeDir, { recursive: true, force: true })
+    fs.rmSync(repoDir, { recursive: true, force: true })
+  })
+
+  it('emits a refs change when a commit moves HEAD in the worktree', async () => {
+    startWatching(worktreeDir, fakeWebContents, resolveGitDirsViaCli(worktreeDir))
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    fs.writeFileSync(path.join(worktreeDir, 'feature.ts'), 'export const feature = 1\n')
+    execFileSync('git', ['-C', worktreeDir, 'add', 'feature.ts'])
+    execFileSync('git', ['-C', worktreeDir, 'commit', '-m', 'feature commit'])
+
+    const seen = await waitFor(() => events.some((event) => event.kind === 'refs'))
     expect(seen).toBe(true)
   })
 })

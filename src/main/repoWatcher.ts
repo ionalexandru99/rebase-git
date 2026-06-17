@@ -1,14 +1,18 @@
 import path from 'node:path'
+import { Channel } from '@shared/channels'
+import { parseOrThrow } from '@shared/codec'
+import { normalizeRepoPath } from '@shared/repo-path'
+import { RepoChangedEventSchema, type RepoChangeKind } from '@shared/schemas/git'
 import chokidar, { type FSWatcher } from 'chokidar'
 import type { WebContents } from 'electron'
 import { type DebouncedDrain, startDebouncedDrain } from './debounced-drain'
 
-export type RepoChangeKind = 'refs' | 'workingTree'
-
 interface Watcher {
   refs: FSWatcher
+  index: FSWatcher
   workingTree: FSWatcher
   refsDrain: DebouncedDrain
+  indexDrain: DebouncedDrain
   workingTreeDrain: DebouncedDrain
   webContents: WebContents
   onDestroyed: () => void
@@ -50,30 +54,46 @@ export function ignoreWorkingTree(targetPath: string): boolean {
 
 export { startDebouncedDrain } from './debounced-drain'
 
-export function startWatching(repoPath: string, webContents: WebContents): void {
-  const existing = watchers.get(repoPath)
+export interface GitDirs {
+  gitDir?: string
+  commonDir?: string
+}
+
+function watcherKey(webContentsId: number, repoPath: string): string {
+  return `${webContentsId}:${normalizeRepoPath(repoPath)}`
+}
+
+// gitDir/commonDir come resolved from the sidecar's open response (git logic stays out of main);
+// they differ from `<repo>/.git` for linked worktrees and submodules. Fall back to the plain
+// layout when absent.
+export function startWatching(repoPath: string, webContents: WebContents, dirs?: GitDirs): void {
+  const key = watcherKey(webContents.id, repoPath)
+  const existing = watchers.get(key)
   if (existing) {
     if (existing.webContents === webContents && !webContents.isDestroyed()) {
       return
     }
-    void stopWatching(repoPath)
+    void stopWatching(repoPath, webContents.id)
   }
 
-  const gitDir = path.join(repoPath, '.git')
+  const gitDir = dirs?.gitDir ?? path.join(repoPath, '.git')
+  const commonDir = dirs?.commonDir ?? gitDir
   const refsTargets = [
     path.join(gitDir, 'HEAD'),
-    path.join(gitDir, 'refs'),
-    path.join(gitDir, 'packed-refs')
+    path.join(commonDir, 'refs'),
+    path.join(commonDir, 'packed-refs')
   ]
+  const indexTarget = path.join(gitDir, 'index')
 
   const emit = (kind: RepoChangeKind) => {
     if (webContents.isDestroyed()) {
       return
     }
-    webContents.send('repo-changed', { repoPath, kind })
+    webContents.send(Channel.repoChanged, parseOrThrow(RepoChangedEventSchema, { repoPath, kind }))
   }
 
   const refsDrain = startDebouncedDrain(DEBOUNCE_MS, () => emit('refs'))
+  const indexDrain = startDebouncedDrain(DEBOUNCE_MS, () => emit('index'))
   const workingTreeDrain = startDebouncedDrain(DEBOUNCE_MS, () => emit('workingTree'))
 
   const refs = chokidar.watch(refsTargets, {
@@ -82,6 +102,13 @@ export function startWatching(repoPath: string, webContents: WebContents): void 
   })
   refs.on('all', () => refsDrain.push())
   refs.on('error', (err) => console.warn('[repoWatcher] refs error', err))
+
+  const index = chokidar.watch(indexTarget, {
+    ignoreInitial: true,
+    persistent: true
+  })
+  index.on('all', () => indexDrain.push())
+  index.on('error', (err) => console.warn('[repoWatcher] index error', err))
 
   // Watch the whole working tree (chokidar 4 uses native recursive fs.watch, so this no longer
   // costs one descriptor per directory). `ignoreWorkingTree` prunes .git and heavy build dirs so
@@ -96,31 +123,35 @@ export function startWatching(repoPath: string, webContents: WebContents): void 
   workingTree.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
 
   const onDestroyed = () => {
-    void stopWatching(repoPath)
+    void stopWatching(repoPath, webContents.id)
   }
   webContents.once('destroyed', onDestroyed)
 
-  watchers.set(repoPath, {
+  watchers.set(key, {
     refs,
+    index,
     workingTree,
     refsDrain,
+    indexDrain,
     workingTreeDrain,
     webContents,
     onDestroyed
   })
 }
 
-export async function stopWatching(repoPath: string): Promise<void> {
-  const watcher = watchers.get(repoPath)
+export async function stopWatching(repoPath: string, webContentsId: number): Promise<void> {
+  const key = watcherKey(webContentsId, repoPath)
+  const watcher = watchers.get(key)
   if (!watcher) {
     return
   }
-  watchers.delete(repoPath)
+  watchers.delete(key)
   watcher.webContents.removeListener('destroyed', watcher.onDestroyed)
   watcher.refsDrain.stop()
+  watcher.indexDrain.stop()
   watcher.workingTreeDrain.stop()
   try {
-    await Promise.all([watcher.refs.close(), watcher.workingTree.close()])
+    await Promise.all([watcher.refs.close(), watcher.index.close(), watcher.workingTree.close()])
   } catch (err) {
     console.warn('[repoWatcher] close error', err)
   }

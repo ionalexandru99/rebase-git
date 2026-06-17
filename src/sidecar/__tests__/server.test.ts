@@ -320,6 +320,50 @@ describe('sidecar server', () => {
     }
   })
 
+  it('stamps every streamed chunk with the request streamId', async () => {
+    const response = await fetch(`${baseUrl}/stream/log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ repoPath, streamId: 7 })
+    })
+    expect(response.ok).toBe(true)
+    const lines = (await response.text()).trim().split('\n')
+    const chunks = lines.map((line) => JSON.parse(line) as { streamId?: number; done: boolean })
+    expect(chunks.length).toBeGreaterThan(0)
+    expect(chunks.every((chunk) => chunk.streamId === 7)).toBe(true)
+    expect(chunks[chunks.length - 1]?.done).toBe(true)
+  })
+
+  it('rejects a log stream with an out-of-bounds skip', async () => {
+    const response = await fetch(`${baseUrl}/stream/log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ repoPath, skip: -1 })
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'bad request' })
+  })
+
+  it('rejects a log stream with an out-of-bounds maxCount', async () => {
+    const response = await fetch(`${baseUrl}/stream/log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ repoPath, maxCount: 0 })
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'bad request' })
+  })
+
+  it('rejects a log stream with a non-integer maxCount', async () => {
+    const response = await fetch(`${baseUrl}/stream/log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ repoPath, maxCount: 2.5 })
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'bad request' })
+  })
+
   it('rejects checkout requests with an invalid ref kind', async () => {
     const response = await call('checkout-ref', { repoPath, refKind: 'branch', fullPath: 'main' })
     expect(response.status).toBe(400)

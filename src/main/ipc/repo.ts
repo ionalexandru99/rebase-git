@@ -11,17 +11,19 @@ export function register(): void {
     const response = await sidecarRequest<OpenRepoResponse>(SidecarOp.openRepo, { repoPath })
     if (response._tag === 'Ok') {
       addRecentRepo(response.result.path)
-      startWatching(response.result.path, event.sender)
+      startWatching(response.result.path, event.sender, {
+        gitDir: response.result.gitDir,
+        commonDir: response.result.commonDir
+      })
     }
     return response
   })
 
-  ipcMain.handle(Channel.closeRepo, async (_, repoPath: string) => {
-    const normalized = normalizeRepoPath(repoPath)
+  ipcMain.handle(Channel.closeRepo, async (event, repoPath: string) => {
     try {
       await sidecarRequest(SidecarOp.closeRepo, { repoPath })
     } finally {
-      await stopWatching(normalized)
+      await stopWatching(normalizeRepoPath(repoPath), event.sender.id)
     }
   })
 

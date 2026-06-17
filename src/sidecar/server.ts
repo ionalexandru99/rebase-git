@@ -8,6 +8,7 @@ import {
   type ScanForReposResponse,
   ScanForReposResponseSchema
 } from '@shared/schemas/ipc'
+import { LogStreamRequestSchema } from '@shared/schemas/log-stream'
 import { simpleGit } from 'simple-git'
 import { streamGitLog } from './log-stream'
 import * as operations from './operations'
@@ -671,10 +672,20 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
         sendJson(res, 400, { error: 'bad request' })
         return
       }
-      const skip = typeof body.skip === 'number' ? body.skip : undefined
-      const maxCount = typeof body.maxCount === 'number' ? body.maxCount : undefined
-      streamGitLog(repoPath, res, { skip, maxCount })
+      const parsed = LogStreamRequestSchema.safeParse({
+        repoPath,
+        skip: body.skip,
+        maxCount: body.maxCount,
+        streamId: body.streamId
+      })
+      if (!parsed.success) {
+        sendJson(res, 400, { error: 'bad request' })
+        return
+      }
+      const { skip, maxCount, streamId } = parsed.data
+      streamGitLog(repoPath, res, { skip, maxCount, streamId })
     } catch (error) {
+      console.error('[sidecar] request error', error)
       if (error instanceof BodyTooLargeError) {
         sendJson(res, 413, { error: 'payload too large' })
         return
@@ -714,6 +725,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
     }
     sendJson(res, 200, result)
   } catch (error) {
+    console.error('[sidecar] request error', error)
     if (error instanceof BodyTooLargeError) {
       sendJson(res, 413, { error: 'payload too large' })
       return
