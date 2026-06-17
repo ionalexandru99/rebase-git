@@ -42,7 +42,7 @@ export function createStore<T extends object>(initial: T): [T, StoreSetter] {
     if (Object.is(stateRef.current, next)) {
       return
     }
-    Object.assign(stateRef.current, next)
+    stateRef.current = next
     forceUpdate()
   }
 

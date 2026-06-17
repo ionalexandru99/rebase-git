@@ -1,8 +1,8 @@
 import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import type { UIEvent } from 'react'
 import { useCallback, useEffect, useRef } from 'react'
 import { type Accessor, createSignal } from '@/lib/react-compat'
-import { createVirtualizer } from '@/lib/react-virtual-compat'
 
 interface UseFixedVirtualizerOptions {
   count: Accessor<number>
@@ -23,7 +23,7 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
   const resizeObserver = useRef<ResizeObserver | null>(null)
   const resizeFrame = useRef<number | null>(null)
 
-  const virtualizer = createVirtualizer({
+  const virtualizer = useVirtualizer({
     get count() {
       return options.count()
     },

@@ -62,11 +62,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "src/renderer/lib/react-compat.tsx",
-        "src/renderer/lib/react-query-compat.ts",
-        "src/renderer/lib/react-store-compat.ts"
-      ],
+      "includes": ["src/renderer/lib/react-compat.tsx", "src/renderer/lib/react-store-compat.ts"],
       "linter": {
         "rules": {
           "correctness": {

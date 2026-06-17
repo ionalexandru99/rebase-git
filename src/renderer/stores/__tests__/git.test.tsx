@@ -1,6 +1,6 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
-import { waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
 import { setupLogStream, sidecarMock } from '@/../test/setup'
 import { type Accessor, createSignal } from '@/lib/react-compat'
@@ -59,20 +59,60 @@ function GitStoreHarness(props: HarnessProps) {
 }
 
 function renderGitStore(tabActive = createSignal(true)) {
-  let git: GitStore | undefined
+  let latestGit: GitStore | undefined
   renderWithQuery(() => (
-    <GitStoreHarness tabActive={tabActive[0]} onGit={(store) => (git = store)} />
+    <GitStoreHarness tabActive={tabActive[0]} onGit={(store) => (latestGit = store)} />
   ))
-  if (!git) {
+  if (!latestGit) {
     throw new Error('git store not initialized')
   }
+  // The store and its `state` are recreated every render now that `createStore` hands back a fresh
+  // identity per update. Forward to the latest render's store, and after an awaited store method
+  // settles, commit its pending re-render with an empty `act` so the next synchronous `state` read
+  // (and the store's own onLogChunk/onRepoChanged handlers reading the live state) observe it —
+  // restoring the synchronous semantics the old in-place mutation gave these tests. The empty `act`
+  // only drains React's work queue; it never awaits the store's fire-and-forget promises, so it
+  // cannot hang on the never-resolving log-stream restarts some tests set up.
+  const git = new Proxy({} as GitStore, {
+    get: (_target, prop) => {
+      const value = latestGit?.[prop as keyof GitStore]
+      if (typeof value !== 'function') {
+        return value
+      }
+      return (...args: unknown[]) => {
+        const result = (value as (...callArgs: unknown[]) => unknown).apply(latestGit, args)
+        if (!(result instanceof Promise)) {
+          return result
+        }
+        return result.then(async (resolved) => {
+          await act(async () => {})
+          return resolved
+        })
+      }
+    }
+  })
   return { git, tabActive }
 }
+
+// Advance fake timers and commit the re-render the fired flush schedules, so the captured store
+// observes it.
+const advanceTimers = (ms: number) =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms)
+  })
+
+// A fake-timer test that fails before its own `vi.useRealTimers()` would otherwise leave fake
+// timers active and hang `waitFor` in every later test.
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 describe('useGitStore — parallel repo loading', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
-    vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
+    vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({
+      _tag: 'Ok'
+    })
     vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
     vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
     vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
@@ -250,11 +290,11 @@ describe('useGitStore — parallel repo loading', () => {
       ]
     })
 
-    await vi.advanceTimersByTimeAsync(200)
+    await advanceTimers(200)
     expect(git.state.log?.all.length ?? 0).toBe(0)
 
     active[1](true)
-    await vi.advanceTimersByTimeAsync(200)
+    await advanceTimers(200)
 
     expect(git.state.log?.all.some((commit) => commit.message === 'Buffered commit')).toBe(true)
 
@@ -284,7 +324,7 @@ describe('useGitStore — parallel repo loading', () => {
     })
 
     active[1](true)
-    await vi.advanceTimersByTimeAsync(200)
+    await advanceTimers(200)
 
     expect(git.state.log?.all.some((commit) => commit.message === 'Deferred commit')).toBe(true)
 
@@ -313,7 +353,7 @@ describe('useGitStore — parallel repo loading', () => {
       ]
     })
 
-    await vi.advanceTimersByTimeAsync(200)
+    await advanceTimers(200)
     expect(git.state.log?.all.some((commit) => commit.message === 'Buffered during resize')).toBe(
       true
     )
@@ -368,13 +408,21 @@ describe('useGitStore — parallel repo loading', () => {
     await git.stageHunk('a.ts', '@@ -1,1 +1,1 @@')
 
     await waitFor(() => {
-      expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+      expect(git.state.status?.files?.[0]).toEqual({
+        path: 'a.ts',
+        index: 'M',
+        working_dir: ' '
+      })
     })
 
     resolveStale()
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+    expect(git.state.status?.files?.[0]).toEqual({
+      path: 'a.ts',
+      index: 'M',
+      working_dir: ' '
+    })
   })
 
   it('optimistically marks a file staged when staging its final hunk', async () => {
@@ -408,19 +456,36 @@ describe('useGitStore — parallel repo loading', () => {
     const { git } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => {
-      expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: 'M' })
+      expect(git.state.status?.files?.[0]).toEqual({
+        path: 'a.ts',
+        index: 'M',
+        working_dir: 'M'
+      })
     })
 
-    const stagePromise = git.stageHunk('a.ts', '@@ -1,1 +1,1 @@', { fullyStagesFile: true })
+    let stagePromise: Promise<boolean> | undefined
+    // stageHunk applies its optimistic status update synchronously; commit it so the read below
+    // observes the optimistic state before the in-flight mutation resolves.
+    await act(async () => {
+      stagePromise = git.stageHunk('a.ts', '@@ -1,1 +1,1 @@', { fullyStagesFile: true })
+    })
 
-    expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+    expect(git.state.status?.files?.[0]).toEqual({
+      path: 'a.ts',
+      index: 'M',
+      working_dir: ' '
+    })
     expect(git.state.status?.modified).toEqual([])
     expect(git.state.status?.staged).toEqual(['a.ts'])
 
     resolveStageHunk()
     await stagePromise
 
-    expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+    expect(git.state.status?.files?.[0]).toEqual({
+      path: 'a.ts',
+      index: 'M',
+      working_dir: ' '
+    })
   })
 
   it('loadMoreHistory requests the next page without clearing existing commits', async () => {
@@ -478,12 +543,38 @@ describe('useGitStore — parallel repo loading', () => {
       expect(git.state.logLoadingMore).toBe(false)
     })
   })
+
+  it('routes a repo-changed(refs) event through the live store after open', async () => {
+    let repoChanged: (event: { repoPath: string; kind: 'refs' | 'workingTree' }) => void = () => {}
+    vi.mocked(window.electronAPI.onRepoChanged).mockImplementation((callback) => {
+      repoChanged = callback
+      return () => {}
+    })
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+    })
+
+    // The subscription registered at render zero, when repoPath was null. Reading the live store
+    // through the latest ref is what lets the refs handler pass its repoPath guard and refresh
+    // branches even though the store object's identity has since changed.
+    sidecarMock.getLocalBranches.mockClear()
+    repoChanged({ repoPath, kind: 'refs' })
+
+    await waitFor(() => {
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+    })
+  })
 })
 
 describe('useGitStore — push and pull', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
-    vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
+    vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({
+      _tag: 'Ok'
+    })
     vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
     vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
     vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
@@ -509,7 +600,10 @@ describe('useGitStore — push and pull', () => {
   })
 
   it('pushNow surfaces a GitError as state.error', async () => {
-    sidecarMock.pushRepo.mockResolvedValue({ _tag: 'GitError', message: 'no upstream' })
+    sidecarMock.pushRepo.mockResolvedValue({
+      _tag: 'GitError',
+      message: 'no upstream'
+    })
     const { git } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
@@ -538,7 +632,10 @@ describe('useGitStore — push and pull', () => {
   })
 
   it('pullNow surfaces a GitError as state.error', async () => {
-    sidecarMock.pullRepo.mockResolvedValue({ _tag: 'GitError', message: 'not fast-forward' })
+    sidecarMock.pullRepo.mockResolvedValue({
+      _tag: 'GitError',
+      message: 'not fast-forward'
+    })
     const { git } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => expect(git.state.repoPath).toBe(repoPath))

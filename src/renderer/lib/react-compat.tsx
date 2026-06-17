@@ -1,5 +1,4 @@
 import type * as React from 'react'
-import * as ReactRuntime from 'react'
 import {
   type ComponentType,
   createContext,
@@ -12,8 +11,6 @@ import {
   useRef,
   useState
 } from 'react'
-import { flushSync } from 'react-dom'
-import { createRoot as createReactRoot } from 'react-dom/client'
 
 export type Accessor<T> = () => T
 export type Component<P = Record<string, never>> = ComponentType<P>
@@ -31,16 +28,8 @@ export namespace JSX {
 }
 
 type Setter<T> = (value: T | ((previous: T) => T)) => void
-type ReactInternals = typeof ReactRuntime & {
-  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?: { H: unknown }
-}
 
 const cleanupStack: Array<(cleanup: () => void) => void> = []
-
-function hasHookDispatcher() {
-  return !!(ReactRuntime as ReactInternals)
-    .__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?.H
-}
 
 function resolveSetterValue<T>(previous: T, value: T | ((previous: T) => T)): T {
   return typeof value === 'function' ? (value as (previous: T) => T)(previous) : value
@@ -49,15 +38,9 @@ function resolveSetterValue<T>(previous: T, value: T | ((previous: T) => T)): T 
 export function createSignal<T>(initial: T): [Accessor<T>, Setter<T>]
 export function createSignal<T = undefined>(): [Accessor<T | undefined>, Setter<T | undefined>]
 export function createSignal<T>(initial?: T): [Accessor<T | undefined>, Setter<T | undefined>] {
-  if (!hasHookDispatcher()) {
-    let value = initial
-    return [
-      () => value,
-      (next) => {
-        value = resolveSetterValue(value, next)
-      }
-    ]
-  }
+  // Test harnesses create standalone signals outside any React render (e.g. a `tabActive` toggle
+  // passed into a store under test). When no hook dispatcher is active `useState` throws, so fall
+  // back to a plain closure-backed signal for those call sites.
   try {
     const [value, setValueState] = useState(initial)
     const valueRef = useRef(value)
@@ -88,32 +71,10 @@ export function createSignal<T>(initial?: T): [Accessor<T | undefined>, Setter<T
 
 export function createMemo<T>(compute: () => T): Accessor<T> {
   const value = compute()
-  if (!hasHookDispatcher()) {
-    return () => value
-  }
   return useCallback(() => value, [value])
 }
 
-export function createDeferred<T>(source: Accessor<T>): Accessor<T> {
-  return source
-}
-
 export function createEffect(effect: () => void | (() => void)): void {
-  if (!hasHookDispatcher()) {
-    const cleanups: Array<() => void> = []
-    cleanupStack.push((cleanup) => cleanups.push(cleanup))
-    const returned = effect()
-    cleanupStack.pop()
-    cleanupStack.at(-1)?.(() => {
-      if (typeof returned === 'function') {
-        returned()
-      }
-      for (const cleanup of cleanups) {
-        cleanup()
-      }
-    })
-    return
-  }
   useEffect(() => {
     const cleanups: Array<() => void> = []
     cleanupStack.push((cleanup) => cleanups.push(cleanup))
@@ -131,21 +92,6 @@ export function createEffect(effect: () => void | (() => void)): void {
 }
 
 export function onMount(effect: () => void | (() => void)): void {
-  if (!hasHookDispatcher()) {
-    const cleanups: Array<() => void> = []
-    cleanupStack.push((cleanup) => cleanups.push(cleanup))
-    const returned = effect()
-    cleanupStack.pop()
-    cleanupStack.at(-1)?.(() => {
-      if (typeof returned === 'function') {
-        returned()
-      }
-      for (const cleanup of cleanups) {
-        cleanup()
-      }
-    })
-    return
-  }
   useEffect(() => {
     const cleanups: Array<() => void> = []
     cleanupStack.push((cleanup) => cleanups.push(cleanup))
@@ -168,45 +114,6 @@ export function onCleanup(cleanup: () => void): void {
 
 export function untrack<T>(read: () => T): T {
   return read()
-}
-
-export function batch(update: () => void): void {
-  update()
-}
-
-export function on<T>(source: () => T, effect: (value: T) => void): () => void {
-  return () => effect(source())
-}
-
-export function createRoot(run: (dispose: () => void) => void): void {
-  if (typeof document === 'undefined') {
-    const cleanups: Array<() => void> = []
-    cleanupStack.push((cleanup) => cleanups.push(cleanup))
-    run(() => {
-      for (const cleanup of cleanups) {
-        cleanup()
-      }
-    })
-    cleanupStack.pop()
-    return
-  }
-
-  const container = document.createElement('div')
-  const root = createReactRoot(container)
-  const dispose = () => {
-    queueMicrotask(() => root.unmount())
-  }
-
-  function CompatRoot() {
-    const started = useRef(false)
-    if (!started.current) {
-      started.current = true
-      run(dispose)
-    }
-    return null
-  }
-
-  flushSync(() => root.render(<CompatRoot />))
 }
 
 export function splitProps<T extends object, K extends keyof T>(

@@ -1,7 +1,8 @@
 import { FolderPlusIcon, SearchIcon } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
+import { useMemo } from 'react'
 import { fuzzyFilter } from '@/lib/fuzzy'
-import { createMemo, createSignal, Show } from '@/lib/react-compat'
+import { createSignal, Show } from '@/lib/react-compat'
 import { Button } from '../components/ui/button'
 import { EmptyState } from '../components/ui/empty-state'
 import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher'
@@ -26,11 +27,18 @@ interface RepoPickerProps {
 
 export function RepoPicker(props: RepoPickerProps) {
   const [query, setQuery] = createSignal('')
-  const hasQuery = () => query().trim().length > 0
+  const queryValue = query()
+  const hasQuery = () => queryValue.trim().length > 0
 
-  const filteredDiscovered = createMemo(() => fuzzyFilter(query(), props.discoveredRepos))
-  const filteredRecent = createMemo(() => fuzzyFilter(query(), props.recentRepos))
-  const enterTarget = () => filteredRecent()[0] ?? filteredDiscovered()[0] ?? null
+  const filteredDiscovered = useMemo(
+    () => fuzzyFilter(queryValue, props.discoveredRepos),
+    [queryValue, props.discoveredRepos]
+  )
+  const filteredRecent = useMemo(
+    () => fuzzyFilter(queryValue, props.recentRepos),
+    [queryValue, props.recentRepos]
+  )
+  const enterTarget = () => filteredRecent[0] ?? filteredDiscovered[0] ?? null
 
   const hasAnyWorkspace = () => props.workspaces.length > 0 || !!props.activeWorkspace
 
@@ -93,7 +101,7 @@ export function RepoPicker(props: RepoPickerProps) {
             <RepoGroup>
               <RepoGroupHeader label="Recent" />
               <Show
-                when={filteredRecent().length > 0}
+                when={filteredRecent.length > 0}
                 fallback={
                   <RepoGroupEmpty>
                     {hasQuery()
@@ -105,7 +113,7 @@ export function RepoPicker(props: RepoPickerProps) {
                 }
               >
                 <RepoCardGrid
-                  repos={filteredRecent()}
+                  repos={filteredRecent}
                   enterTarget={enterTarget()}
                   onSelect={props.onOpenRepo}
                 />
@@ -126,7 +134,7 @@ export function RepoPicker(props: RepoPickerProps) {
                 }
               />
               <Show
-                when={filteredDiscovered().length > 0}
+                when={filteredDiscovered.length > 0}
                 fallback={
                   <RepoGroupEmpty>
                     {hasQuery()
@@ -137,7 +145,7 @@ export function RepoPicker(props: RepoPickerProps) {
                   </RepoGroupEmpty>
                 }
               >
-                <RepoGroupList repos={filteredDiscovered()} onSelect={props.onOpenRepo} />
+                <RepoGroupList repos={filteredDiscovered} onSelect={props.onOpenRepo} />
               </Show>
             </RepoGroup>
           </div>

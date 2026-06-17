@@ -1,5 +1,6 @@
+import { useMemo } from 'react'
 import type { FileAction } from '@/lib/git-actions'
-import { createMemo, For } from '@/lib/react-compat'
+import { For } from '@/lib/react-compat'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/lib/status-file-rows'
 import { STATUS_FILE_OVERSCAN, STATUS_FILE_ROW_HEIGHT } from '@/lib/virtual-config'
 import type { GitStatus } from '@/types'
@@ -52,9 +53,9 @@ function StatusVirtualRow(props: {
 }
 
 export function VirtualFileList(props: VirtualFileListProps) {
-  const rows = createMemo(() => buildUnifiedFileRows(props.status))
+  const rows = useMemo(() => buildUnifiedFileRows(props.status), [props.status])
   const { setScrollRef, onScroll, virtualItems, totalHeight } = useFixedVirtualizer({
-    count: () => rows().length,
+    count: () => rows.length,
     rowHeight: STATUS_FILE_ROW_HEIGHT,
     overscan: STATUS_FILE_OVERSCAN,
     initialViewportHeight: 480
@@ -70,7 +71,7 @@ export function VirtualFileList(props: VirtualFileListProps) {
       <ul className="relative m-0 list-none p-0" style={{ height: `${totalHeight()}px` }}>
         <For each={virtualItems()}>
           {(virtualItem) => {
-            const row = rows()[virtualItem.index]
+            const row = rows[virtualItem.index]
             if (!row) {
               return null
             }
