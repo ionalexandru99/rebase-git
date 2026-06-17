@@ -19,9 +19,16 @@ export function shouldPromptOnRenderGone(reason: string): boolean {
 
 const SIDECAR_SERVICE_NAME = 'rebase git sidecar'
 
-export function shouldRespawnSidecar(details: { type?: string; serviceName?: string }): boolean {
-  if (details.serviceName === SIDECAR_SERVICE_NAME) {
+// Electron surfaces the `utilityProcess.fork` serviceName option as `details.name`; `serviceName`
+// holds the non-localized service id (e.g. `node.mojom.NodeService`). Match `name` first, keep the
+// id as a defensive fallback, and otherwise only respawn an anonymous utility child.
+export function shouldRespawnSidecar(details: {
+  type?: string
+  serviceName?: string
+  name?: string
+}): boolean {
+  if (details.name === SIDECAR_SERVICE_NAME || details.serviceName === SIDECAR_SERVICE_NAME) {
     return true
   }
-  return details.type === 'Utility' && !details.serviceName
+  return details.type === 'Utility' && !details.name && !details.serviceName
 }

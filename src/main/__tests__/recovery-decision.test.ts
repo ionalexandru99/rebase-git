@@ -34,11 +34,21 @@ describe('shouldPromptOnRenderGone', () => {
 })
 
 describe('shouldRespawnSidecar', () => {
-  it('respawns when the gone child is the named git sidecar', () => {
+  it('respawns the git sidecar identified by its fork name (Electron details.name)', () => {
+    expect(
+      shouldRespawnSidecar({
+        type: 'Utility',
+        serviceName: 'node.mojom.NodeService',
+        name: 'rebase git sidecar'
+      })
+    ).toBe(true)
+  })
+
+  it('respawns when the label lands on serviceName instead', () => {
     expect(shouldRespawnSidecar({ type: 'Utility', serviceName: 'rebase git sidecar' })).toBe(true)
   })
 
-  it('respawns a utility child with no service name', () => {
+  it('respawns a utility child with no name or service name', () => {
     expect(shouldRespawnSidecar({ type: 'Utility' })).toBe(true)
   })
 
@@ -47,7 +57,13 @@ describe('shouldRespawnSidecar', () => {
   })
 
   it('does not respawn for an unrelated named utility service', () => {
-    expect(shouldRespawnSidecar({ type: 'Utility', serviceName: 'Network Service' })).toBe(false)
+    expect(
+      shouldRespawnSidecar({
+        type: 'Utility',
+        serviceName: 'node.mojom.NodeService',
+        name: 'Network Service'
+      })
+    ).toBe(false)
   })
 
   it('does not respawn for a zygote or unknown child without a service name', () => {
