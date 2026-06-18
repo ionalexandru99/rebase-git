@@ -1,7 +1,7 @@
 import { parseOrThrow } from '@shared/codec'
 import { SidebarPrefsSchema } from '@shared/schemas/ipc'
+import type { ReactNode } from 'react'
 import type { BranchAction, StashAction } from '@/lib/git-actions'
-import type { JSX } from '@/lib/react-compat'
 import type { BranchTracking, RefKind, StashRowData } from '@/lib/ref-tree'
 import { useDraggableWidth } from '../../hooks/useDraggableWidth'
 import { AppSidebar } from './Sidebar'
@@ -47,7 +47,7 @@ interface ShellProps {
   onPush?: () => void
   pulling?: boolean
   pushing?: boolean
-  children: JSX.Element
+  children: ReactNode
 }
 
 const loadSidebarPrefs = () => window.electronAPI.getSidebarPrefs()
@@ -73,7 +73,7 @@ export function Shell(props: ShellProps) {
   return (
     <div
       className="grid h-full min-h-0 gap-1.5 bg-chrome p-1.5"
-      style={{ gridTemplateColumns: `${width()}px minmax(0, 1fr)` }}
+      style={{ gridTemplateColumns: `${width}px minmax(0, 1fr)` }}
     >
       <AppSidebar
         branchBrowser={props.branchBrowser}

@@ -1,6 +1,6 @@
 import { Archive } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import type { StashAction } from '@/lib/git-actions'
-import type { JSX } from '@/lib/react-compat'
 import type { RefStashRow } from '@/lib/ref-tree'
 import {
   ContextMenu,
@@ -12,13 +12,13 @@ import {
 
 interface StashRowProps {
   row: RefStashRow
-  style: JSX.CSSProperties
+  style: CSSProperties
   onStashAction?: (action: StashAction, index: number) => void
 }
 
 export function StashRow(props: StashRowProps) {
   const act = (action: StashAction) => props.onStashAction?.(action, props.row.index)
-  const title = () => `stash@{${props.row.index}} (on ${props.row.branch}): ${props.row.message}`
+  const title = `stash@{${props.row.index}} (on ${props.row.branch}): ${props.row.message}`
 
   return (
     <ContextMenu>
@@ -32,7 +32,7 @@ export function StashRow(props: StashRowProps) {
           type="button"
           onDoubleClick={() => act('apply')}
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--r-sm)] py-0 pr-0 pl-[22px] text-sm"
-          title={title()}
+          title={title}
         >
           <Archive className="size-3.5 shrink-0 text-amber-500" />
           <span className="min-w-0 truncate text-left">{props.row.message}</span>

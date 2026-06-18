@@ -165,15 +165,16 @@ export function ConfirmDialog(props: { request: ConfirmRequest | null; onClose: 
 export function useDialogs() {
   const [promptRequest, setPromptRequest] = useState<PromptRequest | null>(null)
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null)
+  const dialogs: ReactNode = (
+    <>
+      <PromptDialog request={promptRequest} onClose={() => setPromptRequest(null)} />
+      <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
+    </>
+  )
 
   return {
     prompt: (request: PromptRequest) => setPromptRequest(request),
     confirm: (request: ConfirmRequest) => setConfirmRequest(request),
-    dialogs: () => (
-      <>
-        <PromptDialog request={promptRequest} onClose={() => setPromptRequest(null)} />
-        <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
-      </>
-    )
+    dialogs
   }
 }

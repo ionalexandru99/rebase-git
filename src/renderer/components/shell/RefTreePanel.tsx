@@ -1,9 +1,8 @@
 import { parseOrThrow } from '@shared/codec'
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import { RefTreeTogglesSchema } from '@shared/schemas/ipc'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { BranchAction, StashAction } from '@/lib/git-actions'
-import { createSignal, For, onCleanup, onMount, Show } from '@/lib/react-compat'
 import {
   type BranchTracking,
   buildRefTreeRows,
@@ -11,6 +10,7 @@ import {
   REF_TREE_ROW_HEIGHT,
   type RefKind,
   type RefRow,
+  rowKey,
   type StashRowData
 } from '@/lib/ref-tree'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
@@ -49,23 +49,22 @@ interface VirtualRefTreeRowProps {
 
 function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
   const row = props.rows[props.index]
+  if (!row) {
+    return null
+  }
   return (
-    <Show when={row}>
-      {(definedRow) => (
-        <RefTreeRow
-          row={definedRow()}
-          top={props.top}
-          localLoading={props.localLoading}
-          currentBranch={props.currentBranch}
-          visibleTimelineRefs={props.visibleTimelineRefs}
-          onToggleCollapsed={props.onToggleCollapsed}
-          onToggleTimelineVisibility={props.onToggleTimelineVisibility}
-          onCheckoutLeaf={props.onCheckoutRef}
-          onBranchAction={props.onBranchAction}
-          onStashAction={props.onStashAction}
-        />
-      )}
-    </Show>
+    <RefTreeRow
+      row={row}
+      top={props.top}
+      localLoading={props.localLoading}
+      currentBranch={props.currentBranch}
+      visibleTimelineRefs={props.visibleTimelineRefs}
+      onToggleCollapsed={props.onToggleCollapsed}
+      onToggleTimelineVisibility={props.onToggleTimelineVisibility}
+      onCheckoutLeaf={props.onCheckoutRef}
+      onBranchAction={props.onBranchAction}
+      onStashAction={props.onStashAction}
+    />
   )
 }
 
@@ -74,9 +73,9 @@ function persistToggles(next: Set<string>): void {
 }
 
 export function RefTreePanel(props: RefTreePanelProps) {
-  const [toggles, setToggles] = createSignal<Set<string>>(new Set())
+  const [toggles, setToggles] = useState<Set<string>>(new Set())
 
-  onMount(() => {
+  useEffect(() => {
     let cancelled = false
     window.electronAPI
       .getRefTreeToggles()
@@ -90,19 +89,18 @@ export function RefTreePanel(props: RefTreePanelProps) {
       .catch((err: unknown) => {
         console.warn('[RefTreePanel] failed to load toggles', err)
       })
-    onCleanup(() => {
+    return () => {
       cancelled = true
-    })
-  })
+    }
+  }, [])
 
-  const toggleSet = toggles()
   const rows = useMemo(
     () =>
       buildRefTreeRows({
         localBranches: props.localBranches,
         remoteBranches: props.remoteBranches,
         tags: props.tags,
-        toggles: toggleSet,
+        toggles,
         currentBranch: props.currentBranch,
         localLoading: props.loading ?? false,
         tracking: props.tracking,
@@ -112,7 +110,7 @@ export function RefTreePanel(props: RefTreePanelProps) {
       props.localBranches,
       props.remoteBranches,
       props.tags,
-      toggleSet,
+      toggles,
       props.currentBranch,
       props.loading,
       props.tracking,
@@ -121,7 +119,7 @@ export function RefTreePanel(props: RefTreePanelProps) {
   )
 
   const { setScrollRef, onScroll, virtualItems, totalHeight, virtualizer } = useFixedVirtualizer({
-    count: () => rows.length,
+    count: rows.length,
     rowHeight: REF_TREE_ROW_HEIGHT,
     overscan: REF_TREE_OVERSCAN,
     initialViewportHeight: 400
@@ -150,10 +148,12 @@ export function RefTreePanel(props: RefTreePanelProps) {
       className="min-h-0 flex-1 overflow-auto px-2 pb-2 pt-3 [scrollbar-gutter:stable]"
       data-testid="ref-tree-scroll"
     >
-      <div className="relative" style={{ height: `${totalHeight()}px` }}>
-        <For each={virtualItems()}>
-          {(virtualItem) => (
+      <div className="relative" style={{ height: `${totalHeight}px` }}>
+        {virtualItems.map((virtualItem) => {
+          const row = rows[virtualItem.index]
+          return (
             <VirtualRefTreeRow
+              key={row ? rowKey(row) : virtualItem.key}
               index={virtualItem.index}
               top={virtualItem.start}
               rows={rows}
@@ -166,8 +166,8 @@ export function RefTreePanel(props: RefTreePanelProps) {
               onBranchAction={props.onBranchAction}
               onStashAction={props.onStashAction}
             />
-          )}
-        </For>
+          )
+        })}
       </div>
     </div>
   )

@@ -1,10 +1,9 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
 import { setupLogStream, sidecarMock } from '@/../test/setup'
 import { DiffPanel } from '@/components/DiffPanel'
 import type { SelectedFile } from '@/components/StatusPanel'
-import { type Accessor, createSignal } from '@/lib/react-compat'
 import { type GitStore, useGitStore } from '@/stores/git'
 
 const repoPath = '/home/user/project'
@@ -80,25 +79,23 @@ function mockPartiallyStagedDiff() {
 }
 
 interface HarnessProps {
-  tabActive: Accessor<boolean>
-  selected: Accessor<SelectedFile | null>
+  tabActive: boolean
+  selected: SelectedFile | null
   onGit: (git: GitStore) => void
 }
 
 function DiffPanelHarness(props: HarnessProps) {
   const git = useGitStore('diff-test-tab', props.tabActive)
   props.onGit(git)
-  return <DiffPanel git={git} selected={props.selected()} />
+  return <DiffPanel git={git} selected={props.selected} />
 }
 
 async function renderDiffPanel(selected: SelectedFile | null) {
-  const [tabActive] = createSignal(true)
-  const [selectedSignal] = createSignal(selected)
   let git: GitStore | undefined
   renderWithQuery(() => (
     <DiffPanelHarness
-      tabActive={tabActive}
-      selected={selectedSignal}
+      tabActive={true}
+      selected={selected}
       onGit={(store) => {
         git = store
       }}
@@ -107,8 +104,11 @@ async function renderDiffPanel(selected: SelectedFile | null) {
   if (!git) {
     throw new Error('git store not initialized')
   }
-  await git.openRepo(repoPath)
-  return git
+  const store = git
+  await act(async () => {
+    await store.openRepo(repoPath)
+  })
+  return store
 }
 
 beforeEach(() => {

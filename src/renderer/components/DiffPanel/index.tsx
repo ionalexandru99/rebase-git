@@ -2,14 +2,13 @@ import type { DiffHunk, DiffLine, FileDiff } from '@shared/schemas/git'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useQuery } from '@tanstack/react-query'
 import { FileDiffIcon } from 'lucide-react'
-import { useMemo } from 'react'
+import { type CSSProperties, useMemo, useState } from 'react'
 import {
   highlightHunk,
   hunkHighlightKey,
   type LineTokens,
   languageForFile
 } from '@/lib/diff-highlight'
-import { createSignal, For, Show } from '@/lib/react-compat'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import { cn } from '@/lib/utils'
 import type { GitStore } from '@/stores/git'
@@ -24,23 +23,22 @@ interface DiffPanelProps {
 
 export function DiffPanel(props: DiffPanelProps) {
   const git = props.git
-  const repoPath = () => git.state.repoPath
+  const repoPath = git.state.repoPath
 
-  const isUntracked = () =>
+  const isUntracked =
     props.selected !== null && (git.state.status?.not_added.includes(props.selected.file) ?? false)
 
   const buildDiffQueryOptions = (staged: boolean) => {
-    const path = repoPath()
     const selected = props.selected
     return {
       queryKey: selected ? git.diffQueryKey(selected.file, staged) : ['diff', 'none', staged],
-      enabled: Boolean(path && selected),
+      enabled: Boolean(repoPath && selected),
       queryFn: async (): Promise<FileDiff> => {
-        if (!path || !selected) {
+        if (!repoPath || !selected) {
           throw new Error('No file selected')
         }
         const response = await sidecarFetch(SidecarOp.getDiff, {
-          repoPath: path,
+          repoPath,
           file: selected.file,
           staged
         })
@@ -57,18 +55,17 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const unstagedQuery = useQuery(buildDiffQueryOptions(false))
   const stagedQuery = useQuery(buildDiffQueryOptions(true))
-  const [pendingHunk, setPendingHunk] = createSignal<PendingHunk | null>(null)
+  const [pendingHunk, setPendingHunk] = useState<PendingHunk | null>(null)
 
-  const unstagedDiff = () => (props.selected ? (unstagedQuery.data ?? null) : null)
-  const stagedDiff = () => (props.selected ? (stagedQuery.data ?? null) : null)
+  const unstagedDiff = props.selected ? (unstagedQuery.data ?? null) : null
+  const stagedDiff = props.selected ? (stagedQuery.data ?? null) : null
 
-  const isBinary = () => Boolean(unstagedDiff()?.binary || stagedDiff()?.binary)
-  const hasError = () => unstagedQuery.isError || stagedQuery.isError
-  const errorMessage = () => unstagedQuery.error?.message ?? stagedQuery.error?.message
+  const isBinary = Boolean(unstagedDiff?.binary || stagedDiff?.binary)
+  const hasError = unstagedQuery.isError || stagedQuery.isError
+  const errorMessage = unstagedQuery.error?.message ?? stagedQuery.error?.message
 
-  const pendingValue = pendingHunk()
   const activePending =
-    pendingValue && pendingValue.file === props.selected?.file ? pendingValue : null
+    pendingHunk && pendingHunk.file === props.selected?.file ? pendingHunk : null
 
   // Both diffs share the index as a coordinate system: the staged diff's "new" side and
   // the unstaged diff's "old" side are the index. Sorting on those keeps document order,
@@ -148,16 +145,12 @@ export function DiffPanel(props: DiffPanelProps) {
     return { adds, dels }
   }, [mergedHunks])
 
-  const hasAnyHunks = () => mergedHunks.length > 0
-  const stagedEntryCount = () => mergedHunks.filter((entry) => entry.staged).length
-  const unstagedEntryCount = () => mergedHunks.filter((entry) => !entry.staged).length
+  const hasAnyHunks = mergedHunks.length > 0
+  const stagedEntryCount = mergedHunks.filter((entry) => entry.staged).length
+  const unstagedEntryCount = mergedHunks.filter((entry) => !entry.staged).length
 
-  const fileStageState = () => {
-    if (stagedEntryCount() === 0) {
-      return 'unstaged'
-    }
-    return unstagedEntryCount() > 0 ? 'partial' : 'staged'
-  }
+  const fileStageState =
+    stagedEntryCount === 0 ? 'unstaged' : unstagedEntryCount > 0 ? 'partial' : 'staged'
 
   const clearPendingHunk = (pending: PendingHunk) => {
     setPendingHunk((current) => (current === pending ? null : current))
@@ -168,7 +161,7 @@ export function DiffPanel(props: DiffPanelProps) {
     if (!file) {
       return
     }
-    const fullyStagesFile = unstagedEntryCount() === 1
+    const fullyStagesFile = unstagedEntryCount === 1
     const pending: PendingHunk = {
       file,
       op: 'stage',
@@ -192,7 +185,7 @@ export function DiffPanel(props: DiffPanelProps) {
     if (!file) {
       return
     }
-    const fullyUnstagesFile = stagedEntryCount() === 1
+    const fullyUnstagesFile = stagedEntryCount === 1
     const pending: PendingHunk = {
       file,
       op: 'unstage',
@@ -226,7 +219,7 @@ export function DiffPanel(props: DiffPanelProps) {
     if (!file) {
       return
     }
-    if (fileStageState() === 'staged') {
+    if (fileStageState === 'staged') {
       void git.unstageFile(file)
     } else {
       void git.stageFile(file)
@@ -235,77 +228,63 @@ export function DiffPanel(props: DiffPanelProps) {
 
   return (
     <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-      <Show when={props.selected} fallback={<div className="border-b" />}>
-        {(selected) => (
-          <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
-            <Show when={hasAnyHunks() && !isBinary()}>
-              <Checkbox
-                checked={fileStageState() === 'staged'}
-                indeterminate={fileStageState() === 'partial'}
-                aria-label={
-                  fileStageState() === 'staged'
-                    ? `Unstage ${selected().file}`
-                    : `Stage ${selected().file}`
-                }
-                onChange={toggleFileStaged}
-              />
-            </Show>
-            <span className="min-w-0 truncate text-sm font-semibold" title={selected().file}>
-              {selected().file}
-            </span>
-            <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
-              <span className="text-add">+{totals.adds}</span>
-              <span className="text-del">−{totals.dels}</span>
-            </span>
-            <div className="flex-1" />
-          </div>
-        )}
-      </Show>
+      {props.selected ? (
+        <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
+          {hasAnyHunks && !isBinary ? (
+            <Checkbox
+              checked={fileStageState === 'staged'}
+              indeterminate={fileStageState === 'partial'}
+              aria-label={
+                fileStageState === 'staged'
+                  ? `Unstage ${props.selected.file}`
+                  : `Stage ${props.selected.file}`
+              }
+              onChange={toggleFileStaged}
+            />
+          ) : null}
+          <span className="min-w-0 truncate text-sm font-semibold" title={props.selected.file}>
+            {props.selected.file}
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
+            <span className="text-add">+{totals.adds}</span>
+            <span className="text-del">−{totals.dels}</span>
+          </span>
+          <div className="flex-1" />
+        </div>
+      ) : (
+        <div className="border-b" />
+      )}
 
       <div className="min-h-0 overflow-auto p-2" data-testid="diff-body">
-        <Show
-          when={props.selected}
-          fallback={
-            <EmptyState
-              size="sm"
-              icon={FileDiffIcon}
-              title="No file selected"
-              description="Select a file on the left to review its changes."
+        {!props.selected ? (
+          <EmptyState
+            size="sm"
+            icon={FileDiffIcon}
+            title="No file selected"
+            description="Select a file on the left to review its changes."
+          />
+        ) : hasError ? (
+          <DiffError message={errorMessage} />
+        ) : isBinary ? (
+          <div className="px-2 py-4 text-sm text-muted-foreground">
+            Binary file — no preview available.
+          </div>
+        ) : hasAnyHunks ? (
+          mergedHunks.map((entry) => (
+            <HunkCard
+              key={`${entry.staged ? 'staged' : 'unstaged'}:${hunkHighlightKey(entry.hunk)}:${entry.indexStart}`}
+              hunk={entry.display}
+              filePath={props.selected?.file ?? ''}
+              staged={entry.staged}
+              pending={isPendingEntry(entry)}
+              hunkActionsEnabled={entry.staged || !isUntracked}
+              onStageHunk={() => void stageHunk(entry)}
+              onUnstageHunk={() => void unstageHunk(entry)}
             />
-          }
-        >
-          <Show when={!hasError()} fallback={<DiffError message={errorMessage()} />}>
-            <Show
-              when={!isBinary()}
-              fallback={
-                <div className="px-2 py-4 text-sm text-muted-foreground">
-                  Binary file — no preview available.
-                </div>
-              }
-            >
-              <Show
-                when={hasAnyHunks()}
-                fallback={
-                  <div className="px-2 py-4 text-sm text-muted-foreground">No changes to show.</div>
-                }
-              >
-                <For each={mergedHunks}>
-                  {(entry) => (
-                    <HunkCard
-                      hunk={entry.display}
-                      filePath={props.selected?.file ?? ''}
-                      staged={entry.staged}
-                      pending={isPendingEntry(entry)}
-                      hunkActionsEnabled={entry.staged || !isUntracked()}
-                      onStageHunk={() => void stageHunk(entry)}
-                      onUnstageHunk={() => void unstageHunk(entry)}
-                    />
-                  )}
-                </For>
-              </Show>
-            </Show>
-          </Show>
-        </Show>
+          ))
+        ) : (
+          <div className="px-2 py-4 text-sm text-muted-foreground">No changes to show.</div>
+        )}
       </div>
     </section>
   )
@@ -388,25 +367,35 @@ function HunkCard(props: HunkCardProps) {
   return (
     <div className="mb-3 overflow-hidden rounded-[10px] border" data-testid="diff-hunk">
       <div className="flex h-8 items-center gap-2.5 border-b bg-card-2 px-2.5">
-        <Show when={props.hunkActionsEnabled}>
+        {props.hunkActionsEnabled ? (
           <Checkbox
             checked={props.staged}
             disabled={props.pending}
             onChange={toggle}
             aria-label={props.staged ? 'Unstage hunk' : 'Stage hunk'}
           />
-        </Show>
+        ) : null}
         <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
           {props.hunk.header}
         </span>
       </div>
-      <For each={props.hunk.lines}>
-        {(line, index) => (
-          <DiffLineRow line={line} tokens={highlightQuery.data?.[index()] ?? null} />
-        )}
-      </For>
+      {props.hunk.lines.map((line, index) => (
+        <DiffLineRow
+          key={diffLineKey(line)}
+          line={line}
+          tokens={highlightQuery.data?.[index] ?? null}
+        />
+      ))}
     </div>
   )
+}
+
+function diffLineKey(line: DiffLine) {
+  return `${line.kind}:${line.oldLine ?? ''}:${line.newLine ?? ''}:${line.text}`
+}
+
+function tokenKey(token: LineTokens[number], index: number) {
+  return `${token.content}:${token.lightColor}:${token.darkColor}:${index}`
 }
 
 function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
@@ -434,23 +423,22 @@ function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
       <span className={lineNumberClass}>{line.oldLine ?? ''}</span>
       <span className={lineNumberClass}>{line.newLine ?? ''}</span>
       <span>
-        <Show when={props.tokens} fallback={line.text}>
-          {(tokens) => (
-            <For each={tokens()}>
-              {(token) => (
-                <span
-                  className="text-(--shiki-light) dark:text-(--shiki-dark)"
-                  style={{
+        {props.tokens
+          ? props.tokens.map((token, index) => (
+              <span
+                key={tokenKey(token, index)}
+                className="text-(--shiki-light) dark:text-(--shiki-dark)"
+                style={
+                  {
                     '--shiki-light': token.lightColor,
                     '--shiki-dark': token.darkColor
-                  }}
-                >
-                  {token.content}
-                </span>
-              )}
-            </For>
-          )}
-        </Show>
+                  } as CSSProperties
+                }
+              >
+                {token.content}
+              </span>
+            ))
+          : line.text}
       </span>
     </div>
   )

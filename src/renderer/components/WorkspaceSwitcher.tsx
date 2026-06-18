@@ -5,7 +5,6 @@ import {
   FolderPlusIcon,
   Trash2Icon
 } from 'lucide-react'
-import { For, Show } from '@/lib/react-compat'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +27,8 @@ function shortName(path: string): string {
 }
 
 export function WorkspaceSwitcher(props: WorkspaceSwitcherProps) {
-  const canRemove = () => props.workspaces.length > 1 && !!props.activeWorkspace
+  const activeWorkspace = props.activeWorkspace
+  const canRemove = props.workspaces.length > 1 && !!activeWorkspace
 
   return (
     <DropdownMenu>
@@ -38,13 +38,11 @@ export function WorkspaceSwitcher(props: WorkspaceSwitcherProps) {
       >
         <FolderOpenIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" strokeWidth={2} />
         <span className="min-w-0 flex-1 truncate font-medium">
-          {props.activeWorkspace ? shortName(props.activeWorkspace) : 'No workspace'}
+          {activeWorkspace ? shortName(activeWorkspace) : 'No workspace'}
         </span>
-        <Show when={props.activeWorkspace}>
-          {(active) => (
-            <span className="truncate text-xs text-muted-foreground/60">{active()}</span>
-          )}
-        </Show>
+        {activeWorkspace && (
+          <span className="truncate text-xs text-muted-foreground/60">{activeWorkspace}</span>
+        )}
         <ChevronsUpDownIcon
           className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground"
           strokeWidth={2}
@@ -52,20 +50,21 @@ export function WorkspaceSwitcher(props: WorkspaceSwitcherProps) {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent className="w-[18rem] max-w-[80vw] border-border bg-popover text-sm">
-        <Show when={props.workspaces.length > 0}>
-          <DropdownMenuLabel className="px-2 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Workspaces
-          </DropdownMenuLabel>
-          <For each={props.workspaces}>
-            {(workspace) => {
-              const isActive = () => workspace === props.activeWorkspace
+        {props.workspaces.length > 0 && (
+          <>
+            <DropdownMenuLabel className="px-2 py-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Workspaces
+            </DropdownMenuLabel>
+            {props.workspaces.map((workspace) => {
+              const isActive = workspace === activeWorkspace
               return (
                 <DropdownMenuItem
+                  key={workspace}
                   onSelect={() => props.onSwitch(workspace)}
                   className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm"
                 >
                   <CheckIcon
-                    className={`h-3.5 w-3.5 shrink-0 ${isActive() ? 'text-primary' : 'text-transparent'}`}
+                    className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-transparent'}`}
                     strokeWidth={2.5}
                   />
                   <div className="flex min-w-0 flex-1 flex-col leading-tight">
@@ -76,10 +75,10 @@ export function WorkspaceSwitcher(props: WorkspaceSwitcherProps) {
                   </div>
                 </DropdownMenuItem>
               )
-            }}
-          </For>
-          <DropdownMenuSeparator className="bg-border/70" />
-        </Show>
+            })}
+            <DropdownMenuSeparator className="bg-border/70" />
+          </>
+        )}
 
         <DropdownMenuItem
           onSelect={() => props.onAdd()}
@@ -89,18 +88,16 @@ export function WorkspaceSwitcher(props: WorkspaceSwitcherProps) {
           <span>Add workspace…</span>
         </DropdownMenuItem>
 
-        <Show when={canRemove() && props.activeWorkspace}>
-          {(active) => (
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={() => props.onRemove(active())}
-              className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm"
-            >
-              <Trash2Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-              <span className="truncate">Remove “{shortName(active())}”</span>
-            </DropdownMenuItem>
-          )}
-        </Show>
+        {canRemove && activeWorkspace && (
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() => props.onRemove(activeWorkspace)}
+            className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm"
+          >
+            <Trash2Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+            <span className="truncate">Remove “{shortName(activeWorkspace)}”</span>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

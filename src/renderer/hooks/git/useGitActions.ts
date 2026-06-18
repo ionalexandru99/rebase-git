@@ -13,7 +13,7 @@ function describe(error: unknown): string {
 }
 
 export function useGitActions(git: GitStore) {
-  const repoPath = () => git.state.repoPath
+  const repoPath = git.state.repoPath
 
   async function mutate(
     op: string,
@@ -21,7 +21,7 @@ export function useGitActions(git: GitStore) {
     label: string,
     refresh: (path: string) => Promise<void>
   ): Promise<boolean> {
-    const path = repoPath()
+    const path = repoPath
     if (!path) {
       toast.error('Repository is not open')
       return false
@@ -54,7 +54,7 @@ export function useGitActions(git: GitStore) {
     body: Record<string, unknown>,
     label: string
   ): Promise<boolean> {
-    const path = repoPath()
+    const path = repoPath
     if (!path) {
       toast.error('Repository is not open')
       return false
@@ -94,7 +94,7 @@ export function useGitActions(git: GitStore) {
   const refreshWorkingTree = (path: string) => git.refreshWorkingTree(path)
 
   async function stashConflictable(op: string, index: number, label: string): Promise<boolean> {
-    const path = repoPath()
+    const path = repoPath
     if (!path) {
       toast.error('Repository is not open')
       return false

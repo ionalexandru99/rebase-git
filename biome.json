@@ -59,31 +59,5 @@
       "trailingCommas": "none",
       "semicolons": "asNeeded"
     }
-  },
-  "overrides": [
-    {
-      "includes": ["src/renderer/lib/react-compat.tsx", "src/renderer/lib/react-store-compat.ts"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "useHookAtTopLevel": "off",
-            "useExhaustiveDependencies": "off"
-          },
-          "suspicious": {
-            "noConfusingVoidType": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["src/renderer/stores/git.tsx"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "useExhaustiveDependencies": "off"
-          }
-        }
-      }
-    }
-  ]
+  }
 }

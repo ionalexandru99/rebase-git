@@ -27,7 +27,7 @@ export function useStashes(repoPath: string | null) {
   }
 
   return {
-    stashes: () => query.data ?? [],
+    stashes: query.data ?? [],
     refetch
   }
 }

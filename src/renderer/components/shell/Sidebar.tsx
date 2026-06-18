@@ -1,5 +1,4 @@
 import type { MouseEvent } from 'react'
-import { Show } from '@/lib/react-compat'
 import { RefTreePanel } from './RefTreePanel'
 import type { BranchBrowser } from './Shell'
 
@@ -30,7 +29,7 @@ export function AppSidebar(props: AppSidebarProps) {
         onStashAction={props.branchBrowser.onStashAction}
       />
 
-      <Show when={props.onResizeStart}>
+      {props.onResizeStart ? (
         <span
           onMouseDown={(event) => props.onResizeStart?.(event)}
           aria-hidden="true"
@@ -38,7 +37,7 @@ export function AppSidebar(props: AppSidebarProps) {
         >
           <span className="w-px bg-transparent transition-colors group-hover/sidebar-resize:bg-primary/60" />
         </span>
-      </Show>
+      ) : null}
     </aside>
   )
 }

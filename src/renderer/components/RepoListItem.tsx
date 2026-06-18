@@ -1,5 +1,5 @@
 import { FolderIcon, type LucideProps } from 'lucide-react'
-import { type Component, Dynamic, Show } from '@/lib/react-compat'
+import type { ComponentType } from 'react'
 import { Button } from './ui/button'
 
 function repoShortName(path: string): string {
@@ -8,42 +8,33 @@ function repoShortName(path: string): string {
 
 interface RepoListItemProps {
   path: string
-  icon?: Component<LucideProps>
+  icon?: ComponentType<LucideProps>
   variant?: 'compact' | 'comfortable'
   onSelect: (path: string) => void
 }
 
 export function RepoListItem(props: RepoListItemProps) {
-  const icon = () => props.icon ?? FolderIcon
-  return (
-    <Show
-      when={props.variant === 'compact'}
-      fallback={
-        <Button
-          variant="ghost"
-          className="h-auto w-full justify-start gap-3 py-2 font-normal transition-none"
-          onClick={() => props.onSelect(props.path)}
-        >
-          <Dynamic component={icon()} className="text-muted-foreground" />
-          <span className="font-medium">{repoShortName(props.path)}</span>
-          <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">
-            {props.path}
-          </span>
-        </Button>
-      }
+  const Icon = props.icon ?? FolderIcon
+  return props.variant === 'compact' ? (
+    <button
+      type="button"
+      onClick={() => props.onSelect(props.path)}
+      className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-sm text-foreground/85 hover:bg-accent hover:text-foreground"
     >
-      <button
-        type="button"
-        onClick={() => props.onSelect(props.path)}
-        className="flex h-7 w-full items-center gap-2 border-none bg-transparent px-2.5 text-left text-sm text-foreground/85 hover:bg-accent hover:text-foreground"
-      >
-        <Dynamic
-          component={icon()}
-          className="h-3 w-3 shrink-0 text-muted-foreground"
-          strokeWidth={2}
-        />
-        <span className="truncate">{props.path}</span>
-      </button>
-    </Show>
+      <Icon className="h-3 w-3 shrink-0 text-muted-foreground" strokeWidth={2} />
+      <span className="truncate">{props.path}</span>
+    </button>
+  ) : (
+    <Button
+      variant="ghost"
+      className="h-auto w-full justify-start gap-3 py-2 font-normal transition-none"
+      onClick={() => props.onSelect(props.path)}
+    >
+      <Icon className="text-muted-foreground" />
+      <span className="font-medium">{repoShortName(props.path)}</span>
+      <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">
+        {props.path}
+      </span>
+    </Button>
   )
 }

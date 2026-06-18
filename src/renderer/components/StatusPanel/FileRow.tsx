@@ -24,11 +24,11 @@ interface FileRowProps {
 }
 
 export function FileRow(props: FileRowProps) {
-  const label = () => props.display ?? props.file
-  const isStaged = () => props.stageState === 'staged'
+  const label = props.display ?? props.file
+  const isStaged = props.stageState === 'staged'
 
   const toggleStaged = () => {
-    if (isStaged()) {
+    if (isStaged) {
       props.onUnstage?.(props.file)
       return
     }
@@ -45,9 +45,9 @@ export function FileRow(props: FileRowProps) {
         data-testid="status-file-row"
       >
         <Checkbox
-          checked={isStaged()}
+          checked={isStaged}
           indeterminate={props.stageState === 'partial'}
-          aria-label={isStaged() ? `Unstage ${label()}` : `Stage ${label()}`}
+          aria-label={isStaged ? `Unstage ${label}` : `Stage ${label}`}
           onChange={() => toggleStaged()}
         />
         <StatusBadge kind={props.kind} />
@@ -56,13 +56,13 @@ export function FileRow(props: FileRowProps) {
           onClick={() => props.onSelect(props.file)}
           className="flex h-full min-w-0 items-center text-left"
         >
-          <span className="min-w-0 truncate text-sm" title={label()}>
-            {label()}
+          <span className="min-w-0 truncate text-sm" title={label}>
+            {label}
           </span>
         </button>
       </ContextMenuTriggerArea>
       <ContextMenuContent>
-        {isStaged() ? (
+        {isStaged ? (
           <ContextMenuItem onSelect={() => props.onUnstage?.(props.file)}>Unstage</ContextMenuItem>
         ) : (
           <ContextMenuItem onSelect={() => props.onStage?.(props.file)}>Stage</ContextMenuItem>

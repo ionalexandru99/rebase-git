@@ -1,11 +1,10 @@
 import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { UIEvent } from 'react'
-import { useCallback, useEffect, useRef } from 'react'
-import { type Accessor, createSignal } from '@/lib/react-compat'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface UseFixedVirtualizerOptions {
-  count: Accessor<number>
+  count: number
   rowHeight: number
   overscan: number
   initialViewportHeight?: number
@@ -13,11 +12,11 @@ interface UseFixedVirtualizerOptions {
 }
 
 export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
-  const [viewportHeight, setViewportHeight] = createSignal(
+  const [viewportHeight, setViewportHeight] = useState(
     options.initialViewportHeight ?? (typeof window !== 'undefined' ? window.innerHeight : 800)
   )
-  const [scrollTop, setScrollTop] = createSignal(0)
-  const [scrollRevision, setScrollRevision] = createSignal(0)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [scrollRevision, setScrollRevision] = useState(0)
 
   const scrollElement = useRef<HTMLDivElement | null>(null)
   const resizeObserver = useRef<ResizeObserver | null>(null)
@@ -25,7 +24,7 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
 
   const virtualizer = useVirtualizer({
     get count() {
-      return options.count()
+      return options.count
     },
     getScrollElement: () => scrollElement.current,
     estimateSize: () => options.rowHeight,
@@ -43,7 +42,7 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
       setViewportHeight(element.clientHeight)
     }
     virtualizerRef.current.measure()
-  }, [setViewportHeight])
+  }, [])
 
   const scheduleMeasure = useCallback(() => {
     if (resizeFrame.current !== null) {
@@ -74,7 +73,7 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
       })
       resizeObserver.current.observe(element)
     },
-    [scheduleMeasure, setViewportHeight]
+    [scheduleMeasure]
   )
 
   const onSidebarResizeEnd = useCallback(() => {
@@ -103,18 +102,18 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
     }
   }, [])
 
-  const virtualItems = () => {
-    scrollRevision()
-    scrollTop()
+  const virtualItems = useMemo(() => {
+    void scrollRevision
+    void scrollTop
     const items = virtualizer.getVirtualItems()
-    const count = options.count()
+    const count = options.count
     if (items.length > 0 || count === 0) {
       return items
     }
 
-    const viewport = viewportHeight()
+    const viewport = viewportHeight
     const overscan = options.overscan
-    const offset = scrollTop()
+    const offset = scrollTop
     const start = Math.max(0, Math.floor(offset / options.rowHeight) - overscan)
     const visibleCount = Math.ceil(viewport / options.rowHeight) + overscan * 2
     const end = Math.min(count, start + visibleCount)
@@ -129,20 +128,19 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
         lane: 0
       }
     })
-  }
+  }, [
+    options.count,
+    options.overscan,
+    options.rowHeight,
+    scrollRevision,
+    scrollTop,
+    viewportHeight,
+    virtualizer
+  ])
 
-  const startIndex = () => {
-    scrollRevision()
-    const items = virtualItems()
-    return items[0]?.index ?? 0
-  }
-
-  const endIndex = () => {
-    scrollRevision()
-    const items = virtualItems()
-    const last = items.at(-1)
-    return last ? last.index + 1 : 0
-  }
+  const startIndex = virtualItems[0]?.index ?? 0
+  const lastVirtualItem = virtualItems.at(-1)
+  const endIndex = lastVirtualItem ? lastVirtualItem.index + 1 : 0
 
   return {
     setScrollRef,
@@ -153,6 +151,6 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
     virtualItems,
     startIndex,
     endIndex,
-    totalHeight: () => virtualizer.getTotalSize()
+    totalHeight: virtualizer.getTotalSize()
   }
 }

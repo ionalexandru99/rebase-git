@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ParentProps } from '@/lib/react-compat'
+import type { ReactNode } from 'react'
 
 export function createQueryClient(options: { gcTime?: number } = {}): QueryClient {
   return new QueryClient({
@@ -16,7 +16,7 @@ export function createQueryClient(options: { gcTime?: number } = {}): QueryClien
 
 const queryClient = createQueryClient()
 
-export function QueryProvider(props: ParentProps & { client?: QueryClient }) {
+export function QueryProvider(props: { children?: ReactNode; client?: QueryClient }) {
   return (
     <QueryClientProvider client={props.client ?? queryClient}>{props.children}</QueryClientProvider>
   )

@@ -1,11 +1,11 @@
-import { type JSX, Show } from '@/lib/react-compat'
+import type { CSSProperties } from 'react'
 import { type RefSectionRow, sectionKey } from '@/lib/ref-tree'
 import { Skeleton } from '../../ui/skeleton'
 import { Chevron } from './Chevron'
 
 interface SectionRowProps {
   row: RefSectionRow
-  style: JSX.CSSProperties
+  style: CSSProperties
   loading: boolean
   onToggleCollapsed: (key: string) => void
 }
@@ -20,16 +20,13 @@ export function SectionRow(props: SectionRowProps) {
     >
       <Chevron expanded={props.row.expanded} />
       <span>{props.row.label}</span>
-      <Show
-        when={props.loading}
-        fallback={
-          <span className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-full bg-muted-foreground/15 px-1.5 text-xs font-semibold tabular-nums">
-            {props.row.count}
-          </span>
-        }
-      >
+      {props.loading ? (
         <Skeleton className="h-2 w-4 rounded-sm" />
-      </Show>
+      ) : (
+        <span className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-full bg-muted-foreground/15 px-1.5 text-xs font-semibold tabular-nums">
+          {props.row.count}
+        </span>
+      )}
     </button>
   )
 }

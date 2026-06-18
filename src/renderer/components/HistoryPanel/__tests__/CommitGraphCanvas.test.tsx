@@ -55,17 +55,15 @@ describe('CommitGraphCanvas', () => {
   it('redraws when the visible filter set changes', async () => {
     const scrollContainer = document.createElement('div')
     Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    const scrollEl = () => scrollContainer
 
     const { rerender, unmount } = render(
       <CommitGraphCanvas
         rows={[row('a'), row('b')]}
-        scrollContainer={scrollEl}
+        scrollContainer={scrollContainer}
         viewportHeight={400}
         visibleSet={new Set(['a'])}
         railWidth={40}
         themeNonce={0}
-        scrollTop={0}
         startIndex={0}
         endIndex={2}
         graphLayoutEndIndex={2}
@@ -80,12 +78,11 @@ describe('CommitGraphCanvas', () => {
     rerender(
       <CommitGraphCanvas
         rows={[row('a'), row('b')]}
-        scrollContainer={scrollEl}
+        scrollContainer={scrollContainer}
         viewportHeight={400}
         visibleSet={new Set(['b'])}
         railWidth={40}
         themeNonce={0}
-        scrollTop={0}
         startIndex={0}
         endIndex={2}
         graphLayoutEndIndex={2}
@@ -102,17 +99,15 @@ describe('CommitGraphCanvas', () => {
   it('skips rows beyond graphLayoutEndIndex', async () => {
     const scrollContainer = document.createElement('div')
     Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    const scrollEl = () => scrollContainer
 
     render(
       <CommitGraphCanvas
         rows={[row('a'), row('b')]}
-        scrollContainer={scrollEl}
+        scrollContainer={scrollContainer}
         viewportHeight={400}
         visibleSet={null}
         railWidth={40}
         themeNonce={0}
-        scrollTop={0}
         startIndex={0}
         endIndex={2}
         graphLayoutEndIndex={1}
@@ -128,7 +123,6 @@ describe('CommitGraphCanvas', () => {
   it('redraws when visible row graph geometry changes without changing row count', async () => {
     const scrollContainer = document.createElement('div')
     Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    const scrollEl = () => scrollContainer
     const initialRows: RowLayout[] = [
       { ...row('a'), incoming: [], outgoing: [] },
       { ...row('b'), incoming: [], outgoing: [] }
@@ -137,12 +131,11 @@ describe('CommitGraphCanvas', () => {
     const { rerender } = render(
       <CommitGraphCanvas
         rows={initialRows}
-        scrollContainer={scrollEl}
+        scrollContainer={scrollContainer}
         viewportHeight={400}
         visibleSet={null}
         railWidth={40}
         themeNonce={0}
-        scrollTop={0}
         startIndex={0}
         endIndex={2}
         graphLayoutEndIndex={2}
@@ -157,12 +150,11 @@ describe('CommitGraphCanvas', () => {
     rerender(
       <CommitGraphCanvas
         rows={[row('a'), row('b')]}
-        scrollContainer={scrollEl}
+        scrollContainer={scrollContainer}
         viewportHeight={400}
         visibleSet={null}
         railWidth={40}
         themeNonce={0}
-        scrollTop={0}
         startIndex={0}
         endIndex={2}
         graphLayoutEndIndex={2}

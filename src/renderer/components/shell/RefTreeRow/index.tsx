@@ -1,6 +1,6 @@
+import type { CSSProperties } from 'react'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import type { BranchAction, StashAction } from '@/lib/git-actions'
-import { type JSX, Match, Switch } from '@/lib/react-compat'
 import { REF_TREE_ROW_HEIGHT, type RefKind, type RefRow } from '@/lib/ref-tree'
 import { EmptyRow } from './EmptyRow'
 import { FolderRow } from './FolderRow'
@@ -23,64 +23,47 @@ interface RefTreeRowProps {
 }
 
 export function RefTreeRow(props: RefTreeRowProps) {
-  const baseStyle = (): JSX.CSSProperties => ({
+  const baseStyle: CSSProperties = {
     top: '0',
     height: `${REF_TREE_ROW_HEIGHT}px`,
     transform: `translateY(${props.top}px)`,
     contain: 'layout paint style'
-  })
+  }
 
-  return (
-    <Switch>
-      <Match when={props.row.kind === 'section'}>
+  switch (props.row.kind) {
+    case 'section':
+      return (
         <SectionRow
-          row={props.row as Extract<RefRow, { kind: 'section' }>}
-          style={baseStyle()}
+          row={props.row}
+          style={baseStyle}
           loading={props.localLoading && props.row.refKind === 'local'}
           onToggleCollapsed={props.onToggleCollapsed}
         />
-      </Match>
-      <Match when={props.row.kind === 'empty'}>
-        <EmptyRow row={props.row as Extract<RefRow, { kind: 'empty' }>} style={baseStyle()} />
-      </Match>
-      <Match when={props.row.kind === 'skeleton'}>
-        <SkeletonRowItem
-          row={props.row as Extract<RefRow, { kind: 'skeleton' }>}
-          style={baseStyle()}
-        />
-      </Match>
-      <Match when={props.row.kind === 'folder'}>
-        <FolderRow
-          row={props.row as Extract<RefRow, { kind: 'folder' }>}
-          style={baseStyle()}
-          onToggleCollapsed={props.onToggleCollapsed}
-        />
-      </Match>
-      <Match when={props.row.kind === 'stash'}>
-        <StashRow
-          row={props.row as Extract<RefRow, { kind: 'stash' }>}
-          style={baseStyle()}
-          onStashAction={props.onStashAction}
-        />
-      </Match>
-      <Match when={props.row.kind === 'leaf'}>
+      )
+    case 'empty':
+      return <EmptyRow row={props.row} style={baseStyle} />
+    case 'skeleton':
+      return <SkeletonRowItem row={props.row} style={baseStyle} />
+    case 'folder':
+      return (
+        <FolderRow row={props.row} style={baseStyle} onToggleCollapsed={props.onToggleCollapsed} />
+      )
+    case 'stash':
+      return <StashRow row={props.row} style={baseStyle} onStashAction={props.onStashAction} />
+    case 'leaf':
+      return (
         <LeafRow
-          row={props.row as Extract<RefRow, { kind: 'leaf' }>}
-          style={baseStyle()}
+          row={props.row}
+          style={baseStyle}
           currentBranch={props.currentBranch}
           onBranchAction={props.onBranchAction}
           timelineVisible={
-            props.visibleTimelineRefs?.has(
-              refFilterKey(
-                (props.row as Extract<RefRow, { kind: 'leaf' }>).refKind,
-                (props.row as Extract<RefRow, { kind: 'leaf' }>).fullPath
-              )
-            ) ?? false
+            props.visibleTimelineRefs?.has(refFilterKey(props.row.refKind, props.row.fullPath)) ??
+            false
           }
           onToggleTimelineVisibility={props.onToggleTimelineVisibility}
           onCheckoutLeaf={props.onCheckoutLeaf}
         />
-      </Match>
-    </Switch>
-  )
+      )
+  }
 }

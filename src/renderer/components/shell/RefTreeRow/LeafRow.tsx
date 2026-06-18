@@ -1,7 +1,6 @@
 import { EyeIcon, EyeOffIcon } from 'lucide-react'
-import type { MouseEvent } from 'react'
+import type { CSSProperties, MouseEvent } from 'react'
 import type { BranchAction } from '@/lib/git-actions'
-import { type JSX, Show } from '@/lib/react-compat'
 import { REF_TREE_INDENT_PX, type RefKind, type RefLeafRow } from '@/lib/ref-tree'
 import { cn } from '@/lib/utils'
 import {
@@ -15,7 +14,7 @@ import { AheadBehindBadge } from './AheadBehindBadge'
 
 interface LeafRowProps {
   row: RefLeafRow
-  style: JSX.CSSProperties
+  style: CSSProperties
   currentBranch?: string
   timelineVisible?: boolean
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
@@ -34,8 +33,8 @@ type MenuEntry =
     }
 
 export function LeafRow(props: LeafRowProps) {
-  const padLeft = () => 22 + (props.row.depth - 1) * REF_TREE_INDENT_PX
-  const showTimelineEye = () => props.row.refKind === 'local' || props.row.refKind === 'remote'
+  const padLeft = 22 + (props.row.depth - 1) * REF_TREE_INDENT_PX
+  const showTimelineEye = props.row.refKind === 'local' || props.row.refKind === 'remote'
 
   const handleToggleVisibility = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
@@ -47,7 +46,7 @@ export function LeafRow(props: LeafRowProps) {
   const act = (action: BranchAction) =>
     props.onBranchAction?.(action, props.row.refKind, props.row.fullPath)
 
-  const menuEntries = (): MenuEntry[] => {
+  const menuEntries: MenuEntry[] = (() => {
     const { refKind, isCurrent } = props.row
     const current = props.currentBranch
     const mergeLabel = current ? `Merge into ${current}` : 'Merge into current branch'
@@ -92,7 +91,7 @@ export function LeafRow(props: LeafRowProps) {
       })
     }
     return entries
-  }
+  })()
 
   return (
     <ContextMenu>
@@ -109,7 +108,7 @@ export function LeafRow(props: LeafRowProps) {
           type="button"
           onDoubleClick={() => checkout()}
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[var(--r-sm)] py-0 pr-0 text-sm"
-          style={{ paddingLeft: `${padLeft()}px` }}
+          style={{ paddingLeft: `${padLeft}px` }}
           title={props.row.fullPath}
         >
           <span
@@ -117,18 +116,18 @@ export function LeafRow(props: LeafRowProps) {
           >
             {props.row.name}
           </span>
-          <Show when={props.row.isCurrent}>
+          {props.row.isCurrent ? (
             <span
               data-testid="current-ref-check"
               className="inline-flex h-[18px] shrink-0 items-center rounded-[var(--r-xs)] bg-green/15 px-1.5 text-[11px] font-semibold lowercase leading-none text-green"
             >
               current
             </span>
-          </Show>
+          ) : null}
           <AheadBehindBadge ahead={props.row.ahead} behind={props.row.behind} />
         </ContextMenuTrigger>
 
-        <Show when={showTimelineEye()}>
+        {showTimelineEye ? (
           <button
             type="button"
             data-testid="timeline-visibility-toggle"
@@ -149,14 +148,16 @@ export function LeafRow(props: LeafRowProps) {
             }
             onClick={handleToggleVisibility}
           >
-            <Show when={props.timelineVisible} fallback={<EyeOffIcon className="size-3.5" />}>
+            {props.timelineVisible ? (
               <EyeIcon className="size-3.5" />
-            </Show>
+            ) : (
+              <EyeOffIcon className="size-3.5" />
+            )}
           </button>
-        </Show>
+        ) : null}
       </div>
       <ContextMenuContent>
-        {menuEntries().map((entry, index) =>
+        {menuEntries.map((entry, index) =>
           entry.kind === 'separator' ? (
             // biome-ignore lint/suspicious/noArrayIndexKey: static menu, order is stable
             <ContextMenuSeparator key={`sep-${index}`} />

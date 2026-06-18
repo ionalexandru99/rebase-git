@@ -2,14 +2,14 @@ import { toast } from 'sonner'
 import type { RefKind } from '@/lib/ref-tree'
 
 export function useCheckoutRef(
-  repoPath: () => string | null,
+  repoPath: string | null,
   onCheckedOut?: (repoPath: string) => void | Promise<void>
 ) {
   return async (refKind: RefKind, fullPath: string) => {
     if (refKind === 'stash') {
       return
     }
-    const path = repoPath()
+    const path = repoPath
     if (!path) {
       toast.error('Repository is not open')
       return

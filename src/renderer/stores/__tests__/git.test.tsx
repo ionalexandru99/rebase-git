@@ -1,11 +1,11 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import { act, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
 import { setupLogStream, setupRepoChanged, sidecarMock } from '@/../test/setup'
 import { useStashes } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
-import { type Accessor, createSignal } from '@/lib/react-compat'
 import { createQueryClient } from '@/providers/QueryProvider'
 import { type GitStore, useGitStore } from '@/stores/git'
 
@@ -52,25 +52,40 @@ const remoteRefsOk = {
 }
 
 interface HarnessProps {
-  tabActive: Accessor<boolean>
+  initialTabActive: boolean
   onGit: (git: GitStore) => void
+  onSetTabActive: (setTabActive: (next: boolean) => void) => void
 }
 
 function GitStoreHarness(props: HarnessProps) {
-  const git = useGitStore('test-tab', props.tabActive)
+  const [tabActive, setTabActive] = useState(props.initialTabActive)
+  props.onSetTabActive(setTabActive)
+  const git = useGitStore('test-tab', tabActive)
   props.onGit(git)
   return null
 }
 
-function renderGitStore(tabActive = createSignal(true)) {
+function renderGitStore(initialTabActive = true) {
   const queryClient = createQueryClient({ gcTime: Number.POSITIVE_INFINITY })
   let latestGit: GitStore | undefined
+  let latestSetTabActive: ((next: boolean) => void) | undefined
   renderWithQuery(
-    () => <GitStoreHarness tabActive={tabActive[0]} onGit={(store) => (latestGit = store)} />,
+    () => (
+      <GitStoreHarness
+        initialTabActive={initialTabActive}
+        onGit={(store) => (latestGit = store)}
+        onSetTabActive={(setTabActive) => (latestSetTabActive = setTabActive)}
+      />
+    ),
     queryClient
   )
-  if (!latestGit) {
+  if (!latestGit || !latestSetTabActive) {
     throw new Error('git store not initialized')
+  }
+  const setTabActive = (next: boolean) => {
+    act(() => {
+      latestSetTabActive?.(next)
+    })
   }
   // The store and its `state` are recreated every render now that `createStore` hands back a fresh
   // identity per update. Forward to the latest render's store, and after an awaited store method
@@ -103,7 +118,7 @@ function renderGitStore(tabActive = createSignal(true)) {
       }
     }
   })
-  return { git, tabActive, queryClient }
+  return { git, setTabActive, queryClient }
 }
 
 // Advance fake timers and commit the re-render the fired flush schedules, so the captured store
@@ -164,6 +179,30 @@ describe('useGitStore — parallel repo loading', () => {
 
     await waitFor(() => {
       expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
+    })
+  })
+
+  it('closes an obsolete repo open that resolves after the tab is closed', async () => {
+    let resolveOpen: () => void = () => {}
+    vi.mocked(window.electronAPI.openRepo).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveOpen = () => resolve(openRepoOk)
+        })
+    )
+
+    const { git } = renderGitStore()
+    const openPromise = git.openRepo(repoPath)
+
+    await waitFor(() => {
+      expect(git.state.opening).toBe(true)
+    })
+    await git.closeRepo()
+    resolveOpen()
+
+    await expect(openPromise).resolves.toBeNull()
+    await waitFor(() => {
+      expect(window.electronAPI.closeRepo).toHaveBeenCalledWith(repoPath)
     })
   })
 
@@ -307,12 +346,11 @@ describe('useGitStore — parallel repo loading', () => {
   it('log flush skipped when tab inactive', async () => {
     vi.useFakeTimers()
     const stream = setupLogStream()
-    const tabActive = createSignal(true)
-    const { git, tabActive: active } = renderGitStore(tabActive)
+    const { git, setTabActive } = renderGitStore(true)
 
     await git.openRepo(repoPath)
 
-    active[1](false)
+    setTabActive(false)
     stream.fire({
       repoPath,
       commits: [
@@ -330,7 +368,7 @@ describe('useGitStore — parallel repo loading', () => {
     await advanceTimers(200)
     expect(git.state.log?.all.length ?? 0).toBe(0)
 
-    active[1](true)
+    setTabActive(true)
     await advanceTimers(200)
 
     expect(git.state.log?.all.some((commit) => commit.message === 'Buffered commit')).toBe(true)
@@ -341,8 +379,7 @@ describe('useGitStore — parallel repo loading', () => {
   it('inactive tab flushes buffered commits on activate', async () => {
     vi.useFakeTimers()
     const stream = setupLogStream()
-    const tabActive = createSignal(false)
-    const { git, tabActive: active } = renderGitStore(tabActive)
+    const { git, setTabActive } = renderGitStore(false)
 
     await git.openRepo(repoPath)
 
@@ -360,7 +397,7 @@ describe('useGitStore — parallel repo loading', () => {
       ]
     })
 
-    active[1](true)
+    setTabActive(true)
     await advanceTimers(200)
 
     expect(git.state.log?.all.some((commit) => commit.message === 'Deferred commit')).toBe(true)
@@ -896,8 +933,7 @@ const makeCommit = (hash: string, message: string, parents: string[] = []) => ({
 })
 
 function StashHarness(props: { onGit: (git: GitStore) => void }) {
-  const [active] = createSignal(true)
-  const git = useGitStore('test-tab', active)
+  const git = useGitStore('test-tab', true)
   useStashes(git.state.repoPath)
   props.onGit(git)
   return null
@@ -960,11 +996,10 @@ describe('useGitStore — Phase 2 streaming + watcher', () => {
   it('computes load-more skip from the buffer when the store flush lags', async () => {
     vi.useFakeTimers()
     const stream = setupLogStream()
-    const tabActive = createSignal(true)
-    const { git, tabActive: active } = renderGitStore(tabActive)
+    const { git, setTabActive } = renderGitStore(true)
     await git.openRepo(repoPath)
 
-    active[1](false)
+    setTabActive(false)
     stream.fire({ repoPath, commits: [makeCommit('a', 'A'), makeCommit('b', 'B')] })
     stream.fireDone(repoPath, true)
     await advanceTimers(200)
@@ -980,7 +1015,7 @@ describe('useGitStore — Phase 2 streaming + watcher', () => {
       streamId: expect.any(Number)
     })
 
-    active[1](true)
+    setTabActive(true)
     vi.useRealTimers()
   })
 

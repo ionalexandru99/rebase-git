@@ -1,4 +1,3 @@
-import { Show } from '@/lib/react-compat'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { LoadingBadge } from '../ui/loading-badge'
@@ -42,10 +41,8 @@ export function HistoryHeader(props: HistoryHeaderProps) {
         <div className="truncate text-[13px] text-muted-foreground">{subtitle(props)}</div>
       </div>
       <div className="flex-1" />
-      <Show when={props.loading || props.loadingMore}>
-        <LoadingBadge />
-      </Show>
-      <Show when={props.hasMore && props.onLoadMore}>
+      {props.loading || props.loadingMore ? <LoadingBadge /> : null}
+      {props.hasMore && props.onLoadMore ? (
         <Button
           size="sm"
           variant="outline"
@@ -55,8 +52,8 @@ export function HistoryHeader(props: HistoryHeaderProps) {
         >
           {props.loadingMore ? 'Loading…' : 'Load more'}
         </Button>
-      </Show>
-      <Show when={props.showFilter}>
+      ) : null}
+      {props.showFilter ? (
         <Input
           value={props.filter}
           onChange={(event) => props.onFilterChange(event.currentTarget.value)}
@@ -64,7 +61,7 @@ export function HistoryHeader(props: HistoryHeaderProps) {
           aria-label="Filter commits"
           className="h-[34px] w-60 rounded-[var(--r-sm)] bg-background"
         />
-      </Show>
+      ) : null}
     </div>
   )
 }
