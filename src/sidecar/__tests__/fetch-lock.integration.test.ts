@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { Effect } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, commit, fetchRepo, openRepo, stageFile } from '../operations'
 import { repoLockCount } from '../repo-lock'
@@ -34,34 +35,29 @@ beforeAll(async () => {
   gitIn(repoDir, 'commit', '-m', 'base')
   gitIn(repoDir, 'push', '-u', 'origin', 'main')
 
-  const opened = await openRepo(repoDir)
-  expect(opened._tag).toBe('Ok')
+  await Effect.runPromise(openRepo(repoDir))
 })
 
 afterAll(async () => {
-  await closeRepo(repoDir)
+  await Effect.runPromise(closeRepo(repoDir))
   fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
 describe('fetch does not serialize behind the repo lock', () => {
   it('fetches against a local remote without taking the repo lock', async () => {
     expect(repoLockCount()).toBe(0)
-    const result = await fetchRepo(repoDir)
-    expect(result._tag).toBe('Ok')
+    await Effect.runPromise(fetchRepo(repoDir))
     expect(repoLockCount()).toBe(0)
   })
 
   it('lets a concurrent mutation acquire the lock during an in-flight fetch', async () => {
     write('tracked.txt', 'fetch-concurrent\n')
 
-    const fetching = fetchRepo(repoDir)
-    const staged = await stageFile(repoDir, 'tracked.txt')
-    expect(staged._tag).toBe('Ok')
-    const committed = await commit(repoDir, 'commit during fetch')
-    expect(committed._tag).toBe('Ok')
+    const fetching = Effect.runPromise(fetchRepo(repoDir))
+    await Effect.runPromise(stageFile(repoDir, 'tracked.txt'))
+    await Effect.runPromise(commit(repoDir, 'commit during fetch'))
 
-    const fetchResult = await fetching
-    expect(fetchResult._tag).toBe('Ok')
+    await fetching
 
     gitIn(repoDir, 'reset', '--hard', 'HEAD~1')
   })

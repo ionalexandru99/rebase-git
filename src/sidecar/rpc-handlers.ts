@@ -1,111 +1,75 @@
 import { Etag, FileSystem, HttpPlatform, Path } from '@effect/platform'
 import { RpcSerialization, RpcServer } from '@effect/rpc'
-import { GitError, RepoNotOpen, SidecarRpcs } from '@shared/rpc'
+import { GitError as RpcGitError, RepoNotOpen as RpcRepoNotOpen, SidecarRpcs } from '@shared/rpc'
 import { Effect, Layer } from 'effect'
+import type { GitError, RepoNotOpen } from './git-errors'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 
 const INVALID_REPO_PATH = 'invalid repository path'
 
-const resolveRepo = (repoPath: string): Effect.Effect<string, GitError> =>
+const resolveRepo = (repoPath: string): Effect.Effect<string, RpcGitError> =>
   Effect.suspend(() => {
     const resolved = resolveExistingRepoRoot(repoPath)
     return resolved
       ? Effect.succeed(resolved)
-      : Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
+      : Effect.fail(new RpcGitError({ message: INVALID_REPO_PATH }))
   })
+
+// Read ops fail only with the sidecar-internal RepoNotOpen/GitError; project them onto the RPC
+// group's Schema-defined error classes so they serialize on the typed error channel.
+const toReadError = (error: RepoNotOpen | GitError): RpcRepoNotOpen | RpcGitError =>
+  error._tag === 'RepoNotOpen' ? new RpcRepoNotOpen() : new RpcGitError({ message: error.message })
 
 const handlersLayer = SidecarRpcs.toLayer({
   getStatus: ({ repoPath }) =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveRepo(repoPath)
-      const result = yield* Effect.promise(() => operations.getStatus(resolved))
-      if (result._tag === 'RepoNotOpen') {
-        return yield* Effect.fail(new RepoNotOpen())
-      }
-      if (result._tag === 'GitError') {
-        return yield* Effect.fail(new GitError({ message: result.message }))
-      }
-      return { status: result.status }
-    }),
-  getBranches: ({ repoPath }) =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveRepo(repoPath)
-      const result = yield* Effect.promise(() => operations.getBranches(resolved))
-      if (result._tag === 'RepoNotOpen') {
-        return yield* Effect.fail(new RepoNotOpen())
-      }
-      if (result._tag === 'GitError') {
-        return yield* Effect.fail(new GitError({ message: result.message }))
-      }
-      return { branches: result.branches }
-    }),
-  getLocalBranches: ({ repoPath }) =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveRepo(repoPath)
-      const result = yield* Effect.promise(() => operations.getLocalBranches(resolved))
-      if (result._tag === 'RepoNotOpen') {
-        return yield* Effect.fail(new RepoNotOpen())
-      }
-      if (result._tag === 'GitError') {
-        return yield* Effect.fail(new GitError({ message: result.message }))
-      }
-      return { branches: result.branches }
-    }),
-  getRemoteRefs: ({ repoPath }) =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveRepo(repoPath)
-      const result = yield* Effect.promise(() => operations.getRemoteRefs(resolved))
-      if (result._tag === 'RepoNotOpen') {
-        return yield* Effect.fail(new RepoNotOpen())
-      }
-      if (result._tag === 'GitError') {
-        return yield* Effect.fail(new GitError({ message: result.message }))
-      }
-      return { refs: result.refs }
-    }),
-  getLog: ({ repoPath, maxCount }) =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveRepo(repoPath)
-      const result = yield* Effect.promise(() => operations.getLog(resolved, maxCount))
-      if (result._tag === 'RepoNotOpen') {
-        return yield* Effect.fail(new RepoNotOpen())
-      }
-      if (result._tag === 'GitError') {
-        return yield* Effect.fail(new GitError({ message: result.message }))
-      }
-      return { log: result.log }
-    }),
-  getDiff: ({ repoPath, file, staged }) =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveRepo(repoPath)
-      const relative = resolveRepoRelativeFile(resolved, file)
-      if (!relative) {
-        return yield* Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
-      }
-      const result = yield* Effect.promise(() =>
-        operations.getDiff(resolved, relative, staged === true)
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.getStatus(resolved).pipe(Effect.mapError(toReadError))
       )
-      if (result._tag === 'RepoNotOpen') {
-        return yield* Effect.fail(new RepoNotOpen())
-      }
-      if (result._tag === 'GitError') {
-        return yield* Effect.fail(new GitError({ message: result.message }))
-      }
-      return { diff: result.diff }
-    }),
+    ),
+  getBranches: ({ repoPath }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.getBranches(resolved).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  getLocalBranches: ({ repoPath }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.getLocalBranches(resolved).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  getRemoteRefs: ({ repoPath }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.getRemoteRefs(resolved).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  getLog: ({ repoPath, maxCount }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.getLog(resolved, maxCount).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  getDiff: ({ repoPath, file, staged }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) => {
+        const relative = resolveRepoRelativeFile(resolved, file)
+        if (!relative) {
+          return Effect.fail(new RpcGitError({ message: INVALID_REPO_PATH }))
+        }
+        return operations
+          .getDiff(resolved, relative, staged === true)
+          .pipe(Effect.mapError(toReadError))
+      })
+    ),
   stashList: ({ repoPath }) =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveRepo(repoPath)
-      const result = yield* Effect.promise(() => operations.stashList(resolved))
-      if (result._tag === 'RepoNotOpen') {
-        return yield* Effect.fail(new RepoNotOpen())
-      }
-      if (result._tag === 'GitError') {
-        return yield* Effect.fail(new GitError({ message: result.message }))
-      }
-      return { stashes: result.stashes }
-    })
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.stashList(resolved).pipe(Effect.mapError(toReadError))
+      )
+    )
 })
 
 // toWebHandler is built on HttpRouter, so it asks for the HTTP platform services even though the

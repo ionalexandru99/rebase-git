@@ -66,6 +66,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
+    "@effect/vitest": "0.23.13",
     "@playwright/test": "1.60.0",
     "@tailwindcss/vite": "4.1.11",
     "@testing-library/jest-dom": "6.9.1",
