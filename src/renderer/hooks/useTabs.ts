@@ -74,7 +74,7 @@ export interface TabsStore {
 }
 
 export function useTabs(persisted?: PersistedTabState): TabsStore {
-  const initial = hydrateFromPersisted(persisted)
+  const [initial] = useState(() => hydrateFromPersisted(persisted))
   const [tabs, setTabs] = useState<TabRecord[]>(initial.tabs)
   const [activeTabId, setActiveTabId] = useState<string>(initial.activeTabId)
 

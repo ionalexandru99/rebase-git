@@ -29,7 +29,7 @@ export function RepoTab(props: RepoTabProps) {
         }
       })
     }
-  }, [git, props])
+  }, [git.openRepo, props.repoPath, props.onRepoOpened])
 
   const errorBanner = git.state.error ? (
     <div className="shrink-0 border-b px-4 py-2">

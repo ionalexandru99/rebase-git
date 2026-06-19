@@ -508,7 +508,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     const response = await sidecarFetch('fetch-repo', { repoPath })
     if (response._tag === 'Ok') {
       setUi('lastFetchedAt', Date.now())
-      if (tabActive) {
+      if (tabActiveRef.current) {
         await refreshBranchesOnly(repoPath)
       }
     } else if (response._tag === 'GitError') {
@@ -869,6 +869,8 @@ export function useGitStore(tabId: string, tabActive: boolean) {
 
   const repoPathValue = ui.repoPath
   useEffect(() => {
+    // Bumping fetchTick (on a manual fetch) is a deliberate re-trigger that resets the auto-fetch
+    // interval; referencing it here keeps it a used dependency.
     void fetchTick
     if (!repoPathValue) {
       return
@@ -882,6 +884,8 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     return () => window.clearInterval(handle)
   }, [repoPathValue, fetchTick])
 
+  // The close is deferred a tick and cancelled when the effect re-runs so StrictMode's transient
+  // mount→unmount→remount doesn't tear down the repo + log stream and bump the open generation.
   useEffect(() => {
     if (unmountCleanupTimer.current !== null) {
       clearTimeout(unmountCleanupTimer.current)

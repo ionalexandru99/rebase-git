@@ -88,8 +88,14 @@ export function useOnboarding(): OnboardingStore {
   }, [scanWorkspace])
 
   const completeOnboarding = async () => {
-    await window.electronAPI.setOnboardingComplete(true)
-    setOnboardingComplete(true)
+    setError(null)
+    try {
+      await window.electronAPI.setOnboardingComplete(true)
+      setOnboardingComplete(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      throw err
+    }
   }
 
   const rescanWorkingDirectory = async () => {

@@ -1,12 +1,12 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
-import { act, waitFor } from '@testing-library/react'
-import { useState } from 'react'
+import { act, render, waitFor } from '@testing-library/react'
+import { StrictMode, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
 import { setupLogStream, setupRepoChanged, sidecarMock } from '@/../test/setup'
 import { useStashes } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
-import { createQueryClient } from '@/providers/QueryProvider'
+import { createQueryClient, QueryProvider } from '@/providers/QueryProvider'
 import { type GitStore, useGitStore } from '@/stores/git'
 
 const repoPath = '/home/user/project'
@@ -204,6 +204,36 @@ describe('useGitStore — parallel repo loading', () => {
     await waitFor(() => {
       expect(window.electronAPI.closeRepo).toHaveBeenCalledWith(repoPath)
     })
+  })
+
+  it('does not close the repo on a StrictMode transient unmount/remount', async () => {
+    vi.useFakeTimers()
+    let latestGit: GitStore | undefined
+    // StrictMode mounts, unmounts, then remounts the same instance on the first render. The
+    // transient unmount queues the deferred close that the remount must cancel.
+    render(
+      <StrictMode>
+        <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+          <GitStoreHarness
+            initialTabActive={true}
+            onGit={(store) => (latestGit = store)}
+            onSetTabActive={() => {}}
+          />
+        </QueryProvider>
+      </StrictMode>
+    )
+
+    await act(async () => {
+      await latestGit?.openRepo(repoPath)
+    })
+
+    // Drain the deferred-cleanup timer: if the remount failed to cancel it, closeRepo fires here.
+    await advanceTimers(0)
+
+    expect(latestGit?.state.repoPath).toBe(repoPath)
+    expect(window.electronAPI.closeRepo).not.toHaveBeenCalled()
+
+    vi.useRealTimers()
   })
 
   it('local branches paint before log stream completes', async () => {

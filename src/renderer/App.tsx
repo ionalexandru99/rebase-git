@@ -43,8 +43,8 @@ export default function App() {
         onSelectDirectory={onboarding.addWorkspace}
         onComplete={onboarding.completeOnboarding}
         onOpenRepo={async (path) => {
-          await onboarding.completeOnboarding()
           try {
+            await onboarding.completeOnboarding()
             await window.electronAPI.openRepo(path)
           } catch (error) {
             console.error('[onboarding] openRepo failed', { path, error })
@@ -122,7 +122,15 @@ function TabsShell(props: TabsShellProps) {
       addWorkspace: props.onboarding.addWorkspace,
       removeWorkspace: props.onboarding.removeWorkspace
     }),
-    [props.onboarding, recentRepos]
+    [
+      recentRepos,
+      props.onboarding.discoveredRepos,
+      props.onboarding.workspaces,
+      props.onboarding.activeWorkspace,
+      props.onboarding.switchWorkspace,
+      props.onboarding.addWorkspace,
+      props.onboarding.removeWorkspace
+    ]
   )
 
   return (
