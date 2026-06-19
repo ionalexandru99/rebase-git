@@ -1,4 +1,4 @@
-import { type Accessor, createMemo, createSignal, onCleanup, onMount } from '@/lib/react-compat'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 export interface TabDescriptor {
   id: string
@@ -62,73 +62,79 @@ function hydrateFromPersisted(persisted: PersistedTabState | undefined): {
 }
 
 export interface TabsStore {
-  tabs: Accessor<TabRecord[]>
-  activeTabId: Accessor<string>
+  tabs: TabRecord[]
+  activeTabId: string
   setActiveTabId: (id: string) => void
-  tabDescriptors: Accessor<TabDescriptor[]>
+  tabDescriptors: TabDescriptor[]
   newTab: () => void
   closeTab: (id: string) => void
   openRepoInTab: (sourceTabId: string, path: string) => boolean
   confirmRepoOpen: (id: string, path: string) => void
-  persistedSnapshot: Accessor<PersistedTabState>
+  persistedSnapshot: PersistedTabState
 }
 
 export function useTabs(persisted?: PersistedTabState): TabsStore {
-  const initial = hydrateFromPersisted(persisted)
-  const [tabs, setTabs] = createSignal<TabRecord[]>(initial.tabs)
-  const [activeTabId, setActiveTabId] = createSignal<string>(initial.activeTabId)
+  const [initial] = useState(() => hydrateFromPersisted(persisted))
+  const [tabs, setTabs] = useState<TabRecord[]>(initial.tabs)
+  const [activeTabId, setActiveTabId] = useState<string>(initial.activeTabId)
 
-  const newTab = () => {
+  const newTab = useCallback(() => {
     const id = nextTabId()
     setTabs((prev) => [...prev, { id, kind: 'new' }])
     setActiveTabId(id)
-  }
+  }, [])
 
-  const closeTab = (id: string) => {
-    const current = tabs()
-    if (current.length <= 1) {
-      const freshId = nextTabId()
-      setTabs([{ id: freshId, kind: 'new' }])
-      setActiveTabId(freshId)
-      return
-    }
-    const idx = current.findIndex((tab) => tab.id === id)
-    const next = current.filter((tab) => tab.id !== id)
-    setTabs(next)
-    if (activeTabId() === id) {
-      setActiveTabId(next[Math.min(idx, next.length - 1)].id)
-    }
-  }
+  const closeTab = useCallback(
+    (id: string) => {
+      const current = tabs
+      if (current.length <= 1) {
+        const freshId = nextTabId()
+        setTabs([{ id: freshId, kind: 'new' }])
+        setActiveTabId(freshId)
+        return
+      }
+      const idx = current.findIndex((tab) => tab.id === id)
+      const next = current.filter((tab) => tab.id !== id)
+      setTabs(next)
+      if (activeTabId === id) {
+        setActiveTabId(next[Math.min(idx, next.length - 1)].id)
+      }
+    },
+    [activeTabId, tabs]
+  )
 
-  const openRepoInTab = (sourceTabId: string, path: string): boolean => {
-    const match = tabs().find(
-      (tab) =>
-        (tab.kind === 'repo' || tab.kind === 'opening-repo') &&
-        sameRepoPath(tab.repoPath, path) &&
-        tab.id !== sourceTabId
-    )
-    if (match) {
-      setActiveTabId(match.id)
-      setTabs((prev) => prev.filter((tab) => tab.id !== sourceTabId))
-      return true
-    }
+  const openRepoInTab = useCallback(
+    (sourceTabId: string, path: string): boolean => {
+      const match = tabs.find(
+        (tab) =>
+          (tab.kind === 'repo' || tab.kind === 'opening-repo') &&
+          sameRepoPath(tab.repoPath, path) &&
+          tab.id !== sourceTabId
+      )
+      if (match) {
+        setActiveTabId(match.id)
+        setTabs((prev) => prev.filter((tab) => tab.id !== sourceTabId))
+        return true
+      }
 
-    setTabs((prev) => {
-      let found = false
-      const next = prev.map((tab) => {
-        if (tab.id !== sourceTabId) {
-          return tab
-        }
-        found = true
-        return { id: tab.id, kind: 'opening-repo', repoPath: path } satisfies OpeningRepoTabRecord
+      setTabs((prev) => {
+        let found = false
+        const next = prev.map((tab) => {
+          if (tab.id !== sourceTabId) {
+            return tab
+          }
+          found = true
+          return { id: tab.id, kind: 'opening-repo', repoPath: path } satisfies OpeningRepoTabRecord
+        })
+        return found ? next : prev
       })
-      return found ? next : prev
-    })
-    setActiveTabId(sourceTabId)
-    return false
-  }
+      setActiveTabId(sourceTabId)
+      return false
+    },
+    [tabs]
+  )
 
-  const confirmRepoOpen = (id: string, path: string) => {
+  const confirmRepoOpen = useCallback((id: string, path: string) => {
     setTabs((prev) => {
       let changed = false
       const next = prev.map((tab) => {
@@ -143,22 +149,25 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
       })
       return changed ? next : prev
     })
-  }
+  }, [])
 
-  const cycleTab = (direction: 1 | -1) => {
-    const current = tabs()
-    if (current.length <= 1) {
-      return
-    }
-    const idx = current.findIndex((tab) => tab.id === activeTabId())
-    if (idx === -1) {
-      return
-    }
-    const nextIdx = (idx + direction + current.length) % current.length
-    setActiveTabId(current[nextIdx].id)
-  }
+  const cycleTab = useCallback(
+    (direction: 1 | -1) => {
+      const current = tabs
+      if (current.length <= 1) {
+        return
+      }
+      const idx = current.findIndex((tab) => tab.id === activeTabId)
+      if (idx === -1) {
+        return
+      }
+      const nextIdx = (idx + direction + current.length) % current.length
+      setActiveTabId(current[nextIdx].id)
+    },
+    [activeTabId, tabs]
+  )
 
-  onMount(() => {
+  useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey
       if (!mod) {
@@ -182,15 +191,15 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
         newTab()
       } else if (event.key === 'w') {
         event.preventDefault()
-        closeTab(activeTabId())
+        closeTab(activeTabId)
       }
     }
     window.addEventListener('keydown', onKey)
-    onCleanup(() => window.removeEventListener('keydown', onKey))
-  })
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeTabId, closeTab, cycleTab, newTab])
 
-  const tabDescriptors = createMemo<TabDescriptor[]>(() => {
-    return tabs().map((tab) => {
+  const tabDescriptors = useMemo<TabDescriptor[]>(() => {
+    return tabs.map((tab) => {
       const hasRepo = tab.kind === 'repo' || tab.kind === 'opening-repo'
       const repoPath = hasRepo ? tab.repoPath : null
       const title = repoPath
@@ -198,16 +207,16 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
         : 'New tab'
       return { id: tab.id, title, hasRepo, repoPath }
     })
-  })
+  }, [tabs])
 
-  const persistedSnapshot = createMemo<PersistedTabState>(() => {
-    const paths = tabs().map((tab) => (tab.kind === 'repo' ? tab.repoPath : null))
+  const persistedSnapshot = useMemo<PersistedTabState>(() => {
+    const paths = tabs.map((tab) => (tab.kind === 'repo' ? tab.repoPath : null))
     const activeIndex = Math.max(
       0,
-      tabs().findIndex((tab) => tab.id === activeTabId())
+      tabs.findIndex((tab) => tab.id === activeTabId)
     )
     return { tabs: paths, activeIndex }
-  })
+  }, [activeTabId, tabs])
 
   return {
     tabs,

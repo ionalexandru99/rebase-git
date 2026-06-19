@@ -1,5 +1,5 @@
 import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
-import { type Accessor, createSignal, onCleanup, onMount } from '@/lib/react-compat'
+import { useEffect, useRef, useState } from 'react'
 
 interface PaneState {
   open: boolean
@@ -18,8 +18,8 @@ interface UseDraggableWidthOptions {
 }
 
 interface UseDraggableWidthResult {
-  width: Accessor<number>
-  isOpen: Accessor<boolean>
+  width: number
+  isOpen: boolean
   setOpen: (next: boolean) => void
   onResizeStart: (event: MouseEvent) => void
 }
@@ -33,12 +33,12 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
   const onLoadError = options.onLoadError
   const onSaveError = options.onSaveError ?? defaultSaveError
 
-  const [isOpen, setIsOpen] = createSignal(true)
-  const [width, setWidth] = createSignal(defaultWidth)
-  let dragWidth = defaultWidth
-  let dragTeardown: (() => void) | null = null
+  const [isOpen, setIsOpen] = useState(true)
+  const [width, setWidth] = useState(defaultWidth)
+  const dragWidth = useRef(defaultWidth)
+  const dragTeardown = useRef<(() => void) | null>(null)
 
-  onMount(() => {
+  useEffect(() => {
     if (!load) {
       return
     }
@@ -52,7 +52,7 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
         const clamped = Math.max(min, Math.min(max, decoded.width))
         setIsOpen(decoded.open)
         setWidth(clamped)
-        dragWidth = clamped
+        dragWidth.current = clamped
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -60,12 +60,14 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
         }
         onLoadError?.(error)
       })
-    onCleanup(() => {
+    return () => {
       cancelled = true
-    })
-  })
+    }
+  }, [decode, load, max, min, onLoadError])
 
-  onCleanup(() => dragTeardown?.())
+  useEffect(() => {
+    return () => dragTeardown.current?.()
+  }, [])
 
   const persist = (nextOpen: boolean, nextWidth: number) => {
     const result = save?.({ open: nextOpen, width: nextWidth })
@@ -76,14 +78,14 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
 
   const setOpen = (next: boolean) => {
     setIsOpen(next)
-    persist(next, dragWidth)
+    persist(next, dragWidth.current)
   }
 
   const onResizeStart = (event: MouseEvent) => {
     event.preventDefault()
     const startX = event.clientX
-    const startWidth = width()
-    dragWidth = startWidth
+    const startWidth = width
+    dragWidth.current = startWidth
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
     document.body.dataset.sidebarResizing = 'true'
@@ -91,18 +93,18 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     let pendingFrame: number | null = null
 
     const onMove = (moveEvent: MouseEvent) => {
-      dragWidth = Math.max(min, Math.min(max, startWidth + (moveEvent.clientX - startX)))
+      dragWidth.current = Math.max(min, Math.min(max, startWidth + (moveEvent.clientX - startX)))
       if (pendingFrame !== null) {
         return
       }
       pendingFrame = requestAnimationFrame(() => {
         pendingFrame = null
-        setWidth(dragWidth)
+        setWidth(dragWidth.current)
       })
     }
 
     const finalize = () => {
-      if (!dragTeardown) {
+      if (!dragTeardown.current) {
         return
       }
       if (pendingFrame !== null) {
@@ -114,13 +116,13 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       delete document.body.dataset.sidebarResizing
-      dragTeardown = null
-      setWidth(dragWidth)
-      persist(isOpen(), dragWidth)
+      dragTeardown.current = null
+      setWidth(dragWidth.current)
+      persist(isOpen, dragWidth.current)
       window.dispatchEvent(new Event(SIDEBAR_RESIZE_END_EVENT))
     }
 
-    dragTeardown = finalize
+    dragTeardown.current = finalize
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', finalize)
   }

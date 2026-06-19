@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import type { FileAction } from '@/lib/git-actions'
-import { For } from '@/lib/react-compat'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/lib/status-file-rows'
 import { STATUS_FILE_OVERSCAN, STATUS_FILE_ROW_HEIGHT } from '@/lib/virtual-config'
 import type { GitStatus } from '@/types'
@@ -55,7 +54,7 @@ function StatusVirtualRow(props: {
 export function VirtualFileList(props: VirtualFileListProps) {
   const rows = useMemo(() => buildUnifiedFileRows(props.status), [props.status])
   const { setScrollRef, onScroll, virtualItems, totalHeight } = useFixedVirtualizer({
-    count: () => rows.length,
+    count: rows.length,
     rowHeight: STATUS_FILE_ROW_HEIGHT,
     overscan: STATUS_FILE_OVERSCAN,
     initialViewportHeight: 480
@@ -68,26 +67,25 @@ export function VirtualFileList(props: VirtualFileListProps) {
       className="min-h-0 flex-1 overflow-auto p-1.5"
       data-testid="status-file-scroll"
     >
-      <ul className="relative m-0 list-none p-0" style={{ height: `${totalHeight()}px` }}>
-        <For each={virtualItems()}>
-          {(virtualItem) => {
-            const row = rows[virtualItem.index]
-            if (!row) {
-              return null
-            }
-            return (
-              <StatusVirtualRow
-                row={row}
-                top={virtualItem.start}
-                selected={props.selected}
-                onSelect={props.onSelect}
-                onStage={props.onStage}
-                onUnstage={props.onUnstage}
-                onFileAction={props.onFileAction}
-              />
-            )
-          }}
-        </For>
+      <ul className="relative m-0 list-none p-0" style={{ height: `${totalHeight}px` }}>
+        {virtualItems.map((virtualItem) => {
+          const row = rows[virtualItem.index]
+          if (!row) {
+            return null
+          }
+          return (
+            <StatusVirtualRow
+              key={row.file}
+              row={row}
+              top={virtualItem.start}
+              selected={props.selected}
+              onSelect={props.onSelect}
+              onStage={props.onStage}
+              onUnstage={props.onUnstage}
+              onFileAction={props.onFileAction}
+            />
+          )
+        })}
       </ul>
     </div>
   )

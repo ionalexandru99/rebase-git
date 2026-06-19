@@ -1,8 +1,10 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderApp } from '@/../test/render-app'
+import { renderApp, renderWithQuery } from '@/../test/render-app'
 import { mockBranchResponses, setupLogStream, sidecarMock } from '@/../test/setup'
+import { RepoTab } from '@/RepoTab'
 
 beforeEach(() => {
   setupLogStream()
@@ -217,6 +219,68 @@ describe('App — repo picker (no repo open)', () => {
 })
 
 describe('App — persisted tabs', () => {
+  it('finishes opening a restored repo under StrictMode effect replay', async () => {
+    mockBaseAPI({ workingDirectory: '/home/user/projects' })
+    let resolveOpen: () => void = () => {}
+    vi.mocked(window.electronAPI.openRepo).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveOpen = () => {
+            resolve({
+              _tag: 'Ok',
+              result: { path: '/home/user/projects/restored', remotes: {}, defaultBranch: 'main' }
+            })
+          }
+        })
+    )
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+    setupLogStream()
+
+    const onRepoOpened = vi.fn()
+    renderWithQuery(() => (
+      <StrictMode>
+        <RepoTab
+          tabId="restored-tab"
+          tabActive={true}
+          repoPath="/home/user/projects/restored"
+          catalog={{
+            recentRepos: [],
+            discoveredRepos: [],
+            workspaces: [],
+            activeWorkspace: null,
+            switchWorkspace: vi.fn(),
+            addWorkspace: vi.fn(),
+            removeWorkspace: vi.fn()
+          }}
+          onOpenRepo={vi.fn()}
+          onRepoOpened={onRepoOpened}
+        />
+      </StrictMode>
+    ))
+
+    await screen.findByText('Opening repository...')
+    resolveOpen()
+
+    await waitFor(() => {
+      expect(onRepoOpened).toHaveBeenCalledWith('/home/user/projects/restored')
+    })
+    expect(screen.queryByText('Opening repository...')).not.toBeInTheDocument()
+  })
+
   it('reopens persisted repos on boot', async () => {
     mockBaseAPI({ workingDirectory: '/home/user/projects' })
     vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({

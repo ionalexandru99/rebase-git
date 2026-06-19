@@ -1,15 +1,10 @@
-import { type JSX, splitProps } from '@/lib/react-compat'
+import type { ComponentProps } from 'react'
 import { cn } from '@/lib/utils'
 
-function ScrollArea(props: JSX.HTMLAttributes<HTMLDivElement>) {
-  const [local, rest] = splitProps(props, ['className', 'children'])
+function ScrollArea({ className, children, ...rest }: ComponentProps<'div'>) {
   return (
-    <div
-      data-slot="scroll-area"
-      className={cn('relative overflow-auto', local.className)}
-      {...rest}
-    >
-      {local.children}
+    <div data-slot="scroll-area" className={cn('relative overflow-auto', className)} {...rest}>
+      {children}
     </div>
   )
 }

@@ -1,16 +1,15 @@
 import { parseOrThrow } from '@shared/codec'
 import { ScanForReposResponseSchema } from '@shared/schemas/ipc'
-import { useRef } from 'react'
-import { type Accessor, createSignal, onMount } from '@/lib/react-compat'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface OnboardingStore {
-  onboardingComplete: Accessor<boolean | null>
-  workingDirectory: Accessor<string | null>
-  workspaces: Accessor<string[]>
-  activeWorkspace: Accessor<string | null>
-  discoveredRepos: Accessor<string[]>
-  loading: Accessor<boolean>
-  error: Accessor<string | null>
+  onboardingComplete: boolean | null
+  workingDirectory: string | null
+  workspaces: string[]
+  activeWorkspace: string | null
+  discoveredRepos: string[]
+  loading: boolean
+  error: string | null
   completeOnboarding: () => Promise<void>
   rescanWorkingDirectory: () => Promise<void>
   addWorkspace: () => Promise<string | null>
@@ -19,15 +18,15 @@ export interface OnboardingStore {
 }
 
 export function useOnboarding(): OnboardingStore {
-  const [onboardingComplete, setOnboardingComplete] = createSignal<boolean | null>(null)
-  const [workspaces, setWorkspaces] = createSignal<string[]>([])
-  const [activeWorkspace, setActiveWorkspace] = createSignal<string | null>(null)
-  const [discoveredRepos, setDiscoveredRepos] = createSignal<string[]>([])
-  const [loading, setLoading] = createSignal(false)
-  const [error, setError] = createSignal<string | null>(null)
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null)
+  const [workspaces, setWorkspaces] = useState<string[]>([])
+  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null)
+  const [discoveredRepos, setDiscoveredRepos] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const scanGeneration = useRef(0)
 
-  const scanWorkspace = async (path: string | null) => {
+  const scanWorkspace = useCallback(async (path: string | null) => {
     const generation = scanGeneration.current + 1
     scanGeneration.current = generation
     if (!path) {
@@ -61,9 +60,9 @@ export function useOnboarding(): OnboardingStore {
         setLoading(false)
       }
     }
-  }
+  }, [])
 
-  onMount(() => {
+  useEffect(() => {
     window.electronAPI
       .getOnboardingComplete()
       .then(setOnboardingComplete)
@@ -86,15 +85,21 @@ export function useOnboarding(): OnboardingStore {
         setWorkspaces([])
         setActiveWorkspace(null)
       })
-  })
+  }, [scanWorkspace])
 
   const completeOnboarding = async () => {
-    await window.electronAPI.setOnboardingComplete(true)
-    setOnboardingComplete(true)
+    setError(null)
+    try {
+      await window.electronAPI.setOnboardingComplete(true)
+      setOnboardingComplete(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      throw err
+    }
   }
 
   const rescanWorkingDirectory = async () => {
-    const active = activeWorkspace()
+    const active = activeWorkspace
     if (!active) {
       return
     }
@@ -127,7 +132,7 @@ export function useOnboarding(): OnboardingStore {
       const list = await window.electronAPI.removeWorkspace(path)
       const safeList = list ?? []
       setWorkspaces(safeList)
-      if (activeWorkspace() === path) {
+      if (activeWorkspace === path) {
         const next = safeList[0] ?? null
         setActiveWorkspace(next)
         await window.electronAPI.setActiveWorkspace(next)
@@ -139,7 +144,7 @@ export function useOnboarding(): OnboardingStore {
   }
 
   const switchWorkspace = async (path: string) => {
-    if (path === activeWorkspace()) {
+    if (path === activeWorkspace) {
       return
     }
     setError(null)

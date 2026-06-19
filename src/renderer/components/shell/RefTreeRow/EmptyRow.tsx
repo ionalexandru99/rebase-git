@@ -1,9 +1,9 @@
-import type { JSX } from '@/lib/react-compat'
+import type { CSSProperties } from 'react'
 import type { RefEmptyRow } from '@/lib/ref-tree'
 
 interface EmptyRowProps {
   row: RefEmptyRow
-  style: JSX.CSSProperties
+  style: CSSProperties
 }
 
 export function EmptyRow(props: EmptyRowProps) {

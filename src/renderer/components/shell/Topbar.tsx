@@ -1,5 +1,5 @@
 import { Loader2Icon } from 'lucide-react'
-import { createSignal, onCleanup, Show } from '@/lib/react-compat'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 export const workspaceViewTabs = [
@@ -28,14 +28,16 @@ const actionButtonClass =
 const COPY_FEEDBACK_MS = 1100
 
 export function Topbar(props: TopbarProps) {
-  const [copied, setCopied] = createSignal(false)
-  let copyTimer: ReturnType<typeof setTimeout> | null = null
+  const [copied, setCopied] = useState(false)
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  onCleanup(() => {
-    if (copyTimer !== null) {
-      clearTimeout(copyTimer)
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current !== null) {
+        clearTimeout(copyTimer.current)
+      }
     }
-  })
+  }, [])
 
   const copyPath = () => {
     const path = props.repoPath
@@ -44,29 +46,29 @@ export function Topbar(props: TopbarProps) {
     }
     void navigator.clipboard?.writeText(path)
     setCopied(true)
-    if (copyTimer !== null) {
-      clearTimeout(copyTimer)
+    if (copyTimer.current !== null) {
+      clearTimeout(copyTimer.current)
     }
-    copyTimer = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
+    copyTimer.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }
 
   return (
     <div className="grid shrink-0 grid-rows-[40px_40px] border-b p-1">
       <div className="flex min-w-0 items-center gap-2.5 px-2">
         <span className="shrink-0 font-semibold">{props.repoName}</span>
-        <Show when={props.repoPath}>
+        {props.repoPath ? (
           <button
             type="button"
             title="Copy path"
             onClick={copyPath}
             className={cn(
               'min-w-0 truncate rounded-[var(--r-xs)] px-1 py-0.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-              copied() && 'text-green hover:text-green'
+              copied && 'text-green hover:text-green'
             )}
           >
-            {copied() ? 'Copied path' : props.repoPath}
+            {copied ? 'Copied path' : props.repoPath}
           </button>
-        </Show>
+        ) : null}
         <div className="flex-1" />
         <button type="button" onClick={() => props.onFetch?.()} className={actionButtonClass}>
           Fetch
@@ -77,9 +79,7 @@ export function Topbar(props: TopbarProps) {
           disabled={props.pulling}
           className={actionButtonClass}
         >
-          <Show when={props.pulling}>
-            <Loader2Icon className="size-3.5 animate-spin" />
-          </Show>
+          {props.pulling ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
           Pull
         </button>
         <button
@@ -88,9 +88,7 @@ export function Topbar(props: TopbarProps) {
           disabled={props.pushing}
           className={actionButtonClass}
         >
-          <Show when={props.pushing}>
-            <Loader2Icon className="size-3.5 animate-spin" />
-          </Show>
+          {props.pushing ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
           Push
         </button>
       </div>
@@ -114,11 +112,11 @@ export function Topbar(props: TopbarProps) {
             </button>
           ))}
         </div>
-        <Show when={props.workspaceContext}>
+        {props.workspaceContext ? (
           <span className="min-w-0 truncate text-[13px] text-muted-foreground">
             {props.workspaceContext}
           </span>
-        </Show>
+        ) : null}
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import { useDialogs } from '@/components/ui/prompt-dialog'
@@ -8,7 +8,6 @@ import {
   RESET_MODE_BY_ACTION,
   type StashAction
 } from '@/lib/git-actions'
-import { createSignal, type JSX } from '@/lib/react-compat'
 import {
   defaultVisibleTimelineRefs,
   effectiveVisibleTimelineRefs,
@@ -47,8 +46,8 @@ async function copyToClipboard(value: string, label: string): Promise<void> {
 
 interface WorkspaceProps {
   git: GitStore
-  tabActive?: () => boolean
-  errorBanner: JSX.Element
+  tabActive?: boolean
+  errorBanner: ReactNode
 }
 
 const EMPTY_BRANCH_NAMES: string[] = []
@@ -56,21 +55,21 @@ const EMPTY_BRANCH_NAMES: string[] = []
 export function Workspace(props: WorkspaceProps) {
   const git = props.git
   const repoPath = git.state.repoPath
-  const repoName = () => repoDisplayName(repoPath)
-  const branch = () => git.state.currentBranch || 'no-branch'
-  const modifiedCount = () => git.state.status?.modified.length ?? 0
-  const stagedCount = () => git.state.status?.staged.length ?? 0
-  const untrackedCount = () => git.state.status?.not_added.length ?? 0
-  const totalChanges = () => modifiedCount() + stagedCount() + untrackedCount()
-  const [activeView, setActiveView] = createSignal<WorkspaceView>('history')
-  const [visibleTimelineRefs, setVisibleTimelineRefs] = createSignal<Set<string>>(new Set())
+  const repoName = repoDisplayName(repoPath)
+  const branch = git.state.currentBranch || 'no-branch'
+  const modifiedCount = git.state.status?.modified.length ?? 0
+  const stagedCount = git.state.status?.staged.length ?? 0
+  const untrackedCount = git.state.status?.not_added.length ?? 0
+  const totalChanges = modifiedCount + stagedCount + untrackedCount
+  const [activeView, setActiveView] = useState<WorkspaceView>('history')
+  const [visibleTimelineRefs, setVisibleTimelineRefs] = useState<Set<string>>(new Set())
 
-  const sidebarTags = () => git.state.branches?.tags ?? EMPTY_BRANCH_NAMES
-  const sidebarTracking = () => git.state.branches?.tracking
+  const sidebarTags = git.state.branches?.tags ?? EMPTY_BRANCH_NAMES
+  const sidebarTracking = git.state.branches?.tracking
   const localBranches = git.state.branches?.all ?? EMPTY_BRANCH_NAMES
   const remoteBranches = git.state.branches?.remotes ?? EMPTY_BRANCH_NAMES
 
-  const selectedTimelineRefs = visibleTimelineRefs()
+  const selectedTimelineRefs = visibleTimelineRefs
   const { defaultBranch, currentBranch, remotes } = git.state
   const timelineFilterRefs = useMemo(
     () =>
@@ -91,7 +90,7 @@ export function Workspace(props: WorkspaceProps) {
       return
     }
     setVisibleTimelineRefs(new Set<string>())
-  }, [repoPath, setVisibleTimelineRefs])
+  }, [repoPath])
 
   useEffect(() => {
     if (!repoPath) {
@@ -118,13 +117,11 @@ export function Workspace(props: WorkspaceProps) {
     git.state.currentBranch,
     git.state.remotes,
     localBranches,
-    remoteBranches,
-    setVisibleTimelineRefs
+    remoteBranches
   ])
 
-  const handleCheckoutRef = useCheckoutRef(
-    () => repoPath,
-    (repoPath) => git.refreshAfterCheckout(repoPath)
+  const handleCheckoutRef = useCheckoutRef(repoPath, (repoPath) =>
+    git.refreshAfterCheckout(repoPath)
   )
 
   const actions = useGitActions(git)
@@ -275,22 +272,22 @@ export function Workspace(props: WorkspaceProps) {
   return (
     <Shell
       repo={{
-        repoName: repoName(),
+        repoName,
         repoPath,
-        branch: branch(),
-        changes: totalChanges()
+        branch,
+        changes: totalChanges
       }}
       navigation={{
-        activeView: activeView(),
+        activeView,
         onSelectView: setActiveView
       }}
       branchBrowser={{
         localBranches,
         remoteBranches,
-        tags: sidebarTags(),
-        stashes: stashList.stashes(),
+        tags: sidebarTags,
+        stashes: stashList.stashes,
         branchesLoading: git.state.branchesLoading,
-        tracking: sidebarTracking(),
+        tracking: sidebarTracking,
         visibleTimelineRefs: timelineFilterRefs,
         onToggleTimelineVisibility: handleToggleTimelineVisibility,
         onCheckoutRef: handleCheckoutRef,
@@ -312,22 +309,22 @@ export function Workspace(props: WorkspaceProps) {
       <WorkspaceProvider value={workspaceContextValue}>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <WorkspaceViewRenderer
-            activeView={activeView()}
+            activeView={activeView}
             git={git}
             repoPath={repoPath}
             remoteBranches={remoteBranches}
             visibleBranchRefs={timelineFilterRefs}
             onToggleTimelineVisibility={handleToggleTimelineVisibility}
             onCommitAction={handleCommitAction}
-            tabActive={() => props.tabActive?.() ?? true}
+            tabActive={props.tabActive ?? true}
           />
         </div>
       </WorkspaceProvider>
 
       <span className="sr-only">
-        {modifiedCount()} modified, {stagedCount()} staged, {untrackedCount()} untracked
+        {modifiedCount} modified, {stagedCount} staged, {untrackedCount} untracked
       </span>
-      {dialogs()}
+      {dialogs}
     </Shell>
   )
 }

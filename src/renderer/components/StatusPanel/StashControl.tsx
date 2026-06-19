@@ -17,8 +17,8 @@ export function StashControl(props: StashControlProps) {
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
 
-  const stagedCount = () => props.stagedFiles.length
-  const canStashSelected = () => stagedCount() > 0
+  const stagedCount = props.stagedFiles.length
+  const canStashSelected = stagedCount > 0
 
   const openMenu = () => {
     const rect = triggerRef.current?.getBoundingClientRect()
@@ -89,10 +89,10 @@ export function StashControl(props: StashControlProps) {
     <div className="flex h-7 shrink-0 items-stretch overflow-hidden rounded-[var(--r-sm)] border bg-card-2 text-xs text-muted-foreground">
       <button
         type="button"
-        disabled={!canStashSelected()}
+        disabled={!canStashSelected}
         onClick={stashSelected}
         title={
-          canStashSelected()
+          canStashSelected
             ? 'Stash the staged files'
             : 'Stage files to stash a selection, or use the menu to stash everything'
         }
@@ -100,8 +100,8 @@ export function StashControl(props: StashControlProps) {
       >
         <Archive className="size-3.5" />
         Stash
-        {stagedCount() > 0 ? (
-          <span className="rounded-full bg-muted px-1.5 text-[10px]">{stagedCount()}</span>
+        {stagedCount > 0 ? (
+          <span className="rounded-full bg-muted px-1.5 text-[10px]">{stagedCount}</span>
         ) : null}
       </button>
       <button

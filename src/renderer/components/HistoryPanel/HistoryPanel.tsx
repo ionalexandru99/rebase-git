@@ -3,11 +3,10 @@ import type { UIEvent } from 'react'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { CommitAction } from '@/lib/git-actions'
 import { computeGraphRailWidth, OVERSCAN, ROW_H } from '@/lib/git-graph/canvas'
-import { Show } from '@/lib/react-compat'
 import type { RefKind } from '@/lib/ref-tree'
 import type { GitLog, GitLogEntry } from '@/types'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
-import { buildDisplayRows, useGraphLayoutWorker } from '../../hooks/useGraphLayoutWorker'
+import { buildDisplayRows, useGraphLayout } from '../../hooks/useGraphLayout'
 import { useThemeNonce } from '../../hooks/useThemeNonce'
 import { EmptyState } from '../ui/empty-state'
 import { CommitGraphCanvas } from './CommitGraphCanvas'
@@ -97,13 +96,13 @@ export function HistoryPanel(props: HistoryPanelProps) {
     return allCommits.filter((commit) => branchFilteredSet.has(commit.hash))
   }, [allCommits, branchFilteredSet])
 
-  const graphLayout = useGraphLayoutWorker({
-    commits: () => commits,
-    loading: () => props.loading || !!props.loadingMore,
-    enabled: () => commits.length > 0
+  const graphLayout = useGraphLayout({
+    commits,
+    loading: props.loading || !!props.loadingMore,
+    enabled: commits.length > 0
   })
-  const layout = graphLayout.layout()
-  const laidOutThroughIndex = graphLayout.laidOutThroughIndex()
+  const layout = graphLayout.layout
+  const laidOutThroughIndex = graphLayout.laidOutThroughIndex
 
   const rows = useMemo(
     () => buildDisplayRows(commits, layout, laidOutThroughIndex),
@@ -123,10 +122,9 @@ export function HistoryPanel(props: HistoryPanelProps) {
     virtualItems,
     startIndex,
     endIndex,
-    totalHeight,
-    scrollTop
+    totalHeight
   } = useFixedVirtualizer({
-    count: () => rows.length,
+    count: rows.length,
     rowHeight: ROW_H,
     overscan: OVERSCAN
   })
@@ -161,8 +159,8 @@ export function HistoryPanel(props: HistoryPanelProps) {
     onScroll(event)
   }
 
-  const items = virtualItems()
-  const endIndexValue = endIndex()
+  const items = virtualItems
+  const endIndexValue = endIndex
   const lastAutoLoadCount = useRef(0)
   const { hasMore, loading, loadingMore, onLoadMore } = props
   useEffect(() => {
@@ -194,7 +192,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
       <HistoryHeader
         total={props.log?.total}
         visibleTotal={commits.length}
-        loading={props.loading || graphLayout.layoutPending()}
+        loading={props.loading || graphLayout.layoutPending}
         loadingMore={props.loadingMore}
         hasMore={props.hasMore}
         onLoadMore={props.onLoadMore}
@@ -204,7 +202,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
         visibleBranchCount={visibleBranchCount}
       />
 
-      <Show when={commits.length > 0}>
+      {commits.length > 0 ? (
         <div
           className="grid h-[30px] shrink-0 items-center gap-1 border-b bg-history-head px-0 text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground"
           style={{ gridTemplateColumns: headerGridTemplate }}
@@ -215,7 +213,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
           <span>SHA</span>
           <span className="pr-3 text-right">Date</span>
         </div>
-      </Show>
+      ) : null}
 
       <div
         ref={attachScroll}
@@ -223,38 +221,19 @@ export function HistoryPanel(props: HistoryPanelProps) {
         className="min-h-0 flex-1 overflow-auto"
         data-testid="history-scroll"
       >
-        <Show
-          when={props.log && commits.length > 0}
-          fallback={
-            <Show
-              when={showSkeleton}
-              fallback={
-                <Show when={hasCommits} fallback={<HistoryEmptyState />}>
-                  <FilteredEmptyState />
-                </Show>
-              }
-            >
-              <SkeletonRows
-                graphRailWidth={graphRailWidth}
-                gridTail={gridTail}
-                viewportHeight={viewportHeight()}
-              />
-            </Show>
-          }
-        >
+        {props.log && commits.length > 0 ? (
           <div
             className="relative"
-            style={{ height: `${totalHeight()}px`, '--row-grid-tail': gridTail }}
+            style={{ height: `${totalHeight}px`, '--row-grid-tail': gridTail }}
           >
             <CommitGraphCanvas
               rows={rows}
-              scrollContainer={() => scrollEl}
-              viewportHeight={viewportHeight()}
+              scrollContainer={scrollEl}
+              viewportHeight={viewportHeight}
               visibleSet={visibleSet}
               railWidth={graphRailWidth}
-              themeNonce={themeNonce()}
-              scrollTop={scrollTop()}
-              startIndex={startIndex()}
+              themeNonce={themeNonce}
+              startIndex={startIndex}
               endIndex={endIndexValue}
               graphLayoutEndIndex={laidOutThroughIndex}
             />
@@ -266,7 +245,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
               }
               return (
                 <CommitRow
-                  key={virtualItem.index}
+                  key={row.commit.hash}
                   row={row}
                   top={virtualItem.start}
                   dim={!!(visibleSet && !visibleSet.has(row.commit.hash))}
@@ -279,7 +258,17 @@ export function HistoryPanel(props: HistoryPanelProps) {
               )
             })}
           </div>
-        </Show>
+        ) : showSkeleton ? (
+          <SkeletonRows
+            graphRailWidth={graphRailWidth}
+            gridTail={gridTail}
+            viewportHeight={viewportHeight}
+          />
+        ) : hasCommits ? (
+          <FilteredEmptyState />
+        ) : (
+          <HistoryEmptyState />
+        )}
       </div>
     </div>
   )

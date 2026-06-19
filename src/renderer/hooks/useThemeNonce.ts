@@ -1,16 +1,16 @@
-import { type Accessor, createSignal, onCleanup, onMount } from '@/lib/react-compat'
+import { useEffect, useState } from 'react'
 
-export function useThemeNonce(): Accessor<number> {
-  const [nonce, setNonce] = createSignal(0)
+export function useThemeNonce(): number {
+  const [nonce, setNonce] = useState(0)
 
-  onMount(() => {
+  useEffect(() => {
     if (typeof MutationObserver === 'undefined') {
       return
     }
     const observer = new MutationObserver(() => setNonce((value) => value + 1))
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    onCleanup(() => observer.disconnect())
-  })
+    return () => observer.disconnect()
+  }, [])
 
   return nonce
 }

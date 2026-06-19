@@ -1,4 +1,4 @@
-import { createSignal } from '@/lib/react-compat'
+import { useState } from 'react'
 import { applyTheme, getStoredTheme, type Theme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
@@ -8,7 +8,7 @@ const SWATCHES: { theme: Theme; label: string; background: string }[] = [
 ]
 
 export function Titlebar() {
-  const [theme, setTheme] = createSignal<Theme>(getStoredTheme())
+  const [theme, setTheme] = useState<Theme>(getStoredTheme())
 
   const select = (next: Theme) => {
     applyTheme(next)
@@ -24,12 +24,12 @@ export function Titlebar() {
             key={swatch.theme}
             type="button"
             aria-label={swatch.label}
-            aria-pressed={theme() === swatch.theme}
+            aria-pressed={theme === swatch.theme}
             onClick={() => select(swatch.theme)}
             style={{ background: swatch.background }}
             className={cn(
               'size-[18px] rounded-[var(--r-sm)] border border-border',
-              theme() === swatch.theme && 'shadow-[inset_0_0_0_2px_var(--primary)]'
+              theme === swatch.theme && 'shadow-[inset_0_0_0_2px_var(--primary)]'
             )}
           />
         ))}

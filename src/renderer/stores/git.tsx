@@ -4,12 +4,10 @@ import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import { OpenRepoResponseSchema, StartLogStreamResponseSchema } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { stashKey } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
-import { type Accessor, createSignal } from '@/lib/react-compat'
-import { createStore } from '@/lib/react-store-compat'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 
@@ -60,6 +58,11 @@ export interface GitState {
 interface HunkStageOptions {
   fullyStagesFile?: boolean
   fullyUnstagesFile?: boolean
+}
+
+type SetGitUiState = {
+  (next: Partial<GitUiState>): void
+  <K extends keyof GitUiState>(key: K, value: GitUiState[K]): void
 }
 
 // Server state lives only in the TanStack Query cache. This store holds the imperative UI flags
@@ -233,9 +236,23 @@ const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
   files: mapFileCodes(status, file, (entry) => unstageCodes(entry.index))
 })
 
-export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
+export function useGitStore(tabId: string, tabActive: boolean) {
   const queryClient = useQueryClient()
-  const [ui, setUi] = createStore<GitUiState>({ ...initialUiState })
+  const [ui, setUiState] = useState<GitUiState>({ ...initialUiState })
+  const setUi = useCallback(
+    ((keyOrNext: keyof GitUiState | Partial<GitUiState>, value?: unknown) => {
+      setUiState((previous) => {
+        if (typeof keyOrNext === 'string') {
+          if (Object.is(previous[keyOrNext], value)) {
+            return previous
+          }
+          return { ...previous, [keyOrNext]: value }
+        }
+        return { ...previous, ...keyOrNext }
+      })
+    }) as SetGitUiState,
+    []
+  )
 
   const path = ui.repoPath
   const repoKeys = path ? repoQueryKeys(path) : null
@@ -246,11 +263,14 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   // render.
   const liveRepoPath = useRef(path)
   liveRepoPath.current = path
+  const tabActiveRef = useRef(tabActive)
+  tabActiveRef.current = tabActive
 
-  const [fetchTick, setFetchTick] = createSignal(0)
+  const [fetchTick, setFetchTick] = useState(0)
 
   const logBuffer = useRef<GitLogEntry[]>([])
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const unmountCleanupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const openGeneration = useRef(0)
   const logStreamSeq = useRef(0)
 
@@ -336,7 +356,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     if (error) {
       setUi('error', formatCause(error))
     }
-  }, [statusQuery.error, localBranchesQuery.error, remoteRefsQuery.error])
+  }, [statusQuery.error, localBranchesQuery.error, remoteRefsQuery.error, setUi])
 
   const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
     logFlushTimer.current = null
@@ -362,7 +382,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     const expectedGen = openGeneration.current
     const expectedPath = liveRepoPath.current
     logFlushTimer.current = setTimeout(() => {
-      if (!tabActive()) {
+      if (!tabActiveRef.current) {
         logFlushTimer.current = null
         if (logBuffer.current.length > 0) {
           scheduleLogFlush()
@@ -488,7 +508,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     const response = await sidecarFetch('fetch-repo', { repoPath })
     if (response._tag === 'Ok') {
       setUi('lastFetchedAt', Date.now())
-      if (tabActive()) {
+      if (tabActiveRef.current) {
         await refreshBranchesOnly(repoPath)
       }
     } else if (response._tag === 'GitError') {
@@ -534,6 +554,9 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         await window.electronAPI.openRepo(requestedPath)
       )
       if (generation !== openGeneration.current) {
+        if (openResponse._tag === 'Ok') {
+          void window.electronAPI.closeRepo(openResponse.result.path).catch(() => {})
+        }
         return null
       }
 
@@ -737,7 +760,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   })
 
   useEffect(() => {
-    if (tabActive() && logBuffer.current.length > 0) {
+    if (tabActive && logBuffer.current.length > 0) {
       scheduleLogFlush()
     }
   })
@@ -746,7 +769,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
   // current helpers, not render-zero closures. The helpers are recreated each render, so the
   // subscription reads them through this ref (and the live repo through `liveRepoPath`).
   const latest = useRef({
-    tabActive,
+    isTabActive: () => tabActiveRef.current,
     scheduleLogFlush,
     flushLogToStore,
     refreshStatus,
@@ -754,10 +777,11 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     invalidateDiffs,
     invalidateStashes,
     restartLogStream,
+    runFetchAndRefresh,
     openRepo
   })
   latest.current = {
-    tabActive,
+    isTabActive: () => tabActiveRef.current,
     scheduleLogFlush,
     flushLogToStore,
     refreshStatus,
@@ -765,12 +789,13 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     invalidateDiffs,
     invalidateStashes,
     restartLogStream,
+    runFetchAndRefresh,
     openRepo
   }
 
   useEffect(() => {
     const unsubLog = window.electronAPI.onLogChunk((chunk) => {
-      const { tabActive, scheduleLogFlush, flushLogToStore } = latest.current
+      const { isTabActive, scheduleLogFlush, flushLogToStore } = latest.current
       if (chunk.repoPath !== liveRepoPath.current) {
         return
       }
@@ -792,7 +817,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
         }
         setUi('logLoading', false)
         setUi('logLoadingMore', false)
-        if (tabActive()) {
+        if (isTabActive()) {
           flushLogToStore(openGeneration.current, liveRepoPath.current)
         }
       }
@@ -824,12 +849,12 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
     })
 
     const unsubRestarted = window.electronAPI.onSidecarRestarted(() => {
-      const { openRepo, tabActive } = latest.current
+      const { openRepo, isTabActive } = latest.current
       const repoPath = liveRepoPath.current
       if (!repoPath) {
         return
       }
-      if (tabActive()) {
+      if (isTabActive()) {
         toast.info('Reconnecting git engine…')
       }
       void openRepo(repoPath)
@@ -840,36 +865,47 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
       unsubChanged?.()
       unsubRestarted?.()
     }
-  }, [])
+  }, [setUi])
 
   const repoPathValue = ui.repoPath
-  const fetchTickValue = fetchTick()
   useEffect(() => {
+    // Bumping fetchTick (on a manual fetch) is a deliberate re-trigger that resets the auto-fetch
+    // interval; referencing it here keeps it a used dependency.
+    void fetchTick
     if (!repoPathValue) {
       return
     }
     const handle = window.setInterval(() => {
-      if (tabActive()) {
+      const { isTabActive, runFetchAndRefresh } = latest.current
+      if (isTabActive()) {
         void runFetchAndRefresh(repoPathValue)
       }
     }, AUTO_FETCH_INTERVAL_MS)
     return () => window.clearInterval(handle)
-  }, [repoPathValue, fetchTickValue])
+  }, [repoPathValue, fetchTick])
 
+  // The close is deferred a tick and cancelled when the effect re-runs so StrictMode's transient
+  // mount→unmount→remount doesn't tear down the repo + log stream and bump the open generation.
   useEffect(() => {
-    return () => {
-      openGeneration.current++
-      if (logFlushTimer.current !== null) {
-        clearTimeout(logFlushTimer.current)
-        logFlushTimer.current = null
-      }
-      logBuffer.current = []
+    if (unmountCleanupTimer.current !== null) {
+      clearTimeout(unmountCleanupTimer.current)
+      unmountCleanupTimer.current = null
+    }
 
-      const repoPath = liveRepoPath.current
-      if (!repoPath) {
-        return
-      }
-      setTimeout(() => {
+    return () => {
+      unmountCleanupTimer.current = setTimeout(() => {
+        unmountCleanupTimer.current = null
+        openGeneration.current++
+        if (logFlushTimer.current !== null) {
+          clearTimeout(logFlushTimer.current)
+          logFlushTimer.current = null
+        }
+        logBuffer.current = []
+
+        const repoPath = liveRepoPath.current
+        if (!repoPath) {
+          return
+        }
         Promise.resolve(window.electronAPI.cancelLogStream(repoPath)).catch(() => {})
         Promise.resolve(window.electronAPI.closeRepo(repoPath)).catch(() => {})
       }, 0)
@@ -932,7 +968,7 @@ export function useGitStore(tabId: string, tabActive: Accessor<boolean>) {
 
   return {
     state,
-    loading: () => ui.opening || ui.committing,
+    loading: ui.opening || ui.committing,
     openRepo,
     closeRepo,
     stageFile: (file: string) => stageMutation.mutateAsync(file),

@@ -1,5 +1,4 @@
 import { ChevronRightIcon } from 'lucide-react'
-import { Show } from '@/lib/react-compat'
 import { avatarColor, avatarInitials } from '@/lib/repo-avatar'
 import { repoDisplayName } from '@/lib/repoDisplayName'
 import { cn } from '@/lib/utils'
@@ -22,11 +21,11 @@ export function RepoCard(props: RepoCardProps) {
           : 'bg-card-2 hover:border-border-strong hover:bg-card'
       )}
     >
-      <Show when={props.isEnterTarget}>
+      {props.isEnterTarget && (
         <span className="absolute right-2.5 top-2 rounded-[var(--r-xs)] bg-brand/20 px-1.5 py-px text-[11px] font-semibold text-brand">
           ↵
         </span>
-      </Show>
+      )}
       <span
         className="flex size-[38px] items-center justify-center rounded-[10px] text-sm font-bold text-white"
         style={{ background: avatarColor(props.path) }}

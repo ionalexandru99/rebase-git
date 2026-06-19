@@ -1,5 +1,5 @@
 import { cva, type VariantProps } from 'class-variance-authority'
-import { type JSX, splitProps } from '@/lib/react-compat'
+import type { ComponentProps } from 'react'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
@@ -34,17 +34,15 @@ const buttonVariants = cva(
   }
 )
 
-export type ButtonProps = JSX.ButtonHTMLAttributes<HTMLButtonElement> &
-  VariantProps<typeof buttonVariants>
+export type ButtonProps = ComponentProps<'button'> & VariantProps<typeof buttonVariants>
 
-function Button(props: ButtonProps) {
-  const [local, rest] = splitProps(props, ['className', 'variant', 'size'])
+function Button({ className, variant, size, ...rest }: ButtonProps) {
   return (
     <button
       data-slot="button"
-      data-variant={local.variant ?? 'default'}
-      data-size={local.size ?? 'default'}
-      className={cn(buttonVariants({ variant: local.variant, size: local.size }), local.className)}
+      data-variant={variant ?? 'default'}
+      data-size={size ?? 'default'}
+      className={cn(buttonVariants({ variant, size }), className)}
       {...rest}
     />
   )

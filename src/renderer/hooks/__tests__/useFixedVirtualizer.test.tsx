@@ -1,11 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { useFixedVirtualizer } from '@/hooks/useFixedVirtualizer'
-import { For } from '@/lib/react-compat'
 
 function ScrollHarness() {
   const virtualizer = useFixedVirtualizer({
-    count: () => 500,
+    count: 500,
     rowHeight: 32,
     overscan: 5
   })
@@ -17,17 +16,16 @@ function ScrollHarness() {
       style={{ height: '320px', overflow: 'auto' }}
       onScroll={virtualizer.onScroll}
     >
-      <div style={{ height: `${virtualizer.totalHeight()}px`, position: 'relative' }}>
-        <For each={virtualizer.virtualItems()}>
-          {(item) => (
-            <div
-              data-testid={`row-${item.index}`}
-              style={{ position: 'absolute', top: `${item.start}px` }}
-            >
-              row-{item.index}
-            </div>
-          )}
-        </For>
+      <div style={{ height: `${virtualizer.totalHeight}px`, position: 'relative' }}>
+        {virtualizer.virtualItems.map((item) => (
+          <div
+            key={item.index}
+            data-testid={`row-${item.index}`}
+            style={{ position: 'absolute', top: `${item.start}px` }}
+          >
+            row-{item.index}
+          </div>
+        ))}
       </div>
     </div>
   )

@@ -1,5 +1,4 @@
 import { FolderOpenIcon, Loader2Icon } from 'lucide-react'
-import { Show } from '@/lib/react-compat'
 import { Button } from '../ui/button'
 
 interface WorkspacePickerProps {
@@ -15,9 +14,7 @@ export function WorkspacePicker(props: WorkspacePickerProps) {
         <p className="text-sm text-muted-foreground">No workspace folder selected</p>
       </div>
       <Button onClick={() => props.onSelectDirectory()} disabled={props.loading} className="w-full">
-        <Show when={props.loading} fallback={<FolderOpenIcon />}>
-          <Loader2Icon className="animate-spin" />
-        </Show>
+        {props.loading ? <Loader2Icon className="animate-spin" /> : <FolderOpenIcon />}
         Select Working Folder
       </Button>
     </div>

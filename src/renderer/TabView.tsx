@@ -4,7 +4,7 @@ import { RepoTab } from './RepoTab'
 
 interface TabViewProps {
   tab: TabRecord
-  tabActive: () => boolean
+  tabActive: boolean
   catalog: WorkspaceCatalog
   onOpenRepo: (sourceTabId: string, path: string) => void
   onRepoOpened: (tabId: string, path: string) => void

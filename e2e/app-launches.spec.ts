@@ -25,10 +25,12 @@ test.describe.configure({ mode: 'serial' })
 test.describe('Git GUI E2E', () => {
   let electronApp: ElectronApplication
   let page: Page
+  let userDataDir: string
 
   test.beforeAll(async () => {
+    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
     electronApp = await electron.launch({
-      args: [path.join(__dirname, '..', 'out', 'main', 'index.js')],
+      args: [path.join(__dirname, '..', 'out', 'main', 'index.js'), `--user-data-dir=${userDataDir}`],
       env: {
         ...process.env,
         NODE_ENV: 'test',
@@ -40,6 +42,7 @@ test.describe('Git GUI E2E', () => {
 
   test.afterAll(async () => {
     await electronApp?.close()
+    fs.rmSync(userDataDir, { recursive: true, force: true })
   })
 
   test('window opens and title is correct', async () => {
@@ -101,6 +104,53 @@ test.describe('Git GUI E2E', () => {
       expect(result.statusTag).toBe('Ok')
       expect(result.branchesTag).toBe('Ok')
       expect(result.currentBranch).toBe('main')
+    } finally {
+      await page
+        .evaluate(async (repoPath) => {
+          const api = (
+            window as unknown as {
+              electronAPI?: { closeRepo?: (path: string) => Promise<unknown> }
+            }
+          ).electronAPI
+          await api?.closeRepo?.(repoPath)
+        }, repo)
+        .catch(() => {})
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  test('restored repo renders branches and history in the UI', async () => {
+    const repo = createFixtureRepo()
+    try {
+      await page.evaluate(
+        async ({ repoPath, workspacePath }) => {
+          const api = (
+            window as unknown as {
+              electronAPI: {
+                addWorkspace: (path: string) => Promise<string[]>
+                setOnboardingComplete: (complete: boolean) => Promise<void>
+                setPersistedTabs: (state: {
+                  tabs: Array<string | null>
+                  activeIndex: number
+                }) => Promise<void>
+              }
+            }
+          ).electronAPI
+          await api.addWorkspace(workspacePath)
+          await api.setOnboardingComplete(true)
+          await api.setPersistedTabs({ tabs: [repoPath], activeIndex: 0 })
+        },
+        { repoPath: repo, workspacePath: path.dirname(repo) }
+      )
+
+      await page.reload({ waitUntil: 'domcontentloaded' })
+
+      await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({
+        timeout: 10_000
+      })
+      await expect(page.getByText('initial').first()).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByText(/0 commits/)).not.toBeVisible()
     } finally {
       await page
         .evaluate(async (repoPath) => {

@@ -1,5 +1,4 @@
 import { AlertCircleIcon, FolderOpenIcon, Loader2Icon } from 'lucide-react'
-import { Show } from '@/lib/react-compat'
 import { Alert, AlertDescription } from '../ui/alert'
 import { Button } from '../ui/button'
 import { DiscoveredReposList } from './DiscoveredReposList'
@@ -23,27 +22,19 @@ export function OnboardingScreen(props: OnboardingScreenProps) {
         <OnboardingHero />
 
         <div className="rounded-md border border-border bg-card">
-          <Show
-            when={props.workingDirectory}
-            fallback={
-              <WorkspacePicker
-                loading={props.loading}
-                onSelectDirectory={props.onSelectDirectory}
-              />
-            }
-          >
-            {(workingDirectory) => (
-              <SelectedWorkspaceBody
-                workingDirectory={workingDirectory()}
-                discoveredRepos={props.discoveredRepos}
-                loading={props.loading}
-                error={props.error}
-                onSelectDirectory={props.onSelectDirectory}
-                onComplete={props.onComplete}
-                onOpenRepo={props.onOpenRepo}
-              />
-            )}
-          </Show>
+          {props.workingDirectory ? (
+            <SelectedWorkspaceBody
+              workingDirectory={props.workingDirectory}
+              discoveredRepos={props.discoveredRepos}
+              loading={props.loading}
+              error={props.error}
+              onSelectDirectory={props.onSelectDirectory}
+              onComplete={props.onComplete}
+              onOpenRepo={props.onOpenRepo}
+            />
+          ) : (
+            <WorkspacePicker loading={props.loading} onSelectDirectory={props.onSelectDirectory} />
+          )}
         </div>
       </div>
     </div>
@@ -91,12 +82,12 @@ function SelectedWorkspacePath(props: { path: string }) {
 
 function SelectedWorkspaceError(props: { error: string | null }) {
   return (
-    <Show when={props.error}>
+    props.error && (
       <Alert variant="destructive" className="mb-3 border-destructive/30 bg-destructive/10 py-2">
         <AlertCircleIcon className="h-3.5 w-3.5" />
         <AlertDescription className="text-sm">{props.error}</AlertDescription>
       </Alert>
-    </Show>
+    )
   )
 }
 
@@ -106,21 +97,14 @@ function SelectedWorkspaceRepos(props: {
   error: string | null
   onOpenRepo: (path: string) => void
 }) {
-  return (
-    <Show
-      when={props.repos.length > 0}
-      fallback={
-        <Show when={!props.loading && !props.error}>
-          <div className="mb-3 rounded-sm border border-dashed border-border px-4 py-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              No git repositories found in this folder.
-            </p>
-          </div>
-        </Show>
-      }
-    >
-      <DiscoveredReposList repos={props.repos} onOpenRepo={props.onOpenRepo} />
-    </Show>
+  return props.repos.length > 0 ? (
+    <DiscoveredReposList repos={props.repos} onOpenRepo={props.onOpenRepo} />
+  ) : (
+    !props.loading && !props.error && (
+      <div className="mb-3 rounded-sm border border-dashed border-border px-4 py-6 text-center">
+        <p className="text-sm text-muted-foreground">No git repositories found in this folder.</p>
+      </div>
+    )
   )
 }
 
@@ -137,9 +121,7 @@ function SelectedWorkspaceActions(props: {
         disabled={props.loading}
         className="flex-1"
       >
-        <Show when={props.loading} fallback={'Change Folder'}>
-          <Loader2Icon className="animate-spin" />
-        </Show>
+        {props.loading ? <Loader2Icon className="animate-spin" /> : 'Change Folder'}
       </Button>
       <Button onClick={() => props.onComplete()} className="flex-1">
         Get Started

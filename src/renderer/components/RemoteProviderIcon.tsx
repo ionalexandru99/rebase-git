@@ -7,7 +7,6 @@ import githubSvg from '@/assets/providers/github.svg?raw'
 import gitlabSvg from '@/assets/providers/gitlab.svg?raw'
 import sourcehutSvg from '@/assets/providers/sourcehut.svg?raw'
 import { detectProvider, type Provider } from '@/lib/providers'
-import { Show } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
 
 type Style = 'color' | 'mono'
@@ -28,28 +27,20 @@ interface RemoteProviderIconProps {
 }
 
 export function RemoteProviderIcon(props: RemoteProviderIconProps) {
-  const provider = () => detectProvider(props.url)
-  const entry = () => {
-    const detected = provider()
-    return detected ? PROVIDERS[detected] : null
-  }
-  return (
-    <Show
-      when={entry()}
-      fallback={<CloudIcon aria-label="remote" className={cn('shrink-0', props.className)} />}
-    >
-      {(resolved) => (
-        <img
-          alt={resolved().label}
-          title={resolved().label}
-          className={cn(
-            'inline-flex shrink-0 object-contain',
-            resolved().style === 'mono' && 'text-current',
-            props.className
-          )}
-          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(resolved().svg)}`}
-        />
+  const provider = detectProvider(props.url)
+  const entry = provider ? PROVIDERS[provider] : null
+  return entry ? (
+    <img
+      alt={entry.label}
+      title={entry.label}
+      className={cn(
+        'inline-flex shrink-0 object-contain',
+        entry.style === 'mono' && 'text-current',
+        props.className
       )}
-    </Show>
+      src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(entry.svg)}`}
+    />
+  ) : (
+    <CloudIcon aria-label="remote" className={cn('shrink-0', props.className)} />
   )
 }

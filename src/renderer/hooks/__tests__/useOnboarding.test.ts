@@ -23,13 +23,13 @@ describe('useOnboarding', () => {
   it('should start with null onboardingComplete and no workspaces', () => {
     const { result } = renderHook(() => useOnboarding())
 
-    expect(result.current.onboardingComplete()).toBeNull()
-    expect(result.current.workingDirectory()).toBeNull()
-    expect(result.current.workspaces()).toEqual([])
-    expect(result.current.activeWorkspace()).toBeNull()
-    expect(result.current.loading()).toBe(false)
-    expect(result.current.error()).toBeNull()
-    expect(result.current.discoveredRepos()).toEqual([])
+    expect(result.current.onboardingComplete).toBeNull()
+    expect(result.current.workingDirectory).toBeNull()
+    expect(result.current.workspaces).toEqual([])
+    expect(result.current.activeWorkspace).toBeNull()
+    expect(result.current.loading).toBe(false)
+    expect(result.current.error).toBeNull()
+    expect(result.current.discoveredRepos).toEqual([])
   })
 
   it('should load workspaces and the active workspace on mount', async () => {
@@ -42,11 +42,11 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.onboardingComplete()).toBe(false)
-      expect(result.current.workingDirectory()).toBe('/home/user/repos')
-      expect(result.current.activeWorkspace()).toBe('/home/user/repos')
-      expect(result.current.workspaces()).toEqual(['/home/user/repos'])
-      expect(result.current.discoveredRepos()).toEqual(['/home/user/repos/app'])
+      expect(result.current.onboardingComplete).toBe(false)
+      expect(result.current.workingDirectory).toBe('/home/user/repos')
+      expect(result.current.activeWorkspace).toBe('/home/user/repos')
+      expect(result.current.workspaces).toEqual(['/home/user/repos'])
+      expect(result.current.discoveredRepos).toEqual(['/home/user/repos/app'])
     })
   })
 
@@ -61,19 +61,19 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.onboardingComplete()).toBe(false)
+      expect(result.current.onboardingComplete).toBe(false)
     })
 
     await result.current.addWorkspace()
 
     await waitFor(() => {
-      expect(result.current.workingDirectory()).toBe('/home/user/projects')
-      expect(result.current.workspaces()).toEqual(['/home/user/projects'])
-      expect(result.current.discoveredRepos()).toEqual([
+      expect(result.current.workingDirectory).toBe('/home/user/projects')
+      expect(result.current.workspaces).toEqual(['/home/user/projects'])
+      expect(result.current.discoveredRepos).toEqual([
         '/home/user/projects/app',
         '/home/user/projects/lib'
       ])
-      expect(result.current.loading()).toBe(false)
+      expect(result.current.loading).toBe(false)
     })
 
     expect(window.electronAPI.addWorkspace).toHaveBeenCalledWith('/home/user/projects')
@@ -91,14 +91,14 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.onboardingComplete()).toBe(false)
+      expect(result.current.onboardingComplete).toBe(false)
     })
 
     await result.current.addWorkspace()
 
     await waitFor(() => {
-      expect(result.current.error()).toBe('Permission denied')
-      expect(result.current.loading()).toBe(false)
+      expect(result.current.error).toBe('Permission denied')
+      expect(result.current.loading).toBe(false)
     })
   })
 
@@ -108,13 +108,13 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.onboardingComplete()).toBe(false)
+      expect(result.current.onboardingComplete).toBe(false)
     })
 
     await result.current.completeOnboarding()
 
     await waitFor(() => {
-      expect(result.current.onboardingComplete()).toBe(true)
+      expect(result.current.onboardingComplete).toBe(true)
     })
 
     expect(window.electronAPI.setOnboardingComplete).toHaveBeenCalledWith(true)
@@ -131,14 +131,14 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.workingDirectory()).toBe('/home/user/repos')
+      expect(result.current.workingDirectory).toBe('/home/user/repos')
     })
 
     await result.current.rescanWorkingDirectory()
 
     await waitFor(() => {
-      expect(result.current.discoveredRepos()).toEqual(['/home/user/repos/one'])
-      expect(result.current.loading()).toBe(false)
+      expect(result.current.discoveredRepos).toEqual(['/home/user/repos/one'])
+      expect(result.current.loading).toBe(false)
     })
 
     expect(window.electronAPI.scanForRepos).toHaveBeenCalledWith('/home/user/repos')
@@ -148,7 +148,7 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.workingDirectory()).toBeNull()
+      expect(result.current.workingDirectory).toBeNull()
     })
 
     vi.mocked(window.electronAPI.scanForRepos).mockClear()
@@ -174,15 +174,15 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.activeWorkspace()).toBe('/home/user/personal')
+      expect(result.current.activeWorkspace).toBe('/home/user/personal')
     })
 
     await result.current.addWorkspace()
 
     await waitFor(() => {
-      expect(result.current.workspaces()).toEqual(['/home/user/personal', '/home/user/work'])
-      expect(result.current.activeWorkspace()).toBe('/home/user/work')
-      expect(result.current.discoveredRepos()).toEqual(['/home/user/work/repo-a'])
+      expect(result.current.workspaces).toEqual(['/home/user/personal', '/home/user/work'])
+      expect(result.current.activeWorkspace).toBe('/home/user/work')
+      expect(result.current.discoveredRepos).toEqual(['/home/user/work/repo-a'])
     })
 
     expect(window.electronAPI.addWorkspace).toHaveBeenCalledWith('/home/user/work')
@@ -199,7 +199,7 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.activeWorkspace()).toBe('/home/user/personal')
+      expect(result.current.activeWorkspace).toBe('/home/user/personal')
     })
 
     vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
@@ -210,8 +210,8 @@ describe('useOnboarding', () => {
     await result.current.switchWorkspace('/home/user/work')
 
     await waitFor(() => {
-      expect(result.current.activeWorkspace()).toBe('/home/user/work')
-      expect(result.current.discoveredRepos()).toEqual(['/home/user/work/job'])
+      expect(result.current.activeWorkspace).toBe('/home/user/work')
+      expect(result.current.discoveredRepos).toEqual(['/home/user/work/job'])
     })
 
     expect(window.electronAPI.setActiveWorkspace).toHaveBeenCalledWith('/home/user/work')
@@ -238,7 +238,7 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.activeWorkspace()).toBe('/home/user/personal')
+      expect(result.current.activeWorkspace).toBe('/home/user/personal')
     })
 
     const switched = result.current.switchWorkspace('/home/user/work')
@@ -249,14 +249,14 @@ describe('useOnboarding', () => {
     await switched
 
     await waitFor(() => {
-      expect(result.current.discoveredRepos()).toEqual(['/home/user/work/job'])
+      expect(result.current.discoveredRepos).toEqual(['/home/user/work/job'])
     })
 
     resolvePersonal({ _tag: 'Ok', repos: ['/home/user/personal/app'] })
     await Promise.resolve()
 
-    expect(result.current.activeWorkspace()).toBe('/home/user/work')
-    expect(result.current.discoveredRepos()).toEqual(['/home/user/work/job'])
+    expect(result.current.activeWorkspace).toBe('/home/user/work')
+    expect(result.current.discoveredRepos).toEqual(['/home/user/work/job'])
   })
 
   it('should remove a workspace and fall back to the first remaining one', async () => {
@@ -271,15 +271,15 @@ describe('useOnboarding', () => {
     const { result } = renderHook(() => useOnboarding())
 
     await waitFor(() => {
-      expect(result.current.activeWorkspace()).toBe('/home/user/personal')
+      expect(result.current.activeWorkspace).toBe('/home/user/personal')
     })
 
     await result.current.removeWorkspace('/home/user/personal')
 
     await waitFor(() => {
-      expect(result.current.workspaces()).toEqual(['/home/user/work'])
-      expect(result.current.activeWorkspace()).toBe('/home/user/work')
-      expect(result.current.discoveredRepos()).toEqual(['/home/user/work/job'])
+      expect(result.current.workspaces).toEqual(['/home/user/work'])
+      expect(result.current.activeWorkspace).toBe('/home/user/work')
+      expect(result.current.discoveredRepos).toEqual(['/home/user/work/job'])
     })
 
     expect(window.electronAPI.removeWorkspace).toHaveBeenCalledWith('/home/user/personal')

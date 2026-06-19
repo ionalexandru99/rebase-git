@@ -1,10 +1,10 @@
-import { type JSX, Show } from '@/lib/react-compat'
+import type { ReactNode } from 'react'
 
 interface FileSectionProps {
   label: string
   count: number
   emptyText?: string
-  children?: JSX.Element
+  children?: ReactNode
 }
 
 export function FileSection(props: FileSectionProps) {
@@ -16,14 +16,11 @@ export function FileSection(props: FileSectionProps) {
         </span>
         <span className="text-xs tabular-nums text-muted-foreground">{props.count}</span>
       </div>
-      <Show
-        when={!(props.count === 0 && props.emptyText)}
-        fallback={
-          <p className="px-2 py-1.5 text-sm italic text-muted-foreground">{props.emptyText}</p>
-        }
-      >
+      {props.count === 0 && props.emptyText ? (
+        <p className="px-2 py-1.5 text-sm italic text-muted-foreground">{props.emptyText}</p>
+      ) : (
         <ul className="space-y-px">{props.children}</ul>
-      </Show>
+      )}
     </>
   )
 }

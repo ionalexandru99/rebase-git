@@ -5,7 +5,6 @@ import type { CommitAction } from '@/lib/git-actions'
 import { computeRowRailWidth, laneColor, ROW_H } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
-import { Show } from '@/lib/react-compat'
 import { cn } from '@/lib/utils'
 import {
   ContextMenu,
@@ -54,9 +53,9 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
       >
         <span aria-hidden="true" />
         <span className="flex min-w-0 items-center gap-1 overflow-hidden text-sm">
-          <Show when={isMerge}>
+          {isMerge ? (
             <GitMergeIcon aria-label="merge commit" className="size-3 shrink-0 text-green" />
-          </Show>
+          ) : null}
           {refs.map((parsedRef) => (
             <RefBadge
               key={`${parsedRef.kind}:${parsedRef.label}`}

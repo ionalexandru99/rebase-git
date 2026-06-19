@@ -1,5 +1,4 @@
 import { PlusIcon, XIcon } from 'lucide-react'
-import { For } from '@/lib/react-compat'
 import { avatarColor, avatarInitials } from '@/lib/repo-avatar'
 import { cn } from '@/lib/utils'
 import type { TabDescriptor } from '../../hooks/useTabs'
@@ -13,8 +12,8 @@ interface RepoRailProps {
 }
 
 export function RepoRail(props: RepoRailProps) {
-  const repoTabs = () => props.tabs.filter((tab) => tab.hasRepo)
-  const activeIsBlank = () => !props.tabs.find((tab) => tab.id === props.activeTabId)?.hasRepo
+  const repoTabs = props.tabs.filter((tab) => tab.hasRepo)
+  const activeIsBlank = !props.tabs.find((tab) => tab.id === props.activeTabId)?.hasRepo
 
   const openNew = () => {
     const blank = props.tabs.find((tab) => !tab.hasRepo)
@@ -33,24 +32,23 @@ export function RepoRail(props: RepoRailProps) {
       className="drag-region flex min-h-0 flex-col items-center gap-[3px] overflow-y-auto bg-chrome p-3"
     >
       <div role="tablist" className="no-drag flex flex-col items-center gap-[3px]">
-        <For each={repoTabs()}>
-          {(tab) => (
-            <RepoTabButton
-              tab={tab}
-              isActive={tab.id === props.activeTabId}
-              onSelect={() => props.onSelect(tab.id)}
-              onClose={() => props.onClose(tab.id)}
-            />
-          )}
-        </For>
+        {repoTabs.map((tab) => (
+          <RepoTabButton
+            key={tab.id}
+            tab={tab}
+            isActive={tab.id === props.activeTabId}
+            onSelect={() => props.onSelect(tab.id)}
+            onClose={() => props.onClose(tab.id)}
+          />
+        ))}
         <button
           type="button"
           aria-label="Open new tab"
-          aria-pressed={activeIsBlank()}
+          aria-pressed={activeIsBlank}
           onClick={openNew}
           className={cn(
             'flex size-[46px] items-center justify-center rounded-[var(--r-lg)] text-[15px] text-muted-foreground transition-colors hover:bg-card-2 hover:text-foreground',
-            activeIsBlank() && 'bg-card-2 text-foreground'
+            activeIsBlank && 'bg-card-2 text-foreground'
           )}
         >
           <PlusIcon className="size-4" />
@@ -68,17 +66,17 @@ interface RepoTabButtonProps {
 }
 
 function RepoTabButton(props: RepoTabButtonProps) {
-  const colorKey = () => props.tab.repoPath ?? props.tab.title
-  const loaded = () => props.tab.loaded ?? true
-  const label = () => (loaded() ? props.tab.title : `${props.tab.title} - not loaded yet`)
+  const colorKey = props.tab.repoPath ?? props.tab.title
+  const loaded = props.tab.loaded ?? true
+  const label = loaded ? props.tab.title : `${props.tab.title} - not loaded yet`
   return (
     <div className="group relative">
       <button
         type="button"
         role="tab"
         aria-selected={props.isActive}
-        aria-label={label()}
-        title={label()}
+        aria-label={label}
+        title={label}
         onClick={() => props.onSelect()}
         onAuxClick={(event) => {
           if (event.button === 1) {
@@ -88,7 +86,7 @@ function RepoTabButton(props: RepoTabButtonProps) {
         }}
         className={cn(
           'flex size-[46px] items-center justify-center rounded-[var(--r-lg)] border transition-colors',
-          !loaded() && !props.isActive && 'opacity-60',
+          !loaded && !props.isActive && 'opacity-60',
           props.isActive
             ? 'border-2 border-primary p-0.5'
             : 'border-transparent p-[3px] hover:border-border hover:bg-card-2'
@@ -97,9 +95,9 @@ function RepoTabButton(props: RepoTabButtonProps) {
         <span
           className={cn(
             'flex size-full items-center justify-center rounded-[10px] text-[13px] font-bold',
-            loaded() ? 'text-white' : 'bg-muted text-muted-foreground'
+            loaded ? 'text-white' : 'bg-muted text-muted-foreground'
           )}
-          style={loaded() ? { background: avatarColor(colorKey()) } : undefined}
+          style={loaded ? { background: avatarColor(colorKey) } : undefined}
         >
           {avatarInitials(props.tab.title)}
         </span>
