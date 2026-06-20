@@ -5,6 +5,7 @@ import type { GitLogEntry, LogChunk } from '@shared/schemas/git'
 import { Cause, Chunk, Effect, Fiber, Option, Stream } from 'effect'
 import { LOG_FORMAT, parseGitLogRecord, RS_SEP } from './git/log-format'
 import { GitError } from './git-errors'
+import { capStderr } from './spawn'
 
 export const STREAM_BATCH_SIZE = 500
 
@@ -113,10 +114,7 @@ function commitStream(proc: GitStdioProc): Stream.Stream<GitLogEntry, GitError> 
 
       proc.stderr.setEncoding('utf8')
       proc.stderr.on('data', (chunk: string) => {
-        stderrBuf += chunk
-        if (stderrBuf.length > 4096) {
-          stderrBuf = stderrBuf.slice(-4096)
-        }
+        stderrBuf = capStderr(stderrBuf + chunk)
       })
 
       proc.on('error', (error) => {
