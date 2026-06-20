@@ -63,13 +63,15 @@ describe('layoutCommits', () => {
     expect(rows[3].outgoing).toEqual([])
   })
 
-  it('reuses the row buffer when appending incrementally', () => {
+  it('does not mutate the previous snapshot when appending incrementally', () => {
     const prefix = [entry({ hash: 'c1', parents: ['c2'] }), entry({ hash: 'c2', parents: [] })]
     const step1 = layoutCommits(prefix)
     const step2 = layoutCommits([...prefix, entry({ hash: 'c3', parents: ['c2'] })], step1)
 
-    expect(step2.rows).toBe(step1.rows)
+    expect(step2.rows).not.toBe(step1.rows)
+    expect(step1.rows).toHaveLength(2)
     expect(step2.rows).toHaveLength(3)
+    expect(step2.rows.slice(0, 2).map((row) => row.commit.hash)).toEqual(['c1', 'c2'])
   })
 
   it('produces the same layout incrementally as in one pass', () => {
