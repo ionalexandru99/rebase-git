@@ -121,10 +121,6 @@ const formatCause = (error: unknown): string => {
   return String(error)
 }
 
-const isInvalidSidecarRequest = (error: unknown): boolean => {
-  return formatCause(error).includes('invalid sidecar request')
-}
-
 const parseLocalBranchesResponse = (response: {
   _tag: string
   branches?: LocalBranches
@@ -154,42 +150,13 @@ const parseRemoteRefsResponse = (response: {
 }
 
 const fetchLocalBranches = async (path: string): Promise<LocalBranches> => {
-  try {
-    const response = await sidecarFetch(SidecarOp.getLocalBranches, { repoPath: path })
-    return parseLocalBranchesResponse(response)
-  } catch (error) {
-    if (!isInvalidSidecarRequest(error)) {
-      throw error
-    }
-    const response = await sidecarFetch(SidecarOp.getBranches, { repoPath: path })
-    if (response._tag === 'Ok') {
-      return {
-        current: response.branches.current,
-        all: response.branches.all,
-        tracking: response.branches.tracking
-      }
-    }
-    return parseLocalBranchesResponse(response)
-  }
+  const response = await sidecarFetch(SidecarOp.getLocalBranches, { repoPath: path })
+  return parseLocalBranchesResponse(response)
 }
 
 const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
-  try {
-    const response = await sidecarFetch(SidecarOp.getRemoteRefs, { repoPath: path })
-    return parseRemoteRefsResponse(response)
-  } catch (error) {
-    if (!isInvalidSidecarRequest(error)) {
-      throw error
-    }
-    const response = await sidecarFetch(SidecarOp.getBranches, { repoPath: path })
-    if (response._tag === 'Ok') {
-      return {
-        remotes: response.branches.remotes,
-        tags: response.branches.tags
-      }
-    }
-    return parseRemoteRefsResponse(response)
-  }
+  const response = await sidecarFetch(SidecarOp.getRemoteRefs, { repoPath: path })
+  return parseRemoteRefsResponse(response)
 }
 
 const withoutFile = (files: string[], file: string): string[] => files.filter((f) => f !== file)
