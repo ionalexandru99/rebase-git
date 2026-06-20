@@ -6,6 +6,8 @@ import {
   countVisibleBranchRefs,
   expandFilterRefs,
   findRefTip,
+  getCommitIndex,
+  getRefTipIndex,
   pruneAncestorTips,
   refFilterKey,
   resolveTrackingRemoteBranches
@@ -187,5 +189,35 @@ describe('resolveTrackingRemoteBranches', () => {
     expect(resolveTrackingRemoteBranches('main', remotes, new Set(['origin', 'upstream']))).toEqual(
       ['origin/main', 'upstream/main']
     )
+  })
+})
+
+describe('commit index cache', () => {
+  it('memoizes per commits array and retains each across interleaved repos', () => {
+    const repoA = [entry({ hash: 'a1', parents: ['a2'] }), entry({ hash: 'a2' })]
+    const repoB = [entry({ hash: 'b1' })]
+
+    const indexA = getCommitIndex(repoA)
+    const indexB = getCommitIndex(repoB)
+
+    expect(getCommitIndex(repoA)).toBe(indexA)
+    expect(indexB).not.toBe(indexA)
+    // A single global slot would have been overwritten by repoB; the WeakMap keeps repoA's index.
+    expect(getCommitIndex(repoA)).toBe(indexA)
+  })
+})
+
+describe('ref tip index cache', () => {
+  it('retains each repo and recomputes when remoteNames change', () => {
+    const repoA = [entry({ hash: 'a1', refs: 'HEAD -> main' })]
+    const repoB = [entry({ hash: 'b1', refs: 'HEAD -> main' })]
+    const remotes = new Set(['origin'])
+
+    const indexA = getRefTipIndex(repoA, remotes)
+    getRefTipIndex(repoB, remotes)
+
+    expect(getRefTipIndex(repoA, remotes)).toBe(indexA)
+    // A different remoteNames identity invalidates the entry for the same commits array.
+    expect(getRefTipIndex(repoA, new Set(['origin']))).not.toBe(indexA)
   })
 })
