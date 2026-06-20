@@ -4,7 +4,14 @@ import type { RowLayout } from '@/lib/git-graph/layout'
 import type { GitLogEntry } from '@/types'
 
 function commit(hash: string, parents: string[]): GitLogEntry {
-  return { hash, message: hash, author_name: 'Author', date: '2024-01-01T00:00:00.000Z', parents, refs: '' }
+  return {
+    hash,
+    message: hash,
+    author_name: 'Author',
+    date: '2024-01-01T00:00:00.000Z',
+    parents,
+    refs: ''
+  }
 }
 
 function mockCtx() {

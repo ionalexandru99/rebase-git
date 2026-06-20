@@ -26,6 +26,17 @@ interface CommitRowProps {
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
 }
 
+// The graph rail is aria-hidden canvas, so the only topology a screen reader gets is this row hint.
+export function commitTopologyLabel(parentCount: number, offBranch: boolean): string {
+  const base =
+    parentCount === 0
+      ? 'Root commit'
+      : parentCount >= 2
+        ? `Merge commit with ${parentCount} parents`
+        : 'Commit'
+  return offBranch ? `${base}, off the current branch` : base
+}
+
 export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
   const commit = props.row.commit
   const isMerge = commit.parents.length >= 2
@@ -53,8 +64,11 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
       >
         <span aria-hidden="true" />
         <span className="flex min-w-0 items-center gap-1 overflow-hidden text-sm">
+          <span className="sr-only">
+            {commitTopologyLabel(commit.parents.length, props.offBranch)}
+          </span>
           {isMerge ? (
-            <GitMergeIcon aria-label="merge commit" className="size-3 shrink-0 text-green" />
+            <GitMergeIcon aria-hidden="true" className="size-3 shrink-0 text-green" />
           ) : null}
           {refs.map((parsedRef) => (
             <RefBadge
