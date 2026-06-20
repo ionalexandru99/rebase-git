@@ -63,6 +63,23 @@ describe('layoutCommits', () => {
     expect(rows[3].outgoing).toEqual([])
   })
 
+  it('gives every parent of an octopus merge a distinct lane', () => {
+    const commits: GitLogEntry[] = [
+      entry({ hash: 'm', parents: ['p1', 'p2', 'p3'] }),
+      entry({ hash: 'p1', parents: [] }),
+      entry({ hash: 'p2', parents: [] }),
+      entry({ hash: 'p3', parents: [] })
+    ]
+
+    const { rows, maxLanes } = layoutCommits(commits)
+
+    const mergeRow = rows[0]
+    const parentLanes = ['p1', 'p2', 'p3'].map((parent) => mergeRow.outgoing.indexOf(parent))
+    expect(parentLanes).not.toContain(-1)
+    expect(new Set(parentLanes).size).toBe(3)
+    expect(maxLanes).toBeGreaterThanOrEqual(3)
+  })
+
   it('does not mutate the previous snapshot when appending incrementally', () => {
     const prefix = [entry({ hash: 'c1', parents: ['c2'] }), entry({ hash: 'c2', parents: [] })]
     const step1 = layoutCommits(prefix)

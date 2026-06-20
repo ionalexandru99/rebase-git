@@ -13,6 +13,10 @@ export const ROW_H = Math.round(ROOT_PX * 2.5)
 export const COL_W = Math.round(ROOT_PX)
 export const RAIL_PAD = Math.round(ROOT_PX * 0.875)
 export const DOT_R = ROOT_PX * 0.3125
+// Merge nodes are drawn as a ring (stroke, no fill) one notch larger than the solid commit dot, both
+// derived from the root font size so the graph scales with zoom instead of using fixed pixels.
+export const MERGE_DOT_R = ROOT_PX * 0.25
+export const MERGE_STROKE = Math.max(1, ROOT_PX * 0.1)
 
 import { HISTORY_OVERSCAN } from '@/lib/virtual-config'
 
@@ -139,16 +143,12 @@ export function drawGraphRow(
     }
   }
 
-  const parentSet = new Set(row.commit.parents)
   for (const parent of row.commit.parents) {
     const j = row.outgoing.indexOf(parent)
     if (j === -1 || j === row.commitLane) {
       continue
     }
     if (row.incoming[j] !== parent) {
-      continue
-    }
-    if (!parentSet.has(row.outgoing[j] ?? '')) {
       continue
     }
     const endX = laneX(j)
@@ -163,11 +163,11 @@ export function drawGraphRow(
   if (isMerge) {
     ctx.globalAlpha = dim ? 0.25 : 0.95
     ctx.beginPath()
-    ctx.arc(dotX, rowMid, 4, 0, Math.PI * 2)
+    ctx.arc(dotX, rowMid, MERGE_DOT_R, 0, Math.PI * 2)
     ctx.fillStyle = bgColor
     ctx.fill()
     ctx.strokeStyle = mergeColor
-    ctx.lineWidth = 1.6
+    ctx.lineWidth = MERGE_STROKE
     ctx.stroke()
   } else {
     ctx.globalAlpha = dim ? 0.25 : 1
