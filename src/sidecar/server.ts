@@ -12,7 +12,6 @@ import { streamGitLog } from './log-stream'
 import { resolveExistingRepoRoot } from './path-guards'
 import { SidecarOp } from './protocol'
 import { handleRpcRequest } from './rpc-handlers'
-import { storeValidatedScanRoot, takeValidatedScanRoot } from './scan-root-registry'
 
 type Body = Record<string, unknown>
 
@@ -75,18 +74,8 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
     return invalidScanDirectoryResponse()
   }
 
-  const scanRootId = storeValidatedScanRoot(scanRoot)
-  const trustedScanRoot = takeValidatedScanRoot(scanRootId)
-  if (!trustedScanRoot) {
-    return invalidScanDirectoryResponse()
-  }
-
-  const trustedPrefix = trustedScanRoot.endsWith(path.sep)
-    ? trustedScanRoot
-    : `${trustedScanRoot}${path.sep}`
-
   try {
-    const entries = await fs.promises.readdir(trustedScanRoot, { withFileTypes: true })
+    const entries = await fs.promises.readdir(scanRoot, { withFileTypes: true })
     const repos: string[] = []
     for (const entry of entries) {
       if (!entry.isDirectory()) {
@@ -96,8 +85,8 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
       if (childName !== entry.name) {
         continue
       }
-      const childPath = path.join(trustedScanRoot, childName)
-      if (!childPath.startsWith(trustedPrefix)) {
+      const childPath = path.join(scanRoot, childName)
+      if (!childPath.startsWith(scanRootPrefix)) {
         continue
       }
       try {

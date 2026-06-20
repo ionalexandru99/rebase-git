@@ -159,9 +159,16 @@ export function closeRepo(repoPath: string): Effect.Effect<void> {
       graphProc.kill()
     }
     commitGraphWrites.delete(key)
+    commitGraphWritten.delete(key)
     releaseFetchSemaphore(key)
     releaseRepoSemaphore(key)
   })
+}
+
+// Whether a commit-graph write has been started for this repo this process. closeRepo clears the
+// flag so a write interrupted by close is retried on reopen rather than skipped forever.
+export function isCommitGraphTracked(repoPath: string): boolean {
+  return commitGraphWritten.has(normalizeRepoPath(repoPath))
 }
 
 export function getLocalBranches(
