@@ -46,6 +46,8 @@ function isSafeCheckoutRef(ref: string): boolean {
 
 // Reject anything that could be read as an option flag (leading '-') or smuggle a NUL. Arguments
 // are passed as an array to git (never a shell), so this is the only injection surface that matters.
+// Ref-taking commands (checkout/reset/merge) additionally pass a trailing `--` so a ref that
+// collides with a path can never be reinterpreted as a pathspec — defense-in-depth atop this guard.
 function isSafeRefArg(value: string): boolean {
   return value.length > 0 && !value.includes('\0') && !value.startsWith('-')
 }
@@ -472,13 +474,13 @@ export function checkoutRef(
                 })
               )
             }
-            yield* tryGit(() => git.checkout([shortName]))
+            yield* tryGit(() => git.checkout([shortName, '--']))
           } else {
-            yield* tryGit(() => git.checkout(['--track', fullPath]))
+            yield* tryGit(() => git.checkout(['--track', fullPath, '--']))
           }
           return { checkedOut: shortName }
         }
-        yield* tryGit(() => git.checkout([fullPath]))
+        yield* tryGit(() => git.checkout([fullPath, '--']))
         return { checkedOut: fullPath }
       })
     )
@@ -732,7 +734,7 @@ export function mergeBranch(
     if (!isSafeRefArg(ref)) {
       return yield* Effect.fail(new GitError({ message: 'invalid ref name' }))
     }
-    yield* runWithConflictDetection(repoPath, git, ['merge', '--no-edit', ref])
+    yield* runWithConflictDetection(repoPath, git, ['merge', '--no-edit', ref, '--'])
   })
 }
 
@@ -748,7 +750,7 @@ export function resetToCommit(
     }
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.raw(['reset', `--${mode}`, sha]))
+      tryGit(() => git.raw(['reset', `--${mode}`, sha, '--']))
     )
   })
 }

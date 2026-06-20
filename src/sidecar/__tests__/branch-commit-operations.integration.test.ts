@@ -5,6 +5,7 @@ import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  checkoutRef,
   cherryPick,
   closeRepo,
   createBranch,
@@ -104,6 +105,17 @@ describe('branch operations', () => {
       expect(soft.left._tag).toBe('GitError')
     }
     await Effect.runPromise(deleteBranch(repoDir, 'feature/unmerged', true))
+  })
+})
+
+describe('checkout', () => {
+  it('checks out a local branch whose name collides with a tracked path', async () => {
+    git('checkout', 'main')
+    commitFile('collide', 'data\n', 'add a file named collide')
+    await Effect.runPromise(createBranch(repoDir, 'collide'))
+    await Effect.runPromise(checkoutRef(repoDir, 'local', 'collide'))
+    expect(currentBranch()).toBe('collide')
+    git('checkout', 'main')
   })
 })
 
