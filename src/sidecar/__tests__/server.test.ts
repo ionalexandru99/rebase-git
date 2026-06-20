@@ -437,10 +437,11 @@ describe('sidecar server', () => {
     expect(await response.json()).toEqual({ error: 'internal error' })
   })
 
-  it('rejects browser CORS preflight requests', async () => {
+  it('rejects an authenticated CORS preflight with 403', async () => {
     const response = await fetch(`${baseUrl}/op/get-branches`, {
       method: 'OPTIONS',
       headers: {
+        authorization: `Bearer ${TOKEN}`,
         origin: 'http://localhost:5173',
         'access-control-request-method': 'POST',
         'access-control-request-headers': 'authorization, content-type, b3, traceparent',
@@ -448,6 +449,17 @@ describe('sidecar server', () => {
       }
     })
     expect(response.status).toBe(403)
+  })
+
+  it('rejects an unauthenticated preflight with 401 before reaching OPTIONS handling', async () => {
+    const response = await fetch(`${baseUrl}/op/get-branches`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://localhost:5173',
+        'access-control-request-method': 'POST'
+      }
+    })
+    expect(response.status).toBe(401)
   })
 
   it('does not include wildcard CORS headers on op responses', async () => {

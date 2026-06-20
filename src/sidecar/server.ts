@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import fs from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import path from 'node:path'
@@ -143,17 +144,31 @@ function sendJson(res: ServerResponse, status: number, payload: unknown): void {
   res.end(data)
 }
 
+// Constant-time bearer-token check so a request can't probe the token byte-by-byte via response
+// timing. The length compare is a cheap guard (timingSafeEqual throws on unequal lengths); the token
+// length is not secret.
+function isAuthorized(header: string | undefined, token: string): boolean {
+  if (typeof header !== 'string') {
+    return false
+  }
+  const provided = Buffer.from(header)
+  const expected = Buffer.from(`Bearer ${token}`)
+  return provided.length === expected.length && timingSafeEqual(provided, expected)
+}
+
 async function handle(req: IncomingMessage, res: ServerResponse, token: string): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost')
+
+  // Authenticate before anything else (including OPTIONS) so every unauthorized request gets a
+  // uniform 401 and the auth path can't be skipped by method or route.
+  if (!isAuthorized(req.headers.authorization, token)) {
+    sendJson(res, 401, { error: 'unauthorized' })
+    return
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(403)
     res.end()
-    return
-  }
-
-  if (req.headers.authorization !== `Bearer ${token}`) {
-    sendJson(res, 401, { error: 'unauthorized' })
     return
   }
 
