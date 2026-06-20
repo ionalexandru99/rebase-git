@@ -836,8 +836,10 @@ export function useGitStore(tabId: string, tabActive: boolean) {
 
   const repoPathValue = ui.repoPath
   useEffect(() => {
-    // Bumping fetchTick (on a manual fetch) is a deliberate re-trigger that resets the auto-fetch
-    // interval; referencing it here keeps it a used dependency.
+    // fetchTick is a dependency on purpose: a manual fetch bumps it, re-running this effect and
+    // restarting the interval, so the 5-minute cadence resets and we never auto-fetch right after a
+    // manual one. Trade-off: fetching manually more often than every 5 minutes postpones the
+    // independent auto-fetch indefinitely — acceptable, since the user is already fetching.
     void fetchTick
     if (!repoPathValue) {
       return
