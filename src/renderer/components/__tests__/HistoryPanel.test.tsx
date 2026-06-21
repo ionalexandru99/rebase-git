@@ -188,7 +188,7 @@ describe('HistoryPanel', () => {
       total: 1
     })
 
-    expect(screen.getByLabelText('merge commit')).toBeInTheDocument()
+    expect(screen.getByText('Merge commit with 2 parents')).toBeInTheDocument()
   })
 
   it('hides commits outside visible branches', () => {
