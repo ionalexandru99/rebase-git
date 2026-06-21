@@ -11,6 +11,7 @@ import * as workspaceIpc from './ipc/workspace'
 import { setupContextMenu } from './menu'
 import { wireProcessRecovery, wireWindowRecovery } from './recovery'
 import { killSidecar, startSidecar } from './sidecar'
+import { focusExistingWindow } from './single-instance'
 import { getTheme } from './store'
 import { resolveBackgroundColor } from './theme'
 import { setupUpdater } from './updater'
@@ -131,28 +132,36 @@ function registerIpcHandlers(): void {
   settingsIpc.register()
 }
 
-app.whenReady().then(async () => {
-  try {
-    await startSidecar()
-  } catch (error: unknown) {
-    console.error('[main] sidecar failed to start', error)
-    dialog.showErrorBox('Rebase', 'Git sidecar failed to start. The app will exit.')
-    app.quit()
-    return
-  }
-  registerIpcHandlers()
-  wireProcessRecovery()
-  applyContentSecurityPolicy()
-  createWindow()
-  setupUpdater()
-  setupContextMenu()
+// A second launch must not spin up a rival main process (and a second sidecar) racing the same
+// persisted store/window-state; route it to the existing window instead.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => focusExistingWindow(mainWindow))
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
+  app.whenReady().then(async () => {
+    try {
+      await startSidecar()
+    } catch (error: unknown) {
+      console.error('[main] sidecar failed to start', error)
+      dialog.showErrorBox('Rebase', 'Git sidecar failed to start. The app will exit.')
+      app.quit()
+      return
     }
+    registerIpcHandlers()
+    wireProcessRecovery()
+    applyContentSecurityPolicy()
+    createWindow()
+    setupUpdater()
+    setupContextMenu()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+      }
+    })
   })
-})
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

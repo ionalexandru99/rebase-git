@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Effect } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { closeRepo, openRepo } from '../operations'
+import { closeRepo, isCommitGraphTracked, openRepo } from '../operations'
 
 let baseDir: string
 let repoDir: string
@@ -51,5 +51,12 @@ describe('openRepo gitdir resolution', () => {
     )
     expect(fs.realpathSync.native(response.result.commonDir as string)).toBe(dotGit)
     await Effect.runPromise(closeRepo(worktreeDir))
+  })
+
+  it('stops tracking the commit-graph write after close so reopen can retry', async () => {
+    await Effect.runPromise(openRepo(repoDir))
+    expect(isCommitGraphTracked(repoDir)).toBe(true)
+    await Effect.runPromise(closeRepo(repoDir))
+    expect(isCommitGraphTracked(repoDir)).toBe(false)
   })
 })

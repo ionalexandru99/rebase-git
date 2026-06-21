@@ -98,3 +98,17 @@ Two consequences:
 - Resources that can outlive a single repo session — log streams that need cancellation by tab, multi-window state — should still be keyed by `${webContentsId}:${repoPath}` (see `activeLogStreams` in `src/main/ipc/log-stream.ts`). Never key by `webContentsId` alone: a different-repo IPC from the same window would otherwise cancel the in-flight work of another tab and leave its loading state stuck.
 
 When introducing a new per-repo resource in main, pick the narrower of the two keying strategies that still routes correctly. Don't add same-repo refcount/sharing logic — that case is unreachable.
+
+## Agent skills
+
+### Issue tracker
+
+Issues (and external PRs) are tracked in this repo's GitHub Issues via the `gh` CLI; `/triage` treats external pull requests as a request surface alongside issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.

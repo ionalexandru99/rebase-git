@@ -1,5 +1,7 @@
+import { timingSafeEqual } from 'node:crypto'
 import fs from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { parseOrThrow } from '@shared/codec'
@@ -12,7 +14,6 @@ import { streamGitLog } from './log-stream'
 import { resolveExistingRepoRoot } from './path-guards'
 import { SidecarOp } from './protocol'
 import { handleRpcRequest } from './rpc-handlers'
-import { storeValidatedScanRoot, takeValidatedScanRoot } from './scan-root-registry'
 
 type Body = Record<string, unknown>
 
@@ -60,11 +61,13 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
   }
 
   let scanRoot: string
+  let homeRoot: string
   try {
     scanRoot = fs.realpathSync.native(path.resolve(requestedDirPath))
     if (!fs.statSync(scanRoot).isDirectory()) {
       return invalidScanDirectoryResponse()
     }
+    homeRoot = fs.realpathSync.native(os.homedir())
   } catch {
     return invalidScanDirectoryResponse()
   }
@@ -75,18 +78,15 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
     return invalidScanDirectoryResponse()
   }
 
-  const scanRootId = storeValidatedScanRoot(scanRoot)
-  const trustedScanRoot = takeValidatedScanRoot(scanRootId)
-  if (!trustedScanRoot) {
+  // Confine scanning to the user's home tree so a forged request can't enumerate directories
+  // outside it. The canonical scanRoot is compared against the realpath'd home root.
+  const homePrefix = homeRoot.endsWith(path.sep) ? homeRoot : `${homeRoot}${path.sep}`
+  if (scanRoot !== homeRoot && !scanRoot.startsWith(homePrefix)) {
     return invalidScanDirectoryResponse()
   }
 
-  const trustedPrefix = trustedScanRoot.endsWith(path.sep)
-    ? trustedScanRoot
-    : `${trustedScanRoot}${path.sep}`
-
   try {
-    const entries = await fs.promises.readdir(trustedScanRoot, { withFileTypes: true })
+    const entries = await fs.promises.readdir(scanRoot, { withFileTypes: true })
     const repos: string[] = []
     for (const entry of entries) {
       if (!entry.isDirectory()) {
@@ -96,8 +96,8 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
       if (childName !== entry.name) {
         continue
       }
-      const childPath = path.join(trustedScanRoot, childName)
-      if (!childPath.startsWith(trustedPrefix)) {
+      const childPath = path.join(scanRoot, childName)
+      if (!childPath.startsWith(scanRootPrefix)) {
         continue
       }
       try {
@@ -154,17 +154,31 @@ function sendJson(res: ServerResponse, status: number, payload: unknown): void {
   res.end(data)
 }
 
+// Constant-time bearer-token check so a request can't probe the token byte-by-byte via response
+// timing. The length compare is a cheap guard (timingSafeEqual throws on unequal lengths); the token
+// length is not secret.
+function isAuthorized(header: string | undefined, token: string): boolean {
+  if (typeof header !== 'string') {
+    return false
+  }
+  const provided = Buffer.from(header)
+  const expected = Buffer.from(`Bearer ${token}`)
+  return provided.length === expected.length && timingSafeEqual(provided, expected)
+}
+
 async function handle(req: IncomingMessage, res: ServerResponse, token: string): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost')
+
+  // Authenticate before anything else (including OPTIONS) so every unauthorized request gets a
+  // uniform 401 and the auth path can't be skipped by method or route.
+  if (!isAuthorized(req.headers.authorization, token)) {
+    sendJson(res, 401, { error: 'unauthorized' })
+    return
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(403)
     res.end()
-    return
-  }
-
-  if (req.headers.authorization !== `Bearer ${token}`) {
-    sendJson(res, 401, { error: 'unauthorized' })
     return
   }
 

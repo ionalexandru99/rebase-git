@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { RowLayout } from '@/lib/git-graph/layout'
 import type { GitLogEntry } from '@/types'
-import { CommitRow } from '../CommitRow'
+import { CommitRow, commitTopologyLabel } from '../CommitRow'
 
 function row(overrides: Partial<GitLogEntry> = {}): RowLayout {
   return {
@@ -74,5 +74,34 @@ describe('CommitRow context menu', () => {
       expect(onCommitAction).toHaveBeenCalledWith(action, 'abcdef1234567890', 'do the thing')
       unmount()
     }
+  })
+})
+
+describe('commitTopologyLabel', () => {
+  it('describes root, normal, and merge commits', () => {
+    expect(commitTopologyLabel(0, false)).toBe('Root commit')
+    expect(commitTopologyLabel(1, false)).toBe('Commit')
+    expect(commitTopologyLabel(3, false)).toBe('Merge commit with 3 parents')
+  })
+
+  it('appends off-branch status', () => {
+    expect(commitTopologyLabel(1, true)).toBe('Commit, off the current branch')
+  })
+})
+
+describe('CommitRow accessibility', () => {
+  it('exposes a screen-reader topology hint for a merge commit', () => {
+    render(
+      <CommitRow
+        row={row({ parents: ['p1', 'p2'] })}
+        top={0}
+        dim={false}
+        offBranch={false}
+        gridTail="1fr"
+        remotes={{}}
+        remoteNames={new Set()}
+      />
+    )
+    expect(screen.getByText('Merge commit with 2 parents')).toBeInTheDocument()
   })
 })

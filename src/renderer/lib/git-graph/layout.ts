@@ -122,7 +122,7 @@ export function layoutCommits(
   ) {
     startIdx = prev.rows.length
     lanes = prev.lanesAfter.slice()
-    rows = prev.rows
+    rows = prev.rows.slice()
     maxLanes = prev.maxLanes
   } else if (prev && startIdx > 0 && startIdx === prev.laidOutThroughIndex) {
     lanes = prev.lanesAfter.slice()

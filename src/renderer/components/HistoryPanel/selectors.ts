@@ -28,16 +28,19 @@ export function parseFilterRefKey(key: string): FilterRef | null {
   return { kind, fullPath }
 }
 
-interface CommitIndex {
+export interface CommitIndex {
   byHash: Map<string, GitLogEntry>
   positionByHash: Map<string, number>
 }
 
-let commitIndexCache: { commits: GitLogEntry[]; index: CommitIndex } | null = null
+// Keyed by the commits array so each open repo keeps its own index instead of thrashing a single
+// global slot; entries are released automatically when a repo's log array is dropped.
+const commitIndexCache = new WeakMap<GitLogEntry[], CommitIndex>()
 
-function getCommitIndex(commits: GitLogEntry[]): CommitIndex {
-  if (commitIndexCache?.commits === commits) {
-    return commitIndexCache.index
+export function getCommitIndex(commits: GitLogEntry[]): CommitIndex {
+  const cached = commitIndexCache.get(commits)
+  if (cached) {
+    return cached
   }
   const byHash = new Map<string, GitLogEntry>()
   const positionByHash = new Map<string, number>()
@@ -47,20 +50,19 @@ function getCommitIndex(commits: GitLogEntry[]): CommitIndex {
     positionByHash.set(commit.hash, position)
   }
   const index = { byHash, positionByHash }
-  commitIndexCache = { commits, index }
+  commitIndexCache.set(commits, index)
   return index
 }
 
-interface RefTipIndex {
+export interface RefTipIndex {
   tipByRefKey: Map<string, string>
   headTip: string | undefined
 }
 
-let refTipIndexCache: {
-  commits: GitLogEntry[]
-  remoteNames: ReadonlySet<string> | undefined
-  index: RefTipIndex
-} | null = null
+const refTipIndexCache = new WeakMap<
+  GitLogEntry[],
+  { remoteNames: ReadonlySet<string> | undefined; index: RefTipIndex }
+>()
 
 function hasHeadMarker(refs: string): boolean {
   return refs.split(',').some((part) => {
@@ -69,9 +71,10 @@ function hasHeadMarker(refs: string): boolean {
   })
 }
 
-function getRefTipIndex(commits: GitLogEntry[], remoteNames?: Set<string>): RefTipIndex {
-  if (refTipIndexCache?.commits === commits && refTipIndexCache.remoteNames === remoteNames) {
-    return refTipIndexCache.index
+export function getRefTipIndex(commits: GitLogEntry[], remoteNames?: Set<string>): RefTipIndex {
+  const cached = refTipIndexCache.get(commits)
+  if (cached && cached.remoteNames === remoteNames) {
+    return cached.index
   }
   const tipByRefKey = new Map<string, string>()
   let headTip: string | undefined
@@ -93,7 +96,7 @@ function getRefTipIndex(commits: GitLogEntry[], remoteNames?: Set<string>): RefT
     }
   }
   const index = { tipByRefKey, headTip }
-  refTipIndexCache = { commits, remoteNames, index }
+  refTipIndexCache.set(commits, { remoteNames, index })
   return index
 }
 

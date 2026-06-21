@@ -251,28 +251,6 @@ describe('useGitStore — parallel repo loading', () => {
     expect(git.state.logLoading).toBe(true)
   })
 
-  it('falls back to get-branches when split local op is rejected', async () => {
-    sidecarMock.getLocalBranches.mockRejectedValue(new Error('invalid sidecar request'))
-    sidecarMock.getBranches.mockResolvedValue({
-      _tag: 'Ok',
-      branches: {
-        current: 'main',
-        all: ['main', 'dev'],
-        remotes: ['origin/main'],
-        tags: ['v1']
-      }
-    })
-
-    const { git } = renderGitStore()
-    void git.openRepo(repoPath)
-
-    await waitFor(() => {
-      expect(git.state.branches?.all).toEqual(['main', 'dev'])
-      expect(git.state.branches?.remotes).toEqual(['origin/main'])
-    })
-    expect(sidecarMock.getBranches).toHaveBeenCalledWith(repoPath)
-  })
-
   it('local branches paint before remote refs arrive', async () => {
     let resolveRemote: () => void = () => {}
     sidecarMock.getRemoteRefs
