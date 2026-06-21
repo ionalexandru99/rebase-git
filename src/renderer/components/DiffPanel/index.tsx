@@ -9,6 +9,7 @@ import {
   type LineTokens,
   languageForFile
 } from '@/lib/diff-highlight'
+import { type HunkEntry, type PendingHunk, remapHunk } from '@/lib/diff-merge'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import { cn } from '@/lib/utils'
 import type { GitStore } from '@/stores/git'
@@ -288,42 +289,6 @@ export function DiffPanel(props: DiffPanelProps) {
       </div>
     </section>
   )
-}
-
-interface HunkEntry {
-  hunk: DiffHunk
-  display: DiffHunk
-  staged: boolean
-  indexStart: number
-}
-
-interface PendingHunk extends HunkEntry {
-  file: string
-  op: 'stage' | 'unstage'
-  opHeader: string
-  key: string
-}
-
-const HUNK_RANGE_RE = /^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/
-
-function remapHunk(hunk: DiffHunk, oldShift: number, newShift: number): DiffHunk {
-  if (oldShift === 0 && newShift === 0) {
-    return hunk
-  }
-  const oldStart = hunk.oldStart + oldShift
-  const newStart = hunk.newStart + newShift
-  const tail = hunk.header.replace(HUNK_RANGE_RE, '')
-  return {
-    ...hunk,
-    oldStart,
-    newStart,
-    header: `@@ -${oldStart},${hunk.oldCount} +${newStart},${hunk.newCount} @@${tail}`,
-    lines: hunk.lines.map((line) => ({
-      ...line,
-      oldLine: line.oldLine === null ? null : line.oldLine + oldShift,
-      newLine: line.newLine === null ? null : line.newLine + newShift
-    }))
-  }
 }
 
 function DiffError(props: { message?: string }) {
