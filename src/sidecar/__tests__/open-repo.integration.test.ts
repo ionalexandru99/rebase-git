@@ -13,6 +13,43 @@ function git(dir: string, ...args: string[]): void {
   execFileSync('git', ['-C', dir, ...args])
 }
 
+function commitGraphWriteProcesses(dir: string): number {
+  let output = ''
+  try {
+    output = execFileSync('ps', ['-ax', '-o', 'command'], { encoding: 'utf8' })
+  } catch {
+    return 0
+  }
+  return output
+    .split('\n')
+    .filter((line) => line.includes('commit-graph') && line.includes('write') && line.includes(dir))
+    .length
+}
+
+// A `git` shim that hangs on `commit-graph` and forwards everything else to the real binary, so the
+// write child is reliably in flight (not racing a sub-100ms real write) when close kills it.
+function installSlowGitShim(): string {
+  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
+  const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-git-shim-'))
+  const shimPath = path.join(shimDir, 'git')
+  fs.writeFileSync(
+    shimPath,
+    `#!/bin/sh
+for arg in "$@"; do
+  if [ "$arg" = "commit-graph" ]; then
+    sleep 30
+    break
+  fi
+done
+exec ${realGit} "$@"
+`
+  )
+  fs.chmodSync(shimPath, 0o755)
+  return shimDir
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
 beforeEach(() => {
   baseDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-open-test-')))
   repoDir = path.join(baseDir, 'repo')
@@ -59,4 +96,38 @@ describe('openRepo gitdir resolution', () => {
     await Effect.runPromise(closeRepo(repoDir))
     expect(isCommitGraphTracked(repoDir)).toBe(false)
   })
+
+  it('re-kicks the commit-graph write on reopen rather than skipping it forever', async () => {
+    await Effect.runPromise(openRepo(repoDir))
+    await Effect.runPromise(closeRepo(repoDir))
+    expect(isCommitGraphTracked(repoDir)).toBe(false)
+    await Effect.runPromise(openRepo(repoDir))
+    expect(isCommitGraphTracked(repoDir)).toBe(true)
+  })
+
+  it('terminates an in-flight commit-graph write when the repo closes', async () => {
+    const shimDir = installSlowGitShim()
+    const originalPath = process.env.PATH
+    process.env.PATH = `${shimDir}${path.delimiter}${originalPath}`
+    try {
+      await Effect.runPromise(openRepo(repoDir))
+      let inFlight = 0
+      for (let attempt = 0; attempt < 40 && inFlight === 0; attempt++) {
+        await sleep(25)
+        inFlight = commitGraphWriteProcesses(repoDir)
+      }
+      expect(inFlight).toBeGreaterThan(0)
+
+      await Effect.runPromise(closeRepo(repoDir))
+      let survivors = commitGraphWriteProcesses(repoDir)
+      for (let attempt = 0; attempt < 40 && survivors > 0; attempt++) {
+        await sleep(25)
+        survivors = commitGraphWriteProcesses(repoDir)
+      }
+      expect(survivors).toBe(0)
+    } finally {
+      process.env.PATH = originalPath
+      fs.rmSync(shimDir, { recursive: true, force: true })
+    }
+  }, 15000)
 })
