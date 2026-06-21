@@ -62,3 +62,65 @@ describe('fetch does not serialize behind the repo lock', () => {
     gitIn(repoDir, 'reset', '--hard', 'HEAD~1')
   })
 })
+
+describe('closing a repo terminates an in-flight fetch', () => {
+  let hangBaseDir: string
+  let hangRepoDir: string
+
+  beforeAll(async () => {
+    hangBaseDir = fs.realpathSync.native(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-fetch-hang-'))
+    )
+    hangRepoDir = path.join(hangBaseDir, 'repo')
+    fs.mkdirSync(hangRepoDir)
+    execFileSync('git', ['-C', hangRepoDir, 'init', '-b', 'main'])
+    gitIn(hangRepoDir, 'config', 'user.email', 'test@example.com')
+    gitIn(hangRepoDir, 'config', 'user.name', 'Test')
+    fs.writeFileSync(path.join(hangRepoDir, 'tracked.txt'), 'base\n')
+    gitIn(hangRepoDir, 'add', '.')
+    gitIn(hangRepoDir, 'commit', '-m', 'base')
+    // `ext::sleep 30` makes `git fetch` block on a transport child that never speaks the protocol,
+    // and `protocol.ext.allow=always` lets the sidecar's plain `git fetch` use it.
+    gitIn(hangRepoDir, 'remote', 'add', 'origin', 'ext::sleep 30')
+    gitIn(hangRepoDir, 'config', 'protocol.ext.allow', 'always')
+  })
+
+  afterAll(() => {
+    fs.rmSync(hangBaseDir, { recursive: true, force: true })
+  })
+
+  function transportChildCount(): number {
+    const listing = execFileSync('ps', ['-A', '-o', 'command='], { encoding: 'utf8' })
+    return listing
+      .split('\n')
+      .filter(
+        (line) =>
+          (line.includes('git remote-ext origin sleep 30') || line.includes('/bin/sleep 30')) &&
+          !line.includes('node') &&
+          !line.includes('vitest')
+      ).length
+  }
+
+  it('settles the fetch promptly and leaves no transport child when the repo is closed mid-fetch', async () => {
+    await Effect.runPromise(openRepo(hangRepoDir))
+
+    const fetching = Effect.runPromise(fetchRepo(hangRepoDir)).then(
+      () => 'resolved',
+      () => 'rejected'
+    )
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    expect(transportChildCount()).toBeGreaterThan(0)
+
+    const startedAt = Date.now()
+    await Effect.runPromise(closeRepo(hangRepoDir))
+    const settled = await fetching
+    const elapsedMs = Date.now() - startedAt
+
+    expect(settled).toBe('rejected')
+    expect(elapsedMs).toBeLessThan(5000)
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    expect(transportChildCount()).toBe(0)
+  })
+})

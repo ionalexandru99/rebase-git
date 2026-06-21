@@ -5,7 +5,7 @@ import { releaseFetchSemaphore } from './fetch-semaphore'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { type GitError, gitError, NotARepo, RepoNotOpen } from './git-errors'
 import { releaseRepoSemaphore } from './repo-lock'
-import { activeFetches, commitGraphWrites } from './state'
+import { commitGraphWrites } from './state'
 
 export interface RepoSessionsService {
   // Session creation only: get-or-create the instance, reject a non-repo, ensure the commit graph.
@@ -87,11 +87,6 @@ function makeRepoSessions(): RepoSessionsService {
           scopes.delete(key)
           yield* Scope.close(scope, Exit.void)
         }
-        const fetchProc = activeFetches.get(key)
-        if (fetchProc && !fetchProc.killed) {
-          fetchProc.kill()
-        }
-        activeFetches.delete(key)
         const graphProc = commitGraphWrites.get(key)
         if (graphProc && !graphProc.killed) {
           graphProc.kill()

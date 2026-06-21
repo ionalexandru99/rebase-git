@@ -1,42 +1,64 @@
-import type { ChildProcess } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { Effect } from 'effect'
 import { fetchSemaphoreFor } from './fetch-semaphore'
 import { normalizeRepoPath } from './git/instances'
 import { FetchSkipped, GitError, type RepoNotOpen } from './git-errors'
 import { requireOpen } from './op-helpers'
 import { withRepoLock } from './repo-lock'
-import { spawnGit } from './spawn'
-import { activeFetches } from './state'
+import { withSessionScope } from './repo-sessions'
+import { capStderr, spawnGit } from './spawn'
 
 type GitCmdResult = { ok: true } | { ok: false; message: string }
 
 const PROMPTLESS_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' }
 
-function runFetch(key: string): Promise<GitCmdResult> {
-  let child: ChildProcess | undefined
-  const releaseActive = () => {
-    if (child && activeFetches.get(key) === child) {
-      activeFetches.delete(key)
-    }
+// `git fetch` forks transport helpers (e.g. ssh/remote-ext) that survive a signal aimed only at the
+// git parent, so the child runs in its own process group and the finalizer signals the whole group.
+function killFetchGroup(child: ReturnType<typeof spawn>): void {
+  if (child.killed || child.pid === undefined) {
+    return
   }
-  return spawnGit(['-c', 'fetch.writeCommitGraph=true', '-C', key, 'fetch', '--prune'], {
-    env: PROMPTLESS_ENV,
-    collectStdout: false,
-    onSpawn: (proc) => {
-      child = proc
-      activeFetches.set(key, proc)
-    }
-  }).then<GitCmdResult, GitCmdResult>(
-    ({ code, stderr }) => {
-      releaseActive()
-      return code === 0
-        ? { ok: true }
-        : { ok: false, message: stderr.trim() || `git fetch exited with code ${code}` }
-    },
-    (error: Error) => {
-      releaseActive()
-      return { ok: false, message: error.message }
-    }
+  try {
+    process.kill(-child.pid, 'SIGTERM')
+  } catch {
+    child.kill()
+  }
+}
+
+function runFetch(key: string): Effect.Effect<GitCmdResult> {
+  return withSessionScope(
+    key,
+    Effect.gen(function* () {
+      const child = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          spawn('git', ['-c', 'fetch.writeCommitGraph=true', '-C', key, 'fetch', '--prune'], {
+            stdio: ['ignore', 'ignore', 'pipe'],
+            detached: true,
+            env: PROMPTLESS_ENV
+          })
+        ),
+        (proc) => Effect.sync(() => killFetchGroup(proc))
+      )
+      return yield* Effect.async<GitCmdResult>((resume) => {
+        let stderr = ''
+        child.stderr?.setEncoding('utf8')
+        child.stderr?.on('data', (chunk: string) => {
+          stderr = capStderr(stderr + chunk)
+        })
+        child.on('error', (error: Error) => {
+          resume(Effect.succeed({ ok: false, message: error.message }))
+        })
+        child.on('close', (code) => {
+          resume(
+            Effect.succeed(
+              code === 0
+                ? { ok: true }
+                : { ok: false, message: stderr.trim() || `git fetch exited with code ${code}` }
+            )
+          )
+        })
+      })
+    })
   )
 }
 
@@ -61,7 +83,7 @@ export function fetchRepo(
     yield* requireOpen(key)
     const semaphore = fetchSemaphoreFor(key)
     const outcome = yield* Effect.promise(() =>
-      semaphore.withPermitsIfAvailable(() => runFetch(key))
+      semaphore.withPermitsIfAvailable(() => Effect.runPromise(runFetch(key)))
     )
     if (outcome === null) {
       return yield* Effect.fail(new FetchSkipped())
