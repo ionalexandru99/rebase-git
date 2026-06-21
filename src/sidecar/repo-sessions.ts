@@ -94,7 +94,20 @@ function makeRepoSessions(): RepoSessionsService {
           return yield* Effect.fail(new NotARepo())
         }
         if (!scopes.has(key)) {
-          scopes.set(key, yield* Scope.make())
+          const scope = yield* Scope.make()
+          yield* Scope.addFinalizer(
+            scope,
+            Effect.sync(() => {
+              releaseFetchSemaphore(key)
+            })
+          )
+          yield* Scope.addFinalizer(
+            scope,
+            Effect.sync(() => {
+              releaseRepoSemaphore(key)
+            })
+          )
+          scopes.set(key, scope)
         }
         yield* ensureCommitGraph(key)
         return git
@@ -109,8 +122,6 @@ function makeRepoSessions(): RepoSessionsService {
           yield* Scope.close(scope, Exit.void)
         }
         commitGraphWritten.delete(key)
-        releaseFetchSemaphore(key)
-        releaseRepoSemaphore(key)
       }),
     withSessionScope: (repoPath, effect) => runOnSessionScope(normalizeRepoPath(repoPath), effect),
     requireGit: (repoPath) =>
