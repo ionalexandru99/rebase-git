@@ -2,16 +2,18 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Effect } from 'effect'
+import { Deferred, Effect, Fiber } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { NotARepo, RepoNotOpen } from '../git-errors'
 import { closeRepo, openRepo } from '../operations'
 import {
+  closeSession,
   openSession,
   RepoSessions,
   RepoSessionsLive,
   requireGit,
-  requireOpen
+  requireOpen,
+  withSessionScope
 } from '../repo-sessions'
 
 let baseDir: string
@@ -88,5 +90,46 @@ describe('RepoSessions spine', () => {
       )
     )
     expect(viaService).toBe(created)
+  })
+})
+
+describe('RepoSessions session scope', () => {
+  it('runs a withSessionScope finalizer when the scoped effect completes', async () => {
+    await Effect.runPromise(openSession(repoDir))
+    let released = false
+    const probe = Effect.acquireRelease(Effect.succeed('resource'), () =>
+      Effect.sync(() => {
+        released = true
+      })
+    )
+
+    await Effect.runPromise(withSessionScope(repoDir, probe))
+
+    expect(released).toBe(true)
+  })
+
+  it('force-runs an in-flight withSessionScope finalizer when the repo closes', async () => {
+    await Effect.runPromise(openSession(repoDir))
+    let released = false
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const acquired = yield* Deferred.make<void>()
+        const held = yield* Deferred.make<void>()
+        const probe = Effect.acquireRelease(Deferred.succeed(acquired, undefined), () =>
+          Effect.sync(() => {
+            released = true
+          })
+        ).pipe(Effect.zipRight(Deferred.await(held)))
+
+        const fiber = yield* Effect.fork(withSessionScope(repoDir, probe))
+        yield* Deferred.await(acquired)
+        yield* closeSession(repoDir)
+        yield* Deferred.succeed(held, undefined)
+        yield* Fiber.join(fiber)
+      })
+    )
+
+    expect(released).toBe(true)
   })
 })
