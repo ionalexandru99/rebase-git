@@ -5,7 +5,7 @@ import { releaseFetchSemaphore } from './fetch-semaphore'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { type GitError, gitError, NotARepo, RepoNotOpen } from './git-errors'
 import { releaseRepoSemaphore } from './repo-lock'
-import { activeFetches, commitGraphWrites } from './state'
+import { activeFetches } from './state'
 
 export interface RepoSessionsService {
   // Session creation only: get-or-create the instance, reject a non-repo, ensure the commit graph.
@@ -29,23 +29,58 @@ function makeRepoSessions(): RepoSessionsService {
   const scopes = new Map<string, Scope.CloseableScope>()
   const commitGraphWritten = new Set<string>()
 
+  // Forks a child Scope from the session's scope so the effect's finalizers run when it settles and
+  // are force-run if the session closes first; falls back to a self-contained scope when no session
+  // is open. Shared by withSessionScope and the background commit-graph write.
+  function runOnSessionScope<A, E>(
+    key: string,
+    effect: Effect.Effect<A, E, Scope.Scope>
+  ): Effect.Effect<A, E> {
+    return Effect.gen(function* () {
+      const parent = scopes.get(key)
+      if (!parent) {
+        return yield* Effect.scoped(effect)
+      }
+      const child = yield* Scope.fork(parent, ExecutionStrategy.sequential)
+      return yield* Scope.extend(effect, child).pipe(
+        Effect.onExit((exit) => Scope.close(child, exit))
+      )
+    })
+  }
+
   // Generation numbers from a commit-graph file make `git log --topo-order` stream incrementally
-  // instead of walking the full history before the first row.
-  function ensureCommitGraph(key: string): void {
-    if (commitGraphWritten.has(key)) {
-      return
-    }
-    commitGraphWritten.add(key)
-    const proc = spawn('git', ['-C', key, 'commit-graph', 'write', '--reachable', '--split'], {
-      stdio: 'ignore',
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-    })
-    commitGraphWrites.set(key, proc)
-    proc.on('error', () => {
-      commitGraphWrites.delete(key)
-    })
-    proc.on('close', () => {
-      commitGraphWrites.delete(key)
+  // instead of walking the full history before the first row. The write child is registered on the
+  // session scope, so closing the repo kills it; the marker is cleared on close so reopen retries.
+  function ensureCommitGraph(key: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      if (commitGraphWritten.has(key)) {
+        return Effect.void
+      }
+      commitGraphWritten.add(key)
+      const write = runOnSessionScope(
+        key,
+        Effect.gen(function* () {
+          const proc = yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              spawn('git', ['-C', key, 'commit-graph', 'write', '--reachable', '--split'], {
+                stdio: 'ignore',
+                env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+              })
+            ),
+            (child) =>
+              Effect.sync(() => {
+                if (!child.killed) {
+                  child.kill()
+                }
+              })
+          )
+          yield* Effect.async<void>((resume) => {
+            proc.on('close', () => resume(Effect.void))
+            proc.on('error', () => resume(Effect.void))
+          })
+        })
+      )
+      return Effect.forkDaemon(write).pipe(Effect.asVoid)
     })
   }
 
@@ -62,7 +97,7 @@ function makeRepoSessions(): RepoSessionsService {
         if (!scopes.has(key)) {
           scopes.set(key, yield* Scope.make())
         }
-        ensureCommitGraph(key)
+        yield* ensureCommitGraph(key)
         return git
       }),
     close: (repoPath) =>
@@ -79,27 +114,11 @@ function makeRepoSessions(): RepoSessionsService {
           fetchProc.kill()
         }
         activeFetches.delete(key)
-        const graphProc = commitGraphWrites.get(key)
-        if (graphProc && !graphProc.killed) {
-          graphProc.kill()
-        }
-        commitGraphWrites.delete(key)
         commitGraphWritten.delete(key)
         releaseFetchSemaphore(key)
         releaseRepoSemaphore(key)
       }),
-    withSessionScope: (repoPath, effect) =>
-      Effect.gen(function* () {
-        const key = normalizeRepoPath(repoPath)
-        const parent = scopes.get(key)
-        if (!parent) {
-          return yield* Effect.scoped(effect)
-        }
-        const child = yield* Scope.fork(parent, ExecutionStrategy.sequential)
-        return yield* Scope.extend(effect, child).pipe(
-          Effect.onExit((exit) => Scope.close(child, exit))
-        )
-      }),
+    withSessionScope: (repoPath, effect) => runOnSessionScope(normalizeRepoPath(repoPath), effect),
     requireGit: (repoPath) =>
       Effect.suspend(() => {
         const git = lookupGit(instances, repoPath)
