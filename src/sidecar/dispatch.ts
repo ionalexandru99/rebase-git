@@ -259,9 +259,9 @@ export async function dispatch(op: string, body: Body): Promise<unknown> {
     }
     const repoPath = resolveExistingRepoRoot(decoded.repoPath as string)
     if (repoPath) {
-      await runtime.runPromise(operations.closeRepo(repoPath))
+      return await runOp(operations.closeRepo(repoPath))
     }
-    return {}
+    return { _tag: 'Ok' }
   }
 
   const entry = handlerTable[op]
