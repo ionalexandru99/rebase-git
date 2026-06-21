@@ -1,9 +1,10 @@
 import { SidecarOp, type SidecarOpName } from '@shared/sidecar-ops'
 import { type SidecarRequest, sidecarRegistry } from '@shared/sidecar-registry'
-import { Cause, Effect, Either, Layer, ManagedRuntime, Option, Schema } from 'effect'
+import { Cause, Effect, Either, ManagedRuntime, Option, Schema } from 'effect'
 import type { GitOpError } from './git-errors'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
+import { RepoSessionsLive } from './repo-sessions'
 
 export const BAD_REQUEST = Symbol('bad-request')
 
@@ -12,7 +13,7 @@ type Body = Record<string, unknown>
 const INVALID_REPO_PATH = 'invalid repository path'
 const invalidRepoWire = { _tag: 'GitError', message: INVALID_REPO_PATH } as const
 
-const runtime = ManagedRuntime.make(Layer.empty)
+const runtime = ManagedRuntime.make(RepoSessionsLive)
 
 type WireResult = Record<string, unknown>
 
@@ -258,9 +259,9 @@ export async function dispatch(op: string, body: Body): Promise<unknown> {
     }
     const repoPath = resolveExistingRepoRoot(decoded.repoPath as string)
     if (repoPath) {
-      await runtime.runPromise(operations.closeRepo(repoPath))
+      return await runOp(operations.closeRepo(repoPath))
     }
-    return {}
+    return { _tag: 'Ok' }
   }
 
   const entry = handlerTable[op]
