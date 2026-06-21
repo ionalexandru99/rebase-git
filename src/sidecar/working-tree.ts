@@ -39,7 +39,7 @@ export function unstageFile(
     const git = yield* requireGit(repoPath)
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.reset(['HEAD', file]))
+      tryGit(() => git.reset(['HEAD', '--', file]))
     )
   })
 }

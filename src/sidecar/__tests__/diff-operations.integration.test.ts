@@ -4,7 +4,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { closeRepo, getDiff, getStatus, openRepo, stageHunk, unstageHunk } from '../operations'
+import {
+  closeRepo,
+  getDiff,
+  getStatus,
+  openRepo,
+  stageHunk,
+  unstageFile,
+  unstageHunk
+} from '../operations'
 
 let repoDir: string
 
@@ -130,5 +138,25 @@ describe('diff operations against a real repository', () => {
 
     const diff = await Effect.runPromise(getDiff(repoDir, 'sample.txt', false))
     expect(diff.diff.hunks).toHaveLength(0)
+  })
+
+  it('unstages an option-like filename as a path, never as a flag', async () => {
+    const canary = 'reset-canary.txt'
+    fs.writeFileSync(path.join(repoDir, canary), 'committed\n')
+    git('add', '--', canary)
+    git('commit', '-m', 'add reset canary')
+    fs.writeFileSync(path.join(repoDir, canary), 'uncommitted edit\n')
+
+    const optionLikeName = '--hard'
+    fs.writeFileSync(path.join(repoDir, optionLikeName), 'staged\n')
+    git('add', '--', optionLikeName)
+
+    await Effect.runPromise(unstageFile(repoDir, optionLikeName))
+
+    expect(git('diff', '--cached', '--name-only')).not.toContain(optionLikeName)
+    expect(fs.readFileSync(path.join(repoDir, canary), 'utf8')).toBe('uncommitted edit\n')
+
+    fs.rmSync(path.join(repoDir, optionLikeName))
+    git('checkout', '--', canary)
   })
 })
