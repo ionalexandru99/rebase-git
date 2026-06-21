@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import fs from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { parseOrThrow } from '@shared/codec'
@@ -60,11 +61,13 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
   }
 
   let scanRoot: string
+  let homeRoot: string
   try {
     scanRoot = fs.realpathSync.native(path.resolve(requestedDirPath))
     if (!fs.statSync(scanRoot).isDirectory()) {
       return invalidScanDirectoryResponse()
     }
+    homeRoot = fs.realpathSync.native(os.homedir())
   } catch {
     return invalidScanDirectoryResponse()
   }
@@ -72,6 +75,13 @@ async function scanForReposSafely(requestedDirPath: string): Promise<ScanForRepo
   const resolvedPath = path.resolve(requestedDirPath)
   const scanRootPrefix = scanRoot.endsWith(path.sep) ? scanRoot : `${scanRoot}${path.sep}`
   if (resolvedPath !== scanRoot && !resolvedPath.startsWith(scanRootPrefix)) {
+    return invalidScanDirectoryResponse()
+  }
+
+  // Confine scanning to the user's home tree so a forged request can't enumerate directories
+  // outside it. The canonical scanRoot is compared against the realpath'd home root.
+  const homePrefix = homeRoot.endsWith(path.sep) ? homeRoot : `${homeRoot}${path.sep}`
+  if (scanRoot !== homeRoot && !scanRoot.startsWith(homePrefix)) {
     return invalidScanDirectoryResponse()
   }
 

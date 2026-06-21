@@ -103,6 +103,27 @@ describe('sidecar server', () => {
     expect(body.result.path).toContain(path.basename(repoPath))
   })
 
+  it('scans a directory inside home and finds nested git repos', async () => {
+    const scanDir = fs.mkdtempSync(path.join(os.homedir(), '.rebase-scan-test-'))
+    try {
+      const nestedRepo = path.join(scanDir, 'repo')
+      fs.mkdirSync(nestedRepo)
+      git(nestedRepo, ['init', '-b', 'main'])
+      const body = await (await call('scan-for-repos', { dirPath: scanDir })).json()
+      expect(body._tag).toBe('Ok')
+      expect(body.repos).toEqual([path.join(fs.realpathSync.native(scanDir), 'repo')])
+    } finally {
+      fs.rmSync(scanDir, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a scan root outside the user home directory', async () => {
+    const outsideHome = path.parse(os.homedir()).root
+    const body = await (await call('scan-for-repos', { dirPath: outsideHome })).json()
+    expect(body._tag).toBe('GitError')
+    expect(body.message).toBe('invalid directory path')
+  })
+
   it('returns RepoNotOpen for status before open', async () => {
     const other = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-unopened-'))
     const response = await call('get-status', { repoPath: other })
