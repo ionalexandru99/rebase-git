@@ -2,10 +2,11 @@ import type { ChildProcess } from 'node:child_process'
 import { Effect } from 'effect'
 import { fetchSemaphoreFor } from './fetch-semaphore'
 import { normalizeRepoPath } from './git/instances'
-import { FetchSkipped, GitError, RepoNotOpen } from './git-errors'
+import { FetchSkipped, GitError, type RepoNotOpen } from './git-errors'
+import { requireOpen } from './op-helpers'
 import { withRepoLock } from './repo-lock'
 import { spawnGit } from './spawn'
-import { activeFetches, gitInstances } from './state'
+import { activeFetches } from './state'
 
 type GitCmdResult = { ok: true } | { ok: false; message: string }
 
@@ -57,9 +58,7 @@ export function fetchRepo(
 ): Effect.Effect<void, RepoNotOpen | GitError | FetchSkipped> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
-    if (!gitInstances.has(key)) {
-      return yield* Effect.fail(new RepoNotOpen())
-    }
+    yield* requireOpen(key)
     const semaphore = fetchSemaphoreFor(key)
     const outcome = yield* Effect.promise(() =>
       semaphore.withPermitsIfAvailable(() => runFetch(key))
@@ -76,9 +75,7 @@ export function fetchRepo(
 export function pushRepo(repoPath: string): Effect.Effect<void, RepoNotOpen | GitError> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
-    if (!gitInstances.has(key)) {
-      return yield* Effect.fail(new RepoNotOpen())
-    }
+    yield* requireOpen(key)
     yield* withRepoLock(
       key,
       Effect.gen(function* () {
@@ -99,9 +96,7 @@ export function pushRepo(repoPath: string): Effect.Effect<void, RepoNotOpen | Gi
 export function pullRepo(repoPath: string): Effect.Effect<void, RepoNotOpen | GitError> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
-    if (!gitInstances.has(key)) {
-      return yield* Effect.fail(new RepoNotOpen())
-    }
+    yield* requireOpen(key)
     // `git pull` fetches, so it must hold the fetch semaphore that standalone fetchRepo uses —
     // otherwise a concurrent fetch and this pull race to write FETCH_HEAD/remote refs and one
     // dies on a git lock. withPermits waits for an in-flight fetch instead of skipping.

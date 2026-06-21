@@ -1,21 +1,19 @@
-import { spawn } from 'node:child_process'
 import path from 'node:path'
 import type { GitLog } from '@shared/schemas/git'
 import type { ResetMode } from '@shared/schemas/ipc'
 import { Effect } from 'effect'
 import type { SimpleGit } from 'simple-git'
 import { runWithConflictDetection } from './conflict'
-import { releaseFetchSemaphore } from './fetch-semaphore'
 import { resolveDefaultBranch } from './git/defaultBranch'
-import { getOrCreateGit, normalizeRepoPath } from './git/instances'
+import { normalizeRepoPath } from './git/instances'
 import { LOG_FORMAT, parseGitLogOutput } from './git/log-format'
 import { serializeRemotes } from './git/serialize'
-import { type Conflict, GitError, NotARepo, type RepoNotOpen } from './git-errors'
+import { type Conflict, GitError, type NotARepo, type RepoNotOpen } from './git-errors'
 import { requireGit, requireOpen, tryGit } from './op-helpers'
 import { isSafeRefArg } from './ref-args'
-import { releaseRepoSemaphore, withRepoLock } from './repo-lock'
+import { withRepoLock } from './repo-lock'
+import { closeSession, openSession } from './repo-sessions'
 import { runGit } from './spawn'
-import { activeFetches, commitGraphWrites, gitInstances } from './state'
 
 export {
   checkoutRef,
@@ -26,6 +24,7 @@ export {
   getRemoteRefs,
   renameBranch
 } from './branches'
+export { isCommitGraphTracked } from './repo-sessions'
 export { stashApply, stashDrop, stashList, stashPop, stashPush } from './stash'
 export { fetchRepo, pullRepo, pushRepo } from './sync'
 export {
@@ -40,34 +39,6 @@ export {
   unstageFile,
   unstageHunk
 } from './working-tree'
-
-const commitGraphWritten = new Set<string>()
-
-// Generation numbers from a commit-graph file make `git log --topo-order` stream
-// incrementally instead of walking the full history before the first row.
-function ensureCommitGraph(key: string): void {
-  if (commitGraphWritten.has(key)) {
-    return
-  }
-  commitGraphWritten.add(key)
-  const proc = spawn('git', ['-C', key, 'commit-graph', 'write', '--reachable', '--split'], {
-    stdio: 'ignore',
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-  })
-  commitGraphWrites.set(key, proc)
-  proc.on('error', () => {
-    commitGraphWrites.delete(key)
-  })
-  proc.on('close', () => {
-    commitGraphWrites.delete(key)
-  })
-}
-
-// Whether a commit-graph write has been started for this repo this process. closeRepo clears the
-// flag so a write interrupted by close is retried on reopen rather than skipped forever.
-export function isCommitGraphTracked(repoPath: string): boolean {
-  return commitGraphWritten.has(normalizeRepoPath(repoPath))
-}
 
 // The real gitdir/common-dir so the main-process watcher can target HEAD/refs/index without
 // running git itself: for linked worktrees and submodules `.git` is a file pointing elsewhere.
@@ -100,13 +71,7 @@ interface OpenRepoResult {
 export function openRepo(repoPath: string): Effect.Effect<OpenRepoResult, GitError | NotARepo> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
-    const git = getOrCreateGit(gitInstances, key)
-    const isRepo = yield* tryGit(() => git.checkIsRepo())
-    if (!isRepo) {
-      gitInstances.delete(key)
-      return yield* Effect.fail(new NotARepo())
-    }
-    ensureCommitGraph(key)
+    const git = yield* openSession(key)
     const [remotes, defaultBranch, gitDirs] = yield* tryGit(() =>
       Promise.all([
         git.getRemotes(true),
@@ -127,23 +92,7 @@ export function openRepo(repoPath: string): Effect.Effect<OpenRepoResult, GitErr
 }
 
 export function closeRepo(repoPath: string): Effect.Effect<void> {
-  return Effect.sync(() => {
-    const key = normalizeRepoPath(repoPath)
-    gitInstances.delete(key)
-    const proc = activeFetches.get(key)
-    if (proc && !proc.killed) {
-      proc.kill()
-    }
-    activeFetches.delete(key)
-    const graphProc = commitGraphWrites.get(key)
-    if (graphProc && !graphProc.killed) {
-      graphProc.kill()
-    }
-    commitGraphWrites.delete(key)
-    commitGraphWritten.delete(key)
-    releaseFetchSemaphore(key)
-    releaseRepoSemaphore(key)
-  })
+  return closeSession(repoPath)
 }
 
 interface CommitResult {
