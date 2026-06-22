@@ -1,5 +1,5 @@
 import path from 'node:path'
-import type { GitLog } from '@shared/schemas/git'
+import type { CommitSummary, GitLog } from '@shared/schemas/git'
 import type { ResetMode } from '@shared/schemas/ipc'
 import { Effect } from 'effect'
 import type { SimpleGit } from 'simple-git'
@@ -96,7 +96,7 @@ export function closeRepo(repoPath: string): Effect.Effect<void> {
 }
 
 interface CommitResult {
-  result: { commit: string; branch: string; summary: Record<string, unknown> }
+  result: CommitSummary
 }
 
 export function commit(
@@ -112,7 +112,11 @@ export function commit(
           result: {
             commit: result.commit,
             branch: result.branch,
-            summary: { ...result.summary }
+            summary: {
+              changes: result.summary.changes,
+              insertions: result.summary.insertions,
+              deletions: result.summary.deletions
+            }
           }
         }))
       )

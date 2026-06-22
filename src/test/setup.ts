@@ -85,9 +85,6 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
           case 'unstage-file':
             payload = await mock.unstageFile(repoPath, body.file as string)
             break
-          case 'commit':
-            payload = await mock.commit(repoPath, body.message as string)
-            break
           case 'fetch-repo':
             payload = await mock.fetchRepo(repoPath)
             break
@@ -316,7 +313,12 @@ beforeEach(() => {
     activeIndex: 0
   })
   vi.mocked(window.electronAPI.setPersistedTabs).mockResolvedValue(undefined)
-  vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+  vi.mocked(window.electronAPI.sidecarRequest).mockImplementation(async (op, body) => {
+    if (op === 'commit') {
+      return sidecarMock.commit(body.repoPath as string, body.message as string)
+    }
+    return { _tag: 'Ok' }
+  })
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })
   mockBranchResponses({ current: '', all: [], remotes: [], tags: [] })

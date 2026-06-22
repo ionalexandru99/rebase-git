@@ -9,7 +9,6 @@ export const SidecarOp = {
   unstageFile: 'unstage-file',
   stageAll: 'stage-all',
   unstageAll: 'unstage-all',
-  commit: 'commit',
   getDiff: 'get-diff',
   stageHunk: 'stage-hunk',
   unstageHunk: 'unstage-hunk',

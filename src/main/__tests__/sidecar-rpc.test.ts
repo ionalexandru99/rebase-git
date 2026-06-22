@@ -1,27 +1,78 @@
 import { GitError, RepoNotOpen } from '@shared/rpc'
 import { Exit } from 'effect'
 import { describe, expect, it, vi } from 'vitest'
-import { classifyReadExit, SidecarRpcError } from '../sidecar-rpc'
+import { classifyExit, isRpcOp, isRpcReadOp, isRpcWriteOp, SidecarRpcError } from '../sidecar-rpc'
 
 const TOKEN = 'super-secret-bearer-token'
 
-describe('classifyReadExit', () => {
-  it('maps a success exit onto the Ok response with its payload', () => {
-    const result = classifyReadExit(
-      'get-status',
-      Exit.succeed({ status: { current: 'main' } }),
+describe('RPC op classification', () => {
+  it('routes the commit op through the write seam, not the old transport', () => {
+    expect(isRpcWriteOp('commit')).toBe(true)
+    expect(isRpcReadOp('commit')).toBe(false)
+    expect(isRpcOp('commit')).toBe(true)
+  })
+
+  it('keeps the read ops on the read seam and rejects unknown ops', () => {
+    expect(isRpcReadOp('get-status')).toBe(true)
+    expect(isRpcWriteOp('get-status')).toBe(false)
+    expect(isRpcOp('get-status')).toBe(true)
+    expect(isRpcOp('stage-file')).toBe(false)
+  })
+})
+
+describe('classifyExit (commit write op)', () => {
+  it('maps a commit success exit onto Ok with the result payload', () => {
+    const result = classifyExit(
+      'commit',
+      Exit.succeed({
+        result: {
+          commit: 'abc1234',
+          branch: 'main',
+          summary: { changes: 1, insertions: 1, deletions: 0 }
+        }
+      }),
       TOKEN
     )
+    expect(result).toEqual({
+      _tag: 'Ok',
+      result: {
+        commit: 'abc1234',
+        branch: 'main',
+        summary: { changes: 1, insertions: 1, deletions: 0 }
+      }
+    })
+  })
+
+  it('maps a typed RepoNotOpen commit failure onto the RepoNotOpen response', () => {
+    expect(classifyExit('commit', Exit.fail(new RepoNotOpen()), TOKEN)).toEqual({
+      _tag: 'RepoNotOpen'
+    })
+  })
+
+  it('throws SidecarRpcError for a transport failure on commit', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const transportFailure = Exit.fail({
+      _tag: 'RequestError',
+      message: 'connect ECONNREFUSED 127.0.0.1'
+    })
+    expect(() => classifyExit('commit', transportFailure, TOKEN)).toThrow(SidecarRpcError)
+    vi.restoreAllMocks()
+  })
+})
+
+describe('classifyExit', () => {
+  it('maps a success exit onto the Ok response with its payload', () => {
+    const result = classifyExit('get-status', Exit.succeed({ status: { current: 'main' } }), TOKEN)
     expect(result).toEqual({ _tag: 'Ok', status: { current: 'main' } })
   })
 
   it('maps a typed RepoNotOpen failure onto the RepoNotOpen response', () => {
-    const result = classifyReadExit('get-status', Exit.fail(new RepoNotOpen()), TOKEN)
+    const result = classifyExit('get-status', Exit.fail(new RepoNotOpen()), TOKEN)
     expect(result).toEqual({ _tag: 'RepoNotOpen' })
   })
 
   it('maps a typed GitError failure onto the GitError response', () => {
-    const result = classifyReadExit(
+    const result = classifyExit(
       'get-status',
       Exit.fail(new GitError({ message: 'fatal: not a git repository' })),
       TOKEN
@@ -35,20 +86,20 @@ describe('classifyReadExit', () => {
       _tag: 'RequestError',
       message: 'connect ECONNREFUSED 127.0.0.1'
     })
-    expect(() => classifyReadExit('get-status', transportFailure, TOKEN)).toThrow(SidecarRpcError)
+    expect(() => classifyExit('get-status', transportFailure, TOKEN)).toThrow(SidecarRpcError)
     vi.restoreAllMocks()
   })
 
   it('throws SidecarRpcError for an RPC decode / contract-drift failure', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const decodeFailure = Exit.fail({ _tag: 'ParseError', message: 'Expected string, actual 5' })
-    expect(() => classifyReadExit('get-log', decodeFailure, TOKEN)).toThrow(SidecarRpcError)
+    expect(() => classifyExit('get-log', decodeFailure, TOKEN)).toThrow(SidecarRpcError)
     vi.restoreAllMocks()
   })
 
   it('throws SidecarRpcError for a defect (die), which carries no typed failure', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(() => classifyReadExit('get-status', Exit.die(new Error('boom')), TOKEN)).toThrow(
+    expect(() => classifyExit('get-status', Exit.die(new Error('boom')), TOKEN)).toThrow(
       SidecarRpcError
     )
     vi.restoreAllMocks()
@@ -62,7 +113,7 @@ describe('classifyReadExit', () => {
     })
     let caught: unknown
     try {
-      classifyReadExit('get-status', leakyFailure, TOKEN)
+      classifyExit('get-status', leakyFailure, TOKEN)
     } catch (error) {
       caught = error
     }
@@ -75,7 +126,7 @@ describe('classifyReadExit', () => {
   })
 
   it('scrubs the bearer token out of a domain GitError message', () => {
-    const result = classifyReadExit(
+    const result = classifyExit(
       'get-status',
       Exit.fail(new GitError({ message: `remote rejected (token ${TOKEN})` })),
       TOKEN
@@ -86,7 +137,7 @@ describe('classifyReadExit', () => {
   it('logs the scrubbed cause for diagnosis without surfacing it to the caller', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() =>
-      classifyReadExit('get-status', Exit.die(new Error(`died with ${TOKEN}`)), TOKEN)
+      classifyExit('get-status', Exit.die(new Error(`died with ${TOKEN}`)), TOKEN)
     ).toThrow(SidecarRpcError)
     expect(errorSpy).toHaveBeenCalled()
     const logged = JSON.stringify(errorSpy.mock.calls)

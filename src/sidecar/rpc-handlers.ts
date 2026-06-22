@@ -21,7 +21,13 @@ const resolveRepo = (repoPath: string): Effect.Effect<string, RpcGitError> =>
 const toReadError = (error: RepoNotOpen | GitError): RpcRepoNotOpen | RpcGitError =>
   error._tag === 'RepoNotOpen' ? new RpcRepoNotOpen() : new RpcGitError({ message: error.message })
 
-const handlersLayer = SidecarRpcs.toLayer({
+export const handlersLayer = SidecarRpcs.toLayer({
+  commit: ({ repoPath, message }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.commit(resolved, message).pipe(Effect.mapError(toReadError))
+      )
+    ),
   getStatus: ({ repoPath }) =>
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>

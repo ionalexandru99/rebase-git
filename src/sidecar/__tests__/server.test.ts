@@ -3,6 +3,10 @@ import fs from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { FetchHttpClient, HttpClient, HttpClientRequest } from '@effect/platform'
+import { RpcClient, RpcSerialization } from '@effect/rpc'
+import { SidecarRpcs } from '@shared/rpc'
+import { Effect, Either, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { STREAM_BATCH_SIZE } from '../log-stream'
 import { createSidecarServer } from '../server'
@@ -56,6 +60,24 @@ async function call(op: string, body: Record<string, unknown>, token = TOKEN): P
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify(body)
   })
+}
+
+const rpcProtocolLayer = () =>
+  RpcClient.layerProtocolHttp({
+    url: `${baseUrl}/rpc`,
+    transformClient: (client) =>
+      HttpClient.mapRequest(client, (request) =>
+        HttpClientRequest.setHeader(request, 'authorization', `Bearer ${TOKEN}`)
+      )
+  }).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(RpcSerialization.layerNdjson))
+
+function rpcCommit(repoPath: string, message: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.commit({ repoPath, message }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
 }
 
 beforeAll(async () => {
@@ -140,13 +162,15 @@ describe('sidecar server', () => {
     expect(body.status.not_added).toContain('new.txt')
   })
 
-  it('stages, commits, and reflects in the log', async () => {
+  it('stages (via /op), commits (via /rpc), and reflects in the log', async () => {
     const staged = await (await call('stage-file', { repoPath, file: 'new.txt' })).json()
     expect(staged._tag).toBe('Ok')
 
-    const committed = await (await call('commit', { repoPath, message: 'add new.txt' })).json()
-    expect(committed._tag).toBe('Ok')
-    expect(committed.result.commit).toBeTruthy()
+    const committed = await rpcCommit(repoPath, 'add new.txt')
+    expect(Either.isRight(committed)).toBe(true)
+    if (Either.isRight(committed)) {
+      expect(committed.right.result.commit).toBeTruthy()
+    }
 
     const log = await (await call('get-log', { repoPath })).json()
     expect(log._tag).toBe('Ok')
@@ -252,12 +276,6 @@ describe('sidecar server', () => {
 
   it('rejects a malformed get-log body via schema validation (non-numeric maxCount)', async () => {
     const response = await call('get-log', { repoPath, maxCount: 'lots' })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'bad request' })
-  })
-
-  it('rejects a malformed commit body via schema validation (non-string message)', async () => {
-    const response = await call('commit', { repoPath, message: 123 })
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'bad request' })
   })

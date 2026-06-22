@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { stashKey } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
+import { rpcCommit } from '@/lib/rpc-client'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 
@@ -707,7 +708,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
       }
       setUi('committing', true)
       try {
-        const response = await sidecarFetch('commit', { repoPath, message })
+        const response = await rpcCommit(repoPath, message)
         if (response._tag === 'Ok') {
           await Promise.all([refreshStatus(repoPath), invalidateDiffs(repoPath)])
           await restartLogStream(repoPath)

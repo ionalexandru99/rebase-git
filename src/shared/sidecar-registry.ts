@@ -4,7 +4,6 @@ import {
   BranchesResponseSchema,
   CancelLogStreamResponseSchema,
   CheckoutResponseSchema,
-  CommitResponseSchema,
   ConflictableMutationResponseSchema,
   FetchResponseSchema,
   GetDiffResponseSchema,
@@ -46,7 +45,6 @@ const HunkRequest = Schema.Struct({
 })
 const FilesRequest = Schema.Struct({ repoPath: RequiredString, files: FileList })
 
-const CommitRequest = Schema.Struct({ repoPath: RequiredString, message: RequiredString })
 const GetLogRequest = Schema.Struct({
   repoPath: RequiredString,
   maxCount: Schema.optional(NonNaNNumber)
@@ -106,7 +104,6 @@ export const sidecarRegistry = {
   [SidecarOp.unstageFile]: { request: FileRequest, response: UnstageResponseSchema },
   [SidecarOp.stageAll]: { request: FilesRequest, response: StageResponseSchema },
   [SidecarOp.unstageAll]: { request: FilesRequest, response: UnstageResponseSchema },
-  [SidecarOp.commit]: { request: CommitRequest, response: CommitResponseSchema },
   [SidecarOp.getDiff]: { request: GetDiffRequest, response: GetDiffResponseSchema },
   [SidecarOp.stageHunk]: { request: HunkRequest, response: StageHunkResponseSchema },
   [SidecarOp.unstageHunk]: { request: HunkRequest, response: StageHunkResponseSchema },
