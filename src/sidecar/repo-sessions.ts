@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { Context, Effect, Layer } from 'effect'
+import { Context, Effect, ExecutionStrategy, Exit, Layer, Scope } from 'effect'
 import type { SimpleGit } from 'simple-git'
 import { releaseFetchSemaphore } from './fetch-semaphore'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
@@ -15,10 +15,18 @@ export interface RepoSessionsService {
   requireGit(repoPath: string): Effect.Effect<SimpleGit, RepoNotOpen>
   requireOpen(repoPath: string): Effect.Effect<void, RepoNotOpen>
   isCommitGraphTracked(repoPath: string): boolean
+  // Run a scoped effect bound to the repo's session: its finalizers run when the scoped effect
+  // settles, and are force-run if the session closes first (the child scope is forked from the
+  // session's scope). Used by the cancel-safe background workers to register kill-on-close cleanup.
+  withSessionScope<A, E>(
+    repoPath: string,
+    effect: Effect.Effect<A, E, Scope.Scope>
+  ): Effect.Effect<A, E>
 }
 
 function makeRepoSessions(): RepoSessionsService {
   const instances = new Map<string, SimpleGit>()
+  const scopes = new Map<string, Scope.CloseableScope>()
   const commitGraphWritten = new Set<string>()
 
   // Generation numbers from a commit-graph file make `git log --topo-order` stream incrementally
@@ -51,13 +59,21 @@ function makeRepoSessions(): RepoSessionsService {
           instances.delete(key)
           return yield* Effect.fail(new NotARepo())
         }
+        if (!scopes.has(key)) {
+          scopes.set(key, yield* Scope.make())
+        }
         ensureCommitGraph(key)
         return git
       }),
     close: (repoPath) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const key = normalizeRepoPath(repoPath)
         instances.delete(key)
+        const scope = scopes.get(key)
+        if (scope) {
+          scopes.delete(key)
+          yield* Scope.close(scope, Exit.void)
+        }
         const fetchProc = activeFetches.get(key)
         if (fetchProc && !fetchProc.killed) {
           fetchProc.kill()
@@ -71,6 +87,18 @@ function makeRepoSessions(): RepoSessionsService {
         commitGraphWritten.delete(key)
         releaseFetchSemaphore(key)
         releaseRepoSemaphore(key)
+      }),
+    withSessionScope: (repoPath, effect) =>
+      Effect.gen(function* () {
+        const key = normalizeRepoPath(repoPath)
+        const parent = scopes.get(key)
+        if (!parent) {
+          return yield* Effect.scoped(effect)
+        }
+        const child = yield* Scope.fork(parent, ExecutionStrategy.sequential)
+        return yield* Scope.extend(effect, child).pipe(
+          Effect.onExit((exit) => Scope.close(child, exit))
+        )
       }),
     requireGit: (repoPath) =>
       Effect.suspend(() => {
@@ -110,3 +138,8 @@ export const requireOpen = (repoPath: string): Effect.Effect<void, RepoNotOpen> 
 
 export const isCommitGraphTracked = (repoPath: string): boolean =>
   sessions.isCommitGraphTracked(repoPath)
+
+export const withSessionScope = <A, E>(
+  repoPath: string,
+  effect: Effect.Effect<A, E, Scope.Scope>
+): Effect.Effect<A, E> => sessions.withSessionScope(repoPath, effect)
