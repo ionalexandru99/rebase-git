@@ -1,7 +1,7 @@
 import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
 import { NonNaNNumber, RequiredString } from './codec'
-import { GitError, RepoNotOpen } from './git-rpc-errors'
+import { GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
 import {
   CommitSummarySchema,
   FileDiffSchema,
@@ -13,15 +13,66 @@ import {
 } from './schemas/git'
 import { StashEntrySchema } from './schemas/ipc'
 
-export { GitError, RepoNotOpen } from './git-rpc-errors'
+export { GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
 
 const ReadError = Schema.Union(RepoNotOpen, GitError)
 const CommitError = Schema.Union(RepoNotOpen, GitError)
+const StageError = Schema.Union(RepoNotOpen, GitError)
+const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)
+const FileList = Schema.Array(RequiredString)
 
 export const Commit = Rpc.make('commit', {
   payload: { repoPath: RequiredString, message: RequiredString },
   success: Schema.Struct({ result: CommitSummarySchema }),
   error: CommitError
+})
+
+export const StageFile = Rpc.make('stageFile', {
+  payload: { repoPath: RequiredString, file: RequiredString },
+  success: Schema.Void,
+  error: StageError
+})
+
+export const UnstageFile = Rpc.make('unstageFile', {
+  payload: { repoPath: RequiredString, file: RequiredString },
+  success: Schema.Void,
+  error: StageError
+})
+
+export const StageAll = Rpc.make('stageAll', {
+  payload: { repoPath: RequiredString, files: FileList },
+  success: Schema.Void,
+  error: StageError
+})
+
+export const UnstageAll = Rpc.make('unstageAll', {
+  payload: { repoPath: RequiredString, files: FileList },
+  success: Schema.Void,
+  error: StageError
+})
+
+export const StageHunk = Rpc.make('stageHunk', {
+  payload: { repoPath: RequiredString, file: RequiredString, hunkHeader: RequiredString },
+  success: Schema.Void,
+  error: HunkError
+})
+
+export const UnstageHunk = Rpc.make('unstageHunk', {
+  payload: { repoPath: RequiredString, file: RequiredString, hunkHeader: RequiredString },
+  success: Schema.Void,
+  error: HunkError
+})
+
+export const DiscardChanges = Rpc.make('discardChanges', {
+  payload: { repoPath: RequiredString, files: FileList },
+  success: Schema.Void,
+  error: StageError
+})
+
+export const DiscardAll = Rpc.make('discardAll', {
+  payload: { repoPath: RequiredString },
+  success: Schema.Void,
+  error: StageError
 })
 
 export const GetStatus = Rpc.make('getStatus', {
@@ -72,6 +123,14 @@ export const StashList = Rpc.make('stashList', {
 
 export const SidecarRpcs = RpcGroup.make(
   Commit,
+  StageFile,
+  UnstageFile,
+  StageAll,
+  UnstageAll,
+  StageHunk,
+  UnstageHunk,
+  DiscardChanges,
+  DiscardAll,
   GetStatus,
   GetBranches,
   GetLocalBranches,
@@ -95,10 +154,18 @@ export const rpcReadOps = {
 export type RpcReadOp = keyof typeof rpcReadOps
 export type RpcReadTag = (typeof rpcReadOps)[RpcReadOp]
 
-// The sidecar HTTP write ops (kebab-case) migrated off the `/op/{name}` transport onto the RPC
-// group, mapped to their RPC tag.
+// Write ops migrated off the `/op/{name}` transport onto the RPC group, keyed by the op string the
+// renderer sends over IPC (each op's RPC tag) and mapped to that same tag for dispatch.
 export const rpcWriteOps = {
-  commit: 'commit'
+  commit: 'commit',
+  stageFile: 'stageFile',
+  unstageFile: 'unstageFile',
+  stageAll: 'stageAll',
+  unstageAll: 'unstageAll',
+  stageHunk: 'stageHunk',
+  unstageHunk: 'unstageHunk',
+  discardChanges: 'discardChanges',
+  discardAll: 'discardAll'
 } as const
 
 export type RpcWriteOp = keyof typeof rpcWriteOps

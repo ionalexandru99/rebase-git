@@ -55,6 +55,18 @@ async function call(op: string, body: Record<string, unknown>): Promise<void> {
   }
 }
 
+async function stageFile(repoPath: string, file: string): Promise<void> {
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.stageFile({ repoPath, file }))
+    }).pipe(Effect.scoped, Effect.provide(protocolLayer()))
+  )
+  if (Either.isLeft(result)) {
+    throw new Error(`stage-file setup failed: ${JSON.stringify(result.left)}`)
+  }
+}
+
 beforeAll(async () => {
   repoPath = makeRepo()
   server = createSidecarServer(TOKEN)
@@ -105,7 +117,7 @@ describe('sidecar RPC read ops', () => {
 describe('sidecar RPC write ops', () => {
   it('commits an open repo and returns a typed CommitSummary over the /rpc transport', async () => {
     fs.writeFileSync(path.join(repoPath, 'rpc-commit.txt'), 'content\n')
-    await call('stage-file', { repoPath, file: 'rpc-commit.txt' })
+    await stageFile(repoPath, 'rpc-commit.txt')
     const program = Effect.gen(function* () {
       const client = yield* RpcClient.make(SidecarRpcs)
       return yield* Effect.either(client.commit({ repoPath, message: 'rpc write commit' }))

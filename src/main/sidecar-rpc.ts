@@ -12,6 +12,7 @@ type RpcResponse =
   | ({ _tag: 'Ok' } & Record<string, unknown>)
   | { _tag: 'RepoNotOpen' }
   | { _tag: 'GitError'; message: string }
+  | { _tag: 'HunkNotFound' }
 
 const makeRuntime = (baseUrl: string, token: string) => {
   const protocol = RpcClient.layerProtocolHttp({
@@ -94,6 +95,9 @@ export function classifyExit(
     const error = failure.value
     if (isTaggedError(error, 'RepoNotOpen')) {
       return { _tag: 'RepoNotOpen' }
+    }
+    if (isTaggedError(error, 'HunkNotFound')) {
+      return { _tag: 'HunkNotFound' }
     }
     const message = (error as { message?: unknown }).message
     if (isTaggedError(error, 'GitError') && typeof message === 'string') {

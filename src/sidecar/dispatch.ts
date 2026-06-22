@@ -103,36 +103,10 @@ const opHandlers: { [Op in DispatchOp]: OpHandler<Op> } = {
   [SidecarOp.getStatus]: {
     handle: ({ repoPath }) => operations.getStatus(repoPath)
   },
-  [SidecarOp.stageFile]: {
-    file: 'single',
-    handle: ({ repoPath, file }) => operations.stageFile(repoPath, file)
-  },
-  [SidecarOp.unstageFile]: {
-    file: 'single',
-    handle: ({ repoPath, file }) => operations.unstageFile(repoPath, file)
-  },
-  [SidecarOp.stageAll]: {
-    file: 'array',
-    handle: ({ repoPath, files }) => operations.stageAll(repoPath, files)
-  },
-  [SidecarOp.unstageAll]: {
-    file: 'array',
-    handle: ({ repoPath, files }) => operations.unstageAll(repoPath, files)
-  },
   [SidecarOp.getDiff]: {
     file: 'single',
     handle: ({ repoPath, file, request }) =>
       operations.getDiff(repoPath, file, request.staged === true)
-  },
-  [SidecarOp.stageHunk]: {
-    file: 'single',
-    handle: ({ repoPath, file, request }) =>
-      operations.stageHunk(repoPath, file, request.hunkHeader)
-  },
-  [SidecarOp.unstageHunk]: {
-    file: 'single',
-    handle: ({ repoPath, file, request }) =>
-      operations.unstageHunk(repoPath, file, request.hunkHeader)
   },
   [SidecarOp.fetchRepo]: {
     handle: ({ repoPath }) => operations.fetchRepo(repoPath)
@@ -212,13 +186,6 @@ const opHandlers: { [Op in DispatchOp]: OpHandler<Op> } = {
   },
   [SidecarOp.stashDrop]: {
     handle: ({ repoPath, request }) => operations.stashDrop(repoPath, request.index)
-  },
-  [SidecarOp.discardChanges]: {
-    file: 'array',
-    handle: ({ repoPath, files }) => operations.discardChanges(repoPath, files)
-  },
-  [SidecarOp.discardAll]: {
-    handle: ({ repoPath }) => operations.discardAll(repoPath)
   }
 }
 

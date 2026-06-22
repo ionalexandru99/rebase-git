@@ -17,11 +17,8 @@ import {
   RemoteRefsResponseSchema,
   ResetModeSchema,
   ScanForReposResponseSchema,
-  StageHunkResponseSchema,
-  StageResponseSchema,
   StashListResponseSchema,
-  StatusResponseSchema,
-  UnstageResponseSchema
+  StatusResponseSchema
 } from './schemas/ipc'
 import { SidecarOp, type SidecarOpName } from './sidecar-ops'
 
@@ -36,14 +33,6 @@ const GetDiffRequest = Schema.Struct({
   file: RequiredString,
   staged: OptionalFlag
 })
-
-const FileRequest = Schema.Struct({ repoPath: RequiredString, file: RequiredString })
-const HunkRequest = Schema.Struct({
-  repoPath: RequiredString,
-  file: RequiredString,
-  hunkHeader: RequiredString
-})
-const FilesRequest = Schema.Struct({ repoPath: RequiredString, files: FileList })
 
 const GetLogRequest = Schema.Struct({
   repoPath: RequiredString,
@@ -100,13 +89,7 @@ export const sidecarRegistry = {
   [SidecarOp.getLocalBranches]: { request: RepoOnly, response: LocalBranchesResponseSchema },
   [SidecarOp.getRemoteRefs]: { request: RepoOnly, response: RemoteRefsResponseSchema },
   [SidecarOp.getStatus]: { request: RepoOnly, response: StatusResponseSchema },
-  [SidecarOp.stageFile]: { request: FileRequest, response: StageResponseSchema },
-  [SidecarOp.unstageFile]: { request: FileRequest, response: UnstageResponseSchema },
-  [SidecarOp.stageAll]: { request: FilesRequest, response: StageResponseSchema },
-  [SidecarOp.unstageAll]: { request: FilesRequest, response: UnstageResponseSchema },
   [SidecarOp.getDiff]: { request: GetDiffRequest, response: GetDiffResponseSchema },
-  [SidecarOp.stageHunk]: { request: HunkRequest, response: StageHunkResponseSchema },
-  [SidecarOp.unstageHunk]: { request: HunkRequest, response: StageHunkResponseSchema },
   [SidecarOp.fetchRepo]: { request: RepoOnly, response: FetchResponseSchema },
   [SidecarOp.pushRepo]: { request: RepoOnly, response: PushResponseSchema },
   [SidecarOp.pullRepo]: { request: RepoOnly, response: PullResponseSchema },
@@ -132,8 +115,6 @@ export const sidecarRegistry = {
     response: ConflictableMutationResponseSchema
   },
   [SidecarOp.stashDrop]: { request: StashIndexRequest, response: GitMutationResponseSchema },
-  [SidecarOp.discardChanges]: { request: FilesRequest, response: GitMutationResponseSchema },
-  [SidecarOp.discardAll]: { request: RepoOnly, response: GitMutationResponseSchema },
   [SidecarOp.scanForRepos]: { request: ScanRequest, response: ScanForReposResponseSchema }
 }
 

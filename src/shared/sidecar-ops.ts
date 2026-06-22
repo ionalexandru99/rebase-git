@@ -5,13 +5,7 @@ export const SidecarOp = {
   getLocalBranches: 'get-local-branches',
   getRemoteRefs: 'get-remote-refs',
   getStatus: 'get-status',
-  stageFile: 'stage-file',
-  unstageFile: 'unstage-file',
-  stageAll: 'stage-all',
-  unstageAll: 'unstage-all',
   getDiff: 'get-diff',
-  stageHunk: 'stage-hunk',
-  unstageHunk: 'unstage-hunk',
   fetchRepo: 'fetch-repo',
   pushRepo: 'push-repo',
   pullRepo: 'pull-repo',
@@ -31,8 +25,6 @@ export const SidecarOp = {
   stashApply: 'stash-apply',
   stashPop: 'stash-pop',
   stashDrop: 'stash-drop',
-  discardChanges: 'discard-changes',
-  discardAll: 'discard-all',
   scanForRepos: 'scan-for-repos'
 } as const
 

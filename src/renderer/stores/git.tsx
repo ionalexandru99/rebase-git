@@ -8,7 +8,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { stashKey } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
-import { rpcCommit } from '@/lib/rpc-client'
+import {
+  rpcCommit,
+  rpcStageAll,
+  rpcStageFile,
+  rpcStageHunk,
+  rpcUnstageAll,
+  rpcUnstageFile,
+  rpcUnstageHunk
+} from '@/lib/rpc-client'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 
@@ -652,33 +660,33 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   const stageMutation = useMutation(
     statusMutationOptions<string>(
       (current, file) => applyStage(current, file),
-      (repoPath, file) => sidecarFetch('stage-file', { repoPath, file })
+      (repoPath, file) => rpcStageFile(repoPath, file)
     )
   )
 
   const unstageMutation = useMutation(
     statusMutationOptions<string>(
       (current, file) => applyUnstage(current, file),
-      (repoPath, file) => sidecarFetch('unstage-file', { repoPath, file })
+      (repoPath, file) => rpcUnstageFile(repoPath, file)
     )
   )
 
   const stageAllMutation = useMutation(
     statusMutationOptions<string[]>(
       (current, files) => files.reduce((next, file) => applyStage(next, file), current),
-      (repoPath, files) => sidecarFetch('stage-all', { repoPath, files })
+      (repoPath, files) => rpcStageAll(repoPath, files)
     )
   )
 
   const unstageAllMutation = useMutation(
     statusMutationOptions<string[]>(
       (current, files) => files.reduce((next, file) => applyUnstage(next, file), current),
-      (repoPath, files) => sidecarFetch('unstage-all', { repoPath, files })
+      (repoPath, files) => rpcUnstageAll(repoPath, files)
     )
   )
 
   interface HunkMutationVars {
-    op: typeof SidecarOp.stageHunk | typeof SidecarOp.unstageHunk
+    op: 'stage' | 'unstage'
     file: string
     hunkHeader: string
     options: HunkStageOptions
@@ -687,16 +695,18 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   const hunkMutation = useMutation(
     statusMutationOptions<HunkMutationVars>(
       (current, vars) => {
-        if (vars.op === SidecarOp.stageHunk && vars.options.fullyStagesFile) {
+        if (vars.op === 'stage' && vars.options.fullyStagesFile) {
           return applyStage(current, vars.file)
         }
-        if (vars.op === SidecarOp.unstageHunk && vars.options.fullyUnstagesFile) {
+        if (vars.op === 'unstage' && vars.options.fullyUnstagesFile) {
           return applyUnstage(current, vars.file)
         }
         return null
       },
       (repoPath, vars) =>
-        sidecarFetch(vars.op, { repoPath, file: vars.file, hunkHeader: vars.hunkHeader })
+        vars.op === 'stage'
+          ? rpcStageHunk(repoPath, vars.file, vars.hunkHeader)
+          : rpcUnstageHunk(repoPath, vars.file, vars.hunkHeader)
     )
   )
 
@@ -947,11 +957,11 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     unstageAll: (files: string[]) => unstageAllMutation.mutateAsync(files),
     stageHunk: (file: string, hunkHeader: string, options: HunkStageOptions = {}) =>
       hunkMutation
-        .mutateAsync({ op: SidecarOp.stageHunk, file, hunkHeader, options })
+        .mutateAsync({ op: 'stage', file, hunkHeader, options })
         .then((response) => response?._tag === 'Ok'),
     unstageHunk: (file: string, hunkHeader: string, options: HunkStageOptions = {}) =>
       hunkMutation
-        .mutateAsync({ op: SidecarOp.unstageHunk, file, hunkHeader, options })
+        .mutateAsync({ op: 'unstage', file, hunkHeader, options })
         .then((response) => response?._tag === 'Ok'),
     diffQueryKey: (file: string, staged: boolean) => {
       const repoPath = ui.repoPath
