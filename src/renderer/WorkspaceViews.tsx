@@ -12,6 +12,7 @@ import type { CommitAction, FileAction } from './lib/git-actions'
 import type { RefKind } from './lib/ref-tree'
 import { buildUnifiedFileRows } from './lib/status-file-rows'
 import type { GitStore } from './stores/git'
+import type { GitLogEntry } from './types'
 import { useWorkspaceContext } from './WorkspaceContext'
 
 const FILES_PANEL_WIDTH_MIN = 240
@@ -38,6 +39,7 @@ interface WorkspaceViewProps {
   repoPath: string | null
   remoteBranches: string[]
   visibleBranchRefs: ReadonlySet<string>
+  filteredCommits: GitLogEntry[]
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
   tabActive: boolean
@@ -240,6 +242,7 @@ function HistoryView(props: WorkspaceViewProps) {
         currentBranch={git.state.currentBranch}
         remoteBranches={props.remoteBranches}
         visibleBranchRefs={props.visibleBranchRefs}
+        filteredCommits={props.filteredCommits}
         onToggleTimelineVisibility={props.onToggleTimelineVisibility}
         onCommitAction={props.onCommitAction}
       />

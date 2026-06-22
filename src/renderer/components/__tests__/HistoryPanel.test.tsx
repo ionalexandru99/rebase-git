@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { refFilterKey } from '@/components/HistoryPanel/selectors'
+import { computeBranchFilterSet, refFilterKey } from '@/components/HistoryPanel/selectors'
 import { parseRefs } from '@/lib/git-graph/refs'
 import type { GitLog, GitLogEntry } from '@/types'
 import { HistoryPanel } from '../HistoryPanel'
@@ -15,10 +15,27 @@ interface PanelOptions {
   currentBranch?: string
 }
 
+function filterCommits(
+  log: GitLog | null,
+  visibleBranchRefs: ReadonlySet<string>,
+  remoteBranches: string[]
+): GitLogEntry[] {
+  const commits = log?.all ?? []
+  if (visibleBranchRefs.size === 0) {
+    return []
+  }
+  const reachable = computeBranchFilterSet(commits, visibleBranchRefs, remoteBranches, new Set())
+  if (!reachable) {
+    return []
+  }
+  return commits.filter((commit) => reachable.has(commit.hash))
+}
+
 function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
   const visibleBranchRefs =
     options.visibleBranchRefs ??
     new Set([refFilterKey('local', 'main'), refFilterKey('remote', 'origin/main')])
+  const remoteBranches = options.remoteBranches ?? ['origin/main']
 
   return render(
     <HistoryPanel
@@ -27,7 +44,8 @@ function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
       hasMore={options.hasMore}
       onLoadMore={options.onLoadMore}
       visibleBranchRefs={visibleBranchRefs}
-      remoteBranches={options.remoteBranches ?? ['origin/main']}
+      filteredCommits={filterCommits(log, visibleBranchRefs, remoteBranches)}
+      remoteBranches={remoteBranches}
       repoPath={options.repoPath}
       currentBranch={options.currentBranch}
     />

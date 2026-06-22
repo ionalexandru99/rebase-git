@@ -14,12 +14,7 @@ import { CommitRow } from './CommitRow'
 import { FocusRail } from './FocusRail'
 import { HistoryHeader } from './HistoryHeader'
 import { SkeletonRows } from './SkeletonRows'
-import {
-  computeBranchFilterSet,
-  computeOnBranchSet,
-  computeVisibleSet,
-  countVisibleBranchRefs
-} from './selectors'
+import { computeOnBranchSet, computeVisibleSet, countVisibleBranchRefs } from './selectors'
 
 interface HistoryPanelProps {
   log: GitLog | null
@@ -31,6 +26,7 @@ interface HistoryPanelProps {
   currentBranch?: string
   remoteBranches?: string[]
   visibleBranchRefs?: ReadonlySet<string>
+  filteredCommits?: GitLogEntry[]
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
   repoPath?: string | null
@@ -67,34 +63,18 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const allCommits = props.log?.all ?? EMPTY_COMMITS
   const visibleBranchRefs = props.visibleBranchRefs ?? EMPTY_REF_SET
   const remoteBranches = props.remoteBranches
+  const commits = props.filteredCommits ?? EMPTY_COMMITS
 
   const visibleBranchCount = useMemo(
     () => countVisibleBranchRefs(visibleBranchRefs, remoteBranches, remoteNames),
     [visibleBranchRefs, remoteBranches, remoteNames]
   )
 
-  const branchFilteredSet = useMemo(() => {
-    if (visibleBranchRefs.size === 0) {
-      return new Set<string>()
-    }
-    return (
-      computeBranchFilterSet(allCommits, visibleBranchRefs, remoteBranches, remoteNames) ??
-      new Set<string>()
-    )
-  }, [allCommits, visibleBranchRefs, remoteBranches, remoteNames])
-
   const currentBranch = props.currentBranch
   const onCurrentBranchSet = useMemo(
     () => computeOnBranchSet(allCommits, remoteNames, currentBranch),
     [allCommits, remoteNames, currentBranch]
   )
-
-  const commits = useMemo<GitLogEntry[]>(() => {
-    if (branchFilteredSet.size === 0) {
-      return EMPTY_COMMITS
-    }
-    return allCommits.filter((commit) => branchFilteredSet.has(commit.hash))
-  }, [allCommits, branchFilteredSet])
 
   const graphLayout = useGraphLayout({
     commits,
