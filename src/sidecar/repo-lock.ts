@@ -3,6 +3,7 @@ import { GitError } from './git-errors'
 
 const repoSemaphores = new Map<string, Effect.Semaphore>()
 const heldLocks = new Map<string, number>()
+const pendingReclaim = new Set<string>()
 
 const DEFAULT_LOCK_TIMEOUT_MS = 120_000
 
@@ -23,6 +24,9 @@ function unmarkHeld(repoPath: string): void {
   const next = (heldLocks.get(repoPath) ?? 0) - 1
   if (next <= 0) {
     heldLocks.delete(repoPath)
+    if (pendingReclaim.delete(repoPath)) {
+      repoSemaphores.delete(repoPath)
+    }
   } else {
     heldLocks.set(repoPath, next)
   }
@@ -69,12 +73,27 @@ export function repoLockCount(): number {
   return heldLocks.size
 }
 
+export function repoSemaphoreSize(): number {
+  return repoSemaphores.size
+}
+
 // Drop a repo's cached semaphore on close so the map doesn't grow unbounded over the process
-// lifetime. Skip while a lock is held: deleting a live semaphore would hand a concurrent acquirer a
-// fresh one and break mutual exclusion for the in-flight op.
+// lifetime. A mutation spared by close (ADR-0002) may still hold the lock; deleting its live
+// semaphore would hand a concurrent acquirer a fresh one and break mutual exclusion, so reclamation
+// is deferred — armed here and completed by unmarkHeld on the lock's release-on-completion path.
 export function releaseRepoSemaphore(repoPath: string): boolean {
   if (heldLocks.has(repoPath)) {
+    pendingReclaim.add(repoPath)
     return false
   }
+  pendingReclaim.delete(repoPath)
   return repoSemaphores.delete(repoPath)
+}
+
+// A reopened session re-takes ownership of the repo's semaphore: cancel any reclaim a previous
+// close deferred onto an in-flight mutation, so settling that mutation doesn't delete the live
+// session's semaphore and hand a concurrent acquirer a fresh one. The new session reclaims it on
+// its own close instead.
+export function retainRepoSemaphore(repoPath: string): void {
+  pendingReclaim.delete(repoPath)
 }

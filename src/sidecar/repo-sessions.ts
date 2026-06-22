@@ -4,7 +4,7 @@ import type { SimpleGit } from 'simple-git'
 import { releaseFetchSemaphore } from './fetch-semaphore'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { type GitError, gitError, NotARepo, RepoNotOpen } from './git-errors'
-import { releaseRepoSemaphore } from './repo-lock'
+import { releaseRepoSemaphore, retainRepoSemaphore } from './repo-lock'
 
 export interface RepoSessionsService {
   // Session creation only: get-or-create the instance, reject a non-repo, ensure the commit graph.
@@ -94,6 +94,7 @@ function makeRepoSessions(): RepoSessionsService {
           return yield* Effect.fail(new NotARepo())
         }
         if (!scopes.has(key)) {
+          retainRepoSemaphore(key)
           const scope = yield* Scope.make()
           yield* Scope.addFinalizer(
             scope,
