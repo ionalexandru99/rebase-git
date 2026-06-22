@@ -1,18 +1,13 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { toast } from 'sonner'
-import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import { useDialogs } from '@/components/ui/prompt-dialog'
+import { useTimelineVisibility } from '@/hooks/useTimelineVisibility'
 import {
   type BranchAction,
   type CommitAction,
   RESET_MODE_BY_ACTION,
   type StashAction
 } from '@/lib/git-actions'
-import {
-  defaultVisibleTimelineRefs,
-  effectiveVisibleTimelineRefs,
-  toggleVisibleTimelineRef
-} from '@/lib/timeline-visible-refs'
 import { Shell } from './components/shell/Shell'
 import type { WorkspaceView } from './components/shell/Topbar'
 import { useCheckoutRef } from './hooks/git/useCheckoutRef'
@@ -62,63 +57,13 @@ export function Workspace(props: WorkspaceProps) {
   const untrackedCount = git.state.status?.not_added.length ?? 0
   const totalChanges = modifiedCount + stagedCount + untrackedCount
   const [activeView, setActiveView] = useState<WorkspaceView>('history')
-  const [visibleTimelineRefs, setVisibleTimelineRefs] = useState<Set<string>>(new Set())
 
   const sidebarTags = git.state.branches?.tags ?? EMPTY_BRANCH_NAMES
   const sidebarTracking = git.state.branches?.tracking
   const localBranches = git.state.branches?.all ?? EMPTY_BRANCH_NAMES
   const remoteBranches = git.state.branches?.remotes ?? EMPTY_BRANCH_NAMES
 
-  const selectedTimelineRefs = visibleTimelineRefs
-  const { defaultBranch, currentBranch, remotes } = git.state
-  const timelineFilterRefs = useMemo(
-    () =>
-      effectiveVisibleTimelineRefs(
-        selectedTimelineRefs,
-        localBranches,
-        remoteBranches,
-        defaultBranch,
-        currentBranch,
-        new Set(Object.keys(remotes))
-      ),
-    [selectedTimelineRefs, localBranches, remoteBranches, defaultBranch, currentBranch, remotes]
-  )
-
-  useEffect(() => {
-    if (!repoPath) {
-      setVisibleTimelineRefs(new Set<string>())
-      return
-    }
-    setVisibleTimelineRefs(new Set<string>())
-  }, [repoPath])
-
-  useEffect(() => {
-    if (!repoPath) {
-      return
-    }
-    if (localBranches.length === 0) {
-      return
-    }
-    setVisibleTimelineRefs((prev) => {
-      if (prev.size > 0) {
-        return prev
-      }
-      return defaultVisibleTimelineRefs(
-        localBranches,
-        remoteBranches,
-        git.state.defaultBranch,
-        git.state.currentBranch,
-        new Set(Object.keys(git.state.remotes))
-      )
-    })
-  }, [
-    repoPath,
-    git.state.defaultBranch,
-    git.state.currentBranch,
-    git.state.remotes,
-    localBranches,
-    remoteBranches
-  ])
+  const timeline = useTimelineVisibility(git)
 
   const handleCheckoutRef = useCheckoutRef(repoPath, (repoPath) =>
     git.refreshAfterCheckout(repoPath)
@@ -251,24 +196,6 @@ export function Workspace(props: WorkspaceProps) {
     }
   }
 
-  const handleToggleTimelineVisibility = (refKind: RefKind, fullPath: string) => {
-    if (refKind === 'tag') {
-      return
-    }
-    const key = refFilterKey(refKind, fullPath)
-    setVisibleTimelineRefs((prev) =>
-      toggleVisibleTimelineRef(
-        prev,
-        key,
-        localBranches,
-        remoteBranches,
-        git.state.defaultBranch,
-        git.state.currentBranch,
-        new Set(Object.keys(git.state.remotes))
-      )
-    )
-  }
-
   return (
     <Shell
       repo={{
@@ -288,8 +215,8 @@ export function Workspace(props: WorkspaceProps) {
         stashes: stashList.stashes,
         branchesLoading: git.state.branchesLoading,
         tracking: sidebarTracking,
-        visibleTimelineRefs: timelineFilterRefs,
-        onToggleTimelineVisibility: handleToggleTimelineVisibility,
+        visibleTimelineRefs: timeline.visibleRefs,
+        onToggleTimelineVisibility: timeline.toggle,
         onCheckoutRef: handleCheckoutRef,
         onBranchAction: handleBranchAction,
         onStashAction: handleStashAction
@@ -313,8 +240,9 @@ export function Workspace(props: WorkspaceProps) {
             git={git}
             repoPath={repoPath}
             remoteBranches={remoteBranches}
-            visibleBranchRefs={timelineFilterRefs}
-            onToggleTimelineVisibility={handleToggleTimelineVisibility}
+            visibleBranchRefs={timeline.visibleRefs}
+            filteredCommits={timeline.filteredCommits}
+            onToggleTimelineVisibility={timeline.toggle}
             onCommitAction={handleCommitAction}
             tabActive={props.tabActive ?? true}
           />
