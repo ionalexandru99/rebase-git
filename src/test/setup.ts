@@ -79,12 +79,6 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
           case 'get-log':
             payload = await mock.getLog(repoPath)
             break
-          case 'stage-file':
-            payload = await mock.stageFile(repoPath, body.file as string)
-            break
-          case 'unstage-file':
-            payload = await mock.unstageFile(repoPath, body.file as string)
-            break
           case 'fetch-repo':
             payload = await mock.fetchRepo(repoPath)
             break
@@ -96,16 +90,6 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             break
           case 'get-diff':
             payload = await mock.getDiff(repoPath, body.file as string, body.staged === true)
-            break
-          case 'stage-hunk':
-            payload = await mock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
-            break
-          case 'unstage-hunk':
-            payload = await mock.unstageHunk(
-              repoPath,
-              body.file as string,
-              body.hunkHeader as string
-            )
             break
           case 'stash-list':
             payload = await mock.stashList(repoPath)
@@ -314,10 +298,21 @@ beforeEach(() => {
   })
   vi.mocked(window.electronAPI.setPersistedTabs).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.sidecarRequest).mockImplementation(async (op, body) => {
-    if (op === 'commit') {
-      return sidecarMock.commit(body.repoPath as string, body.message as string)
+    const repoPath = body.repoPath as string
+    switch (op) {
+      case 'commit':
+        return sidecarMock.commit(repoPath, body.message as string)
+      case 'stageFile':
+        return sidecarMock.stageFile(repoPath, body.file as string)
+      case 'unstageFile':
+        return sidecarMock.unstageFile(repoPath, body.file as string)
+      case 'stageHunk':
+        return sidecarMock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
+      case 'unstageHunk':
+        return sidecarMock.unstageHunk(repoPath, body.file as string, body.hunkHeader as string)
+      default:
+        return { _tag: 'Ok' }
     }
-    return { _tag: 'Ok' }
   })
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })

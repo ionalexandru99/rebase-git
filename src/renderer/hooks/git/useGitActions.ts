@@ -5,8 +5,14 @@ import {
 } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { toast } from 'sonner'
+import { rpcDiscardAll, rpcDiscardChanges } from '@/lib/rpc-client'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitStore } from '@/stores/git'
+
+type VoidWriteResult =
+  | { _tag: 'Ok' }
+  | { _tag: 'RepoNotOpen' }
+  | { _tag: 'GitError'; message: string }
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -76,6 +82,34 @@ export function useGitActions(git: GitStore) {
           description: 'Resolve the conflicted files, then commit or abort.'
         })
         return false
+      }
+      if (response._tag === 'GitError') {
+        toast.error(`${label} failed`, { description: response.message })
+      } else {
+        toast.error('Repository is not open')
+      }
+      return false
+    } catch (error) {
+      toast.error(`${label} failed`, { description: describe(error) })
+      return false
+    }
+  }
+
+  async function runVoidWrite(
+    call: (path: string) => Promise<VoidWriteResult>,
+    label: string
+  ): Promise<boolean> {
+    const path = repoPath
+    if (!path) {
+      toast.error('Repository is not open')
+      return false
+    }
+    try {
+      const response = await call(path)
+      if (response._tag === 'Ok') {
+        await git.refreshWorkingTree(path)
+        toast.success(label)
+        return true
       }
       if (response._tag === 'GitError') {
         toast.error(`${label} failed`, { description: response.message })
@@ -160,8 +194,8 @@ export function useGitActions(git: GitStore) {
     deleteTag: (name: string) =>
       mutate(SidecarOp.deleteTag, { name }, `Deleted tag ${name}`, refreshBranches),
     discardChanges: (files: string[], label: string) =>
-      mutate(SidecarOp.discardChanges, { files }, label, refreshWorkingTree),
-    discardAll: () => mutate(SidecarOp.discardAll, {}, 'Discarded all changes', refreshWorkingTree),
+      runVoidWrite((path) => rpcDiscardChanges(path, files), label),
+    discardAll: () => runVoidWrite((path) => rpcDiscardAll(path), 'Discarded all changes'),
     stashPush: (message?: string, includeUntracked?: boolean, files?: string[]) =>
       mutate(
         SidecarOp.stashPush,

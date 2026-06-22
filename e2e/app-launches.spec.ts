@@ -130,7 +130,7 @@ test.describe('Git GUI E2E', () => {
           }
         ).electronAPI
         const open = (await api.openRepo(repoPath)) as { _tag: string }
-        await api.sidecarRequest('stage-file', { repoPath, file: 'second.txt' })
+        await api.sidecarRequest('stageFile', { repoPath, file: 'second.txt' })
         const committed = (await api.sidecarRequest('commit', {
           repoPath,
           message: 'second from e2e'

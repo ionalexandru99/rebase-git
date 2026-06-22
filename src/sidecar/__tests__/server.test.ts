@@ -80,6 +80,33 @@ function rpcCommit(repoPath: string, message: string) {
   )
 }
 
+function rpcStageFile(repoPath: string, file: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.stageFile({ repoPath, file }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcStageAll(repoPath: string, files: string[]) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.stageAll({ repoPath, files }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcUnstageAll(repoPath: string, files: string[]) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.unstageAll({ repoPath, files }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
 beforeAll(async () => {
   repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sidecar-'))
   git(repoPath, ['init', '-b', 'main'])
@@ -162,9 +189,9 @@ describe('sidecar server', () => {
     expect(body.status.not_added).toContain('new.txt')
   })
 
-  it('stages (via /op), commits (via /rpc), and reflects in the log', async () => {
-    const staged = await (await call('stage-file', { repoPath, file: 'new.txt' })).json()
-    expect(staged._tag).toBe('Ok')
+  it('stages (via /rpc), commits (via /rpc), and reflects in the log', async () => {
+    const staged = await rpcStageFile(repoPath, 'new.txt')
+    expect(Either.isRight(staged)).toBe(true)
 
     const committed = await rpcCommit(repoPath, 'add new.txt')
     expect(Either.isRight(committed)).toBe(true)
@@ -181,18 +208,14 @@ describe('sidecar server', () => {
     fs.writeFileSync(path.join(repoPath, 'one.txt'), 'one\n')
     fs.writeFileSync(path.join(repoPath, 'two.txt'), 'two\n')
 
-    const staged = await (
-      await call('stage-all', { repoPath, files: ['one.txt', 'two.txt'] })
-    ).json()
-    expect(staged._tag).toBe('Ok')
+    const staged = await rpcStageAll(repoPath, ['one.txt', 'two.txt'])
+    expect(Either.isRight(staged)).toBe(true)
 
     const afterStage = await (await call('get-status', { repoPath })).json()
     expect(afterStage.status.staged).toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
 
-    const unstaged = await (
-      await call('unstage-all', { repoPath, files: ['one.txt', 'two.txt'] })
-    ).json()
-    expect(unstaged._tag).toBe('Ok')
+    const unstaged = await rpcUnstageAll(repoPath, ['one.txt', 'two.txt'])
+    expect(Either.isRight(unstaged)).toBe(true)
 
     const afterUnstage = await (await call('get-status', { repoPath })).json()
     expect(afterUnstage.status.staged).not.toEqual(expect.arrayContaining(['one.txt', 'two.txt']))

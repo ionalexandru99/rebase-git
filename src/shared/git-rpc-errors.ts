@@ -7,3 +7,4 @@ export class RepoNotOpen extends Schema.TaggedError<RepoNotOpen>()('RepoNotOpen'
 export class GitError extends Schema.TaggedError<GitError>()('GitError', {
   message: Schema.String
 }) {}
+export class HunkNotFound extends Schema.TaggedError<HunkNotFound>()('HunkNotFound', {}) {}

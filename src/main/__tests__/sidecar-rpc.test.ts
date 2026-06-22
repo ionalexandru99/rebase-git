@@ -1,4 +1,4 @@
-import { GitError, RepoNotOpen } from '@shared/rpc'
+import { GitError, HunkNotFound, RepoNotOpen } from '@shared/rpc'
 import { Exit } from 'effect'
 import { describe, expect, it, vi } from 'vitest'
 import { classifyExit, isRpcOp, isRpcReadOp, isRpcWriteOp, SidecarRpcError } from '../sidecar-rpc'
@@ -17,6 +17,14 @@ describe('RPC op classification', () => {
     expect(isRpcWriteOp('get-status')).toBe(false)
     expect(isRpcOp('get-status')).toBe(true)
     expect(isRpcOp('stage-file')).toBe(false)
+  })
+
+  it('routes the migrated staging ops through the write seam by their RPC tag', () => {
+    for (const tag of ['stageFile', 'unstageFile', 'stageAll', 'unstageAll', 'discardAll']) {
+      expect(isRpcWriteOp(tag)).toBe(true)
+      expect(isRpcReadOp(tag)).toBe(false)
+      expect(isRpcOp(tag)).toBe(true)
+    }
   })
 })
 
@@ -69,6 +77,11 @@ describe('classifyExit', () => {
   it('maps a typed RepoNotOpen failure onto the RepoNotOpen response', () => {
     const result = classifyExit('get-status', Exit.fail(new RepoNotOpen()), TOKEN)
     expect(result).toEqual({ _tag: 'RepoNotOpen' })
+  })
+
+  it('maps a typed HunkNotFound failure onto the HunkNotFound response', () => {
+    const result = classifyExit('stageHunk', Exit.fail(new HunkNotFound()), TOKEN)
+    expect(result).toEqual({ _tag: 'HunkNotFound' })
   })
 
   it('maps a typed GitError failure onto the GitError response', () => {
