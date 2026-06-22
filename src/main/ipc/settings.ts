@@ -1,4 +1,5 @@
 import { parseOrThrow } from '@shared/codec'
+import { type RpcWriteOp, rpcWriteOps } from '@shared/rpc'
 import {
   Channel,
   PersistedTabsSchema,
@@ -7,7 +8,7 @@ import {
 } from '@shared/schemas/ipc'
 import { SidecarOp, type SidecarOpName } from '@shared/sidecar-ops'
 import { ipcMain } from 'electron'
-import { sidecarRequest } from '../sidecar'
+import { sidecarRequest, sidecarRpcWrite } from '../sidecar'
 import {
   getPersistedTabs,
   getRefTreeToggles,
@@ -18,9 +19,14 @@ import {
 } from '../store'
 
 const sidecarOps = new Set<string>(Object.values(SidecarOp))
+const rpcWriteOpNames = new Set<string>(Object.keys(rpcWriteOps))
 
 function isSidecarOpName(value: unknown): value is SidecarOpName {
   return typeof value === 'string' && sidecarOps.has(value)
+}
+
+function isRpcWriteOpName(value: unknown): value is RpcWriteOp {
+  return typeof value === 'string' && rpcWriteOpNames.has(value)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -29,7 +35,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function register(): void {
   ipcMain.handle(Channel.sidecarRequest, (_event, op: unknown, body: unknown) => {
-    if (!isSidecarOpName(op) || !isRecord(body)) {
+    if (!isRecord(body)) {
+      throw new Error('invalid sidecar request')
+    }
+    if (isRpcWriteOpName(op)) {
+      return sidecarRpcWrite(op, body)
+    }
+    if (!isSidecarOpName(op)) {
       throw new Error('invalid sidecar request')
     }
     return sidecarRequest(op, body)

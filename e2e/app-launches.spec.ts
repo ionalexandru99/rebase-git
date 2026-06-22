@@ -119,6 +119,55 @@ test.describe('Git GUI E2E', () => {
     }
   })
 
+  test('commits through the typed RPC write seam end to end', async () => {
+    const repo = createFixtureRepo()
+    fs.writeFileSync(path.join(repo, 'second.txt'), 'second\n')
+    try {
+      const result = await page.evaluate(async (repoPath) => {
+        const api = (
+          window as unknown as {
+            electronAPI: Record<string, (...args: unknown[]) => Promise<unknown>>
+          }
+        ).electronAPI
+        const open = (await api.openRepo(repoPath)) as { _tag: string }
+        await api.sidecarRequest('stage-file', { repoPath, file: 'second.txt' })
+        const committed = (await api.sidecarRequest('commit', {
+          repoPath,
+          message: 'second from e2e'
+        })) as { _tag: string; result?: { commit?: string } }
+
+        const unopened = (await api.sidecarRequest('commit', {
+          repoPath: '/no/such/path/from/e2e',
+          message: 'never lands'
+        })) as { _tag: string }
+
+        return {
+          open: open._tag,
+          committedTag: committed._tag,
+          committedHash: committed.result?.commit ?? '',
+          unopenedTag: unopened._tag
+        }
+      }, repo)
+
+      expect(result.open).toBe('Ok')
+      expect(result.committedTag).toBe('Ok')
+      expect(result.committedHash).toBeTruthy()
+      expect(result.unopenedTag).toBe('GitError')
+    } finally {
+      await page
+        .evaluate(async (repoPath) => {
+          const api = (
+            window as unknown as {
+              electronAPI?: { closeRepo?: (path: string) => Promise<unknown> }
+            }
+          ).electronAPI
+          await api?.closeRepo?.(repoPath)
+        }, repo)
+        .catch(() => {})
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   test('restored repo renders branches and history in the UI', async () => {
     const repo = createFixtureRepo()
     try {

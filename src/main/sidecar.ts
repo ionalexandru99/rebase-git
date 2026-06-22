@@ -3,11 +3,12 @@ import { createServer } from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseOrThrow } from '@shared/codec'
+import type { RpcWriteOp } from '@shared/rpc'
 import { type LogChunk, LogChunkSchema } from '@shared/schemas/git'
 import type { SidecarOpName } from '@shared/sidecar-ops'
 import { type UtilityProcess, utilityProcess } from 'electron'
 import type { SidecarMessage } from '../sidecar/protocol'
-import { disposeRpcRuntime } from './sidecar-rpc'
+import { callRpc, disposeRpcRuntime } from './sidecar-rpc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const START_TIMEOUT_MS = 30_000
@@ -177,6 +178,16 @@ export async function sidecarRequest<T>(
     throw new Error(`sidecar ${op} failed with status ${response.status}`)
   }
   return (await response.json()) as T
+}
+
+// Routes a write op through the typed @effect/rpc seam. Domain failures come back as a tagged wire
+// value (decoded into a typed result by the renderer); transport/decode/defect/interrupt reject.
+export async function sidecarRpcWrite(
+  op: RpcWriteOp,
+  body: Record<string, unknown>
+): Promise<unknown> {
+  const { baseUrl, token } = await ensureSidecar()
+  return callRpc(op, baseUrl, token, body)
 }
 
 export interface LogStreamOptions {

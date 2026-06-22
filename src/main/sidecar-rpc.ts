@@ -1,9 +1,14 @@
 import { FetchHttpClient, HttpClient, HttpClientRequest } from '@effect/platform'
 import { RpcClient, RpcSerialization } from '@effect/rpc'
-import { type RpcReadOp, rpcReadOps, SidecarRpcs } from '@shared/rpc'
+import { type RpcReadOp, type RpcWriteOp, rpcReadOps, rpcWriteOps, SidecarRpcs } from '@shared/rpc'
 import { Cause, Effect, Exit, Layer, ManagedRuntime, Option } from 'effect'
 
-type ReadResponse =
+type RpcOp = RpcReadOp | RpcWriteOp
+const rpcTags: Record<string, string> = { ...rpcReadOps, ...rpcWriteOps }
+
+// The renderer↔main wire shape for an RPC op: the typed success/domain errors as data; every
+// infrastructure failure rejects the call instead (see callRpc / SidecarRpcError).
+type RpcResponse =
   | ({ _tag: 'Ok' } & Record<string, unknown>)
   | { _tag: 'RepoNotOpen' }
   | { _tag: 'GitError'; message: string }
@@ -47,6 +52,14 @@ export function isRpcReadOp(op: string): op is RpcReadOp {
   return op in rpcReadOps
 }
 
+export function isRpcWriteOp(op: string): op is RpcWriteOp {
+  return op in rpcWriteOps
+}
+
+export function isRpcOp(op: string): op is RpcOp {
+  return op in rpcTags
+}
+
 // Thrown for anything that is NOT a typed domain failure (transport error, RPC decode failure,
 // schema/contract drift, defect, interrupt). It rejects the IPC call so the renderer surfaces an
 // error rather than parsing it as a normal Git result, and carries no cause detail (which could
@@ -65,14 +78,14 @@ const scrubToken = (text: string, token: string): string =>
   token ? text.split(token).join('***') : text
 
 // Maps an RPC Exit back onto the legacy `_tag` response union — but ONLY for the typed domain
-// errors (`RepoNotOpen`, `GitError`) that the renderer's registry schemas validate. Every other
+// errors (`RepoNotOpen`, `GitError`) that the renderer's response schemas validate. Every other
 // cause throws `SidecarRpcError`: collapsing them into `{ _tag: 'GitError' }` would let the
 // renderer treat infrastructure/contract failures as ordinary Git errors.
-export function classifyReadExit(
+export function classifyExit(
   op: string,
   exit: Exit.Exit<unknown, unknown>,
   token: string
-): ReadResponse {
+): RpcResponse {
   if (Exit.isSuccess(exit)) {
     return { _tag: 'Ok', ...(exit.value as Record<string, unknown>) }
   }
@@ -91,16 +104,16 @@ export function classifyReadExit(
   throw new SidecarRpcError(op)
 }
 
-// Routes a read op through the sidecar's @effect/rpc group; see classifyReadExit for how the typed
-// RPC error channel maps back onto the renderer's `_tag` response union.
-export async function callRpcRead(
-  op: RpcReadOp,
+// Routes a read or write op through the sidecar's @effect/rpc group; see classifyExit for how the
+// typed RPC error channel maps back onto the renderer's `_tag` response union.
+export async function callRpc(
+  op: RpcOp,
   baseUrl: string,
   token: string,
   payload: Record<string, unknown>
-): Promise<ReadResponse> {
+): Promise<RpcResponse> {
   const runtime = runtimeFor(baseUrl, token)
-  const tag = rpcReadOps[op]
+  const tag = rpcTags[op]
   const exit = await runtime.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
@@ -112,5 +125,5 @@ export async function callRpcRead(
       })
     )
   )
-  return classifyReadExit(op, exit, token)
+  return classifyExit(op, exit, token)
 }

@@ -119,9 +119,6 @@ const opHandlers: { [Op in DispatchOp]: OpHandler<Op> } = {
     file: 'array',
     handle: ({ repoPath, files }) => operations.unstageAll(repoPath, files)
   },
-  [SidecarOp.commit]: {
-    handle: ({ repoPath, request }) => operations.commit(repoPath, request.message)
-  },
   [SidecarOp.getDiff]: {
     file: 'single',
     handle: ({ repoPath, file, request }) =>

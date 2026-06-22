@@ -1,7 +1,9 @@
 import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
 import { NonNaNNumber, RequiredString } from './codec'
+import { GitError, RepoNotOpen } from './git-rpc-errors'
 import {
+  CommitSummarySchema,
   FileDiffSchema,
   GitBranchesSchema,
   GitLogSchema,
@@ -11,14 +13,16 @@ import {
 } from './schemas/git'
 import { StashEntrySchema } from './schemas/ipc'
 
-// Tagged errors travel on the RPC error channel (separate from the success value) and serialize
-// with the same `_tag`s the renderer's registry response unions already discriminate on.
-export class RepoNotOpen extends Schema.TaggedError<RepoNotOpen>()('RepoNotOpen', {}) {}
-export class GitError extends Schema.TaggedError<GitError>()('GitError', {
-  message: Schema.String
-}) {}
+export { GitError, RepoNotOpen } from './git-rpc-errors'
 
 const ReadError = Schema.Union(RepoNotOpen, GitError)
+const CommitError = Schema.Union(RepoNotOpen, GitError)
+
+export const Commit = Rpc.make('commit', {
+  payload: { repoPath: RequiredString, message: RequiredString },
+  success: Schema.Struct({ result: CommitSummarySchema }),
+  error: CommitError
+})
 
 export const GetStatus = Rpc.make('getStatus', {
   payload: { repoPath: RequiredString },
@@ -67,6 +71,7 @@ export const StashList = Rpc.make('stashList', {
 })
 
 export const SidecarRpcs = RpcGroup.make(
+  Commit,
   GetStatus,
   GetBranches,
   GetLocalBranches,
@@ -89,3 +94,12 @@ export const rpcReadOps = {
 
 export type RpcReadOp = keyof typeof rpcReadOps
 export type RpcReadTag = (typeof rpcReadOps)[RpcReadOp]
+
+// The sidecar HTTP write ops (kebab-case) migrated off the `/op/{name}` transport onto the RPC
+// group, mapped to their RPC tag.
+export const rpcWriteOps = {
+  commit: 'commit'
+} as const
+
+export type RpcWriteOp = keyof typeof rpcWriteOps
+export type RpcWriteTag = (typeof rpcWriteOps)[RpcWriteOp]

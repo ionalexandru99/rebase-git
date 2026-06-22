@@ -101,3 +101,38 @@ describe('sidecar RPC read ops', () => {
     }
   })
 })
+
+describe('sidecar RPC write ops', () => {
+  it('commits an open repo and returns a typed CommitSummary over the /rpc transport', async () => {
+    fs.writeFileSync(path.join(repoPath, 'rpc-commit.txt'), 'content\n')
+    await call('stage-file', { repoPath, file: 'rpc-commit.txt' })
+    const program = Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.commit({ repoPath, message: 'rpc write commit' }))
+    }).pipe(Effect.scoped, Effect.provide(protocolLayer()))
+    const result = await Effect.runPromise(program)
+    expect(Either.isRight(result)).toBe(true)
+    if (Either.isRight(result)) {
+      expect(result.right.result.commit).toBeTruthy()
+      expect(result.right.result.summary.insertions).toBeGreaterThan(0)
+    }
+  })
+
+  it('flows a commit RepoNotOpen as a typed error, not a thrown string', async () => {
+    const unopened = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-commit-unopened-'))
+    git(unopened, ['init', '-b', 'main'])
+    try {
+      const program = Effect.gen(function* () {
+        const client = yield* RpcClient.make(SidecarRpcs)
+        return yield* Effect.either(client.commit({ repoPath: unopened, message: 'nope' }))
+      }).pipe(Effect.scoped, Effect.provide(protocolLayer()))
+      const result = await Effect.runPromise(program)
+      expect(Either.isLeft(result)).toBe(true)
+      if (Either.isLeft(result)) {
+        expect(result.left).toBeInstanceOf(RepoNotOpen)
+      }
+    } finally {
+      fs.rmSync(unopened, { recursive: true, force: true })
+    }
+  })
+})
