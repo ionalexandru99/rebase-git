@@ -2,13 +2,10 @@ import { Schema } from 'effect'
 import { NonNaNNumber, RequiredString } from './codec'
 import {
   BranchesResponseSchema,
-  CancelLogStreamResponseSchema,
   GetDiffResponseSchema,
   LocalBranchesResponseSchema,
   LogResponseSchema,
-  OpenRepoResponseSchema,
   RemoteRefsResponseSchema,
-  ScanForReposResponseSchema,
   StashListResponseSchema,
   StatusResponseSchema
 } from './schemas/ipc'
@@ -28,19 +25,15 @@ const GetLogRequest = Schema.Struct({
   repoPath: RequiredString,
   maxCount: Schema.optional(NonNaNNumber)
 })
-const ScanRequest = Schema.Struct({ dirPath: RequiredString })
 
 export const sidecarRegistry = {
-  [SidecarOp.openRepo]: { request: RepoOnly, response: OpenRepoResponseSchema },
-  [SidecarOp.closeRepo]: { request: RepoOnly, response: CancelLogStreamResponseSchema },
   [SidecarOp.getBranches]: { request: RepoOnly, response: BranchesResponseSchema },
   [SidecarOp.getLocalBranches]: { request: RepoOnly, response: LocalBranchesResponseSchema },
   [SidecarOp.getRemoteRefs]: { request: RepoOnly, response: RemoteRefsResponseSchema },
   [SidecarOp.getStatus]: { request: RepoOnly, response: StatusResponseSchema },
   [SidecarOp.getDiff]: { request: GetDiffRequest, response: GetDiffResponseSchema },
   [SidecarOp.getLog]: { request: GetLogRequest, response: LogResponseSchema },
-  [SidecarOp.stashList]: { request: RepoOnly, response: StashListResponseSchema },
-  [SidecarOp.scanForRepos]: { request: ScanRequest, response: ScanForReposResponseSchema }
+  [SidecarOp.stashList]: { request: RepoOnly, response: StashListResponseSchema }
 }
 
 type AssertEqual<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false

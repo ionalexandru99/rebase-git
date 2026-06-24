@@ -11,6 +11,7 @@ const rpcTags: Record<string, string> = { ...rpcReadOps, ...rpcWriteOps }
 type RpcResponse =
   | ({ _tag: 'Ok' } & Record<string, unknown>)
   | { _tag: 'RepoNotOpen' }
+  | { _tag: 'NotARepo' }
   | { _tag: 'GitError'; message: string }
   | { _tag: 'HunkNotFound' }
   | { _tag: 'FetchSkipped' }
@@ -98,6 +99,9 @@ export function classifyExit(
     if (isTaggedError(error, 'RepoNotOpen')) {
       return { _tag: 'RepoNotOpen' }
     }
+    if (isTaggedError(error, 'NotARepo')) {
+      return { _tag: 'NotARepo' }
+    }
     if (isTaggedError(error, 'HunkNotFound')) {
       return { _tag: 'HunkNotFound' }
     }
@@ -116,16 +120,13 @@ export function classifyExit(
   throw new SidecarRpcError(op)
 }
 
-// Routes a read or write op through the sidecar's @effect/rpc group; see classifyExit for how the
-// typed RPC error channel maps back onto the renderer's `_tag` response union.
-export async function callRpc(
-  op: RpcOp,
+async function runRpcTag(
+  tag: string,
   baseUrl: string,
   token: string,
   payload: Record<string, unknown>
 ): Promise<RpcResponse> {
   const runtime = runtimeFor(baseUrl, token)
-  const tag = rpcTags[op]
   const exit = await runtime.runPromiseExit(
     Effect.scoped(
       Effect.gen(function* () {
@@ -137,5 +138,28 @@ export async function callRpc(
       })
     )
   )
-  return classifyExit(op, exit, token)
+  return classifyExit(tag, exit, token)
+}
+
+// Routes a read or write op through the sidecar's @effect/rpc group; see classifyExit for how the
+// typed RPC error channel maps back onto the renderer's `_tag` response union.
+export async function callRpc(
+  op: RpcOp,
+  baseUrl: string,
+  token: string,
+  payload: Record<string, unknown>
+): Promise<RpcResponse> {
+  return runRpcTag(rpcTags[op], baseUrl, token, payload)
+}
+
+// Invokes an RPC op by its tag directly, for main's dedicated IPC channels (open/close/scan) that
+// sequence main-process side effects around the typed call and so don't route through the generic
+// renderer `sidecarRequest` write path.
+export async function callRpcByTag(
+  tag: string,
+  baseUrl: string,
+  token: string,
+  payload: Record<string, unknown>
+): Promise<RpcResponse> {
+  return runRpcTag(tag, baseUrl, token, payload)
 }

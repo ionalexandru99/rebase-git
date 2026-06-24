@@ -1,7 +1,14 @@
 import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
 import { NonNaNNumber, RequiredString } from './codec'
-import { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
+import {
+  Conflict,
+  FetchSkipped,
+  GitError,
+  HunkNotFound,
+  NotARepo,
+  RepoNotOpen
+} from './git-rpc-errors'
 import {
   CommitSummarySchema,
   FileDiffSchema,
@@ -9,11 +16,19 @@ import {
   GitLogSchema,
   GitStatusSchema,
   LocalBranchesSchema,
-  RemoteRefsSchema
+  RemoteRefsSchema,
+  RepoOpenSuccessSchema
 } from './schemas/git'
 import { RefKindSchema, ResetModeSchema, StashEntrySchema } from './schemas/ipc'
 
-export { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
+export {
+  Conflict,
+  FetchSkipped,
+  GitError,
+  HunkNotFound,
+  NotARepo,
+  RepoNotOpen
+} from './git-rpc-errors'
 
 const ReadError = Schema.Union(RepoNotOpen, GitError)
 const CommitError = Schema.Union(RepoNotOpen, GitError)
@@ -22,8 +37,30 @@ const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)
 const ConflictableError = Schema.Union(RepoNotOpen, GitError, Conflict)
 const RefWriteError = Schema.Union(RepoNotOpen, GitError)
 const FetchError = Schema.Union(RepoNotOpen, GitError, FetchSkipped)
+const OpenError = Schema.Union(NotARepo, GitError)
+const ScanError = Schema.Union(GitError)
 const OptionalString = Schema.optional(RequiredString)
 const FileList = Schema.Array(RequiredString)
+
+export const OpenRepo = Rpc.make('openRepo', {
+  payload: { repoPath: RequiredString },
+  success: Schema.Struct({ result: RepoOpenSuccessSchema }),
+  error: OpenError
+})
+
+// closeRepo is idempotent and never fails (operations.closeRepo returns Effect<void>), so the error
+// channel is Schema.Never — the handler has no failure to produce.
+export const CloseRepo = Rpc.make('closeRepo', {
+  payload: { repoPath: RequiredString },
+  success: Schema.Void,
+  error: Schema.Never
+})
+
+export const ScanForRepos = Rpc.make('scanForRepos', {
+  payload: { dirPath: RequiredString },
+  success: Schema.Struct({ repos: Schema.Array(RequiredString) }),
+  error: ScanError
+})
 
 export const Commit = Rpc.make('commit', {
   payload: { repoPath: RequiredString, message: RequiredString },
@@ -247,6 +284,9 @@ export const StashList = Rpc.make('stashList', {
 })
 
 export const SidecarRpcs = RpcGroup.make(
+  OpenRepo,
+  CloseRepo,
+  ScanForRepos,
   Commit,
   StageFile,
   UnstageFile,

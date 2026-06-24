@@ -8,7 +8,7 @@ import { type LogChunk, LogChunkSchema } from '@shared/schemas/git'
 import type { SidecarOpName } from '@shared/sidecar-ops'
 import { type UtilityProcess, utilityProcess } from 'electron'
 import type { SidecarMessage } from '../sidecar/protocol'
-import { callRpc, disposeRpcRuntime } from './sidecar-rpc'
+import { callRpc, callRpcByTag, disposeRpcRuntime } from './sidecar-rpc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const START_TIMEOUT_MS = 30_000
@@ -188,6 +188,17 @@ export async function sidecarRpcWrite(
 ): Promise<unknown> {
   const { baseUrl, token } = await ensureSidecar()
   return callRpc(op, baseUrl, token, body)
+}
+
+// Invokes an RPC op by tag through the typed seam, for the dedicated open/close/scan channels that
+// sequence main-process side effects around the call. Returns the tagged wire value (or rejects on
+// transport/decode/defect), letting the channel handler inspect `_tag` before its side effects run.
+export async function sidecarRpcCall(
+  tag: string,
+  body: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const { baseUrl, token } = await ensureSidecar()
+  return callRpcByTag(tag, baseUrl, token, body)
 }
 
 export interface LogStreamOptions {

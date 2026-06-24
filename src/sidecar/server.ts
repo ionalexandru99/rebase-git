@@ -1,18 +1,11 @@
 import { timingSafeEqual } from 'node:crypto'
-import fs from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import os from 'node:os'
-import path from 'node:path'
 import { Readable } from 'node:stream'
-import { parseOrThrow } from '@shared/codec'
-import { type ScanForReposResponse, ScanForReposResponseSchema } from '@shared/schemas/ipc'
 import { LogStreamRequestSchema } from '@shared/schemas/log-stream'
 import { Either, Schema } from 'effect'
-import { simpleGit } from 'simple-git'
 import { BAD_REQUEST, dispatch } from './dispatch'
 import { streamGitLog } from './log-stream'
 import { resolveExistingRepoRoot } from './path-guards'
-import { SidecarOp } from './protocol'
 import { handleRpcRequest } from './rpc-handlers'
 
 type Body = Record<string, unknown>
@@ -41,78 +34,6 @@ function safeRepoPath(body: Body): string | null | typeof BAD_REQUEST {
     return BAD_REQUEST
   }
   return resolveExistingRepoRoot(raw)
-}
-
-const invalidScanDirectoryResponse = (): ScanForReposResponse =>
-  parseOrThrow(ScanForReposResponseSchema, {
-    _tag: 'GitError',
-    message: 'invalid directory path'
-  })
-
-async function scanForReposSafely(requestedDirPath: string): Promise<ScanForReposResponse> {
-  if (!requestedDirPath || requestedDirPath.includes('\0')) {
-    return invalidScanDirectoryResponse()
-  }
-  if (!path.isAbsolute(requestedDirPath)) {
-    return invalidScanDirectoryResponse()
-  }
-  if (requestedDirPath.split(/[/\\]/).includes('..')) {
-    return invalidScanDirectoryResponse()
-  }
-
-  let scanRoot: string
-  let homeRoot: string
-  try {
-    scanRoot = fs.realpathSync.native(path.resolve(requestedDirPath))
-    if (!fs.statSync(scanRoot).isDirectory()) {
-      return invalidScanDirectoryResponse()
-    }
-    homeRoot = fs.realpathSync.native(os.homedir())
-  } catch {
-    return invalidScanDirectoryResponse()
-  }
-
-  const resolvedPath = path.resolve(requestedDirPath)
-  const scanRootPrefix = scanRoot.endsWith(path.sep) ? scanRoot : `${scanRoot}${path.sep}`
-  if (resolvedPath !== scanRoot && !resolvedPath.startsWith(scanRootPrefix)) {
-    return invalidScanDirectoryResponse()
-  }
-
-  // Confine scanning to the user's home tree so a forged request can't enumerate directories
-  // outside it. The canonical scanRoot is compared against the realpath'd home root.
-  const homePrefix = homeRoot.endsWith(path.sep) ? homeRoot : `${homeRoot}${path.sep}`
-  if (scanRoot !== homeRoot && !scanRoot.startsWith(homePrefix)) {
-    return invalidScanDirectoryResponse()
-  }
-
-  try {
-    const entries = await fs.promises.readdir(scanRoot, { withFileTypes: true })
-    const repos: string[] = []
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue
-      }
-      const childName = path.basename(entry.name)
-      if (childName !== entry.name) {
-        continue
-      }
-      const childPath = path.join(scanRoot, childName)
-      if (!childPath.startsWith(scanRootPrefix)) {
-        continue
-      }
-      try {
-        const git = simpleGit(childPath)
-        const isRepo = await git.checkIsRepo()
-        if (isRepo) {
-          repos.push(childPath)
-        }
-      } catch {}
-    }
-    return parseOrThrow(ScanForReposResponseSchema, { _tag: 'Ok', repos })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return parseOrThrow(ScanForReposResponseSchema, { _tag: 'GitError', message })
-  }
 }
 
 function readRawBody(req: IncomingMessage): Promise<string> {
@@ -257,16 +178,6 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
   try {
     const body = await readBody(req)
     const operation = match[1]
-    if (operation === SidecarOp.scanForRepos) {
-      const dirPath = requiredString(body, 'dirPath')
-      if (!dirPath) {
-        sendJson(res, 400, { error: 'bad request' })
-        return
-      }
-      const result = await scanForReposSafely(dirPath)
-      sendJson(res, 200, result)
-      return
-    }
     const result = await dispatch(operation, body)
     if (result === BAD_REQUEST) {
       sendJson(res, 400, { error: 'bad request' })

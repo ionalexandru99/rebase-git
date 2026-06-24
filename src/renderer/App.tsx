@@ -1,5 +1,6 @@
 import type { PersistedTabs } from '@shared/schemas/ipc'
 import { useEffect, useMemo, useState } from 'react'
+import { rpcOpenRepo } from '@/lib/rpc-client'
 import { OnboardingScreen } from './components/OnboardingScreen'
 import { RepoRail } from './components/shell/RepoRail'
 import { Titlebar } from './components/shell/Titlebar'
@@ -45,7 +46,7 @@ export default function App() {
         onOpenRepo={async (path) => {
           try {
             await onboarding.completeOnboarding()
-            await window.electronAPI.openRepo(path)
+            await rpcOpenRepo(path)
           } catch (error) {
             console.error('[onboarding] openRepo failed', { path, error })
           }

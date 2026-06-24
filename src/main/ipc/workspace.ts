@@ -1,7 +1,8 @@
-import { Channel, type ScanForReposResponse } from '@shared/schemas/ipc'
+import { parseOrThrow } from '@shared/codec'
+import { ScanForRepos } from '@shared/rpc'
+import { Channel, ScanForReposResponseSchema } from '@shared/schemas/ipc'
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
-import { SidecarOp } from '../../sidecar/protocol'
-import { sidecarRequest } from '../sidecar'
+import { sidecarRpcCall } from '../sidecar'
 import {
   addWorkspace,
   getActiveWorkspace,
@@ -39,7 +40,7 @@ export function register(getMainWindow: () => BrowserWindow | null): void {
     setOnboardingComplete(complete)
   )
 
-  ipcMain.handle(Channel.scanForRepos, (_, dirPath: string) =>
-    sidecarRequest<ScanForReposResponse>(SidecarOp.scanForRepos, { dirPath })
+  ipcMain.handle(Channel.scanForRepos, async (_, dirPath: string) =>
+    parseOrThrow(ScanForReposResponseSchema, await sidecarRpcCall(ScanForRepos._tag, { dirPath }))
   )
 }

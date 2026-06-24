@@ -15,12 +15,15 @@ import {
   GitError,
   HunkNotFound,
   MergeBranch,
+  NotARepo,
+  OpenRepo,
   Pull,
   Push,
   RenameBranch,
   RepoNotOpen,
   Reset,
   RevertCommit,
+  ScanForRepos,
   StageAll,
   StageFile,
   StageHunk,
@@ -41,6 +44,20 @@ import { Schema } from 'effect'
 const CommitResult = Schema.Union(
   Schema.Struct({ _tag: Schema.Literal('Ok') }).pipe(Schema.extend(Commit.successSchema)),
   RepoNotOpen,
+  GitError
+)
+
+// open/close/scan reach the sidecar through their own main-process channels (not sidecarRequest)
+// because main sequences the file watcher + recent-repo store around the call, but the renderer's
+// result is still the op's contract: open's `Ok` carries the open result and routes `NotARepo`;
+// scan's `Ok` carries the repo list; close is the bare `Ok` tag (the op is infallible).
+const OpenRepoResult = Schema.Union(
+  Schema.Struct({ _tag: Schema.Literal('Ok') }).pipe(Schema.extend(OpenRepo.successSchema)),
+  NotARepo,
+  GitError
+)
+const ScanForReposResult = Schema.Union(
+  Schema.Struct({ _tag: Schema.Literal('Ok') }).pipe(Schema.extend(ScanForRepos.successSchema)),
   GitError
 )
 
@@ -94,12 +111,26 @@ const FetchResult = Schema.Union(
 
 export type CommitPayload = typeof Commit.payloadSchema.Type
 export type CommitResult = typeof CommitResult.Type
+export type OpenRepoResult = typeof OpenRepoResult.Type
+export type ScanForReposResult = typeof ScanForReposResult.Type
 export type StageResult = typeof StageResult.Type
 export type HunkResult = typeof HunkResult.Type
 export type ConflictableResult = typeof ConflictableResult.Type
 export type RefWriteResult = typeof RefWriteResult.Type
 export type CheckoutResult = typeof CheckoutResult.Type
 export type FetchResult = typeof FetchResult.Type
+
+export async function rpcOpenRepo(repoPath: string): Promise<OpenRepoResult> {
+  return parseOrThrow(OpenRepoResult, await window.electronAPI.openRepo(repoPath))
+}
+
+export async function rpcCloseRepo(repoPath: string): Promise<void> {
+  await window.electronAPI.closeRepo(repoPath)
+}
+
+export async function rpcScanForRepos(dirPath: string): Promise<ScanForReposResult> {
+  return parseOrThrow(ScanForReposResult, await window.electronAPI.scanForRepos(dirPath))
+}
 
 export async function rpcCommit(repoPath: string, message: string): Promise<CommitResult> {
   const payload = await window.electronAPI.sidecarRequest(Commit._tag, { repoPath, message })

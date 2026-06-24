@@ -1,14 +1,18 @@
+import { parseOrThrow } from '@shared/codec'
 import { normalizeRepoPath } from '@shared/repo-path'
-import { Channel, type OpenRepoResponse } from '@shared/schemas/ipc'
+import { CloseRepo, OpenRepo } from '@shared/rpc'
+import { Channel, OpenRepoResponseSchema } from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
-import { SidecarOp } from '../../sidecar/protocol'
 import { startWatching, stopWatching } from '../repoWatcher'
-import { sidecarRequest } from '../sidecar'
+import { sidecarRpcCall } from '../sidecar'
 import { addRecentRepo } from '../store'
 
 export function register(): void {
   ipcMain.handle(Channel.openRepo, async (event, repoPath: string) => {
-    const response = await sidecarRequest<OpenRepoResponse>(SidecarOp.openRepo, { repoPath })
+    const response = parseOrThrow(
+      OpenRepoResponseSchema,
+      await sidecarRpcCall(OpenRepo._tag, { repoPath })
+    )
     if (response._tag === 'Ok') {
       addRecentRepo(response.result.path)
       startWatching(response.result.path, event.sender, {
@@ -21,7 +25,7 @@ export function register(): void {
 
   ipcMain.handle(Channel.closeRepo, async (event, repoPath: string) => {
     try {
-      await sidecarRequest(SidecarOp.closeRepo, { repoPath })
+      await sidecarRpcCall(CloseRepo._tag, { repoPath })
     } finally {
       await stopWatching(normalizeRepoPath(repoPath), event.sender.id)
     }

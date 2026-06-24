@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import nodePath from 'node:path'
 import { Etag, FileSystem, HttpPlatform, Path } from '@effect/platform'
 import { RpcSerialization, RpcServer } from '@effect/rpc'
 import {
@@ -5,15 +8,26 @@ import {
   FetchSkipped as RpcFetchSkipped,
   GitError as RpcGitError,
   HunkNotFound as RpcHunkNotFound,
+  NotARepo as RpcNotARepo,
   RepoNotOpen as RpcRepoNotOpen,
   SidecarRpcs
 } from '@shared/rpc'
 import { Effect, Layer } from 'effect'
-import type { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from './git-errors'
+import { simpleGit } from 'simple-git'
+import { normalizeRepoPath } from './git/instances'
+import type {
+  Conflict,
+  FetchSkipped,
+  GitError,
+  HunkNotFound,
+  NotARepo,
+  RepoNotOpen
+} from './git-errors'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 
 const INVALID_REPO_PATH = 'invalid repository path'
+const INVALID_DIRECTORY_PATH = 'invalid directory path'
 
 const resolveRepo = (repoPath: string): Effect.Effect<string, RpcGitError> =>
   Effect.suspend(() => {
@@ -67,7 +81,99 @@ const toFetchError = (
 ): RpcRepoNotOpen | RpcGitError | RpcFetchSkipped =>
   error._tag === 'FetchSkipped' ? new RpcFetchSkipped() : toReadError(error)
 
+// openRepo's own failure surface: a non-repository target becomes the typed NotARepo outcome (which
+// the renderer routes to its "not a git repository" path), every other failure a GitError.
+const toOpenError = (error: NotARepo | GitError): RpcNotARepo | RpcGitError =>
+  error._tag === 'NotARepo' ? new RpcNotARepo() : new RpcGitError({ message: error.message })
+
+// scanForRepos confines enumeration to the user's home tree. The guard mirrors the previous
+// scanForReposSafely: absolute, no `..`/NUL, realpath must be a directory under the realpath'd home
+// root. Any violation fails with the typed GitError('invalid directory path').
+const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], RpcGitError> =>
+  Effect.tryPromise({
+    try: async () => {
+      if (!requestedDirPath || requestedDirPath.includes('\0')) {
+        throw new Error(INVALID_DIRECTORY_PATH)
+      }
+      if (!nodePath.isAbsolute(requestedDirPath)) {
+        throw new Error(INVALID_DIRECTORY_PATH)
+      }
+      if (requestedDirPath.split(/[/\\]/).includes('..')) {
+        throw new Error(INVALID_DIRECTORY_PATH)
+      }
+
+      let scanRoot: string
+      let homeRoot: string
+      try {
+        scanRoot = fs.realpathSync.native(nodePath.resolve(requestedDirPath))
+        if (!fs.statSync(scanRoot).isDirectory()) {
+          throw new Error(INVALID_DIRECTORY_PATH)
+        }
+        homeRoot = fs.realpathSync.native(os.homedir())
+      } catch {
+        throw new Error(INVALID_DIRECTORY_PATH)
+      }
+
+      const resolvedPath = nodePath.resolve(requestedDirPath)
+      const scanRootPrefix = scanRoot.endsWith(nodePath.sep)
+        ? scanRoot
+        : `${scanRoot}${nodePath.sep}`
+      if (resolvedPath !== scanRoot && !resolvedPath.startsWith(scanRootPrefix)) {
+        throw new Error(INVALID_DIRECTORY_PATH)
+      }
+
+      const homePrefix = homeRoot.endsWith(nodePath.sep) ? homeRoot : `${homeRoot}${nodePath.sep}`
+      if (scanRoot !== homeRoot && !scanRoot.startsWith(homePrefix)) {
+        throw new Error(INVALID_DIRECTORY_PATH)
+      }
+
+      const entries = await fs.promises.readdir(scanRoot, { withFileTypes: true })
+      const repos: string[] = []
+      for (const entry of entries) {
+        if (!entry.isDirectory()) {
+          continue
+        }
+        const childName = nodePath.basename(entry.name)
+        if (childName !== entry.name) {
+          continue
+        }
+        const childPath = nodePath.join(scanRoot, childName)
+        if (!childPath.startsWith(scanRootPrefix)) {
+          continue
+        }
+        try {
+          const isRepo = await simpleGit(childPath).checkIsRepo()
+          if (isRepo) {
+            repos.push(childPath)
+          }
+        } catch {}
+      }
+      return repos
+    },
+    catch: (error) =>
+      new RpcGitError({ message: error instanceof Error ? error.message : String(error) })
+  })
+
 export const handlersLayer = SidecarRpcs.toLayer({
+  // openRepo resolves the path to an existing directory first (a non-existent/unsafe path is a
+  // GitError, and simple-git would otherwise throw a defect on a missing dir). It must NOT, however,
+  // pre-filter a non-repo into GitError the way resolveRepo does: for an existing-but-not-a-repo dir
+  // openSession fails with the internal NotARepo, which toOpenError surfaces as the typed NotARepo.
+  openRepo: ({ repoPath }) =>
+    Effect.suspend(() => {
+      const resolved = resolveExistingRepoRoot(repoPath)
+      if (!resolved) {
+        return Effect.fail(new RpcGitError({ message: INVALID_REPO_PATH }))
+      }
+      return operations.openRepo(resolved).pipe(Effect.mapError(toOpenError))
+    }),
+  closeRepo: ({ repoPath }) =>
+    Effect.suspend(() => {
+      const resolved = resolveExistingRepoRoot(repoPath)
+      return operations.closeRepo(resolved ?? normalizeRepoPath(repoPath))
+    }),
+  scanForRepos: ({ dirPath }) =>
+    scanForReposGuarded(dirPath).pipe(Effect.map((repos) => ({ repos }))),
   commit: ({ repoPath, message }) =>
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>

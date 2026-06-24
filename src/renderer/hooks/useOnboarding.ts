@@ -1,6 +1,5 @@
-import { parseOrThrow } from '@shared/codec'
-import { ScanForReposResponseSchema } from '@shared/schemas/ipc'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { rpcScanForRepos } from '@/lib/rpc-client'
 
 export interface OnboardingStore {
   onboardingComplete: boolean | null
@@ -37,10 +36,7 @@ export function useOnboarding(): OnboardingStore {
     setLoading(true)
     setError(null)
     try {
-      const decoded = parseOrThrow(
-        ScanForReposResponseSchema,
-        await window.electronAPI.scanForRepos(path)
-      )
+      const decoded = await rpcScanForRepos(path)
       if (generation !== scanGeneration.current) {
         return
       }

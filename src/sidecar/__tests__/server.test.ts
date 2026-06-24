@@ -126,6 +126,18 @@ function rpcPull(repoPath: string) {
   )
 }
 
+async function rpcOpenRepo(repoPath: string): Promise<void> {
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.openRepo({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+  if (Either.isLeft(result)) {
+    throw new Error(`open-repo setup failed: ${JSON.stringify(result.left)}`)
+  }
+}
+
 beforeAll(async () => {
   repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sidecar-'))
   git(repoPath, ['init', '-b', 'main'])
@@ -139,6 +151,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address() as AddressInfo
   baseUrl = `http://127.0.0.1:${port}`
+  await rpcOpenRepo(repoPath)
 })
 
 afterAll(async () => {
@@ -162,34 +175,6 @@ describe('sidecar server', () => {
   it('rejects op requests without a valid token', async () => {
     const response = await call('get-status', { repoPath }, 'wrong')
     expect(response.status).toBe(401)
-  })
-
-  it('opens a repo and reports the default branch', async () => {
-    const response = await call('open-repo', { repoPath })
-    const body = await response.json()
-    expect(body._tag).toBe('Ok')
-    expect(body.result.path).toContain(path.basename(repoPath))
-  })
-
-  it('scans a directory inside home and finds nested git repos', async () => {
-    const scanDir = fs.mkdtempSync(path.join(os.homedir(), '.rebase-scan-test-'))
-    try {
-      const nestedRepo = path.join(scanDir, 'repo')
-      fs.mkdirSync(nestedRepo)
-      git(nestedRepo, ['init', '-b', 'main'])
-      const body = await (await call('scan-for-repos', { dirPath: scanDir })).json()
-      expect(body._tag).toBe('Ok')
-      expect(body.repos).toEqual([path.join(fs.realpathSync.native(scanDir), 'repo')])
-    } finally {
-      fs.rmSync(scanDir, { recursive: true, force: true })
-    }
-  })
-
-  it('rejects a scan root outside the user home directory', async () => {
-    const outsideHome = path.parse(os.homedir()).root
-    const body = await (await call('scan-for-repos', { dirPath: outsideHome })).json()
-    expect(body._tag).toBe('GitError')
-    expect(body.message).toBe('invalid directory path')
   })
 
   it('returns RepoNotOpen for status before open', async () => {
@@ -275,11 +260,11 @@ describe('sidecar server', () => {
     fs.writeFileSync(path.join(clone, 'b.txt'), 'b\n')
     git(clone, ['add', '.'])
     git(clone, ['commit', '-m', 'second'])
-    await call('open-repo', { repoPath: clone })
+    await rpcOpenRepo(clone)
     const pushed = await rpcPush(clone)
     expect(Either.isRight(pushed)).toBe(true)
 
-    await call('open-repo', { repoPath: downstream })
+    await rpcOpenRepo(downstream)
     const pulled = await rpcPull(downstream)
     expect(Either.isRight(pulled)).toBe(true)
 
@@ -353,7 +338,7 @@ describe('sidecar server', () => {
   it('streams more than one batch of commits', async () => {
     const largeRepo = createFixtureRepo(STREAM_BATCH_SIZE + 5)
     try {
-      await call('open-repo', { repoPath: largeRepo })
+      await rpcOpenRepo(largeRepo)
       const response = await fetch(`${baseUrl}/stream/log`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
@@ -377,7 +362,7 @@ describe('sidecar server', () => {
   it('reports hasMore when a maxCount page is full', async () => {
     const pagedRepo = createFixtureRepo(15)
     try {
-      await call('open-repo', { repoPath: pagedRepo })
+      await rpcOpenRepo(pagedRepo)
       const response = await fetch(`${baseUrl}/stream/log`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
@@ -407,7 +392,7 @@ describe('sidecar server', () => {
   it('streams a later page with skip and clears hasMore on the final page', async () => {
     const pagedRepo = createFixtureRepo(15)
     try {
-      await call('open-repo', { repoPath: pagedRepo })
+      await rpcOpenRepo(pagedRepo)
       const response = await fetch(`${baseUrl}/stream/log`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
@@ -482,10 +467,6 @@ describe('sidecar server', () => {
     const status = await call('get-status', {})
     expect(status.status).toBe(400)
     expect(await status.json()).toEqual({ error: 'bad request' })
-
-    const scan = await call('scan-for-repos', {})
-    expect(scan.status).toBe(400)
-    expect(await scan.json()).toEqual({ error: 'bad request' })
   })
 
   it('returns 413 when the request body exceeds the size limit', async () => {
@@ -496,19 +477,6 @@ describe('sidecar server', () => {
     })
     expect(response.status).toBe(413)
     expect(await response.json()).toEqual({ error: 'payload too large' })
-  })
-
-  it('rejects scan-for-repos paths with parent traversal', async () => {
-    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-scan-server-'))
-    try {
-      const traversal = `${parent}/../..${path.sep}etc`
-      const response = await call('scan-for-repos', { dirPath: traversal })
-      const body = await response.json()
-      expect(body._tag).toBe('GitError')
-      expect(body.message).toBe('invalid directory path')
-    } finally {
-      fs.rmSync(parent, { recursive: true, force: true })
-    }
   })
 
   it('returns a generic error body without leaking exception details', async () => {

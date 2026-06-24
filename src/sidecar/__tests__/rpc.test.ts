@@ -44,14 +44,15 @@ const protocolLayer = () =>
       )
   }).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(RpcSerialization.layerNdjson))
 
-async function call(op: string, body: Record<string, unknown>): Promise<void> {
-  const response = await fetch(`${baseUrl}/op/${op}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-    body: JSON.stringify(body)
-  })
-  if (!response.ok) {
-    throw new Error(`setup call failed: ${op} -> ${response.status} ${await response.text()}`)
+async function openRepo(repoPath: string): Promise<void> {
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.openRepo({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(protocolLayer()))
+  )
+  if (Either.isLeft(result)) {
+    throw new Error(`open-repo setup failed: ${JSON.stringify(result.left)}`)
   }
 }
 
@@ -73,7 +74,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address() as AddressInfo
   baseUrl = `http://127.0.0.1:${port}`
-  await call('open-repo', { repoPath })
+  await openRepo(repoPath)
 })
 
 afterAll(async () => {

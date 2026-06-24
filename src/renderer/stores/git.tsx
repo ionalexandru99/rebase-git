@@ -1,7 +1,7 @@
 import { parseOrThrow } from '@shared/codec'
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
-import { OpenRepoResponseSchema, StartLogStreamResponseSchema } from '@shared/schemas/ipc'
+import { StartLogStreamResponseSchema } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -9,8 +9,10 @@ import { toast } from 'sonner'
 import { stashKey } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
+  rpcCloseRepo,
   rpcCommit,
   rpcFetch,
+  rpcOpenRepo,
   rpcPull,
   rpcPush,
   rpcStageAll,
@@ -528,13 +530,10 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     setUi('error', null)
 
     try {
-      const openResponse = parseOrThrow(
-        OpenRepoResponseSchema,
-        await window.electronAPI.openRepo(requestedPath)
-      )
+      const openResponse = await rpcOpenRepo(requestedPath)
       if (generation !== openGeneration.current) {
         if (openResponse._tag === 'Ok') {
-          void window.electronAPI.closeRepo(openResponse.result.path).catch(() => {})
+          void rpcCloseRepo(openResponse.result.path).catch(() => {})
         }
         return null
       }
@@ -587,7 +586,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     if (repoPath) {
       try {
         await window.electronAPI.cancelLogStream(repoPath).catch(() => {})
-        await window.electronAPI.closeRepo(repoPath)
+        await rpcCloseRepo(repoPath)
       } catch {}
     }
     reset()
@@ -890,7 +889,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
           return
         }
         Promise.resolve(window.electronAPI.cancelLogStream(repoPath)).catch(() => {})
-        Promise.resolve(window.electronAPI.closeRepo(repoPath)).catch(() => {})
+        Promise.resolve(rpcCloseRepo(repoPath)).catch(() => {})
       }, 0)
     }
   }, [])

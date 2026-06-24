@@ -71,12 +71,7 @@ export const resolveRepoRelativeFiles = (repoPath: string, body: Body): string[]
   return resolved
 }
 
-// Ops with bespoke repoPath handling (open/close) and the dirPath-based scan are dispatched
-// outside the uniform table.
-type DispatchOp = Exclude<
-  SidecarOpName,
-  typeof SidecarOp.openRepo | typeof SidecarOp.closeRepo | typeof SidecarOp.scanForRepos
->
+type DispatchOp = SidecarOpName
 
 interface HandlerCtx<Op extends SidecarOpName> {
   repoPath: string
@@ -134,27 +129,6 @@ const decodeRequest = (op: SidecarOpName, body: Body): Record<string, unknown> |
 }
 
 export async function dispatch(op: string, body: Body): Promise<unknown> {
-  if (op === SidecarOp.openRepo) {
-    const decoded = decodeRequest(SidecarOp.openRepo, body)
-    if (!decoded) {
-      return BAD_REQUEST
-    }
-    const repoPath = resolveExistingRepoRoot(decoded.repoPath as string)
-    return repoPath ? runOp(operations.openRepo(repoPath)) : { ...invalidRepoWire }
-  }
-
-  if (op === SidecarOp.closeRepo) {
-    const decoded = decodeRequest(SidecarOp.closeRepo, body)
-    if (!decoded) {
-      return BAD_REQUEST
-    }
-    const repoPath = resolveExistingRepoRoot(decoded.repoPath as string)
-    if (repoPath) {
-      return await runOp(operations.closeRepo(repoPath))
-    }
-    return { _tag: 'Ok' }
-  }
-
   const entry = handlerTable[op]
   if (!entry) {
     return undefined
