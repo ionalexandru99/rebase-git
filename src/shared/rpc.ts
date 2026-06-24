@@ -1,7 +1,7 @@
 import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
 import { NonNaNNumber, RequiredString } from './codec'
-import { GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
+import { Conflict, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
 import {
   CommitSummarySchema,
   FileDiffSchema,
@@ -13,12 +13,13 @@ import {
 } from './schemas/git'
 import { StashEntrySchema } from './schemas/ipc'
 
-export { GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
+export { Conflict, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
 
 const ReadError = Schema.Union(RepoNotOpen, GitError)
 const CommitError = Schema.Union(RepoNotOpen, GitError)
 const StageError = Schema.Union(RepoNotOpen, GitError)
 const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)
+const ConflictableError = Schema.Union(RepoNotOpen, GitError, Conflict)
 const FileList = Schema.Array(RequiredString)
 
 export const Commit = Rpc.make('commit', {
@@ -73,6 +74,24 @@ export const DiscardAll = Rpc.make('discardAll', {
   payload: { repoPath: RequiredString },
   success: Schema.Void,
   error: StageError
+})
+
+export const MergeBranch = Rpc.make('mergeBranch', {
+  payload: { repoPath: RequiredString, ref: RequiredString },
+  success: Schema.Void,
+  error: ConflictableError
+})
+
+export const RevertCommit = Rpc.make('revertCommit', {
+  payload: { repoPath: RequiredString, sha: RequiredString },
+  success: Schema.Void,
+  error: ConflictableError
+})
+
+export const CherryPick = Rpc.make('cherryPick', {
+  payload: { repoPath: RequiredString, sha: RequiredString },
+  success: Schema.Void,
+  error: ConflictableError
 })
 
 export const GetStatus = Rpc.make('getStatus', {
@@ -131,6 +150,9 @@ export const SidecarRpcs = RpcGroup.make(
   UnstageHunk,
   DiscardChanges,
   DiscardAll,
+  MergeBranch,
+  RevertCommit,
+  CherryPick,
   GetStatus,
   GetBranches,
   GetLocalBranches,
@@ -165,7 +187,10 @@ export const rpcWriteOps = {
   stageHunk: 'stageHunk',
   unstageHunk: 'unstageHunk',
   discardChanges: 'discardChanges',
-  discardAll: 'discardAll'
+  discardAll: 'discardAll',
+  mergeBranch: 'mergeBranch',
+  revertCommit: 'revertCommit',
+  cherryPick: 'cherryPick'
 } as const
 
 export type RpcWriteOp = keyof typeof rpcWriteOps
