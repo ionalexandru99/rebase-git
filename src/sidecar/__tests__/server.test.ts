@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { FetchHttpClient, HttpClient, HttpClientRequest } from '@effect/platform'
 import { RpcClient, RpcSerialization } from '@effect/rpc'
+import { RepoNotOpen } from '@shared/git-rpc-errors'
 import { SidecarRpcs } from '@shared/rpc'
 import { Effect, Either, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -103,6 +104,24 @@ function rpcUnstageAll(repoPath: string, files: string[]) {
     Effect.gen(function* () {
       const client = yield* RpcClient.make(SidecarRpcs)
       return yield* Effect.either(client.unstageAll({ repoPath, files }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcPush(repoPath: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.push({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcPull(repoPath: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.pull({ repoPath }))
     }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
   )
 }
@@ -224,8 +243,16 @@ describe('sidecar server', () => {
 
   it('returns RepoNotOpen for push and pull before open', async () => {
     const other = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-unopened-'))
-    expect((await (await call('push-repo', { repoPath: other })).json())._tag).toBe('RepoNotOpen')
-    expect((await (await call('pull-repo', { repoPath: other })).json())._tag).toBe('RepoNotOpen')
+    const pushed = await rpcPush(other)
+    const pulled = await rpcPull(other)
+    expect(Either.isLeft(pushed)).toBe(true)
+    expect(Either.isLeft(pulled)).toBe(true)
+    if (Either.isLeft(pushed)) {
+      expect(pushed.left).toBeInstanceOf(RepoNotOpen)
+    }
+    if (Either.isLeft(pulled)) {
+      expect(pulled.left).toBeInstanceOf(RepoNotOpen)
+    }
     fs.rmSync(other, { recursive: true, force: true })
   })
 
@@ -249,12 +276,12 @@ describe('sidecar server', () => {
     git(clone, ['add', '.'])
     git(clone, ['commit', '-m', 'second'])
     await call('open-repo', { repoPath: clone })
-    const pushed = await (await call('push-repo', { repoPath: clone })).json()
-    expect(pushed._tag).toBe('Ok')
+    const pushed = await rpcPush(clone)
+    expect(Either.isRight(pushed)).toBe(true)
 
     await call('open-repo', { repoPath: downstream })
-    const pulled = await (await call('pull-repo', { repoPath: downstream })).json()
-    expect(pulled._tag).toBe('Ok')
+    const pulled = await rpcPull(downstream)
+    expect(Either.isRight(pulled)).toBe(true)
 
     const log = await (await call('get-log', { repoPath: downstream })).json()
     expect(log.log.all[0].message).toBe('second')
@@ -291,8 +318,8 @@ describe('sidecar server', () => {
     expect(await response.json()).toEqual({ error: 'unknown op: nope' })
   })
 
-  it('rejects a malformed body via schema validation (wrong-typed numeric field)', async () => {
-    const response = await call('stash-apply', { repoPath, index: 'not-a-number' })
+  it('rejects a malformed body via schema validation (wrong-typed string field)', async () => {
+    const response = await call('get-diff', { repoPath, file: 42 })
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'bad request' })
   })

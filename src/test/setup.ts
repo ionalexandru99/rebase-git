@@ -4,12 +4,9 @@ import type { GitBranches } from '@shared/schemas/git'
 import type {
   BranchesResponse,
   CommitResponse,
-  FetchResponse,
   GetDiffResponse,
   LocalBranchesResponse,
   LogResponse,
-  PullResponse,
-  PushResponse,
   RemoteRefsResponse,
   StageHunkResponse,
   StageResponse,
@@ -22,6 +19,12 @@ import { sidecarRegistry } from '@shared/sidecar-registry'
 import { cleanup } from '@testing-library/react'
 import type { Schema } from 'effect'
 import { afterEach, beforeEach, vi } from 'vitest'
+
+type VoidWriteWire =
+  | { _tag: 'Ok' }
+  | { _tag: 'RepoNotOpen' }
+  | { _tag: 'GitError'; message: string }
+type FetchWire = VoidWriteWire | { _tag: 'FetchSkipped' }
 
 const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown | Promise<unknown>>()
 
@@ -37,9 +40,9 @@ export const sidecarMock = {
   stageFile: vi.fn<(repoPath: string, file: string) => Promise<StageResponse>>(),
   unstageFile: vi.fn<(repoPath: string, file: string) => Promise<UnstageResponse>>(),
   commit: vi.fn<(repoPath: string, message: string) => Promise<CommitResponse>>(),
-  fetchRepo: vi.fn<(repoPath: string) => Promise<FetchResponse>>(),
-  pushRepo: vi.fn<(repoPath: string) => Promise<PushResponse>>(),
-  pullRepo: vi.fn<(repoPath: string) => Promise<PullResponse>>(),
+  fetchRepo: vi.fn<(repoPath: string) => Promise<FetchWire>>(),
+  pushRepo: vi.fn<(repoPath: string) => Promise<VoidWriteWire>>(),
+  pullRepo: vi.fn<(repoPath: string) => Promise<VoidWriteWire>>(),
   getDiff: vi.fn<(repoPath: string, file: string, staged: boolean) => Promise<GetDiffResponse>>(),
   stageHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
@@ -85,15 +88,6 @@ vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
             break
           case 'get-log':
             payload = await mock.getLog(repoPath)
-            break
-          case 'fetch-repo':
-            payload = await mock.fetchRepo(repoPath)
-            break
-          case 'push-repo':
-            payload = await mock.pushRepo(repoPath)
-            break
-          case 'pull-repo':
-            payload = await mock.pullRepo(repoPath)
             break
           case 'get-diff':
             payload = await mock.getDiff(repoPath, body.file as string, body.staged === true)
@@ -318,6 +312,12 @@ beforeEach(() => {
         return sidecarMock.unstageHunk(repoPath, body.file as string, body.hunkHeader as string)
       case 'checkout':
         return sidecarMock.checkout(repoPath, body.refKind as string, body.fullPath as string)
+      case 'fetch':
+        return sidecarMock.fetchRepo(repoPath)
+      case 'push':
+        return sidecarMock.pushRepo(repoPath)
+      case 'pull':
+        return sidecarMock.pullRepo(repoPath)
       default:
         return { _tag: 'Ok' }
     }
@@ -325,6 +325,9 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })
   sidecarMock.checkout.mockResolvedValue({ _tag: 'Ok', checkedOut: 'main' })
+  sidecarMock.fetchRepo.mockResolvedValue({ _tag: 'Ok' })
+  sidecarMock.pushRepo.mockResolvedValue({ _tag: 'Ok' })
+  sidecarMock.pullRepo.mockResolvedValue({ _tag: 'Ok' })
   mockBranchResponses({ current: '', all: [], remotes: [], tags: [] })
 })
 

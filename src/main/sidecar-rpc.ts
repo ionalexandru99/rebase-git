@@ -13,6 +13,7 @@ type RpcResponse =
   | { _tag: 'RepoNotOpen' }
   | { _tag: 'GitError'; message: string }
   | { _tag: 'HunkNotFound' }
+  | { _tag: 'FetchSkipped' }
   | { _tag: 'Conflict'; message: string }
 
 const makeRuntime = (baseUrl: string, token: string) => {
@@ -99,6 +100,9 @@ export function classifyExit(
     }
     if (isTaggedError(error, 'HunkNotFound')) {
       return { _tag: 'HunkNotFound' }
+    }
+    if (isTaggedError(error, 'FetchSkipped')) {
+      return { _tag: 'FetchSkipped' }
     }
     const message = (error as { message?: unknown }).message
     if (isTaggedError(error, 'Conflict') && typeof message === 'string') {

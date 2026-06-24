@@ -8,11 +8,19 @@ import {
   rpcCreateTag,
   rpcDeleteBranch,
   rpcDeleteTag,
+  rpcFetch,
   rpcMergeBranch,
+  rpcPull,
+  rpcPush,
   rpcRenameBranch,
+  rpcReset,
   rpcRevertCommit,
   rpcStageFile,
-  rpcStageHunk
+  rpcStageHunk,
+  rpcStashApply,
+  rpcStashDrop,
+  rpcStashPop,
+  rpcStashPush
 } from '@/lib/rpc-client'
 
 describe('rpcCommit', () => {
@@ -303,6 +311,159 @@ describe('rpcDeleteTag', () => {
       repoPath: '/repo',
       name: 'v1'
     })
+    expect(result._tag).toBe('Ok')
+  })
+})
+
+describe('rpcStashApply', () => {
+  it('sends the index under the stashApply tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcStashApply('/repo', 2)
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('stashApply', {
+      repoPath: '/repo',
+      index: 2
+    })
+    expect(result._tag).toBe('Ok')
+  })
+
+  it('decodes a typed Conflict result with its message', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'Conflict',
+      message: 'stash apply hit conflicts'
+    })
+
+    const result = await rpcStashApply('/repo', 0)
+
+    expect(result._tag).toBe('Conflict')
+    if (result._tag === 'Conflict') {
+      expect(result.message).toBe('stash apply hit conflicts')
+    }
+  })
+})
+
+describe('rpcStashPop', () => {
+  it('sends the index under the stashPop tag and decodes a typed Conflict', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'Conflict',
+      message: 'stash pop hit conflicts'
+    })
+
+    const result = await rpcStashPop('/repo', 1)
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('stashPop', {
+      repoPath: '/repo',
+      index: 1
+    })
+    expect(result._tag).toBe('Conflict')
+  })
+})
+
+describe('rpcStashDrop', () => {
+  it('sends the index under the stashDrop tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcStashDrop('/repo', 0)
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('stashDrop', {
+      repoPath: '/repo',
+      index: 0
+    })
+    expect(result._tag).toBe('Ok')
+  })
+})
+
+describe('rpcStashPush', () => {
+  it('sends the message/includeUntracked/files under the stashPush tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcStashPush('/repo', 'wip', true, ['a.txt'])
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('stashPush', {
+      repoPath: '/repo',
+      message: 'wip',
+      includeUntracked: true,
+      files: ['a.txt']
+    })
+    expect(result._tag).toBe('Ok')
+  })
+
+  it('surfaces a domain GitError as a typed result rather than rejecting', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'GitError',
+      message: 'nothing to stash'
+    })
+
+    const result = await rpcStashPush('/repo')
+
+    expect(result._tag).toBe('GitError')
+  })
+})
+
+describe('rpcReset', () => {
+  it('sends the sha/mode under the reset tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcReset('/repo', 'abc1234', 'hard')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('reset', {
+      repoPath: '/repo',
+      sha: 'abc1234',
+      mode: 'hard'
+    })
+    expect(result._tag).toBe('Ok')
+  })
+})
+
+describe('rpcFetch', () => {
+  it('sends the repoPath under the fetch tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcFetch('/repo')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('fetch', { repoPath: '/repo' })
+    expect(result._tag).toBe('Ok')
+  })
+
+  it('decodes a typed FetchSkipped result rather than rejecting', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'FetchSkipped' })
+
+    const result = await rpcFetch('/repo')
+
+    expect(result._tag).toBe('FetchSkipped')
+  })
+
+  it('surfaces a domain GitError as a typed result', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'GitError',
+      message: 'fetch failed'
+    })
+
+    const result = await rpcFetch('/repo')
+
+    expect(result._tag).toBe('GitError')
+  })
+})
+
+describe('rpcPush', () => {
+  it('sends the repoPath under the push tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcPush('/repo')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('push', { repoPath: '/repo' })
+    expect(result._tag).toBe('Ok')
+  })
+})
+
+describe('rpcPull', () => {
+  it('sends the repoPath under the pull tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcPull('/repo')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('pull', { repoPath: '/repo' })
     expect(result._tag).toBe('Ok')
   })
 })

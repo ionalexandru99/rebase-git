@@ -10,20 +10,29 @@ import {
   DeleteTag,
   DiscardAll,
   DiscardChanges,
+  Fetch,
+  FetchSkipped,
   GitError,
   HunkNotFound,
   MergeBranch,
+  Pull,
+  Push,
   RenameBranch,
   RepoNotOpen,
+  Reset,
   RevertCommit,
   StageAll,
   StageFile,
   StageHunk,
+  StashApply,
+  StashDrop,
+  StashPop,
+  StashPush,
   UnstageAll,
   UnstageFile,
   UnstageHunk
 } from '@shared/rpc'
-import type { RefKind } from '@shared/schemas/ipc'
+import type { RefKind, ResetMode } from '@shared/schemas/ipc'
 import { Schema } from 'effect'
 
 // The renderer↔main wire envelope for a typed RPC op: the op's success value tagged `Ok`, or one of
@@ -74,6 +83,15 @@ const CheckoutResult = Schema.Union(
   GitError
 )
 
+// Fetch can decline to run when one is already in flight, surfacing the typed `FetchSkipped` outcome
+// (a benign domain result the caller treats as a no-op) on top of the shared read error union.
+const FetchResult = Schema.Union(
+  Schema.Struct({ _tag: Schema.Literal('Ok') }),
+  FetchSkipped,
+  RepoNotOpen,
+  GitError
+)
+
 export type CommitPayload = typeof Commit.payloadSchema.Type
 export type CommitResult = typeof CommitResult.Type
 export type StageResult = typeof StageResult.Type
@@ -81,6 +99,7 @@ export type HunkResult = typeof HunkResult.Type
 export type ConflictableResult = typeof ConflictableResult.Type
 export type RefWriteResult = typeof RefWriteResult.Type
 export type CheckoutResult = typeof CheckoutResult.Type
+export type FetchResult = typeof FetchResult.Type
 
 export async function rpcCommit(repoPath: string, message: string): Promise<CommitResult> {
   const payload = await window.electronAPI.sidecarRequest(Commit._tag, { repoPath, message })
@@ -229,5 +248,59 @@ export async function rpcCreateTag(
 
 export async function rpcDeleteTag(repoPath: string, name: string): Promise<RefWriteResult> {
   const payload = await window.electronAPI.sidecarRequest(DeleteTag._tag, { repoPath, name })
+  return parseOrThrow(RefWriteResult, payload)
+}
+
+export async function rpcStashApply(repoPath: string, index: number): Promise<ConflictableResult> {
+  const payload = await window.electronAPI.sidecarRequest(StashApply._tag, { repoPath, index })
+  return parseOrThrow(ConflictableResult, payload)
+}
+
+export async function rpcStashPop(repoPath: string, index: number): Promise<ConflictableResult> {
+  const payload = await window.electronAPI.sidecarRequest(StashPop._tag, { repoPath, index })
+  return parseOrThrow(ConflictableResult, payload)
+}
+
+export async function rpcStashDrop(repoPath: string, index: number): Promise<RefWriteResult> {
+  const payload = await window.electronAPI.sidecarRequest(StashDrop._tag, { repoPath, index })
+  return parseOrThrow(RefWriteResult, payload)
+}
+
+export async function rpcStashPush(
+  repoPath: string,
+  message?: string,
+  includeUntracked?: boolean,
+  files?: string[]
+): Promise<RefWriteResult> {
+  const payload = await window.electronAPI.sidecarRequest(StashPush._tag, {
+    repoPath,
+    message,
+    includeUntracked,
+    files
+  })
+  return parseOrThrow(RefWriteResult, payload)
+}
+
+export async function rpcReset(
+  repoPath: string,
+  sha: string,
+  mode: ResetMode
+): Promise<RefWriteResult> {
+  const payload = await window.electronAPI.sidecarRequest(Reset._tag, { repoPath, sha, mode })
+  return parseOrThrow(RefWriteResult, payload)
+}
+
+export async function rpcFetch(repoPath: string): Promise<FetchResult> {
+  const payload = await window.electronAPI.sidecarRequest(Fetch._tag, { repoPath })
+  return parseOrThrow(FetchResult, payload)
+}
+
+export async function rpcPush(repoPath: string): Promise<RefWriteResult> {
+  const payload = await window.electronAPI.sidecarRequest(Push._tag, { repoPath })
+  return parseOrThrow(RefWriteResult, payload)
+}
+
+export async function rpcPull(repoPath: string): Promise<RefWriteResult> {
+  const payload = await window.electronAPI.sidecarRequest(Pull._tag, { repoPath })
   return parseOrThrow(RefWriteResult, payload)
 }

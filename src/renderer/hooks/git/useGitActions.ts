@@ -1,9 +1,4 @@
-import {
-  ConflictableMutationResponseSchema,
-  GitMutationResponseSchema,
-  type ResetMode
-} from '@shared/schemas/ipc'
-import { SidecarOp } from '@shared/sidecar-ops'
+import type { ResetMode } from '@shared/schemas/ipc'
 import { toast } from 'sonner'
 import {
   type ConflictableResult,
@@ -17,9 +12,13 @@ import {
   rpcDiscardChanges,
   rpcMergeBranch,
   rpcRenameBranch,
-  rpcRevertCommit
+  rpcReset,
+  rpcRevertCommit,
+  rpcStashApply,
+  rpcStashDrop,
+  rpcStashPop,
+  rpcStashPush
 } from '@/lib/rpc-client'
-import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitStore } from '@/stores/git'
 
 type VoidWriteResult = RefWriteResult
@@ -30,40 +29,6 @@ function describe(error: unknown): string {
 
 export function useGitActions(git: GitStore) {
   const repoPath = git.state.repoPath
-
-  async function mutate(
-    op: string,
-    body: Record<string, unknown>,
-    label: string,
-    refresh: (path: string) => Promise<void>
-  ): Promise<boolean> {
-    const path = repoPath
-    if (!path) {
-      toast.error('Repository is not open')
-      return false
-    }
-    try {
-      const response = await sidecarFetch(
-        op,
-        { repoPath: path, ...body },
-        GitMutationResponseSchema
-      )
-      if (response._tag === 'Ok') {
-        await refresh(path)
-        toast.success(label)
-        return true
-      }
-      if (response._tag === 'GitError') {
-        toast.error(`${label} failed`, { description: response.message })
-      } else {
-        toast.error('Repository is not open')
-      }
-      return false
-    } catch (error) {
-      toast.error(`${label} failed`, { description: describe(error) })
-      return false
-    }
-  }
 
   async function mutateConflictable(
     call: (path: string) => Promise<ConflictableResult>,
@@ -133,17 +98,16 @@ export function useGitActions(git: GitStore) {
   const refreshAll = (path: string) => git.refreshAfterMutation(path)
   const refreshWorkingTree = (path: string) => git.refreshWorkingTree(path)
 
-  async function stashConflictable(op: string, index: number, label: string): Promise<boolean> {
+  async function stashConflictable(
+    call: (path: string) => Promise<ConflictableResult>,
+    label: string
+  ): Promise<boolean> {
     const path = repoPath
     if (!path) {
       toast.error('Repository is not open')
       return false
     }
-    const response = await sidecarFetch(
-      op,
-      { repoPath: path, index },
-      ConflictableMutationResponseSchema
-    ).catch((error: unknown) => {
+    const response = await call(path).catch((error: unknown) => {
       toast.error(`${label} failed`, { description: describe(error) })
       return null
     })
@@ -187,9 +151,8 @@ export function useGitActions(git: GitStore) {
     mergeBranch: (ref: string) =>
       mutateConflictable((path) => rpcMergeBranch(path, ref), `Merged ${ref}`),
     resetToCommit: (sha: string, mode: ResetMode) =>
-      mutate(
-        SidecarOp.resetToCommit,
-        { sha, mode },
+      runVoidWrite(
+        (path) => rpcReset(path, sha, mode),
         `Reset (${mode}) to ${sha.slice(0, 7)}`,
         refreshAll
       ),
@@ -209,16 +172,21 @@ export function useGitActions(git: GitStore) {
       runVoidWrite((path) => rpcDiscardChanges(path, files), label),
     discardAll: () => runVoidWrite((path) => rpcDiscardAll(path), 'Discarded all changes'),
     stashPush: (message?: string, includeUntracked?: boolean, files?: string[]) =>
-      mutate(
-        SidecarOp.stashPush,
-        { message, includeUntracked, files },
+      runVoidWrite(
+        (path) => rpcStashPush(path, message, includeUntracked, files),
         'Stashed changes',
         refreshWorkingTree
       ),
-    stashApply: (index: number) => stashConflictable(SidecarOp.stashApply, index, 'Applied stash'),
-    stashPop: (index: number) => stashConflictable(SidecarOp.stashPop, index, 'Popped stash'),
+    stashApply: (index: number) =>
+      stashConflictable((path) => rpcStashApply(path, index), 'Applied stash'),
+    stashPop: (index: number) =>
+      stashConflictable((path) => rpcStashPop(path, index), 'Popped stash'),
     stashDrop: (index: number) =>
-      mutate(SidecarOp.stashDrop, { index }, 'Dropped stash', (path) => git.refreshStashes(path))
+      runVoidWrite(
+        (path) => rpcStashDrop(path, index),
+        'Dropped stash',
+        (path) => git.refreshStashes(path)
+      )
   }
 }
 

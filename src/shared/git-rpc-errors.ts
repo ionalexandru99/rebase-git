@@ -11,3 +11,4 @@ export class HunkNotFound extends Schema.TaggedError<HunkNotFound>()('HunkNotFou
 export class Conflict extends Schema.TaggedError<Conflict>()('Conflict', {
   message: Schema.String
 }) {}
+export class FetchSkipped extends Schema.TaggedError<FetchSkipped>()('FetchSkipped', {}) {}

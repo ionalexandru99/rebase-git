@@ -90,20 +90,6 @@ export const CommitResponseSchema = Schema.Union(
 )
 export type CommitResponse = typeof CommitResponseSchema.Type
 
-export const FetchResponseSchema = Schema.Union(
-  Schema.TaggedStruct('Ok', {}),
-  Schema.TaggedStruct('FetchSkipped', {}),
-  repoNotOpen,
-  gitError
-)
-export type FetchResponse = typeof FetchResponseSchema.Type
-
-export const PushResponseSchema = Schema.Union(Schema.TaggedStruct('Ok', {}), repoNotOpen, gitError)
-export type PushResponse = typeof PushResponseSchema.Type
-
-export const PullResponseSchema = Schema.Union(Schema.TaggedStruct('Ok', {}), repoNotOpen, gitError)
-export type PullResponse = typeof PullResponseSchema.Type
-
 export const StartLogStreamResponseSchema = Schema.Union(Schema.TaggedStruct('Ok', {}), gitError)
 export type StartLogStreamResponse = typeof StartLogStreamResponseSchema.Type
 
@@ -118,25 +104,6 @@ export type ScanForReposResponse = typeof ScanForReposResponseSchema.Type
 
 export const RefKindSchema = Schema.Literal('local', 'remote', 'tag')
 export type RefKind = typeof RefKindSchema.Type
-
-// Ok / RepoNotOpen / GitError — shared by the simple write operations (reset, discard, stash
-// mutations) that have no extra success payload.
-export const GitMutationResponseSchema = Schema.Union(
-  Schema.TaggedStruct('Ok', {}),
-  repoNotOpen,
-  gitError
-)
-export type GitMutationResponse = typeof GitMutationResponseSchema.Type
-
-// Adds a Conflict tag for operations that can leave the working tree in a conflicted state
-// (merge, revert, cherry-pick).
-export const ConflictableMutationResponseSchema = Schema.Union(
-  Schema.TaggedStruct('Ok', {}),
-  Schema.TaggedStruct('Conflict', { message: Schema.String }),
-  repoNotOpen,
-  gitError
-)
-export type ConflictableMutationResponse = typeof ConflictableMutationResponseSchema.Type
 
 export const ResetModeSchema = Schema.Literal('soft', 'mixed', 'hard')
 export type ResetMode = typeof ResetModeSchema.Type

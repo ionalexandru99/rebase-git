@@ -2,13 +2,14 @@ import { Etag, FileSystem, HttpPlatform, Path } from '@effect/platform'
 import { RpcSerialization, RpcServer } from '@effect/rpc'
 import {
   Conflict as RpcConflict,
+  FetchSkipped as RpcFetchSkipped,
   GitError as RpcGitError,
   HunkNotFound as RpcHunkNotFound,
   RepoNotOpen as RpcRepoNotOpen,
   SidecarRpcs
 } from '@shared/rpc'
 import { Effect, Layer } from 'effect'
-import type { Conflict, GitError, HunkNotFound, RepoNotOpen } from './git-errors'
+import type { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from './git-errors'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 
@@ -60,6 +61,11 @@ const toConflictError = (
   error: RepoNotOpen | GitError | Conflict
 ): RpcRepoNotOpen | RpcGitError | RpcConflict =>
   error._tag === 'Conflict' ? new RpcConflict({ message: error.message }) : toReadError(error)
+
+const toFetchError = (
+  error: RepoNotOpen | GitError | FetchSkipped
+): RpcRepoNotOpen | RpcGitError | RpcFetchSkipped =>
+  error._tag === 'FetchSkipped' ? new RpcFetchSkipped() : toReadError(error)
 
 export const handlersLayer = SidecarRpcs.toLayer({
   commit: ({ repoPath, message }) =>
@@ -203,6 +209,58 @@ export const handlersLayer = SidecarRpcs.toLayer({
       Effect.flatMap((resolved) =>
         operations.deleteTag(resolved, name).pipe(Effect.mapError(toReadError))
       )
+    ),
+  stashPop: ({ repoPath, index }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.stashPop(resolved, index).pipe(Effect.mapError(toConflictError))
+      )
+    ),
+  stashApply: ({ repoPath, index }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.stashApply(resolved, index).pipe(Effect.mapError(toConflictError))
+      )
+    ),
+  stashDrop: ({ repoPath, index }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.stashDrop(resolved, index).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  stashPush: ({ repoPath, message, includeUntracked, files }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) => {
+        const resolvedFiles: Effect.Effect<string[] | undefined, RpcGitError> =
+          files === undefined ? Effect.succeed(undefined) : resolveFiles(resolved, files)
+        return resolvedFiles.pipe(
+          Effect.flatMap((relatives) =>
+            operations
+              .stashPush(resolved, message || undefined, includeUntracked === true, relatives)
+              .pipe(Effect.mapError(toReadError))
+          )
+        )
+      })
+    ),
+  reset: ({ repoPath, sha, mode }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.resetToCommit(resolved, sha, mode).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  fetch: ({ repoPath }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.fetchRepo(resolved).pipe(Effect.mapError(toFetchError))
+      )
+    ),
+  push: ({ repoPath }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) => operations.pushRepo(resolved).pipe(Effect.mapError(toReadError)))
+    ),
+  pull: ({ repoPath }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) => operations.pullRepo(resolved).pipe(Effect.mapError(toReadError)))
     ),
   getStatus: ({ repoPath }) =>
     resolveRepo(repoPath).pipe(

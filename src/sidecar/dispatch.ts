@@ -108,42 +108,11 @@ const opHandlers: { [Op in DispatchOp]: OpHandler<Op> } = {
     handle: ({ repoPath, file, request }) =>
       operations.getDiff(repoPath, file, request.staged === true)
   },
-  [SidecarOp.fetchRepo]: {
-    handle: ({ repoPath }) => operations.fetchRepo(repoPath)
-  },
-  [SidecarOp.pushRepo]: {
-    handle: ({ repoPath }) => operations.pushRepo(repoPath)
-  },
-  [SidecarOp.pullRepo]: {
-    handle: ({ repoPath }) => operations.pullRepo(repoPath)
-  },
   [SidecarOp.getLog]: {
     handle: ({ repoPath, request }) => operations.getLog(repoPath, request.maxCount)
   },
-  [SidecarOp.resetToCommit]: {
-    handle: ({ repoPath, request }) => operations.resetToCommit(repoPath, request.sha, request.mode)
-  },
   [SidecarOp.stashList]: {
     handle: ({ repoPath }) => operations.stashList(repoPath)
-  },
-  [SidecarOp.stashPush]: {
-    file: 'optionalArray',
-    handle: ({ repoPath, request, files }) =>
-      operations.stashPush(
-        repoPath,
-        request.message || undefined,
-        request.includeUntracked === true,
-        request.files !== undefined ? files : undefined
-      )
-  },
-  [SidecarOp.stashApply]: {
-    handle: ({ repoPath, request }) => operations.stashApply(repoPath, request.index)
-  },
-  [SidecarOp.stashPop]: {
-    handle: ({ repoPath, request }) => operations.stashPop(repoPath, request.index)
-  },
-  [SidecarOp.stashDrop]: {
-    handle: ({ repoPath, request }) => operations.stashDrop(repoPath, request.index)
   }
 }
 

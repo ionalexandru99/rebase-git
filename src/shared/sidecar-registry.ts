@@ -1,28 +1,20 @@
 import { Schema } from 'effect'
-import { mutableArray, NonNaNNumber, RequiredString } from './codec'
+import { NonNaNNumber, RequiredString } from './codec'
 import {
   BranchesResponseSchema,
   CancelLogStreamResponseSchema,
-  ConflictableMutationResponseSchema,
-  FetchResponseSchema,
   GetDiffResponseSchema,
-  GitMutationResponseSchema,
   LocalBranchesResponseSchema,
   LogResponseSchema,
   OpenRepoResponseSchema,
-  PullResponseSchema,
-  PushResponseSchema,
   RemoteRefsResponseSchema,
-  ResetModeSchema,
   ScanForReposResponseSchema,
   StashListResponseSchema,
   StatusResponseSchema
 } from './schemas/ipc'
 import { SidecarOp, type SidecarOpName } from './sidecar-ops'
 
-const OptionalString = Schema.optional(Schema.String)
 const OptionalFlag = Schema.optional(Schema.Boolean)
-const FileList = mutableArray(Schema.String)
 
 const RepoOnly = Schema.Struct({ repoPath: RequiredString })
 
@@ -36,18 +28,6 @@ const GetLogRequest = Schema.Struct({
   repoPath: RequiredString,
   maxCount: Schema.optional(NonNaNNumber)
 })
-const ResetRequest = Schema.Struct({
-  repoPath: RequiredString,
-  sha: RequiredString,
-  mode: ResetModeSchema
-})
-const StashPushRequest = Schema.Struct({
-  repoPath: RequiredString,
-  message: OptionalString,
-  includeUntracked: OptionalFlag,
-  files: Schema.optional(FileList)
-})
-const StashIndexRequest = Schema.Struct({ repoPath: RequiredString, index: NonNaNNumber })
 const ScanRequest = Schema.Struct({ dirPath: RequiredString })
 
 export const sidecarRegistry = {
@@ -58,22 +38,8 @@ export const sidecarRegistry = {
   [SidecarOp.getRemoteRefs]: { request: RepoOnly, response: RemoteRefsResponseSchema },
   [SidecarOp.getStatus]: { request: RepoOnly, response: StatusResponseSchema },
   [SidecarOp.getDiff]: { request: GetDiffRequest, response: GetDiffResponseSchema },
-  [SidecarOp.fetchRepo]: { request: RepoOnly, response: FetchResponseSchema },
-  [SidecarOp.pushRepo]: { request: RepoOnly, response: PushResponseSchema },
-  [SidecarOp.pullRepo]: { request: RepoOnly, response: PullResponseSchema },
   [SidecarOp.getLog]: { request: GetLogRequest, response: LogResponseSchema },
-  [SidecarOp.resetToCommit]: { request: ResetRequest, response: GitMutationResponseSchema },
   [SidecarOp.stashList]: { request: RepoOnly, response: StashListResponseSchema },
-  [SidecarOp.stashPush]: { request: StashPushRequest, response: GitMutationResponseSchema },
-  [SidecarOp.stashApply]: {
-    request: StashIndexRequest,
-    response: ConflictableMutationResponseSchema
-  },
-  [SidecarOp.stashPop]: {
-    request: StashIndexRequest,
-    response: ConflictableMutationResponseSchema
-  },
-  [SidecarOp.stashDrop]: { request: StashIndexRequest, response: GitMutationResponseSchema },
   [SidecarOp.scanForRepos]: { request: ScanRequest, response: ScanForReposResponseSchema }
 }
 

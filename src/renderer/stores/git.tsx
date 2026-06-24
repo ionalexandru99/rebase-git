@@ -10,6 +10,9 @@ import { stashKey } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
   rpcCommit,
+  rpcFetch,
+  rpcPull,
+  rpcPush,
   rpcStageAll,
   rpcStageFile,
   rpcStageHunk,
@@ -481,7 +484,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   }
 
   const runFetchAndRefresh = async (repoPath: string) => {
-    const response = await sidecarFetch('fetch-repo', { repoPath })
+    const response = await rpcFetch(repoPath)
     if (response._tag === 'Ok') {
       setUi('lastFetchedAt', Date.now())
       if (tabActiveRef.current) {
@@ -912,7 +915,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     }
     setUi('pushing', true)
     try {
-      const response = await sidecarFetch(SidecarOp.pushRepo, { repoPath })
+      const response = await rpcPush(repoPath)
       if (response._tag === 'Ok') {
         await refreshBranchesOnly(repoPath)
       } else if (response._tag === 'GitError') {
@@ -932,7 +935,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     }
     setUi('pulling', true)
     try {
-      const response = await sidecarFetch(SidecarOp.pullRepo, { repoPath })
+      const response = await rpcPull(repoPath)
       if (response._tag === 'Ok') {
         await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
         await restartLogStream(repoPath)

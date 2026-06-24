@@ -1,4 +1,4 @@
-import { Conflict, GitError, HunkNotFound, RepoNotOpen } from '@shared/rpc'
+import { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from '@shared/rpc'
 import { Exit } from 'effect'
 import { describe, expect, it, vi } from 'vitest'
 import { classifyExit, isRpcOp, isRpcReadOp, isRpcWriteOp, SidecarRpcError } from '../sidecar-rpc'
@@ -36,6 +36,35 @@ describe('RPC op classification', () => {
     expect(isRpcOp('merge-branch')).toBe(false)
     expect(isRpcOp('revert-commit')).toBe(false)
     expect(isRpcOp('cherry-pick')).toBe(false)
+  })
+
+  it('routes the stash, reset and remote ops through the write seam by their RPC tag', () => {
+    for (const tag of [
+      'stashPop',
+      'stashApply',
+      'stashDrop',
+      'stashPush',
+      'reset',
+      'fetch',
+      'push',
+      'pull'
+    ]) {
+      expect(isRpcWriteOp(tag)).toBe(true)
+      expect(isRpcReadOp(tag)).toBe(false)
+      expect(isRpcOp(tag)).toBe(true)
+    }
+    for (const legacy of [
+      'fetch-repo',
+      'push-repo',
+      'pull-repo',
+      'reset-to-commit',
+      'stash-push',
+      'stash-apply',
+      'stash-pop',
+      'stash-drop'
+    ]) {
+      expect(isRpcOp(legacy)).toBe(false)
+    }
   })
 })
 
@@ -111,6 +140,11 @@ describe('classifyExit', () => {
       TOKEN
     )
     expect(result).toEqual({ _tag: 'Conflict', message: 'conflict (token ***)' })
+  })
+
+  it('maps a typed FetchSkipped failure onto the FetchSkipped response with no message', () => {
+    const result = classifyExit('fetch', Exit.fail(new FetchSkipped()), TOKEN)
+    expect(result).toEqual({ _tag: 'FetchSkipped' })
   })
 
   it('maps a typed GitError failure onto the GitError response', () => {

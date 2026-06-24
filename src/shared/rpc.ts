@@ -1,7 +1,7 @@
 import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
 import { NonNaNNumber, RequiredString } from './codec'
-import { Conflict, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
+import { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
 import {
   CommitSummarySchema,
   FileDiffSchema,
@@ -11,9 +11,9 @@ import {
   LocalBranchesSchema,
   RemoteRefsSchema
 } from './schemas/git'
-import { RefKindSchema, StashEntrySchema } from './schemas/ipc'
+import { RefKindSchema, ResetModeSchema, StashEntrySchema } from './schemas/ipc'
 
-export { Conflict, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
+export { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
 
 const ReadError = Schema.Union(RepoNotOpen, GitError)
 const CommitError = Schema.Union(RepoNotOpen, GitError)
@@ -21,6 +21,7 @@ const StageError = Schema.Union(RepoNotOpen, GitError)
 const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)
 const ConflictableError = Schema.Union(RepoNotOpen, GitError, Conflict)
 const RefWriteError = Schema.Union(RepoNotOpen, GitError)
+const FetchError = Schema.Union(RepoNotOpen, GitError, FetchSkipped)
 const OptionalString = Schema.optional(RequiredString)
 const FileList = Schema.Array(RequiredString)
 
@@ -146,6 +147,59 @@ export const DeleteTag = Rpc.make('deleteTag', {
   error: RefWriteError
 })
 
+export const StashPop = Rpc.make('stashPop', {
+  payload: { repoPath: RequiredString, index: NonNaNNumber },
+  success: Schema.Void,
+  error: ConflictableError
+})
+
+export const StashApply = Rpc.make('stashApply', {
+  payload: { repoPath: RequiredString, index: NonNaNNumber },
+  success: Schema.Void,
+  error: ConflictableError
+})
+
+export const StashDrop = Rpc.make('stashDrop', {
+  payload: { repoPath: RequiredString, index: NonNaNNumber },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+export const StashPush = Rpc.make('stashPush', {
+  payload: {
+    repoPath: RequiredString,
+    message: OptionalString,
+    includeUntracked: Schema.optional(Schema.Boolean),
+    files: Schema.optional(FileList)
+  },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+export const Reset = Rpc.make('reset', {
+  payload: { repoPath: RequiredString, sha: RequiredString, mode: ResetModeSchema },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+export const Fetch = Rpc.make('fetch', {
+  payload: { repoPath: RequiredString },
+  success: Schema.Void,
+  error: FetchError
+})
+
+export const Push = Rpc.make('push', {
+  payload: { repoPath: RequiredString },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+export const Pull = Rpc.make('pull', {
+  payload: { repoPath: RequiredString },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
 export const GetStatus = Rpc.make('getStatus', {
   payload: { repoPath: RequiredString },
   success: Schema.Struct({ status: GitStatusSchema }),
@@ -211,6 +265,14 @@ export const SidecarRpcs = RpcGroup.make(
   RenameBranch,
   CreateTag,
   DeleteTag,
+  StashPop,
+  StashApply,
+  StashDrop,
+  StashPush,
+  Reset,
+  Fetch,
+  Push,
+  Pull,
   GetStatus,
   GetBranches,
   GetLocalBranches,
@@ -254,7 +316,15 @@ export const rpcWriteOps = {
   deleteBranch: 'deleteBranch',
   renameBranch: 'renameBranch',
   createTag: 'createTag',
-  deleteTag: 'deleteTag'
+  deleteTag: 'deleteTag',
+  stashPop: 'stashPop',
+  stashApply: 'stashApply',
+  stashDrop: 'stashDrop',
+  stashPush: 'stashPush',
+  reset: 'reset',
+  fetch: 'fetch',
+  push: 'push',
+  pull: 'pull'
 } as const
 
 export type RpcWriteOp = keyof typeof rpcWriteOps
