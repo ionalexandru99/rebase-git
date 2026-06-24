@@ -141,17 +141,8 @@ const opHandlers: { [Op in DispatchOp]: OpHandler<Op> } = {
     handle: ({ repoPath, request }) =>
       operations.renameBranch(repoPath, request.oldName, request.newName)
   },
-  [SidecarOp.mergeBranch]: {
-    handle: ({ repoPath, request }) => operations.mergeBranch(repoPath, request.ref)
-  },
   [SidecarOp.resetToCommit]: {
     handle: ({ repoPath, request }) => operations.resetToCommit(repoPath, request.sha, request.mode)
-  },
-  [SidecarOp.revertCommit]: {
-    handle: ({ repoPath, request }) => operations.revertCommit(repoPath, request.sha)
-  },
-  [SidecarOp.cherryPick]: {
-    handle: ({ repoPath, request }) => operations.cherryPick(repoPath, request.sha)
   },
   [SidecarOp.createTag]: {
     handle: ({ repoPath, request }) =>

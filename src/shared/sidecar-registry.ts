@@ -59,13 +59,11 @@ const RenameBranchRequest = Schema.Struct({
   oldName: RequiredString,
   newName: RequiredString
 })
-const RefRequest = Schema.Struct({ repoPath: RequiredString, ref: RequiredString })
 const ResetRequest = Schema.Struct({
   repoPath: RequiredString,
   sha: RequiredString,
   mode: ResetModeSchema
 })
-const ShaRequest = Schema.Struct({ repoPath: RequiredString, sha: RequiredString })
 const CreateTagRequest = Schema.Struct({
   repoPath: RequiredString,
   name: RequiredString,
@@ -98,10 +96,7 @@ export const sidecarRegistry = {
   [SidecarOp.createBranch]: { request: CreateBranchRequest, response: GitMutationResponseSchema },
   [SidecarOp.deleteBranch]: { request: DeleteBranchRequest, response: GitMutationResponseSchema },
   [SidecarOp.renameBranch]: { request: RenameBranchRequest, response: GitMutationResponseSchema },
-  [SidecarOp.mergeBranch]: { request: RefRequest, response: ConflictableMutationResponseSchema },
   [SidecarOp.resetToCommit]: { request: ResetRequest, response: GitMutationResponseSchema },
-  [SidecarOp.revertCommit]: { request: ShaRequest, response: ConflictableMutationResponseSchema },
-  [SidecarOp.cherryPick]: { request: ShaRequest, response: ConflictableMutationResponseSchema },
   [SidecarOp.createTag]: { request: CreateTagRequest, response: GitMutationResponseSchema },
   [SidecarOp.deleteTag]: { request: NameRequest, response: GitMutationResponseSchema },
   [SidecarOp.stashList]: { request: RepoOnly, response: StashListResponseSchema },
