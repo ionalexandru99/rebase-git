@@ -5,7 +5,14 @@ import {
 } from '@shared/schemas/ipc'
 import { SidecarOp } from '@shared/sidecar-ops'
 import { toast } from 'sonner'
-import { rpcDiscardAll, rpcDiscardChanges } from '@/lib/rpc-client'
+import {
+  type ConflictableResult,
+  rpcCherryPick,
+  rpcDiscardAll,
+  rpcDiscardChanges,
+  rpcMergeBranch,
+  rpcRevertCommit
+} from '@/lib/rpc-client'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitStore } from '@/stores/git'
 
@@ -56,8 +63,7 @@ export function useGitActions(git: GitStore) {
   }
 
   async function mutateConflictable(
-    op: string,
-    body: Record<string, unknown>,
+    call: (path: string) => Promise<ConflictableResult>,
     label: string
   ): Promise<boolean> {
     const path = repoPath
@@ -66,11 +72,7 @@ export function useGitActions(git: GitStore) {
       return false
     }
     try {
-      const response = await sidecarFetch(
-        op,
-        { repoPath: path, ...body },
-        ConflictableMutationResponseSchema
-      )
+      const response = await call(path)
       if (response._tag === 'Ok') {
         await git.refreshAfterMutation(path)
         toast.success(label)
@@ -177,7 +179,7 @@ export function useGitActions(git: GitStore) {
         refreshBranches
       ),
     mergeBranch: (ref: string) =>
-      mutateConflictable(SidecarOp.mergeBranch, { ref }, `Merged ${ref}`),
+      mutateConflictable((path) => rpcMergeBranch(path, ref), `Merged ${ref}`),
     resetToCommit: (sha: string, mode: ResetMode) =>
       mutate(
         SidecarOp.resetToCommit,
@@ -186,9 +188,9 @@ export function useGitActions(git: GitStore) {
         refreshAll
       ),
     revertCommit: (sha: string) =>
-      mutateConflictable(SidecarOp.revertCommit, { sha }, `Reverted ${sha.slice(0, 7)}`),
+      mutateConflictable((path) => rpcRevertCommit(path, sha), `Reverted ${sha.slice(0, 7)}`),
     cherryPick: (sha: string) =>
-      mutateConflictable(SidecarOp.cherryPick, { sha }, `Cherry-picked ${sha.slice(0, 7)}`),
+      mutateConflictable((path) => rpcCherryPick(path, sha), `Cherry-picked ${sha.slice(0, 7)}`),
     createTag: (name: string, ref?: string, message?: string) =>
       mutate(SidecarOp.createTag, { name, ref, message }, `Created tag ${name}`, refreshBranches),
     deleteTag: (name: string) =>

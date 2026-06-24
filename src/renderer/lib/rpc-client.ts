@@ -1,11 +1,15 @@
 import { parseOrThrow } from '@shared/codec'
 import {
+  CherryPick,
   Commit,
+  Conflict,
   DiscardAll,
   DiscardChanges,
   GitError,
   HunkNotFound,
+  MergeBranch,
   RepoNotOpen,
+  RevertCommit,
   StageAll,
   StageFile,
   StageHunk,
@@ -38,10 +42,20 @@ const HunkResult = Schema.Union(
   GitError
 )
 
+// merge/revert/cherry-pick can leave the tree conflicted, so they add the typed `Conflict` outcome
+// (a domain result the renderer routes to the resolve path) on top of the shared stage error union.
+const ConflictableResult = Schema.Union(
+  Schema.Struct({ _tag: Schema.Literal('Ok') }),
+  Conflict,
+  RepoNotOpen,
+  GitError
+)
+
 export type CommitPayload = typeof Commit.payloadSchema.Type
 export type CommitResult = typeof CommitResult.Type
 export type StageResult = typeof StageResult.Type
 export type HunkResult = typeof HunkResult.Type
+export type ConflictableResult = typeof ConflictableResult.Type
 
 export async function rpcCommit(repoPath: string, message: string): Promise<CommitResult> {
   const payload = await window.electronAPI.sidecarRequest(Commit._tag, { repoPath, message })
@@ -102,4 +116,25 @@ export async function rpcDiscardChanges(repoPath: string, files: string[]): Prom
 export async function rpcDiscardAll(repoPath: string): Promise<StageResult> {
   const payload = await window.electronAPI.sidecarRequest(DiscardAll._tag, { repoPath })
   return parseOrThrow(StageResult, payload)
+}
+
+export async function rpcMergeBranch(
+  repoPath: string,
+  ref: string
+): Promise<ConflictableResult> {
+  const payload = await window.electronAPI.sidecarRequest(MergeBranch._tag, { repoPath, ref })
+  return parseOrThrow(ConflictableResult, payload)
+}
+
+export async function rpcRevertCommit(
+  repoPath: string,
+  sha: string
+): Promise<ConflictableResult> {
+  const payload = await window.electronAPI.sidecarRequest(RevertCommit._tag, { repoPath, sha })
+  return parseOrThrow(ConflictableResult, payload)
+}
+
+export async function rpcCherryPick(repoPath: string, sha: string): Promise<ConflictableResult> {
+  const payload = await window.electronAPI.sidecarRequest(CherryPick._tag, { repoPath, sha })
+  return parseOrThrow(ConflictableResult, payload)
 }
