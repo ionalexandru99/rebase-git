@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { sidecarMock } from '@/../test/setup'
-import { rpcCommit, rpcStageFile, rpcStageHunk } from '@/lib/rpc-client'
+import {
+  rpcCherryPick,
+  rpcCommit,
+  rpcMergeBranch,
+  rpcRevertCommit,
+  rpcStageFile,
+  rpcStageHunk
+} from '@/lib/rpc-client'
 
 describe('rpcCommit', () => {
   it('decodes a typed Ok result from the contract-derived wire shape', async () => {
@@ -92,5 +99,85 @@ describe('rpcStageHunk', () => {
       hunkHeader: '@@ -1 +1 @@'
     })
     expect(result._tag).toBe('HunkNotFound')
+  })
+})
+
+describe('rpcMergeBranch', () => {
+  it('sends the ref under the mergeBranch tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcMergeBranch('/repo', 'feature')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('mergeBranch', {
+      repoPath: '/repo',
+      ref: 'feature'
+    })
+    expect(result._tag).toBe('Ok')
+  })
+
+  it('decodes a typed Conflict result with its message', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'Conflict',
+      message: 'merge stopped on conflicts'
+    })
+
+    const result = await rpcMergeBranch('/repo', 'feature')
+
+    expect(result._tag).toBe('Conflict')
+    if (result._tag === 'Conflict') {
+      expect(result.message).toBe('merge stopped on conflicts')
+    }
+  })
+
+  it('rejects when the call fails at the infrastructure boundary', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockRejectedValue(
+      new Error("sidecar RPC 'mergeBranch' failed")
+    )
+
+    await expect(rpcMergeBranch('/repo', 'feature')).rejects.toThrow(
+      "sidecar RPC 'mergeBranch' failed"
+    )
+  })
+})
+
+describe('rpcRevertCommit', () => {
+  it('sends the sha under the revertCommit tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcRevertCommit('/repo', 'abc1234')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('revertCommit', {
+      repoPath: '/repo',
+      sha: 'abc1234'
+    })
+    expect(result._tag).toBe('Ok')
+  })
+
+  it('decodes a typed Conflict result rather than a generic GitError', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'Conflict',
+      message: 'revert stopped on conflicts'
+    })
+
+    const result = await rpcRevertCommit('/repo', 'abc1234')
+
+    expect(result._tag).toBe('Conflict')
+  })
+})
+
+describe('rpcCherryPick', () => {
+  it('sends the sha under the cherryPick tag and decodes a typed Conflict', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'Conflict',
+      message: 'cherry-pick stopped on conflicts'
+    })
+
+    const result = await rpcCherryPick('/repo', 'abc1234')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('cherryPick', {
+      repoPath: '/repo',
+      sha: 'abc1234'
+    })
+    expect(result._tag).toBe('Conflict')
   })
 })
