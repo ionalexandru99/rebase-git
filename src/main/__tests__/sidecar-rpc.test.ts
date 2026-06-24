@@ -1,4 +1,4 @@
-import { GitError, HunkNotFound, RepoNotOpen } from '@shared/rpc'
+import { Conflict, GitError, HunkNotFound, RepoNotOpen } from '@shared/rpc'
 import { Exit } from 'effect'
 import { describe, expect, it, vi } from 'vitest'
 import { classifyExit, isRpcOp, isRpcReadOp, isRpcWriteOp, SidecarRpcError } from '../sidecar-rpc'
@@ -25,6 +25,17 @@ describe('RPC op classification', () => {
       expect(isRpcReadOp(tag)).toBe(false)
       expect(isRpcOp(tag)).toBe(true)
     }
+  })
+
+  it('routes the conflictable ops through the write seam by their RPC tag', () => {
+    for (const tag of ['mergeBranch', 'revertCommit', 'cherryPick']) {
+      expect(isRpcWriteOp(tag)).toBe(true)
+      expect(isRpcReadOp(tag)).toBe(false)
+      expect(isRpcOp(tag)).toBe(true)
+    }
+    expect(isRpcOp('merge-branch')).toBe(false)
+    expect(isRpcOp('revert-commit')).toBe(false)
+    expect(isRpcOp('cherry-pick')).toBe(false)
   })
 })
 
@@ -82,6 +93,24 @@ describe('classifyExit', () => {
   it('maps a typed HunkNotFound failure onto the HunkNotFound response', () => {
     const result = classifyExit('stageHunk', Exit.fail(new HunkNotFound()), TOKEN)
     expect(result).toEqual({ _tag: 'HunkNotFound' })
+  })
+
+  it('maps a typed Conflict failure onto the Conflict response with its message', () => {
+    const result = classifyExit(
+      'mergeBranch',
+      Exit.fail(new Conflict({ message: 'merge stopped on conflicts' })),
+      TOKEN
+    )
+    expect(result).toEqual({ _tag: 'Conflict', message: 'merge stopped on conflicts' })
+  })
+
+  it('scrubs the bearer token out of a domain Conflict message', () => {
+    const result = classifyExit(
+      'mergeBranch',
+      Exit.fail(new Conflict({ message: `conflict (token ${TOKEN})` })),
+      TOKEN
+    )
+    expect(result).toEqual({ _tag: 'Conflict', message: 'conflict (token ***)' })
   })
 
   it('maps a typed GitError failure onto the GitError response', () => {

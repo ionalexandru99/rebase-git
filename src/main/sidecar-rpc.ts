@@ -13,6 +13,7 @@ type RpcResponse =
   | { _tag: 'RepoNotOpen' }
   | { _tag: 'GitError'; message: string }
   | { _tag: 'HunkNotFound' }
+  | { _tag: 'Conflict'; message: string }
 
 const makeRuntime = (baseUrl: string, token: string) => {
   const protocol = RpcClient.layerProtocolHttp({
@@ -100,6 +101,9 @@ export function classifyExit(
       return { _tag: 'HunkNotFound' }
     }
     const message = (error as { message?: unknown }).message
+    if (isTaggedError(error, 'Conflict') && typeof message === 'string') {
+      return { _tag: 'Conflict', message: scrubToken(message, token) }
+    }
     if (isTaggedError(error, 'GitError') && typeof message === 'string') {
       return { _tag: 'GitError', message: scrubToken(message, token) }
     }
