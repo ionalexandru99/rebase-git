@@ -8,3 +8,6 @@ export class GitError extends Schema.TaggedError<GitError>()('GitError', {
   message: Schema.String
 }) {}
 export class HunkNotFound extends Schema.TaggedError<HunkNotFound>()('HunkNotFound', {}) {}
+export class Conflict extends Schema.TaggedError<Conflict>()('Conflict', {
+  message: Schema.String
+}) {}

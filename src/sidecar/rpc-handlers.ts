@@ -1,13 +1,14 @@
 import { Etag, FileSystem, HttpPlatform, Path } from '@effect/platform'
 import { RpcSerialization, RpcServer } from '@effect/rpc'
 import {
+  Conflict as RpcConflict,
   GitError as RpcGitError,
   HunkNotFound as RpcHunkNotFound,
   RepoNotOpen as RpcRepoNotOpen,
   SidecarRpcs
 } from '@shared/rpc'
 import { Effect, Layer } from 'effect'
-import type { GitError, HunkNotFound, RepoNotOpen } from './git-errors'
+import type { Conflict, GitError, HunkNotFound, RepoNotOpen } from './git-errors'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 
@@ -54,6 +55,11 @@ const toHunkError = (
   error: RepoNotOpen | GitError | HunkNotFound
 ): RpcRepoNotOpen | RpcGitError | RpcHunkNotFound =>
   error._tag === 'HunkNotFound' ? new RpcHunkNotFound() : toReadError(error)
+
+const toConflictError = (
+  error: RepoNotOpen | GitError | Conflict
+): RpcRepoNotOpen | RpcGitError | RpcConflict =>
+  error._tag === 'Conflict' ? new RpcConflict({ message: error.message }) : toReadError(error)
 
 export const handlersLayer = SidecarRpcs.toLayer({
   commit: ({ repoPath, message }) =>
@@ -138,6 +144,24 @@ export const handlersLayer = SidecarRpcs.toLayer({
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
         operations.discardAll(resolved).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  mergeBranch: ({ repoPath, ref }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.mergeBranch(resolved, ref).pipe(Effect.mapError(toConflictError))
+      )
+    ),
+  revertCommit: ({ repoPath, sha }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.revertCommit(resolved, sha).pipe(Effect.mapError(toConflictError))
+      )
+    ),
+  cherryPick: ({ repoPath, sha }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.cherryPick(resolved, sha).pipe(Effect.mapError(toConflictError))
       )
     ),
   getStatus: ({ repoPath }) =>
