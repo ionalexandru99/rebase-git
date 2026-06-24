@@ -173,3 +173,4 @@ vite.config.ts.timestamp-*
 
 # Biome
 .biome/
+/.agent-investigations/2026-06-24-issue-65-e2e-failures.md
