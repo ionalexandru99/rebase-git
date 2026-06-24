@@ -1,7 +1,6 @@
 import type { StashEntry } from '@shared/schemas/ipc'
-import { SidecarOp } from '@shared/sidecar-ops'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { sidecarFetch } from '@/lib/sidecar-fetch'
+import { rpcStashList } from '@/lib/rpc-client'
 
 export const stashKey = (repoPath: string) => ['stashes', repoPath] as const
 
@@ -15,8 +14,8 @@ export function useStashes(repoPath: string | null) {
       if (!repoPath) {
         return []
       }
-      const response = await sidecarFetch(SidecarOp.stashList, { repoPath })
-      return response._tag === 'Ok' ? response.stashes : []
+      const response = await rpcStashList(repoPath)
+      return response._tag === 'Ok' ? [...response.stashes] : []
     }
   })
 

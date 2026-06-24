@@ -3,12 +3,10 @@ import { createServer } from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseOrThrow } from '@shared/codec'
-import type { RpcWriteOp } from '@shared/rpc'
 import { type LogChunk, LogChunkSchema } from '@shared/schemas/git'
-import type { SidecarOpName } from '@shared/sidecar-ops'
 import { type UtilityProcess, utilityProcess } from 'electron'
 import type { SidecarMessage } from '../sidecar/protocol'
-import { callRpc, callRpcByTag, disposeRpcRuntime } from './sidecar-rpc'
+import { callRpcByTag, disposeRpcRuntime } from './sidecar-rpc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const START_TIMEOUT_MS = 30_000
@@ -164,35 +162,6 @@ export async function restartSidecar(): Promise<void> {
   }
 }
 
-export async function sidecarRequest<T>(
-  op: SidecarOpName,
-  body: Record<string, unknown>
-): Promise<T> {
-  const { baseUrl, token } = await ensureSidecar()
-  const response = await fetch(`${baseUrl}/op/${op}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify(body)
-  })
-  if (!response.ok) {
-    throw new Error(`sidecar ${op} failed with status ${response.status}`)
-  }
-  return (await response.json()) as T
-}
-
-// Routes a write op through the typed @effect/rpc seam. Domain failures come back as a tagged wire
-// value (decoded into a typed result by the renderer); transport/decode/defect/interrupt reject.
-export async function sidecarRpcWrite(
-  op: RpcWriteOp,
-  body: Record<string, unknown>
-): Promise<unknown> {
-  const { baseUrl, token } = await ensureSidecar()
-  return callRpc(op, baseUrl, token, body)
-}
-
-// Invokes an RPC op by tag through the typed seam, for the dedicated open/close/scan channels that
-// sequence main-process side effects around the call. Returns the tagged wire value (or rejects on
-// transport/decode/defect), letting the channel handler inspect `_tag` before its side effects run.
 export async function sidecarRpcCall(
   tag: string,
   body: Record<string, unknown>

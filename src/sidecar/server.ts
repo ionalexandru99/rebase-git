@@ -3,7 +3,6 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { Readable } from 'node:stream'
 import { LogStreamRequestSchema } from '@shared/schemas/log-stream'
 import { Either, Schema } from 'effect'
-import { BAD_REQUEST, dispatch } from './dispatch'
 import { streamGitLog } from './log-stream'
 import { resolveExistingRepoRoot } from './path-guards'
 import { handleRpcRequest } from './rpc-handlers'
@@ -11,6 +10,7 @@ import { handleRpcRequest } from './rpc-handlers'
 type Body = Record<string, unknown>
 
 const MAX_BODY_BYTES = 1024 * 1024
+const BAD_REQUEST = Symbol('bad-request')
 
 class BodyTooLargeError extends Error {
   override readonly name = 'BodyTooLargeError'
@@ -169,38 +169,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
     return
   }
 
-  const match = url.pathname.match(/^\/op\/(.+)$/)
-  if (!match || req.method !== 'POST') {
-    sendJson(res, 404, { error: 'not found' })
-    return
-  }
-
-  try {
-    const body = await readBody(req)
-    const operation = match[1]
-    const result = await dispatch(operation, body)
-    if (result === BAD_REQUEST) {
-      sendJson(res, 400, { error: 'bad request' })
-      return
-    }
-    // Unknown ops keep a plain 404 rather than a typed error: `op` is statically `SidecarOpName`
-    // end-to-end (the registry's AssertEqual + the exhaustive opHandlers map guarantee every op has
-    // an entry), and read ops are served by the RPC group, so this path is unreachable from the app
-    // and only fires for a foreign client or a bug. A bespoke error tag would bloat the response
-    // unions for a case the renderer cannot produce.
-    if (result === undefined) {
-      sendJson(res, 404, { error: `unknown op: ${match[1]}` })
-      return
-    }
-    sendJson(res, 200, result)
-  } catch (error) {
-    console.error('[sidecar] request error', error)
-    if (error instanceof BodyTooLargeError) {
-      sendJson(res, 413, { error: 'payload too large' })
-      return
-    }
-    sendJson(res, 500, { error: 'internal error' })
-  }
+  sendJson(res, 404, { error: 'not found' })
 }
 
 export function createSidecarServer(token: string): Server {

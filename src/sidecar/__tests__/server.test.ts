@@ -126,6 +126,51 @@ function rpcPull(repoPath: string) {
   )
 }
 
+function rpcGetStatus(repoPath: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.getStatus({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcGetLog(repoPath: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.getLog({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcGetBranches(repoPath: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.getBranches({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcGetLocalBranches(repoPath: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.getLocalBranches({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcGetRemoteRefs(repoPath: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.getRemoteRefs({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
 async function rpcOpenRepo(repoPath: string): Promise<void> {
   const result = await Effect.runPromise(
     Effect.gen(function* () {
@@ -172,25 +217,32 @@ describe('sidecar server', () => {
     expect(response.status).toBe(401)
   })
 
-  it('rejects op requests without a valid token', async () => {
-    const response = await call('get-status', { repoPath }, 'wrong')
+  it('rejects rpc requests without a valid token', async () => {
+    const response = await fetch(`${baseUrl}/rpc`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/ndjson', authorization: 'Bearer wrong' },
+      body: ''
+    })
     expect(response.status).toBe(401)
   })
 
   it('returns RepoNotOpen for status before open', async () => {
     const other = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-unopened-'))
-    const response = await call('get-status', { repoPath: other })
-    const body = await response.json()
-    expect(body._tag).toBe('RepoNotOpen')
+    const status = await rpcGetStatus(other)
+    expect(Either.isLeft(status)).toBe(true)
+    if (Either.isLeft(status)) {
+      expect(status.left).toBeInstanceOf(RepoNotOpen)
+    }
     fs.rmSync(other, { recursive: true, force: true })
   })
 
   it('reports status after a file change', async () => {
     fs.writeFileSync(path.join(repoPath, 'new.txt'), 'content\n')
-    const response = await call('get-status', { repoPath })
-    const body = await response.json()
-    expect(body._tag).toBe('Ok')
-    expect(body.status.not_added).toContain('new.txt')
+    const status = await rpcGetStatus(repoPath)
+    expect(Either.isRight(status)).toBe(true)
+    if (Either.isRight(status)) {
+      expect(status.right.status.not_added).toContain('new.txt')
+    }
   })
 
   it('stages (via /rpc), commits (via /rpc), and reflects in the log', async () => {
@@ -203,9 +255,11 @@ describe('sidecar server', () => {
       expect(committed.right.result.commit).toBeTruthy()
     }
 
-    const log = await (await call('get-log', { repoPath })).json()
-    expect(log._tag).toBe('Ok')
-    expect(log.log.all[0].message).toBe('add new.txt')
+    const log = await rpcGetLog(repoPath)
+    expect(Either.isRight(log)).toBe(true)
+    if (Either.isRight(log)) {
+      expect(log.right.log.all[0].message).toBe('add new.txt')
+    }
   })
 
   it('stages and unstages many files in one call', async () => {
@@ -215,15 +269,25 @@ describe('sidecar server', () => {
     const staged = await rpcStageAll(repoPath, ['one.txt', 'two.txt'])
     expect(Either.isRight(staged)).toBe(true)
 
-    const afterStage = await (await call('get-status', { repoPath })).json()
-    expect(afterStage.status.staged).toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
+    const afterStage = await rpcGetStatus(repoPath)
+    expect(Either.isRight(afterStage)).toBe(true)
+    if (Either.isRight(afterStage)) {
+      expect(afterStage.right.status.staged).toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
+    }
 
     const unstaged = await rpcUnstageAll(repoPath, ['one.txt', 'two.txt'])
     expect(Either.isRight(unstaged)).toBe(true)
 
-    const afterUnstage = await (await call('get-status', { repoPath })).json()
-    expect(afterUnstage.status.staged).not.toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
-    expect(afterUnstage.status.not_added).toEqual(expect.arrayContaining(['one.txt', 'two.txt']))
+    const afterUnstage = await rpcGetStatus(repoPath)
+    expect(Either.isRight(afterUnstage)).toBe(true)
+    if (Either.isRight(afterUnstage)) {
+      expect(afterUnstage.right.status.staged).not.toEqual(
+        expect.arrayContaining(['one.txt', 'two.txt'])
+      )
+      expect(afterUnstage.right.status.not_added).toEqual(
+        expect.arrayContaining(['one.txt', 'two.txt'])
+      )
+    }
   })
 
   it('returns RepoNotOpen for push and pull before open', async () => {
@@ -268,8 +332,11 @@ describe('sidecar server', () => {
     const pulled = await rpcPull(downstream)
     expect(Either.isRight(pulled)).toBe(true)
 
-    const log = await (await call('get-log', { repoPath: downstream })).json()
-    expect(log.log.all[0].message).toBe('second')
+    const log = await rpcGetLog(downstream)
+    expect(Either.isRight(log)).toBe(true)
+    if (Either.isRight(log)) {
+      expect(log.right.log.all[0].message).toBe('second')
+    }
 
     for (const dir of [remote, clone, downstream]) {
       fs.rmSync(dir, { recursive: true, force: true })
@@ -277,48 +344,36 @@ describe('sidecar server', () => {
   }, 10_000)
 
   it('lists branches', async () => {
-    const body = await (await call('get-branches', { repoPath })).json()
-    expect(body._tag).toBe('Ok')
-    expect(body.branches.current).toBe('main')
-    expect(body.branches.all).toContain('main')
+    const branches = await rpcGetBranches(repoPath)
+    expect(Either.isRight(branches)).toBe(true)
+    if (Either.isRight(branches)) {
+      expect(branches.right.branches.current).toBe('main')
+      expect(branches.right.branches.all).toContain('main')
+    }
   })
 
   it('lists local branches separately', async () => {
-    const body = await (await call('get-local-branches', { repoPath })).json()
-    expect(body._tag).toBe('Ok')
-    expect(body.branches.current).toBe('main')
-    expect(body.branches.all).toContain('main')
+    const branches = await rpcGetLocalBranches(repoPath)
+    expect(Either.isRight(branches)).toBe(true)
+    if (Either.isRight(branches)) {
+      expect(branches.right.branches.current).toBe('main')
+      expect(branches.right.branches.all).toContain('main')
+    }
   })
 
   it('lists remote refs separately', async () => {
-    const body = await (await call('get-remote-refs', { repoPath })).json()
-    expect(body._tag).toBe('Ok')
-    expect(body.refs.remotes).toEqual([])
-    expect(body.refs.tags).toEqual([])
+    const refs = await rpcGetRemoteRefs(repoPath)
+    expect(Either.isRight(refs)).toBe(true)
+    if (Either.isRight(refs)) {
+      expect(refs.right.refs.remotes).toEqual([])
+      expect(refs.right.refs.tags).toEqual([])
+    }
   })
 
-  it('rejects an unknown op with a 404', async () => {
-    const response = await call('nope', { repoPath })
+  it('does not expose the old op endpoint for operations', async () => {
+    const response = await call('get-status', { repoPath })
     expect(response.status).toBe(404)
-    expect(await response.json()).toEqual({ error: 'unknown op: nope' })
-  })
-
-  it('rejects a malformed body via schema validation (wrong-typed string field)', async () => {
-    const response = await call('get-diff', { repoPath, file: 42 })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'bad request' })
-  })
-
-  it('rejects a malformed get-log body via schema validation (non-numeric maxCount)', async () => {
-    const response = await call('get-log', { repoPath, maxCount: 'lots' })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'bad request' })
-  })
-
-  it('rejects an unexpected-typed repoPath via schema validation', async () => {
-    const response = await call('get-status', { repoPath: 42 })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'bad request' })
+    expect(await response.json()).toEqual({ error: 'not found' })
   })
 
   it('streams log chunks over the sidecar stream endpoint', async () => {
@@ -463,16 +518,20 @@ describe('sidecar server', () => {
     expect(await response.json()).toEqual({ error: 'bad request' })
   })
 
-  it('returns 400 when required string fields are missing', async () => {
-    const status = await call('get-status', {})
+  it('returns 400 when required string fields are missing from a stream request', async () => {
+    const status = await fetch(`${baseUrl}/stream/log`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      body: '{}'
+    })
     expect(status.status).toBe(400)
     expect(await status.json()).toEqual({ error: 'bad request' })
   })
 
-  it('returns 413 when the request body exceeds the size limit', async () => {
-    const response = await fetch(`${baseUrl}/op/get-status`, {
+  it('returns 413 when an rpc request body exceeds the size limit', async () => {
+    const response = await fetch(`${baseUrl}/rpc`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
+      headers: { 'content-type': 'application/ndjson', authorization: `Bearer ${TOKEN}` },
       body: `{"repoPath":${JSON.stringify('x'.repeat(1024 * 1024 + 1))}}`
     })
     expect(response.status).toBe(413)
@@ -480,7 +539,7 @@ describe('sidecar server', () => {
   })
 
   it('returns a generic error body without leaking exception details', async () => {
-    const response = await fetch(`${baseUrl}/op/get-status`, {
+    const response = await fetch(`${baseUrl}/stream/log`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
       body: '{not json'
@@ -490,7 +549,7 @@ describe('sidecar server', () => {
   })
 
   it('rejects an authenticated CORS preflight with 403', async () => {
-    const response = await fetch(`${baseUrl}/op/get-branches`, {
+    const response = await fetch(`${baseUrl}/rpc`, {
       method: 'OPTIONS',
       headers: {
         authorization: `Bearer ${TOKEN}`,
@@ -504,7 +563,7 @@ describe('sidecar server', () => {
   })
 
   it('rejects an unauthenticated preflight with 401 before reaching OPTIONS handling', async () => {
-    const response = await fetch(`${baseUrl}/op/get-branches`, {
+    const response = await fetch(`${baseUrl}/rpc`, {
       method: 'OPTIONS',
       headers: {
         origin: 'http://localhost:5173',
@@ -514,8 +573,10 @@ describe('sidecar server', () => {
     expect(response.status).toBe(401)
   })
 
-  it('does not include wildcard CORS headers on op responses', async () => {
-    const response = await call('get-branches', { repoPath })
+  it('does not include wildcard CORS headers on sidecar responses', async () => {
+    const response = await fetch(`${baseUrl}/health`, {
+      headers: { authorization: `Bearer ${TOKEN}` }
+    })
     expect(response.headers.get('access-control-allow-origin')).toBeNull()
   })
 })

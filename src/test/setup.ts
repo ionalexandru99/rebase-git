@@ -1,5 +1,4 @@
 import '@testing-library/jest-dom/vitest'
-import { parseOrThrow } from '@shared/codec'
 import type { GitBranches } from '@shared/schemas/git'
 import type {
   BranchesResponse,
@@ -14,10 +13,7 @@ import type {
   StatusResponse,
   UnstageResponse
 } from '@shared/schemas/ipc'
-import type { SidecarOpName } from '@shared/sidecar-ops'
-import { sidecarRegistry } from '@shared/sidecar-registry'
 import { cleanup } from '@testing-library/react'
-import type { Schema } from 'effect'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 type VoidWriteWire =
@@ -58,61 +54,6 @@ type CheckoutResult =
   | { _tag: 'RepoNotOpen' }
   | { _tag: 'GitError'; message: string }
 ;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
-
-vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/sidecar-fetch')>()
-
-  return {
-    ...actual,
-    sidecarFetch: vi.fn(
-      async (
-        op: string,
-        body: Record<string, unknown>,
-        schema?: Schema.Schema<unknown, unknown>
-      ) => {
-        const mock = (globalThis as Record<string, unknown>).__sidecarMock as typeof sidecarMock
-        const repoPath = body.repoPath as string
-        let payload: unknown
-        switch (op) {
-          case 'get-status':
-            payload = await mock.getStatus(repoPath)
-            break
-          case 'get-branches':
-            payload = await mock.getBranches(repoPath)
-            break
-          case 'get-local-branches':
-            payload = await mock.getLocalBranches(repoPath)
-            break
-          case 'get-remote-refs':
-            payload = await mock.getRemoteRefs(repoPath)
-            break
-          case 'get-log':
-            payload = await mock.getLog(repoPath)
-            break
-          case 'get-diff':
-            payload = await mock.getDiff(repoPath, body.file as string, body.staged === true)
-            break
-          case 'stash-list':
-            payload = await mock.stashList(repoPath)
-            break
-          default: {
-            const handler = opHandlers.get(op)
-            if (!handler) {
-              throw new Error(
-                `Unregistered sidecar op in test: "${op}". Register it with ` +
-                  `sidecarMock.respond('${op}', ...) or add a case in src/test/setup.ts.`
-              )
-            }
-            payload = await handler(body)
-            break
-          }
-        }
-        const responseSchema = schema ?? sidecarRegistry[op as SidecarOpName].response
-        return parseOrThrow(responseSchema as Schema.Schema<unknown, unknown>, payload)
-      }
-    )
-  }
-})
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -302,6 +243,20 @@ beforeEach(() => {
     switch (op) {
       case 'commit':
         return sidecarMock.commit(repoPath, body.message as string)
+      case 'getStatus':
+        return sidecarMock.getStatus(repoPath)
+      case 'getBranches':
+        return sidecarMock.getBranches(repoPath)
+      case 'getLocalBranches':
+        return sidecarMock.getLocalBranches(repoPath)
+      case 'getRemoteRefs':
+        return sidecarMock.getRemoteRefs(repoPath)
+      case 'getLog':
+        return sidecarMock.getLog(repoPath)
+      case 'getDiff':
+        return sidecarMock.getDiff(repoPath, body.file as string, body.staged === true)
+      case 'stashList':
+        return sidecarMock.stashList(repoPath)
       case 'stageFile':
         return sidecarMock.stageFile(repoPath, body.file as string)
       case 'unstageFile':
@@ -318,8 +273,13 @@ beforeEach(() => {
         return sidecarMock.pushRepo(repoPath)
       case 'pull':
         return sidecarMock.pullRepo(repoPath)
-      default:
+      default: {
+        const handler = opHandlers.get(op)
+        if (handler) {
+          return handler(body)
+        }
         return { _tag: 'Ok' }
+      }
     }
   })
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)

@@ -3,7 +3,6 @@ import {
   Checkout,
   CherryPick,
   Commit,
-  Conflict,
   CreateBranch,
   CreateTag,
   DeleteBranch,
@@ -11,16 +10,17 @@ import {
   DiscardAll,
   DiscardChanges,
   Fetch,
-  FetchSkipped,
-  GitError,
-  HunkNotFound,
+  GetBranches,
+  GetDiff,
+  GetLocalBranches,
+  GetLog,
+  GetRemoteRefs,
+  GetStatus,
   MergeBranch,
-  NotARepo,
   OpenRepo,
   Pull,
   Push,
   RenameBranch,
-  RepoNotOpen,
   Reset,
   RevertCommit,
   ScanForRepos,
@@ -29,6 +29,7 @@ import {
   StageHunk,
   StashApply,
   StashDrop,
+  StashList,
   StashPop,
   StashPush,
   UnstageAll,
@@ -38,90 +39,101 @@ import {
 import type { RefKind, ResetMode } from '@shared/schemas/ipc'
 import { Schema } from 'effect'
 
-// The renderer↔main wire envelope for a typed RPC op: the op's success value tagged `Ok`, or one of
-// the contract's domain errors as data. Both halves are derived from the `Commit` Rpc itself so the
-// call site never hand-passes a response schema or restates the shape.
-const CommitResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }).pipe(Schema.extend(Commit.successSchema)),
-  RepoNotOpen,
-  GitError
-)
+type RpcContract<Success, SuccessInput, Failure, FailureInput> = {
+  readonly _tag: string
+  readonly successSchema: Schema.Schema<Success, SuccessInput>
+  readonly errorSchema: Schema.Schema<Failure, FailureInput>
+}
 
-// open/close/scan reach the sidecar through their own main-process channels (not sidecarRequest)
-// because main sequences the file watcher + recent-repo store around the call, but the renderer's
-// result is still the op's contract: open's `Ok` carries the open result and routes `NotARepo`;
-// scan's `Ok` carries the repo list; close is the bare `Ok` tag (the op is infallible).
-const OpenRepoResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }).pipe(Schema.extend(OpenRepo.successSchema)),
-  NotARepo,
-  GitError
-)
-const ScanForReposResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }).pipe(Schema.extend(ScanForRepos.successSchema)),
-  GitError
-)
+type RpcResult<Success, Failure> =
+  | Failure
+  | (Success extends void ? { _tag: 'Ok' } : { _tag: 'Ok' } & Success)
 
-// The void-returning write ops carry no payload on success, so `Ok` is the bare tag; the hunk ops
-// add the typed `HunkNotFound` outcome on top of the shared stage error union.
-const StageResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }),
-  RepoNotOpen,
-  GitError
-)
-const HunkResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }),
-  HunkNotFound,
-  RepoNotOpen,
-  GitError
-)
+const OkResult = Schema.Struct({ _tag: Schema.Literal('Ok') })
 
-// merge/revert/cherry-pick can leave the tree conflicted, so they add the typed `Conflict` outcome
-// (a domain result the renderer routes to the resolve path) on top of the shared stage error union.
-const ConflictableResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }),
-  Conflict,
-  RepoNotOpen,
-  GitError
-)
+function rpcResultSchema<Success, SuccessInput, Failure, FailureInput>(
+  rpc: RpcContract<Success, SuccessInput, Failure, FailureInput>
+): Schema.Schema<RpcResult<Success, Failure>, unknown> {
+  const success =
+    (rpc.successSchema as Schema.Schema.Any) === Schema.Void
+      ? OkResult
+      : OkResult.pipe(Schema.extend(rpc.successSchema as Schema.Schema<Record<string, unknown>>))
+  return Schema.Union(success, rpc.errorSchema) as Schema.Schema<
+    RpcResult<Success, Failure>,
+    unknown
+  >
+}
 
-// Branch create/delete/rename and tag create/delete are void writes with no Conflict arm — their
-// success is the bare `Ok` tag and the only domain failures are RepoNotOpen/GitError.
-const RefWriteResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }),
-  RepoNotOpen,
-  GitError
-)
-
-// Checkout returns the name it actually switched to; its `Ok` carries that payload, derived from the
-// contract so the shape is never restated here.
-const CheckoutResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }).pipe(Schema.extend(Checkout.successSchema)),
-  RepoNotOpen,
-  GitError
-)
-
-// Fetch can decline to run when one is already in flight, surfacing the typed `FetchSkipped` outcome
-// (a benign domain result the caller treats as a no-op) on top of the shared read error union.
-const FetchResult = Schema.Union(
-  Schema.Struct({ _tag: Schema.Literal('Ok') }),
-  FetchSkipped,
-  RepoNotOpen,
-  GitError
-)
+async function callSidecarRpc<Success, SuccessInput, Failure, FailureInput>(
+  rpc: RpcContract<Success, SuccessInput, Failure, FailureInput>,
+  body: Record<string, unknown>
+): Promise<RpcResult<Success, Failure>> {
+  const payload = await window.electronAPI.sidecarRequest(rpc._tag, body)
+  return parseOrThrow(rpcResultSchema(rpc), payload)
+}
 
 export type CommitPayload = typeof Commit.payloadSchema.Type
-export type CommitResult = typeof CommitResult.Type
-export type OpenRepoResult = typeof OpenRepoResult.Type
-export type ScanForReposResult = typeof ScanForReposResult.Type
-export type StageResult = typeof StageResult.Type
-export type HunkResult = typeof HunkResult.Type
-export type ConflictableResult = typeof ConflictableResult.Type
-export type RefWriteResult = typeof RefWriteResult.Type
-export type CheckoutResult = typeof CheckoutResult.Type
-export type FetchResult = typeof FetchResult.Type
+export type CommitResult = RpcResult<
+  typeof Commit.successSchema.Type,
+  typeof Commit.errorSchema.Type
+>
+export type OpenRepoResult = RpcResult<
+  typeof OpenRepo.successSchema.Type,
+  typeof OpenRepo.errorSchema.Type
+>
+export type ScanForReposResult = RpcResult<
+  typeof ScanForRepos.successSchema.Type,
+  typeof ScanForRepos.errorSchema.Type
+>
+export type StageResult = RpcResult<
+  typeof StageFile.successSchema.Type,
+  typeof StageFile.errorSchema.Type
+>
+export type HunkResult = RpcResult<
+  typeof StageHunk.successSchema.Type,
+  typeof StageHunk.errorSchema.Type
+>
+export type ConflictableResult = RpcResult<
+  typeof MergeBranch.successSchema.Type,
+  typeof MergeBranch.errorSchema.Type
+>
+export type RefWriteResult = RpcResult<
+  typeof CreateBranch.successSchema.Type,
+  typeof CreateBranch.errorSchema.Type
+>
+export type CheckoutResult = RpcResult<
+  typeof Checkout.successSchema.Type,
+  typeof Checkout.errorSchema.Type
+>
+export type FetchResult = RpcResult<typeof Fetch.successSchema.Type, typeof Fetch.errorSchema.Type>
+export type StatusResult = RpcResult<
+  typeof GetStatus.successSchema.Type,
+  typeof GetStatus.errorSchema.Type
+>
+export type LocalBranchesResult = RpcResult<
+  typeof GetLocalBranches.successSchema.Type,
+  typeof GetLocalBranches.errorSchema.Type
+>
+export type RemoteRefsResult = RpcResult<
+  typeof GetRemoteRefs.successSchema.Type,
+  typeof GetRemoteRefs.errorSchema.Type
+>
+export type BranchesResult = RpcResult<
+  typeof GetBranches.successSchema.Type,
+  typeof GetBranches.errorSchema.Type
+>
+export type DiffResult = RpcResult<
+  typeof GetDiff.successSchema.Type,
+  typeof GetDiff.errorSchema.Type
+>
+export type LogResult = RpcResult<typeof GetLog.successSchema.Type, typeof GetLog.errorSchema.Type>
+export type StashListResult = RpcResult<
+  typeof StashList.successSchema.Type,
+  typeof StashList.errorSchema.Type
+>
 
 export async function rpcOpenRepo(repoPath: string): Promise<OpenRepoResult> {
-  return parseOrThrow(OpenRepoResult, await window.electronAPI.openRepo(repoPath))
+  return parseOrThrow(rpcResultSchema(OpenRepo), await window.electronAPI.openRepo(repoPath))
 }
 
 export async function rpcCloseRepo(repoPath: string): Promise<void> {
@@ -129,32 +141,27 @@ export async function rpcCloseRepo(repoPath: string): Promise<void> {
 }
 
 export async function rpcScanForRepos(dirPath: string): Promise<ScanForReposResult> {
-  return parseOrThrow(ScanForReposResult, await window.electronAPI.scanForRepos(dirPath))
+  return parseOrThrow(rpcResultSchema(ScanForRepos), await window.electronAPI.scanForRepos(dirPath))
 }
 
 export async function rpcCommit(repoPath: string, message: string): Promise<CommitResult> {
-  const payload = await window.electronAPI.sidecarRequest(Commit._tag, { repoPath, message })
-  return parseOrThrow(CommitResult, payload)
+  return callSidecarRpc(Commit, { repoPath, message })
 }
 
 export async function rpcStageFile(repoPath: string, file: string): Promise<StageResult> {
-  const payload = await window.electronAPI.sidecarRequest(StageFile._tag, { repoPath, file })
-  return parseOrThrow(StageResult, payload)
+  return callSidecarRpc(StageFile, { repoPath, file })
 }
 
 export async function rpcUnstageFile(repoPath: string, file: string): Promise<StageResult> {
-  const payload = await window.electronAPI.sidecarRequest(UnstageFile._tag, { repoPath, file })
-  return parseOrThrow(StageResult, payload)
+  return callSidecarRpc(UnstageFile, { repoPath, file })
 }
 
 export async function rpcStageAll(repoPath: string, files: string[]): Promise<StageResult> {
-  const payload = await window.electronAPI.sidecarRequest(StageAll._tag, { repoPath, files })
-  return parseOrThrow(StageResult, payload)
+  return callSidecarRpc(StageAll, { repoPath, files })
 }
 
 export async function rpcUnstageAll(repoPath: string, files: string[]): Promise<StageResult> {
-  const payload = await window.electronAPI.sidecarRequest(UnstageAll._tag, { repoPath, files })
-  return parseOrThrow(StageResult, payload)
+  return callSidecarRpc(UnstageAll, { repoPath, files })
 }
 
 export async function rpcStageHunk(
@@ -162,12 +169,11 @@ export async function rpcStageHunk(
   file: string,
   hunkHeader: string
 ): Promise<HunkResult> {
-  const payload = await window.electronAPI.sidecarRequest(StageHunk._tag, {
+  return callSidecarRpc(StageHunk, {
     repoPath,
     file,
     hunkHeader
   })
-  return parseOrThrow(HunkResult, payload)
 }
 
 export async function rpcUnstageHunk(
@@ -175,37 +181,31 @@ export async function rpcUnstageHunk(
   file: string,
   hunkHeader: string
 ): Promise<HunkResult> {
-  const payload = await window.electronAPI.sidecarRequest(UnstageHunk._tag, {
+  return callSidecarRpc(UnstageHunk, {
     repoPath,
     file,
     hunkHeader
   })
-  return parseOrThrow(HunkResult, payload)
 }
 
 export async function rpcDiscardChanges(repoPath: string, files: string[]): Promise<StageResult> {
-  const payload = await window.electronAPI.sidecarRequest(DiscardChanges._tag, { repoPath, files })
-  return parseOrThrow(StageResult, payload)
+  return callSidecarRpc(DiscardChanges, { repoPath, files })
 }
 
 export async function rpcDiscardAll(repoPath: string): Promise<StageResult> {
-  const payload = await window.electronAPI.sidecarRequest(DiscardAll._tag, { repoPath })
-  return parseOrThrow(StageResult, payload)
+  return callSidecarRpc(DiscardAll, { repoPath })
 }
 
 export async function rpcMergeBranch(repoPath: string, ref: string): Promise<ConflictableResult> {
-  const payload = await window.electronAPI.sidecarRequest(MergeBranch._tag, { repoPath, ref })
-  return parseOrThrow(ConflictableResult, payload)
+  return callSidecarRpc(MergeBranch, { repoPath, ref })
 }
 
 export async function rpcRevertCommit(repoPath: string, sha: string): Promise<ConflictableResult> {
-  const payload = await window.electronAPI.sidecarRequest(RevertCommit._tag, { repoPath, sha })
-  return parseOrThrow(ConflictableResult, payload)
+  return callSidecarRpc(RevertCommit, { repoPath, sha })
 }
 
 export async function rpcCherryPick(repoPath: string, sha: string): Promise<ConflictableResult> {
-  const payload = await window.electronAPI.sidecarRequest(CherryPick._tag, { repoPath, sha })
-  return parseOrThrow(ConflictableResult, payload)
+  return callSidecarRpc(CherryPick, { repoPath, sha })
 }
 
 export async function rpcCheckout(
@@ -213,12 +213,11 @@ export async function rpcCheckout(
   refKind: RefKind,
   fullPath: string
 ): Promise<CheckoutResult> {
-  const payload = await window.electronAPI.sidecarRequest(Checkout._tag, {
+  return callSidecarRpc(Checkout, {
     repoPath,
     refKind,
     fullPath
   })
-  return parseOrThrow(CheckoutResult, payload)
 }
 
 export async function rpcCreateBranch(
@@ -227,13 +226,12 @@ export async function rpcCreateBranch(
   startPoint?: string,
   checkout?: boolean
 ): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(CreateBranch._tag, {
+  return callSidecarRpc(CreateBranch, {
     repoPath,
     name,
     startPoint,
     checkout
   })
-  return parseOrThrow(RefWriteResult, payload)
 }
 
 export async function rpcDeleteBranch(
@@ -241,12 +239,11 @@ export async function rpcDeleteBranch(
   name: string,
   force?: boolean
 ): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(DeleteBranch._tag, {
+  return callSidecarRpc(DeleteBranch, {
     repoPath,
     name,
     force
   })
-  return parseOrThrow(RefWriteResult, payload)
 }
 
 export async function rpcRenameBranch(
@@ -254,12 +251,11 @@ export async function rpcRenameBranch(
   oldName: string,
   newName: string
 ): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(RenameBranch._tag, {
+  return callSidecarRpc(RenameBranch, {
     repoPath,
     oldName,
     newName
   })
-  return parseOrThrow(RefWriteResult, payload)
 }
 
 export async function rpcCreateTag(
@@ -268,33 +264,28 @@ export async function rpcCreateTag(
   ref?: string,
   message?: string
 ): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(CreateTag._tag, {
+  return callSidecarRpc(CreateTag, {
     repoPath,
     name,
     ref,
     message
   })
-  return parseOrThrow(RefWriteResult, payload)
 }
 
 export async function rpcDeleteTag(repoPath: string, name: string): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(DeleteTag._tag, { repoPath, name })
-  return parseOrThrow(RefWriteResult, payload)
+  return callSidecarRpc(DeleteTag, { repoPath, name })
 }
 
 export async function rpcStashApply(repoPath: string, index: number): Promise<ConflictableResult> {
-  const payload = await window.electronAPI.sidecarRequest(StashApply._tag, { repoPath, index })
-  return parseOrThrow(ConflictableResult, payload)
+  return callSidecarRpc(StashApply, { repoPath, index })
 }
 
 export async function rpcStashPop(repoPath: string, index: number): Promise<ConflictableResult> {
-  const payload = await window.electronAPI.sidecarRequest(StashPop._tag, { repoPath, index })
-  return parseOrThrow(ConflictableResult, payload)
+  return callSidecarRpc(StashPop, { repoPath, index })
 }
 
 export async function rpcStashDrop(repoPath: string, index: number): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(StashDrop._tag, { repoPath, index })
-  return parseOrThrow(RefWriteResult, payload)
+  return callSidecarRpc(StashDrop, { repoPath, index })
 }
 
 export async function rpcStashPush(
@@ -303,13 +294,12 @@ export async function rpcStashPush(
   includeUntracked?: boolean,
   files?: string[]
 ): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(StashPush._tag, {
+  return callSidecarRpc(StashPush, {
     repoPath,
     message,
     includeUntracked,
     files
   })
-  return parseOrThrow(RefWriteResult, payload)
 }
 
 export async function rpcReset(
@@ -317,21 +307,49 @@ export async function rpcReset(
   sha: string,
   mode: ResetMode
 ): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(Reset._tag, { repoPath, sha, mode })
-  return parseOrThrow(RefWriteResult, payload)
+  return callSidecarRpc(Reset, { repoPath, sha, mode })
 }
 
 export async function rpcFetch(repoPath: string): Promise<FetchResult> {
-  const payload = await window.electronAPI.sidecarRequest(Fetch._tag, { repoPath })
-  return parseOrThrow(FetchResult, payload)
+  return callSidecarRpc(Fetch, { repoPath })
 }
 
 export async function rpcPush(repoPath: string): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(Push._tag, { repoPath })
-  return parseOrThrow(RefWriteResult, payload)
+  return callSidecarRpc(Push, { repoPath })
 }
 
 export async function rpcPull(repoPath: string): Promise<RefWriteResult> {
-  const payload = await window.electronAPI.sidecarRequest(Pull._tag, { repoPath })
-  return parseOrThrow(RefWriteResult, payload)
+  return callSidecarRpc(Pull, { repoPath })
+}
+
+export async function rpcGetStatus(repoPath: string): Promise<StatusResult> {
+  return callSidecarRpc(GetStatus, { repoPath })
+}
+
+export async function rpcGetLocalBranches(repoPath: string): Promise<LocalBranchesResult> {
+  return callSidecarRpc(GetLocalBranches, { repoPath })
+}
+
+export async function rpcGetRemoteRefs(repoPath: string): Promise<RemoteRefsResult> {
+  return callSidecarRpc(GetRemoteRefs, { repoPath })
+}
+
+export async function rpcGetBranches(repoPath: string): Promise<BranchesResult> {
+  return callSidecarRpc(GetBranches, { repoPath })
+}
+
+export async function rpcGetDiff(
+  repoPath: string,
+  file: string,
+  staged?: boolean
+): Promise<DiffResult> {
+  return callSidecarRpc(GetDiff, { repoPath, file, staged })
+}
+
+export async function rpcGetLog(repoPath: string, maxCount?: number): Promise<LogResult> {
+  return callSidecarRpc(GetLog, { repoPath, maxCount })
+}
+
+export async function rpcStashList(repoPath: string): Promise<StashListResult> {
+  return callSidecarRpc(StashList, { repoPath })
 }

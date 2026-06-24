@@ -3,93 +3,52 @@ import os from 'node:os'
 import nodePath from 'node:path'
 import { Etag, FileSystem, HttpPlatform, Path } from '@effect/platform'
 import { RpcSerialization, RpcServer } from '@effect/rpc'
-import {
-  Conflict as RpcConflict,
-  FetchSkipped as RpcFetchSkipped,
-  GitError as RpcGitError,
-  HunkNotFound as RpcHunkNotFound,
-  NotARepo as RpcNotARepo,
-  RepoNotOpen as RpcRepoNotOpen,
-  SidecarRpcs
-} from '@shared/rpc'
+import { GitError, SidecarRpcs } from '@shared/rpc'
 import { Effect, Layer } from 'effect'
 import { simpleGit } from 'simple-git'
 import { normalizeRepoPath } from './git/instances'
-import type {
-  Conflict,
-  FetchSkipped,
-  GitError,
-  HunkNotFound,
-  NotARepo,
-  RepoNotOpen
-} from './git-errors'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 
 const INVALID_REPO_PATH = 'invalid repository path'
 const INVALID_DIRECTORY_PATH = 'invalid directory path'
 
-const resolveRepo = (repoPath: string): Effect.Effect<string, RpcGitError> =>
+const resolveRepo = (repoPath: string): Effect.Effect<string, GitError> =>
   Effect.suspend(() => {
     const resolved = resolveExistingRepoRoot(repoPath)
     return resolved
       ? Effect.succeed(resolved)
-      : Effect.fail(new RpcGitError({ message: INVALID_REPO_PATH }))
+      : Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
   })
 
-const resolveFile = (repoRoot: string, file: string): Effect.Effect<string, RpcGitError> =>
+const resolveFile = (repoRoot: string, file: string): Effect.Effect<string, GitError> =>
   Effect.suspend(() => {
     const relative = resolveRepoRelativeFile(repoRoot, file)
     return relative
       ? Effect.succeed(relative)
-      : Effect.fail(new RpcGitError({ message: INVALID_REPO_PATH }))
+      : Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
   })
 
 const resolveFiles = (
   repoRoot: string,
   files: readonly string[]
-): Effect.Effect<string[], RpcGitError> =>
+): Effect.Effect<string[], GitError> =>
   Effect.suspend(() => {
     const resolved: string[] = []
     for (const file of files) {
       const relative = resolveRepoRelativeFile(repoRoot, file)
       if (!relative) {
-        return Effect.fail(new RpcGitError({ message: INVALID_REPO_PATH }))
+        return Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
       }
       resolved.push(relative)
     }
     return Effect.succeed(resolved)
   })
 
-// Read ops fail only with the sidecar-internal RepoNotOpen/GitError; project them onto the RPC
-// group's Schema-defined error classes so they serialize on the typed error channel.
-const toReadError = (error: RepoNotOpen | GitError): RpcRepoNotOpen | RpcGitError =>
-  error._tag === 'RepoNotOpen' ? new RpcRepoNotOpen() : new RpcGitError({ message: error.message })
-
-const toHunkError = (
-  error: RepoNotOpen | GitError | HunkNotFound
-): RpcRepoNotOpen | RpcGitError | RpcHunkNotFound =>
-  error._tag === 'HunkNotFound' ? new RpcHunkNotFound() : toReadError(error)
-
-const toConflictError = (
-  error: RepoNotOpen | GitError | Conflict
-): RpcRepoNotOpen | RpcGitError | RpcConflict =>
-  error._tag === 'Conflict' ? new RpcConflict({ message: error.message }) : toReadError(error)
-
-const toFetchError = (
-  error: RepoNotOpen | GitError | FetchSkipped
-): RpcRepoNotOpen | RpcGitError | RpcFetchSkipped =>
-  error._tag === 'FetchSkipped' ? new RpcFetchSkipped() : toReadError(error)
-
-// openRepo's own failure surface: a non-repository target becomes the typed NotARepo outcome (which
-// the renderer routes to its "not a git repository" path), every other failure a GitError.
-const toOpenError = (error: NotARepo | GitError): RpcNotARepo | RpcGitError =>
-  error._tag === 'NotARepo' ? new RpcNotARepo() : new RpcGitError({ message: error.message })
-
 // scanForRepos confines enumeration to the user's home tree. The guard mirrors the previous
 // scanForReposSafely: absolute, no `..`/NUL, realpath must be a directory under the realpath'd home
 // root. Any violation fails with the typed GitError('invalid directory path').
-const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], RpcGitError> =>
+const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], GitError> =>
   Effect.tryPromise({
     try: async () => {
       if (!requestedDirPath || requestedDirPath.includes('\0')) {
@@ -151,21 +110,17 @@ const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], 
       return repos
     },
     catch: (error) =>
-      new RpcGitError({ message: error instanceof Error ? error.message : String(error) })
+      new GitError({ message: error instanceof Error ? error.message : String(error) })
   })
 
 export const handlersLayer = SidecarRpcs.toLayer({
-  // openRepo resolves the path to an existing directory first (a non-existent/unsafe path is a
-  // GitError, and simple-git would otherwise throw a defect on a missing dir). It must NOT, however,
-  // pre-filter a non-repo into GitError the way resolveRepo does: for an existing-but-not-a-repo dir
-  // openSession fails with the internal NotARepo, which toOpenError surfaces as the typed NotARepo.
   openRepo: ({ repoPath }) =>
     Effect.suspend(() => {
       const resolved = resolveExistingRepoRoot(repoPath)
       if (!resolved) {
-        return Effect.fail(new RpcGitError({ message: INVALID_REPO_PATH }))
+        return Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
       }
-      return operations.openRepo(resolved).pipe(Effect.mapError(toOpenError))
+      return operations.openRepo(resolved)
     }),
   closeRepo: ({ repoPath }) =>
     Effect.suspend(() => {
@@ -175,18 +130,12 @@ export const handlersLayer = SidecarRpcs.toLayer({
   scanForRepos: ({ dirPath }) =>
     scanForReposGuarded(dirPath).pipe(Effect.map((repos) => ({ repos }))),
   commit: ({ repoPath, message }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.commit(resolved, message).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.commit(resolved, message))),
   stageFile: ({ repoPath, file }) =>
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
         resolveFile(resolved, file).pipe(
-          Effect.flatMap((relative) =>
-            operations.stageFile(resolved, relative).pipe(Effect.mapError(toReadError))
-          )
+          Effect.flatMap((relative) => operations.stageFile(resolved, relative))
         )
       )
     ),
@@ -194,9 +143,7 @@ export const handlersLayer = SidecarRpcs.toLayer({
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
         resolveFile(resolved, file).pipe(
-          Effect.flatMap((relative) =>
-            operations.unstageFile(resolved, relative).pipe(Effect.mapError(toReadError))
-          )
+          Effect.flatMap((relative) => operations.unstageFile(resolved, relative))
         )
       )
     ),
@@ -204,9 +151,7 @@ export const handlersLayer = SidecarRpcs.toLayer({
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
         resolveFiles(resolved, files).pipe(
-          Effect.flatMap((relatives) =>
-            operations.stageAll(resolved, relatives).pipe(Effect.mapError(toReadError))
-          )
+          Effect.flatMap((relatives) => operations.stageAll(resolved, relatives))
         )
       )
     ),
@@ -214,9 +159,7 @@ export const handlersLayer = SidecarRpcs.toLayer({
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
         resolveFiles(resolved, files).pipe(
-          Effect.flatMap((relatives) =>
-            operations.unstageAll(resolved, relatives).pipe(Effect.mapError(toReadError))
-          )
+          Effect.flatMap((relatives) => operations.unstageAll(resolved, relatives))
         )
       )
     ),
@@ -224,9 +167,7 @@ export const handlersLayer = SidecarRpcs.toLayer({
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
         resolveFile(resolved, file).pipe(
-          Effect.flatMap((relative) =>
-            operations.stageHunk(resolved, relative, hunkHeader).pipe(Effect.mapError(toHunkError))
-          )
+          Effect.flatMap((relative) => operations.stageHunk(resolved, relative, hunkHeader))
         )
       )
     ),
@@ -234,11 +175,7 @@ export const handlersLayer = SidecarRpcs.toLayer({
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
         resolveFile(resolved, file).pipe(
-          Effect.flatMap((relative) =>
-            operations
-              .unstageHunk(resolved, relative, hunkHeader)
-              .pipe(Effect.mapError(toHunkError))
-          )
+          Effect.flatMap((relative) => operations.unstageHunk(resolved, relative, hunkHeader))
         )
       )
     ),
@@ -246,176 +183,103 @@ export const handlersLayer = SidecarRpcs.toLayer({
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
         resolveFiles(resolved, files).pipe(
-          Effect.flatMap((relatives) =>
-            operations.discardChanges(resolved, relatives).pipe(Effect.mapError(toReadError))
-          )
+          Effect.flatMap((relatives) => operations.discardChanges(resolved, relatives))
         )
       )
     ),
   discardAll: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.discardAll(resolved).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.discardAll(resolved))),
   mergeBranch: ({ repoPath, ref }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.mergeBranch(resolved, ref).pipe(Effect.mapError(toConflictError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.mergeBranch(resolved, ref))),
   revertCommit: ({ repoPath, sha }) =>
     resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.revertCommit(resolved, sha).pipe(Effect.mapError(toConflictError))
-      )
+      Effect.flatMap((resolved) => operations.revertCommit(resolved, sha))
     ),
   cherryPick: ({ repoPath, sha }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.cherryPick(resolved, sha).pipe(Effect.mapError(toConflictError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.cherryPick(resolved, sha))),
   checkout: ({ repoPath, refKind, fullPath }) =>
     resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.checkoutRef(resolved, refKind, fullPath).pipe(Effect.mapError(toReadError))
-      )
+      Effect.flatMap((resolved) => operations.checkoutRef(resolved, refKind, fullPath))
     ),
   createBranch: ({ repoPath, name, startPoint, checkout }) =>
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
-        operations
-          .createBranch(resolved, name, startPoint || undefined, checkout === true)
-          .pipe(Effect.mapError(toReadError))
+        operations.createBranch(resolved, name, startPoint || undefined, checkout === true)
       )
     ),
   deleteBranch: ({ repoPath, name, force }) =>
     resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.deleteBranch(resolved, name, force === true).pipe(Effect.mapError(toReadError))
-      )
+      Effect.flatMap((resolved) => operations.deleteBranch(resolved, name, force === true))
     ),
   renameBranch: ({ repoPath, oldName, newName }) =>
     resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.renameBranch(resolved, oldName, newName).pipe(Effect.mapError(toReadError))
-      )
+      Effect.flatMap((resolved) => operations.renameBranch(resolved, oldName, newName))
     ),
   createTag: ({ repoPath, name, ref, message }) =>
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>
-        operations
-          .createTag(resolved, name, ref || undefined, message || undefined)
-          .pipe(Effect.mapError(toReadError))
+        operations.createTag(resolved, name, ref || undefined, message || undefined)
       )
     ),
   deleteTag: ({ repoPath, name }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.deleteTag(resolved, name).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.deleteTag(resolved, name))),
   stashPop: ({ repoPath, index }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.stashPop(resolved, index).pipe(Effect.mapError(toConflictError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.stashPop(resolved, index))),
   stashApply: ({ repoPath, index }) =>
     resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.stashApply(resolved, index).pipe(Effect.mapError(toConflictError))
-      )
+      Effect.flatMap((resolved) => operations.stashApply(resolved, index))
     ),
   stashDrop: ({ repoPath, index }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.stashDrop(resolved, index).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.stashDrop(resolved, index))),
   stashPush: ({ repoPath, message, includeUntracked, files }) =>
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) => {
-        const resolvedFiles: Effect.Effect<string[] | undefined, RpcGitError> =
+        const resolvedFiles: Effect.Effect<string[] | undefined, GitError> =
           files === undefined ? Effect.succeed(undefined) : resolveFiles(resolved, files)
         return resolvedFiles.pipe(
           Effect.flatMap((relatives) =>
-            operations
-              .stashPush(resolved, message || undefined, includeUntracked === true, relatives)
-              .pipe(Effect.mapError(toReadError))
+            operations.stashPush(
+              resolved,
+              message || undefined,
+              includeUntracked === true,
+              relatives
+            )
           )
         )
       })
     ),
   reset: ({ repoPath, sha, mode }) =>
     resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.resetToCommit(resolved, sha, mode).pipe(Effect.mapError(toReadError))
-      )
+      Effect.flatMap((resolved) => operations.resetToCommit(resolved, sha, mode))
     ),
   fetch: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.fetchRepo(resolved).pipe(Effect.mapError(toFetchError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.fetchRepo(resolved))),
   push: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => operations.pushRepo(resolved).pipe(Effect.mapError(toReadError)))
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.pushRepo(resolved))),
   pull: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => operations.pullRepo(resolved).pipe(Effect.mapError(toReadError)))
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.pullRepo(resolved))),
   getStatus: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.getStatus(resolved).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getStatus(resolved))),
   getBranches: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.getBranches(resolved).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getBranches(resolved))),
   getLocalBranches: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.getLocalBranches(resolved).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getLocalBranches(resolved))),
   getRemoteRefs: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.getRemoteRefs(resolved).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getRemoteRefs(resolved))),
   getLog: ({ repoPath, maxCount }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.getLog(resolved, maxCount).pipe(Effect.mapError(toReadError))
-      )
-    ),
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getLog(resolved, maxCount))),
   getDiff: ({ repoPath, file, staged }) =>
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) => {
         const relative = resolveRepoRelativeFile(resolved, file)
         if (!relative) {
-          return Effect.fail(new RpcGitError({ message: INVALID_REPO_PATH }))
+          return Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
         }
-        return operations
-          .getDiff(resolved, relative, staged === true)
-          .pipe(Effect.mapError(toReadError))
+        return operations.getDiff(resolved, relative, staged === true)
       })
     ),
   stashList: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.stashList(resolved).pipe(Effect.mapError(toReadError))
-      )
-    )
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.stashList(resolved)))
 })
 
 // toWebHandler is built on HttpRouter, so it asks for the HTTP platform services even though the

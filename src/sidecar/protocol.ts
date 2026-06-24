@@ -1,5 +1,3 @@
-export { SidecarOp, type SidecarOpName } from '@shared/sidecar-ops'
-
 export type SidecarStartMessage = {
   type: 'start'
   hostname: string

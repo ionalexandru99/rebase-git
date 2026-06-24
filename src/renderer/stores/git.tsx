@@ -2,7 +2,6 @@ import { parseOrThrow } from '@shared/codec'
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import { StartLogStreamResponseSchema } from '@shared/schemas/ipc'
-import { SidecarOp } from '@shared/sidecar-ops'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -12,6 +11,9 @@ import {
   rpcCloseRepo,
   rpcCommit,
   rpcFetch,
+  rpcGetLocalBranches,
+  rpcGetRemoteRefs,
+  rpcGetStatus,
   rpcOpenRepo,
   rpcPull,
   rpcPush,
@@ -22,7 +24,6 @@ import {
   rpcUnstageFile,
   rpcUnstageHunk
 } from '@/lib/rpc-client'
-import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
@@ -164,12 +165,12 @@ const parseRemoteRefsResponse = (response: {
 }
 
 const fetchLocalBranches = async (path: string): Promise<LocalBranches> => {
-  const response = await sidecarFetch(SidecarOp.getLocalBranches, { repoPath: path })
+  const response = await rpcGetLocalBranches(path)
   return parseLocalBranchesResponse(response)
 }
 
 const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
-  const response = await sidecarFetch(SidecarOp.getRemoteRefs, { repoPath: path })
+  const response = await rpcGetRemoteRefs(path)
   return parseRemoteRefsResponse(response)
 }
 
@@ -264,7 +265,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: async ({ queryKey }) => {
       const repoPath = queryKey[1] as string
-      const response = await sidecarFetch('get-status', { repoPath })
+      const response = await rpcGetStatus(repoPath)
       if (response._tag === 'GitError') {
         throw new Error(response.message)
       }

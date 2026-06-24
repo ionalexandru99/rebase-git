@@ -1,5 +1,4 @@
 import type { DiffHunk, DiffLine, FileDiff } from '@shared/schemas/git'
-import { SidecarOp } from '@shared/sidecar-ops'
 import { useQuery } from '@tanstack/react-query'
 import { FileDiffIcon } from 'lucide-react'
 import { type CSSProperties, useMemo, useState } from 'react'
@@ -10,7 +9,7 @@ import {
   languageForFile
 } from '@/lib/diff-highlight'
 import { type HunkEntry, type PendingHunk, remapHunk } from '@/lib/diff-merge'
-import { sidecarFetch } from '@/lib/sidecar-fetch'
+import { rpcGetDiff } from '@/lib/rpc-client'
 import { cn } from '@/lib/utils'
 import type { GitStore } from '@/stores/git'
 import type { SelectedFile } from '../StatusPanel'
@@ -38,11 +37,7 @@ export function DiffPanel(props: DiffPanelProps) {
         if (!repoPath || !selected) {
           throw new Error('No file selected')
         }
-        const response = await sidecarFetch(SidecarOp.getDiff, {
-          repoPath,
-          file: selected.file,
-          staged
-        })
+        const response = await rpcGetDiff(repoPath, selected.file, staged)
         if (response._tag === 'Ok') {
           return response.diff
         }

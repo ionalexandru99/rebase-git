@@ -1,10 +1,9 @@
 import { FetchHttpClient, HttpClient, HttpClientRequest } from '@effect/platform'
 import { RpcClient, RpcSerialization } from '@effect/rpc'
-import { type RpcReadOp, type RpcWriteOp, rpcReadOps, rpcWriteOps, SidecarRpcs } from '@shared/rpc'
+import { SidecarRpcs } from '@shared/rpc'
 import { Cause, Effect, Exit, Layer, ManagedRuntime, Option } from 'effect'
 
-type RpcOp = RpcReadOp | RpcWriteOp
-const rpcTags: Record<string, string> = { ...rpcReadOps, ...rpcWriteOps }
+const rpcTags = new Set(SidecarRpcs.requests.keys())
 
 // The renderer↔main wire shape for an RPC op: the typed success/domain errors as data; every
 // infrastructure failure rejects the call instead (see callRpc / SidecarRpcError).
@@ -52,16 +51,8 @@ export function disposeRpcRuntime(): void {
   }
 }
 
-export function isRpcReadOp(op: string): op is RpcReadOp {
-  return op in rpcReadOps
-}
-
-export function isRpcWriteOp(op: string): op is RpcWriteOp {
-  return op in rpcWriteOps
-}
-
-export function isRpcOp(op: string): op is RpcOp {
-  return op in rpcTags
+export function isRpcOp(op: string): boolean {
+  return rpcTags.has(op)
 }
 
 // Thrown for anything that is NOT a typed domain failure (transport error, RPC decode failure,
@@ -132,7 +123,7 @@ async function runRpcTag(
       Effect.gen(function* () {
         const client = yield* RpcClient.make(SidecarRpcs)
         const method = (
-          client as Record<string, (input: unknown) => Effect.Effect<unknown, unknown>>
+          client as unknown as Record<string, (input: unknown) => Effect.Effect<unknown, unknown>>
         )[tag]
         return yield* method(payload)
       })
@@ -141,20 +132,6 @@ async function runRpcTag(
   return classifyExit(tag, exit, token)
 }
 
-// Routes a read or write op through the sidecar's @effect/rpc group; see classifyExit for how the
-// typed RPC error channel maps back onto the renderer's `_tag` response union.
-export async function callRpc(
-  op: RpcOp,
-  baseUrl: string,
-  token: string,
-  payload: Record<string, unknown>
-): Promise<RpcResponse> {
-  return runRpcTag(rpcTags[op], baseUrl, token, payload)
-}
-
-// Invokes an RPC op by its tag directly, for main's dedicated IPC channels (open/close/scan) that
-// sequence main-process side effects around the typed call and so don't route through the generic
-// renderer `sidecarRequest` write path.
 export async function callRpcByTag(
   tag: string,
   baseUrl: string,

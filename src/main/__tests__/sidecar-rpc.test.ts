@@ -1,58 +1,32 @@
 import { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from '@shared/rpc'
 import { Exit } from 'effect'
 import { describe, expect, it, vi } from 'vitest'
-import { classifyExit, isRpcOp, isRpcReadOp, isRpcWriteOp, SidecarRpcError } from '../sidecar-rpc'
+import { classifyExit, isRpcOp, SidecarRpcError } from '../sidecar-rpc'
 
 const TOKEN = 'super-secret-bearer-token'
 
 describe('RPC op classification', () => {
-  it('routes the commit op through the write seam, not the old transport', () => {
-    expect(isRpcWriteOp('commit')).toBe(true)
-    expect(isRpcReadOp('commit')).toBe(false)
+  it('accepts write RPC tags', () => {
     expect(isRpcOp('commit')).toBe(true)
+    expect(isRpcOp('stageFile')).toBe(true)
+    expect(isRpcOp('mergeBranch')).toBe(true)
+    expect(isRpcOp('stashPush')).toBe(true)
   })
 
-  it('keeps the read ops on the read seam and rejects unknown ops', () => {
-    expect(isRpcReadOp('get-status')).toBe(true)
-    expect(isRpcWriteOp('get-status')).toBe(false)
-    expect(isRpcOp('get-status')).toBe(true)
+  it('accepts read RPC tags', () => {
+    expect(isRpcOp('getStatus')).toBe(true)
+    expect(isRpcOp('getBranches')).toBe(true)
+    expect(isRpcOp('getLocalBranches')).toBe(true)
+    expect(isRpcOp('getRemoteRefs')).toBe(true)
+    expect(isRpcOp('stashList')).toBe(true)
+  })
+
+  it('rejects deleted legacy op names', () => {
+    expect(isRpcOp('get-status')).toBe(false)
     expect(isRpcOp('stage-file')).toBe(false)
-  })
-
-  it('routes the migrated staging ops through the write seam by their RPC tag', () => {
-    for (const tag of ['stageFile', 'unstageFile', 'stageAll', 'unstageAll', 'discardAll']) {
-      expect(isRpcWriteOp(tag)).toBe(true)
-      expect(isRpcReadOp(tag)).toBe(false)
-      expect(isRpcOp(tag)).toBe(true)
-    }
-  })
-
-  it('routes the conflictable ops through the write seam by their RPC tag', () => {
-    for (const tag of ['mergeBranch', 'revertCommit', 'cherryPick']) {
-      expect(isRpcWriteOp(tag)).toBe(true)
-      expect(isRpcReadOp(tag)).toBe(false)
-      expect(isRpcOp(tag)).toBe(true)
-    }
     expect(isRpcOp('merge-branch')).toBe(false)
     expect(isRpcOp('revert-commit')).toBe(false)
     expect(isRpcOp('cherry-pick')).toBe(false)
-  })
-
-  it('routes the stash, reset and remote ops through the write seam by their RPC tag', () => {
-    for (const tag of [
-      'stashPop',
-      'stashApply',
-      'stashDrop',
-      'stashPush',
-      'reset',
-      'fetch',
-      'push',
-      'pull'
-    ]) {
-      expect(isRpcWriteOp(tag)).toBe(true)
-      expect(isRpcReadOp(tag)).toBe(false)
-      expect(isRpcOp(tag)).toBe(true)
-    }
     for (const legacy of [
       'fetch-repo',
       'push-repo',
