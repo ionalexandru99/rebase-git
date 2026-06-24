@@ -118,18 +118,12 @@ export async function rpcDiscardAll(repoPath: string): Promise<StageResult> {
   return parseOrThrow(StageResult, payload)
 }
 
-export async function rpcMergeBranch(
-  repoPath: string,
-  ref: string
-): Promise<ConflictableResult> {
+export async function rpcMergeBranch(repoPath: string, ref: string): Promise<ConflictableResult> {
   const payload = await window.electronAPI.sidecarRequest(MergeBranch._tag, { repoPath, ref })
   return parseOrThrow(ConflictableResult, payload)
 }
 
-export async function rpcRevertCommit(
-  repoPath: string,
-  sha: string
-): Promise<ConflictableResult> {
+export async function rpcRevertCommit(repoPath: string, sha: string): Promise<ConflictableResult> {
   const payload = await window.electronAPI.sidecarRequest(RevertCommit._tag, { repoPath, sha })
   return parseOrThrow(ConflictableResult, payload)
 }
