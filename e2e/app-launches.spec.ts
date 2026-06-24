@@ -168,6 +168,65 @@ test.describe('Git GUI E2E', () => {
     }
   })
 
+  test('a merge conflict flows end to end as a typed Conflict through the RPC seam', async () => {
+    const repo = createFixtureRepo()
+    const git = (args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
+    git(['checkout', '-b', 'feature'])
+    fs.writeFileSync(path.join(repo, 'conflict.txt'), 'feature-side\n')
+    git(['add', '.'])
+    git(['commit', '-m', 'feature side'])
+    git(['checkout', 'main'])
+    fs.writeFileSync(path.join(repo, 'conflict.txt'), 'main-side\n')
+    git(['add', '.'])
+    git(['commit', '-m', 'main side'])
+    try {
+      const result = await page.evaluate(async (repoPath) => {
+        const api = (
+          window as unknown as {
+            electronAPI: Record<string, (...args: unknown[]) => Promise<unknown>>
+          }
+        ).electronAPI
+        const open = (await api.openRepo(repoPath)) as { _tag: string }
+        const conflicted = (await api.sidecarRequest('mergeBranch', {
+          repoPath,
+          ref: 'feature'
+        })) as { _tag: string; message?: string }
+
+        const cleanRepo = (await api.sidecarRequest('mergeBranch', {
+          repoPath: '/no/such/path/from/e2e',
+          ref: 'feature'
+        })) as { _tag: string }
+
+        return {
+          open: open._tag,
+          conflictedTag: conflicted._tag,
+          conflictedMessage: conflicted.message ?? '',
+          missingTag: cleanRepo._tag
+        }
+      }, repo)
+
+      expect(result.open).toBe('Ok')
+      expect(result.conflictedTag).toBe('Conflict')
+      expect(result.conflictedMessage).toBeTruthy()
+      expect(result.missingTag).toBe('GitError')
+    } finally {
+      try {
+        git(['merge', '--abort'])
+      } catch {}
+      await page
+        .evaluate(async (repoPath) => {
+          const api = (
+            window as unknown as {
+              electronAPI?: { closeRepo?: (path: string) => Promise<unknown> }
+            }
+          ).electronAPI
+          await api?.closeRepo?.(repoPath)
+        }, repo)
+        .catch(() => {})
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   test('restored repo renders branches and history in the UI', async () => {
     const repo = createFixtureRepo()
     try {
