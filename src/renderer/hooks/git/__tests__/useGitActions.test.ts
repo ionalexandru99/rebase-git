@@ -3,8 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGitActions } from '@/hooks/git/useGitActions'
 import {
   type ConflictableResult,
+  type RefWriteResult,
   rpcCherryPick,
+  rpcCreateBranch,
+  rpcCreateTag,
+  rpcDeleteBranch,
+  rpcDeleteTag,
   rpcMergeBranch,
+  rpcRenameBranch,
   rpcRevertCommit
 } from '@/lib/rpc-client'
 import type { GitStore } from '@/stores/git'
@@ -12,12 +18,20 @@ import type { GitStore } from '@/stores/git'
 const conflictable = (wire: { _tag: string; message?: string }): ConflictableResult =>
   wire as unknown as ConflictableResult
 
+const refWrite = (wire: { _tag: string; message?: string }): RefWriteResult =>
+  wire as unknown as RefWriteResult
+
 vi.mock('@/lib/rpc-client', () => ({
   rpcMergeBranch: vi.fn(),
   rpcRevertCommit: vi.fn(),
   rpcCherryPick: vi.fn(),
   rpcDiscardChanges: vi.fn(),
-  rpcDiscardAll: vi.fn()
+  rpcDiscardAll: vi.fn(),
+  rpcCreateBranch: vi.fn(),
+  rpcDeleteBranch: vi.fn(),
+  rpcRenameBranch: vi.fn(),
+  rpcCreateTag: vi.fn(),
+  rpcDeleteTag: vi.fn()
 }))
 
 const toast = vi.hoisted(() => ({
@@ -117,5 +131,64 @@ describe('useGitActions conflictable ops', () => {
     expect(ok).toBe(false)
     expect(toast.error).toHaveBeenCalled()
     expect(toast.warning).not.toHaveBeenCalled()
+  })
+})
+
+describe('useGitActions branch & tag ops', () => {
+  it('calls the typed createBranch caller and reports success', async () => {
+    vi.mocked(rpcCreateBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+
+    const ok = await actionsFor().createBranch('feature', 'main', true)
+
+    expect(rpcCreateBranch).toHaveBeenCalledWith('/repo', 'feature', 'main', true)
+    expect(ok).toBe(true)
+    expect(toast.success).toHaveBeenCalled()
+  })
+
+  it('calls the typed deleteBranch caller and reports success', async () => {
+    vi.mocked(rpcDeleteBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+
+    const ok = await actionsFor().deleteBranch('feature', true)
+
+    expect(rpcDeleteBranch).toHaveBeenCalledWith('/repo', 'feature', true)
+    expect(ok).toBe(true)
+  })
+
+  it('calls the typed renameBranch caller and reports success', async () => {
+    vi.mocked(rpcRenameBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+
+    const ok = await actionsFor().renameBranch('old', 'new')
+
+    expect(rpcRenameBranch).toHaveBeenCalledWith('/repo', 'old', 'new')
+    expect(ok).toBe(true)
+  })
+
+  it('calls the typed createTag caller and reports success', async () => {
+    vi.mocked(rpcCreateTag).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+
+    const ok = await actionsFor().createTag('v1', 'main')
+
+    expect(rpcCreateTag).toHaveBeenCalledWith('/repo', 'v1', 'main', undefined)
+    expect(ok).toBe(true)
+  })
+
+  it('calls the typed deleteTag caller and reports success', async () => {
+    vi.mocked(rpcDeleteTag).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+
+    const ok = await actionsFor().deleteTag('v1')
+
+    expect(rpcDeleteTag).toHaveBeenCalledWith('/repo', 'v1')
+    expect(ok).toBe(true)
+  })
+
+  it('surfaces a GitError from a branch op as an error toast', async () => {
+    vi.mocked(rpcDeleteBranch).mockResolvedValue(
+      refWrite({ _tag: 'GitError', message: 'branch not found' })
+    )
+
+    const ok = await actionsFor().deleteBranch('missing')
+
+    expect(ok).toBe(false)
+    expect(toast.error).toHaveBeenCalled()
   })
 })

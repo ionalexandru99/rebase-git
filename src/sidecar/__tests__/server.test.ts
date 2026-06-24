@@ -451,11 +451,6 @@ describe('sidecar server', () => {
     expect(await response.json()).toEqual({ error: 'bad request' })
   })
 
-  it('rejects checkout requests with an invalid ref kind', async () => {
-    const response = await call('checkout-ref', { repoPath, refKind: 'branch', fullPath: 'main' })
-    expect(response.status).toBe(400)
-  })
-
   it('returns 400 when required string fields are missing', async () => {
     const status = await call('get-status', {})
     expect(status.status).toBe(400)

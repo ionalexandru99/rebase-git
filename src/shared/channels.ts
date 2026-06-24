@@ -19,7 +19,6 @@ export const Channel = {
   setRefTreeToggles: 'set-ref-tree-toggles',
   getPersistedTabs: 'get-persisted-tabs',
   setPersistedTabs: 'set-persisted-tabs',
-  checkoutRef: 'checkout-ref',
   sidecarRequest: 'sidecar-request',
   logChunk: 'log-chunk',
   repoChanged: 'repo-changed',

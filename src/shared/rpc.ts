@@ -11,7 +11,7 @@ import {
   LocalBranchesSchema,
   RemoteRefsSchema
 } from './schemas/git'
-import { StashEntrySchema } from './schemas/ipc'
+import { RefKindSchema, StashEntrySchema } from './schemas/ipc'
 
 export { Conflict, GitError, HunkNotFound, RepoNotOpen } from './git-rpc-errors'
 
@@ -20,6 +20,8 @@ const CommitError = Schema.Union(RepoNotOpen, GitError)
 const StageError = Schema.Union(RepoNotOpen, GitError)
 const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)
 const ConflictableError = Schema.Union(RepoNotOpen, GitError, Conflict)
+const RefWriteError = Schema.Union(RepoNotOpen, GitError)
+const OptionalString = Schema.optional(RequiredString)
 const FileList = Schema.Array(RequiredString)
 
 export const Commit = Rpc.make('commit', {
@@ -94,6 +96,56 @@ export const CherryPick = Rpc.make('cherryPick', {
   error: ConflictableError
 })
 
+export const Checkout = Rpc.make('checkout', {
+  payload: { repoPath: RequiredString, refKind: RefKindSchema, fullPath: RequiredString },
+  success: Schema.Struct({ checkedOut: RequiredString }),
+  error: RefWriteError
+})
+
+export const CreateBranch = Rpc.make('createBranch', {
+  payload: {
+    repoPath: RequiredString,
+    name: RequiredString,
+    startPoint: OptionalString,
+    checkout: Schema.optional(Schema.Boolean)
+  },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+export const DeleteBranch = Rpc.make('deleteBranch', {
+  payload: {
+    repoPath: RequiredString,
+    name: RequiredString,
+    force: Schema.optional(Schema.Boolean)
+  },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+export const RenameBranch = Rpc.make('renameBranch', {
+  payload: { repoPath: RequiredString, oldName: RequiredString, newName: RequiredString },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+export const CreateTag = Rpc.make('createTag', {
+  payload: {
+    repoPath: RequiredString,
+    name: RequiredString,
+    ref: OptionalString,
+    message: OptionalString
+  },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+export const DeleteTag = Rpc.make('deleteTag', {
+  payload: { repoPath: RequiredString, name: RequiredString },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
 export const GetStatus = Rpc.make('getStatus', {
   payload: { repoPath: RequiredString },
   success: Schema.Struct({ status: GitStatusSchema }),
@@ -153,6 +205,12 @@ export const SidecarRpcs = RpcGroup.make(
   MergeBranch,
   RevertCommit,
   CherryPick,
+  Checkout,
+  CreateBranch,
+  DeleteBranch,
+  RenameBranch,
+  CreateTag,
+  DeleteTag,
   GetStatus,
   GetBranches,
   GetLocalBranches,
@@ -190,7 +248,13 @@ export const rpcWriteOps = {
   discardAll: 'discardAll',
   mergeBranch: 'mergeBranch',
   revertCommit: 'revertCommit',
-  cherryPick: 'cherryPick'
+  cherryPick: 'cherryPick',
+  checkout: 'checkout',
+  createBranch: 'createBranch',
+  deleteBranch: 'deleteBranch',
+  renameBranch: 'renameBranch',
+  createTag: 'createTag',
+  deleteTag: 'deleteTag'
 } as const
 
 export type RpcWriteOp = keyof typeof rpcWriteOps

@@ -2,7 +2,6 @@ import { Channel } from '@shared/channels'
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import type {
   CancelLogStreamResponse,
-  CheckoutResponse,
   OpenRepoResponse,
   PersistedTabs,
   RefTreeToggles,
@@ -20,11 +19,6 @@ export interface IElectronAPI {
   selectFolder: () => Promise<string | null>
   openRepo: (path: string) => Promise<OpenRepoResponse>
   closeRepo: (path: string) => Promise<void>
-  checkoutRef: (
-    repoPath: string,
-    refKind: 'local' | 'remote' | 'tag',
-    fullPath: string
-  ) => Promise<CheckoutResponse>
   startLogStream: (repoPath: string, options?: LogStreamOptions) => Promise<StartLogStreamResponse>
   cancelLogStream: (repoPath?: string) => Promise<CancelLogStreamResponse>
   onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
@@ -52,8 +46,6 @@ const api: IElectronAPI = {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   openRepo: (path: string) => ipcRenderer.invoke(Channel.openRepo, path),
   closeRepo: (path: string) => ipcRenderer.invoke(Channel.closeRepo, path),
-  checkoutRef: (repoPath: string, refKind: 'local' | 'remote' | 'tag', fullPath: string) =>
-    ipcRenderer.invoke(Channel.checkoutRef, repoPath, refKind, fullPath),
   startLogStream: (repoPath: string, options?: LogStreamOptions) =>
     ipcRenderer.invoke(Channel.startLogStream, repoPath, options),
   cancelLogStream: (repoPath?: string) =>

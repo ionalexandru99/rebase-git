@@ -164,6 +164,46 @@ export const handlersLayer = SidecarRpcs.toLayer({
         operations.cherryPick(resolved, sha).pipe(Effect.mapError(toConflictError))
       )
     ),
+  checkout: ({ repoPath, refKind, fullPath }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.checkoutRef(resolved, refKind, fullPath).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  createBranch: ({ repoPath, name, startPoint, checkout }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations
+          .createBranch(resolved, name, startPoint || undefined, checkout === true)
+          .pipe(Effect.mapError(toReadError))
+      )
+    ),
+  deleteBranch: ({ repoPath, name, force }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.deleteBranch(resolved, name, force === true).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  renameBranch: ({ repoPath, oldName, newName }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.renameBranch(resolved, oldName, newName).pipe(Effect.mapError(toReadError))
+      )
+    ),
+  createTag: ({ repoPath, name, ref, message }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations
+          .createTag(resolved, name, ref || undefined, message || undefined)
+          .pipe(Effect.mapError(toReadError))
+      )
+    ),
+  deleteTag: ({ repoPath, name }) =>
+    resolveRepo(repoPath).pipe(
+      Effect.flatMap((resolved) =>
+        operations.deleteTag(resolved, name).pipe(Effect.mapError(toReadError))
+      )
+    ),
   getStatus: ({ repoPath }) =>
     resolveRepo(repoPath).pipe(
       Effect.flatMap((resolved) =>

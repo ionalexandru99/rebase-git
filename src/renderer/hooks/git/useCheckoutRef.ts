@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
 import type { RefKind } from '@/lib/ref-tree'
+import { rpcCheckout } from '@/lib/rpc-client'
 
 export function useCheckoutRef(
   repoPath: string | null,
@@ -15,7 +16,7 @@ export function useCheckoutRef(
       return
     }
     try {
-      const result = await window.electronAPI.checkoutRef(path, refKind, fullPath)
+      const result = await rpcCheckout(path, refKind, fullPath)
       if (result._tag === 'Ok') {
         await onCheckedOut?.(path)
         toast.success(`Switched to ${result.checkedOut}`)

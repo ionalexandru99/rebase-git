@@ -647,7 +647,7 @@ describe('App — workspace (repo open)', () => {
       _tag: 'Ok',
       refs: { remotes: [], tags: [] }
     })
-    vi.mocked(window.electronAPI.checkoutRef).mockResolvedValue({
+    vi.mocked(sidecarMock.checkout).mockResolvedValue({
       _tag: 'Ok',
       checkedOut: 'main'
     })
@@ -664,7 +664,7 @@ describe('App — workspace (repo open)', () => {
     fireEvent.dblClick(screen.getByTitle('main'))
 
     await waitFor(() => {
-      expect(window.electronAPI.checkoutRef).toHaveBeenCalledWith(
+      expect(sidecarMock.checkout).toHaveBeenCalledWith(
         '/home/user/projects/my-app',
         'local',
         'main'

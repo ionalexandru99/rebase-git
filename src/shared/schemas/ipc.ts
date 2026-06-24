@@ -119,15 +119,8 @@ export type ScanForReposResponse = typeof ScanForReposResponseSchema.Type
 export const RefKindSchema = Schema.Literal('local', 'remote', 'tag')
 export type RefKind = typeof RefKindSchema.Type
 
-export const CheckoutResponseSchema = Schema.Union(
-  Schema.TaggedStruct('Ok', { checkedOut: Schema.String }),
-  repoNotOpen,
-  gitError
-)
-export type CheckoutResponse = typeof CheckoutResponseSchema.Type
-
-// Ok / RepoNotOpen / GitError — shared by the simple write operations (branch create/delete/rename,
-// reset, tag create/delete, discard, stash mutations) that have no extra success payload.
+// Ok / RepoNotOpen / GitError — shared by the simple write operations (reset, discard, stash
+// mutations) that have no extra success payload.
 export const GitMutationResponseSchema = Schema.Union(
   Schema.TaggedStruct('Ok', {}),
   repoNotOpen,

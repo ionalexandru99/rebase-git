@@ -45,8 +45,15 @@ export const sidecarMock = {
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
   unstageHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
-  stashList: vi.fn<(repoPath: string) => Promise<StashListResponse>>()
+  stashList: vi.fn<(repoPath: string) => Promise<StashListResponse>>(),
+  checkout:
+    vi.fn<(repoPath: string, refKind: string, fullPath: string) => Promise<CheckoutResult>>()
 }
+
+type CheckoutResult =
+  | { _tag: 'Ok'; checkedOut: string }
+  | { _tag: 'RepoNotOpen' }
+  | { _tag: 'GitError'; message: string }
 ;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
 
 vi.mock('@/lib/sidecar-fetch', async (importOriginal) => {
@@ -158,7 +165,6 @@ const mockElectronAPI = {
   selectFolder: vi.fn(),
   openRepo: vi.fn(),
   closeRepo: vi.fn(),
-  checkoutRef: vi.fn(),
   startLogStream: vi.fn(),
   cancelLogStream: vi.fn(),
   onLogChunk: vi.fn(),
@@ -310,12 +316,15 @@ beforeEach(() => {
         return sidecarMock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
       case 'unstageHunk':
         return sidecarMock.unstageHunk(repoPath, body.file as string, body.hunkHeader as string)
+      case 'checkout':
+        return sidecarMock.checkout(repoPath, body.refKind as string, body.fullPath as string)
       default:
         return { _tag: 'Ok' }
     }
   })
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })
+  sidecarMock.checkout.mockResolvedValue({ _tag: 'Ok', checkedOut: 'main' })
   mockBranchResponses({ current: '', all: [], remotes: [], tags: [] })
 })
 

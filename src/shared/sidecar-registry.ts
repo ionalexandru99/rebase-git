@@ -3,7 +3,6 @@ import { mutableArray, NonNaNNumber, RequiredString } from './codec'
 import {
   BranchesResponseSchema,
   CancelLogStreamResponseSchema,
-  CheckoutResponseSchema,
   ConflictableMutationResponseSchema,
   FetchResponseSchema,
   GetDiffResponseSchema,
@@ -13,7 +12,6 @@ import {
   OpenRepoResponseSchema,
   PullResponseSchema,
   PushResponseSchema,
-  RefKindSchema,
   RemoteRefsResponseSchema,
   ResetModeSchema,
   ScanForReposResponseSchema,
@@ -38,39 +36,11 @@ const GetLogRequest = Schema.Struct({
   repoPath: RequiredString,
   maxCount: Schema.optional(NonNaNNumber)
 })
-const CheckoutRequest = Schema.Struct({
-  repoPath: RequiredString,
-  fullPath: RequiredString,
-  refKind: RefKindSchema
-})
-const CreateBranchRequest = Schema.Struct({
-  repoPath: RequiredString,
-  name: RequiredString,
-  startPoint: OptionalString,
-  checkout: OptionalFlag
-})
-const DeleteBranchRequest = Schema.Struct({
-  repoPath: RequiredString,
-  name: RequiredString,
-  force: OptionalFlag
-})
-const RenameBranchRequest = Schema.Struct({
-  repoPath: RequiredString,
-  oldName: RequiredString,
-  newName: RequiredString
-})
 const ResetRequest = Schema.Struct({
   repoPath: RequiredString,
   sha: RequiredString,
   mode: ResetModeSchema
 })
-const CreateTagRequest = Schema.Struct({
-  repoPath: RequiredString,
-  name: RequiredString,
-  ref: OptionalString,
-  message: OptionalString
-})
-const NameRequest = Schema.Struct({ repoPath: RequiredString, name: RequiredString })
 const StashPushRequest = Schema.Struct({
   repoPath: RequiredString,
   message: OptionalString,
@@ -92,13 +62,7 @@ export const sidecarRegistry = {
   [SidecarOp.pushRepo]: { request: RepoOnly, response: PushResponseSchema },
   [SidecarOp.pullRepo]: { request: RepoOnly, response: PullResponseSchema },
   [SidecarOp.getLog]: { request: GetLogRequest, response: LogResponseSchema },
-  [SidecarOp.checkoutRef]: { request: CheckoutRequest, response: CheckoutResponseSchema },
-  [SidecarOp.createBranch]: { request: CreateBranchRequest, response: GitMutationResponseSchema },
-  [SidecarOp.deleteBranch]: { request: DeleteBranchRequest, response: GitMutationResponseSchema },
-  [SidecarOp.renameBranch]: { request: RenameBranchRequest, response: GitMutationResponseSchema },
   [SidecarOp.resetToCommit]: { request: ResetRequest, response: GitMutationResponseSchema },
-  [SidecarOp.createTag]: { request: CreateTagRequest, response: GitMutationResponseSchema },
-  [SidecarOp.deleteTag]: { request: NameRequest, response: GitMutationResponseSchema },
   [SidecarOp.stashList]: { request: RepoOnly, response: StashListResponseSchema },
   [SidecarOp.stashPush]: { request: StashPushRequest, response: GitMutationResponseSchema },
   [SidecarOp.stashApply]: {

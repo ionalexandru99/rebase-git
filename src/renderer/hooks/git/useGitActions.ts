@@ -7,19 +7,22 @@ import { SidecarOp } from '@shared/sidecar-ops'
 import { toast } from 'sonner'
 import {
   type ConflictableResult,
+  type RefWriteResult,
   rpcCherryPick,
+  rpcCreateBranch,
+  rpcCreateTag,
+  rpcDeleteBranch,
+  rpcDeleteTag,
   rpcDiscardAll,
   rpcDiscardChanges,
   rpcMergeBranch,
+  rpcRenameBranch,
   rpcRevertCommit
 } from '@/lib/rpc-client'
 import { sidecarFetch } from '@/lib/sidecar-fetch'
 import type { GitStore } from '@/stores/git'
 
-type VoidWriteResult =
-  | { _tag: 'Ok' }
-  | { _tag: 'RepoNotOpen' }
-  | { _tag: 'GitError'; message: string }
+type VoidWriteResult = RefWriteResult
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -99,7 +102,8 @@ export function useGitActions(git: GitStore) {
 
   async function runVoidWrite(
     call: (path: string) => Promise<VoidWriteResult>,
-    label: string
+    label: string,
+    refresh: (path: string) => Promise<void> = (path) => git.refreshWorkingTree(path)
   ): Promise<boolean> {
     const path = repoPath
     if (!path) {
@@ -109,7 +113,7 @@ export function useGitActions(git: GitStore) {
     try {
       const response = await call(path)
       if (response._tag === 'Ok') {
-        await git.refreshWorkingTree(path)
+        await refresh(path)
         toast.success(label)
         return true
       }
@@ -163,18 +167,20 @@ export function useGitActions(git: GitStore) {
 
   return {
     createBranch: (name: string, startPoint?: string, checkout?: boolean) =>
-      mutate(
-        SidecarOp.createBranch,
-        { name, startPoint, checkout },
+      runVoidWrite(
+        (path) => rpcCreateBranch(path, name, startPoint, checkout),
         checkout ? `Created and switched to ${name}` : `Created branch ${name}`,
         checkout ? refreshAll : refreshBranches
       ),
     deleteBranch: (name: string, force?: boolean) =>
-      mutate(SidecarOp.deleteBranch, { name, force }, `Deleted branch ${name}`, refreshBranches),
+      runVoidWrite(
+        (path) => rpcDeleteBranch(path, name, force),
+        `Deleted branch ${name}`,
+        refreshBranches
+      ),
     renameBranch: (oldName: string, newName: string) =>
-      mutate(
-        SidecarOp.renameBranch,
-        { oldName, newName },
+      runVoidWrite(
+        (path) => rpcRenameBranch(path, oldName, newName),
         `Renamed ${oldName} to ${newName}`,
         refreshBranches
       ),
@@ -192,9 +198,13 @@ export function useGitActions(git: GitStore) {
     cherryPick: (sha: string) =>
       mutateConflictable((path) => rpcCherryPick(path, sha), `Cherry-picked ${sha.slice(0, 7)}`),
     createTag: (name: string, ref?: string, message?: string) =>
-      mutate(SidecarOp.createTag, { name, ref, message }, `Created tag ${name}`, refreshBranches),
+      runVoidWrite(
+        (path) => rpcCreateTag(path, name, ref, message),
+        `Created tag ${name}`,
+        refreshBranches
+      ),
     deleteTag: (name: string) =>
-      mutate(SidecarOp.deleteTag, { name }, `Deleted tag ${name}`, refreshBranches),
+      runVoidWrite((path) => rpcDeleteTag(path, name), `Deleted tag ${name}`, refreshBranches),
     discardChanges: (files: string[], label: string) =>
       runVoidWrite((path) => rpcDiscardChanges(path, files), label),
     discardAll: () => runVoidWrite((path) => rpcDiscardAll(path), 'Discarded all changes'),

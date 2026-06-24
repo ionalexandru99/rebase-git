@@ -120,41 +120,8 @@ const opHandlers: { [Op in DispatchOp]: OpHandler<Op> } = {
   [SidecarOp.getLog]: {
     handle: ({ repoPath, request }) => operations.getLog(repoPath, request.maxCount)
   },
-  [SidecarOp.checkoutRef]: {
-    handle: ({ repoPath, request }) =>
-      operations.checkoutRef(repoPath, request.refKind, request.fullPath)
-  },
-  [SidecarOp.createBranch]: {
-    handle: ({ repoPath, request }) =>
-      operations.createBranch(
-        repoPath,
-        request.name,
-        request.startPoint || undefined,
-        request.checkout === true
-      )
-  },
-  [SidecarOp.deleteBranch]: {
-    handle: ({ repoPath, request }) =>
-      operations.deleteBranch(repoPath, request.name, request.force === true)
-  },
-  [SidecarOp.renameBranch]: {
-    handle: ({ repoPath, request }) =>
-      operations.renameBranch(repoPath, request.oldName, request.newName)
-  },
   [SidecarOp.resetToCommit]: {
     handle: ({ repoPath, request }) => operations.resetToCommit(repoPath, request.sha, request.mode)
-  },
-  [SidecarOp.createTag]: {
-    handle: ({ repoPath, request }) =>
-      operations.createTag(
-        repoPath,
-        request.name,
-        request.ref || undefined,
-        request.message || undefined
-      )
-  },
-  [SidecarOp.deleteTag]: {
-    handle: ({ repoPath, request }) => operations.deleteTag(repoPath, request.name)
   },
   [SidecarOp.stashList]: {
     handle: ({ repoPath }) => operations.stashList(repoPath)

@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import { sidecarMock } from '@/../test/setup'
 import {
+  rpcCheckout,
   rpcCherryPick,
   rpcCommit,
+  rpcCreateBranch,
+  rpcCreateTag,
+  rpcDeleteBranch,
+  rpcDeleteTag,
   rpcMergeBranch,
+  rpcRenameBranch,
   rpcRevertCommit,
   rpcStageFile,
   rpcStageHunk
@@ -179,5 +185,124 @@ describe('rpcCherryPick', () => {
       sha: 'abc1234'
     })
     expect(result._tag).toBe('Conflict')
+  })
+})
+
+describe('rpcCheckout', () => {
+  it('sends the refKind/fullPath under the checkout tag and decodes the checked-out ref', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'Ok',
+      checkedOut: 'feature'
+    })
+
+    const result = await rpcCheckout('/repo', 'local', 'feature')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('checkout', {
+      repoPath: '/repo',
+      refKind: 'local',
+      fullPath: 'feature'
+    })
+    expect(result._tag).toBe('Ok')
+    if (result._tag === 'Ok') {
+      expect(result.checkedOut).toBe('feature')
+    }
+  })
+
+  it('surfaces a domain GitError as a typed result rather than rejecting', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'GitError',
+      message: 'invalid ref name'
+    })
+
+    const result = await rpcCheckout('/repo', 'local', 'feature')
+
+    expect(result._tag).toBe('GitError')
+  })
+})
+
+describe('rpcCreateBranch', () => {
+  it('sends the branch payload under the createBranch tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcCreateBranch('/repo', 'feature', 'main', true)
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('createBranch', {
+      repoPath: '/repo',
+      name: 'feature',
+      startPoint: 'main',
+      checkout: true
+    })
+    expect(result._tag).toBe('Ok')
+  })
+
+  it('surfaces a domain GitError as a typed result rather than rejecting', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'GitError',
+      message: 'invalid branch name'
+    })
+
+    const result = await rpcCreateBranch('/repo', 'feature')
+
+    expect(result._tag).toBe('GitError')
+  })
+})
+
+describe('rpcDeleteBranch', () => {
+  it('sends the name/force under the deleteBranch tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcDeleteBranch('/repo', 'feature', true)
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('deleteBranch', {
+      repoPath: '/repo',
+      name: 'feature',
+      force: true
+    })
+    expect(result._tag).toBe('Ok')
+  })
+})
+
+describe('rpcRenameBranch', () => {
+  it('sends oldName/newName under the renameBranch tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcRenameBranch('/repo', 'old', 'new')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('renameBranch', {
+      repoPath: '/repo',
+      oldName: 'old',
+      newName: 'new'
+    })
+    expect(result._tag).toBe('Ok')
+  })
+})
+
+describe('rpcCreateTag', () => {
+  it('sends the tag payload under the createTag tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcCreateTag('/repo', 'v1', 'main', 'release')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('createTag', {
+      repoPath: '/repo',
+      name: 'v1',
+      ref: 'main',
+      message: 'release'
+    })
+    expect(result._tag).toBe('Ok')
+  })
+})
+
+describe('rpcDeleteTag', () => {
+  it('sends the name under the deleteTag tag and decodes a void Ok', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    const result = await rpcDeleteTag('/repo', 'v1')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('deleteTag', {
+      repoPath: '/repo',
+      name: 'v1'
+    })
+    expect(result._tag).toBe('Ok')
   })
 })
