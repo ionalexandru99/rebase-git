@@ -4,9 +4,10 @@ import nodePath from 'node:path'
 import { Etag, FileSystem, HttpPlatform, Path } from '@effect/platform'
 import { RpcSerialization, RpcServer } from '@effect/rpc'
 import { GitError, SidecarRpcs } from '@shared/rpc'
-import { Effect, Layer } from 'effect'
+import { Effect, Layer, Stream } from 'effect'
 import { simpleGit } from 'simple-git'
 import { normalizeRepoPath } from './git/instances'
+import { logChunkStream } from './log-stream'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 
@@ -279,7 +280,13 @@ export const handlersLayer = SidecarRpcs.toLayer({
       })
     ),
   stashList: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.stashList(resolved)))
+    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.stashList(resolved))),
+  streamLog: ({ repoPath, skip, maxCount, streamId }) =>
+    Stream.unwrap(
+      resolveRepo(repoPath).pipe(
+        Effect.map((resolved) => logChunkStream(resolved, { skip, maxCount, streamId }))
+      )
+    )
 })
 
 // toWebHandler is built on HttpRouter, so it asks for the HTTP platform services even though the

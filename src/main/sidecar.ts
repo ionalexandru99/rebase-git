@@ -2,11 +2,10 @@ import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseOrThrow } from '@shared/codec'
-import { type LogChunk, LogChunkSchema } from '@shared/schemas/git'
+import type { LogChunk } from '@shared/schemas/git'
 import { type UtilityProcess, utilityProcess } from 'electron'
 import type { SidecarMessage } from '../sidecar/protocol'
-import { callRpcByTag } from './sidecar-rpc'
+import { callRpcByTag, runStreamLog } from './sidecar-rpc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const START_TIMEOUT_MS = 30_000
@@ -184,49 +183,20 @@ export async function sidecarLogStream(
   options?: LogStreamOptions
 ): Promise<void> {
   const { baseUrl, token } = await ensureSidecar()
-  const response = await fetch(`${baseUrl}/stream/log`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      repoPath,
-      skip: options?.skip,
-      maxCount: options?.maxCount,
-      streamId: options?.streamId
-    }),
-    signal
-  })
-  if (!response.ok) {
-    throw new Error(`sidecar log stream failed with status ${response.status}`)
-  }
-  onStarted()
-  if (!response.body) {
-    throw new Error('sidecar log stream response body missing')
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) {
-      break
-    }
-    buffer += decoder.decode(value, { stream: true })
-    let newline = buffer.indexOf('\n')
-    while (newline !== -1) {
-      const line = buffer.slice(0, newline).trim()
-      buffer = buffer.slice(newline + 1)
-      if (line) {
-        onChunk(parseOrThrow(LogChunkSchema, JSON.parse(line)))
+  let started = false
+  await runStreamLog(
+    baseUrl,
+    token,
+    { repoPath, skip: options?.skip, maxCount: options?.maxCount, streamId: options?.streamId },
+    signal,
+    (chunk) => {
+      if (!started) {
+        started = true
+        onStarted()
       }
-      newline = buffer.indexOf('\n')
+      onChunk(chunk)
     }
-  }
-
-  const lastLine = `${buffer}${decoder.decode()}`.trim()
-  if (lastLine) {
-    onChunk(parseOrThrow(LogChunkSchema, JSON.parse(lastLine)))
-  }
+  )
 }
 
 export async function killSidecar(): Promise<void> {

@@ -1,7 +1,8 @@
 import { FetchHttpClient, HttpClient, HttpClientRequest } from '@effect/platform'
 import { RpcClient, RpcSerialization } from '@effect/rpc'
 import { SidecarRpcs } from '@shared/rpc'
-import { Cause, Effect, Exit, Layer, ManagedRuntime, Option } from 'effect'
+import type { LogChunk } from '@shared/schemas/git'
+import { Cause, Effect, Exit, Layer, ManagedRuntime, Option, Stream } from 'effect'
 
 const rpcTags = new Set(SidecarRpcs.requests.keys())
 
@@ -120,4 +121,49 @@ export async function callRpcByTag(
   payload: Record<string, unknown>
 ): Promise<RpcResponse> {
   return runRpcTag(tag, baseUrl, token, payload)
+}
+
+export interface StreamLogPayload {
+  repoPath: string
+  skip?: number
+  maxCount?: number
+  streamId?: number
+}
+
+// Drives the streaming `streamLog` RPC, invoking onChunk per delivered LogChunk. Aborting the signal
+// interrupts the stream — which cancels the underlying `git log` on the sidecar — and resolves quietly
+// (no throw), so a superseded stream is silent. Any real failure rejects with the scrubbed message,
+// which the IPC layer turns into a terminal error chunk for the renderer.
+export async function runStreamLog(
+  baseUrl: string,
+  token: string,
+  payload: StreamLogPayload,
+  signal: AbortSignal,
+  onChunk: (chunk: LogChunk) => void
+): Promise<void> {
+  const runtime = makeRuntime(baseUrl, token)
+  try {
+    const exit = await runtime.runPromiseExit(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* RpcClient.make(SidecarRpcs)
+          yield* Stream.runForEach(client.streamLog(payload), (chunk) =>
+            Effect.sync(() => onChunk(chunk))
+          )
+        })
+      ),
+      { signal }
+    )
+    if (Exit.isSuccess(exit) || Exit.isInterrupted(exit)) {
+      return
+    }
+    const failure = Cause.failureOption(exit.cause)
+    const message =
+      Option.isSome(failure) && typeof (failure.value as { message?: unknown }).message === 'string'
+        ? (failure.value as { message: string }).message
+        : 'sidecar log stream failed'
+    throw new Error(scrubToken(message, token))
+  } finally {
+    void runtime.dispose()
+  }
 }

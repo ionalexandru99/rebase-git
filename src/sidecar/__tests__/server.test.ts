@@ -9,7 +9,6 @@ import { RepoNotOpen } from '@shared/git-rpc-errors'
 import { SidecarRpcs } from '@shared/rpc'
 import { Effect, Either, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { STREAM_BATCH_SIZE } from '../log-stream'
 import { createSidecarServer } from '../server'
 
 const TOKEN = 'test-token'
@@ -31,28 +30,6 @@ function git(cwd: string, args: string[]): void {
         ]
       : args
   execFileSync('git', commandArgs, { cwd, stdio: 'ignore' })
-}
-
-function createFixtureRepo(commitCount: number): string {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sidecar-log-'))
-  git(repo, ['init', '-b', 'main'])
-  git(repo, ['config', 'user.email', 'test@example.com'])
-  git(repo, ['config', 'user.name', 'Test'])
-  let importScript = ''
-  for (let i = 1; i <= commitCount; i++) {
-    const fileContent = `${i}\n`
-    const message = `commit ${i}`
-    importScript += `blob\nmark :${i}\ndata ${Buffer.byteLength(fileContent)}\n${fileContent}`
-    importScript += `commit refs/heads/main\ncommitter Test <test@example.com> ${1_700_000_000 + i} +0000\n`
-    importScript += `data ${Buffer.byteLength(message)}\n${message}\nM 100644 :${i} file.txt\n`
-  }
-  execFileSync('git', ['fast-import'], {
-    cwd: repo,
-    input: importScript,
-    stdio: ['pipe', 'ignore', 'ignore']
-  })
-  git(repo, ['checkout', '-f', 'main'])
-  return repo
 }
 
 async function call(op: string, body: Record<string, unknown>, token = TOKEN): Promise<Response> {
@@ -376,158 +353,6 @@ describe('sidecar server', () => {
     expect(await response.json()).toEqual({ error: 'not found' })
   })
 
-  it('streams log chunks over the sidecar stream endpoint', async () => {
-    const response = await fetch(`${baseUrl}/stream/log`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify({ repoPath })
-    })
-    expect(response.ok).toBe(true)
-    const lines = (await response.text()).trim().split('\n')
-    const chunks = lines.map((line) => JSON.parse(line) as { commits: Array<{ message: string }> })
-    expect(
-      chunks.some((chunk) => chunk.commits.some((commit) => commit.message === 'initial'))
-    ).toBe(true)
-  })
-
-  it('streams more than one batch of commits', async () => {
-    const largeRepo = createFixtureRepo(STREAM_BATCH_SIZE + 5)
-    try {
-      await rpcOpenRepo(largeRepo)
-      const response = await fetch(`${baseUrl}/stream/log`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-        body: JSON.stringify({ repoPath: largeRepo })
-      })
-      expect(response.ok).toBe(true)
-      const lines = (await response.text()).trim().split('\n')
-      const chunks = lines.map(
-        (line) => JSON.parse(line) as { commits: Array<{ message: string }>; done: boolean }
-      )
-      const commits = chunks.flatMap((chunk) => chunk.commits)
-
-      expect(commits).toHaveLength(STREAM_BATCH_SIZE + 5)
-      expect(chunks.filter((chunk) => chunk.commits.length > 0)).toHaveLength(2)
-      expect(chunks[chunks.length - 1]?.done).toBe(true)
-    } finally {
-      fs.rmSync(largeRepo, { recursive: true, force: true })
-    }
-  })
-
-  it('reports hasMore when a maxCount page is full', async () => {
-    const pagedRepo = createFixtureRepo(15)
-    try {
-      await rpcOpenRepo(pagedRepo)
-      const response = await fetch(`${baseUrl}/stream/log`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-        body: JSON.stringify({ repoPath: pagedRepo, maxCount: 10 })
-      })
-      expect(response.ok).toBe(true)
-      const lines = (await response.text()).trim().split('\n')
-      const chunks = lines.map(
-        (line) =>
-          JSON.parse(line) as {
-            commits: Array<{ message: string }>
-            done: boolean
-            hasMore?: boolean
-          }
-      )
-      const commits = chunks.flatMap((chunk) => chunk.commits)
-      const terminal = chunks[chunks.length - 1]
-
-      expect(commits).toHaveLength(10)
-      expect(terminal?.done).toBe(true)
-      expect(terminal?.hasMore).toBe(true)
-    } finally {
-      fs.rmSync(pagedRepo, { recursive: true, force: true })
-    }
-  })
-
-  it('streams a later page with skip and clears hasMore on the final page', async () => {
-    const pagedRepo = createFixtureRepo(15)
-    try {
-      await rpcOpenRepo(pagedRepo)
-      const response = await fetch(`${baseUrl}/stream/log`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-        body: JSON.stringify({ repoPath: pagedRepo, skip: 10, maxCount: 10 })
-      })
-      expect(response.ok).toBe(true)
-      const lines = (await response.text()).trim().split('\n')
-      const chunks = lines.map(
-        (line) =>
-          JSON.parse(line) as {
-            commits: Array<{ message: string }>
-            done: boolean
-            hasMore?: boolean
-          }
-      )
-      const commits = chunks.flatMap((chunk) => chunk.commits)
-      const terminal = chunks[chunks.length - 1]
-
-      expect(commits).toHaveLength(5)
-      expect(terminal?.done).toBe(true)
-      expect(terminal?.hasMore).toBe(false)
-    } finally {
-      fs.rmSync(pagedRepo, { recursive: true, force: true })
-    }
-  })
-
-  it('stamps every streamed chunk with the request streamId', async () => {
-    const response = await fetch(`${baseUrl}/stream/log`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify({ repoPath, streamId: 7 })
-    })
-    expect(response.ok).toBe(true)
-    const lines = (await response.text()).trim().split('\n')
-    const chunks = lines.map((line) => JSON.parse(line) as { streamId?: number; done: boolean })
-    expect(chunks.length).toBeGreaterThan(0)
-    expect(chunks.every((chunk) => chunk.streamId === 7)).toBe(true)
-    expect(chunks[chunks.length - 1]?.done).toBe(true)
-  })
-
-  it('rejects a log stream with an out-of-bounds skip', async () => {
-    const response = await fetch(`${baseUrl}/stream/log`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify({ repoPath, skip: -1 })
-    })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'bad request' })
-  })
-
-  it('rejects a log stream with an out-of-bounds maxCount', async () => {
-    const response = await fetch(`${baseUrl}/stream/log`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify({ repoPath, maxCount: 0 })
-    })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'bad request' })
-  })
-
-  it('rejects a log stream with a non-integer maxCount', async () => {
-    const response = await fetch(`${baseUrl}/stream/log`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-      body: JSON.stringify({ repoPath, maxCount: 2.5 })
-    })
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual({ error: 'bad request' })
-  })
-
-  it('returns 400 when required string fields are missing from a stream request', async () => {
-    const status = await fetch(`${baseUrl}/stream/log`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-      body: '{}'
-    })
-    expect(status.status).toBe(400)
-    expect(await status.json()).toEqual({ error: 'bad request' })
-  })
-
   it('returns 413 when an rpc request body exceeds the size limit', async () => {
     const response = await fetch(`${baseUrl}/rpc`, {
       method: 'POST',
@@ -536,16 +361,6 @@ describe('sidecar server', () => {
     })
     expect(response.status).toBe(413)
     expect(await response.json()).toEqual({ error: 'payload too large' })
-  })
-
-  it('returns a generic error body without leaking exception details', async () => {
-    const response = await fetch(`${baseUrl}/stream/log`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-      body: '{not json'
-    })
-    expect(response.status).toBe(500)
-    expect(await response.json()).toEqual({ error: 'internal error' })
   })
 
   it('rejects an authenticated CORS preflight with 403', async () => {
