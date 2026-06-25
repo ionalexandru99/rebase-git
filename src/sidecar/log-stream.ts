@@ -1,8 +1,7 @@
 import { type ChildProcessByStdio, spawn } from 'node:child_process'
-import type { ServerResponse } from 'node:http'
 import type { Readable } from 'node:stream'
 import type { GitLogEntry, LogChunk } from '@shared/schemas/git'
-import { Cause, Chunk, Effect, Fiber, Option, Stream } from 'effect'
+import { Chunk, Effect, Ref, Stream } from 'effect'
 import { LOG_FORMAT, parseGitLogRecord, RS_SEP } from './git/log-format'
 import { GitError } from './git-errors'
 import { capStderr } from './spawn'
@@ -37,56 +36,14 @@ function spawnGitLog(repoPath: string, options?: LogStreamOptions): GitStdioProc
   return spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] })
 }
 
-function writeLine(res: ServerResponse, chunk: LogChunk): boolean {
-  if (res.destroyed || res.writableEnded) {
-    return false
-  }
-  return res.write(`${JSON.stringify(chunk)}\n`)
-}
-
-function waitForDrain(res: ServerResponse): Promise<void> {
-  return new Promise((resolve) => {
-    const done = () => {
-      res.off('drain', done)
-      res.off('close', done)
-      res.off('error', done)
-      resolve()
-    }
-    res.once('drain', done)
-    res.once('close', done)
-    res.once('error', done)
-  })
-}
-
-async function writeChunkWithBackpressure(
-  res: ServerResponse,
-  proc: GitStdioProc,
-  chunk: LogChunk
-): Promise<void> {
-  const canContinue = writeLine(res, chunk)
-  if (!canContinue && !res.destroyed && !res.writableEnded) {
-    proc.stdout.pause()
-    await waitForDrain(res)
-    proc.stdout.resume()
-  }
-}
-
-function writeTerminal(res: ServerResponse, chunk: LogChunk): void {
-  if (res.destroyed || res.writableEnded) {
-    return
-  }
-  res.write(`${JSON.stringify(chunk)}\n`)
-  res.end()
-}
-
 // The parsed-record producer: a Stream whose lifetime is the spawned `git log`. NUL-delimited (-z)
 // records are parsed and pushed; a nonzero exit fails the Stream, a clean exit ends it. The process
 // is killed when the Stream's scope closes (completion, error, or interruption) — so a restart that
 // interrupts this Stream can never leak the child or interleave with a fresh one.
 //
-// The buffer is intentionally unbounded: backpressure is applied by pausing `proc.stdout` on the
-// write side (writeChunkWithBackpressure), not by the queue. Do NOT switch to a `dropping`/`sliding`
-// strategy — that would silently drop commits.
+// The buffer is intentionally unbounded so commits are never dropped (do NOT switch to a
+// `dropping`/`sliding` strategy). The sole consumer is the main process draining the loopback socket,
+// which keeps up with `git log`, so the queue stays shallow in practice.
 function commitStream(proc: GitStdioProc): Stream.Stream<GitLogEntry, GitError> {
   return Stream.asyncPush<GitLogEntry, GitError>((emit) =>
     Effect.sync(() => {
@@ -134,66 +91,47 @@ function commitStream(proc: GitStdioProc): Stream.Stream<GitLogEntry, GitError> 
   )
 }
 
-export function streamGitLog(
+// The streaming-RPC producer: the same `git log` history modeled as a Stream of LogChunks instead of
+// written onto a ServerResponse. The terminal `done` chunk carries `hasMore` (pagination) exactly as
+// the dedicated endpoint did; stream errors flow through the GitError channel. The spawned child is
+// killed when the stream's scope closes (completion, error, or interruption), so a superseded stream
+// never leaks the child.
+export function logChunkStream(
   repoPath: string,
-  res: ServerResponse,
   options?: LogStreamOptions
-): void {
-  res.writeHead(200, { 'content-type': 'application/x-ndjson' })
+): Stream.Stream<LogChunk, GitError> {
   const streamId = options?.streamId
   const pageSize = options?.maxCount
-
-  const program = Effect.gen(function* () {
-    const proc = yield* Effect.acquireRelease(
-      Effect.sync(() => spawnGitLog(repoPath, options)),
-      (child) =>
-        Effect.sync(() => {
-          if (!child.killed) {
-            child.kill()
-          }
-        })
-    )
-    let totalEmitted = 0
-    yield* commitStream(proc).pipe(
-      Stream.grouped(STREAM_BATCH_SIZE),
-      Stream.runForEach((group) => {
-        const commits = Chunk.toReadonlyArray(group) as GitLogEntry[]
-        totalEmitted += commits.length
-        return Effect.promise(() =>
-          writeChunkWithBackpressure(res, proc, { repoPath, commits, done: false, streamId })
-        )
-      })
-    )
-    return totalEmitted
-  })
-
-  const fiber = Effect.runFork(
-    Effect.scoped(program).pipe(
-      Effect.matchCauseEffect({
-        onSuccess: (totalEmitted) =>
+  return Stream.unwrapScoped(
+    Effect.gen(function* () {
+      const proc = yield* Effect.acquireRelease(
+        Effect.sync(() => spawnGitLog(repoPath, options)),
+        (child) =>
           Effect.sync(() => {
-            const hasMore =
-              typeof pageSize === 'number' && pageSize > 0 ? totalEmitted >= pageSize : false
-            writeTerminal(res, { repoPath, commits: [], done: true, hasMore, streamId })
-          }),
-        onFailure: (cause) =>
-          Effect.sync(() => {
-            const failure = Cause.failureOption(cause)
-            const error = Option.isSome(failure) ? failure.value.message : undefined
-            writeTerminal(res, {
-              repoPath,
-              commits: [],
-              done: true,
-              hasMore: false,
-              error,
-              streamId
-            })
+            if (!child.killed) {
+              child.kill()
+            }
           })
-      })
-    )
+      )
+      const emitted = yield* Ref.make(0)
+      const data = commitStream(proc).pipe(
+        Stream.grouped(STREAM_BATCH_SIZE),
+        Stream.mapEffect((group) => {
+          const commits = Chunk.toReadonlyArray(group) as GitLogEntry[]
+          return Ref.update(emitted, (total) => total + commits.length).pipe(
+            Effect.as<LogChunk>({ repoPath, commits, done: false, streamId })
+          )
+        })
+      )
+      const terminal = Stream.fromEffect(
+        Ref.get(emitted).pipe(
+          Effect.map((total): LogChunk => {
+            const hasMore = typeof pageSize === 'number' && pageSize > 0 ? total >= pageSize : false
+            return { repoPath, commits: [], done: true, hasMore, streamId }
+          })
+        )
+      )
+      return Stream.concat(data, terminal)
+    })
   )
-
-  res.on('close', () => {
-    void Effect.runPromise(Fiber.interrupt(fiber)).catch(() => {})
-  })
 }

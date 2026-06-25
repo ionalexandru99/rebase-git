@@ -1,39 +1,12 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
-import { LogStreamRequestSchema } from '@shared/schemas/log-stream'
-import { Either, Schema } from 'effect'
-import { streamGitLog } from './log-stream'
-import { resolveExistingRepoRoot } from './path-guards'
 import { handleRpcRequest } from './rpc-handlers'
 
-type Body = Record<string, unknown>
-
 const MAX_BODY_BYTES = 1024 * 1024
-const BAD_REQUEST = Symbol('bad-request')
 
 class BodyTooLargeError extends Error {
   override readonly name = 'BodyTooLargeError'
-}
-
-const requiredString = (body: Body, key: string): string | null => {
-  const value = body[key]
-  if (typeof value !== 'string') {
-    return null
-  }
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return null
-  }
-  return trimmed
-}
-
-function safeRepoPath(body: Body): string | null | typeof BAD_REQUEST {
-  const raw = requiredString(body, 'repoPath')
-  if (!raw) {
-    return BAD_REQUEST
-  }
-  return resolveExistingRepoRoot(raw)
 }
 
 function readRawBody(req: IncomingMessage): Promise<string> {
@@ -62,11 +35,6 @@ function readRawBody(req: IncomingMessage): Promise<string> {
     })
     req.on('error', reject)
   })
-}
-
-async function readBody(req: IncomingMessage): Promise<Body> {
-  const raw = await readRawBody(req)
-  return raw ? (JSON.parse(raw) as Body) : {}
 }
 
 function sendJson(res: ServerResponse, status: number, payload: unknown): void {
@@ -129,37 +97,6 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
       }
     } catch (error) {
       console.error('[sidecar] rpc error', error)
-      if (error instanceof BodyTooLargeError) {
-        sendJson(res, 413, { error: 'payload too large' })
-        return
-      }
-      sendJson(res, 500, { error: 'internal error' })
-    }
-    return
-  }
-
-  if (url.pathname === '/stream/log' && req.method === 'POST') {
-    try {
-      const body = await readBody(req)
-      const repoPath = safeRepoPath(body)
-      if (repoPath === BAD_REQUEST || !repoPath) {
-        sendJson(res, 400, { error: 'bad request' })
-        return
-      }
-      const parsed = Schema.decodeUnknownEither(LogStreamRequestSchema)({
-        repoPath,
-        skip: body.skip,
-        maxCount: body.maxCount,
-        streamId: body.streamId
-      })
-      if (Either.isLeft(parsed)) {
-        sendJson(res, 400, { error: 'bad request' })
-        return
-      }
-      const { skip, maxCount, streamId } = parsed.right
-      streamGitLog(repoPath, res, { skip, maxCount, streamId })
-    } catch (error) {
-      console.error('[sidecar] request error', error)
       if (error instanceof BodyTooLargeError) {
         sendJson(res, 413, { error: 'payload too large' })
         return

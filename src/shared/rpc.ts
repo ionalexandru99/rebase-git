@@ -16,6 +16,7 @@ import {
   GitLogSchema,
   GitStatusSchema,
   LocalBranchesSchema,
+  LogChunkSchema,
   RemoteRefsSchema,
   RepoOpenSuccessSchema
 } from './schemas/git'
@@ -283,6 +284,22 @@ export const StashList = Rpc.make('stashList', {
   error: ReadError
 })
 
+// Streaming RPC: each emitted LogChunk is one NDJSON frame on the wire; stream completion replaces
+// the old terminal "done" round-trip and stream interruption cancels the underlying `git log`. The
+// payload is the single parsing point for pagination (the deleted /stream/log route validated these
+// inline): skip is a non-negative int, maxCount a positive int.
+export const StreamLog = Rpc.make('streamLog', {
+  payload: {
+    repoPath: RequiredString,
+    skip: Schema.optional(Schema.Int.pipe(Schema.nonNegative())),
+    maxCount: Schema.optional(Schema.Int.pipe(Schema.positive())),
+    streamId: Schema.optional(Schema.Int)
+  },
+  success: LogChunkSchema,
+  error: GitError,
+  stream: true
+})
+
 export const SidecarRpcs = RpcGroup.make(
   OpenRepo,
   CloseRepo,
@@ -319,5 +336,6 @@ export const SidecarRpcs = RpcGroup.make(
   GetRemoteRefs,
   GetLog,
   GetDiff,
-  StashList
+  StashList,
+  StreamLog
 )
