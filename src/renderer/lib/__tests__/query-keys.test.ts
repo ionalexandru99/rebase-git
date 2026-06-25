@@ -34,6 +34,9 @@ describe('repoQueryKeys', () => {
       'src/App.tsx',
       false
     ])
+    expect(keys.diff('src/App.tsx', false)).toEqual(
+      repoQueryKeys('/repos/example').diff('src/App.tsx', false)
+    )
     expect(keys.hunkHighlight('src/App.tsx', '@@ -1,2 +1,2 @@')).toEqual([
       'repo',
       '/repos/example',
