@@ -71,14 +71,20 @@ afterAll(async () => {
 
 function waitUntil(predicate: () => boolean): Effect.Effect<void> {
   return Effect.async<void>((resume) => {
+    let timer: ReturnType<typeof setTimeout> | undefined
     const tick = () => {
       if (predicate()) {
         resume(Effect.void)
         return
       }
-      setTimeout(tick, 5)
+      timer = setTimeout(tick, 5)
     }
     tick()
+    return Effect.sync(() => {
+      if (timer !== undefined) {
+        clearTimeout(timer)
+      }
+    })
   })
 }
 
@@ -99,6 +105,20 @@ describe('streamLog RPC over the /rpc transport', () => {
       expect(commits).toHaveLength(10)
       expect(terminal?.done).toBe(true)
       expect(terminal?.hasMore).toBe(true)
+    } finally {
+      fs.rmSync(pagedRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('clears hasMore when the page exactly exhausts the history', async () => {
+    const pagedRepo = makeBigRepo(10)
+    try {
+      const chunks = await collectStreamLog(pagedRepo, { maxCount: 10 })
+      const commits = chunks.flatMap((chunk) => chunk.commits)
+      const terminal = chunks.at(-1)
+      expect(commits).toHaveLength(10)
+      expect(terminal?.done).toBe(true)
+      expect(terminal?.hasMore).toBe(false)
     } finally {
       fs.rmSync(pagedRepo, { recursive: true, force: true })
     }
