@@ -27,8 +27,7 @@ test.describe('Git GUI E2E', () => {
   let page: Page
   let userDataDir: string
 
-  test.beforeAll(async () => {
-    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
+  async function launchApp(): Promise<void> {
     electronApp = await electron.launch({
       args: [path.join(__dirname, '..', 'out', 'main', 'index.js'), `--user-data-dir=${userDataDir}`],
       env: {
@@ -38,6 +37,11 @@ test.describe('Git GUI E2E', () => {
     })
 
     page = await electronApp.firstWindow()
+  }
+
+  test.beforeAll(async () => {
+    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
+    await launchApp()
   })
 
   test.afterAll(async () => {
@@ -85,8 +89,8 @@ test.describe('Git GUI E2E', () => {
           }
         ).electronAPI
         const open = (await api.openRepo(repoPath)) as { _tag: string }
-        const status = (await api.sidecarRequest('get-status', { repoPath })) as { _tag: string }
-        const branches = (await api.sidecarRequest('get-branches', { repoPath })) as {
+        const status = (await api.sidecarRequest('getStatus', { repoPath })) as { _tag: string }
+        const branches = (await api.sidecarRequest('getBranches', { repoPath })) as {
           _tag: string
           branches?: { current: string }
         }
@@ -251,7 +255,9 @@ test.describe('Git GUI E2E', () => {
         { repoPath: repo, workspacePath: path.dirname(repo) }
       )
 
-      await page.reload({ waitUntil: 'domcontentloaded' })
+      await electronApp.close()
+      await launchApp()
+      await page.waitForLoadState('domcontentloaded')
 
       await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible()
       await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({

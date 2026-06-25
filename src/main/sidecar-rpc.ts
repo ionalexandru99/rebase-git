@@ -27,30 +27,6 @@ const makeRuntime = (baseUrl: string, token: string) => {
   return ManagedRuntime.make(protocol)
 }
 
-type SidecarRuntime = ReturnType<typeof makeRuntime>
-
-let cached: { key: string; runtime: SidecarRuntime } | null = null
-
-function runtimeFor(baseUrl: string, token: string): SidecarRuntime {
-  const key = `${baseUrl}|${token}`
-  if (cached?.key === key) {
-    return cached.runtime
-  }
-  if (cached) {
-    void cached.runtime.dispose()
-  }
-  const runtime = makeRuntime(baseUrl, token)
-  cached = { key, runtime }
-  return runtime
-}
-
-export function disposeRpcRuntime(): void {
-  if (cached) {
-    void cached.runtime.dispose()
-    cached = null
-  }
-}
-
 export function isRpcOp(op: string): boolean {
   return rpcTags.has(op)
 }
@@ -117,19 +93,24 @@ async function runRpcTag(
   token: string,
   payload: Record<string, unknown>
 ): Promise<RpcResponse> {
-  const runtime = runtimeFor(baseUrl, token)
-  const exit = await runtime.runPromiseExit(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const client = yield* RpcClient.make(SidecarRpcs)
-        const method = (
-          client as unknown as Record<string, (input: unknown) => Effect.Effect<unknown, unknown>>
-        )[tag]
-        return yield* method(payload)
-      })
+  // A shared runtime can leave concurrent Electron IPC reads waiting after the sidecar responds.
+  const runtime = makeRuntime(baseUrl, token)
+  try {
+    const exit = await runtime.runPromiseExit(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* RpcClient.make(SidecarRpcs)
+          const method = (
+            client as unknown as Record<string, (input: unknown) => Effect.Effect<unknown, unknown>>
+          )[tag]
+          return yield* method(payload)
+        })
+      )
     )
-  )
-  return classifyExit(tag, exit, token)
+    return classifyExit(tag, exit, token)
+  } finally {
+    void runtime.dispose()
+  }
 }
 
 export async function callRpcByTag(

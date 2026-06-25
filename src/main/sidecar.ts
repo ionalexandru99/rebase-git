@@ -6,7 +6,7 @@ import { parseOrThrow } from '@shared/codec'
 import { type LogChunk, LogChunkSchema } from '@shared/schemas/git'
 import { type UtilityProcess, utilityProcess } from 'electron'
 import type { SidecarMessage } from '../sidecar/protocol'
-import { callRpcByTag, disposeRpcRuntime } from './sidecar-rpc'
+import { callRpcByTag } from './sidecar-rpc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const START_TIMEOUT_MS = 30_000
@@ -231,7 +231,6 @@ export async function sidecarLogStream(
 
 export async function killSidecar(): Promise<void> {
   isShuttingDown = true
-  disposeRpcRuntime()
   const current = sidecar
   sidecar = null
   startup = null
