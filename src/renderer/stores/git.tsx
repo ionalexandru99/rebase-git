@@ -5,7 +5,6 @@ import { StartLogStreamResponseSchema } from '@shared/schemas/ipc'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { stashKey } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
   rpcCloseRepo,
@@ -237,8 +236,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   )
 
   const path = ui.repoPath
-  const repoKeys = path ? repoQueryKeys(path) : null
-  const idleKey = (kind: string) => ['repo', 'idle', tabId, kind] as const
+  const repoKeys = repoQueryKeys(path, { idle: tabId })
 
   // Long-lived async closures (IPC subscription, unmount cleanup, query/mutation callbacks) must
   // read the live repo, not the render-zero value, so they go through this ref refreshed each
@@ -260,7 +258,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   // flight when this tab is redirected to another repo must still resolve against the repo it was
   // started for, never write another repo's data under this key.
   const statusQuery = useQuery({
-    queryKey: repoKeys?.status ?? idleKey('status'),
+    queryKey: repoKeys.status,
     enabled: Boolean(path),
     gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: async ({ queryKey }) => {
@@ -277,14 +275,14 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   })
 
   const localBranchesQuery = useQuery({
-    queryKey: repoKeys?.localBranches ?? idleKey('local-branches'),
+    queryKey: repoKeys.localBranches,
     enabled: Boolean(path),
     gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: ({ queryKey }) => fetchLocalBranches(queryKey[1] as string)
   })
 
   const remoteRefsQuery = useQuery({
-    queryKey: repoKeys?.remoteRefs ?? idleKey('remote-refs'),
+    queryKey: repoKeys.remoteRefs,
     enabled: Boolean(path) && Boolean(localBranchesQuery.data),
     gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: ({ queryKey }) => fetchRemoteRefs(queryKey[1] as string)
@@ -294,7 +292,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   // setQueryData. This disabled query subscribes the component to those cache writes — it never
   // fetches on its own.
   const logQuery = useQuery({
-    queryKey: repoKeys?.log ?? idleKey('log'),
+    queryKey: repoKeys.log,
     enabled: false,
     gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: () => Promise.resolve<GitLog | null>(null)
@@ -395,7 +393,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).diffRoot })
 
   const invalidateStashes = (repoPath: string) =>
-    queryClient.invalidateQueries({ queryKey: stashKey(repoPath) })
+    queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).stash })
 
   const refreshStatus = (repoPath: string) =>
     queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).status })
@@ -966,12 +964,6 @@ export function useGitStore(tabId: string, tabActive: boolean) {
       hunkMutation
         .mutateAsync({ op: 'unstage', file, hunkHeader, options })
         .then((response) => response?._tag === 'Ok'),
-    diffQueryKey: (file: string, staged: boolean) => {
-      const repoPath = ui.repoPath
-      return repoPath
-        ? repoQueryKeys(repoPath).diff(file, staged)
-        : (['repo', 'idle', tabId, 'diff', file, staged] as const)
-    },
     commit: (message: string) => commitMutation.mutateAsync(message),
     fetchNow,
     pushNow,

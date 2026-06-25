@@ -1,14 +1,14 @@
 import type { StashEntry } from '@shared/schemas/ipc'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcStashList } from '@/lib/rpc-client'
-
-export const stashKey = (repoPath: string) => ['stashes', repoPath] as const
 
 export function useStashes(repoPath: string | null) {
   const queryClient = useQueryClient()
+  const queryKeys = repoQueryKeys(repoPath, { idle: 'stashes' })
 
   const query = useQuery<StashEntry[]>({
-    queryKey: repoPath ? stashKey(repoPath) : ['stashes', 'idle'],
+    queryKey: queryKeys.stash,
     enabled: Boolean(repoPath),
     queryFn: async () => {
       if (!repoPath) {
@@ -21,7 +21,7 @@ export function useStashes(repoPath: string | null) {
 
   const refetch = () => {
     if (repoPath) {
-      void queryClient.invalidateQueries({ queryKey: stashKey(repoPath) })
+      void queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).stash })
     }
   }
 
