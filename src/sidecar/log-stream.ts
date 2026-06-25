@@ -102,10 +102,15 @@ export function logChunkStream(
 ): Stream.Stream<LogChunk, GitError> {
   const streamId = options?.streamId
   const pageSize = options?.maxCount
+  // One-record lookahead: ask git for one commit past the page so `hasMore` reflects whether a real
+  // next commit exists, not merely that the page filled exactly. The extra record is read but never
+  // emitted, so a page that exactly exhausts the history reports `hasMore: false`.
+  const limit = typeof pageSize === 'number' && pageSize > 0 ? pageSize : undefined
+  const spawnOptions = limit !== undefined ? { ...options, maxCount: limit + 1 } : options
   return Stream.unwrapScoped(
     Effect.gen(function* () {
       const proc = yield* Effect.acquireRelease(
-        Effect.sync(() => spawnGitLog(repoPath, options)),
+        Effect.sync(() => spawnGitLog(repoPath, spawnOptions)),
         (child) =>
           Effect.sync(() => {
             if (!child.killed) {
@@ -114,21 +119,30 @@ export function logChunkStream(
           })
       )
       const emitted = yield* Ref.make(0)
+      const hasMoreRef = yield* Ref.make(false)
       const data = commitStream(proc).pipe(
         Stream.grouped(STREAM_BATCH_SIZE),
-        Stream.mapEffect((group) => {
-          const commits = Chunk.toReadonlyArray(group) as GitLogEntry[]
-          return Ref.update(emitted, (total) => total + commits.length).pipe(
-            Effect.as<LogChunk>({ repoPath, commits, done: false, streamId })
-          )
-        })
+        Stream.mapEffect((group) =>
+          Effect.gen(function* () {
+            const records = Chunk.toReadonlyArray(group) as GitLogEntry[]
+            const already = yield* Ref.get(emitted)
+            const room = limit === undefined ? records.length : Math.max(0, limit - already)
+            const commits = room >= records.length ? records : records.slice(0, room)
+            if (records.length > room) {
+              yield* Ref.set(hasMoreRef, true)
+            }
+            yield* Ref.update(emitted, (total) => total + commits.length)
+            return commits
+          })
+        ),
+        Stream.filter((commits) => commits.length > 0),
+        Stream.map((commits): LogChunk => ({ repoPath, commits, done: false, streamId }))
       )
       const terminal = Stream.fromEffect(
-        Ref.get(emitted).pipe(
-          Effect.map((total): LogChunk => {
-            const hasMore = typeof pageSize === 'number' && pageSize > 0 ? total >= pageSize : false
-            return { repoPath, commits: [], done: true, hasMore, streamId }
-          })
+        Ref.get(hasMoreRef).pipe(
+          Effect.map(
+            (hasMore): LogChunk => ({ repoPath, commits: [], done: true, hasMore, streamId })
+          )
         )
       )
       return Stream.concat(data, terminal)
