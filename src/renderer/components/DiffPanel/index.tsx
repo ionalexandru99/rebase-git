@@ -9,6 +9,7 @@ import {
   languageForFile
 } from '@/lib/diff-highlight'
 import { type HunkEntry, type PendingHunk, remapHunk } from '@/lib/diff-merge'
+import { type RepoQueryKeys, repoQueryKeys } from '@/lib/query-keys'
 import { rpcGetDiff } from '@/lib/rpc-client'
 import { cn } from '@/lib/utils'
 import type { GitStore } from '@/stores/git'
@@ -24,6 +25,7 @@ interface DiffPanelProps {
 export function DiffPanel(props: DiffPanelProps) {
   const git = props.git
   const repoPath = git.state.repoPath
+  const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
 
   const isUntracked =
     props.selected !== null && (git.state.status?.not_added.includes(props.selected.file) ?? false)
@@ -31,7 +33,7 @@ export function DiffPanel(props: DiffPanelProps) {
   const buildDiffQueryOptions = (staged: boolean) => {
     const selected = props.selected
     return {
-      queryKey: selected ? git.diffQueryKey(selected.file, staged) : ['diff', 'none', staged],
+      queryKey: selected ? queryKeys.diff(selected.file, staged) : queryKeys.diff('none', staged),
       enabled: Boolean(repoPath && selected),
       queryFn: async (): Promise<FileDiff> => {
         if (!repoPath || !selected) {
@@ -271,6 +273,7 @@ export function DiffPanel(props: DiffPanelProps) {
               key={`${entry.staged ? 'staged' : 'unstaged'}:${hunkHighlightKey(entry.hunk)}:${entry.indexStart}`}
               hunk={entry.display}
               filePath={props.selected?.file ?? ''}
+              queryKeys={queryKeys}
               staged={entry.staged}
               pending={isPendingEntry(entry)}
               hunkActionsEnabled={entry.staged || !isUntracked}
@@ -297,6 +300,7 @@ function DiffError(props: { message?: string }) {
 interface HunkCardProps {
   hunk: DiffHunk
   filePath: string
+  queryKeys: RepoQueryKeys
   staged: boolean
   pending: boolean
   hunkActionsEnabled: boolean
@@ -317,7 +321,7 @@ function HunkCard(props: HunkCardProps) {
   }
 
   const highlightQuery = useQuery<Array<LineTokens | null> | null>({
-    queryKey: ['hunk-highlight', props.filePath, hunkHighlightKey(props.hunk)],
+    queryKey: props.queryKeys.hunkHighlight(props.filePath, hunkHighlightKey(props.hunk)),
     enabled: languageForFile(props.filePath) !== null,
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
