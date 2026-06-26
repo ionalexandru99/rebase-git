@@ -441,7 +441,12 @@ describe('useGitStore — parallel repo loading', () => {
       expect(git.state.branches?.all).toEqual(['main', 'dev'])
     })
 
-    git.invalidateRepoQueries(repoPath)
+    // A branch action invalidates the branch caches through the runner, forcing a refetch.
+    const refresh = git.runAction(
+      'createBranch',
+      () => Promise.resolve({ _tag: 'Ok' as const }),
+      'Created'
+    )
 
     await waitFor(() => {
       expect(sidecarMock.getLocalBranches.mock.calls.length).toBeGreaterThanOrEqual(2)
@@ -449,9 +454,10 @@ describe('useGitStore — parallel repo loading', () => {
     })
 
     resolveRefetch()
+    await refresh
   })
 
-  it('refreshAfterCheckout updates the current branch from fresh sidecar reads', async () => {
+  it('checkout updates the current branch from fresh sidecar reads', async () => {
     const { git } = renderGitStore()
     await git.openRepo(repoPath)
 
@@ -468,7 +474,11 @@ describe('useGitStore — parallel repo loading', () => {
       branches: { current: 'dev', all: ['main', 'dev'] }
     })
 
-    await git.refreshAfterCheckout(repoPath)
+    await git.runAction(
+      'checkout',
+      () => Promise.resolve({ _tag: 'Ok' as const }),
+      'Switched to dev'
+    )
 
     await waitFor(() => {
       expect(git.state.currentBranch).toBe('dev')
@@ -490,7 +500,7 @@ describe('useGitStore — parallel repo loading', () => {
       branches: { current: 'renamed', all: ['renamed', 'dev'] }
     })
 
-    await git.refreshBranchesOnly(repoPath)
+    await git.runAction('renameBranch', () => Promise.resolve({ _tag: 'Ok' as const }), 'Renamed')
 
     await waitFor(() => {
       expect(git.state.currentBranch).toBe('renamed')
