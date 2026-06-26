@@ -1,3 +1,4 @@
+import { DeleteBranch } from '@shared/rpc'
 import type { ResetMode } from '@shared/schemas/ipc'
 import { toast } from 'sonner'
 import {
@@ -137,10 +138,10 @@ export function useGitActions(git: GitStore) {
         checkout ? refreshAll : refreshBranches
       ),
     deleteBranch: (name: string, force?: boolean) =>
-      runVoidWrite(
+      git.runAction(
+        DeleteBranch._tag,
         (path) => rpcDeleteBranch(path, name, force),
-        `Deleted branch ${name}`,
-        refreshBranches
+        `Deleted branch ${name}`
       ),
     renameBranch: (oldName: string, newName: string) =>
       runVoidWrite(

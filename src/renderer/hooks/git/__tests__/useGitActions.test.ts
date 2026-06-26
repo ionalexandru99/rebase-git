@@ -44,13 +44,25 @@ vi.mock('sonner', () => ({ toast }))
 
 const refreshAfterMutation = vi.fn().mockResolvedValue(undefined)
 
+// The action runner is the git store's; here it is faked to invoke the handed-off call and report
+// Ok-ness, so wiring tests can assert which operation/label deleteBranch routes through it. Its own
+// invalidation + toast behavior is covered in the store harness.
+const runAction = vi.fn(
+  async (
+    _operation: string,
+    call: (path: string) => Promise<{ _tag: string }>,
+    _label: string
+  ): Promise<boolean> => (await call('/repo'))._tag === 'Ok'
+)
+
 function makeStore(): GitStore {
   return {
     state: { repoPath: '/store-prop-should-not-be-used' },
     refreshAfterMutation,
     refreshWorkingTree: vi.fn().mockResolvedValue(undefined),
     refreshBranchesOnly: vi.fn().mockResolvedValue(undefined),
-    refreshStashes: vi.fn().mockResolvedValue(undefined)
+    refreshStashes: vi.fn().mockResolvedValue(undefined),
+    runAction
   } as unknown as GitStore
 }
 
@@ -159,11 +171,16 @@ describe('useGitActions branch & tag ops', () => {
     expect(toast.success).toHaveBeenCalled()
   })
 
-  it('calls the typed deleteBranch caller and reports success', async () => {
+  it('routes deleteBranch through the action runner with the mapped operation tag', async () => {
     vi.mocked(rpcDeleteBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
 
     const ok = await actionsFor().deleteBranch('feature', true)
 
+    expect(runAction).toHaveBeenCalledWith(
+      'deleteBranch',
+      expect.any(Function),
+      'Deleted branch feature'
+    )
     expect(rpcDeleteBranch).toHaveBeenCalledWith('/repo', 'feature', true)
     expect(ok).toBe(true)
   })
@@ -195,12 +212,12 @@ describe('useGitActions branch & tag ops', () => {
     expect(ok).toBe(true)
   })
 
-  it('surfaces a GitError from a branch op as an error toast', async () => {
-    vi.mocked(rpcDeleteBranch).mockResolvedValue(
-      refWrite({ _tag: 'GitError', message: 'branch not found' })
+  it('surfaces a GitError from a refresh-bundle branch op as an error toast', async () => {
+    vi.mocked(rpcCreateBranch).mockResolvedValue(
+      refWrite({ _tag: 'GitError', message: 'branch already exists' })
     )
 
-    const ok = await actionsFor().deleteBranch('missing')
+    const ok = await actionsFor().createBranch('feature')
 
     expect(ok).toBe(false)
     expect(toast.error).toHaveBeenCalled()
