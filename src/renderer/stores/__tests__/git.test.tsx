@@ -15,6 +15,14 @@ import {
   useRepoSession
 } from '@/stores/git'
 
+const toast = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn()
+}))
+vi.mock('sonner', () => ({ toast }))
+
 const repoPath = '/home/user/project'
 const otherRepoPath = '/home/user/other-project'
 
@@ -1224,5 +1232,75 @@ describe('useGitStore — Phase 2 streaming + watcher', () => {
     await waitFor(() => {
       expect(sidecarMock.stashList.mock.calls.length).toBeGreaterThan(callsAfterOpen)
     })
+  })
+})
+
+describe('useGitStore — runAction', () => {
+  beforeEach(() => {
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
+    vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
+    vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
+    setupLogStream()
+    sidecarMock.getStatus.mockResolvedValue(statusOk)
+    sidecarMock.getLocalBranches.mockResolvedValue(localBranchesOk)
+    sidecarMock.getRemoteRefs.mockResolvedValue(remoteRefsOk)
+  })
+
+  async function openedStore() {
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+      expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
+    })
+    sidecarMock.getStatus.mockClear()
+    sidecarMock.getLocalBranches.mockClear()
+    sidecarMock.getRemoteRefs.mockClear()
+    return git
+  }
+
+  it('invalidates exactly the mapped caches and toasts success on Ok', async () => {
+    const git = await openedStore()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Ok' })
+    const ok = await git.runAction('deleteBranch', call, 'Deleted branch feature')
+
+    expect(ok).toBe(true)
+    expect(call).toHaveBeenCalledWith(repoPath)
+    expect(toast.success).toHaveBeenCalledWith('Deleted branch feature')
+    await waitFor(() => {
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+      expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
+    })
+    expect(sidecarMock.getStatus).not.toHaveBeenCalled()
+  })
+
+  it('toasts the failure and invalidates nothing on a Git error', async () => {
+    const git = await openedStore()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'GitError', message: 'branch not found' })
+    const ok = await git.runAction('deleteBranch', call, 'Deleted branch feature')
+
+    expect(ok).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith('Deleted branch feature failed', {
+      description: 'branch not found'
+    })
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(sidecarMock.getLocalBranches).not.toHaveBeenCalled()
+    expect(sidecarMock.getRemoteRefs).not.toHaveBeenCalled()
+    expect(sidecarMock.getStatus).not.toHaveBeenCalled()
+  })
+
+  it('reports a closed repo and never calls the op when no repo is open', async () => {
+    const { git } = renderGitStore()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Ok' })
+    const ok = await git.runAction('deleteBranch', call, 'Deleted branch feature')
+
+    expect(ok).toBe(false)
+    expect(call).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith('Repository is not open')
   })
 })

@@ -14,6 +14,7 @@ import {
   useState
 } from 'react'
 import { toast } from 'sonner'
+import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
   rpcCommit,
@@ -406,6 +407,60 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
 
   const invalidateStashes = (repoPath: string) =>
     queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).stash })
+
+  const repoCacheQueryKey = (repoPath: string, cache: RepoCache): readonly unknown[] => {
+    const queryKeys = repoQueryKeys(repoPath)
+    switch (cache) {
+      case 'status':
+        return queryKeys.status
+      case 'localBranches':
+        return queryKeys.localBranches
+      case 'remoteRefs':
+        return queryKeys.remoteRefs
+      case 'log':
+        return queryKeys.log
+      case 'stash':
+        return queryKeys.stash
+      case 'diff':
+        return queryKeys.diffRoot
+    }
+  }
+
+  // The single action runner: call the typed op, and on success invalidate exactly the caches the
+  // op→caches map names — no per-action refresh-bundle choice. A Git error (or any other non-Ok
+  // outcome) toasts and invalidates nothing.
+  const runAction = async (
+    operation: MappedOperation,
+    call: (repoPath: string) => Promise<{ _tag: string; message?: string }>,
+    label: string
+  ): Promise<boolean> => {
+    const repoPath = liveRepoPath.current
+    if (!repoPath) {
+      toast.error('Repository is not open')
+      return false
+    }
+    try {
+      const response = await call(repoPath)
+      if (response._tag === 'Ok') {
+        await Promise.all(
+          cachesForOperation(operation).map((cache) =>
+            queryClient.invalidateQueries({ queryKey: repoCacheQueryKey(repoPath, cache) })
+          )
+        )
+        toast.success(label)
+        return true
+      }
+      if (response._tag === 'GitError') {
+        toast.error(`${label} failed`, { description: response.message })
+        return false
+      }
+      toast.error('Repository is not open')
+      return false
+    } catch (error) {
+      toast.error(`${label} failed`, { description: formatCause(error) })
+      return false
+    }
+  }
 
   const refreshStatus = (repoPath: string) =>
     queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).status })
@@ -949,6 +1004,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     refreshWorkingTree,
     refreshBranchesOnly,
     refreshStashes: invalidateStashes,
+    runAction,
     loadMoreHistory,
     invalidateRepoQueries
   }
