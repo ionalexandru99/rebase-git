@@ -1,4 +1,16 @@
-import { DeleteBranch } from '@shared/rpc'
+import {
+  CherryPick,
+  CreateBranch,
+  CreateTag,
+  DeleteBranch,
+  DeleteTag,
+  MergeBranch,
+  RenameBranch,
+  Reset,
+  RevertCommit,
+  StashApply,
+  StashPop
+} from '@shared/rpc'
 import { describe, expect, it } from 'vitest'
 import { cachesForOperation } from '../operation-caches'
 
@@ -11,9 +23,24 @@ describe('cachesForOperation', () => {
     expect(cachesForOperation('discardChanges')).toEqual(['status', 'diff', 'stash'])
   })
 
-  it('dirties the branch caches for a rename and a tag delete', () => {
+  it('dirties the branch caches for a rename, a tag create, and a tag delete', () => {
     expect(cachesForOperation('renameBranch')).toEqual(['localBranches', 'remoteRefs'])
+    expect(cachesForOperation('createTag')).toEqual(['localBranches', 'remoteRefs'])
     expect(cachesForOperation('deleteTag')).toEqual(['localBranches', 'remoteRefs'])
+  })
+
+  it('dirties the working tree, refs, and timeline for a history op', () => {
+    const union = ['status', 'localBranches', 'remoteRefs', 'diff', 'log']
+    expect(cachesForOperation('mergeBranch')).toEqual(union)
+    expect(cachesForOperation('reset')).toEqual(union)
+    expect(cachesForOperation('revertCommit')).toEqual(union)
+    expect(cachesForOperation('cherryPick')).toEqual(union)
+    expect(cachesForOperation('createBranch')).toEqual(union)
+  })
+
+  it('dirties the working-tree caches for a stash apply or pop', () => {
+    expect(cachesForOperation('stashApply')).toEqual(['status', 'diff', 'stash'])
+    expect(cachesForOperation('stashPop')).toEqual(['status', 'diff', 'stash'])
   })
 
   it('dirties only the stash cache for a stash drop', () => {
@@ -22,5 +49,15 @@ describe('cachesForOperation', () => {
 
   it('is keyed by the typed RPC operation tag', () => {
     expect(cachesForOperation(DeleteBranch._tag)).toEqual(['localBranches', 'remoteRefs'])
+    expect(cachesForOperation(CreateBranch._tag)).toBeDefined()
+    expect(cachesForOperation(RenameBranch._tag)).toBeDefined()
+    expect(cachesForOperation(CreateTag._tag)).toBeDefined()
+    expect(cachesForOperation(DeleteTag._tag)).toBeDefined()
+    expect(cachesForOperation(MergeBranch._tag)).toBeDefined()
+    expect(cachesForOperation(Reset._tag)).toBeDefined()
+    expect(cachesForOperation(RevertCommit._tag)).toBeDefined()
+    expect(cachesForOperation(CherryPick._tag)).toBeDefined()
+    expect(cachesForOperation(StashApply._tag)).toBeDefined()
+    expect(cachesForOperation(StashPop._tag)).toBeDefined()
   })
 })

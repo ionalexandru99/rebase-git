@@ -426,9 +426,17 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     }
   }
 
-  // The single action runner: call the typed op, and on success invalidate exactly the caches the
-  // op→caches map names — no per-action refresh-bundle choice. A Git error (or any other non-Ok
-  // outcome) toasts and invalidates nothing.
+  // The log is push-based (chunks written via setQueryData), so "dirtying" it means restarting the
+  // stream, not invalidating a query — every other cache is a normal query refetch.
+  const refreshMappedCache = (repoPath: string, cache: RepoCache): Promise<unknown> =>
+    cache === 'log'
+      ? restartLogStream(repoPath)
+      : queryClient.invalidateQueries({ queryKey: repoCacheQueryKey(repoPath, cache) })
+
+  // The single action runner: call the typed op, then refresh exactly the caches the op→caches map
+  // names — no per-action refresh-bundle choice. Ok toasts success; a Conflict refreshes the same
+  // caches but routes to the resolve-the-conflict path (warning, not error). A Git error (or any
+  // other non-Ok outcome) toasts and refreshes nothing.
   const runAction = async (
     operation: MappedOperation,
     call: (repoPath: string) => Promise<{ _tag: string; message?: string }>,
@@ -441,14 +449,20 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     }
     try {
       const response = await call(repoPath)
-      if (response._tag === 'Ok') {
+      if (response._tag === 'Ok' || response._tag === 'Conflict') {
         await Promise.all(
-          cachesForOperation(operation).map((cache) =>
-            queryClient.invalidateQueries({ queryKey: repoCacheQueryKey(repoPath, cache) })
-          )
+          cachesForOperation(operation).map((cache) => refreshMappedCache(repoPath, cache))
         )
+      }
+      if (response._tag === 'Ok') {
         toast.success(label)
         return true
+      }
+      if (response._tag === 'Conflict') {
+        toast.warning(`${label} hit conflicts`, {
+          description: 'Resolve the conflicted files, then commit or abort.'
+        })
+        return false
       }
       if (response._tag === 'GitError') {
         toast.error(`${label} failed`, { description: response.message })
@@ -480,23 +494,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
       queryClient.cancelQueries({ queryKey: queryKeys.localBranches })
     ])
     await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
-  }
-
-  // Operations that move HEAD or rewrite history (merge, reset, revert, cherry-pick, create+
-  // checkout) change which commits are reachable, so the log stream must be restarted on top of the
-  // status/branch refresh.
-  const refreshAfterMutation = async (repoPath: string) => {
-    await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
-    void invalidateDiffs(repoPath)
-    await restartLogStream(repoPath)
-  }
-
-  // Working-tree-only operations (discard, stash apply/pop/push) change file state but not the
-  // commit graph, so the log stream is left alone.
-  const refreshWorkingTree = async (repoPath: string) => {
-    await refreshStatus(repoPath)
-    void invalidateDiffs(repoPath)
-    void invalidateStashes(repoPath)
   }
 
   const restartLogStream = async (
@@ -1000,10 +997,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     pushNow,
     pullNow,
     refreshAfterCheckout,
-    refreshAfterMutation,
-    refreshWorkingTree,
     refreshBranchesOnly,
-    refreshStashes: invalidateStashes,
     runAction,
     loadMoreHistory,
     invalidateRepoQueries
