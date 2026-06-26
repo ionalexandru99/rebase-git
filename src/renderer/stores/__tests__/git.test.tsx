@@ -1303,4 +1303,125 @@ describe('useGitStore — runAction', () => {
     expect(call).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith('Repository is not open')
   })
+
+  it('routes a conflictable op Conflict to the resolve path and refreshes its mapped caches', async () => {
+    const git = await openedStore()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Conflict', message: 'merge stopped' })
+    const ok = await git.runAction('mergeBranch', call, 'Merged feature')
+
+    expect(ok).toBe(false)
+    expect(toast.warning).toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+      expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
+    })
+    expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+  })
+
+  it('refreshes the working tree, branches, and timeline for a create-branch', async () => {
+    const git = await openedStore()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Ok' })
+    const ok = await git.runAction('createBranch', call, 'Created branch feature')
+
+    expect(ok).toBe(true)
+    await waitFor(() => {
+      expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+      expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
+    })
+    expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+  })
+
+  it('refreshes only the working tree for a discard — not branches or the timeline', async () => {
+    const git = await openedStore()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Ok' })
+    const ok = await git.runAction('discardChanges', call, 'Discarded changes')
+
+    expect(ok).toBe(true)
+    await waitFor(() => {
+      expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    })
+    expect(sidecarMock.getLocalBranches).not.toHaveBeenCalled()
+    expect(sidecarMock.getRemoteRefs).not.toHaveBeenCalled()
+    expect(window.electronAPI.startLogStream).not.toHaveBeenCalled()
+  })
+})
+
+describe('useGitStore — runAction stash caches', () => {
+  beforeEach(() => {
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
+    vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
+    vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
+    vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
+    vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
+    setupLogStream()
+    sidecarMock.getStatus.mockResolvedValue(statusOk)
+    sidecarMock.getLocalBranches.mockResolvedValue(localBranchesOk)
+    sidecarMock.getRemoteRefs.mockResolvedValue(remoteRefsOk)
+    sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })
+  })
+
+  async function openedStashStore() {
+    const ref: { git?: GitStore } = {}
+    renderWithQuery(() => <StashHarness onGit={(git) => (ref.git = git)} />)
+    await act(async () => {
+      await ref.git?.openRepo(repoPath)
+    })
+    await waitFor(() => {
+      expect(sidecarMock.stashList).toHaveBeenCalledWith(repoPath)
+    })
+    sidecarMock.getStatus.mockClear()
+    sidecarMock.getLocalBranches.mockClear()
+    sidecarMock.getRemoteRefs.mockClear()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+    return ref
+  }
+
+  it('refreshes only the stash list for a stash drop', async () => {
+    const ref = await openedStashStore()
+    const stashListCalls = sidecarMock.stashList.mock.calls.length
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Ok' })
+    let ok: boolean | undefined
+    await act(async () => {
+      ok = await ref.git?.runAction('stashDrop', call, 'Dropped stash')
+    })
+
+    expect(ok).toBe(true)
+    await waitFor(() => {
+      expect(sidecarMock.stashList.mock.calls.length).toBeGreaterThan(stashListCalls)
+    })
+    expect(sidecarMock.getStatus).not.toHaveBeenCalled()
+    expect(sidecarMock.getLocalBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.startLogStream).not.toHaveBeenCalled()
+  })
+
+  it('routes a stash apply Conflict to the resolve path and refreshes the working tree and stash', async () => {
+    const ref = await openedStashStore()
+    const stashListCalls = sidecarMock.stashList.mock.calls.length
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Conflict', message: 'stash conflicts' })
+    let ok: boolean | undefined
+    await act(async () => {
+      ok = await ref.git?.runAction('stashApply', call, 'Applied stash')
+    })
+
+    expect(ok).toBe(false)
+    expect(toast.warning).toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+      expect(sidecarMock.stashList.mock.calls.length).toBeGreaterThan(stashListCalls)
+    })
+    expect(sidecarMock.getLocalBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.startLogStream).not.toHaveBeenCalled()
+  })
 })

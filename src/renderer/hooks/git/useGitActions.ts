@@ -1,9 +1,22 @@
-import { DeleteBranch } from '@shared/rpc'
-import type { ResetMode } from '@shared/schemas/ipc'
-import { toast } from 'sonner'
 import {
-  type ConflictableResult,
-  type RefWriteResult,
+  CherryPick,
+  CreateBranch,
+  CreateTag,
+  DeleteBranch,
+  DeleteTag,
+  DiscardAll,
+  DiscardChanges,
+  MergeBranch,
+  RenameBranch,
+  Reset,
+  RevertCommit,
+  StashApply,
+  StashDrop,
+  StashPop,
+  StashPush
+} from '@shared/rpc'
+import type { ResetMode } from '@shared/schemas/ipc'
+import {
   rpcCherryPick,
   rpcCreateBranch,
   rpcCreateTag,
@@ -20,122 +33,17 @@ import {
   rpcStashPop,
   rpcStashPush
 } from '@/lib/rpc-client'
-import { type GitStore, useRepoSession } from '@/stores/git'
+import type { GitStore } from '@/stores/git'
 
-type VoidWriteResult = RefWriteResult
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
+const shortSha = (sha: string) => sha.slice(0, 7)
 
 export function useGitActions(git: GitStore) {
-  const { repoPath } = useRepoSession()
-
-  async function mutateConflictable(
-    call: (path: string) => Promise<ConflictableResult>,
-    label: string
-  ): Promise<boolean> {
-    const path = repoPath
-    if (!path) {
-      toast.error('Repository is not open')
-      return false
-    }
-    try {
-      const response = await call(path)
-      if (response._tag === 'Ok') {
-        await git.refreshAfterMutation(path)
-        toast.success(label)
-        return true
-      }
-      if (response._tag === 'Conflict') {
-        await git.refreshAfterMutation(path)
-        toast.warning(`${label} hit conflicts`, {
-          description: 'Resolve the conflicted files, then commit or abort.'
-        })
-        return false
-      }
-      if (response._tag === 'GitError') {
-        toast.error(`${label} failed`, { description: response.message })
-      } else {
-        toast.error('Repository is not open')
-      }
-      return false
-    } catch (error) {
-      toast.error(`${label} failed`, { description: describe(error) })
-      return false
-    }
-  }
-
-  async function runVoidWrite(
-    call: (path: string) => Promise<VoidWriteResult>,
-    label: string,
-    refresh: (path: string) => Promise<void> = (path) => git.refreshWorkingTree(path)
-  ): Promise<boolean> {
-    const path = repoPath
-    if (!path) {
-      toast.error('Repository is not open')
-      return false
-    }
-    try {
-      const response = await call(path)
-      if (response._tag === 'Ok') {
-        await refresh(path)
-        toast.success(label)
-        return true
-      }
-      if (response._tag === 'GitError') {
-        toast.error(`${label} failed`, { description: response.message })
-      } else {
-        toast.error('Repository is not open')
-      }
-      return false
-    } catch (error) {
-      toast.error(`${label} failed`, { description: describe(error) })
-      return false
-    }
-  }
-
-  const refreshBranches = (path: string) => git.refreshBranchesOnly(path)
-  const refreshAll = (path: string) => git.refreshAfterMutation(path)
-  const refreshWorkingTree = (path: string) => git.refreshWorkingTree(path)
-
-  async function stashConflictable(
-    call: (path: string) => Promise<ConflictableResult>,
-    label: string
-  ): Promise<boolean> {
-    const path = repoPath
-    if (!path) {
-      toast.error('Repository is not open')
-      return false
-    }
-    const response = await call(path).catch((error: unknown) => {
-      toast.error(`${label} failed`, { description: describe(error) })
-      return null
-    })
-    if (!response) {
-      return false
-    }
-    if (response._tag === 'Ok' || response._tag === 'Conflict') {
-      await git.refreshWorkingTree(path)
-    }
-    if (response._tag === 'Ok') {
-      toast.success(label)
-      return true
-    }
-    if (response._tag === 'Conflict') {
-      toast.warning(`${label} hit conflicts`, { description: 'Resolve the conflicts to continue.' })
-    } else if (response._tag === 'GitError') {
-      toast.error(`${label} failed`, { description: response.message })
-    }
-    return false
-  }
-
   return {
     createBranch: (name: string, startPoint?: string, checkout?: boolean) =>
-      runVoidWrite(
+      git.runAction(
+        CreateBranch._tag,
         (path) => rpcCreateBranch(path, name, startPoint, checkout),
-        checkout ? `Created and switched to ${name}` : `Created branch ${name}`,
-        checkout ? refreshAll : refreshBranches
+        checkout ? `Created and switched to ${name}` : `Created branch ${name}`
       ),
     deleteBranch: (name: string, force?: boolean) =>
       git.runAction(
@@ -144,50 +52,55 @@ export function useGitActions(git: GitStore) {
         `Deleted branch ${name}`
       ),
     renameBranch: (oldName: string, newName: string) =>
-      runVoidWrite(
+      git.runAction(
+        RenameBranch._tag,
         (path) => rpcRenameBranch(path, oldName, newName),
-        `Renamed ${oldName} to ${newName}`,
-        refreshBranches
+        `Renamed ${oldName} to ${newName}`
       ),
     mergeBranch: (ref: string) =>
-      mutateConflictable((path) => rpcMergeBranch(path, ref), `Merged ${ref}`),
+      git.runAction(MergeBranch._tag, (path) => rpcMergeBranch(path, ref), `Merged ${ref}`),
     resetToCommit: (sha: string, mode: ResetMode) =>
-      runVoidWrite(
+      git.runAction(
+        Reset._tag,
         (path) => rpcReset(path, sha, mode),
-        `Reset (${mode}) to ${sha.slice(0, 7)}`,
-        refreshAll
+        `Reset (${mode}) to ${shortSha(sha)}`
       ),
     revertCommit: (sha: string) =>
-      mutateConflictable((path) => rpcRevertCommit(path, sha), `Reverted ${sha.slice(0, 7)}`),
+      git.runAction(
+        RevertCommit._tag,
+        (path) => rpcRevertCommit(path, sha),
+        `Reverted ${shortSha(sha)}`
+      ),
     cherryPick: (sha: string) =>
-      mutateConflictable((path) => rpcCherryPick(path, sha), `Cherry-picked ${sha.slice(0, 7)}`),
+      git.runAction(
+        CherryPick._tag,
+        (path) => rpcCherryPick(path, sha),
+        `Cherry-picked ${shortSha(sha)}`
+      ),
     createTag: (name: string, ref?: string, message?: string) =>
-      runVoidWrite(
+      git.runAction(
+        CreateTag._tag,
         (path) => rpcCreateTag(path, name, ref, message),
-        `Created tag ${name}`,
-        refreshBranches
+        `Created tag ${name}`
       ),
     deleteTag: (name: string) =>
-      runVoidWrite((path) => rpcDeleteTag(path, name), `Deleted tag ${name}`, refreshBranches),
+      git.runAction(DeleteTag._tag, (path) => rpcDeleteTag(path, name), `Deleted tag ${name}`),
     discardChanges: (files: string[], label: string) =>
-      runVoidWrite((path) => rpcDiscardChanges(path, files), label),
-    discardAll: () => runVoidWrite((path) => rpcDiscardAll(path), 'Discarded all changes'),
+      git.runAction(DiscardChanges._tag, (path) => rpcDiscardChanges(path, files), label),
+    discardAll: () =>
+      git.runAction(DiscardAll._tag, (path) => rpcDiscardAll(path), 'Discarded all changes'),
     stashPush: (message?: string, includeUntracked?: boolean, files?: string[]) =>
-      runVoidWrite(
+      git.runAction(
+        StashPush._tag,
         (path) => rpcStashPush(path, message, includeUntracked, files),
-        'Stashed changes',
-        refreshWorkingTree
+        'Stashed changes'
       ),
     stashApply: (index: number) =>
-      stashConflictable((path) => rpcStashApply(path, index), 'Applied stash'),
+      git.runAction(StashApply._tag, (path) => rpcStashApply(path, index), 'Applied stash'),
     stashPop: (index: number) =>
-      stashConflictable((path) => rpcStashPop(path, index), 'Popped stash'),
+      git.runAction(StashPop._tag, (path) => rpcStashPop(path, index), 'Popped stash'),
     stashDrop: (index: number) =>
-      runVoidWrite(
-        (path) => rpcStashDrop(path, index),
-        'Dropped stash',
-        (path) => git.refreshStashes(path)
-      )
+      git.runAction(StashDrop._tag, (path) => rpcStashDrop(path, index), 'Dropped stash')
   }
 }
 
