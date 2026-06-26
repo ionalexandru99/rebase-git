@@ -19,7 +19,7 @@ import {
   rpcStashPop,
   rpcStashPush
 } from '@/lib/rpc-client'
-import type { GitStore } from '@/stores/git'
+import { type GitStore, useRepoSession } from '@/stores/git'
 
 type VoidWriteResult = RefWriteResult
 
@@ -28,7 +28,7 @@ function describe(error: unknown): string {
 }
 
 export function useGitActions(git: GitStore) {
-  const repoPath = git.state.repoPath
+  const { repoPath } = useRepoSession()
 
   async function mutateConflictable(
     call: (path: string) => Promise<ConflictableResult>,

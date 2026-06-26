@@ -12,7 +12,7 @@ import { type HunkEntry, type PendingHunk, remapHunk } from '@/lib/diff-merge'
 import { type RepoQueryKeys, repoQueryKeys } from '@/lib/query-keys'
 import { rpcGetDiff } from '@/lib/rpc-client'
 import { cn } from '@/lib/utils'
-import type { GitStore } from '@/stores/git'
+import { type GitStore, useRepoSession } from '@/stores/git'
 import type { SelectedFile } from '../StatusPanel'
 import { Checkbox } from '../ui/checkbox'
 import { EmptyState } from '../ui/empty-state'
@@ -24,7 +24,7 @@ interface DiffPanelProps {
 
 export function DiffPanel(props: DiffPanelProps) {
   const git = props.git
-  const repoPath = git.state.repoPath
+  const { repoPath } = useRepoSession()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
 
   const isUntracked =

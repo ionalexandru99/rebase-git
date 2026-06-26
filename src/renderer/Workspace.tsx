@@ -16,7 +16,7 @@ import { useStashes } from './hooks/git/useStashes'
 import { formatRelativeTime } from './lib/format'
 import type { RefKind } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
-import type { GitStore } from './stores/git'
+import { type GitStore, useRepoSession } from './stores/git'
 import { WorkspaceProvider } from './WorkspaceContext'
 import { WorkspaceViewRenderer } from './WorkspaceViews'
 
@@ -49,7 +49,7 @@ const EMPTY_BRANCH_NAMES: string[] = []
 
 export function Workspace(props: WorkspaceProps) {
   const git = props.git
-  const repoPath = git.state.repoPath
+  const { repoPath } = useRepoSession()
   const repoName = repoDisplayName(repoPath)
   const branch = git.state.currentBranch || 'no-branch'
   const modifiedCount = git.state.status?.modified.length ?? 0

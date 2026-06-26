@@ -4,7 +4,7 @@ import { renderWithQuery } from '@/../test/render-app'
 import { setupLogStream, sidecarMock } from '@/../test/setup'
 import { DiffPanel } from '@/components/DiffPanel'
 import type { SelectedFile } from '@/components/StatusPanel'
-import { type GitStore, useGitStore } from '@/stores/git'
+import { type GitStore, GitStoreProvider, useGitStore } from '@/stores/git'
 
 const repoPath = '/home/user/project'
 
@@ -85,7 +85,15 @@ interface HarnessProps {
 }
 
 function DiffPanelHarness(props: HarnessProps) {
-  const git = useGitStore('diff-test-tab', props.tabActive)
+  return (
+    <GitStoreProvider tabId="diff-test-tab" tabActive={props.tabActive}>
+      <DiffPanelProbe selected={props.selected} onGit={props.onGit} />
+    </GitStoreProvider>
+  )
+}
+
+function DiffPanelProbe(props: Pick<HarnessProps, 'selected' | 'onGit'>) {
+  const git = useGitStore()
   props.onGit(git)
   return <DiffPanel git={git} selected={props.selected} />
 }
