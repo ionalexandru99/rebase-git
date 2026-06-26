@@ -14,19 +14,11 @@ import { useCheckoutRef } from './hooks/git/useCheckoutRef'
 import { useGitActions } from './hooks/git/useGitActions'
 import { useStashes } from './hooks/git/useStashes'
 import { formatRelativeTime } from './lib/format'
-import type { RefKind } from './lib/ref-tree'
+import { type RefKind, shortRefName } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
 import { type GitStore, useRepoSession } from './stores/git'
 import { WorkspaceProvider } from './WorkspaceContext'
 import { WorkspaceViewRenderer } from './WorkspaceViews'
-
-function shortRefName(refKind: RefKind, fullPath: string): string {
-  if (refKind === 'remote') {
-    const slash = fullPath.indexOf('/')
-    return slash >= 0 ? fullPath.slice(slash + 1) : fullPath
-  }
-  return fullPath
-}
 
 async function copyToClipboard(value: string, label: string): Promise<void> {
   try {
@@ -65,9 +57,7 @@ export function Workspace(props: WorkspaceProps) {
 
   const timeline = useTimelineVisibility(git)
 
-  const handleCheckoutRef = useCheckoutRef(repoPath, (repoPath) =>
-    git.refreshAfterCheckout(repoPath)
-  )
+  const handleCheckoutRef = useCheckoutRef(git)
 
   const actions = useGitActions(git)
   const stashList = useStashes(repoPath)

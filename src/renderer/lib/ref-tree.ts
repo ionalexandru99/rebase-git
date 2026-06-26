@@ -96,6 +96,14 @@ export function folderKey(refKind: RefKind, fullPath: string): string {
   return `folder:${refKind}:${fullPath}`
 }
 
+export function shortRefName(refKind: RefKind, fullPath: string): string {
+  if (refKind === 'remote') {
+    const slash = fullPath.indexOf('/')
+    return slash >= 0 ? fullPath.slice(slash + 1) : fullPath
+  }
+  return fullPath
+}
+
 function isSectionExpanded(toggles: Set<string>, refKind: RefKind): boolean {
   const hasToggle = toggles.has(sectionKey(refKind))
   return refKind === 'local' || refKind === 'stash' ? !hasToggle : hasToggle

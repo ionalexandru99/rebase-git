@@ -1,4 +1,5 @@
 import {
+  Checkout,
   CherryPick,
   CreateBranch,
   CreateTag,
@@ -30,12 +31,13 @@ describe('cachesForOperation', () => {
     expect(cachesForOperation('deleteTag')).toEqual(['localBranches', 'remoteRefs'])
   })
 
-  it('dirties the working tree, refs, and timeline for a history op or a create+checkout', () => {
+  it('dirties the working tree, refs, and timeline for a history op, a checkout, or a create+checkout', () => {
     const union = ['status', 'localBranches', 'remoteRefs', 'diff', 'log']
     expect(cachesForOperation('mergeBranch')).toEqual(union)
     expect(cachesForOperation('reset')).toEqual(union)
     expect(cachesForOperation('revertCommit')).toEqual(union)
     expect(cachesForOperation('cherryPick')).toEqual(union)
+    expect(cachesForOperation('checkout')).toEqual(union)
     expect(cachesForOperation('createBranchCheckout')).toEqual(union)
   })
 
@@ -49,6 +51,7 @@ describe('cachesForOperation', () => {
   })
 
   it('is keyed by the typed RPC operation tag', () => {
+    expect(cachesForOperation(Checkout._tag)).toBeDefined()
     expect(cachesForOperation(DeleteBranch._tag)).toEqual(['localBranches', 'remoteRefs'])
     expect(cachesForOperation(CreateBranch._tag)).toBeDefined()
     expect(cachesForOperation(RenameBranch._tag)).toBeDefined()

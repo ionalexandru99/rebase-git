@@ -395,19 +395,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     setUi({ ...initialUiState })
   }
 
-  const invalidateRepoQueries = (repoPath: string) => {
-    const queryKeys = repoQueryKeys(repoPath)
-    void queryClient.invalidateQueries({ queryKey: queryKeys.status })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.localBranches })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
-  }
-
-  const invalidateDiffs = (repoPath: string) =>
-    queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).diffRoot })
-
-  const invalidateStashes = (repoPath: string) =>
-    queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).stash })
-
   const repoCacheQueryKey = (repoPath: string, cache: RepoCache): readonly unknown[] => {
     const queryKeys = repoQueryKeys(repoPath)
     switch (cache) {
@@ -433,6 +420,12 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
       ? restartLogStream(repoPath)
       : queryClient.invalidateQueries({ queryKey: repoCacheQueryKey(repoPath, cache) })
 
+  // The one invalidation primitive every path shares: name the caches a change dirties and they
+  // refresh through the same cache→key switch. Actions read their list from the op→caches map; the
+  // bespoke paths (open, commit, push, pull, fetch, external change) pass an explicit list.
+  const refreshCaches = (repoPath: string, caches: readonly RepoCache[]): Promise<unknown> =>
+    Promise.all(caches.map((cache) => refreshMappedCache(repoPath, cache)))
+
   // The single action runner: call the typed op, then refresh exactly the caches the op→caches map
   // names — no per-action refresh-bundle choice. Ok toasts success; a Conflict refreshes the same
   // caches but routes to the resolve-the-conflict path (warning, not error). A Git error (or any
@@ -450,9 +443,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     try {
       const response = await call(repoPath)
       if (response._tag === 'Ok' || response._tag === 'Conflict') {
-        await Promise.all(
-          cachesForOperation(operation).map((cache) => refreshMappedCache(repoPath, cache))
-        )
+        await refreshCaches(repoPath, cachesForOperation(operation))
       }
       if (response._tag === 'Ok') {
         toast.success(label)
@@ -474,26 +465,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
       toast.error(`${label} failed`, { description: formatCause(error) })
       return false
     }
-  }
-
-  const refreshStatus = (repoPath: string) =>
-    queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).status })
-
-  const refreshBranchesOnly = async (repoPath: string): Promise<void> => {
-    const queryKeys = repoQueryKeys(repoPath)
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.localBranches }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.remoteRefs })
-    ])
-  }
-
-  const refreshAfterCheckout = async (repoPath: string) => {
-    const queryKeys = repoQueryKeys(repoPath)
-    await Promise.all([
-      queryClient.cancelQueries({ queryKey: queryKeys.status }),
-      queryClient.cancelQueries({ queryKey: queryKeys.localBranches })
-    ])
-    await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
   }
 
   const restartLogStream = async (
@@ -570,7 +541,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     if (response._tag === 'Ok') {
       setUi('lastFetchedAt', Date.now())
       if (tabActiveRef.current) {
-        await refreshBranchesOnly(repoPath)
+        await refreshCaches(repoPath, ['localBranches', 'remoteRefs'])
       }
     } else if (response._tag === 'GitError') {
       session.setError(response.message)
@@ -613,7 +584,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
         logHasMore: false
       })
       logBuffer.current = cachedLog?.all ? [...cachedLog.all] : []
-      invalidateRepoQueries(opened.path)
+      void refreshCaches(opened.path, ['status', 'localBranches', 'remoteRefs'])
       startRepoRefresh(opened.path, generation, {
         clearLogOnStream: !cachedLog
       })
@@ -628,7 +599,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const resyncStatusAndDiffs = (context: StatusMutationContext) =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: context.key }),
-      invalidateDiffs(context.path)
+      queryClient.invalidateQueries({ queryKey: repoQueryKeys(context.path).diffRoot })
     ])
 
   // Every mutation re-syncs status+diffs from the sidecar after it settles, success or failure.
@@ -767,8 +738,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
           return false
         }
         if (response._tag === 'Ok') {
-          await Promise.all([refreshStatus(repoPath), invalidateDiffs(repoPath)])
-          await restartLogStream(repoPath)
+          await refreshCaches(repoPath, ['status', 'diff', 'log'])
           return true
         }
         if (response._tag === 'GitError') {
@@ -804,11 +774,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     setError: session.setError,
     scheduleLogFlush,
     flushLogToStore,
-    refreshStatus,
-    refreshBranchesOnly,
-    invalidateDiffs,
-    invalidateStashes,
-    restartLogStream,
     runFetchAndRefresh,
     openRepo: session.openRepo
   })
@@ -819,11 +784,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     setError: session.setError,
     scheduleLogFlush,
     flushLogToStore,
-    refreshStatus,
-    refreshBranchesOnly,
-    invalidateDiffs,
-    invalidateStashes,
-    restartLogStream,
     runFetchAndRefresh,
     openRepo: session.openRepo
   }
@@ -931,7 +891,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
         return
       }
       if (response._tag === 'Ok') {
-        await refreshBranchesOnly(repoPath)
+        await refreshCaches(repoPath, ['localBranches', 'remoteRefs'])
       } else if (response._tag === 'GitError') {
         session.setError(response.message)
       }
@@ -959,8 +919,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
         return
       }
       if (response._tag === 'Ok') {
-        await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
-        await restartLogStream(repoPath)
+        await refreshCaches(repoPath, ['status', 'localBranches', 'remoteRefs', 'log'])
       } else if (response._tag === 'GitError') {
         session.setError(response.message)
       }
@@ -996,23 +955,14 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     fetchNow,
     pushNow,
     pullNow,
-    refreshAfterCheckout,
-    refreshBranchesOnly,
     runAction,
-    loadMoreHistory,
-    invalidateRepoQueries
+    loadMoreHistory
   }
 
   return {
     git,
     session,
-    repoChangedHandlers: {
-      refreshStatus,
-      refreshBranchesOnly,
-      invalidateDiffs,
-      invalidateStashes,
-      restartLogStream
-    }
+    repoChangedHandlers: { refreshCaches }
   }
 }
 
@@ -1045,14 +995,11 @@ export function GitStoreProvider(props: GitStoreProviderProps) {
       if (event.repoPath !== repoPath) {
         return
       }
-      if (event.kind === 'refs') {
-        void handlers.refreshBranchesOnly(event.repoPath)
-        void handlers.restartLogStream(event.repoPath)
-      } else {
-        void handlers.refreshStatus(event.repoPath)
-        void handlers.invalidateDiffs(event.repoPath)
-      }
-      void handlers.invalidateStashes(event.repoPath)
+      const caches: RepoCache[] =
+        event.kind === 'refs'
+          ? ['localBranches', 'remoteRefs', 'log', 'stash']
+          : ['status', 'diff', 'stash']
+      void handlers.refreshCaches(event.repoPath, caches)
     })
     return () => unsubscribe?.()
   }, [])
