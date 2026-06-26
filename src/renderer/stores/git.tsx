@@ -3,17 +3,24 @@ import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import { StartLogStreamResponseSchema } from '@shared/schemas/ipc'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { toast } from 'sonner'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
-  rpcCloseRepo,
   rpcCommit,
   rpcFetch,
   rpcGetLocalBranches,
   rpcGetRemoteRefs,
   rpcGetStatus,
-  rpcOpenRepo,
   rpcPull,
   rpcPush,
   rpcStageAll,
@@ -24,6 +31,17 @@ import {
   rpcUnstageHunk
 } from '@/lib/rpc-client'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
+import {
+  emptyRepoSessionLifecycle,
+  RepoSessionContext,
+  type RepoSessionLifecycle,
+  RepoSessionProvider,
+  useRepoSession,
+  useRepoSessionController
+} from './repo-session'
+
+export type { RepoSession } from './repo-session'
+export { RepoSessionProvider, useRepoSession }
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 const LOG_FLUSH_MS = 100
@@ -80,13 +98,9 @@ type SetGitUiState = {
 }
 
 // Server state lives only in the TanStack Query cache. This store holds the imperative UI flags
-// (open/commit/push/pull progress, the push-based log-stream flags, the last error) that have no
-// natural query of their own.
+// (commit/push/pull progress and the push-based log-stream flags) that have no natural query of
+// their own.
 interface GitUiState {
-  repoPath: string | null
-  remotes: Record<string, string>
-  defaultBranch: string | undefined
-  opening: boolean
   committing: boolean
   pushing: boolean
   pulling: boolean
@@ -94,22 +108,16 @@ interface GitUiState {
   logLoadingMore: boolean
   logHasMore: boolean
   lastFetchedAt: number | null
-  error: string | null
 }
 
 const initialUiState: GitUiState = {
-  repoPath: null,
-  remotes: {},
-  defaultBranch: undefined,
-  opening: false,
   committing: false,
   pushing: false,
   pulling: false,
   logLoading: false,
   logLoadingMore: false,
   logHasMore: false,
-  lastFetchedAt: null,
-  error: null
+  lastFetchedAt: null
 }
 
 type StatusMutationResult =
@@ -120,6 +128,7 @@ type StatusMutationResult =
 
 interface StatusMutationContext {
   path: string
+  generation: number
   key: readonly unknown[]
   previous: GitStatus | undefined
   hadOptimistic: boolean
@@ -217,8 +226,10 @@ const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
   files: mapFileCodes(status, file, (entry) => unstageCodes(entry.index))
 })
 
-export function useGitStore(tabId: string, tabActive: boolean) {
+function useGitStoreValue(tabId: string, tabActive: boolean) {
   const queryClient = useQueryClient()
+  const sessionLifecycle = useRef<RepoSessionLifecycle>(emptyRepoSessionLifecycle)
+  const session = useRepoSessionController(sessionLifecycle)
   const [ui, setUiState] = useState<GitUiState>({ ...initialUiState })
   const setUi = useCallback(
     ((keyOrNext: keyof GitUiState | Partial<GitUiState>, value?: unknown) => {
@@ -235,14 +246,13 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     []
   )
 
-  const path = ui.repoPath
+  const path = session.repoPath
   const repoKeys = repoQueryKeys(path, { idle: tabId })
 
-  // Long-lived async closures (IPC subscription, unmount cleanup, query/mutation callbacks) must
+  // Long-lived async closures (IPC subscriptions and query/mutation callbacks) must
   // read the live repo, not the render-zero value, so they go through this ref refreshed each
   // render.
-  const liveRepoPath = useRef(path)
-  liveRepoPath.current = path
+  const liveRepoPath = session.liveRepoPath
   const tabActiveRef = useRef(tabActive)
   tabActiveRef.current = tabActive
 
@@ -250,9 +260,11 @@ export function useGitStore(tabId: string, tabActive: boolean) {
 
   const logBuffer = useRef<GitLogEntry[]>([])
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const unmountCleanupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const openGeneration = useRef(0)
+  const openGeneration = session.openGenerationRef
   const logStreamSeq = useRef(0)
+
+  const isCurrentRepo = (generation: number, repoPath: string) =>
+    generation === openGeneration.current && liveRepoPath.current === repoPath
 
   // The queryFn fetches the repo encoded in its own key, not `liveRepoPath`: a refetch already in
   // flight when this tab is redirected to another repo must still resolve against the repo it was
@@ -311,14 +323,14 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   const currentBranch = localBranchesQuery.data?.current || status?.current || ''
 
   const state: GitState = {
-    repoPath: ui.repoPath,
+    repoPath: session.repoPath,
     status,
     log,
     branches,
-    remotes: ui.remotes,
-    defaultBranch: ui.defaultBranch,
+    remotes: session.remotes,
+    defaultBranch: session.defaultBranch,
     currentBranch,
-    opening: ui.opening,
+    opening: session.opening,
     committing: ui.committing,
     pushing: ui.pushing,
     pulling: ui.pulling,
@@ -328,15 +340,15 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     logLoadingMore: ui.logLoadingMore,
     logHasMore: ui.logHasMore,
     lastFetchedAt: ui.lastFetchedAt,
-    error: ui.error
+    error: session.error
   }
 
   useEffect(() => {
     const error = statusQuery.error ?? localBranchesQuery.error ?? remoteRefsQuery.error
     if (error) {
-      setUi('error', formatCause(error))
+      session.setError(formatCause(error))
     }
-  }, [statusQuery.error, localBranchesQuery.error, remoteRefsQuery.error, setUi])
+  }, [statusQuery.error, localBranchesQuery.error, remoteRefsQuery.error, session.setError])
 
   const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
     logFlushTimer.current = null
@@ -436,6 +448,10 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     repoPath: string,
     options?: { clearLog?: boolean; skip?: number; maxCount?: number }
   ) => {
+    const generation = openGeneration.current
+    if (!isCurrentRepo(generation, repoPath)) {
+      return
+    }
     const skip = options?.skip ?? 0
     const maxCount = options?.maxCount ?? LOG_PAGE_SIZE
     const append = skip > 0
@@ -462,12 +478,18 @@ export function useGitStore(tabId: string, tabActive: boolean) {
         StartLogStreamResponseSchema,
         await window.electronAPI.startLogStream(repoPath, { skip, maxCount, streamId })
       )
+      if (!isCurrentRepo(generation, repoPath)) {
+        return
+      }
       if (response._tag === 'GitError') {
-        setUi('error', response.message)
+        session.setError(response.message)
         setUi(append ? 'logLoadingMore' : 'logLoading', false)
       }
     } catch (error) {
-      setUi('error', formatCause(error))
+      if (!isCurrentRepo(generation, repoPath)) {
+        return
+      }
+      session.setError(formatCause(error))
       setUi(append ? 'logLoadingMore' : 'logLoading', false)
     }
   }
@@ -485,14 +507,21 @@ export function useGitStore(tabId: string, tabActive: boolean) {
   }
 
   const runFetchAndRefresh = async (repoPath: string) => {
+    const generation = openGeneration.current
+    if (!isCurrentRepo(generation, repoPath)) {
+      return
+    }
     const response = await rpcFetch(repoPath)
+    if (!isCurrentRepo(generation, repoPath)) {
+      return
+    }
     if (response._tag === 'Ok') {
       setUi('lastFetchedAt', Date.now())
       if (tabActiveRef.current) {
         await refreshBranchesOnly(repoPath)
       }
     } else if (response._tag === 'GitError') {
-      setUi('error', response.message)
+      session.setError(response.message)
     }
   }
 
@@ -503,11 +532,11 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     task: () => Promise<void>
   ) => {
     void task().catch((error: unknown) => {
-      if (generation !== openGeneration.current || liveRepoPath.current !== repoPath) {
+      if (!isCurrentRepo(generation, repoPath)) {
         return
       }
       console.error(`[git] ${label} failed for ${repoPath}:`, formatCause(error))
-      setUi('error', formatCause(error))
+      session.setError(formatCause(error))
     })
   }
 
@@ -523,72 +552,25 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     })
   }
 
-  const openRepo = async (requestedPath: string): Promise<string | null> => {
-    const generation = ++openGeneration.current
-    setUi('opening', true)
-    setUi('error', null)
-
-    try {
-      const openResponse = await rpcOpenRepo(requestedPath)
-      if (generation !== openGeneration.current) {
-        if (openResponse._tag === 'Ok') {
-          void rpcCloseRepo(openResponse.result.path).catch(() => {})
-        }
-        return null
-      }
-
-      if (openResponse._tag !== 'Ok') {
-        const errorMessage =
-          openResponse._tag === 'NotARepo' ? 'Not a git repository' : openResponse.message
-        setUi('error', errorMessage)
-        setUi('opening', false)
-        return null
-      }
-
-      const opened = openResponse.result
-      // status / branches / log paint instantly from the warm Query cache (keyed by repoPath); the
-      // invalidate + log-stream restart below replace them with fresh data.
+  sessionLifecycle.current = {
+    onRepoOpened: (opened, generation) => {
       const cachedLog = queryClient.getQueryData<GitLog>(repoQueryKeys(opened.path).log)
-
       setUi({
-        repoPath: opened.path,
-        remotes: opened.remotes,
-        defaultBranch: opened.defaultBranch,
-        opening: false,
         logLoading: false,
         logLoadingMore: false,
         logHasMore: false
       })
-
       logBuffer.current = cachedLog?.all ? [...cachedLog.all] : []
-
-      // Mark before the render that subscribes the per-path queries: cached entries refetch
-      // exactly once on mount, fresh entries fetch once — no imperative duplicate.
       invalidateRepoQueries(opened.path)
       startRepoRefresh(opened.path, generation, {
         clearLogOnStream: !cachedLog
       })
-      return opened.path
-    } catch (error) {
-      if (generation !== openGeneration.current) {
-        return null
-      }
-      setUi('error', formatCause(error))
-      setUi('opening', false)
-      return null
-    }
-  }
-
-  const closeRepo = async () => {
-    openGeneration.current++
-    const repoPath = liveRepoPath.current
-    if (repoPath) {
-      try {
-        await window.electronAPI.cancelLogStream(repoPath).catch(() => {})
-        await rpcCloseRepo(repoPath)
-      } catch {}
-    }
-    reset()
+    },
+    onBeforeRepoClosed: (repoPath) =>
+      Promise.resolve(window.electronAPI.cancelLogStream(repoPath))
+        .then(() => undefined)
+        .catch(() => {}),
+    onSessionReset: reset
   }
 
   const resyncStatusAndDiffs = (context: StatusMutationContext) =>
@@ -625,13 +607,21 @@ export function useGitStore(tabId: string, tabActive: boolean) {
       if (optimistic) {
         queryClient.setQueryData<GitStatus>(key, optimistic)
       }
-      return { path: repoPath, key, previous, hadOptimistic: Boolean(optimistic) }
+      return {
+        path: repoPath,
+        generation: openGeneration.current,
+        key,
+        previous,
+        hadOptimistic: Boolean(optimistic)
+      }
     },
     onError: (error: unknown, _vars: Vars, context: StatusMutationContext | undefined) => {
       if (context?.hadOptimistic && context.previous) {
         queryClient.setQueryData<GitStatus>(context.key, context.previous)
       }
-      setUi('error', formatCause(error))
+      if (context && isCurrentRepo(context.generation, context.path)) {
+        session.setError(formatCause(error))
+      }
       if (context) {
         return resyncStatusAndDiffs(context)
       }
@@ -651,8 +641,8 @@ export function useGitStore(tabId: string, tabActive: boolean) {
       if (context.hadOptimistic && context.previous) {
         queryClient.setQueryData<GitStatus>(context.key, context.previous)
       }
-      if (response._tag === 'GitError') {
-        setUi('error', response.message)
+      if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
+        session.setError(response.message)
       }
       return resyncStatusAndDiffs(context)
     }
@@ -717,23 +707,31 @@ export function useGitStore(tabId: string, tabActive: boolean) {
       if (!repoPath) {
         return false
       }
+      const generation = openGeneration.current
       setUi('committing', true)
       try {
         const response = await rpcCommit(repoPath, message)
+        if (!isCurrentRepo(generation, repoPath)) {
+          return false
+        }
         if (response._tag === 'Ok') {
           await Promise.all([refreshStatus(repoPath), invalidateDiffs(repoPath)])
           await restartLogStream(repoPath)
           return true
         }
         if (response._tag === 'GitError') {
-          setUi('error', response.message)
+          session.setError(response.message)
         }
         return false
       } catch (error) {
-        setUi('error', formatCause(error))
+        if (isCurrentRepo(generation, repoPath)) {
+          session.setError(formatCause(error))
+        }
         return false
       } finally {
-        setUi('committing', false)
+        if (isCurrentRepo(generation, repoPath)) {
+          setUi('committing', false)
+        }
       }
     }
   })
@@ -744,11 +742,14 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     }
   })
 
-  // The IPC subscription and unmount cleanup below register once (`[]` deps) and must read the
-  // current helpers, not render-zero closures. The helpers are recreated each render, so the
-  // subscription reads them through this ref (and the live repo through `liveRepoPath`).
+  // The IPC subscriptions below register once (`[]` deps) and must read the current helpers, not
+  // render-zero closures. The helpers are recreated each render, so the subscriptions read them
+  // through this ref.
   const latest = useRef({
+    getOpenGeneration: () => openGeneration.current,
+    getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,
+    setError: session.setError,
     scheduleLogFlush,
     flushLogToStore,
     refreshStatus,
@@ -757,10 +758,13 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     invalidateStashes,
     restartLogStream,
     runFetchAndRefresh,
-    openRepo
+    openRepo: session.openRepo
   })
   latest.current = {
+    getOpenGeneration: () => openGeneration.current,
+    getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,
+    setError: session.setError,
     scheduleLogFlush,
     flushLogToStore,
     refreshStatus,
@@ -769,13 +773,20 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     invalidateStashes,
     restartLogStream,
     runFetchAndRefresh,
-    openRepo
+    openRepo: session.openRepo
   }
 
   useEffect(() => {
     const unsubLog = window.electronAPI.onLogChunk((chunk) => {
-      const { isTabActive, scheduleLogFlush, flushLogToStore } = latest.current
-      if (chunk.repoPath !== liveRepoPath.current) {
+      const {
+        getOpenGeneration,
+        getRepoPath,
+        isTabActive,
+        scheduleLogFlush,
+        flushLogToStore,
+        setError
+      } = latest.current
+      if (chunk.repoPath !== getRepoPath()) {
         return
       }
       if (chunk.streamId !== undefined && chunk.streamId !== logStreamSeq.current) {
@@ -788,7 +799,7 @@ export function useGitStore(tabId: string, tabActive: boolean) {
         scheduleLogFlush()
       }
       if (chunk.error) {
-        setUi('error', chunk.error)
+        setError(chunk.error)
       }
       if (chunk.done) {
         if (chunk.hasMore !== undefined) {
@@ -797,39 +808,14 @@ export function useGitStore(tabId: string, tabActive: boolean) {
         setUi('logLoading', false)
         setUi('logLoadingMore', false)
         if (isTabActive()) {
-          flushLogToStore(openGeneration.current, liveRepoPath.current)
+          flushLogToStore(getOpenGeneration(), getRepoPath())
         }
       }
     })
 
-    const unsubChanged = window.electronAPI.onRepoChanged((event) => {
-      const {
-        refreshStatus,
-        refreshBranchesOnly,
-        invalidateDiffs,
-        invalidateStashes,
-        restartLogStream
-      } = latest.current
-      if (event.repoPath !== liveRepoPath.current) {
-        return
-      }
-      const repoPath = event.repoPath
-      if (event.kind === 'refs') {
-        // External ref moves (CLI commit/rebase/amend, another GUI) change which commits are
-        // reachable, so the graph must be re-streamed, not just relabelled. The watcher debounce
-        // coalesces a multi-step rebase; the stream generation drops any old in-flight chunks.
-        void refreshBranchesOnly(repoPath)
-        void restartLogStream(repoPath)
-      } else {
-        void refreshStatus(repoPath)
-        void invalidateDiffs(repoPath)
-      }
-      void invalidateStashes(repoPath)
-    })
-
     const unsubRestarted = window.electronAPI.onSidecarRestarted(() => {
-      const { openRepo, isTabActive } = latest.current
-      const repoPath = liveRepoPath.current
+      const { getRepoPath, openRepo, isTabActive } = latest.current
+      const repoPath = getRepoPath()
       if (!repoPath) {
         return
       }
@@ -841,12 +827,11 @@ export function useGitStore(tabId: string, tabActive: boolean) {
 
     return () => {
       unsubLog?.()
-      unsubChanged?.()
       unsubRestarted?.()
     }
   }, [setUi])
 
-  const repoPathValue = ui.repoPath
+  const repoPathValue = session.repoPath
   useEffect(() => {
     // fetchTick is a dependency on purpose: a manual fetch bumps it, re-running this effect and
     // restarting the interval, so the 5-minute cadence resets and we never auto-fetch right after a
@@ -865,44 +850,19 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     return () => window.clearInterval(handle)
   }, [repoPathValue, fetchTick])
 
-  // The close is deferred a tick and cancelled when the effect re-runs so StrictMode's transient
-  // mount→unmount→remount doesn't tear down the repo + log stream and bump the open generation.
-  useEffect(() => {
-    if (unmountCleanupTimer.current !== null) {
-      clearTimeout(unmountCleanupTimer.current)
-      unmountCleanupTimer.current = null
-    }
-
-    return () => {
-      unmountCleanupTimer.current = setTimeout(() => {
-        unmountCleanupTimer.current = null
-        openGeneration.current++
-        if (logFlushTimer.current !== null) {
-          clearTimeout(logFlushTimer.current)
-          logFlushTimer.current = null
-        }
-        logBuffer.current = []
-
-        const repoPath = liveRepoPath.current
-        if (!repoPath) {
-          return
-        }
-        Promise.resolve(window.electronAPI.cancelLogStream(repoPath)).catch(() => {})
-        Promise.resolve(rpcCloseRepo(repoPath)).catch(() => {})
-      }, 0)
-    }
-  }, [])
-
   const fetchNow = async () => {
     const repoPath = liveRepoPath.current
     if (!repoPath) {
       return
     }
+    const generation = openGeneration.current
     setFetchTick((tick) => tick + 1)
     try {
       await runFetchAndRefresh(repoPath)
     } catch (error) {
-      setUi('error', formatCause(error))
+      if (isCurrentRepo(generation, repoPath)) {
+        session.setError(formatCause(error))
+      }
     }
   }
 
@@ -911,18 +871,26 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     if (!repoPath || ui.pushing) {
       return
     }
+    const generation = openGeneration.current
     setUi('pushing', true)
     try {
       const response = await rpcPush(repoPath)
+      if (!isCurrentRepo(generation, repoPath)) {
+        return
+      }
       if (response._tag === 'Ok') {
         await refreshBranchesOnly(repoPath)
       } else if (response._tag === 'GitError') {
-        setUi('error', response.message)
+        session.setError(response.message)
       }
     } catch (error) {
-      setUi('error', formatCause(error))
+      if (isCurrentRepo(generation, repoPath)) {
+        session.setError(formatCause(error))
+      }
     } finally {
-      setUi('pushing', false)
+      if (isCurrentRepo(generation, repoPath)) {
+        setUi('pushing', false)
+      }
     }
   }
 
@@ -931,27 +899,35 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     if (!repoPath || ui.pulling) {
       return
     }
+    const generation = openGeneration.current
     setUi('pulling', true)
     try {
       const response = await rpcPull(repoPath)
+      if (!isCurrentRepo(generation, repoPath)) {
+        return
+      }
       if (response._tag === 'Ok') {
         await Promise.all([refreshStatus(repoPath), refreshBranchesOnly(repoPath)])
         await restartLogStream(repoPath)
       } else if (response._tag === 'GitError') {
-        setUi('error', response.message)
+        session.setError(response.message)
       }
     } catch (error) {
-      setUi('error', formatCause(error))
+      if (isCurrentRepo(generation, repoPath)) {
+        session.setError(formatCause(error))
+      }
     } finally {
-      setUi('pulling', false)
+      if (isCurrentRepo(generation, repoPath)) {
+        setUi('pulling', false)
+      }
     }
   }
 
-  return {
+  const git = {
     state,
-    loading: ui.opening || ui.committing,
-    openRepo,
-    closeRepo,
+    loading: session.opening || ui.committing,
+    openRepo: session.openRepo,
+    closeRepo: session.closeRepo,
     stageFile: (file: string) => stageMutation.mutateAsync(file),
     unstageFile: (file: string) => unstageMutation.mutateAsync(file),
     stageAll: (files: string[]) => stageAllMutation.mutateAsync(files),
@@ -976,6 +952,72 @@ export function useGitStore(tabId: string, tabActive: boolean) {
     loadMoreHistory,
     invalidateRepoQueries
   }
+
+  return {
+    git,
+    session,
+    repoChangedHandlers: {
+      refreshStatus,
+      refreshBranchesOnly,
+      invalidateDiffs,
+      invalidateStashes,
+      restartLogStream
+    }
+  }
 }
 
-export type GitStore = ReturnType<typeof useGitStore>
+type GitStoreValue = ReturnType<typeof useGitStoreValue>
+
+export type GitStore = GitStoreValue['git']
+
+const GitStoreContext = createContext<GitStore | null>(null)
+
+interface GitStoreProviderProps {
+  tabId: string
+  tabActive: boolean
+  children: ReactNode
+}
+
+export function GitStoreProvider(props: GitStoreProviderProps) {
+  const { git, session, repoChangedHandlers } = useGitStoreValue(props.tabId, props.tabActive)
+  const latestRepoChanged = useRef({
+    repoPath: session.repoPath,
+    handlers: repoChangedHandlers
+  })
+  latestRepoChanged.current = {
+    repoPath: session.repoPath,
+    handlers: repoChangedHandlers
+  }
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onRepoChanged((event) => {
+      const { repoPath, handlers } = latestRepoChanged.current
+      if (event.repoPath !== repoPath) {
+        return
+      }
+      if (event.kind === 'refs') {
+        void handlers.refreshBranchesOnly(event.repoPath)
+        void handlers.restartLogStream(event.repoPath)
+      } else {
+        void handlers.refreshStatus(event.repoPath)
+        void handlers.invalidateDiffs(event.repoPath)
+      }
+      void handlers.invalidateStashes(event.repoPath)
+    })
+    return () => unsubscribe?.()
+  }, [])
+
+  return (
+    <RepoSessionContext.Provider value={session.publicValue}>
+      <GitStoreContext.Provider value={git}>{props.children}</GitStoreContext.Provider>
+    </RepoSessionContext.Provider>
+  )
+}
+
+export function useGitStore(): GitStore {
+  const value = useContext(GitStoreContext)
+  if (!value) {
+    throw new Error('useGitStore must be used within a GitStoreProvider')
+  }
+  return value
+}

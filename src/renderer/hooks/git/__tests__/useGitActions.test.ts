@@ -1,4 +1,5 @@
 import { renderHook } from '@testing-library/react'
+import { createElement, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGitActions } from '@/hooks/git/useGitActions'
 import {
@@ -13,7 +14,7 @@ import {
   rpcRenameBranch,
   rpcRevertCommit
 } from '@/lib/rpc-client'
-import type { GitStore } from '@/stores/git'
+import { type GitStore, type RepoSession, RepoSessionProvider } from '@/stores/git'
 
 const conflictable = (wire: { _tag: string; message?: string }): ConflictableResult =>
   wire as unknown as ConflictableResult
@@ -43,9 +44,9 @@ vi.mock('sonner', () => ({ toast }))
 
 const refreshAfterMutation = vi.fn().mockResolvedValue(undefined)
 
-function makeStore(repoPath = '/repo'): GitStore {
+function makeStore(): GitStore {
   return {
-    state: { repoPath },
+    state: { repoPath: '/store-prop-should-not-be-used' },
     refreshAfterMutation,
     refreshWorkingTree: vi.fn().mockResolvedValue(undefined),
     refreshBranchesOnly: vi.fn().mockResolvedValue(undefined),
@@ -53,8 +54,21 @@ function makeStore(repoPath = '/repo'): GitStore {
   } as unknown as GitStore
 }
 
+function makeSession(repoPath: string): RepoSession {
+  return {
+    repoPath,
+    opening: false,
+    openGeneration: 1,
+    error: null,
+    openRepo: vi.fn(),
+    closeRepo: vi.fn()
+  }
+}
+
 function actionsFor(repoPath = '/repo') {
-  const { result } = renderHook(() => useGitActions(makeStore(repoPath)))
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(RepoSessionProvider, { value: makeSession(repoPath) }, children)
+  const { result } = renderHook(() => useGitActions(makeStore()), { wrapper })
   return result.current
 }
 
