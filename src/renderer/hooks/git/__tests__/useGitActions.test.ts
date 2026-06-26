@@ -129,7 +129,7 @@ describe('useGitActions branch & tag ops route through the runner', () => {
     const ok = await actionsFor().createBranch('feature', 'main', true)
 
     expect(runAction).toHaveBeenCalledWith(
-      'createBranch',
+      'createBranchCheckout',
       expect.any(Function),
       'Created and switched to feature'
     )
