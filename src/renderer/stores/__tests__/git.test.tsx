@@ -1322,12 +1322,28 @@ describe('useGitStore — runAction', () => {
     expect(window.electronAPI.startLogStream).toHaveBeenCalled()
   })
 
-  it('refreshes the working tree, branches, and timeline for a create-branch', async () => {
+  it('refreshes only branches for a plain create-branch — not the working tree or timeline', async () => {
     const git = await openedStore()
     vi.mocked(window.electronAPI.startLogStream).mockClear()
 
     const call = vi.fn().mockResolvedValue({ _tag: 'Ok' })
     const ok = await git.runAction('createBranch', call, 'Created branch feature')
+
+    expect(ok).toBe(true)
+    await waitFor(() => {
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+      expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
+    })
+    expect(sidecarMock.getStatus).not.toHaveBeenCalled()
+    expect(window.electronAPI.startLogStream).not.toHaveBeenCalled()
+  })
+
+  it('refreshes the working tree, branches, and timeline for a create+checkout', async () => {
+    const git = await openedStore()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Ok' })
+    const ok = await git.runAction('createBranchCheckout', call, 'Created and switched to feature')
 
     expect(ok).toBe(true)
     await waitFor(() => {

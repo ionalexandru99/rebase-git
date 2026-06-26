@@ -23,19 +23,20 @@ describe('cachesForOperation', () => {
     expect(cachesForOperation('discardChanges')).toEqual(['status', 'diff', 'stash'])
   })
 
-  it('dirties the branch caches for a rename, a tag create, and a tag delete', () => {
+  it('dirties only the branch caches for a plain create, rename, tag create, and tag delete', () => {
+    expect(cachesForOperation('createBranch')).toEqual(['localBranches', 'remoteRefs'])
     expect(cachesForOperation('renameBranch')).toEqual(['localBranches', 'remoteRefs'])
     expect(cachesForOperation('createTag')).toEqual(['localBranches', 'remoteRefs'])
     expect(cachesForOperation('deleteTag')).toEqual(['localBranches', 'remoteRefs'])
   })
 
-  it('dirties the working tree, refs, and timeline for a history op', () => {
+  it('dirties the working tree, refs, and timeline for a history op or a create+checkout', () => {
     const union = ['status', 'localBranches', 'remoteRefs', 'diff', 'log']
     expect(cachesForOperation('mergeBranch')).toEqual(union)
     expect(cachesForOperation('reset')).toEqual(union)
     expect(cachesForOperation('revertCommit')).toEqual(union)
     expect(cachesForOperation('cherryPick')).toEqual(union)
-    expect(cachesForOperation('createBranch')).toEqual(union)
+    expect(cachesForOperation('createBranchCheckout')).toEqual(union)
   })
 
   it('dirties the working-tree caches for a stash apply or pop', () => {

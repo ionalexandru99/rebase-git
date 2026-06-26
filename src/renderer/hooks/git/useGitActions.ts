@@ -41,7 +41,7 @@ export function useGitActions(git: GitStore) {
   return {
     createBranch: (name: string, startPoint?: string, checkout?: boolean) =>
       git.runAction(
-        CreateBranch._tag,
+        checkout ? 'createBranchCheckout' : CreateBranch._tag,
         (path) => rpcCreateBranch(path, name, startPoint, checkout),
         checkout ? `Created and switched to ${name}` : `Created branch ${name}`
       ),
