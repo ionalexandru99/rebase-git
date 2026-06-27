@@ -891,13 +891,16 @@ describe('useGitStore — parallel repo loading', () => {
     })
 
     sidecarMock.getStatus.mockClear()
+    sidecarMock.getLocalBranches.mockClear()
     vi.mocked(window.electronAPI.startLogStream).mockClear()
     const committed = await git.commit('a message')
 
     expect(committed).toBe(true)
     expect(sidecarMock.commit).toHaveBeenCalledWith(repoPath, 'a message')
     expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
     expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+    expect(toast.success).toHaveBeenCalledWith('Committed')
     expect(git.state.committing).toBe(false)
   })
 
@@ -1036,11 +1039,34 @@ describe('useGitStore — push and pull', () => {
 
     expect(sidecarMock.pushRepo).toHaveBeenCalledWith(repoPath)
     expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+    expect(toast.success).toHaveBeenCalledWith('Pushed')
     expect(git.state.pushing).toBe(false)
     expect(git.state.error).toBeNull()
   })
 
-  it('pushNow surfaces a GitError as state.error', async () => {
+  it('reflects only the in-flight action’s pending flag', async () => {
+    let resolvePush: () => void = () => {}
+    sidecarMock.pushRepo.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePush = () => resolve({ _tag: 'Ok' })
+        })
+    )
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    const pushPromise = git.pushNow()
+    await waitFor(() => expect(git.state.pushing).toBe(true))
+    expect(git.state.committing).toBe(false)
+    expect(git.state.pulling).toBe(false)
+
+    resolvePush()
+    await pushPromise
+    await waitFor(() => expect(git.state.pushing).toBe(false))
+  })
+
+  it('pushNow toasts a GitError without touching session error', async () => {
     sidecarMock.pushRepo.mockResolvedValue({
       _tag: 'GitError',
       message: 'no upstream'
@@ -1051,7 +1077,8 @@ describe('useGitStore — push and pull', () => {
 
     await git.pushNow()
 
-    expect(git.state.error).toBe('no upstream')
+    expect(toast.error).toHaveBeenCalledWith('Pushed failed', { description: 'no upstream' })
+    expect(git.state.error).toBeNull()
     expect(git.state.pushing).toBe(false)
   })
 
@@ -1098,11 +1125,12 @@ describe('useGitStore — push and pull', () => {
     expect(sidecarMock.pullRepo).toHaveBeenCalledWith(repoPath)
     expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
     expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+    expect(toast.success).toHaveBeenCalledWith('Pulled')
     expect(git.state.pulling).toBe(false)
     expect(git.state.error).toBeNull()
   })
 
-  it('pullNow surfaces a GitError as state.error', async () => {
+  it('pullNow toasts a GitError without touching session error', async () => {
     sidecarMock.pullRepo.mockResolvedValue({
       _tag: 'GitError',
       message: 'not fast-forward'
@@ -1113,7 +1141,8 @@ describe('useGitStore — push and pull', () => {
 
     await git.pullNow()
 
-    expect(git.state.error).toBe('not fast-forward')
+    expect(toast.error).toHaveBeenCalledWith('Pulled failed', { description: 'not fast-forward' })
+    expect(git.state.error).toBeNull()
     expect(git.state.pulling).toBe(false)
   })
 })
