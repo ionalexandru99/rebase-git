@@ -1,3 +1,5 @@
+import type { RepoChangeKind } from '@shared/schemas/git'
+
 export type RepoCache = 'status' | 'localBranches' | 'remoteRefs' | 'log' | 'stash' | 'diff'
 
 // Keyed by the typed RPC operation tag. Stays renderer-side: cache invalidation is a renderer
@@ -34,3 +36,12 @@ export type MappedOperation = keyof typeof OPERATION_CACHES
 
 export const cachesForOperation = (operation: MappedOperation): readonly RepoCache[] =>
   OPERATION_CACHES[operation]
+
+const REPO_CHANGE_CACHES = {
+  refs: ['localBranches', 'remoteRefs', 'log', 'stash'],
+  workingTree: ['status', 'diff', 'stash'],
+  index: ['status', 'diff', 'stash']
+} satisfies Record<RepoChangeKind, readonly RepoCache[]>
+
+export const cachesForRepoChange = (kind: RepoChangeKind): readonly RepoCache[] =>
+  REPO_CHANGE_CACHES[kind]
