@@ -8,11 +8,13 @@ import { useStashes } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { createQueryClient, QueryProvider } from '@/providers/QueryProvider'
 import {
-  type GitStore,
   GitStoreProvider,
   type RepoSession,
-  useGitStore,
-  useRepoSession
+  useActionRunner,
+  useCommitHistory,
+  useRefs,
+  useRepoSession,
+  useWorkingTreeStatus
 } from '@/stores/git'
 
 const toast = vi.hoisted(() => ({
@@ -68,15 +70,64 @@ const remoteRefsOk = {
   }
 }
 
+// The fat store object is gone; these provider-level tests assert behavior across the concerns at
+// once, so they read every focused context and assemble one view to assert against. This is test
+// ergonomics only — each value still flows through the real per-tab provider and its contexts.
+function useAggregateGit() {
+  const session = useRepoSession()
+  const workingTree = useWorkingTreeStatus()
+  const history = useCommitHistory()
+  const refs = useRefs()
+  const actions = useActionRunner()
+  return {
+    state: {
+      repoPath: session.repoPath,
+      status: workingTree.status,
+      log: history.log,
+      branches: refs.branches,
+      remotes: refs.remotes,
+      defaultBranch: refs.defaultBranch,
+      currentBranch: refs.currentBranch,
+      opening: session.opening,
+      committing: actions.committing,
+      pushing: actions.pushing,
+      pulling: actions.pulling,
+      statusLoading: workingTree.statusLoading,
+      branchesLoading: refs.branchesLoading,
+      logLoading: history.logLoading,
+      logLoadingMore: history.logLoadingMore,
+      logHasMore: history.logHasMore,
+      lastFetchedAt: refs.lastFetchedAt,
+      error: session.error
+    },
+    openRepo: session.openRepo,
+    closeRepo: session.closeRepo,
+    stageFile: workingTree.stageFile,
+    unstageFile: workingTree.unstageFile,
+    stageAll: workingTree.stageAll,
+    unstageAll: workingTree.unstageAll,
+    stageHunk: workingTree.stageHunk,
+    unstageHunk: workingTree.unstageHunk,
+    commit: actions.commit,
+    fetchNow: refs.fetchNow,
+    pushNow: actions.pushNow,
+    pullNow: actions.pullNow,
+    runAction: actions.runAction,
+    loadMoreHistory: history.loadMoreHistory
+  }
+}
+
+type AggregateGit = ReturnType<typeof useAggregateGit>
+
 interface HarnessProps {
   initialTabActive: boolean
-  onGit: (git: GitStore) => void
+  onGit: (git: AggregateGit) => void
   onSession: (session: RepoSession) => void
   onSetTabActive: (setTabActive: (next: boolean) => void) => void
 }
 
 function GitStoreProbe(props: HarnessProps) {
-  const git = useGitStore()
+  const git = useAggregateGit()
   const session = useRepoSession()
   props.onGit(git)
   props.onSession(session)
@@ -95,7 +146,7 @@ function GitStoreHarness(props: HarnessProps) {
 
 function renderGitStore(initialTabActive = true) {
   const queryClient = createQueryClient({ gcTime: Number.POSITIVE_INFINITY })
-  let latestGit: GitStore | undefined
+  let latestGit: AggregateGit | undefined
   let latestSession: RepoSession | undefined
   let latestSetTabActive: ((next: boolean) => void) | undefined
   renderWithQuery(
@@ -124,9 +175,9 @@ function renderGitStore(initialTabActive = true) {
   // restoring the synchronous semantics the old in-place mutation gave these tests. The empty `act`
   // only drains React's work queue; it never awaits the store's fire-and-forget promises, so it
   // cannot hang on the never-resolving log-stream restarts some tests set up.
-  const git = new Proxy({} as GitStore, {
+  const git = new Proxy({} as AggregateGit, {
     get: (_target, prop) => {
-      const value = latestGit?.[prop as keyof GitStore]
+      const value = latestGit?.[prop as keyof AggregateGit]
       if (typeof value !== 'function') {
         return value
       }
@@ -188,7 +239,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('useGitStore — parallel repo loading', () => {
+describe('GitStoreProvider — parallel repo loading', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
     vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({
@@ -352,7 +403,7 @@ describe('useGitStore — parallel repo loading', () => {
 
   it('does not close the repo on a StrictMode transient unmount/remount', async () => {
     vi.useFakeTimers()
-    let latestGit: GitStore | undefined
+    let latestGit: AggregateGit | undefined
     let latestSession: RepoSession | undefined
     // StrictMode mounts, unmounts, then remounts the same instance on the first render. The
     // transient unmount queues the deferred close that the remount must cancel.
@@ -1013,7 +1064,7 @@ describe('useGitStore — parallel repo loading', () => {
   })
 })
 
-describe('useGitStore — push and pull', () => {
+describe('GitStoreProvider — push and pull', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
     vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({
@@ -1156,15 +1207,15 @@ const makeCommit = (hash: string, message: string, parents: string[] = []) => ({
   refs: ''
 })
 
-function StashProbe(props: { onGit: (git: GitStore) => void }) {
-  const git = useGitStore()
+function StashProbe(props: { onGit: (git: AggregateGit) => void }) {
+  const git = useAggregateGit()
   const session = useRepoSession()
   useStashes(session.repoPath)
   props.onGit(git)
   return null
 }
 
-function StashHarness(props: { onGit: (git: GitStore) => void }) {
+function StashHarness(props: { onGit: (git: AggregateGit) => void }) {
   return (
     <GitStoreProvider tabId="test-tab" tabActive={true}>
       <StashProbe {...props} />
@@ -1172,7 +1223,7 @@ function StashHarness(props: { onGit: (git: GitStore) => void }) {
   )
 }
 
-describe('useGitStore — Phase 2 streaming + watcher', () => {
+describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
     vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
@@ -1255,7 +1306,7 @@ describe('useGitStore — Phase 2 streaming + watcher', () => {
   it('invalidates the stash list on a working-tree change', async () => {
     const repoChanged = setupRepoChanged()
     setupLogStream()
-    let latestGit: GitStore | undefined
+    let latestGit: AggregateGit | undefined
     renderWithQuery(() => <StashHarness onGit={(git) => (latestGit = git)} />)
 
     await act(async () => {
@@ -1274,7 +1325,7 @@ describe('useGitStore — Phase 2 streaming + watcher', () => {
   })
 })
 
-describe('useGitStore — runAction', () => {
+describe('GitStoreProvider — runAction', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
     vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
@@ -1330,6 +1381,18 @@ describe('useGitStore — runAction', () => {
     expect(sidecarMock.getLocalBranches).not.toHaveBeenCalled()
     expect(sidecarMock.getRemoteRefs).not.toHaveBeenCalled()
     expect(sidecarMock.getStatus).not.toHaveBeenCalled()
+  })
+
+  it('reports a RepoNotOpen response as repo-not-open and invalidates nothing', async () => {
+    const git = await openedStore()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'RepoNotOpen' })
+    const ok = await git.runAction('deleteBranch', call, 'Deleted branch feature')
+
+    expect(ok).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith('Repository is not open')
+    expect(sidecarMock.getLocalBranches).not.toHaveBeenCalled()
+    expect(sidecarMock.getRemoteRefs).not.toHaveBeenCalled()
   })
 
   it('reports a closed repo and never calls the op when no repo is open', async () => {
@@ -1410,7 +1473,7 @@ describe('useGitStore — runAction', () => {
   })
 })
 
-describe('useGitStore — runAction stash caches', () => {
+describe('GitStoreProvider — runAction stash caches', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoOk)
     vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
@@ -1425,7 +1488,7 @@ describe('useGitStore — runAction stash caches', () => {
   })
 
   async function openedStashStore() {
-    const ref: { git?: GitStore } = {}
+    const ref: { git?: AggregateGit } = {}
     renderWithQuery(() => <StashHarness onGit={(git) => (ref.git = git)} />)
     await act(async () => {
       await ref.git?.openRepo(repoPath)

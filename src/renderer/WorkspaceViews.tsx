@@ -11,7 +11,12 @@ import { useDraggableWidth } from './hooks/useDraggableWidth'
 import type { CommitAction, FileAction } from './lib/git-actions'
 import type { RefKind } from './lib/ref-tree'
 import { buildUnifiedFileRows } from './lib/status-file-rows'
-import { type GitStore, useCommitHistory } from './stores/git'
+import {
+  useActionRunner,
+  useCommitHistory,
+  useRepoSession,
+  useWorkingTreeStatus
+} from './stores/git'
 import type { GitLogEntry } from './types'
 import { useWorkspaceContext } from './WorkspaceContext'
 
@@ -35,7 +40,6 @@ const saveFilesPanelWidth = (state: { width: number }) => {
 }
 
 interface WorkspaceViewProps {
-  git: GitStore
   repoPath: string | null
   remotes: Record<string, string>
   currentBranch: string
@@ -48,7 +52,10 @@ interface WorkspaceViewProps {
 }
 
 function LocalChangesView(props: WorkspaceViewProps) {
-  const git = props.git
+  const { status, stageFile, unstageFile } = useWorkingTreeStatus()
+  const { commit, committing } = useActionRunner()
+  const { opening } = useRepoSession()
+  const loading = opening || committing
   const { actions, prompt, confirm } = useWorkspaceContext()
   const [selected, setSelected] = useState<SelectedFile | null>(null)
 
@@ -77,10 +84,10 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const handleFileAction = (action: FileAction, file: string) => {
     switch (action) {
       case 'stage':
-        void git.stageFile(file)
+        void stageFile(file)
         return
       case 'unstage':
-        void git.unstageFile(file)
+        void unstageFile(file)
         return
       case 'discard':
         confirm({
@@ -117,7 +124,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
     save: saveFilesPanelWidth
   })
 
-  const status = git.state.status
   const totalChanges = useMemo(() => {
     if (!status) {
       return 0
@@ -187,7 +193,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
                 </button>
               </>
             }
-            loading={git.loading}
+            loading={loading}
           />
           <span
             onMouseDown={(event) => onResizeStart(event.nativeEvent)}
@@ -200,8 +206,8 @@ function LocalChangesView(props: WorkspaceViewProps) {
         <DiffPanel selected={selected} />
       </div>
       <CommitPanel
-        onCommit={git.commit}
-        loading={git.loading}
+        onCommit={commit}
+        loading={loading}
         branch={props.currentBranch || 'no-branch'}
         stagedCount={stagedCount}
       />

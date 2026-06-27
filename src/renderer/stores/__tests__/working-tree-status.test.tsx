@@ -2,7 +2,7 @@ import { act, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
 import { type LogStreamHandle, setupLogStream, sidecarMock } from '@/../test/setup'
-import { GitStoreProvider, useGitStore } from '@/stores/git'
+import { GitStoreProvider, useCommitHistory, useRepoSession } from '@/stores/git'
 import { useWorkingTreeStatus } from '@/stores/working-tree-status'
 
 const toast = vi.hoisted(() => ({
@@ -39,8 +39,8 @@ function StatusProbe() {
 }
 
 function HistoryProbe() {
-  const git = useGitStore()
-  return <div data-testid="log-total">{git.state.log?.total ?? 0}</div>
+  const history = useCommitHistory()
+  return <div data-testid="log-total">{history.log?.total ?? 0}</div>
 }
 
 function streamedCommit(hash: string) {
@@ -79,7 +79,7 @@ describe('useWorkingTreeStatus — concern isolation', () => {
     // history consumer's re-render on a streamed chunk cannot cascade down into the status consumer.
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function OpenController() {
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     renderWithQuery(() => (
@@ -125,7 +125,7 @@ describe('useWorkingTreeStatus — concern isolation', () => {
       return <div data-testid="staged">{workingTree.status?.staged.join(',') ?? ''}</div>
     }
     function OpenController() {
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     renderWithQuery(() => (

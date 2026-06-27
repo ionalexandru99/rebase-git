@@ -16,7 +16,7 @@ import { useStashes } from './hooks/git/useStashes'
 import { formatRelativeTime } from './lib/format'
 import { type RefKind, shortRefName } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
-import { type GitStore, useRefs, useRepoSession } from './stores/git'
+import { useActionRunner, useRefs, useRepoSession, useWorkingTreeStatus } from './stores/git'
 import { WorkspaceProvider } from './WorkspaceContext'
 import { WorkspaceViewRenderer } from './WorkspaceViews'
 
@@ -32,7 +32,6 @@ async function copyToClipboard(value: string, label: string): Promise<void> {
 }
 
 interface WorkspaceProps {
-  git: GitStore
   tabActive?: boolean
   errorBanner: ReactNode
 }
@@ -40,14 +39,15 @@ interface WorkspaceProps {
 const EMPTY_BRANCH_NAMES: string[] = []
 
 export function Workspace(props: WorkspaceProps) {
-  const git = props.git
   const refs = useRefs()
+  const actionRunner = useActionRunner()
+  const { status } = useWorkingTreeStatus()
   const { repoPath } = useRepoSession()
   const repoName = repoDisplayName(repoPath)
   const branch = refs.currentBranch || 'no-branch'
-  const modifiedCount = git.state.status?.modified.length ?? 0
-  const stagedCount = git.state.status?.staged.length ?? 0
-  const untrackedCount = git.state.status?.not_added.length ?? 0
+  const modifiedCount = status?.modified.length ?? 0
+  const stagedCount = status?.staged.length ?? 0
+  const untrackedCount = status?.not_added.length ?? 0
   const totalChanges = modifiedCount + stagedCount + untrackedCount
   const [activeView, setActiveView] = useState<WorkspaceView>('history')
 
@@ -58,9 +58,9 @@ export function Workspace(props: WorkspaceProps) {
 
   const timeline = useTimelineVisibility()
 
-  const handleCheckoutRef = useCheckoutRef(git)
+  const handleCheckoutRef = useCheckoutRef(actionRunner)
 
-  const actions = useGitActions(git)
+  const actions = useGitActions(actionRunner)
   const stashList = useStashes(repoPath)
   const { prompt, confirm, dialogs } = useDialogs()
 
@@ -218,17 +218,16 @@ export function Workspace(props: WorkspaceProps) {
           : undefined
       }
       onFetch={refs.fetchNow}
-      onPull={git.pullNow}
-      onPush={git.pushNow}
-      pulling={git.state.pulling}
-      pushing={git.state.pushing}
+      onPull={actionRunner.pullNow}
+      onPush={actionRunner.pushNow}
+      pulling={actionRunner.pulling}
+      pushing={actionRunner.pushing}
     >
       {props.errorBanner}
       <WorkspaceProvider value={workspaceContextValue}>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <WorkspaceViewRenderer
             activeView={activeView}
-            git={git}
             repoPath={repoPath}
             remotes={refs.remotes}
             currentBranch={refs.currentBranch}

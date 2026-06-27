@@ -33,74 +33,74 @@ import {
   rpcStashPop,
   rpcStashPush
 } from '@/lib/rpc-client'
-import type { GitStore } from '@/stores/git'
+import type { ActionRunner } from '@/stores/git'
 
 const shortSha = (sha: string) => sha.slice(0, 7)
 
-export function useGitActions(git: GitStore) {
+export function useGitActions(runner: ActionRunner) {
   return {
     createBranch: (name: string, startPoint?: string, checkout?: boolean) =>
-      git.runAction(
+      runner.runAction(
         checkout ? 'createBranchCheckout' : CreateBranch._tag,
         (path) => rpcCreateBranch(path, name, startPoint, checkout),
         checkout ? `Created and switched to ${name}` : `Created branch ${name}`
       ),
     deleteBranch: (name: string, force?: boolean) =>
-      git.runAction(
+      runner.runAction(
         DeleteBranch._tag,
         (path) => rpcDeleteBranch(path, name, force),
         `Deleted branch ${name}`
       ),
     renameBranch: (oldName: string, newName: string) =>
-      git.runAction(
+      runner.runAction(
         RenameBranch._tag,
         (path) => rpcRenameBranch(path, oldName, newName),
         `Renamed ${oldName} to ${newName}`
       ),
     mergeBranch: (ref: string) =>
-      git.runAction(MergeBranch._tag, (path) => rpcMergeBranch(path, ref), `Merged ${ref}`),
+      runner.runAction(MergeBranch._tag, (path) => rpcMergeBranch(path, ref), `Merged ${ref}`),
     resetToCommit: (sha: string, mode: ResetMode) =>
-      git.runAction(
+      runner.runAction(
         Reset._tag,
         (path) => rpcReset(path, sha, mode),
         `Reset (${mode}) to ${shortSha(sha)}`
       ),
     revertCommit: (sha: string) =>
-      git.runAction(
+      runner.runAction(
         RevertCommit._tag,
         (path) => rpcRevertCommit(path, sha),
         `Reverted ${shortSha(sha)}`
       ),
     cherryPick: (sha: string) =>
-      git.runAction(
+      runner.runAction(
         CherryPick._tag,
         (path) => rpcCherryPick(path, sha),
         `Cherry-picked ${shortSha(sha)}`
       ),
     createTag: (name: string, ref?: string, message?: string) =>
-      git.runAction(
+      runner.runAction(
         CreateTag._tag,
         (path) => rpcCreateTag(path, name, ref, message),
         `Created tag ${name}`
       ),
     deleteTag: (name: string) =>
-      git.runAction(DeleteTag._tag, (path) => rpcDeleteTag(path, name), `Deleted tag ${name}`),
+      runner.runAction(DeleteTag._tag, (path) => rpcDeleteTag(path, name), `Deleted tag ${name}`),
     discardChanges: (files: string[], label: string) =>
-      git.runAction(DiscardChanges._tag, (path) => rpcDiscardChanges(path, files), label),
+      runner.runAction(DiscardChanges._tag, (path) => rpcDiscardChanges(path, files), label),
     discardAll: () =>
-      git.runAction(DiscardAll._tag, (path) => rpcDiscardAll(path), 'Discarded all changes'),
+      runner.runAction(DiscardAll._tag, (path) => rpcDiscardAll(path), 'Discarded all changes'),
     stashPush: (message?: string, includeUntracked?: boolean, files?: string[]) =>
-      git.runAction(
+      runner.runAction(
         StashPush._tag,
         (path) => rpcStashPush(path, message, includeUntracked, files),
         'Stashed changes'
       ),
     stashApply: (index: number) =>
-      git.runAction(StashApply._tag, (path) => rpcStashApply(path, index), 'Applied stash'),
+      runner.runAction(StashApply._tag, (path) => rpcStashApply(path, index), 'Applied stash'),
     stashPop: (index: number) =>
-      git.runAction(StashPop._tag, (path) => rpcStashPop(path, index), 'Popped stash'),
+      runner.runAction(StashPop._tag, (path) => rpcStashPop(path, index), 'Popped stash'),
     stashDrop: (index: number) =>
-      git.runAction(StashDrop._tag, (path) => rpcStashDrop(path, index), 'Dropped stash')
+      runner.runAction(StashDrop._tag, (path) => rpcStashDrop(path, index), 'Dropped stash')
   }
 }
 
