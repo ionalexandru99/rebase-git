@@ -1,5 +1,5 @@
 import { parseOrThrow } from '@shared/codec'
-import { normalizeRepoPath } from '@shared/repo-path'
+import { normalizeRepoPath, tabResourceKey } from '@shared/repo-path'
 import type { LogChunk } from '@shared/schemas/git'
 import {
   CancelLogStreamResponseSchema,
@@ -20,12 +20,8 @@ interface ActiveStream {
 const activeLogStreams = new Map<string, ActiveStream>()
 const webContentsCleanupBound = new Set<number>()
 
-function streamKey(webContentsId: number, repoPath: string): string {
-  return `${webContentsId}:${repoPath}`
-}
-
 function killActiveStream(webContentsId: number, repoPath: string): void {
-  const key = streamKey(webContentsId, repoPath)
+  const key = tabResourceKey(webContentsId, repoPath)
   const existing = activeLogStreams.get(key)
   if (!existing) {
     return
@@ -98,7 +94,7 @@ export function register(): void {
           resolve(parseOrThrow(StartLogStreamResponseSchema, { _tag: 'GitError', message }))
         }
 
-        const mapKey = streamKey(webContentsId, key)
+        const mapKey = tabResourceKey(webContentsId, key)
         const controller = new AbortController()
         activeLogStreams.set(mapKey, { controller, finishOk, webContentsId, repoPath: key })
 
