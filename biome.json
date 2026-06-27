@@ -32,6 +32,14 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+      "correctness": {
+        "useExhaustiveDependencies": {
+          "level": "error",
+          "options": {
+            "hooks": [{ "name": "useLatestRef", "stableResult": true }]
+          }
+        }
+      },
       "suspicious": {
         "noConsole": "off"
       },

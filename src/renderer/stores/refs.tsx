@@ -10,6 +10,7 @@ import {
   useRef,
   useState
 } from 'react'
+import { useLatestRef } from '@/hooks/useLatestRef'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcFetch, rpcGetLocalBranches, rpcGetRemoteRefs } from '@/lib/rpc-client'
 import type { GitBranches } from '@/types'
@@ -212,16 +213,11 @@ export function useRefsController(deps: RefsDeps): RefsController {
     await runFetchAndRefresh(path)
   }
 
-  const latest = useRef({
+  const latest = useLatestRef({
     isTabActive: () => tabActiveRef.current,
     runFetchAndRefresh,
     fetchNow: fetchNowImpl
   })
-  latest.current = {
-    isTabActive: () => tabActiveRef.current,
-    runFetchAndRefresh,
-    fetchNow: fetchNowImpl
-  }
 
   const fetchNow = useCallback(() => latest.current.fetchNow(), [])
 

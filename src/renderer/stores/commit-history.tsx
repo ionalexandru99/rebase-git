@@ -12,6 +12,7 @@ import {
   useRef,
   useState
 } from 'react'
+import { useLatestRef } from '@/hooks/useLatestRef'
 import { repoQueryKeys } from '@/lib/query-keys'
 import type { GitLog, GitLogEntry } from '@/types'
 import type { OpenedRepo } from './repo-session'
@@ -266,7 +267,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
 
   // The IPC subscription below registers once (`[]` deps) and must read the current helpers, not
   // render-zero closures. The helpers are recreated each render, so it reads them through this ref.
-  const latest = useRef({
+  const latest = useLatestRef({
     getOpenGeneration: () => openGenerationRef.current,
     getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,
@@ -274,14 +275,6 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
     scheduleLogFlush,
     flushLogToStore
   })
-  latest.current = {
-    getOpenGeneration: () => openGenerationRef.current,
-    getRepoPath: () => liveRepoPath.current,
-    isTabActive: () => tabActiveRef.current,
-    setError,
-    scheduleLogFlush,
-    flushLogToStore
-  }
 
   useEffect(() => {
     const unsubLog = window.electronAPI.onLogChunk((chunk) => {

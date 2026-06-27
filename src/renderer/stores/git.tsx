@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import { useLatestRef } from '@/hooks/useLatestRef'
 import { cachesForRepoChange, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { ActionRunnerProvider, useActionRunnerController } from './action-runner'
@@ -145,16 +146,11 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
 
   // The IPC subscription below registers once (`[]` deps) and must read the current helpers, not
   // render-zero closures. The helpers are recreated each render, so it reads them through this ref.
-  const latest = useRef({
+  const latest = useLatestRef({
     getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,
     openRepo: session.openRepo
   })
-  latest.current = {
-    getRepoPath: () => liveRepoPath.current,
-    isTabActive: () => tabActiveRef.current,
-    openRepo: session.openRepo
-  }
 
   useEffect(() => {
     const unsubRestarted = window.electronAPI.onSidecarRestarted(() => {
@@ -193,14 +189,10 @@ interface GitStoreProviderProps {
 export function GitStoreProvider(props: GitStoreProviderProps) {
   const { session, workingTreeStatus, commitHistory, refs, actionRunner, repoChangedHandlers } =
     useGitStoreValue(props.tabId, props.tabActive)
-  const latestRepoChanged = useRef({
+  const latestRepoChanged = useLatestRef({
     repoPath: session.repoPath,
     handlers: repoChangedHandlers
   })
-  latestRepoChanged.current = {
-    repoPath: session.repoPath,
-    handlers: repoChangedHandlers
-  }
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onRepoChanged((event) => {
