@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { Channel } from '@shared/channels'
 import { parseOrThrow } from '@shared/codec'
-import { normalizeRepoPath } from '@shared/repo-path'
+import { tabResourceKey } from '@shared/repo-path'
 import { RepoChangedEventSchema, type RepoChangeKind } from '@shared/schemas/git'
 import chokidar, { type FSWatcher } from 'chokidar'
 import type { WebContents } from 'electron'
@@ -59,15 +59,11 @@ export interface GitDirs {
   commonDir?: string
 }
 
-function watcherKey(webContentsId: number, repoPath: string): string {
-  return `${webContentsId}:${normalizeRepoPath(repoPath)}`
-}
-
 // gitDir/commonDir come resolved from the sidecar's open response (git logic stays out of main);
 // they differ from `<repo>/.git` for linked worktrees and submodules. Fall back to the plain
 // layout when absent.
 export function startWatching(repoPath: string, webContents: WebContents, dirs?: GitDirs): void {
-  const key = watcherKey(webContents.id, repoPath)
+  const key = tabResourceKey(webContents.id, repoPath)
   const existing = watchers.get(key)
   if (existing) {
     if (existing.webContents === webContents && !webContents.isDestroyed()) {
@@ -140,7 +136,7 @@ export function startWatching(repoPath: string, webContents: WebContents, dirs?:
 }
 
 export async function stopWatching(repoPath: string, webContentsId: number): Promise<void> {
-  const key = watcherKey(webContentsId, repoPath)
+  const key = tabResourceKey(webContentsId, repoPath)
   const watcher = watchers.get(key)
   if (!watcher) {
     return

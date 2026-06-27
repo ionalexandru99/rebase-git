@@ -8,3 +8,7 @@ export function normalizeRepoPath(repoPath: string): string {
     return path.resolve(repoPath)
   }
 }
+
+export function tabResourceKey(webContentsId: number, repoPath: string): string {
+  return `${webContentsId}:${normalizeRepoPath(repoPath)}`
+}
