@@ -919,7 +919,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
         return
       }
       if (response._tag === 'Ok') {
-        await refreshCaches(repoPath, ['status', 'localBranches', 'remoteRefs', 'log'])
+        await refreshCaches(repoPath, ['status', 'localBranches', 'remoteRefs', 'diff', 'log'])
       } else if (response._tag === 'GitError') {
         session.setError(response.message)
       }
