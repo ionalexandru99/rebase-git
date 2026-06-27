@@ -13,6 +13,7 @@ export function RepoCard(props: RepoCardProps) {
   return (
     <button
       type="button"
+      data-testid="repo-picker-recent"
       onClick={() => props.onSelect(props.path)}
       className={cn(
         'relative grid grid-cols-[38px_minmax(0,1fr)] items-center gap-3 rounded-[var(--r-md)] border px-3 py-2.5 text-left transition-colors',

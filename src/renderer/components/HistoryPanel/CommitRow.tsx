@@ -53,6 +53,7 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
   return (
     <ContextMenu>
       <ContextMenuTriggerArea
+        data-testid="commit-row"
         className="group/row absolute inset-x-0 z-10 grid items-center gap-2 border-b bg-card px-0 hover:bg-muted"
         style={{
           top: `${props.top}px`,
