@@ -2,6 +2,7 @@ import { PlusIcon, XIcon } from 'lucide-react'
 import { avatarColor, avatarInitials } from '@/lib/repo-avatar'
 import { cn } from '@/lib/utils'
 import type { TabDescriptor } from '../../hooks/useTabs'
+import { ThemeToggle } from './ThemeToggle'
 
 interface RepoRailProps {
   tabs: TabDescriptor[]
@@ -27,11 +28,11 @@ export function RepoRail(props: RepoRailProps) {
   }
 
   return (
-    <nav
-      aria-label="Open repositories"
-      className="drag-region flex min-h-0 flex-col items-center gap-[3px] overflow-y-auto bg-chrome p-3"
-    >
-      <div role="tablist" className="no-drag flex flex-col items-center gap-[3px]">
+    <nav aria-label="Open repositories" className="drag-region flex min-h-0 flex-col bg-chrome">
+      <div
+        role="tablist"
+        className="no-drag flex min-h-0 flex-1 flex-col items-center gap-[3px] overflow-y-auto overflow-x-hidden px-1 py-3"
+      >
         {repoTabs.map((tab) => (
           <RepoTabButton
             key={tab.id}
@@ -53,6 +54,9 @@ export function RepoRail(props: RepoRailProps) {
         >
           <PlusIcon className="size-4" />
         </button>
+      </div>
+      <div className="no-drag flex shrink-0 justify-center px-1 pb-3">
+        <ThemeToggle />
       </div>
     </nav>
   )
