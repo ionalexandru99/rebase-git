@@ -1,28 +1,20 @@
-import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   createContext,
   type ReactNode,
   useCallback,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState
 } from 'react'
 import { toast } from 'sonner'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
-import {
-  rpcCommit,
-  rpcFetch,
-  rpcGetLocalBranches,
-  rpcGetRemoteRefs,
-  rpcPull,
-  rpcPush
-} from '@/lib/rpc-client'
+import { rpcCommit, rpcPull, rpcPush } from '@/lib/rpc-client'
 import type { GitBranches, GitLog, GitStatus } from '@/types'
 import { CommitHistoryProvider, useCommitHistoryController } from './commit-history'
+import { RefsProvider, useRefsController } from './refs'
 import {
   emptyRepoSessionLifecycle,
   RepoSessionContext,
@@ -34,31 +26,10 @@ import {
 import { useWorkingTreeStatusController, WorkingTreeStatusProvider } from './working-tree-status'
 
 export { useCommitHistory } from './commit-history'
+export { useRefs } from './refs'
 export type { RepoSession } from './repo-session'
 export { useFileDiff, useWorkingTreeStatus } from './working-tree-status'
 export { RepoSessionProvider, useRepoSession }
-
-const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
-// Closed repos keep their status/branches/log cached this long so reopening repaints instantly —
-// the role the per-repo snapshot Map used to play. Scoped to these queries (not the global default)
-// so transient diff/hunk-highlight queries still expire on the normal schedule.
-const WARM_REOPEN_GC_TIME_MS = 30 * 60 * 1000
-
-const combineBranches = (
-  local: LocalBranches | undefined,
-  remote: RemoteRefs | undefined
-): GitBranches | null => {
-  if (!local && !remote) {
-    return null
-  }
-  return {
-    current: local?.current ?? '',
-    all: local?.all ?? [],
-    remotes: remote?.remotes ?? [],
-    tags: remote?.tags ?? [],
-    tracking: local?.tracking
-  }
-}
 
 export interface GitState {
   repoPath: string | null
@@ -93,14 +64,12 @@ interface GitUiState {
   committing: boolean
   pushing: boolean
   pulling: boolean
-  lastFetchedAt: number | null
 }
 
 const initialUiState: GitUiState = {
   committing: false,
   pushing: false,
-  pulling: false,
-  lastFetchedAt: null
+  pulling: false
 }
 
 const formatCause = (error: unknown): string => {
@@ -111,44 +80,6 @@ const formatCause = (error: unknown): string => {
     return error
   }
   return String(error)
-}
-
-const parseLocalBranchesResponse = (response: {
-  _tag: string
-  branches?: LocalBranches
-  message?: string
-}): LocalBranches => {
-  if (response._tag === 'Ok' && response.branches) {
-    return response.branches
-  }
-  if (response._tag === 'GitError') {
-    throw new Error(response.message ?? 'Git error')
-  }
-  throw new Error('Repository not open')
-}
-
-const parseRemoteRefsResponse = (response: {
-  _tag: string
-  refs?: RemoteRefs
-  message?: string
-}): RemoteRefs => {
-  if (response._tag === 'Ok' && response.refs) {
-    return response.refs
-  }
-  if (response._tag === 'GitError') {
-    throw new Error(response.message ?? 'Git error')
-  }
-  throw new Error('Repository not open')
-}
-
-const fetchLocalBranches = async (path: string): Promise<LocalBranches> => {
-  const response = await rpcGetLocalBranches(path)
-  return parseLocalBranchesResponse(response)
-}
-
-const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
-  const response = await rpcGetRemoteRefs(path)
-  return parseRemoteRefsResponse(response)
 }
 
 function useGitStoreValue(tabId: string, tabActive: boolean) {
@@ -172,7 +103,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   )
 
   const path = session.repoPath
-  const repoKeys = repoQueryKeys(path, { idle: tabId })
 
   // Long-lived async closures (IPC subscriptions and query/mutation callbacks) must
   // read the live repo, not the render-zero value, so they go through this ref refreshed each
@@ -180,8 +110,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const liveRepoPath = session.liveRepoPath
   const tabActiveRef = useRef(tabActive)
   tabActiveRef.current = tabActive
-
-  const [fetchTick, setFetchTick] = useState(0)
 
   const openGeneration = session.openGenerationRef
 
@@ -207,61 +135,51 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     setError: session.setError
   })
 
-  const localBranchesQuery = useQuery({
-    queryKey: repoKeys.localBranches,
-    enabled: Boolean(path),
-    gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: ({ queryKey }) => fetchLocalBranches(queryKey[1] as string)
-  })
-
-  const remoteRefsQuery = useQuery({
-    queryKey: repoKeys.remoteRefs,
-    enabled: Boolean(path) && Boolean(localBranchesQuery.data),
-    gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: ({ queryKey }) => fetchRemoteRefs(queryKey[1] as string)
+  const refs = useRefsController({
+    repoPath: path,
+    tabId,
+    tabActive,
+    remotes: session.remotes,
+    defaultBranch: session.defaultBranch,
+    statusCurrent: workingTreeStatus.status?.current,
+    liveRepoPath,
+    openGenerationRef: openGeneration,
+    isCurrentRepo,
+    setError: session.setError
   })
 
   const status = workingTreeStatus.status
-  const branches = useMemo(
-    () => combineBranches(localBranchesQuery.data, remoteRefsQuery.data),
-    [localBranchesQuery.data, remoteRefsQuery.data]
-  )
-  // Prefer the dedicated branch source over status.current: a branch-only refresh (e.g. renaming
-  // the checked-out branch) updates localBranches but not status, and status.current would
-  // otherwise keep showing the old name until an unrelated status refetch. Falls back to
-  // status.current when there is no named branch (detached HEAD reports an empty current).
-  const currentBranch = localBranchesQuery.data?.current || status?.current || ''
 
   const state: GitState = {
     repoPath: session.repoPath,
     status,
     log: commitHistory.log,
-    branches,
+    branches: refs.branches,
     remotes: session.remotes,
     defaultBranch: session.defaultBranch,
-    currentBranch,
+    currentBranch: refs.currentBranch,
     opening: session.opening,
     committing: ui.committing,
     pushing: ui.pushing,
     pulling: ui.pulling,
     statusLoading: workingTreeStatus.statusLoading,
-    branchesLoading: localBranchesQuery.isFetching && !localBranchesQuery.data,
+    branchesLoading: refs.branchesLoading,
     logLoading: commitHistory.logLoading,
     logLoadingMore: commitHistory.logLoadingMore,
     logHasMore: commitHistory.logHasMore,
-    lastFetchedAt: ui.lastFetchedAt,
+    lastFetchedAt: refs.lastFetchedAt,
     error: session.error
   }
 
   useEffect(() => {
-    const error = workingTreeStatus.statusError ?? localBranchesQuery.error ?? remoteRefsQuery.error
+    const error = workingTreeStatus.statusError ?? refs.localBranchesError ?? refs.remoteRefsError
     if (error) {
       session.setError(formatCause(error))
     }
   }, [
     workingTreeStatus.statusError,
-    localBranchesQuery.error,
-    remoteRefsQuery.error,
+    refs.localBranchesError,
+    refs.remoteRefsError,
     session.setError
   ])
 
@@ -342,25 +260,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     }
   }
 
-  const runFetchAndRefresh = async (repoPath: string) => {
-    const generation = openGeneration.current
-    if (!isCurrentRepo(generation, repoPath)) {
-      return
-    }
-    const response = await rpcFetch(repoPath)
-    if (!isCurrentRepo(generation, repoPath)) {
-      return
-    }
-    if (response._tag === 'Ok') {
-      setUi('lastFetchedAt', Date.now())
-      if (tabActiveRef.current) {
-        await refreshCaches(repoPath, ['localBranches', 'remoteRefs'])
-      }
-    } else if (response._tag === 'GitError') {
-      session.setError(response.message)
-    }
-  }
-
   sessionLifecycle.current = {
     onRepoOpened: (opened, generation) => {
       void refreshCaches(opened.path, ['status', 'localBranches', 'remoteRefs'])
@@ -409,13 +308,11 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const latest = useRef({
     getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,
-    runFetchAndRefresh,
     openRepo: session.openRepo
   })
   latest.current = {
     getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,
-    runFetchAndRefresh,
     openRepo: session.openRepo
   }
 
@@ -436,41 +333,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
       unsubRestarted?.()
     }
   }, [])
-
-  const repoPathValue = session.repoPath
-  useEffect(() => {
-    // fetchTick is a dependency on purpose: a manual fetch bumps it, re-running this effect and
-    // restarting the interval, so the 5-minute cadence resets and we never auto-fetch right after a
-    // manual one. Trade-off: fetching manually more often than every 5 minutes postpones the
-    // independent auto-fetch indefinitely — acceptable, since the user is already fetching.
-    void fetchTick
-    if (!repoPathValue) {
-      return
-    }
-    const handle = window.setInterval(() => {
-      const { isTabActive, runFetchAndRefresh } = latest.current
-      if (isTabActive()) {
-        void runFetchAndRefresh(repoPathValue)
-      }
-    }, AUTO_FETCH_INTERVAL_MS)
-    return () => window.clearInterval(handle)
-  }, [repoPathValue, fetchTick])
-
-  const fetchNow = async () => {
-    const repoPath = liveRepoPath.current
-    if (!repoPath) {
-      return
-    }
-    const generation = openGeneration.current
-    setFetchTick((tick) => tick + 1)
-    try {
-      await runFetchAndRefresh(repoPath)
-    } catch (error) {
-      if (isCurrentRepo(generation, repoPath)) {
-        session.setError(formatCause(error))
-      }
-    }
-  }
 
   const pushNow = async () => {
     const repoPath = liveRepoPath.current
@@ -540,7 +402,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     stageHunk: workingTreeStatus.value.stageHunk,
     unstageHunk: workingTreeStatus.value.unstageHunk,
     commit: (message: string) => commitMutation.mutateAsync(message),
-    fetchNow,
+    fetchNow: refs.fetchNow,
     pushNow,
     pullNow,
     runAction,
@@ -552,6 +414,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     session,
     workingTreeStatus: workingTreeStatus.value,
     commitHistory: commitHistory.value,
+    refs: refs.value,
     repoChangedHandlers: { refreshCaches }
   }
 }
@@ -569,10 +432,8 @@ interface GitStoreProviderProps {
 }
 
 export function GitStoreProvider(props: GitStoreProviderProps) {
-  const { git, session, workingTreeStatus, commitHistory, repoChangedHandlers } = useGitStoreValue(
-    props.tabId,
-    props.tabActive
-  )
+  const { git, session, workingTreeStatus, commitHistory, refs, repoChangedHandlers } =
+    useGitStoreValue(props.tabId, props.tabActive)
   const latestRepoChanged = useRef({
     repoPath: session.repoPath,
     handlers: repoChangedHandlers
@@ -601,7 +462,9 @@ export function GitStoreProvider(props: GitStoreProviderProps) {
     <RepoSessionContext.Provider value={session.publicValue}>
       <WorkingTreeStatusProvider value={workingTreeStatus}>
         <CommitHistoryProvider value={commitHistory}>
-          <GitStoreContext.Provider value={git}>{props.children}</GitStoreContext.Provider>
+          <RefsProvider value={refs}>
+            <GitStoreContext.Provider value={git}>{props.children}</GitStoreContext.Provider>
+          </RefsProvider>
         </CommitHistoryProvider>
       </WorkingTreeStatusProvider>
     </RepoSessionContext.Provider>

@@ -1,9 +1,11 @@
 import { act, render } from '@testing-library/react'
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import { useTimelineVisibility } from '@/hooks/useTimelineVisibility'
-import type { GitStore } from '@/stores/git'
+import { type CommitHistory, CommitHistoryProvider } from '@/stores/commit-history'
+import { type Refs, RefsProvider } from '@/stores/refs'
+import { type RepoSession, RepoSessionProvider } from '@/stores/repo-session'
 import type { GitBranches, GitLog, GitLogEntry } from '@/types'
 
 interface TimelineFixture {
@@ -15,8 +17,40 @@ interface TimelineFixture {
   currentBranch: string
 }
 
-function fixtureToGit(fixture: TimelineFixture): GitStore {
-  return { state: fixture } as unknown as GitStore
+const asyncNoop = async () => {}
+
+function fixtureProviders(fixture: TimelineFixture, children: ReactNode): ReactNode {
+  const session: RepoSession = {
+    repoPath: fixture.repoPath,
+    opening: false,
+    openGeneration: 0,
+    error: null,
+    openRepo: async () => null,
+    closeRepo: asyncNoop
+  }
+  const refs: Refs = {
+    branches: fixture.branches,
+    currentBranch: fixture.currentBranch,
+    branchesLoading: false,
+    lastFetchedAt: null,
+    remotes: fixture.remotes,
+    defaultBranch: fixture.defaultBranch,
+    fetchNow: asyncNoop
+  }
+  const history: CommitHistory = {
+    log: fixture.log,
+    logLoading: false,
+    logLoadingMore: false,
+    logHasMore: false,
+    loadMoreHistory: asyncNoop
+  }
+  return (
+    <RepoSessionProvider value={session}>
+      <RefsProvider value={refs}>
+        <CommitHistoryProvider value={history}>{children}</CommitHistoryProvider>
+      </RefsProvider>
+    </RepoSessionProvider>
+  )
 }
 
 function entry(hash: string, parents: string[], refs = '', message = hash): GitLogEntry {
@@ -55,9 +89,8 @@ interface Harness {
 
 let harness: Harness
 
-function TimelineHarness({ initial }: { initial: TimelineFixture }) {
-  const [fixture, setFixture] = useState(initial)
-  const timeline = useTimelineVisibility(fixtureToGit(fixture))
+function TimelineProbe({ setFixture }: { setFixture: (next: TimelineFixture) => void }) {
+  const timeline = useTimelineVisibility()
   harness = {
     visibleKeys: [...timeline.visibleRefs].sort(),
     filteredHashes: timeline.filteredCommits.map((commit) => commit.hash),
@@ -67,6 +100,11 @@ function TimelineHarness({ initial }: { initial: TimelineFixture }) {
     setFixture
   }
   return null
+}
+
+function TimelineHarness({ initial }: { initial: TimelineFixture }) {
+  const [fixture, setFixture] = useState(initial)
+  return fixtureProviders(fixture, <TimelineProbe setFixture={setFixture} />)
 }
 
 function renderTimeline(initial: TimelineFixture) {
