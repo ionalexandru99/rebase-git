@@ -21,15 +21,8 @@ import {
   rpcFetch,
   rpcGetLocalBranches,
   rpcGetRemoteRefs,
-  rpcGetStatus,
   rpcPull,
-  rpcPush,
-  rpcStageAll,
-  rpcStageFile,
-  rpcStageHunk,
-  rpcUnstageAll,
-  rpcUnstageFile,
-  rpcUnstageHunk
+  rpcPush
 } from '@/lib/rpc-client'
 import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
 import {
@@ -40,8 +33,10 @@ import {
   useRepoSession,
   useRepoSessionController
 } from './repo-session'
+import { useWorkingTreeStatusController, WorkingTreeStatusProvider } from './working-tree-status'
 
 export type { RepoSession } from './repo-session'
+export { useFileDiff, useWorkingTreeStatus } from './working-tree-status'
 export { RepoSessionProvider, useRepoSession }
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
@@ -88,11 +83,6 @@ export interface GitState {
   error: string | null
 }
 
-interface HunkStageOptions {
-  fullyStagesFile?: boolean
-  fullyUnstagesFile?: boolean
-}
-
 type SetGitUiState = {
   (next: Partial<GitUiState>): void
   <K extends keyof GitUiState>(key: K, value: GitUiState[K]): void
@@ -119,20 +109,6 @@ const initialUiState: GitUiState = {
   logLoadingMore: false,
   logHasMore: false,
   lastFetchedAt: null
-}
-
-type StatusMutationResult =
-  | { _tag: 'Ok' }
-  | { _tag: 'RepoNotOpen' }
-  | { _tag: 'GitError'; message: string }
-  | { _tag: 'HunkNotFound' }
-
-interface StatusMutationContext {
-  path: string
-  generation: number
-  key: readonly unknown[]
-  previous: GitStatus | undefined
-  hadOptimistic: boolean
 }
 
 const formatCause = (error: unknown): string => {
@@ -183,50 +159,6 @@ const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
   return parseRemoteRefsResponse(response)
 }
 
-const withoutFile = (files: string[], file: string): string[] => files.filter((f) => f !== file)
-const withFile = (files: string[], file: string): string[] =>
-  files.includes(file) ? files : [...files, file]
-
-const stageCodes = (index: string, workingDir: string): { index: string; working_dir: string } => {
-  if (index === '?' || workingDir === '?') {
-    return { index: 'A', working_dir: ' ' }
-  }
-  return { index: workingDir !== ' ' ? workingDir : index, working_dir: ' ' }
-}
-
-const unstageCodes = (index: string): { index: string; working_dir: string } => {
-  if (index === 'A') {
-    return { index: '?', working_dir: '?' }
-  }
-  return { index: ' ', working_dir: index !== ' ' ? index : 'M' }
-}
-
-type StatusFileCode = NonNullable<GitStatus['files']>[number]
-
-const mapFileCodes = (
-  status: GitStatus,
-  file: string,
-  next: (entry: StatusFileCode) => { index: string; working_dir: string }
-): StatusFileCode[] =>
-  (status.files ?? []).map((entry) => (entry.path === file ? { ...entry, ...next(entry) } : entry))
-
-const applyStage = (status: GitStatus, file: string): GitStatus => ({
-  ...status,
-  staged: withFile(status.staged, file),
-  modified: withoutFile(status.modified, file),
-  not_added: withoutFile(status.not_added, file),
-  created: withoutFile(status.created, file),
-  deleted: withoutFile(status.deleted, file),
-  files: mapFileCodes(status, file, (entry) => stageCodes(entry.index, entry.working_dir))
-})
-
-const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
-  ...status,
-  staged: withoutFile(status.staged, file),
-  modified: withFile(status.modified, file),
-  files: mapFileCodes(status, file, (entry) => unstageCodes(entry.index))
-})
-
 function useGitStoreValue(tabId: string, tabActive: boolean) {
   const queryClient = useQueryClient()
   const sessionLifecycle = useRef<RepoSessionLifecycle>(emptyRepoSessionLifecycle)
@@ -267,24 +199,13 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const isCurrentRepo = (generation: number, repoPath: string) =>
     generation === openGeneration.current && liveRepoPath.current === repoPath
 
-  // The queryFn fetches the repo encoded in its own key, not `liveRepoPath`: a refetch already in
-  // flight when this tab is redirected to another repo must still resolve against the repo it was
-  // started for, never write another repo's data under this key.
-  const statusQuery = useQuery({
-    queryKey: repoKeys.status,
-    enabled: Boolean(path),
-    gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: async ({ queryKey }) => {
-      const repoPath = queryKey[1] as string
-      const response = await rpcGetStatus(repoPath)
-      if (response._tag === 'GitError') {
-        throw new Error(response.message)
-      }
-      if (response._tag !== 'Ok') {
-        throw new Error('Repository not open')
-      }
-      return response.status
-    }
+  const workingTreeStatus = useWorkingTreeStatusController({
+    repoPath: path,
+    tabId,
+    liveRepoPath,
+    openGenerationRef: openGeneration,
+    isCurrentRepo,
+    setError: session.setError
   })
 
   const localBranchesQuery = useQuery({
@@ -311,7 +232,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     queryFn: () => Promise.resolve<GitLog | null>(null)
   })
 
-  const status = statusQuery.data ?? null
+  const status = workingTreeStatus.status
   const branches = useMemo(
     () => combineBranches(localBranchesQuery.data, remoteRefsQuery.data),
     [localBranchesQuery.data, remoteRefsQuery.data]
@@ -335,7 +256,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     committing: ui.committing,
     pushing: ui.pushing,
     pulling: ui.pulling,
-    statusLoading: statusQuery.isFetching && !statusQuery.data,
+    statusLoading: workingTreeStatus.statusLoading,
     branchesLoading: localBranchesQuery.isFetching && !localBranchesQuery.data,
     logLoading: ui.logLoading,
     logLoadingMore: ui.logLoadingMore,
@@ -345,11 +266,16 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   }
 
   useEffect(() => {
-    const error = statusQuery.error ?? localBranchesQuery.error ?? remoteRefsQuery.error
+    const error = workingTreeStatus.statusError ?? localBranchesQuery.error ?? remoteRefsQuery.error
     if (error) {
       session.setError(formatCause(error))
     }
-  }, [statusQuery.error, localBranchesQuery.error, remoteRefsQuery.error, session.setError])
+  }, [
+    workingTreeStatus.statusError,
+    localBranchesQuery.error,
+    remoteRefsQuery.error,
+    session.setError
+  ])
 
   const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
     logFlushTimer.current = null
@@ -596,134 +522,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     onSessionReset: reset
   }
 
-  const resyncStatusAndDiffs = (context: StatusMutationContext) =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: context.key }),
-      queryClient.invalidateQueries({ queryKey: repoQueryKeys(context.path).diffRoot })
-    ])
-
-  // Every mutation re-syncs status+diffs from the sidecar after it settles, success or failure.
-  // On failure the optimistic write is first rolled back to the snapshot, but the snapshot can
-  // itself be a concurrent same-file mutation's optimistic value (the rollback target is captured
-  // in onMutate), so the authoritative refetch is what guarantees the cache converges — and it also
-  // corrects a stale diff behind a HunkNotFound.
-  const statusMutationOptions = <Vars,>(
-    applyOptimistic: (current: GitStatus, vars: Vars) => GitStatus | null,
-    request: (repoPath: string, vars: Vars) => Promise<StatusMutationResult>
-  ) => ({
-    mutationFn: async (vars: Vars): Promise<StatusMutationResult | null> => {
-      const repoPath = liveRepoPath.current
-      if (!repoPath) {
-        return null
-      }
-      return request(repoPath, vars)
-    },
-    onMutate: async (vars: Vars): Promise<StatusMutationContext | undefined> => {
-      const repoPath = liveRepoPath.current
-      if (!repoPath) {
-        return undefined
-      }
-      const key = repoQueryKeys(repoPath).status
-      await queryClient.cancelQueries({ queryKey: key })
-      const previous = queryClient.getQueryData<GitStatus>(key)
-      const optimistic = previous ? applyOptimistic(previous, vars) : null
-      if (optimistic) {
-        queryClient.setQueryData<GitStatus>(key, optimistic)
-      }
-      return {
-        path: repoPath,
-        generation: openGeneration.current,
-        key,
-        previous,
-        hadOptimistic: Boolean(optimistic)
-      }
-    },
-    onError: (error: unknown, _vars: Vars, context: StatusMutationContext | undefined) => {
-      if (context?.hadOptimistic && context.previous) {
-        queryClient.setQueryData<GitStatus>(context.key, context.previous)
-      }
-      if (context && isCurrentRepo(context.generation, context.path)) {
-        session.setError(formatCause(error))
-      }
-      if (context) {
-        return resyncStatusAndDiffs(context)
-      }
-      return undefined
-    },
-    onSuccess: (
-      response: StatusMutationResult | null,
-      _vars: Vars,
-      context: StatusMutationContext | undefined
-    ) => {
-      if (!response || !context) {
-        return undefined
-      }
-      if (response._tag === 'Ok') {
-        return resyncStatusAndDiffs(context)
-      }
-      if (context.hadOptimistic && context.previous) {
-        queryClient.setQueryData<GitStatus>(context.key, context.previous)
-      }
-      if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
-        session.setError(response.message)
-      }
-      return resyncStatusAndDiffs(context)
-    }
-  })
-
-  const stageMutation = useMutation(
-    statusMutationOptions<string>(
-      (current, file) => applyStage(current, file),
-      (repoPath, file) => rpcStageFile(repoPath, file)
-    )
-  )
-
-  const unstageMutation = useMutation(
-    statusMutationOptions<string>(
-      (current, file) => applyUnstage(current, file),
-      (repoPath, file) => rpcUnstageFile(repoPath, file)
-    )
-  )
-
-  const stageAllMutation = useMutation(
-    statusMutationOptions<string[]>(
-      (current, files) => files.reduce((next, file) => applyStage(next, file), current),
-      (repoPath, files) => rpcStageAll(repoPath, files)
-    )
-  )
-
-  const unstageAllMutation = useMutation(
-    statusMutationOptions<string[]>(
-      (current, files) => files.reduce((next, file) => applyUnstage(next, file), current),
-      (repoPath, files) => rpcUnstageAll(repoPath, files)
-    )
-  )
-
-  interface HunkMutationVars {
-    op: 'stage' | 'unstage'
-    file: string
-    hunkHeader: string
-    options: HunkStageOptions
-  }
-
-  const hunkMutation = useMutation(
-    statusMutationOptions<HunkMutationVars>(
-      (current, vars) => {
-        if (vars.op === 'stage' && vars.options.fullyStagesFile) {
-          return applyStage(current, vars.file)
-        }
-        if (vars.op === 'unstage' && vars.options.fullyUnstagesFile) {
-          return applyUnstage(current, vars.file)
-        }
-        return null
-      },
-      (repoPath, vars) =>
-        vars.op === 'stage'
-          ? rpcStageHunk(repoPath, vars.file, vars.hunkHeader)
-          : rpcUnstageHunk(repoPath, vars.file, vars.hunkHeader)
-    )
-  )
-
   const commitMutation = useMutation({
     mutationFn: async (message: string) => {
       const repoPath = liveRepoPath.current
@@ -939,18 +737,12 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     loading: session.opening || ui.committing,
     openRepo: session.openRepo,
     closeRepo: session.closeRepo,
-    stageFile: (file: string) => stageMutation.mutateAsync(file),
-    unstageFile: (file: string) => unstageMutation.mutateAsync(file),
-    stageAll: (files: string[]) => stageAllMutation.mutateAsync(files),
-    unstageAll: (files: string[]) => unstageAllMutation.mutateAsync(files),
-    stageHunk: (file: string, hunkHeader: string, options: HunkStageOptions = {}) =>
-      hunkMutation
-        .mutateAsync({ op: 'stage', file, hunkHeader, options })
-        .then((response) => response?._tag === 'Ok'),
-    unstageHunk: (file: string, hunkHeader: string, options: HunkStageOptions = {}) =>
-      hunkMutation
-        .mutateAsync({ op: 'unstage', file, hunkHeader, options })
-        .then((response) => response?._tag === 'Ok'),
+    stageFile: workingTreeStatus.value.stageFile,
+    unstageFile: workingTreeStatus.value.unstageFile,
+    stageAll: workingTreeStatus.value.stageAll,
+    unstageAll: workingTreeStatus.value.unstageAll,
+    stageHunk: workingTreeStatus.value.stageHunk,
+    unstageHunk: workingTreeStatus.value.unstageHunk,
     commit: (message: string) => commitMutation.mutateAsync(message),
     fetchNow,
     pushNow,
@@ -962,6 +754,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   return {
     git,
     session,
+    workingTreeStatus: workingTreeStatus.value,
     repoChangedHandlers: { refreshCaches }
   }
 }
@@ -979,7 +772,10 @@ interface GitStoreProviderProps {
 }
 
 export function GitStoreProvider(props: GitStoreProviderProps) {
-  const { git, session, repoChangedHandlers } = useGitStoreValue(props.tabId, props.tabActive)
+  const { git, session, workingTreeStatus, repoChangedHandlers } = useGitStoreValue(
+    props.tabId,
+    props.tabActive
+  )
   const latestRepoChanged = useRef({
     repoPath: session.repoPath,
     handlers: repoChangedHandlers
@@ -1006,7 +802,9 @@ export function GitStoreProvider(props: GitStoreProviderProps) {
 
   return (
     <RepoSessionContext.Provider value={session.publicValue}>
-      <GitStoreContext.Provider value={git}>{props.children}</GitStoreContext.Provider>
+      <WorkingTreeStatusProvider value={workingTreeStatus}>
+        <GitStoreContext.Provider value={git}>{props.children}</GitStoreContext.Provider>
+      </WorkingTreeStatusProvider>
     </RepoSessionContext.Provider>
   )
 }

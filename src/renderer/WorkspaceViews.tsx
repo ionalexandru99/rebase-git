@@ -165,13 +165,8 @@ function LocalChangesView(props: WorkspaceViewProps) {
       >
         <div className="relative min-h-0 min-w-0">
           <StatusPanel
-            status={git.state.status}
             selected={selected}
             onSelect={(file) => setSelected({ file })}
-            onStage={git.stageFile}
-            onUnstage={git.unstageFile}
-            onStageAll={git.stageAll}
-            onUnstageAll={git.unstageAll}
             onFileAction={handleFileAction}
             headerActions={
               <>
@@ -190,7 +185,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
                 </button>
               </>
             }
-            loading={git.loading || git.state.statusLoading}
+            loading={git.loading}
           />
           <span
             onMouseDown={(event) => onResizeStart(event.nativeEvent)}
@@ -200,7 +195,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
             <span className="w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/60" />
           </span>
         </div>
-        <DiffPanel git={git} selected={selected} />
+        <DiffPanel selected={selected} />
       </div>
       <CommitPanel
         onCommit={git.commit}
