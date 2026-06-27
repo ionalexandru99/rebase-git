@@ -1,5 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import type { FileAction } from '@/lib/git-actions'
+import { type WorkingTreeStatus, WorkingTreeStatusProvider } from '@/stores/working-tree-status'
 import type { GitStatus } from '@/types'
 import { type SelectedFile, StatusPanel } from '../StatusPanel'
 
@@ -26,27 +29,51 @@ function emptyStatus(overrides: Partial<GitStatus> = {}): GitStatus {
   }
 }
 
+// StatusPanel now reads status and the staging mutations from the working-tree-status context, so
+// each test injects them through the provider instead of through props.
+function provideStatus(status: GitStatus | null, overrides: Partial<WorkingTreeStatus>) {
+  const value: WorkingTreeStatus = {
+    status,
+    statusLoading: false,
+    stageFile: vi.fn(),
+    unstageFile: vi.fn(),
+    stageAll: vi.fn(),
+    unstageAll: vi.fn(),
+    stageHunk: vi.fn(),
+    unstageHunk: vi.fn(),
+    ...overrides
+  }
+  return (children: ReactNode) => (
+    <WorkingTreeStatusProvider value={value}>{children}</WorkingTreeStatusProvider>
+  )
+}
+
 function renderPanel(props: {
   status: GitStatus | null
   selected?: SelectedFile | null
   onSelect?: (file: string) => void
-  onStage?: (file: string) => void
-  onUnstage?: (file: string) => void
-  onStageAll?: (files: string[]) => void
-  onUnstageAll?: (files: string[]) => void
+  onStage?: WorkingTreeStatus['stageFile']
+  onUnstage?: WorkingTreeStatus['unstageFile']
+  onStageAll?: WorkingTreeStatus['stageAll']
+  onUnstageAll?: WorkingTreeStatus['unstageAll']
+  onFileAction?: (action: FileAction, file: string) => void
   loading?: boolean
 }) {
+  const wrap = provideStatus(props.status, {
+    stageFile: props.onStage ?? vi.fn(),
+    unstageFile: props.onUnstage ?? vi.fn(),
+    stageAll: props.onStageAll ?? vi.fn(),
+    unstageAll: props.onUnstageAll ?? vi.fn()
+  })
   return render(
-    <StatusPanel
-      status={props.status}
-      selected={props.selected ?? null}
-      onSelect={props.onSelect ?? vi.fn()}
-      onStage={props.onStage ?? vi.fn()}
-      onUnstage={props.onUnstage ?? vi.fn()}
-      onStageAll={props.onStageAll ?? vi.fn()}
-      onUnstageAll={props.onUnstageAll ?? vi.fn()}
-      loading={props.loading ?? false}
-    />
+    wrap(
+      <StatusPanel
+        selected={props.selected ?? null}
+        onSelect={props.onSelect ?? vi.fn()}
+        onFileAction={props.onFileAction}
+        loading={props.loading ?? false}
+      />
+    )
   )
 }
 
@@ -58,19 +85,10 @@ describe('StatusPanel', () => {
 
   it('fires file actions from the row context menu', async () => {
     const onFileAction = vi.fn()
-    render(
-      <StatusPanel
-        status={emptyStatus({ files: [code('a.ts', ' ', 'M')] })}
-        selected={null}
-        onSelect={vi.fn()}
-        onStage={vi.fn()}
-        onUnstage={vi.fn()}
-        onStageAll={vi.fn()}
-        onUnstageAll={vi.fn()}
-        onFileAction={onFileAction}
-        loading={false}
-      />
-    )
+    renderPanel({
+      status: emptyStatus({ files: [code('a.ts', ' ', 'M')] }),
+      onFileAction
+    })
     fireEvent.contextMenu(screen.getByText('a.ts'))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Discard changes' }))
     expect(onFileAction).toHaveBeenCalledWith('discard', 'a.ts')

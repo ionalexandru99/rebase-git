@@ -1,7 +1,7 @@
 import { type ReactNode, useMemo } from 'react'
 import type { FileAction } from '@/lib/git-actions'
 import { buildUnifiedFileRows } from '@/lib/status-file-rows'
-import type { GitStatus } from '@/types'
+import { useWorkingTreeStatus } from '@/stores/git'
 import { LoadingBadge } from '../ui/loading-badge'
 import { StatusPanelSkeleton } from './Skeleton'
 import { type SelectedFile, VirtualFileList } from './VirtualFileList'
@@ -9,23 +9,18 @@ import { type SelectedFile, VirtualFileList } from './VirtualFileList'
 export type { SelectedFile } from './VirtualFileList'
 
 interface StatusPanelProps {
-  status: GitStatus | null
   selected: SelectedFile | null
   onSelect: (file: string) => void
-  onStage: (file: string) => void
-  onUnstage: (file: string) => void
-  onStageAll: (files: string[]) => void
-  onUnstageAll: (files: string[]) => void
   onFileAction?: (action: FileAction, file: string) => void
   headerActions?: ReactNode
   loading: boolean
 }
 
 export function StatusPanel(props: StatusPanelProps) {
-  const rows = useMemo(
-    () => (props.status ? buildUnifiedFileRows(props.status) : []),
-    [props.status]
-  )
+  const { status, statusLoading, stageFile, unstageFile, stageAll, unstageAll } =
+    useWorkingTreeStatus()
+  const loading = props.loading || statusLoading
+  const rows = useMemo(() => (status ? buildUnifiedFileRows(status) : []), [status])
   const stageable = useMemo(() => rows.filter((row) => !row.isConflicted), [rows])
   const stagedCount = stageable.filter((row) => row.stageState !== 'unstaged').length
   const allStaged = stageable.length > 0 && stageable.every((row) => row.stageState === 'staged')
@@ -33,14 +28,14 @@ export function StatusPanel(props: StatusPanelProps) {
 
   const toggleAll = () => {
     if (allStaged) {
-      props.onUnstageAll(stageable.map((row) => row.file))
+      void unstageAll(stageable.map((row) => row.file))
       return
     }
-    props.onStageAll(stageable.filter((row) => row.stageState !== 'staged').map((row) => row.file))
+    void stageAll(stageable.filter((row) => row.stageState !== 'staged').map((row) => row.file))
   }
 
-  if (!props.status) {
-    return props.loading ? <StatusPanelSkeleton /> : null
+  if (!status) {
+    return loading ? <StatusPanelSkeleton /> : null
   }
 
   return (
@@ -51,7 +46,7 @@ export function StatusPanel(props: StatusPanelProps) {
           <div className="truncate text-[13px] text-muted-foreground">{subtitle}</div>
         </div>
         <div className="flex-1" />
-        {props.loading ? <LoadingBadge /> : null}
+        {loading ? <LoadingBadge /> : null}
         {props.headerActions}
         {stageable.length > 0 ? (
           <button
@@ -65,11 +60,11 @@ export function StatusPanel(props: StatusPanelProps) {
       </div>
 
       <VirtualFileList
-        status={props.status}
+        status={status}
         selected={props.selected}
         onSelect={props.onSelect}
-        onStage={props.onStage}
-        onUnstage={props.onUnstage}
+        onStage={stageFile}
+        onUnstage={unstageFile}
         onFileAction={props.onFileAction}
       />
     </section>

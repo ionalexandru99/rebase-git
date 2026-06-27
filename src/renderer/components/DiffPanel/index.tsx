@@ -1,4 +1,4 @@
-import type { DiffHunk, DiffLine, FileDiff } from '@shared/schemas/git'
+import type { DiffHunk, DiffLine } from '@shared/schemas/git'
 import { useQuery } from '@tanstack/react-query'
 import { FileDiffIcon } from 'lucide-react'
 import { type CSSProperties, useMemo, useState } from 'react'
@@ -10,49 +10,32 @@ import {
 } from '@/lib/diff-highlight'
 import { type HunkEntry, type PendingHunk, remapHunk } from '@/lib/diff-merge'
 import { type RepoQueryKeys, repoQueryKeys } from '@/lib/query-keys'
-import { rpcGetDiff } from '@/lib/rpc-client'
 import { cn } from '@/lib/utils'
-import { type GitStore, useRepoSession } from '@/stores/git'
+import { useFileDiff, useRepoSession, useWorkingTreeStatus } from '@/stores/git'
 import type { SelectedFile } from '../StatusPanel'
 import { Checkbox } from '../ui/checkbox'
 import { EmptyState } from '../ui/empty-state'
 
 interface DiffPanelProps {
-  git: GitStore
   selected: SelectedFile | null
 }
 
 export function DiffPanel(props: DiffPanelProps) {
-  const git = props.git
   const { repoPath } = useRepoSession()
+  const {
+    status,
+    stageFile,
+    unstageFile,
+    stageHunk: stageHunkOp,
+    unstageHunk: unstageHunkOp
+  } = useWorkingTreeStatus()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
 
   const isUntracked =
-    props.selected !== null && (git.state.status?.not_added.includes(props.selected.file) ?? false)
+    props.selected !== null && (status?.not_added.includes(props.selected.file) ?? false)
 
-  const buildDiffQueryOptions = (staged: boolean) => {
-    const selected = props.selected
-    return {
-      queryKey: selected ? queryKeys.diff(selected.file, staged) : queryKeys.diff('none', staged),
-      enabled: Boolean(repoPath && selected),
-      queryFn: async (): Promise<FileDiff> => {
-        if (!repoPath || !selected) {
-          throw new Error('No file selected')
-        }
-        const response = await rpcGetDiff(repoPath, selected.file, staged)
-        if (response._tag === 'Ok') {
-          return response.diff
-        }
-        if (response._tag === 'GitError') {
-          throw new Error(response.message)
-        }
-        throw new Error('Repository not open')
-      }
-    }
-  }
-
-  const unstagedQuery = useQuery(buildDiffQueryOptions(false))
-  const stagedQuery = useQuery(buildDiffQueryOptions(true))
+  const unstagedQuery = useFileDiff(props.selected?.file ?? null, false)
+  const stagedQuery = useFileDiff(props.selected?.file ?? null, true)
   const [pendingHunk, setPendingHunk] = useState<PendingHunk | null>(null)
 
   const unstagedDiff = props.selected ? (unstagedQuery.data ?? null) : null
@@ -172,7 +155,7 @@ export function DiffPanel(props: DiffPanelProps) {
     }
     setPendingHunk(pending)
     try {
-      await git.stageHunk(file, entry.hunk.header, { fullyStagesFile })
+      await stageHunkOp(file, entry.hunk.header, { fullyStagesFile })
     } finally {
       clearPendingHunk(pending)
     }
@@ -196,7 +179,7 @@ export function DiffPanel(props: DiffPanelProps) {
     }
     setPendingHunk(pending)
     try {
-      await git.unstageHunk(file, entry.hunk.header, { fullyUnstagesFile })
+      await unstageHunkOp(file, entry.hunk.header, { fullyUnstagesFile })
     } finally {
       clearPendingHunk(pending)
     }
@@ -218,9 +201,9 @@ export function DiffPanel(props: DiffPanelProps) {
       return
     }
     if (fileStageState === 'staged') {
-      void git.unstageFile(file)
+      void unstageFile(file)
     } else {
-      void git.stageFile(file)
+      void stageFile(file)
     }
   }
 

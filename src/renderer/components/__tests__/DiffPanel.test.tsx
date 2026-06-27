@@ -95,7 +95,7 @@ function DiffPanelHarness(props: HarnessProps) {
 function DiffPanelProbe(props: Pick<HarnessProps, 'selected' | 'onGit'>) {
   const git = useGitStore()
   props.onGit(git)
-  return <DiffPanel git={git} selected={props.selected} />
+  return <DiffPanel selected={props.selected} />
 }
 
 async function renderDiffPanel(selected: SelectedFile | null) {
