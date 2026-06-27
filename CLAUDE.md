@@ -43,6 +43,12 @@ Smoke tests require a build first; they execute `out/main/index.js` and only che
 
 A `pre-push` hook in `.githooks/pre-push` runs `pnpm typecheck` and `pnpm check` and aborts the push on any failure. `pnpm install` auto-runs `prepare`, which calls `git config core.hooksPath .githooks`, so a fresh clone is wired up after the first install. Run `pnpm hooks:install` manually if you skipped install scripts.
 
+## Pull requests
+
+Each PR is **exactly one commit**. PRs merge into `main` with **rebase + fast-forward** (no squash, no merge commit), so that single commit lands on `main` verbatim — one self-contained, individually revertable unit of history per merge. Fold any follow-up work back into the one commit with `git commit --amend` / interactive rebase (and force-push) before merging; never stack fixup commits on a PR.
+
+The commit message must follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/): a `type(scope): summary` subject — `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `build`, `ci`, `style`, `revert` — with an optional body, and `!` after the type/scope (or a `BREAKING CHANGE:` footer) for breaking changes.
+
 ## Architecture
 
 Four processes, hard boundary between them:
