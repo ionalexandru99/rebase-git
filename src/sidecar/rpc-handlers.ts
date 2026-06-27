@@ -10,6 +10,7 @@ import { normalizeRepoPath } from './git/instances'
 import { logChunkStream } from './log-stream'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
+import { RepoSessionsLive } from './repo-sessions'
 
 const INVALID_REPO_PATH = 'invalid repository path'
 const INVALID_DIRECTORY_PATH = 'invalid directory path'
@@ -46,22 +47,22 @@ const resolveFiles = (
     return Effect.succeed(resolved)
   })
 
-const withResolvedRepo = <A, E>(
+const withResolvedRepo = <A, E, R>(
   repoPath: string,
-  use: (repoRoot: string) => Effect.Effect<A, E>
-): Effect.Effect<A, E | GitError> => resolveRepo(repoPath).pipe(Effect.flatMap(use))
+  use: (repoRoot: string) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | GitError, R> => resolveRepo(repoPath).pipe(Effect.flatMap(use))
 
-const withResolvedFile = <A, E>(
+const withResolvedFile = <A, E, R>(
   repoRoot: string,
   file: string,
-  use: (relative: string) => Effect.Effect<A, E>
-): Effect.Effect<A, E | GitError> => resolveFile(repoRoot, file).pipe(Effect.flatMap(use))
+  use: (relative: string) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | GitError, R> => resolveFile(repoRoot, file).pipe(Effect.flatMap(use))
 
-const withResolvedFiles = <A, E>(
+const withResolvedFiles = <A, E, R>(
   repoRoot: string,
   files: readonly string[],
-  use: (relatives: string[]) => Effect.Effect<A, E>
-): Effect.Effect<A, E | GitError> => resolveFiles(repoRoot, files).pipe(Effect.flatMap(use))
+  use: (relatives: string[]) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | GitError, R> => resolveFiles(repoRoot, files).pipe(Effect.flatMap(use))
 
 // scanForRepos confines enumeration to the user's home tree. The guard mirrors the previous
 // scanForReposSafely: absolute, no `..`/NUL, realpath must be a directory under the realpath'd home
@@ -242,7 +243,7 @@ export const handlersLayer = SidecarRpcs.toLayer({
         Effect.map((resolved) => logChunkStream(resolved, { skip, maxCount, streamId }))
       )
     )
-})
+}).pipe(Layer.provide(RepoSessionsLive))
 
 // toWebHandler is built on HttpRouter, so it asks for the HTTP platform services even though the
 // RPC path never touches the filesystem — a no-op FileSystem keeps platform-node (and its native

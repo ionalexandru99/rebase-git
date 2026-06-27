@@ -10,6 +10,7 @@ import { type GitError, RepoNotOpen } from '../git-errors'
 import { closeRepo, fetchRepo, openRepo } from '../operations'
 import { repoLockCount, repoSemaphoreSize, withRepoLock } from '../repo-lock'
 import { requireGit } from '../repo-sessions'
+import { runOp } from './run-op'
 
 let baseDir: string
 let repoDir: string
@@ -21,7 +22,7 @@ function gitIn(dir: string, ...args: string[]): string {
 }
 
 async function prepareStagedRepo(): Promise<SimpleGit> {
-  const git = await Effect.runPromise(openRepo(repoDir).pipe(Effect.zipRight(requireGit(repoDir))))
+  const git = await runOp(openRepo(repoDir).pipe(Effect.zipRight(requireGit(repoDir))))
   fs.writeFileSync(path.join(repoDir, 'tracked.txt'), 'mutated\n')
   await git.add(['tracked.txt'])
   return git
@@ -31,11 +32,11 @@ async function prepareStagedRepo(): Promise<SimpleGit> {
 // op's capture-git-then-lock shape — and runs `whileHeld` after the lock is held but before the
 // commit finishes, so the race with whatever `whileHeld` does (close, reopen, fetch-kill) is
 // deterministic rather than timing-dependent.
-function withSparedCommit<E>(
+function withSparedCommit<E, R>(
   git: SimpleGit,
   key: string,
-  whileHeld: Effect.Effect<void, E>
-): Effect.Effect<void, E | GitError> {
+  whileHeld: Effect.Effect<void, E, R>
+): Effect.Effect<void, E | GitError, R> {
   return Effect.gen(function* () {
     const acquired = yield* Deferred.make<void>()
     const gate = yield* Deferred.make<void>()
@@ -79,7 +80,7 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
     const baseline = repoSemaphoreSize()
     const git = await prepareStagedRepo()
 
-    await Effect.runPromise(withSparedCommit(git, key, closeRepo(repoDir)))
+    await runOp(withSparedCommit(git, key, closeRepo(repoDir)))
 
     expect(gitIn(repoDir, 'log', '--format=%s')).toContain(COMMIT_MESSAGE)
     expect(repoLockCount()).toBe(0)
@@ -99,7 +100,7 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
       expect(repoSemaphoreSize()).toBe(baseline + 1)
     })
 
-    await Effect.runPromise(withSparedCommit(git, key, whileHeld))
+    await runOp(withSparedCommit(git, key, whileHeld))
 
     expect(repoSemaphoreSize()).toBe(baseline)
   })
@@ -113,13 +114,13 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
     gitIn(repoDir, 'remote', 'add', 'origin', 'ext::sleep 30')
     gitIn(repoDir, 'config', 'protocol.ext.allow', 'always')
 
-    const fetching = Effect.runPromise(fetchRepo(repoDir)).then(
+    const fetching = runOp(fetchRepo(repoDir)).then(
       () => 'resolved',
       () => 'rejected'
     )
     await new Promise((resolve) => setTimeout(resolve, 500))
 
-    await Effect.runPromise(withSparedCommit(git, key, closeRepo(repoDir)))
+    await runOp(withSparedCommit(git, key, closeRepo(repoDir)))
 
     expect(await fetching).toBe('rejected')
     expect(gitIn(repoDir, 'log', '--format=%s')).toContain(COMMIT_MESSAGE)
@@ -136,11 +137,11 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
       Effect.zipRight(openRepo(repoDir)),
       Effect.asVoid
     )
-    await Effect.runPromise(withSparedCommit(git, key, reopenWhileHeld))
+    await runOp(withSparedCommit(git, key, reopenWhileHeld))
 
     expect(repoSemaphoreSize()).toBe(baseline + 1)
 
-    await Effect.runPromise(closeRepo(repoDir))
+    await runOp(closeRepo(repoDir))
     expect(repoSemaphoreSize()).toBe(baseline)
   })
 })

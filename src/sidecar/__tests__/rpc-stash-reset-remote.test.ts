@@ -20,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { fetchSemaphoreFor } from '../fetch-semaphore'
 import { closeRepo, openRepo } from '../operations'
 import { handlersLayer } from '../rpc-handlers'
+import { runOp } from './run-op'
 
 const decode = <A, I>(schema: Schema.Schema<A, I>, value: unknown) =>
   Schema.decodeUnknownEither(schema)(value)
@@ -49,7 +50,7 @@ const resetThroughGroup = (payload: {
   sha: string
   mode: 'soft' | 'mixed' | 'hard'
 }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.reset(payload))
@@ -62,7 +63,7 @@ const stashPushThroughGroup = (payload: {
   includeUntracked?: boolean
   files?: readonly string[]
 }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.stashPush(payload))
@@ -70,7 +71,7 @@ const stashPushThroughGroup = (payload: {
   )
 
 const stashApplyThroughGroup = (payload: { repoPath: string; index: number }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.stashApply(payload))
@@ -78,7 +79,7 @@ const stashApplyThroughGroup = (payload: { repoPath: string; index: number }) =>
   )
 
 const stashPopThroughGroup = (payload: { repoPath: string; index: number }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.stashPop(payload))
@@ -86,7 +87,7 @@ const stashPopThroughGroup = (payload: { repoPath: string; index: number }) =>
   )
 
 const stashDropThroughGroup = (payload: { repoPath: string; index: number }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.stashDrop(payload))
@@ -94,7 +95,7 @@ const stashDropThroughGroup = (payload: { repoPath: string; index: number }) =>
   )
 
 const fetchThroughGroup = (payload: { repoPath: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.fetch(payload))
@@ -102,7 +103,7 @@ const fetchThroughGroup = (payload: { repoPath: string }) =>
   )
 
 const pushThroughGroup = (payload: { repoPath: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.push(payload))
@@ -110,7 +111,7 @@ const pushThroughGroup = (payload: { repoPath: string }) =>
   )
 
 const pullThroughGroup = (payload: { repoPath: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.pull(payload))
@@ -126,11 +127,11 @@ beforeAll(async () => {
   git('config', 'user.name', 'Test')
   commitFile('file.txt', 'base\n', 'base')
 
-  await Effect.runPromise(openRepo(repoDir))
+  await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
 })
 

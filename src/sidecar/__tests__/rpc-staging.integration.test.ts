@@ -9,6 +9,7 @@ import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, getStatus, openRepo } from '../operations'
 import { handlersLayer } from '../rpc-handlers'
+import { runOp } from './run-op'
 
 let repoDir: string
 
@@ -21,7 +22,7 @@ function write(name: string, contents: string): void {
 }
 
 const stageFileThroughGroup = (payload: { repoPath: string; file: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.stageFile(payload))
@@ -29,7 +30,7 @@ const stageFileThroughGroup = (payload: { repoPath: string; file: string }) =>
   )
 
 const stageHunkThroughGroup = (payload: { repoPath: string; file: string; hunkHeader: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.stageHunk(payload))
@@ -47,11 +48,11 @@ beforeAll(async () => {
   git('add', '.')
   git('commit', '-m', 'base')
 
-  await Effect.runPromise(openRepo(repoDir))
+  await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
 })
 
@@ -61,7 +62,7 @@ describe('staging through the RPC group against a real repo', () => {
     const result = await stageFileThroughGroup({ repoPath: repoDir, file: 'new.txt' })
     expect(Either.isRight(result)).toBe(true)
 
-    const status = await Effect.runPromise(getStatus(repoDir))
+    const status = await runOp(getStatus(repoDir))
     expect(status.status.staged).toContain('new.txt')
   })
 

@@ -17,6 +17,7 @@ import { Effect, Either, Schema } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, openRepo } from '../operations'
 import { handlersLayer } from '../rpc-handlers'
+import { runOp } from './run-op'
 
 const decode = <A, I>(schema: Schema.Schema<A, I>, value: unknown) =>
   Schema.decodeUnknownEither(schema)(value)
@@ -39,7 +40,7 @@ const createBranchThroughGroup = (payload: {
   startPoint?: string
   checkout?: boolean
 }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.createBranch(payload))
@@ -47,7 +48,7 @@ const createBranchThroughGroup = (payload: {
   )
 
 const deleteBranchThroughGroup = (payload: { repoPath: string; name: string; force?: boolean }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.deleteBranch(payload))
@@ -59,7 +60,7 @@ const renameBranchThroughGroup = (payload: {
   oldName: string
   newName: string
 }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.renameBranch(payload))
@@ -71,7 +72,7 @@ const checkoutThroughGroup = (payload: {
   refKind: 'local' | 'remote' | 'tag'
   fullPath: string
 }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.checkout(payload))
@@ -84,7 +85,7 @@ const createTagThroughGroup = (payload: {
   ref?: string
   message?: string
 }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.createTag(payload))
@@ -92,7 +93,7 @@ const createTagThroughGroup = (payload: {
   )
 
 const deleteTagThroughGroup = (payload: { repoPath: string; name: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.deleteTag(payload))
@@ -108,11 +109,11 @@ beforeAll(async () => {
   git('config', 'user.name', 'Test')
   commitFile('file.txt', 'base\n', 'base')
 
-  await Effect.runPromise(openRepo(repoDir))
+  await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
 })
 

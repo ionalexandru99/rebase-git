@@ -15,6 +15,7 @@ import {
   requireOpen,
   withSessionScope
 } from '../repo-sessions'
+import { runOp } from './run-op'
 
 let baseDir: string
 let repoDir: string
@@ -36,16 +37,16 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
 describe('RepoSessions spine', () => {
   it('yields the open repo simple-git instance through requireGit after openRepo', async () => {
-    const response = await Effect.runPromise(openRepo(repoDir))
+    const response = await runOp(openRepo(repoDir))
     expect(response.result.path).toBe(fs.realpathSync.native(repoDir))
 
-    const instance = await Effect.runPromise(requireGit(repoDir))
+    const instance = await runOp(requireGit(repoDir))
     const branch = await instance.revparse(['--abbrev-ref', 'HEAD'])
     expect(branch.trim()).toBe('main')
   })
@@ -54,37 +55,37 @@ describe('RepoSessions spine', () => {
     const plainDir = path.join(baseDir, 'plain')
     fs.mkdirSync(plainDir)
 
-    const opened = await Effect.runPromise(Effect.either(openRepo(plainDir)))
+    const opened = await runOp(Effect.either(openRepo(plainDir)))
     expect(opened._tag).toBe('Left')
     expect((opened as { left: unknown }).left).toBeInstanceOf(NotARepo)
 
-    const required = await Effect.runPromise(Effect.either(requireGit(plainDir)))
+    const required = await runOp(Effect.either(requireGit(plainDir)))
     expect(required._tag).toBe('Left')
     expect((required as { left: unknown }).left).toBeInstanceOf(RepoNotOpen)
   })
 
   it('fails requireGit and requireOpen with RepoNotOpen after close', async () => {
-    await Effect.runPromise(openRepo(repoDir))
-    await Effect.runPromise(closeRepo(repoDir))
+    await runOp(openRepo(repoDir))
+    await runOp(closeRepo(repoDir))
 
-    const git = await Effect.runPromise(Effect.either(requireGit(repoDir)))
+    const git = await runOp(Effect.either(requireGit(repoDir)))
     expect(git._tag).toBe('Left')
     expect((git as { left: unknown }).left).toBeInstanceOf(RepoNotOpen)
 
-    const open = await Effect.runPromise(Effect.either(requireOpen(repoDir)))
+    const open = await runOp(Effect.either(requireOpen(repoDir)))
     expect(open._tag).toBe('Left')
     expect((open as { left: unknown }).left).toBeInstanceOf(RepoNotOpen)
   })
 
   it('creates the session in open so requireGit later resolves the same instance', async () => {
-    const created = await Effect.runPromise(openSession(repoDir))
-    const resolved = await Effect.runPromise(requireGit(repoDir))
+    const created = await runOp(openSession(repoDir))
+    const resolved = await runOp(requireGit(repoDir))
     expect(resolved).toBe(created)
   })
 
   it('exposes the same session state through its Layer-provided service', async () => {
-    const created = await Effect.runPromise(openSession(repoDir))
-    const viaService = await Effect.runPromise(
+    const created = await runOp(openSession(repoDir))
+    const viaService = await runOp(
       Effect.flatMap(RepoSessions, (sessions) => sessions.requireGit(repoDir)).pipe(
         Effect.provide(RepoSessionsLive)
       )
@@ -95,7 +96,7 @@ describe('RepoSessions spine', () => {
 
 describe('RepoSessions session scope', () => {
   it('runs a withSessionScope finalizer when the scoped effect completes', async () => {
-    await Effect.runPromise(openSession(repoDir))
+    await runOp(openSession(repoDir))
     let released = false
     const probe = Effect.acquireRelease(Effect.succeed('resource'), () =>
       Effect.sync(() => {
@@ -103,16 +104,16 @@ describe('RepoSessions session scope', () => {
       })
     )
 
-    await Effect.runPromise(withSessionScope(repoDir, probe))
+    await runOp(withSessionScope(repoDir, probe))
 
     expect(released).toBe(true)
   })
 
   it('force-runs an in-flight withSessionScope finalizer when the repo closes', async () => {
-    await Effect.runPromise(openSession(repoDir))
+    await runOp(openSession(repoDir))
     let released = false
 
-    await Effect.runPromise(
+    await runOp(
       Effect.gen(function* () {
         const acquired = yield* Deferred.make<void>()
         const held = yield* Deferred.make<void>()

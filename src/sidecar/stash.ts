@@ -5,6 +5,7 @@ import { type Conflict, GitError, type RepoNotOpen } from './git-errors'
 import { requireGit, tryGit } from './op-helpers'
 import { isSafeRefArg } from './ref-args'
 import { withRepoLock } from './repo-lock'
+import type { RepoSessions } from './repo-sessions'
 
 const STASH_FIELD_SEP = '\x1f'
 
@@ -39,7 +40,7 @@ function parseStashList(raw: string): ParsedStash[] {
 
 export function stashList(
   repoPath: string
-): Effect.Effect<{ stashes: StashEntry[] }, RepoNotOpen | GitError> {
+): Effect.Effect<{ stashes: StashEntry[] }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const raw = yield* tryGit(() => git.raw(['stash', 'list', `--format=%gd${STASH_FIELD_SEP}%gs`]))
@@ -52,7 +53,7 @@ export function stashPush(
   message?: string,
   includeUntracked?: boolean,
   files?: string[]
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (files?.some((file) => !isSafeRefArg(file))) {
@@ -84,7 +85,7 @@ function stashRef(index: number): string | null {
 export function stashApply(
   repoPath: string,
   index: number
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const ref = stashRef(index)
@@ -98,7 +99,7 @@ export function stashApply(
 export function stashPop(
   repoPath: string,
   index: number
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const ref = stashRef(index)
@@ -112,7 +113,7 @@ export function stashPop(
 export function stashDrop(
   repoPath: string,
   index: number
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const ref = stashRef(index)

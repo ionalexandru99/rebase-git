@@ -9,6 +9,7 @@ import { Effect, Either, Schema } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo } from '../operations'
 import { handlersLayer } from '../rpc-handlers'
+import { runOp } from './run-op'
 
 const decode = <A, I>(schema: Schema.Schema<A, I>, value: unknown) =>
   Schema.decodeUnknownEither(schema)(value)
@@ -22,7 +23,7 @@ function git(dir: string, ...args: string[]): void {
 }
 
 const openThroughGroup = (payload: { repoPath: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.openRepo(payload))
@@ -30,7 +31,7 @@ const openThroughGroup = (payload: { repoPath: string }) =>
   )
 
 const closeThroughGroup = (payload: { repoPath: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.closeRepo(payload))
@@ -38,7 +39,7 @@ const closeThroughGroup = (payload: { repoPath: string }) =>
   )
 
 const scanThroughGroup = (payload: { dirPath: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.scanForRepos(payload))
@@ -61,7 +62,7 @@ beforeAll(() => {
 })
 
 afterAll(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(homeScanDir, { recursive: true, force: true })
 })
 

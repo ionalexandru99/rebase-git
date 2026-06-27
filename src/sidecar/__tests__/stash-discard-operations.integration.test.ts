@@ -16,6 +16,7 @@ import {
   stashPop,
   stashPush
 } from '../operations'
+import { runOp } from './run-op'
 
 let repoDir: string
 
@@ -46,30 +47,30 @@ beforeAll(async () => {
   git('add', '.')
   git('commit', '-m', 'base')
 
-  await Effect.runPromise(openRepo(repoDir))
+  await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
 })
 
 describe('stash', () => {
   it('pushes, lists, pops, and drops a stash', async () => {
     write('tracked.txt', 'modified\n')
-    await Effect.runPromise(stashPush(repoDir, 'work in progress'))
+    await runOp(stashPush(repoDir, 'work in progress'))
     expect(porcelain()).toBe('')
 
-    const listed = await Effect.runPromise(stashList(repoDir))
+    const listed = await runOp(stashList(repoDir))
     expect(listed.stashes).toHaveLength(1)
     expect(listed.stashes[0].index).toBe(0)
     expect(listed.stashes[0].ref).toBe('stash@{0}')
     expect(listed.stashes[0].branch).toBe('main')
     expect(listed.stashes[0].message).toBe('work in progress')
 
-    await Effect.runPromise(stashPop(repoDir, 0))
+    await runOp(stashPop(repoDir, 0))
     expect(read('tracked.txt')).toBe('modified\n')
-    const afterPop = await Effect.runPromise(stashList(repoDir))
+    const afterPop = await runOp(stashList(repoDir))
     expect(afterPop.stashes).toHaveLength(0)
 
     // restore clean state for the next test
@@ -78,22 +79,22 @@ describe('stash', () => {
 
   it('applies a stash without removing it, then drops it', async () => {
     write('tracked.txt', 'applied-change\n')
-    await Effect.runPromise(stashPush(repoDir))
-    await Effect.runPromise(stashApply(repoDir, 0))
+    await runOp(stashPush(repoDir))
+    await runOp(stashApply(repoDir, 0))
     expect(read('tracked.txt')).toBe('applied-change\n')
 
-    const stillThere = await Effect.runPromise(stashList(repoDir))
+    const stillThere = await runOp(stashList(repoDir))
     expect(stillThere.stashes).toHaveLength(1)
 
-    await Effect.runPromise(stashDrop(repoDir, 0))
-    const empty = await Effect.runPromise(stashList(repoDir))
+    await runOp(stashDrop(repoDir, 0))
+    const empty = await runOp(stashList(repoDir))
     expect(empty.stashes).toHaveLength(0)
 
     git('checkout', '--', 'tracked.txt')
   })
 
   it('rejects a negative stash index', async () => {
-    const result = await Effect.runPromise(Effect.either(stashDrop(repoDir, -1)))
+    const result = await runOp(Effect.either(stashDrop(repoDir, -1)))
     expect(Either.isLeft(result)).toBe(true)
     if (Either.isLeft(result)) {
       expect(result.left._tag).toBe('GitError')
@@ -108,20 +109,18 @@ describe('stash', () => {
     write('tracked.txt', 'changed-tracked\n')
     write('second.txt', 'changed-second\n')
 
-    await Effect.runPromise(stashPush(repoDir, 'partial', false, ['tracked.txt']))
+    await runOp(stashPush(repoDir, 'partial', false, ['tracked.txt']))
     expect(read('tracked.txt')).toBe('base\n')
     expect(read('second.txt')).toBe('changed-second\n')
 
-    await Effect.runPromise(stashPop(repoDir, 0))
+    await runOp(stashPop(repoDir, 0))
     expect(read('tracked.txt')).toBe('changed-tracked\n')
 
     git('checkout', '--', 'tracked.txt', 'second.txt')
   })
 
   it('rejects an option-injecting file path', async () => {
-    const result = await Effect.runPromise(
-      Effect.either(stashPush(repoDir, undefined, false, ['--all']))
-    )
+    const result = await runOp(Effect.either(stashPush(repoDir, undefined, false, ['--all'])))
     expect(Either.isLeft(result)).toBe(true)
     if (Either.isLeft(result)) {
       expect(result.left._tag).toBe('GitError')
@@ -132,18 +131,18 @@ describe('stash', () => {
 describe('discard', () => {
   it('restores a modified tracked file', async () => {
     write('tracked.txt', 'dirty\n')
-    await Effect.runPromise(discardChanges(repoDir, ['tracked.txt']))
+    await runOp(discardChanges(repoDir, ['tracked.txt']))
     expect(read('tracked.txt')).toBe('base\n')
   })
 
   it('deletes an untracked file', async () => {
     write('untracked.txt', 'temp\n')
-    await Effect.runPromise(discardChanges(repoDir, ['untracked.txt']))
+    await runOp(discardChanges(repoDir, ['untracked.txt']))
     expect(fs.existsSync(path.join(repoDir, 'untracked.txt'))).toBe(false)
   })
 
   it('rejects an option-injecting path', async () => {
-    const result = await Effect.runPromise(Effect.either(discardChanges(repoDir, ['--all'])))
+    const result = await runOp(Effect.either(discardChanges(repoDir, ['--all'])))
     expect(Either.isLeft(result)).toBe(true)
     if (Either.isLeft(result)) {
       expect(result.left._tag).toBe('GitError')
@@ -156,7 +155,7 @@ describe('discard', () => {
     git('commit', '-m', 'add spaced file')
     write('a b.txt', 'dirty space\n')
 
-    await Effect.runPromise(discardChanges(repoDir, ['a b.txt']))
+    await runOp(discardChanges(repoDir, ['a b.txt']))
     expect(read('a b.txt')).toBe('space base\n')
   })
 
@@ -167,24 +166,24 @@ describe('discard', () => {
     write('café.txt', 'dirty unicode\n')
     write('résumé.txt', 'temp unicode\n')
 
-    await Effect.runPromise(discardChanges(repoDir, ['café.txt', 'résumé.txt']))
+    await runOp(discardChanges(repoDir, ['café.txt', 'résumé.txt']))
     expect(read('café.txt')).toBe('unicode base\n')
     expect(fs.existsSync(path.join(repoDir, 'résumé.txt'))).toBe(false)
   })
 
   it('deletes an untracked unicode-named file instead of restoring it', async () => {
     write('naïve.txt', 'temp\n')
-    await Effect.runPromise(discardChanges(repoDir, ['naïve.txt']))
+    await runOp(discardChanges(repoDir, ['naïve.txt']))
     expect(fs.existsSync(path.join(repoDir, 'naïve.txt'))).toBe(false)
   })
 
   it('discards everything with discardAll', async () => {
     write('tracked.txt', 'dirty again\n')
     write('another-untracked.txt', 'junk\n')
-    await Effect.runPromise(discardAll(repoDir))
+    await runOp(discardAll(repoDir))
     expect(read('tracked.txt')).toBe('base\n')
     expect(fs.existsSync(path.join(repoDir, 'another-untracked.txt'))).toBe(false)
-    const status = await Effect.runPromise(getStatus(repoDir))
+    const status = await runOp(getStatus(repoDir))
     expect(status.status.modified).toHaveLength(0)
     expect(status.status.not_added).toHaveLength(0)
   })
