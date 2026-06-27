@@ -70,8 +70,9 @@ describe('App — tab shell', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
     })
-    expect(screen.getByRole('button', { name: /Dark theme/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Light theme/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Switch to (light|dark) theme/i })
+    ).toBeInTheDocument()
   })
 
   it('starts with a single empty tab that shows the repo picker', async () => {
