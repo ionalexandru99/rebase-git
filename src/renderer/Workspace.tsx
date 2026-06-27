@@ -229,6 +229,8 @@ export function Workspace(props: WorkspaceProps) {
             activeView={activeView}
             git={git}
             repoPath={repoPath}
+            remotes={git.state.remotes}
+            currentBranch={git.state.currentBranch}
             remoteBranches={remoteBranches}
             visibleBranchRefs={timeline.visibleRefs}
             filteredCommits={timeline.filteredCommits}

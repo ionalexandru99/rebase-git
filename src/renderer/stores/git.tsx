@@ -1,7 +1,4 @@
-import { parseOrThrow } from '@shared/codec'
-import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
-import { StartLogStreamResponseSchema } from '@shared/schemas/ipc'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createContext,
@@ -24,7 +21,8 @@ import {
   rpcPull,
   rpcPush
 } from '@/lib/rpc-client'
-import type { GitBranches, GitLog, GitLogEntry, GitStatus } from '@/types'
+import type { GitBranches, GitLog, GitStatus } from '@/types'
+import { CommitHistoryProvider, useCommitHistoryController } from './commit-history'
 import {
   emptyRepoSessionLifecycle,
   RepoSessionContext,
@@ -35,12 +33,12 @@ import {
 } from './repo-session'
 import { useWorkingTreeStatusController, WorkingTreeStatusProvider } from './working-tree-status'
 
+export { useCommitHistory } from './commit-history'
 export type { RepoSession } from './repo-session'
 export { useFileDiff, useWorkingTreeStatus } from './working-tree-status'
 export { RepoSessionProvider, useRepoSession }
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
-const LOG_FLUSH_MS = 100
 // Closed repos keep their status/branches/log cached this long so reopening repaints instantly —
 // the role the per-repo snapshot Map used to play. Scoped to these queries (not the global default)
 // so transient diff/hunk-highlight queries still expire on the normal schedule.
@@ -89,15 +87,12 @@ type SetGitUiState = {
 }
 
 // Server state lives only in the TanStack Query cache. This store holds the imperative UI flags
-// (commit/push/pull progress and the push-based log-stream flags) that have no natural query of
-// their own.
+// (commit/push/pull progress) that have no natural query of their own. The push-based log-stream
+// flags live in the commit-history module.
 interface GitUiState {
   committing: boolean
   pushing: boolean
   pulling: boolean
-  logLoading: boolean
-  logLoadingMore: boolean
-  logHasMore: boolean
   lastFetchedAt: number | null
 }
 
@@ -105,9 +100,6 @@ const initialUiState: GitUiState = {
   committing: false,
   pushing: false,
   pulling: false,
-  logLoading: false,
-  logLoadingMore: false,
-  logHasMore: false,
   lastFetchedAt: null
 }
 
@@ -191,10 +183,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
 
   const [fetchTick, setFetchTick] = useState(0)
 
-  const logBuffer = useRef<GitLogEntry[]>([])
-  const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const openGeneration = session.openGenerationRef
-  const logStreamSeq = useRef(0)
 
   const isCurrentRepo = (generation: number, repoPath: string) =>
     generation === openGeneration.current && liveRepoPath.current === repoPath
@@ -202,6 +191,16 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const workingTreeStatus = useWorkingTreeStatusController({
     repoPath: path,
     tabId,
+    liveRepoPath,
+    openGenerationRef: openGeneration,
+    isCurrentRepo,
+    setError: session.setError
+  })
+
+  const commitHistory = useCommitHistoryController({
+    repoPath: path,
+    tabId,
+    tabActive,
     liveRepoPath,
     openGenerationRef: openGeneration,
     isCurrentRepo,
@@ -222,22 +221,11 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     queryFn: ({ queryKey }) => fetchRemoteRefs(queryKey[1] as string)
   })
 
-  // The log is push-based: chunks arrive over IPC and are written into the Query cache via
-  // setQueryData. This disabled query subscribes the component to those cache writes — it never
-  // fetches on its own.
-  const logQuery = useQuery({
-    queryKey: repoKeys.log,
-    enabled: false,
-    gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: () => Promise.resolve<GitLog | null>(null)
-  })
-
   const status = workingTreeStatus.status
   const branches = useMemo(
     () => combineBranches(localBranchesQuery.data, remoteRefsQuery.data),
     [localBranchesQuery.data, remoteRefsQuery.data]
   )
-  const log = logQuery.data ?? null
   // Prefer the dedicated branch source over status.current: a branch-only refresh (e.g. renaming
   // the checked-out branch) updates localBranches but not status, and status.current would
   // otherwise keep showing the old name until an unrelated status refetch. Falls back to
@@ -247,7 +235,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const state: GitState = {
     repoPath: session.repoPath,
     status,
-    log,
+    log: commitHistory.log,
     branches,
     remotes: session.remotes,
     defaultBranch: session.defaultBranch,
@@ -258,9 +246,9 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     pulling: ui.pulling,
     statusLoading: workingTreeStatus.statusLoading,
     branchesLoading: localBranchesQuery.isFetching && !localBranchesQuery.data,
-    logLoading: ui.logLoading,
-    logLoadingMore: ui.logLoadingMore,
-    logHasMore: ui.logHasMore,
+    logLoading: commitHistory.logLoading,
+    logLoadingMore: commitHistory.logLoadingMore,
+    logHasMore: commitHistory.logHasMore,
     lastFetchedAt: ui.lastFetchedAt,
     error: session.error
   }
@@ -277,47 +265,8 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     session.setError
   ])
 
-  const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
-    logFlushTimer.current = null
-    if (expectedGen !== openGeneration.current || expectedPath !== liveRepoPath.current) {
-      return
-    }
-    if (!expectedPath) {
-      return
-    }
-    const logKey = repoQueryKeys(expectedPath).log
-    const previous = queryClient.getQueryData<GitLog>(logKey)
-    const nextLength = logBuffer.current.length
-    if (nextLength === (previous?.all.length ?? 0) && previous?.total === nextLength) {
-      return
-    }
-    queryClient.setQueryData<GitLog>(logKey, { all: [...logBuffer.current], total: nextLength })
-  }
-
-  const scheduleLogFlush = () => {
-    if (logFlushTimer.current !== null) {
-      return
-    }
-    const expectedGen = openGeneration.current
-    const expectedPath = liveRepoPath.current
-    logFlushTimer.current = setTimeout(() => {
-      if (!tabActiveRef.current) {
-        logFlushTimer.current = null
-        if (logBuffer.current.length > 0) {
-          scheduleLogFlush()
-        }
-        return
-      }
-      flushLogToStore(expectedGen, expectedPath)
-    }, LOG_FLUSH_MS)
-  }
-
   const reset = () => {
-    logBuffer.current = []
-    if (logFlushTimer.current !== null) {
-      clearTimeout(logFlushTimer.current)
-      logFlushTimer.current = null
-    }
+    commitHistory.reset()
     setUi({ ...initialUiState })
   }
 
@@ -343,7 +292,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   // stream, not invalidating a query — every other cache is a normal query refetch.
   const refreshMappedCache = (repoPath: string, cache: RepoCache): Promise<unknown> =>
     cache === 'log'
-      ? restartLogStream(repoPath)
+      ? commitHistory.restart(repoPath)
       : queryClient.invalidateQueries({ queryKey: repoCacheQueryKey(repoPath, cache) })
 
   // The one invalidation primitive every path shares: name the caches a change dirties and they
@@ -393,68 +342,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     }
   }
 
-  const restartLogStream = async (
-    repoPath: string,
-    options?: { clearLog?: boolean; skip?: number; maxCount?: number }
-  ) => {
-    const generation = openGeneration.current
-    if (!isCurrentRepo(generation, repoPath)) {
-      return
-    }
-    const skip = options?.skip ?? 0
-    const maxCount = options?.maxCount ?? LOG_PAGE_SIZE
-    const append = skip > 0
-    const clearLog = options?.clearLog ?? !append
-
-    // Stamp this start so in-flight chunks from a previous stream (same repoPath, older id) are
-    // dropped by onLogChunk instead of landing in the freshly-cleared buffer.
-    const streamId = ++logStreamSeq.current
-
-    if (!append) {
-      logBuffer.current = []
-      if (clearLog) {
-        queryClient.setQueryData<GitLog>(repoQueryKeys(repoPath).log, { all: [], total: 0 })
-        setUi('logHasMore', false)
-      }
-      setUi('logLoading', true)
-    } else {
-      setUi('logLoadingMore', true)
-    }
-
-    try {
-      await window.electronAPI.cancelLogStream(repoPath).catch(() => {})
-      const response = parseOrThrow(
-        StartLogStreamResponseSchema,
-        await window.electronAPI.startLogStream(repoPath, { skip, maxCount, streamId })
-      )
-      if (!isCurrentRepo(generation, repoPath)) {
-        return
-      }
-      if (response._tag === 'GitError') {
-        session.setError(response.message)
-        setUi(append ? 'logLoadingMore' : 'logLoading', false)
-      }
-    } catch (error) {
-      if (!isCurrentRepo(generation, repoPath)) {
-        return
-      }
-      session.setError(formatCause(error))
-      setUi(append ? 'logLoadingMore' : 'logLoading', false)
-    }
-  }
-
-  const loadMoreHistory = async () => {
-    const repoPath = liveRepoPath.current
-    if (!repoPath || !ui.logHasMore || ui.logLoadingMore || ui.logLoading) {
-      return
-    }
-    // The cache holds the last throttled flush; the buffer may already hold more commits still
-    // draining in. Skipping by the smaller of the two would re-request buffered commits or gap.
-    const cached = queryClient.getQueryData<GitLog>(repoQueryKeys(repoPath).log)
-    const skip = Math.max(logBuffer.current.length, cached?.all.length ?? 0)
-    await restartLogStream(repoPath, { skip, maxCount: LOG_PAGE_SIZE, clearLog: false })
-  }
-
   const runFetchAndRefresh = async (repoPath: string) => {
     const generation = openGeneration.current
     if (!isCurrentRepo(generation, repoPath)) {
@@ -474,51 +361,12 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     }
   }
 
-  const runIfCurrent = (
-    generation: number,
-    repoPath: string,
-    label: string,
-    task: () => Promise<void>
-  ) => {
-    void task().catch((error: unknown) => {
-      if (!isCurrentRepo(generation, repoPath)) {
-        return
-      }
-      console.error(`[git] ${label} failed for ${repoPath}:`, formatCause(error))
-      session.setError(formatCause(error))
-    })
-  }
-
-  const startRepoRefresh = (
-    repoPath: string,
-    generation: number,
-    options?: { clearLogOnStream?: boolean }
-  ) => {
-    runIfCurrent(generation, repoPath, 'restartLogStream', async () => {
-      await restartLogStream(repoPath, {
-        clearLog: options?.clearLogOnStream ?? true
-      })
-    })
-  }
-
   sessionLifecycle.current = {
     onRepoOpened: (opened, generation) => {
-      const cachedLog = queryClient.getQueryData<GitLog>(repoQueryKeys(opened.path).log)
-      setUi({
-        logLoading: false,
-        logLoadingMore: false,
-        logHasMore: false
-      })
-      logBuffer.current = cachedLog?.all ? [...cachedLog.all] : []
       void refreshCaches(opened.path, ['status', 'localBranches', 'remoteRefs'])
-      startRepoRefresh(opened.path, generation, {
-        clearLogOnStream: !cachedLog
-      })
+      commitHistory.onRepoOpened(opened, generation)
     },
-    onBeforeRepoClosed: (repoPath) =>
-      Promise.resolve(window.electronAPI.cancelLogStream(repoPath))
-        .then(() => undefined)
-        .catch(() => {}),
+    onBeforeRepoClosed: (repoPath) => commitHistory.cancelStream(repoPath),
     onSessionReset: reset
   }
 
@@ -556,73 +404,22 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     }
   })
 
-  useEffect(() => {
-    if (tabActive && logBuffer.current.length > 0) {
-      scheduleLogFlush()
-    }
-  })
-
-  // The IPC subscriptions below register once (`[]` deps) and must read the current helpers, not
-  // render-zero closures. The helpers are recreated each render, so the subscriptions read them
-  // through this ref.
+  // The IPC subscription below registers once (`[]` deps) and must read the current helpers, not
+  // render-zero closures. The helpers are recreated each render, so it reads them through this ref.
   const latest = useRef({
-    getOpenGeneration: () => openGeneration.current,
     getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,
-    setError: session.setError,
-    scheduleLogFlush,
-    flushLogToStore,
     runFetchAndRefresh,
     openRepo: session.openRepo
   })
   latest.current = {
-    getOpenGeneration: () => openGeneration.current,
     getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,
-    setError: session.setError,
-    scheduleLogFlush,
-    flushLogToStore,
     runFetchAndRefresh,
     openRepo: session.openRepo
   }
 
   useEffect(() => {
-    const unsubLog = window.electronAPI.onLogChunk((chunk) => {
-      const {
-        getOpenGeneration,
-        getRepoPath,
-        isTabActive,
-        scheduleLogFlush,
-        flushLogToStore,
-        setError
-      } = latest.current
-      if (chunk.repoPath !== getRepoPath()) {
-        return
-      }
-      if (chunk.streamId !== undefined && chunk.streamId !== logStreamSeq.current) {
-        return
-      }
-      if (chunk.commits.length > 0) {
-        for (const commit of chunk.commits) {
-          logBuffer.current.push(commit)
-        }
-        scheduleLogFlush()
-      }
-      if (chunk.error) {
-        setError(chunk.error)
-      }
-      if (chunk.done) {
-        if (chunk.hasMore !== undefined) {
-          setUi('logHasMore', chunk.hasMore)
-        }
-        setUi('logLoading', false)
-        setUi('logLoadingMore', false)
-        if (isTabActive()) {
-          flushLogToStore(getOpenGeneration(), getRepoPath())
-        }
-      }
-    })
-
     const unsubRestarted = window.electronAPI.onSidecarRestarted(() => {
       const { getRepoPath, openRepo, isTabActive } = latest.current
       const repoPath = getRepoPath()
@@ -636,10 +433,9 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     })
 
     return () => {
-      unsubLog?.()
       unsubRestarted?.()
     }
-  }, [setUi])
+  }, [])
 
   const repoPathValue = session.repoPath
   useEffect(() => {
@@ -748,13 +544,14 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     pushNow,
     pullNow,
     runAction,
-    loadMoreHistory
+    loadMoreHistory: commitHistory.value.loadMoreHistory
   }
 
   return {
     git,
     session,
     workingTreeStatus: workingTreeStatus.value,
+    commitHistory: commitHistory.value,
     repoChangedHandlers: { refreshCaches }
   }
 }
@@ -772,7 +569,7 @@ interface GitStoreProviderProps {
 }
 
 export function GitStoreProvider(props: GitStoreProviderProps) {
-  const { git, session, workingTreeStatus, repoChangedHandlers } = useGitStoreValue(
+  const { git, session, workingTreeStatus, commitHistory, repoChangedHandlers } = useGitStoreValue(
     props.tabId,
     props.tabActive
   )
@@ -803,7 +600,9 @@ export function GitStoreProvider(props: GitStoreProviderProps) {
   return (
     <RepoSessionContext.Provider value={session.publicValue}>
       <WorkingTreeStatusProvider value={workingTreeStatus}>
-        <GitStoreContext.Provider value={git}>{props.children}</GitStoreContext.Provider>
+        <CommitHistoryProvider value={commitHistory}>
+          <GitStoreContext.Provider value={git}>{props.children}</GitStoreContext.Provider>
+        </CommitHistoryProvider>
       </WorkingTreeStatusProvider>
     </RepoSessionContext.Provider>
   )
