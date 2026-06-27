@@ -1,13 +1,6 @@
+import { Commit, Pull, Push } from '@shared/rpc'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState
-} from 'react'
+import { createContext, type ReactNode, useContext, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
@@ -52,26 +45,6 @@ export interface GitState {
   error: string | null
 }
 
-type SetGitUiState = {
-  (next: Partial<GitUiState>): void
-  <K extends keyof GitUiState>(key: K, value: GitUiState[K]): void
-}
-
-// Server state lives only in the TanStack Query cache. This store holds the imperative UI flags
-// (commit/push/pull progress) that have no natural query of their own. The push-based log-stream
-// flags live in the commit-history module.
-interface GitUiState {
-  committing: boolean
-  pushing: boolean
-  pulling: boolean
-}
-
-const initialUiState: GitUiState = {
-  committing: false,
-  pushing: false,
-  pulling: false
-}
-
 const formatCause = (error: unknown): string => {
   if (error instanceof Error) {
     return error.message
@@ -86,21 +59,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const queryClient = useQueryClient()
   const sessionLifecycle = useRef<RepoSessionLifecycle>(emptyRepoSessionLifecycle)
   const session = useRepoSessionController(sessionLifecycle)
-  const [ui, setUiState] = useState<GitUiState>({ ...initialUiState })
-  const setUi = useCallback(
-    ((keyOrNext: keyof GitUiState | Partial<GitUiState>, value?: unknown) => {
-      setUiState((previous) => {
-        if (typeof keyOrNext === 'string') {
-          if (Object.is(previous[keyOrNext], value)) {
-            return previous
-          }
-          return { ...previous, [keyOrNext]: value }
-        }
-        return { ...previous, ...keyOrNext }
-      })
-    }) as SetGitUiState,
-    []
-  )
 
   const path = session.repoPath
 
@@ -150,27 +108,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
 
   const status = workingTreeStatus.status
 
-  const state: GitState = {
-    repoPath: session.repoPath,
-    status,
-    log: commitHistory.log,
-    branches: refs.branches,
-    remotes: session.remotes,
-    defaultBranch: session.defaultBranch,
-    currentBranch: refs.currentBranch,
-    opening: session.opening,
-    committing: ui.committing,
-    pushing: ui.pushing,
-    pulling: ui.pulling,
-    statusLoading: workingTreeStatus.statusLoading,
-    branchesLoading: refs.branchesLoading,
-    logLoading: commitHistory.logLoading,
-    logLoadingMore: commitHistory.logLoadingMore,
-    logHasMore: commitHistory.logHasMore,
-    lastFetchedAt: refs.lastFetchedAt,
-    error: session.error
-  }
-
   useEffect(() => {
     const error = workingTreeStatus.statusError ?? refs.localBranchesError ?? refs.remoteRefsError
     if (error) {
@@ -185,7 +122,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
 
   const reset = () => {
     commitHistory.reset()
-    setUi({ ...initialUiState })
   }
 
   const repoCacheQueryKey = (repoPath: string, cache: RepoCache): readonly unknown[] => {
@@ -215,7 +151,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
 
   // The one invalidation primitive every path shares: name the caches a change dirties and they
   // refresh through the same cache→key switch. Actions read their list from the op→caches map; the
-  // bespoke paths (open, commit, push, pull, fetch, external change) pass an explicit list.
+  // bespoke paths (open, fetch, external change) pass an explicit list.
   const refreshCaches = (repoPath: string, caches: readonly RepoCache[]): Promise<unknown> =>
     Promise.all(caches.map((cache) => refreshMappedCache(repoPath, cache)))
 
@@ -270,38 +206,36 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   }
 
   const commitMutation = useMutation({
-    mutationFn: async (message: string) => {
-      const repoPath = liveRepoPath.current
-      if (!repoPath) {
-        return false
-      }
-      const generation = openGeneration.current
-      setUi('committing', true)
-      try {
-        const response = await rpcCommit(repoPath, message)
-        if (!isCurrentRepo(generation, repoPath)) {
-          return false
-        }
-        if (response._tag === 'Ok') {
-          await refreshCaches(repoPath, ['status', 'diff', 'log'])
-          return true
-        }
-        if (response._tag === 'GitError') {
-          session.setError(response.message)
-        }
-        return false
-      } catch (error) {
-        if (isCurrentRepo(generation, repoPath)) {
-          session.setError(formatCause(error))
-        }
-        return false
-      } finally {
-        if (isCurrentRepo(generation, repoPath)) {
-          setUi('committing', false)
-        }
-      }
-    }
+    mutationFn: (message: string) =>
+      runAction(Commit._tag, (repoPath) => rpcCommit(repoPath, message), 'Committed')
   })
+  const pushMutation = useMutation({
+    mutationFn: () => runAction(Push._tag, (repoPath) => rpcPush(repoPath), 'Pushed')
+  })
+  const pullMutation = useMutation({
+    mutationFn: () => runAction(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled')
+  })
+
+  const state: GitState = {
+    repoPath: session.repoPath,
+    status,
+    log: commitHistory.log,
+    branches: refs.branches,
+    remotes: session.remotes,
+    defaultBranch: session.defaultBranch,
+    currentBranch: refs.currentBranch,
+    opening: session.opening,
+    committing: commitMutation.isPending,
+    pushing: pushMutation.isPending,
+    pulling: pullMutation.isPending,
+    statusLoading: workingTreeStatus.statusLoading,
+    branchesLoading: refs.branchesLoading,
+    logLoading: commitHistory.logLoading,
+    logLoadingMore: commitHistory.logLoadingMore,
+    logHasMore: commitHistory.logHasMore,
+    lastFetchedAt: refs.lastFetchedAt,
+    error: session.error
+  }
 
   // The IPC subscription below registers once (`[]` deps) and must read the current helpers, not
   // render-zero closures. The helpers are recreated each render, so it reads them through this ref.
@@ -334,65 +268,9 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     }
   }, [])
 
-  const pushNow = async () => {
-    const repoPath = liveRepoPath.current
-    if (!repoPath || ui.pushing) {
-      return
-    }
-    const generation = openGeneration.current
-    setUi('pushing', true)
-    try {
-      const response = await rpcPush(repoPath)
-      if (!isCurrentRepo(generation, repoPath)) {
-        return
-      }
-      if (response._tag === 'Ok') {
-        await refreshCaches(repoPath, ['localBranches', 'remoteRefs'])
-      } else if (response._tag === 'GitError') {
-        session.setError(response.message)
-      }
-    } catch (error) {
-      if (isCurrentRepo(generation, repoPath)) {
-        session.setError(formatCause(error))
-      }
-    } finally {
-      if (isCurrentRepo(generation, repoPath)) {
-        setUi('pushing', false)
-      }
-    }
-  }
-
-  const pullNow = async () => {
-    const repoPath = liveRepoPath.current
-    if (!repoPath || ui.pulling) {
-      return
-    }
-    const generation = openGeneration.current
-    setUi('pulling', true)
-    try {
-      const response = await rpcPull(repoPath)
-      if (!isCurrentRepo(generation, repoPath)) {
-        return
-      }
-      if (response._tag === 'Ok') {
-        await refreshCaches(repoPath, ['status', 'localBranches', 'remoteRefs', 'diff', 'log'])
-      } else if (response._tag === 'GitError') {
-        session.setError(response.message)
-      }
-    } catch (error) {
-      if (isCurrentRepo(generation, repoPath)) {
-        session.setError(formatCause(error))
-      }
-    } finally {
-      if (isCurrentRepo(generation, repoPath)) {
-        setUi('pulling', false)
-      }
-    }
-  }
-
   const git = {
     state,
-    loading: session.opening || ui.committing,
+    loading: session.opening || commitMutation.isPending,
     openRepo: session.openRepo,
     closeRepo: session.closeRepo,
     stageFile: workingTreeStatus.value.stageFile,
@@ -403,8 +281,8 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     unstageHunk: workingTreeStatus.value.unstageHunk,
     commit: (message: string) => commitMutation.mutateAsync(message),
     fetchNow: refs.fetchNow,
-    pushNow,
-    pullNow,
+    pushNow: () => pushMutation.mutateAsync(),
+    pullNow: () => pullMutation.mutateAsync(),
     runAction,
     loadMoreHistory: commitHistory.value.loadMoreHistory
   }

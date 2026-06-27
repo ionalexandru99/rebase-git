@@ -8,6 +8,9 @@ const OPERATION_CACHES = {
   // commits the log shows. createBranchCheckout is the same footprint; a plain createBranch only
   // adds a ref. createBranchCheckout is a renderer-side key, not an RPC tag: both modes share the
   // createBranch RPC, split only by their cache footprint.
+  commit: ['status', 'localBranches', 'diff', 'log'],
+  push: ['localBranches', 'remoteRefs'],
+  pull: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
   mergeBranch: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
   reset: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
   revertCommit: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
