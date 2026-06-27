@@ -5,7 +5,7 @@ import { normalizeRepoPath } from './git/instances'
 import { FetchSkipped, GitError, type RepoNotOpen } from './git-errors'
 import { requireOpen } from './op-helpers'
 import { withRepoLock } from './repo-lock'
-import { withSessionScope } from './repo-sessions'
+import { type RepoSessions, RepoSessionsLive, withSessionScope } from './repo-sessions'
 import { capStderr, spawnGit } from './spawn'
 
 type GitCmdResult = { ok: true } | { ok: false; message: string }
@@ -25,7 +25,7 @@ function killFetchGroup(child: ReturnType<typeof spawn>): void {
   }
 }
 
-function runFetch(key: string): Effect.Effect<GitCmdResult> {
+function runFetch(key: string): Effect.Effect<GitCmdResult, never, RepoSessions> {
   return withSessionScope(
     key,
     Effect.gen(function* () {
@@ -77,13 +77,15 @@ function runGitCommand(key: string, args: string[]): Promise<GitCmdResult> {
 
 export function fetchRepo(
   repoPath: string
-): Effect.Effect<void, RepoNotOpen | GitError | FetchSkipped> {
+): Effect.Effect<void, RepoNotOpen | GitError | FetchSkipped, RepoSessions> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
     const semaphore = fetchSemaphoreFor(key)
     const outcome = yield* Effect.promise(() =>
-      semaphore.withPermitsIfAvailable(() => Effect.runPromise(runFetch(key)))
+      semaphore.withPermitsIfAvailable(() =>
+        Effect.runPromise(runFetch(key).pipe(Effect.provide(RepoSessionsLive)))
+      )
     )
     if (outcome === null) {
       return yield* Effect.fail(new FetchSkipped())
@@ -94,7 +96,9 @@ export function fetchRepo(
   })
 }
 
-export function pushRepo(repoPath: string): Effect.Effect<void, RepoNotOpen | GitError> {
+export function pushRepo(
+  repoPath: string
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
@@ -115,7 +119,9 @@ export function pushRepo(repoPath: string): Effect.Effect<void, RepoNotOpen | Gi
   })
 }
 
-export function pullRepo(repoPath: string): Effect.Effect<void, RepoNotOpen | GitError> {
+export function pullRepo(
+  repoPath: string
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)

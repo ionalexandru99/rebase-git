@@ -2,10 +2,10 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Effect } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, commit, fetchRepo, openRepo, stageFile } from '../operations'
 import { repoLockCount } from '../repo-lock'
+import { runOp } from './run-op'
 
 let baseDir: string
 let repoDir: string
@@ -35,27 +35,27 @@ beforeAll(async () => {
   gitIn(repoDir, 'commit', '-m', 'base')
   gitIn(repoDir, 'push', '-u', 'origin', 'main')
 
-  await Effect.runPromise(openRepo(repoDir))
+  await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
 describe('fetch does not serialize behind the repo lock', () => {
   it('fetches against a local remote without taking the repo lock', async () => {
     expect(repoLockCount()).toBe(0)
-    await Effect.runPromise(fetchRepo(repoDir))
+    await runOp(fetchRepo(repoDir))
     expect(repoLockCount()).toBe(0)
   })
 
   it('lets a concurrent mutation acquire the lock during an in-flight fetch', async () => {
     write('tracked.txt', 'fetch-concurrent\n')
 
-    const fetching = Effect.runPromise(fetchRepo(repoDir))
-    await Effect.runPromise(stageFile(repoDir, 'tracked.txt'))
-    await Effect.runPromise(commit(repoDir, 'commit during fetch'))
+    const fetching = runOp(fetchRepo(repoDir))
+    await runOp(stageFile(repoDir, 'tracked.txt'))
+    await runOp(commit(repoDir, 'commit during fetch'))
 
     await fetching
 
@@ -102,9 +102,9 @@ describe('closing a repo terminates an in-flight fetch', () => {
   }
 
   it('settles the fetch promptly and leaves no transport child when the repo is closed mid-fetch', async () => {
-    await Effect.runPromise(openRepo(hangRepoDir))
+    await runOp(openRepo(hangRepoDir))
 
-    const fetching = Effect.runPromise(fetchRepo(hangRepoDir)).then(
+    const fetching = runOp(fetchRepo(hangRepoDir)).then(
       () => 'resolved',
       () => 'rejected'
     )
@@ -113,7 +113,7 @@ describe('closing a repo terminates an in-flight fetch', () => {
     expect(transportChildCount()).toBeGreaterThan(0)
 
     const startedAt = Date.now()
-    await Effect.runPromise(closeRepo(hangRepoDir))
+    await runOp(closeRepo(hangRepoDir))
     const settled = await fetching
     const elapsedMs = Date.now() - startedAt
 

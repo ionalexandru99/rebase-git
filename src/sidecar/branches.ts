@@ -11,10 +11,11 @@ import { GitError, type RepoNotOpen } from './git-errors'
 import { requireGit, tryGit } from './op-helpers'
 import { isSafeCheckoutRef, isSafeRefArg } from './ref-args'
 import { withRepoLock } from './repo-lock'
+import type { RepoSessions } from './repo-sessions'
 
 export function getLocalBranches(
   repoPath: string
-): Effect.Effect<{ branches: LocalBranches }, RepoNotOpen | GitError> {
+): Effect.Effect<{ branches: LocalBranches }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const raw = yield* tryGit(() =>
@@ -26,7 +27,7 @@ export function getLocalBranches(
 
 export function getRemoteRefs(
   repoPath: string
-): Effect.Effect<{ refs: RemoteRefs }, RepoNotOpen | GitError> {
+): Effect.Effect<{ refs: RemoteRefs }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const raw = yield* tryGit(() =>
@@ -38,7 +39,7 @@ export function getRemoteRefs(
 
 export function getBranches(
   repoPath: string
-): Effect.Effect<{ branches: GitBranches }, RepoNotOpen | GitError> {
+): Effect.Effect<{ branches: GitBranches }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.all([getLocalBranches(repoPath), getRemoteRefs(repoPath)], {
     concurrency: 'unbounded'
   }).pipe(Effect.map(([local, remote]) => ({ branches: { ...local.branches, ...remote.refs } })))
@@ -48,7 +49,7 @@ export function checkoutRef(
   repoPath: string,
   refKind: 'local' | 'remote' | 'tag',
   fullPath: string
-): Effect.Effect<{ checkedOut: string }, RepoNotOpen | GitError> {
+): Effect.Effect<{ checkedOut: string }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeCheckoutRef(fullPath)) {
@@ -94,7 +95,7 @@ export function createBranch(
   name: string,
   startPoint?: string,
   checkout?: boolean
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(name) || (startPoint !== undefined && !isSafeRefArg(startPoint))) {
@@ -117,7 +118,7 @@ export function deleteBranch(
   repoPath: string,
   name: string,
   force?: boolean
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(name)) {
@@ -134,7 +135,7 @@ export function renameBranch(
   repoPath: string,
   oldName: string,
   newName: string
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(oldName) || !isSafeRefArg(newName)) {

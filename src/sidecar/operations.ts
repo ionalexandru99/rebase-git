@@ -12,7 +12,7 @@ import { type Conflict, GitError, type NotARepo, type RepoNotOpen } from './git-
 import { requireGit, requireOpen, tryGit } from './op-helpers'
 import { isSafeRefArg } from './ref-args'
 import { withRepoLock } from './repo-lock'
-import { closeSession, openSession } from './repo-sessions'
+import { closeSession, openSession, type RepoSessions } from './repo-sessions'
 import { runGit } from './spawn'
 
 export {
@@ -68,7 +68,9 @@ interface OpenRepoResult {
   }
 }
 
-export function openRepo(repoPath: string): Effect.Effect<OpenRepoResult, GitError | NotARepo> {
+export function openRepo(
+  repoPath: string
+): Effect.Effect<OpenRepoResult, GitError | NotARepo, RepoSessions> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     const git = yield* openSession(key)
@@ -91,7 +93,7 @@ export function openRepo(repoPath: string): Effect.Effect<OpenRepoResult, GitErr
   })
 }
 
-export function closeRepo(repoPath: string): Effect.Effect<void> {
+export function closeRepo(repoPath: string): Effect.Effect<void, never, RepoSessions> {
   return closeSession(repoPath)
 }
 
@@ -102,7 +104,7 @@ interface CommitResult {
 export function commit(
   repoPath: string,
   message: string
-): Effect.Effect<CommitResult, RepoNotOpen | GitError> {
+): Effect.Effect<CommitResult, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     return yield* withRepoLock(
@@ -127,7 +129,7 @@ export function commit(
 export function getLog(
   repoPath: string,
   maxCount?: number
-): Effect.Effect<{ log: GitLog }, RepoNotOpen | GitError> {
+): Effect.Effect<{ log: GitLog }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     yield* requireOpen(repoPath)
     const args = [
@@ -152,7 +154,7 @@ export function getLog(
 export function mergeBranch(
   repoPath: string,
   ref: string
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(ref)) {
@@ -166,7 +168,7 @@ export function resetToCommit(
   repoPath: string,
   sha: string,
   mode: ResetMode
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(sha)) {
@@ -182,7 +184,7 @@ export function resetToCommit(
 export function revertCommit(
   repoPath: string,
   sha: string
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(sha)) {
@@ -195,7 +197,7 @@ export function revertCommit(
 export function cherryPick(
   repoPath: string,
   sha: string
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(sha)) {
@@ -210,7 +212,7 @@ export function createTag(
   name: string,
   ref?: string,
   message?: string
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(name) || (ref !== undefined && !isSafeRefArg(ref))) {
@@ -232,7 +234,7 @@ export function createTag(
 export function deleteTag(
   repoPath: string,
   name: string
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(name)) {

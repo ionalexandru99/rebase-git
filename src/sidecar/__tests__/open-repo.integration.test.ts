@@ -2,9 +2,9 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Effect } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeRepo, isCommitGraphTracked, openRepo } from '../operations'
+import { runOp } from './run-op'
 
 let baseDir: string
 let repoDir: string
@@ -63,13 +63,13 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(baseDir, { recursive: true, force: true })
 })
 
 describe('openRepo gitdir resolution', () => {
   it('returns the repo .git as both gitDir and commonDir for a normal repo', async () => {
-    const response = await Effect.runPromise(openRepo(repoDir))
+    const response = await runOp(openRepo(repoDir))
     const dotGit = fs.realpathSync.native(path.join(repoDir, '.git'))
     expect(response.result.gitDir && fs.realpathSync.native(response.result.gitDir)).toBe(dotGit)
     expect(response.result.commonDir && fs.realpathSync.native(response.result.commonDir)).toBe(
@@ -80,28 +80,28 @@ describe('openRepo gitdir resolution', () => {
   it('returns a distinct gitDir but the shared commonDir for a linked worktree', async () => {
     const worktreeDir = path.join(baseDir, 'wt')
     git(repoDir, 'worktree', 'add', worktreeDir, '-b', 'feature')
-    const response = await Effect.runPromise(openRepo(worktreeDir))
+    const response = await runOp(openRepo(worktreeDir))
     const dotGit = fs.realpathSync.native(path.join(repoDir, '.git'))
     expect(response.result.gitDir).toBeDefined()
     expect(fs.realpathSync.native(response.result.gitDir as string)).not.toBe(
       fs.realpathSync.native(worktreeDir)
     )
     expect(fs.realpathSync.native(response.result.commonDir as string)).toBe(dotGit)
-    await Effect.runPromise(closeRepo(worktreeDir))
+    await runOp(closeRepo(worktreeDir))
   })
 
   it('stops tracking the commit-graph write after close so reopen can retry', async () => {
-    await Effect.runPromise(openRepo(repoDir))
+    await runOp(openRepo(repoDir))
     expect(isCommitGraphTracked(repoDir)).toBe(true)
-    await Effect.runPromise(closeRepo(repoDir))
+    await runOp(closeRepo(repoDir))
     expect(isCommitGraphTracked(repoDir)).toBe(false)
   })
 
   it('re-kicks the commit-graph write on reopen rather than skipping it forever', async () => {
-    await Effect.runPromise(openRepo(repoDir))
-    await Effect.runPromise(closeRepo(repoDir))
+    await runOp(openRepo(repoDir))
+    await runOp(closeRepo(repoDir))
     expect(isCommitGraphTracked(repoDir)).toBe(false)
-    await Effect.runPromise(openRepo(repoDir))
+    await runOp(openRepo(repoDir))
     expect(isCommitGraphTracked(repoDir)).toBe(true)
   })
 
@@ -110,7 +110,7 @@ describe('openRepo gitdir resolution', () => {
     const originalPath = process.env.PATH
     process.env.PATH = `${shimDir}${path.delimiter}${originalPath}`
     try {
-      await Effect.runPromise(openRepo(repoDir))
+      await runOp(openRepo(repoDir))
       let inFlight = 0
       for (let attempt = 0; attempt < 40 && inFlight === 0; attempt++) {
         await sleep(25)
@@ -118,7 +118,7 @@ describe('openRepo gitdir resolution', () => {
       }
       expect(inFlight).toBeGreaterThan(0)
 
-      await Effect.runPromise(closeRepo(repoDir))
+      await runOp(closeRepo(repoDir))
       let survivors = commitGraphWriteProcesses(repoDir)
       for (let attempt = 0; attempt < 40 && survivors > 0; attempt++) {
         await sleep(25)

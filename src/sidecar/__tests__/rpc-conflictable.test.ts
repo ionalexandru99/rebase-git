@@ -9,6 +9,7 @@ import { Effect, Either, Schema } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, openRepo } from '../operations'
 import { handlersLayer } from '../rpc-handlers'
+import { runOp } from './run-op'
 
 const decode = <A, I>(schema: Schema.Schema<A, I>, value: unknown) =>
   Schema.decodeUnknownEither(schema)(value)
@@ -30,7 +31,7 @@ function headSha(): string {
 }
 
 const revertThroughGroup = (payload: { repoPath: string; sha: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.revertCommit(payload))
@@ -38,7 +39,7 @@ const revertThroughGroup = (payload: { repoPath: string; sha: string }) =>
   )
 
 const cherryPickThroughGroup = (payload: { repoPath: string; sha: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.cherryPick(payload))
@@ -46,7 +47,7 @@ const cherryPickThroughGroup = (payload: { repoPath: string; sha: string }) =>
   )
 
 const mergeThroughGroup = (payload: { repoPath: string; ref: string }) =>
-  Effect.runPromise(
+  runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
       return yield* Effect.either(client.mergeBranch(payload))
@@ -62,11 +63,11 @@ beforeAll(async () => {
   git('config', 'user.name', 'Test')
   commitFile('file.txt', 'base\n', 'base')
 
-  await Effect.runPromise(openRepo(repoDir))
+  await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
 })
 

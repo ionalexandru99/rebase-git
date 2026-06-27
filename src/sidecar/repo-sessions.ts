@@ -150,16 +150,19 @@ export class RepoSessions extends Context.Tag('sidecar/RepoSessions')<
 
 export const RepoSessionsLive = Layer.succeed(RepoSessions, sessions)
 
-export const openSession = (repoPath: string): Effect.Effect<SimpleGit, NotARepo | GitError> =>
-  sessions.open(repoPath)
+export const openSession = (
+  repoPath: string
+): Effect.Effect<SimpleGit, NotARepo | GitError, RepoSessions> =>
+  RepoSessions.pipe(Effect.flatMap((service) => service.open(repoPath)))
 
-export const closeSession = (repoPath: string): Effect.Effect<void> => sessions.close(repoPath)
+export const closeSession = (repoPath: string): Effect.Effect<void, never, RepoSessions> =>
+  RepoSessions.pipe(Effect.flatMap((service) => service.close(repoPath)))
 
-export const requireGit = (repoPath: string): Effect.Effect<SimpleGit, RepoNotOpen> =>
-  sessions.requireGit(repoPath)
+export const requireGit = (repoPath: string): Effect.Effect<SimpleGit, RepoNotOpen, RepoSessions> =>
+  RepoSessions.pipe(Effect.flatMap((service) => service.requireGit(repoPath)))
 
-export const requireOpen = (repoPath: string): Effect.Effect<void, RepoNotOpen> =>
-  sessions.requireOpen(repoPath)
+export const requireOpen = (repoPath: string): Effect.Effect<void, RepoNotOpen, RepoSessions> =>
+  RepoSessions.pipe(Effect.flatMap((service) => service.requireOpen(repoPath)))
 
 export const isCommitGraphTracked = (repoPath: string): boolean =>
   sessions.isCommitGraphTracked(repoPath)
@@ -167,4 +170,5 @@ export const isCommitGraphTracked = (repoPath: string): boolean =>
 export const withSessionScope = <A, E>(
   repoPath: string,
   effect: Effect.Effect<A, E, Scope.Scope>
-): Effect.Effect<A, E> => sessions.withSessionScope(repoPath, effect)
+): Effect.Effect<A, E, RepoSessions> =>
+  RepoSessions.pipe(Effect.flatMap((service) => service.withSessionScope(repoPath, effect)))

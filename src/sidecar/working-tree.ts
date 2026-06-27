@@ -6,11 +6,12 @@ import { GitError, HunkNotFound, type RepoNotOpen } from './git-errors'
 import { requireGit, requireOpen, tryGit } from './op-helpers'
 import { isSafeRefArg } from './ref-args'
 import { withRepoLock } from './repo-lock'
+import type { RepoSessions } from './repo-sessions'
 import { runGit } from './spawn'
 
 export function getStatus(
   repoPath: string
-): Effect.Effect<{ status: GitStatus }, RepoNotOpen | GitError> {
+): Effect.Effect<{ status: GitStatus }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const status = yield* tryGit(() => git.status())
@@ -21,7 +22,7 @@ export function getStatus(
 export function stageFile(
   repoPath: string,
   file: string
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     yield* withRepoLock(
@@ -34,7 +35,7 @@ export function stageFile(
 export function unstageFile(
   repoPath: string,
   file: string
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     yield* withRepoLock(
@@ -47,7 +48,7 @@ export function unstageFile(
 export function stageAll(
   repoPath: string,
   files: string[]
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (files.length === 0) {
@@ -63,7 +64,7 @@ export function stageAll(
 export function unstageAll(
   repoPath: string,
   files: string[]
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (files.length === 0) {
@@ -105,7 +106,7 @@ export function getDiff(
   repoPath: string,
   file: string,
   staged: boolean
-): Effect.Effect<{ diff: FileDiff }, RepoNotOpen | GitError> {
+): Effect.Effect<{ diff: FileDiff }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     yield* requireOpen(repoPath)
     let raw = yield* tryGit(() => readFileDiff(repoPath, file, staged))
@@ -124,7 +125,7 @@ function applyHunk(
   file: string,
   hunkHeader: string,
   direction: 'stage' | 'unstage'
-): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound> {
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound, RepoSessions> {
   return Effect.gen(function* () {
     yield* requireOpen(repoPath)
     yield* withRepoLock(
@@ -150,7 +151,7 @@ export function stageHunk(
   repoPath: string,
   file: string,
   hunkHeader: string
-): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound> {
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound, RepoSessions> {
   return applyHunk(repoPath, file, hunkHeader, 'stage')
 }
 
@@ -158,7 +159,7 @@ export function unstageHunk(
   repoPath: string,
   file: string,
   hunkHeader: string
-): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound> {
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound, RepoSessions> {
   return applyHunk(repoPath, file, hunkHeader, 'unstage')
 }
 
@@ -167,7 +168,7 @@ export function unstageHunk(
 export function discardChanges(
   repoPath: string,
   files: string[]
-): Effect.Effect<void, RepoNotOpen | GitError> {
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (files.length === 0) {
@@ -200,7 +201,9 @@ export function discardChanges(
   })
 }
 
-export function discardAll(repoPath: string): Effect.Effect<void, RepoNotOpen | GitError> {
+export function discardAll(
+  repoPath: string
+): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     yield* withRepoLock(

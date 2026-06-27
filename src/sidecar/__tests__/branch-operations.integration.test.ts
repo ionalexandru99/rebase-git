@@ -2,9 +2,9 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Effect } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, getLocalBranches, getRemoteRefs, openRepo } from '../operations'
+import { runOp } from './run-op'
 
 let remoteDir: string
 let repoDir: string
@@ -43,24 +43,24 @@ beforeAll(async () => {
   git('commit', '-am', 'ahead of origin')
   git('remote', 'set-head', 'origin', '--auto')
 
-  await Effect.runPromise(openRepo(repoDir))
+  await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
-  await Effect.runPromise(closeRepo(repoDir))
+  await runOp(closeRepo(repoDir))
   fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
 })
 
 describe('branch listing against a real repository', () => {
   it('lists local branches with the current branch and ahead counts', async () => {
-    const result = await Effect.runPromise(getLocalBranches(repoDir))
+    const result = await runOp(getLocalBranches(repoDir))
     expect(result.branches.current).toBe('main')
     expect(result.branches.all).toEqual(['feature/extra', 'main'])
     expect(result.branches.tracking).toEqual({ main: { ahead: 1, behind: 0 } })
   })
 
   it('lists remote branches and tags, skipping the origin/HEAD symref', async () => {
-    const result = await Effect.runPromise(getRemoteRefs(repoDir))
+    const result = await runOp(getRemoteRefs(repoDir))
     expect(result.refs.remotes).toEqual(['origin/main'])
     expect(result.refs.tags).toEqual(['v1.0'])
   })
