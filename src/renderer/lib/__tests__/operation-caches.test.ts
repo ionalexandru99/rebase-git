@@ -13,7 +13,21 @@ import {
   StashPop
 } from '@shared/rpc'
 import { describe, expect, it } from 'vitest'
-import { cachesForOperation } from '../operation-caches'
+import { cachesForOperation, cachesForRepoChange } from '../operation-caches'
+
+describe('cachesForRepoChange', () => {
+  it('dirties the branch, timeline, and stash caches for an external ref move', () => {
+    expect(cachesForRepoChange('refs')).toEqual(['localBranches', 'remoteRefs', 'log', 'stash'])
+  })
+
+  it('dirties the working-tree caches for a working-tree change', () => {
+    expect(cachesForRepoChange('workingTree')).toEqual(['status', 'diff', 'stash'])
+  })
+
+  it('dirties the working-tree caches for an index change', () => {
+    expect(cachesForRepoChange('index')).toEqual(['status', 'diff', 'stash'])
+  })
+})
 
 describe('cachesForOperation', () => {
   it('dirties the branch caches for a branch delete', () => {

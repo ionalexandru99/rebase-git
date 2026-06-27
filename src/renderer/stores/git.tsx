@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import type { RepoCache } from '@/lib/operation-caches'
+import { cachesForRepoChange, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { ActionRunnerProvider, useActionRunnerController } from './action-runner'
 import { CommitHistoryProvider, useCommitHistoryController } from './commit-history'
@@ -208,11 +208,7 @@ export function GitStoreProvider(props: GitStoreProviderProps) {
       if (event.repoPath !== repoPath) {
         return
       }
-      const caches: RepoCache[] =
-        event.kind === 'refs'
-          ? ['localBranches', 'remoteRefs', 'log', 'stash']
-          : ['status', 'diff', 'stash']
-      void handlers.refreshCaches(event.repoPath, caches)
+      void handlers.refreshCaches(event.repoPath, cachesForRepoChange(event.kind))
     })
     return () => unsubscribe?.()
   }, [])
