@@ -4,7 +4,7 @@ import { renderWithQuery } from '@/../test/render-app'
 import { setupLogStream, sidecarMock } from '@/../test/setup'
 import { DiffPanel } from '@/components/DiffPanel'
 import type { SelectedFile } from '@/components/StatusPanel'
-import { type GitStore, GitStoreProvider, useGitStore } from '@/stores/git'
+import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
 
 const repoPath = '/home/user/project'
 
@@ -81,42 +81,42 @@ function mockPartiallyStagedDiff() {
 interface HarnessProps {
   tabActive: boolean
   selected: SelectedFile | null
-  onGit: (git: GitStore) => void
+  onSession: (session: RepoSession) => void
 }
 
 function DiffPanelHarness(props: HarnessProps) {
   return (
     <GitStoreProvider tabId="diff-test-tab" tabActive={props.tabActive}>
-      <DiffPanelProbe selected={props.selected} onGit={props.onGit} />
+      <DiffPanelProbe selected={props.selected} onSession={props.onSession} />
     </GitStoreProvider>
   )
 }
 
-function DiffPanelProbe(props: Pick<HarnessProps, 'selected' | 'onGit'>) {
-  const git = useGitStore()
-  props.onGit(git)
+function DiffPanelProbe(props: Pick<HarnessProps, 'selected' | 'onSession'>) {
+  const session = useRepoSession()
+  props.onSession(session)
   return <DiffPanel selected={props.selected} />
 }
 
 async function renderDiffPanel(selected: SelectedFile | null) {
-  let git: GitStore | undefined
+  let session: RepoSession | undefined
   renderWithQuery(() => (
     <DiffPanelHarness
       tabActive={true}
       selected={selected}
-      onGit={(store) => {
-        git = store
+      onSession={(value) => {
+        session = value
       }}
     />
   ))
-  if (!git) {
+  if (!session) {
     throw new Error('git store not initialized')
   }
-  const store = git
+  const repoSession = session
   await act(async () => {
-    await store.openRepo(repoPath)
+    await repoSession.openRepo(repoPath)
   })
-  return store
+  return repoSession
 }
 
 beforeEach(() => {

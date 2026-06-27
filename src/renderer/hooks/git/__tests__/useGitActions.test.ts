@@ -20,7 +20,7 @@ import {
   rpcStashPop,
   rpcStashPush
 } from '@/lib/rpc-client'
-import type { GitStore } from '@/stores/git'
+import type { ActionRunner } from '@/stores/git'
 
 const conflictable = (wire: { _tag: string; message?: string }): ConflictableResult =>
   wire as unknown as ConflictableResult
@@ -46,9 +46,9 @@ vi.mock('@/lib/rpc-client', () => ({
   rpcStashDrop: vi.fn()
 }))
 
-// The action runner is the git store's; here it is faked to invoke the handed-off call and report
-// Ok-ness, so wiring tests can assert which operation tag, call, and label each action routes
-// through it. Its own invalidation/conflict/toast behavior is covered in the store harness.
+// The action runner is faked here to invoke the handed-off call and report Ok-ness, so wiring tests
+// can assert which operation tag, call, and label each action routes through it. The runner's own
+// invalidation/conflict/toast behavior is covered in the store harness.
 const runAction = vi.fn(
   async (
     _operation: string,
@@ -58,8 +58,8 @@ const runAction = vi.fn(
 )
 
 function actionsFor() {
-  const store = { runAction } as unknown as GitStore
-  const { result } = renderHook(() => useGitActions(store))
+  const runner = { runAction } as unknown as ActionRunner
+  const { result } = renderHook(() => useGitActions(runner))
   return result.current
 }
 

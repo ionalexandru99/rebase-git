@@ -2,7 +2,7 @@ import { AlertCircleIcon } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { Alert, AlertDescription } from './components/ui/alert'
 import { NewTab, type WorkspaceCatalog } from './NewTab'
-import { GitStoreProvider, useGitStore, useRepoSession } from './stores/git'
+import { GitStoreProvider, useRepoSession } from './stores/git'
 import { Workspace } from './Workspace'
 
 interface RepoTabProps {
@@ -23,7 +23,6 @@ export function RepoTab(props: RepoTabProps) {
 }
 
 function RepoTabContent(props: RepoTabProps) {
-  const git = useGitStore()
   const session = useRepoSession()
   const lastRepoPathRequested = useRef<string | null>(null)
 
@@ -50,7 +49,7 @@ function RepoTabContent(props: RepoTabProps) {
   ) : null
 
   if (session.repoPath) {
-    return <Workspace git={git} tabActive={props.tabActive} errorBanner={errorBanner} />
+    return <Workspace tabActive={props.tabActive} errorBanner={errorBanner} />
   }
 
   return (

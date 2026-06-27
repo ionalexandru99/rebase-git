@@ -9,7 +9,7 @@ import {
   sidecarMock
 } from '@/../test/setup'
 import { useCommitHistory } from '@/stores/commit-history'
-import { GitStoreProvider, useGitStore } from '@/stores/git'
+import { GitStoreProvider } from '@/stores/git'
 import { useRepoSession } from '@/stores/repo-session'
 import { useWorkingTreeStatus } from '@/stores/working-tree-status'
 
@@ -94,7 +94,7 @@ describe('useCommitHistory — concern isolation', () => {
   it('shows a streamed chunk in history without re-rendering the diff view', async () => {
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function OpenController() {
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     renderWithQuery(() => (
@@ -131,7 +131,7 @@ describe('useCommitHistory — concern isolation', () => {
     function HistoryController() {
       const history = useCommitHistory()
       loadMore = history.loadMoreHistory
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     renderWithQuery(() => (
@@ -176,7 +176,7 @@ describe('useCommitHistory — concern isolation', () => {
     const repoChanged = setupRepoChanged()
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function OpenController() {
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     renderWithQuery(() => (

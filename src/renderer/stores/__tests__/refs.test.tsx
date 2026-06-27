@@ -2,7 +2,13 @@ import { act, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithQuery } from '@/../test/render-app'
 import { type LogStreamHandle, setupLogStream, sidecarMock } from '@/../test/setup'
-import { type GitStore, GitStoreProvider, useGitStore } from '@/stores/git'
+import {
+  type ActionRunner,
+  GitStoreProvider,
+  useActionRunner,
+  useCommitHistory,
+  useRepoSession
+} from '@/stores/git'
 import { useRefs } from '@/stores/refs'
 
 const toast = vi.hoisted(() => ({
@@ -80,7 +86,7 @@ describe('useRefs', () => {
   it('exposes branches, current branch, remotes, and default branch after open', async () => {
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function OpenController() {
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     function RefsProbe() {
@@ -119,11 +125,10 @@ describe('useRefs', () => {
 
   it('reflects a renamed current branch from a branch-only refresh', async () => {
     let openRepo: ((path: string) => Promise<string | null>) | undefined
-    let runAction: GitStore['runAction'] | undefined
+    let runAction: ActionRunner['runAction'] | undefined
     function Controller() {
-      const git = useGitStore()
-      openRepo = git.openRepo
-      runAction = git.runAction
+      openRepo = useRepoSession().openRepo
+      runAction = useActionRunner().runAction
       return null
     }
     function RefsProbe() {
@@ -168,11 +173,11 @@ describe('useRefs — concern isolation', () => {
       return <div data-testid="remote-refs">{refs.branches?.remotes.join(',') ?? ''}</div>
     }
     function HistoryProbe() {
-      const git = useGitStore()
-      return <div data-testid="log-total">{git.state.log?.total ?? 0}</div>
+      const history = useCommitHistory()
+      return <div data-testid="log-total">{history.log?.total ?? 0}</div>
     }
     function OpenController() {
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     renderWithQuery(() => (
@@ -211,7 +216,7 @@ describe('useRefs — auto-fetch', () => {
     vi.useFakeTimers()
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function OpenController() {
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     renderWithQuery(() => (
@@ -240,7 +245,7 @@ describe('useRefs — auto-fetch', () => {
     vi.useFakeTimers()
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function OpenController() {
-      openRepo = useGitStore().openRepo
+      openRepo = useRepoSession().openRepo
       return null
     }
     renderWithQuery(() => (
@@ -263,9 +268,8 @@ describe('useRefs — auto-fetch', () => {
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     let fetchNow: (() => Promise<void>) | undefined
     function Controller() {
-      const git = useGitStore()
-      openRepo = git.openRepo
-      fetchNow = git.fetchNow
+      openRepo = useRepoSession().openRepo
+      fetchNow = useRefs().fetchNow
       return null
     }
     renderWithQuery(() => (
@@ -301,9 +305,9 @@ describe('useRefs — auto-fetch', () => {
     vi.useFakeTimers()
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function Probe() {
-      const git = useGitStore()
-      openRepo = git.openRepo
-      return <div data-testid="error">{git.state.error ?? ''}</div>
+      const session = useRepoSession()
+      openRepo = session.openRepo
+      return <div data-testid="error">{session.error ?? ''}</div>
     }
     renderWithQuery(() => (
       <GitStoreProvider tabId="refs-tab" tabActive={true}>
@@ -337,9 +341,8 @@ describe('useRefs — per-repo fetch timestamp', () => {
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     let fetchNow: (() => Promise<void>) | undefined
     function Probe() {
-      const git = useGitStore()
       const refs = useRefs()
-      openRepo = git.openRepo
+      openRepo = useRepoSession().openRepo
       fetchNow = refs.fetchNow
       return <div data-testid="last-fetch">{refs.lastFetchedAt != null ? 'set' : 'unset'}</div>
     }
