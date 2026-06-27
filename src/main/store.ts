@@ -1,5 +1,6 @@
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import Store from 'electron-store'
+import { planLegacyWorkspaceMigration } from './store-migration'
 import type { StoreSchema } from './store-schema'
 import { storeDefaults, storeSchema } from './store-schema'
 
@@ -10,19 +11,20 @@ export const store = new Store<StoreSchema>({
 })
 
 function migrateLegacyWorkingDirectory(): void {
-  const workspaces = store.get('workspaces')
-  if (workspaces.length > 0) {
-    return
+  const migration = planLegacyWorkspaceMigration(
+    store.get('workspaces'),
+    store.get('workingDirectory'),
+    store.get('activeWorkspace')
+  )
+  if (migration.workspaces) {
+    store.set('workspaces', migration.workspaces)
   }
-  const legacy = store.get('workingDirectory')
-  if (!legacy) {
-    return
-  }
-  store.set('workspaces', [legacy])
-  if (!store.get('activeWorkspace')) {
-    store.set('activeWorkspace', legacy)
+  if (migration.activeWorkspace) {
+    store.set('activeWorkspace', migration.activeWorkspace)
   }
 }
+
+migrateLegacyWorkingDirectory()
 
 export function getTheme(): 'dark' | 'light' {
   return store.get('theme')
@@ -40,12 +42,10 @@ export function getRecentRepos(): string[] {
 }
 
 export function getWorkspaces(): string[] {
-  migrateLegacyWorkingDirectory()
   return store.get('workspaces')
 }
 
 export function addWorkspace(path: string): string[] {
-  migrateLegacyWorkingDirectory()
   const workspaces = store.get('workspaces')
   if (workspaces.includes(path)) {
     store.set('activeWorkspace', path)
@@ -60,7 +60,6 @@ export function addWorkspace(path: string): string[] {
 }
 
 export function removeWorkspace(path: string): string[] {
-  migrateLegacyWorkingDirectory()
   const workspaces = store.get('workspaces').filter((w) => w !== path)
   store.set('workspaces', workspaces)
   if (store.get('activeWorkspace') === path) {
@@ -72,12 +71,10 @@ export function removeWorkspace(path: string): string[] {
 }
 
 export function getActiveWorkspace(): string | null {
-  migrateLegacyWorkingDirectory()
   return store.get('activeWorkspace')
 }
 
 export function setActiveWorkspace(path: string | null): void {
-  migrateLegacyWorkingDirectory()
   store.set('activeWorkspace', path)
   store.set('workingDirectory', path)
 }
