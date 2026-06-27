@@ -46,6 +46,23 @@ const resolveFiles = (
     return Effect.succeed(resolved)
   })
 
+const withResolvedRepo = <A, E>(
+  repoPath: string,
+  use: (repoRoot: string) => Effect.Effect<A, E>
+): Effect.Effect<A, E | GitError> => resolveRepo(repoPath).pipe(Effect.flatMap(use))
+
+const withResolvedFile = <A, E>(
+  repoRoot: string,
+  file: string,
+  use: (relative: string) => Effect.Effect<A, E>
+): Effect.Effect<A, E | GitError> => resolveFile(repoRoot, file).pipe(Effect.flatMap(use))
+
+const withResolvedFiles = <A, E>(
+  repoRoot: string,
+  files: readonly string[],
+  use: (relatives: string[]) => Effect.Effect<A, E>
+): Effect.Effect<A, E | GitError> => resolveFiles(repoRoot, files).pipe(Effect.flatMap(use))
+
 // scanForRepos confines enumeration to the user's home tree. The guard mirrors the previous
 // scanForReposSafely: absolute, no `..`/NUL, realpath must be a directory under the realpath'd home
 // root. Any violation fails with the typed GitError('invalid directory path').
@@ -131,156 +148,94 @@ export const handlersLayer = SidecarRpcs.toLayer({
   scanForRepos: ({ dirPath }) =>
     scanForReposGuarded(dirPath).pipe(Effect.map((repos) => ({ repos }))),
   commit: ({ repoPath, message }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.commit(resolved, message))),
+    withResolvedRepo(repoPath, (repo) => operations.commit(repo, message)),
   stageFile: ({ repoPath, file }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        resolveFile(resolved, file).pipe(
-          Effect.flatMap((relative) => operations.stageFile(resolved, relative))
-        )
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFile(repo, file, (relative) => operations.stageFile(repo, relative))
     ),
   unstageFile: ({ repoPath, file }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        resolveFile(resolved, file).pipe(
-          Effect.flatMap((relative) => operations.unstageFile(resolved, relative))
-        )
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFile(repo, file, (relative) => operations.unstageFile(repo, relative))
     ),
   stageAll: ({ repoPath, files }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        resolveFiles(resolved, files).pipe(
-          Effect.flatMap((relatives) => operations.stageAll(resolved, relatives))
-        )
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFiles(repo, files, (relatives) => operations.stageAll(repo, relatives))
     ),
   unstageAll: ({ repoPath, files }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        resolveFiles(resolved, files).pipe(
-          Effect.flatMap((relatives) => operations.unstageAll(resolved, relatives))
-        )
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFiles(repo, files, (relatives) => operations.unstageAll(repo, relatives))
     ),
   stageHunk: ({ repoPath, file, hunkHeader }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        resolveFile(resolved, file).pipe(
-          Effect.flatMap((relative) => operations.stageHunk(resolved, relative, hunkHeader))
-        )
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFile(repo, file, (relative) => operations.stageHunk(repo, relative, hunkHeader))
     ),
   unstageHunk: ({ repoPath, file, hunkHeader }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        resolveFile(resolved, file).pipe(
-          Effect.flatMap((relative) => operations.unstageHunk(resolved, relative, hunkHeader))
-        )
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFile(repo, file, (relative) => operations.unstageHunk(repo, relative, hunkHeader))
     ),
   discardChanges: ({ repoPath, files }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        resolveFiles(resolved, files).pipe(
-          Effect.flatMap((relatives) => operations.discardChanges(resolved, relatives))
-        )
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFiles(repo, files, (relatives) => operations.discardChanges(repo, relatives))
     ),
-  discardAll: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.discardAll(resolved))),
+  discardAll: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.discardAll(repo)),
   mergeBranch: ({ repoPath, ref }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.mergeBranch(resolved, ref))),
+    withResolvedRepo(repoPath, (repo) => operations.mergeBranch(repo, ref)),
   revertCommit: ({ repoPath, sha }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => operations.revertCommit(resolved, sha))
-    ),
+    withResolvedRepo(repoPath, (repo) => operations.revertCommit(repo, sha)),
   cherryPick: ({ repoPath, sha }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.cherryPick(resolved, sha))),
+    withResolvedRepo(repoPath, (repo) => operations.cherryPick(repo, sha)),
   checkout: ({ repoPath, refKind, fullPath }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => operations.checkoutRef(resolved, refKind, fullPath))
-    ),
+    withResolvedRepo(repoPath, (repo) => operations.checkoutRef(repo, refKind, fullPath)),
   createBranch: ({ repoPath, name, startPoint, checkout }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.createBranch(resolved, name, startPoint || undefined, checkout === true)
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      operations.createBranch(repo, name, startPoint || undefined, checkout === true)
     ),
   deleteBranch: ({ repoPath, name, force }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => operations.deleteBranch(resolved, name, force === true))
-    ),
+    withResolvedRepo(repoPath, (repo) => operations.deleteBranch(repo, name, force === true)),
   renameBranch: ({ repoPath, oldName, newName }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => operations.renameBranch(resolved, oldName, newName))
-    ),
+    withResolvedRepo(repoPath, (repo) => operations.renameBranch(repo, oldName, newName)),
   createTag: ({ repoPath, name, ref, message }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) =>
-        operations.createTag(resolved, name, ref || undefined, message || undefined)
-      )
+    withResolvedRepo(repoPath, (repo) =>
+      operations.createTag(repo, name, ref || undefined, message || undefined)
     ),
   deleteTag: ({ repoPath, name }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.deleteTag(resolved, name))),
+    withResolvedRepo(repoPath, (repo) => operations.deleteTag(repo, name)),
   stashPop: ({ repoPath, index }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.stashPop(resolved, index))),
+    withResolvedRepo(repoPath, (repo) => operations.stashPop(repo, index)),
   stashApply: ({ repoPath, index }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => operations.stashApply(resolved, index))
-    ),
+    withResolvedRepo(repoPath, (repo) => operations.stashApply(repo, index)),
   stashDrop: ({ repoPath, index }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.stashDrop(resolved, index))),
+    withResolvedRepo(repoPath, (repo) => operations.stashDrop(repo, index)),
   stashPush: ({ repoPath, message, includeUntracked, files }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => {
-        const resolvedFiles: Effect.Effect<string[] | undefined, GitError> =
-          files === undefined ? Effect.succeed(undefined) : resolveFiles(resolved, files)
-        return resolvedFiles.pipe(
-          Effect.flatMap((relatives) =>
-            operations.stashPush(
-              resolved,
-              message || undefined,
-              includeUntracked === true,
-              relatives
-            )
-          )
+    withResolvedRepo(repoPath, (repo) => {
+      const resolvedFiles: Effect.Effect<string[] | undefined, GitError> =
+        files === undefined ? Effect.succeed(undefined) : resolveFiles(repo, files)
+      return resolvedFiles.pipe(
+        Effect.flatMap((relatives) =>
+          operations.stashPush(repo, message || undefined, includeUntracked === true, relatives)
         )
-      })
-    ),
+      )
+    }),
   reset: ({ repoPath, sha, mode }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => operations.resetToCommit(resolved, sha, mode))
-    ),
-  fetch: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.fetchRepo(resolved))),
-  push: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.pushRepo(resolved))),
-  pull: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.pullRepo(resolved))),
-  getStatus: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getStatus(resolved))),
-  getBranches: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getBranches(resolved))),
+    withResolvedRepo(repoPath, (repo) => operations.resetToCommit(repo, sha, mode)),
+  fetch: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.fetchRepo(repo)),
+  push: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.pushRepo(repo)),
+  pull: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.pullRepo(repo)),
+  getStatus: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.getStatus(repo)),
+  getBranches: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.getBranches(repo)),
   getLocalBranches: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getLocalBranches(resolved))),
+    withResolvedRepo(repoPath, (repo) => operations.getLocalBranches(repo)),
   getRemoteRefs: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getRemoteRefs(resolved))),
+    withResolvedRepo(repoPath, (repo) => operations.getRemoteRefs(repo)),
   getLog: ({ repoPath, maxCount }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.getLog(resolved, maxCount))),
+    withResolvedRepo(repoPath, (repo) => operations.getLog(repo, maxCount)),
   getDiff: ({ repoPath, file, staged }) =>
-    resolveRepo(repoPath).pipe(
-      Effect.flatMap((resolved) => {
-        const relative = resolveRepoRelativeFile(resolved, file)
-        if (!relative) {
-          return Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
-        }
-        return operations.getDiff(resolved, relative, staged === true)
-      })
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFile(repo, file, (relative) =>
+        operations.getDiff(repo, relative, staged === true)
+      )
     ),
-  stashList: ({ repoPath }) =>
-    resolveRepo(repoPath).pipe(Effect.flatMap((resolved) => operations.stashList(resolved))),
+  stashList: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.stashList(repo)),
   streamLog: ({ repoPath, skip, maxCount, streamId }) =>
     Stream.unwrap(
       resolveRepo(repoPath).pipe(
