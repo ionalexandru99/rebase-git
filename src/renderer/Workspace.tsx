@@ -16,7 +16,7 @@ import { useStashes } from './hooks/git/useStashes'
 import { formatRelativeTime } from './lib/format'
 import { type RefKind, shortRefName } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
-import { type GitStore, useRepoSession } from './stores/git'
+import { type GitStore, useRefs, useRepoSession } from './stores/git'
 import { WorkspaceProvider } from './WorkspaceContext'
 import { WorkspaceViewRenderer } from './WorkspaceViews'
 
@@ -41,21 +41,22 @@ const EMPTY_BRANCH_NAMES: string[] = []
 
 export function Workspace(props: WorkspaceProps) {
   const git = props.git
+  const refs = useRefs()
   const { repoPath } = useRepoSession()
   const repoName = repoDisplayName(repoPath)
-  const branch = git.state.currentBranch || 'no-branch'
+  const branch = refs.currentBranch || 'no-branch'
   const modifiedCount = git.state.status?.modified.length ?? 0
   const stagedCount = git.state.status?.staged.length ?? 0
   const untrackedCount = git.state.status?.not_added.length ?? 0
   const totalChanges = modifiedCount + stagedCount + untrackedCount
   const [activeView, setActiveView] = useState<WorkspaceView>('history')
 
-  const sidebarTags = git.state.branches?.tags ?? EMPTY_BRANCH_NAMES
-  const sidebarTracking = git.state.branches?.tracking
-  const localBranches = git.state.branches?.all ?? EMPTY_BRANCH_NAMES
-  const remoteBranches = git.state.branches?.remotes ?? EMPTY_BRANCH_NAMES
+  const sidebarTags = refs.branches?.tags ?? EMPTY_BRANCH_NAMES
+  const sidebarTracking = refs.branches?.tracking
+  const localBranches = refs.branches?.all ?? EMPTY_BRANCH_NAMES
+  const remoteBranches = refs.branches?.remotes ?? EMPTY_BRANCH_NAMES
 
-  const timeline = useTimelineVisibility(git)
+  const timeline = useTimelineVisibility()
 
   const handleCheckoutRef = useCheckoutRef(git)
 
@@ -164,7 +165,7 @@ export function Workspace(props: WorkspaceProps) {
         return
       case 'reset-hard':
         confirm({
-          title: `Reset ${git.state.currentBranch || 'branch'} to ${sha.slice(0, 7)}?`,
+          title: `Reset ${refs.currentBranch || 'branch'} to ${sha.slice(0, 7)}?`,
           message: 'A hard reset discards all uncommitted changes in the working tree.',
           confirmText: 'Reset --hard',
           destructive: true,
@@ -203,7 +204,7 @@ export function Workspace(props: WorkspaceProps) {
         remoteBranches,
         tags: sidebarTags,
         stashes: stashList.stashes,
-        branchesLoading: git.state.branchesLoading,
+        branchesLoading: refs.branchesLoading,
         tracking: sidebarTracking,
         visibleTimelineRefs: timeline.visibleRefs,
         onToggleTimelineVisibility: timeline.toggle,
@@ -212,11 +213,11 @@ export function Workspace(props: WorkspaceProps) {
         onStashAction: handleStashAction
       }}
       workspaceContext={
-        git.state.lastFetchedAt
-          ? `Fetched ${formatRelativeTime(git.state.lastFetchedAt, Date.now())}`
+        refs.lastFetchedAt
+          ? `Fetched ${formatRelativeTime(refs.lastFetchedAt, Date.now())}`
           : undefined
       }
-      onFetch={git.fetchNow}
+      onFetch={refs.fetchNow}
       onPull={git.pullNow}
       onPush={git.pushNow}
       pulling={git.state.pulling}
@@ -229,8 +230,8 @@ export function Workspace(props: WorkspaceProps) {
             activeView={activeView}
             git={git}
             repoPath={repoPath}
-            remotes={git.state.remotes}
-            currentBranch={git.state.currentBranch}
+            remotes={refs.remotes}
+            currentBranch={refs.currentBranch}
             remoteBranches={remoteBranches}
             visibleBranchRefs={timeline.visibleRefs}
             filteredCommits={timeline.filteredCommits}

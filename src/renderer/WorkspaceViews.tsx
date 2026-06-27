@@ -202,7 +202,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
       <CommitPanel
         onCommit={git.commit}
         loading={git.loading}
-        branch={git.state.currentBranch || 'no-branch'}
+        branch={props.currentBranch || 'no-branch'}
         stagedCount={stagedCount}
       />
     </div>
