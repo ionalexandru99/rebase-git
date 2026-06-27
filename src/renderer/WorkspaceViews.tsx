@@ -11,7 +11,7 @@ import { useDraggableWidth } from './hooks/useDraggableWidth'
 import type { CommitAction, FileAction } from './lib/git-actions'
 import type { RefKind } from './lib/ref-tree'
 import { buildUnifiedFileRows } from './lib/status-file-rows'
-import type { GitStore } from './stores/git'
+import { type GitStore, useCommitHistory } from './stores/git'
 import type { GitLogEntry } from './types'
 import { useWorkspaceContext } from './WorkspaceContext'
 
@@ -37,6 +37,8 @@ const saveFilesPanelWidth = (state: { width: number }) => {
 interface WorkspaceViewProps {
   git: GitStore
   repoPath: string | null
+  remotes: Record<string, string>
+  currentBranch: string
   remoteBranches: string[]
   visibleBranchRefs: ReadonlySet<string>
   filteredCommits: GitLogEntry[]
@@ -222,19 +224,19 @@ function CleanWorkingTree() {
 }
 
 function HistoryView(props: WorkspaceViewProps) {
-  const git = props.git
+  const history = useCommitHistory()
 
   return props.tabActive ? (
     <div className="min-h-0 flex-1 overflow-hidden">
       <HistoryPanel
-        log={git.state.log}
-        loading={git.state.logLoading}
-        loadingMore={git.state.logLoadingMore}
-        hasMore={git.state.logHasMore}
-        onLoadMore={() => void git.loadMoreHistory()}
+        log={history.log}
+        loading={history.logLoading}
+        loadingMore={history.logLoadingMore}
+        hasMore={history.logHasMore}
+        onLoadMore={() => void history.loadMoreHistory()}
         repoPath={props.repoPath}
-        remotes={git.state.remotes}
-        currentBranch={git.state.currentBranch}
+        remotes={props.remotes}
+        currentBranch={props.currentBranch}
         remoteBranches={props.remoteBranches}
         visibleBranchRefs={props.visibleBranchRefs}
         filteredCommits={props.filteredCommits}
