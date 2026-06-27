@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CommitGraphCanvas } from '@/components/HistoryPanel/CommitGraphCanvas'
+import { LANE_PALETTE } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
 import type { GitLogEntry } from '@/types'
 
@@ -21,6 +22,15 @@ function row(hash: string, lane = 0): RowLayout {
     commitLane: lane,
     incoming: [hash],
     outgoing: []
+  }
+}
+
+function wideRow(hash: string): RowLayout {
+  return {
+    commit: entry(hash),
+    commitLane: 0,
+    incoming: [hash],
+    outgoing: Array.from({ length: 8 }, (_, lane) => `${hash}-out-${lane}`)
   }
 }
 
@@ -94,6 +104,85 @@ describe('CommitGraphCanvas', () => {
     })
 
     unmount()
+  })
+
+  it('batches edges per frame so stroke count stays within the palette across many rows', async () => {
+    const scrollContainer = document.createElement('div')
+    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
+    const rows = Array.from({ length: 20 }, (_, index) => wideRow(`c${index}`))
+
+    render(
+      <CommitGraphCanvas
+        rows={rows}
+        scrollContainer={scrollContainer}
+        viewportHeight={2000}
+        visibleSet={null}
+        railWidth={200}
+        themeNonce={0}
+        startIndex={0}
+        endIndex={rows.length}
+        graphLayoutEndIndex={rows.length}
+      />
+    )
+
+    await vi.waitFor(() => {
+      expect(fillCount).toBeGreaterThan(0)
+    })
+
+    expect(strokeCount).toBeLessThanOrEqual(LANE_PALETTE.length)
+  })
+
+  it('does not resolve CSS variables on every scroll frame, but refreshes them on theme change', async () => {
+    const scrollContainer = document.createElement('div')
+    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
+    const getComputedStyleSpy = vi.spyOn(window, 'getComputedStyle')
+
+    const { rerender } = render(
+      <CommitGraphCanvas
+        rows={[row('a'), row('b')]}
+        scrollContainer={scrollContainer}
+        viewportHeight={400}
+        visibleSet={null}
+        railWidth={40}
+        themeNonce={0}
+        startIndex={0}
+        endIndex={2}
+        graphLayoutEndIndex={2}
+      />
+    )
+
+    await vi.waitFor(() => {
+      expect(fillCount).toBeGreaterThan(0)
+    })
+
+    const afterSetup = getComputedStyleSpy.mock.calls.length
+
+    for (let scrolls = 0; scrolls < 5; scrolls++) {
+      scrollContainer.dispatchEvent(new Event('scroll'))
+    }
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+
+    expect(getComputedStyleSpy.mock.calls.length).toBe(afterSetup)
+
+    rerender(
+      <CommitGraphCanvas
+        rows={[row('a'), row('b')]}
+        scrollContainer={scrollContainer}
+        viewportHeight={400}
+        visibleSet={null}
+        railWidth={40}
+        themeNonce={1}
+        startIndex={0}
+        endIndex={2}
+        graphLayoutEndIndex={2}
+      />
+    )
+
+    await vi.waitFor(() => {
+      expect(getComputedStyleSpy.mock.calls.length).toBeGreaterThan(afterSetup)
+    })
   })
 
   it('skips rows beyond graphLayoutEndIndex', async () => {

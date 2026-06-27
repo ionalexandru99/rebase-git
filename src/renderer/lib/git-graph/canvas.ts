@@ -70,22 +70,64 @@ export function readCssVar(name: string, fallback: string): string {
   return value || fallback
 }
 
-export function drawGraphRow(
-  ctx: CanvasRenderingContext2D,
+interface EdgeSegment {
+  startX: number
+  startY: number
+  control: readonly [number, number, number, number] | null
+  endX: number
+  endY: number
+}
+
+interface EdgeGroup {
+  strokeStyle: string
+  alpha: number
+  segments: EdgeSegment[]
+}
+
+export type EdgeBatch = Map<string, EdgeGroup>
+
+export function createEdgeBatch(): EdgeBatch {
+  return new Map()
+}
+
+function lineSegment(startX: number, startY: number, endX: number, endY: number): EdgeSegment {
+  return { startX, startY, control: null, endX, endY }
+}
+
+function bezierSegment(
+  startX: number,
+  startY: number,
+  controlX1: number,
+  controlY1: number,
+  controlX2: number,
+  controlY2: number,
+  endX: number,
+  endY: number
+): EdgeSegment {
+  return { startX, startY, control: [controlX1, controlY1, controlX2, controlY2], endX, endY }
+}
+
+function addEdge(batch: EdgeBatch, strokeStyle: string, alpha: number, segment: EdgeSegment): void {
+  const key = `${alpha}|${strokeStyle}`
+  let group = batch.get(key)
+  if (!group) {
+    group = { strokeStyle, alpha, segments: [] }
+    batch.set(key, group)
+  }
+  group.segments.push(segment)
+}
+
+export function collectRowEdges(
+  batch: EdgeBatch,
   row: RowLayout,
   yTop: number,
   isFirst: boolean,
-  dim: boolean,
-  bgColor: string,
-  mergeColor: string
+  dim: boolean
 ): void {
   const rowMid = yTop + ROW_H / 2
   const rowBot = yTop + ROW_H
   const dotX = laneX(row.commitLane)
   const edgeAlpha = dim ? 0.2 : 0.85
-
-  ctx.lineWidth = 2
-  ctx.globalAlpha = edgeAlpha
 
   if (!isFirst) {
     for (let j = 0; j < row.incoming.length; j++) {
@@ -93,24 +135,29 @@ export function drawGraphRow(
       if (hash === null) {
         continue
       }
-      ctx.strokeStyle = laneColor(j)
+      const color = laneColor(j)
       if (hash === row.commit.hash) {
         if (j === row.commitLane) {
-          ctx.beginPath()
-          ctx.moveTo(laneX(j), yTop)
-          ctx.lineTo(dotX, rowMid)
-          ctx.stroke()
+          addEdge(batch, color, edgeAlpha, lineSegment(laneX(j), yTop, dotX, rowMid))
         } else {
-          ctx.beginPath()
-          ctx.moveTo(laneX(j), yTop)
-          ctx.bezierCurveTo(laneX(j), rowMid - ROW_H / 4, dotX, rowMid - ROW_H / 4, dotX, rowMid)
-          ctx.stroke()
+          addEdge(
+            batch,
+            color,
+            edgeAlpha,
+            bezierSegment(
+              laneX(j),
+              yTop,
+              laneX(j),
+              rowMid - ROW_H / 4,
+              dotX,
+              rowMid - ROW_H / 4,
+              dotX,
+              rowMid
+            )
+          )
         }
       } else {
-        ctx.beginPath()
-        ctx.moveTo(laneX(j), yTop)
-        ctx.lineTo(laneX(j), rowMid)
-        ctx.stroke()
+        addEdge(batch, color, edgeAlpha, lineSegment(laneX(j), yTop, laneX(j), rowMid))
       }
     }
   }
@@ -120,26 +167,31 @@ export function drawGraphRow(
     if (hash === null) {
       continue
     }
-    ctx.strokeStyle = laneColor(j)
+    const color = laneColor(j)
     const passThrough = row.incoming[j] === hash
     if (passThrough) {
-      ctx.beginPath()
-      ctx.moveTo(laneX(j), rowMid)
-      ctx.lineTo(laneX(j), rowBot)
-      ctx.stroke()
+      addEdge(batch, color, edgeAlpha, lineSegment(laneX(j), rowMid, laneX(j), rowBot))
       continue
     }
     const endX = laneX(j)
     if (dotX === endX) {
-      ctx.beginPath()
-      ctx.moveTo(endX, rowMid)
-      ctx.lineTo(endX, rowBot)
-      ctx.stroke()
+      addEdge(batch, color, edgeAlpha, lineSegment(endX, rowMid, endX, rowBot))
     } else {
-      ctx.beginPath()
-      ctx.moveTo(dotX, rowMid)
-      ctx.bezierCurveTo(dotX, rowMid + ROW_H / 4, endX, rowMid + ROW_H / 4, endX, rowBot)
-      ctx.stroke()
+      addEdge(
+        batch,
+        color,
+        edgeAlpha,
+        bezierSegment(
+          dotX,
+          rowMid,
+          dotX,
+          rowMid + ROW_H / 4,
+          endX,
+          rowMid + ROW_H / 4,
+          endX,
+          rowBot
+        )
+      )
     }
   }
 
@@ -152,13 +204,53 @@ export function drawGraphRow(
       continue
     }
     const endX = laneX(j)
-    ctx.strokeStyle = laneColor(j)
+    addEdge(
+      batch,
+      laneColor(j),
+      edgeAlpha,
+      bezierSegment(dotX, rowMid, dotX, rowMid + ROW_H / 4, endX, rowMid + ROW_H / 4, endX, rowBot)
+    )
+  }
+}
+
+export function strokeEdgeBatch(ctx: CanvasRenderingContext2D, batch: EdgeBatch): void {
+  if (batch.size === 0) {
+    return
+  }
+  ctx.lineWidth = 2
+  for (const group of batch.values()) {
+    ctx.globalAlpha = group.alpha
+    ctx.strokeStyle = group.strokeStyle
     ctx.beginPath()
-    ctx.moveTo(dotX, rowMid)
-    ctx.bezierCurveTo(dotX, rowMid + ROW_H / 4, endX, rowMid + ROW_H / 4, endX, rowBot)
+    for (const segment of group.segments) {
+      ctx.moveTo(segment.startX, segment.startY)
+      if (segment.control) {
+        ctx.bezierCurveTo(
+          segment.control[0],
+          segment.control[1],
+          segment.control[2],
+          segment.control[3],
+          segment.endX,
+          segment.endY
+        )
+      } else {
+        ctx.lineTo(segment.endX, segment.endY)
+      }
+    }
     ctx.stroke()
   }
+}
 
+export function drawCommitDot(
+  ctx: CanvasRenderingContext2D,
+  row: RowLayout,
+  yTop: number,
+  dim: boolean,
+  bgColor: string,
+  mergeColor: string
+): void {
+  const rowMid = yTop + ROW_H / 2
+  const dotX = laneX(row.commitLane)
   const isMerge = row.commit.parents.length >= 2
   if (isMerge) {
     ctx.globalAlpha = dim ? 0.25 : 0.95
@@ -176,4 +268,19 @@ export function drawGraphRow(
     ctx.fillStyle = laneColor(row.commitLane)
     ctx.fill()
   }
+}
+
+export function drawGraphRow(
+  ctx: CanvasRenderingContext2D,
+  row: RowLayout,
+  yTop: number,
+  isFirst: boolean,
+  dim: boolean,
+  bgColor: string,
+  mergeColor: string
+): void {
+  const batch = createEdgeBatch()
+  collectRowEdges(batch, row, yTop, isFirst, dim)
+  strokeEdgeBatch(ctx, batch)
+  drawCommitDot(ctx, row, yTop, dim, bgColor, mergeColor)
 }

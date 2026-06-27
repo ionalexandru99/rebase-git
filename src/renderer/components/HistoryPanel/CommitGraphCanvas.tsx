@@ -1,5 +1,12 @@
 import { useEffect, useRef } from 'react'
-import { drawGraphRow, ROW_H, readCssVar } from '@/lib/git-graph/canvas'
+import {
+  collectRowEdges,
+  createEdgeBatch,
+  drawCommitDot,
+  ROW_H,
+  readCssVar,
+  strokeEdgeBatch
+} from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
 
 interface CommitGraphCanvasProps {
@@ -20,7 +27,10 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
 
   useEffect(() => {
     const scroller = props.scrollContainer
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
     void props.themeNonce
+    const bgColor = readCssVar('--color-background', '#ffffff')
+    const mergeColor = readCssVar('--color-chart-3', '#f59e0b')
     const drawCanvas = () => {
       const canvas = canvasRef.current
       if (!canvas || !scroller) {
@@ -38,7 +48,6 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       const liveScrollTop = scroller.scrollTop
       const graphLayoutEndIndex = props.graphLayoutEndIndex
 
-      const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
       const bitmapW = Math.max(1, Math.round(railWidth * dpr))
       const bitmapH = Math.max(1, Math.round(viewportHeight * dpr))
       if (canvas.width !== bitmapW) {
@@ -52,12 +61,11 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       ctx.clearRect(0, 0, railWidth, viewportHeight)
       ctx.lineCap = 'round'
 
-      const bgColor = readCssVar('--color-background', '#ffffff')
-      const mergeColor = readCssVar('--color-chart-3', '#f59e0b')
-
       const start = props.startIndex
       const end = props.endIndex
 
+      const edgeBatch = createEdgeBatch()
+      const dots: { row: RowLayout; yTop: number; dim: boolean }[] = []
       for (let index = start; index < end; index++) {
         if (index >= graphLayoutEndIndex) {
           continue
@@ -71,7 +79,13 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
           continue
         }
         const dim = !!(visible && !visible.has(row.commit.hash))
-        drawGraphRow(ctx, row, yTop, index === 0, dim, bgColor, mergeColor)
+        collectRowEdges(edgeBatch, row, yTop, index === 0, dim)
+        dots.push({ row, yTop, dim })
+      }
+
+      strokeEdgeBatch(ctx, edgeBatch)
+      for (const dot of dots) {
+        drawCommitDot(ctx, dot.row, dot.yTop, dot.dim, bgColor, mergeColor)
       }
     }
 
