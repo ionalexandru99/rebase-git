@@ -27,3 +27,11 @@ _Avoid_: folded/unfolded
 **Diverged**:
 A branch and its upstream have each gained commits the other lacks — both tips sit ahead of their common ancestor. A Diverged branch cannot be published by a normal (fast-forward) push; republishing it means rewriting the remote tip. This is the state an amend or rebase produces.
 _Avoid_: behind, out-of-date (those name the one-sided case where only the remote moved)
+
+**Amend**:
+Rewriting HEAD in place — producing a new commit on HEAD's parent that replaces HEAD's message and/or tree. Yields a new commit (new SHA) and leaves the branch [[Diverged]] if HEAD was already published. In Rebase, Amend is **deferred**: ticking the amend affordance mutates nothing; the repository is rewritten only when the user commits.
+_Avoid_: fixup, squash (those fold one commit into another; Amend rewrites a single commit, HEAD)
+
+**Reword**:
+The message-only case of [[Amend]] — nothing staged, HEAD's tree unchanged, only its message replaced. Not a separate operation; the same Amend with an empty stage.
+_Avoid_: edit, rename
