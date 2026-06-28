@@ -86,7 +86,7 @@ function DropdownMenuContent(props: HTMLAttributes<HTMLDivElement> & { gutter?: 
         data-slot="dropdown-menu-content"
         role="menu"
         className={cn(
-          'absolute right-0 top-[calc(100%+4px)] z-50 max-h-[60vh] min-w-[12rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
+          'scroll-host absolute right-0 top-[calc(100%+4px)] z-50 max-h-[60vh] min-w-[12rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
           className
         )}
         {...rest}

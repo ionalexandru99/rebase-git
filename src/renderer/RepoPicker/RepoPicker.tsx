@@ -50,7 +50,7 @@ export function RepoPicker(props: RepoPickerProps) {
   }
 
   return hasAnyWorkspace ? (
-    <div className="m-1.5 min-h-0 flex-1 overflow-auto rounded-[var(--r-sm)] border bg-card shadow-[var(--shadow)]">
+    <div className="scroll-host m-1.5 min-h-0 flex-1 overflow-auto rounded-[var(--r-sm)] border bg-card shadow-[var(--shadow)]">
       <div className="mx-auto w-full max-w-3xl px-8 pb-10 pt-14">
         <div className="mb-6">
           <h2 className="mb-1 text-[22px] font-bold tracking-[-0.01em]">Open a repository</h2>

@@ -163,7 +163,7 @@ function ContextMenuContent(props: HTMLAttributes<HTMLDivElement>) {
       tabIndex={-1}
       style={{ position: 'fixed', left: `${placement.x}px`, top: `${placement.y}px`, ...style }}
       className={cn(
-        'z-50 min-w-[10rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
+        'scroll-host z-50 min-w-[10rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
         className
       )}
       {...rest}

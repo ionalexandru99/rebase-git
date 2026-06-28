@@ -64,7 +64,7 @@ export function VirtualFileList(props: VirtualFileListProps) {
     <div
       ref={setScrollRef}
       onScroll={onScroll}
-      className="min-h-0 flex-1 overflow-auto p-1.5"
+      className="scroll-host min-h-0 flex-1 overflow-auto p-1.5"
       data-testid="status-file-scroll"
     >
       <ul className="relative m-0 list-none p-0" style={{ height: `${totalHeight}px` }}>

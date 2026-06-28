@@ -97,7 +97,7 @@ export function LeafRow(props: LeafRowProps) {
     <ContextMenu>
       <div
         className={cn(
-          'group/branch-row absolute inset-x-0 flex items-center rounded-[var(--r-sm)] pr-1 transition-colors hover:bg-muted hover:text-foreground',
+          'group/branch-row absolute inset-x-0 flex items-center rounded-[var(--r-sm)] pr-1 hover:bg-muted hover:text-foreground',
           props.row.isCurrent ? 'text-foreground' : 'text-muted-foreground'
         )}
         style={props.style}

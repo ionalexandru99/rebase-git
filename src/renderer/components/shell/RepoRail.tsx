@@ -31,7 +31,7 @@ export function RepoRail(props: RepoRailProps) {
     <nav aria-label="Open repositories" className="drag-region flex min-h-0 flex-col bg-chrome">
       <div
         role="tablist"
-        className="no-drag flex min-h-0 flex-1 flex-col items-center gap-[3px] overflow-y-auto overflow-x-hidden px-1 py-3"
+        className="scroll-host no-drag flex min-h-0 flex-1 flex-col items-center gap-[3px] overflow-y-auto overflow-x-hidden px-1 py-3"
       >
         {repoTabs.map((tab) => (
           <RepoTabButton

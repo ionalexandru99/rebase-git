@@ -23,7 +23,7 @@ export function StashRow(props: StashRowProps) {
   return (
     <ContextMenu>
       <div
-        className="group/stash-row absolute inset-x-0 flex items-center rounded-[var(--r-sm)] pr-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="group/stash-row absolute inset-x-0 flex items-center rounded-[var(--r-sm)] pr-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         style={props.style}
         data-testid="ref-tree-stash-row"
       >

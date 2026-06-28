@@ -210,7 +210,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
       <div
         ref={attachScroll}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+        className="scroll-host min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
         data-testid="history-scroll"
       >
         {props.log && commits.length > 0 ? (

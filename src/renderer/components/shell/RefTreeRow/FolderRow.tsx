@@ -14,7 +14,7 @@ export function FolderRow(props: FolderRowProps) {
     <button
       type="button"
       onClick={() => props.onToggleCollapsed(folderKey(props.row.refKind, props.row.fullPath))}
-      className="absolute inset-x-0 flex items-center gap-1.5 rounded-[var(--r-sm)] pr-2 text-sm text-foreground transition-colors hover:bg-muted"
+      className="absolute inset-x-0 flex items-center gap-1.5 rounded-[var(--r-sm)] pr-2 text-sm text-foreground hover:bg-muted"
       style={{ ...props.style, paddingLeft: `${padLeft}px` }}
       title={props.row.fullPath}
     >

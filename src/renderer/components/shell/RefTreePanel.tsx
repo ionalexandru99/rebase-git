@@ -145,7 +145,7 @@ export function RefTreePanel(props: RefTreePanelProps) {
     <div
       ref={setScrollRef}
       onScroll={onScroll}
-      className="min-h-0 flex-1 overflow-auto px-2 pb-2 pt-3 [scrollbar-gutter:stable]"
+      className="scroll-host min-h-0 flex-1 overflow-auto px-2 pb-2 pt-3 [scrollbar-gutter:stable]"
       data-testid="ref-tree-scroll"
     >
       <div className="relative" style={{ height: `${totalHeight}px` }}>
