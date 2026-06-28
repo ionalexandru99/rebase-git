@@ -1,13 +1,21 @@
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import {
   collectRowEdges,
   createEdgeBatch,
   drawCommitDot,
+  drawMergeGlyph,
+  laneColor,
+  laneX,
   ROW_H,
   readCssVar,
   strokeEdgeBatch
 } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
+import type { GitLogEntry } from '@/types'
+import { mergeGlyphState } from './selectors'
+
+const EMPTY_SET: ReadonlySet<string> = new Set()
+const NO_COMMITS: GitLogEntry[] = []
 
 interface CommitGraphCanvasProps {
   rows: RowLayout[]
@@ -19,18 +27,20 @@ interface CommitGraphCanvasProps {
   startIndex: number
   endIndex: number
   graphLayoutEndIndex: number
+  allCommits?: GitLogEntry[]
+  displayedSet?: ReadonlySet<string>
+  expandedMerges?: ReadonlySet<string>
 }
 
 export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawFrameRef = useRef<number | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scroller = props.scrollContainer
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1
     void props.themeNonce
     const bgColor = readCssVar('--color-background', '#ffffff')
-    const mergeColor = readCssVar('--color-chart-3', '#f59e0b')
     const drawCanvas = () => {
       const canvas = canvasRef.current
       if (!canvas || !scroller) {
@@ -63,6 +73,9 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
 
       const start = props.startIndex
       const end = props.endIndex
+      const allCommits = props.allCommits ?? NO_COMMITS
+      const displayedSet = props.displayedSet ?? EMPTY_SET
+      const expandedMerges = props.expandedMerges ?? EMPTY_SET
 
       const edgeBatch = createEdgeBatch()
       const dots: { row: RowLayout; yTop: number; dim: boolean }[] = []
@@ -85,7 +98,21 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
 
       strokeEdgeBatch(ctx, edgeBatch)
       for (const dot of dots) {
-        drawCommitDot(ctx, dot.row, dot.yTop, dot.dim, bgColor, mergeColor)
+        drawCommitDot(ctx, dot.row, dot.yTop, dot.dim, bgColor)
+        if (dot.row.commit.parents.length < 2 || allCommits.length === 0) {
+          continue
+        }
+        const glyph = mergeGlyphState(allCommits, dot.row.commit, displayedSet, expandedMerges)
+        if (glyph === 'none') {
+          continue
+        }
+        drawMergeGlyph(
+          ctx,
+          laneX(dot.row.commitLane),
+          dot.yTop + ROW_H / 2,
+          glyph,
+          laneColor(dot.row.commitLane)
+        )
       }
     }
 
@@ -99,7 +126,10 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       })
     }
 
-    scheduleDraw()
+    // Draw synchronously before paint so the dots land in the same frame as the rows they sit on;
+    // a toggle that changes row positions never shows a frame of stale/misaligned dots. Live
+    // scrolling stays on rAF, which only updates scrollTop and never restructures the rows.
+    drawCanvas()
     scroller?.addEventListener('scroll', scheduleDraw, { passive: true })
 
     return () => {
@@ -118,7 +148,10 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     props.startIndex,
     props.endIndex,
     props.graphLayoutEndIndex,
-    props.themeNonce
+    props.themeNonce,
+    props.allCommits,
+    props.displayedSet,
+    props.expandedMerges
   ])
 
   return (
@@ -129,6 +162,7 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     >
       <canvas
         ref={canvasRef}
+        data-testid="commit-graph-canvas"
         className="absolute left-0 top-0"
         style={{ width: `${props.railWidth}px`, height: `${props.viewportHeight}px` }}
       />

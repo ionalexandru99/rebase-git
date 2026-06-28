@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  drawCommitDot,
   drawGraphRow,
+  drawMergeGlyph,
   LANE_PALETTE,
+  laneColor,
   laneX,
   MERGE_DOT_R,
   MERGE_STROKE,
@@ -82,6 +85,42 @@ function collectSubpaths(commands: Array<{ op: string; args: number[] }>): EdgeS
   return subpaths.sort()
 }
 
+function strokeStyleRecorder() {
+  const strokeStyles: string[] = []
+  const ctx = {
+    globalAlpha: 1,
+    strokeStyle: '',
+    fillStyle: '',
+    set lineWidth(_value: number) {},
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    bezierCurveTo: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(() => {
+      strokeStyles.push((ctx as { strokeStyle: string }).strokeStyle)
+    })
+  }
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, strokeStyles }
+}
+
+describe('drawCommitDot', () => {
+  it('strokes a merge ring in the lane color of the branch', () => {
+    const { ctx, strokeStyles } = strokeStyleRecorder()
+    const row: RowLayout = {
+      commit: commit('m', ['p1', 'p2']),
+      commitLane: 2,
+      incoming: ['m'],
+      outgoing: ['p1', 'p2']
+    }
+
+    drawCommitDot(ctx, row, 0, false, '#000000')
+
+    expect(strokeStyles).toContain(laneColor(2))
+  })
+})
+
 describe('drawGraphRow', () => {
   it('draws an edge to each diverging parent of an octopus merge', () => {
     const { ctx, raw } = mockCtx()
@@ -92,7 +131,7 @@ describe('drawGraphRow', () => {
       outgoing: ['p1', 'p2', 'p3']
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000', '#ffffff')
+    drawGraphRow(ctx, row, 0, false, false, '#000000')
 
     // p2 and p3 fan out into freshly opened lanes, each drawn as a bezier from the merge dot.
     expect(raw.bezierCurveTo.mock.calls.length).toBeGreaterThanOrEqual(2)
@@ -107,7 +146,7 @@ describe('drawGraphRow', () => {
       outgoing: ['p1', 'p2']
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000', '#ffffff')
+    drawGraphRow(ctx, row, 0, false, false, '#000000')
 
     expect(arcRadii).toContain(MERGE_DOT_R)
     expect(lineWidths).toContain(MERGE_STROKE)
@@ -123,7 +162,7 @@ describe('drawGraphRow', () => {
       outgoing: wideOutgoing
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000', '#ffffff')
+    drawGraphRow(ctx, row, 0, false, false, '#000000')
 
     expect(raw.stroke.mock.calls.length).toBeLessThanOrEqual(LANE_PALETTE.length)
   })
@@ -141,8 +180,7 @@ describe('drawGraphRow', () => {
       0,
       false,
       false,
-      '#000000',
-      '#ffffff'
+      '#000000'
     )
 
     const sixteenLanes = mockCtx()
@@ -157,8 +195,7 @@ describe('drawGraphRow', () => {
       0,
       false,
       false,
-      '#000000',
-      '#ffffff'
+      '#000000'
     )
 
     expect(sixteenLanes.raw.stroke.mock.calls.length).toBe(eightLanes.raw.stroke.mock.calls.length)
@@ -173,7 +210,7 @@ describe('drawGraphRow', () => {
       outgoing: ['x', 'p1', 'p2']
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000', '#ffffff')
+    drawGraphRow(ctx, row, 0, false, false, '#000000')
 
     const rowMid = ROW_H / 2
     const rowBot = ROW_H
@@ -197,6 +234,20 @@ describe('drawGraphRow', () => {
     expect(collectSubpaths(commands)).toEqual(expected)
   })
 
+  it('draws a plus glyph (horizontal + vertical arm) for a collapsed merge', () => {
+    const { ctx, commands } = recordingCtx()
+    drawMergeGlyph(ctx, 12, 24, 'collapsed', '#ffffff')
+    const armCount = commands.filter((command) => command.op === 'lineTo').length
+    expect(armCount).toBe(2)
+  })
+
+  it('draws a minus glyph (single horizontal arm) for an expanded merge', () => {
+    const { ctx, commands } = recordingCtx()
+    drawMergeGlyph(ctx, 12, 24, 'expanded', '#ffffff')
+    const armCount = commands.filter((command) => command.op === 'lineTo').length
+    expect(armCount).toBe(1)
+  })
+
   it('renders a non-merge commit as a solid dot, not a merge ring', () => {
     const { ctx, arcRadii } = mockCtx()
     const row: RowLayout = {
@@ -206,7 +257,7 @@ describe('drawGraphRow', () => {
       outgoing: ['p']
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000', '#ffffff')
+    drawGraphRow(ctx, row, 0, false, false, '#000000')
 
     expect(arcRadii).not.toContain(MERGE_DOT_R)
   })

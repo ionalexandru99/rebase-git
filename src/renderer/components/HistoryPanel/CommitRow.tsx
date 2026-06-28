@@ -2,7 +2,7 @@ import { GitMergeIcon } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { formatCommitDate, initials } from '@/lib/format'
 import type { CommitAction } from '@/lib/git-actions'
-import { computeRowRailWidth, laneColor, ROW_H } from '@/lib/git-graph/canvas'
+import { computeRowRailWidth, laneColor, laneX, ROW_H } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,7 @@ import {
   ContextMenuTriggerArea
 } from '../ui/context-menu'
 import { RefBadge } from './RefBadge'
+import type { MergeGlyph } from './selectors'
 
 interface CommitRowProps {
   row: RowLayout
@@ -23,8 +24,12 @@ interface CommitRowProps {
   gridTail: string
   remotes: Record<string, string>
   remoteNames: Set<string>
+  mergeGlyph?: MergeGlyph
+  onToggleExpand?: () => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
 }
+
+const MERGE_TOGGLE_HIT = 18
 
 // The graph rail is aria-hidden canvas, so the only topology a screen reader gets is this row hint.
 export function commitTopologyLabel(parentCount: number, offBranch: boolean): string {
@@ -48,6 +53,8 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
   const rowOpacity = props.dim ? 0.35 : props.offBranch ? 0.6 : 1
   const subjectClass = props.offBranch ? 'text-muted-foreground' : 'text-foreground'
   const railWidth = computeRowRailWidth(props.row)
+  const glyph = props.mergeGlyph
+  const expandable = glyph === 'collapsed' || glyph === 'expanded'
   const act = (action: CommitAction) => props.onCommitAction?.(action, commit.hash, commit.message)
 
   return (
@@ -62,6 +69,27 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
           contain: 'layout style'
         }}
       >
+        {expandable ? (
+          <button
+            type="button"
+            aria-expanded={glyph === 'expanded'}
+            aria-label={
+              glyph === 'expanded' ? 'Collapse merge side branch' : 'Expand merge side branch'
+            }
+            onClick={(event) => {
+              event.stopPropagation()
+              props.onToggleExpand?.()
+            }}
+            className="absolute z-20 -translate-y-1/2 rounded-full bg-transparent"
+            style={{
+              left: `${laneX(props.row.commitLane) - MERGE_TOGGLE_HIT / 2}px`,
+              top: '50%',
+              width: `${MERGE_TOGGLE_HIT}px`,
+              height: `${MERGE_TOGGLE_HIT}px`
+            }}
+          />
+        ) : null}
+
         <span
           className="absolute inset-y-0 right-0 flex items-center gap-1 overflow-hidden bg-card pr-2 text-sm group-hover/row:bg-muted"
           style={{ left: `${railWidth}px` }}

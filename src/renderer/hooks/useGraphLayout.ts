@@ -1,13 +1,27 @@
 import { GRAPH_LAYOUT_DEBOUNCE_MS } from '@shared/graph-config'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { type LayoutResult, layoutCommits } from '@/lib/git-graph/layout'
 import type { GitLogEntry } from '@/types'
+
+// A pure tail-append (streaming more history) shares the previous commits as a prefix; anything else
+// — a collapse/expand toggle or a ref filter change — rewrites the middle and must relayout at once
+// instead of riding the streaming debounce, or the canvas paints a stale/mismatched frame.
+function isTailAppend(previous: GitLogEntry[] | undefined, next: GitLogEntry[]): boolean {
+  if (!previous || previous.length === 0 || next.length < previous.length) {
+    return false
+  }
+  return (
+    previous[0]?.hash === next[0]?.hash &&
+    previous[previous.length - 1]?.hash === next[previous.length - 1]?.hash
+  )
+}
 
 interface UseGraphLayoutOptions {
   commits: GitLogEntry[]
   loading: boolean
   enabled: boolean
   debounceMs?: number
+  isHiddenParent?: (hash: string) => boolean
 }
 
 interface GraphLayoutState {
@@ -38,6 +52,8 @@ export function useGraphLayout(options: UseGraphLayoutOptions) {
   const stateRef = useRef(state)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const layoutedCommits = useRef<GitLogEntry[] | null>(null)
+  const isHiddenParentRef = useRef(options.isHiddenParent)
+  isHiddenParentRef.current = options.isHiddenParent
   stateRef.current = state
 
   const setState = useCallback(
@@ -73,7 +89,11 @@ export function useGraphLayout(options: UseGraphLayoutOptions) {
         commits.length > prevCommits.length &&
         prevCommits.every((commit, index) => commit.hash === commits[index]?.hash)
 
-      const result = layoutCommits(commits, extendable ? (snapshot.layout ?? undefined) : undefined)
+      const result = layoutCommits(
+        commits,
+        extendable ? (snapshot.layout ?? undefined) : undefined,
+        { isHiddenParent: isHiddenParentRef.current }
+      )
       setState({
         layout: result,
         layoutPending: false,
@@ -113,7 +133,7 @@ export function useGraphLayout(options: UseGraphLayoutOptions) {
     [debounceMs, runLayout, setState]
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!options.enabled) {
       return
     }
@@ -122,8 +142,10 @@ export function useGraphLayout(options: UseGraphLayoutOptions) {
       return
     }
     const loading = options.loading
-    const needsInitialLayout = commits.length > 0 && stateRef.current.layout === null
-    scheduleLayout(commits, !loading || needsInitialLayout)
+    const layout = stateRef.current.layout
+    const needsInitialLayout = commits.length > 0 && layout === null
+    const immediate = !loading || needsInitialLayout || !isTailAppend(layout?.commits, commits)
+    scheduleLayout(commits, immediate)
   }, [options.commits, options.enabled, options.loading, scheduleLayout])
 
   useEffect(() => {
@@ -157,8 +179,9 @@ export function buildDisplayRows(
 
   const rows = []
   for (let index = 0; index < commits.length; index++) {
-    if (index < laidOutThroughIndex && layout.rows[index]) {
-      rows.push(layout.rows[index])
+    const laidOut = index < laidOutThroughIndex ? layout.rows[index] : undefined
+    if (laidOut && laidOut.commit.hash === commits[index].hash) {
+      rows.push(laidOut)
       continue
     }
     rows.push({

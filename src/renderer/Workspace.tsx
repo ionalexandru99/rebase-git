@@ -234,6 +234,8 @@ export function Workspace(props: WorkspaceProps) {
             remoteBranches={remoteBranches}
             visibleBranchRefs={timeline.visibleRefs}
             filteredCommits={timeline.filteredCommits}
+            expandedMerges={timeline.expandedMerges}
+            onToggleMergeExpansion={timeline.toggleMergeExpansion}
             onToggleTimelineVisibility={timeline.toggle}
             onCommitAction={handleCommitAction}
             tabActive={props.tabActive ?? true}

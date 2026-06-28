@@ -2,6 +2,21 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createFixtureRepo, expect, fileRowCheckbox, gitIn, openLocalChanges, test } from './fixtures'
 
+function createMergeRepo(): string {
+  const repo = createFixtureRepo()
+  const git = gitIn(repo)
+  git(['checkout', '-b', 'feature', 'main'])
+  fs.writeFileSync(path.join(repo, 'feature.txt'), 'feature\n')
+  git(['add', '.'])
+  git(['commit', '-m', 'feature work'])
+  git(['checkout', 'main'])
+  fs.writeFileSync(path.join(repo, 'main.txt'), 'main\n')
+  git(['add', '.'])
+  git(['commit', '-m', 'main work'])
+  git(['merge', '--no-ff', '--no-edit', '-m', 'merge feature branch', 'feature'])
+  return repo
+}
+
 function createWideGraphRepo(branchCount: number, fillerCount: number): string {
   const repo = createFixtureRepo()
   const git = gitIn(repo)
@@ -42,6 +57,40 @@ test('resets the branch to an earlier commit via the history context menu', asyn
 
   await openLocalChanges(page)
   await expect(fileRowCheckbox(page, 'a.txt')).toBeChecked({ timeout: 10_000 })
+})
+
+test('collapses a merge by default and expands/collapses its side branch from the merge dot', async ({
+  harness
+}) => {
+  const repo = createMergeRepo()
+  const page = await harness.openRepo(repo)
+
+  const sideRow = page.getByTestId('commit-row').filter({ hasText: 'feature work' })
+  await expect(page.getByText('merge feature branch')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('main work')).toBeVisible()
+  await expect(sideRow).toHaveCount(0)
+
+  const canvas = page.getByTestId('commit-graph-canvas')
+  const baseBox = await canvas.boundingBox()
+  if (!baseBox) {
+    throw new Error('expected a bounding box for the graph canvas')
+  }
+
+  const expandControl = page.getByRole('button', { name: 'Expand merge side branch' })
+  await expect(expandControl).toBeVisible()
+  await expandControl.click()
+
+  await expect(sideRow).toBeVisible({ timeout: 10_000 })
+  await expect
+    .poll(async () => (await canvas.boundingBox())?.width ?? 0, { timeout: 10_000 })
+    .toBeGreaterThan(baseBox.width)
+
+  await page.getByRole('button', { name: 'Collapse merge side branch' }).click()
+
+  await expect(sideRow).toHaveCount(0)
+  await expect
+    .poll(async () => Math.round((await canvas.boundingBox())?.width ?? 0), { timeout: 10_000 })
+    .toBe(Math.round(baseBox.width))
 })
 
 test('keeps the Author / SHA / Date columns legible on a wide graph while scrolling', async ({

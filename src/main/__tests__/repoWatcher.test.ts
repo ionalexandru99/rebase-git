@@ -141,10 +141,22 @@ describe('startWatching working-tree detection', () => {
 
   it('emits a workingTree change when a nested file is edited', async () => {
     startWatching(repoDir, fakeWebContents)
-    // give chokidar time to finish its initial scan before mutating
+    // give the watcher time to finish its initial scan before mutating
     await new Promise((resolve) => setTimeout(resolve, 400))
 
     fs.writeFileSync(path.join(repoDir, 'src', 'nested.ts'), 'export const x = 1\n')
+
+    const seen = await waitFor(() => events.some((event) => event.kind === 'workingTree'))
+    expect(seen).toBe(true)
+  })
+
+  it('detects edits inside directories created after the watch starts', async () => {
+    startWatching(repoDir, fakeWebContents)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    const deepDir = path.join(repoDir, 'src', 'feature', 'deep')
+    fs.mkdirSync(deepDir, { recursive: true })
+    fs.writeFileSync(path.join(deepDir, 'new.ts'), 'export const y = 2\n')
 
     const seen = await waitFor(() => events.some((event) => event.kind === 'workingTree'))
     expect(seen).toBe(true)

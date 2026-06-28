@@ -27,6 +27,12 @@ test('merging a non-conflicting branch from the ref tree adds a merge commit to 
 
   await expect(page.getByText(/Merge branch 'feature'/)).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('Merge commit with 2 parents')).toBeVisible({ timeout: 10_000 })
+
+  // The merge collapses its side branch by default, so 'feature work' stays hidden until expanded.
+  await expect(page.getByText('feature work')).toBeHidden()
+  await expect(page.getByText(/3 commits/)).toBeVisible({ timeout: 10_000 })
+
+  await page.getByRole('button', { name: 'Expand merge side branch' }).click()
   await expect(page.getByText('feature work').first()).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText(/4 commits/)).toBeVisible({ timeout: 10_000 })
 })

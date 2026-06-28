@@ -19,6 +19,7 @@ export interface LayoutCommitsOptions {
   maxCommits?: number
   startIndex?: number
   endIndex?: number
+  isHiddenParent?: (hash: string) => boolean
 }
 
 function laneIndexOf(lanes: (string | null)[], hash: string): number {
@@ -51,7 +52,8 @@ function trimTrailingNullLanes(lanes: (string | null)[]): void {
 
 function layoutRow(
   commit: GitLogEntry,
-  lanes: (string | null)[]
+  lanes: (string | null)[],
+  isHiddenParent?: (hash: string) => boolean
 ): { row: Omit<RowLayout, 'commit'>; maxLanes: number } {
   const incoming = [...lanes]
 
@@ -72,6 +74,9 @@ function layoutRow(
 
   for (let parentIdx = 0; parentIdx < commit.parents.length; parentIdx++) {
     const parent = commit.parents[parentIdx]
+    if (isHiddenParent?.(parent)) {
+      continue
+    }
     if (parentLaneIndex(lanes, parent) !== -1) {
       continue
     }
@@ -135,7 +140,7 @@ export function layoutCommits(
 
   for (let idx = startIdx; idx < endIndex; idx++) {
     const commit = cappedCommits[idx]
-    const { row, maxLanes: rowMaxLanes } = layoutRow(commit, lanes)
+    const { row, maxLanes: rowMaxLanes } = layoutRow(commit, lanes, options?.isHiddenParent)
     maxLanes = Math.max(maxLanes, rowMaxLanes)
     rows.push({ commit, ...row })
   }

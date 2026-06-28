@@ -17,6 +17,8 @@ export const DOT_R = ROOT_PX * 0.3125
 // derived from the root font size so the graph scales with zoom instead of using fixed pixels.
 export const MERGE_DOT_R = ROOT_PX * 0.25
 export const MERGE_STROKE = Math.max(1, ROOT_PX * 0.1)
+export const MERGE_GLYPH_ARM = ROOT_PX * 0.2
+export const MERGE_GLYPH_STROKE = Math.max(1, ROOT_PX * 0.09)
 
 import { HISTORY_OVERSCAN } from '@/lib/virtual-config'
 
@@ -246,8 +248,7 @@ export function drawCommitDot(
   row: RowLayout,
   yTop: number,
   dim: boolean,
-  bgColor: string,
-  mergeColor: string
+  bgColor: string
 ): void {
   const rowMid = yTop + ROW_H / 2
   const dotX = laneX(row.commitLane)
@@ -258,7 +259,7 @@ export function drawCommitDot(
     ctx.arc(dotX, rowMid, MERGE_DOT_R, 0, Math.PI * 2)
     ctx.fillStyle = bgColor
     ctx.fill()
-    ctx.strokeStyle = mergeColor
+    ctx.strokeStyle = laneColor(row.commitLane)
     ctx.lineWidth = MERGE_STROKE
     ctx.stroke()
   } else {
@@ -270,17 +271,36 @@ export function drawCommitDot(
   }
 }
 
+export function drawMergeGlyph(
+  ctx: CanvasRenderingContext2D,
+  dotX: number,
+  rowMid: number,
+  glyph: 'collapsed' | 'expanded',
+  color: string
+): void {
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = color
+  ctx.lineWidth = MERGE_GLYPH_STROKE
+  ctx.beginPath()
+  ctx.moveTo(dotX - MERGE_GLYPH_ARM, rowMid)
+  ctx.lineTo(dotX + MERGE_GLYPH_ARM, rowMid)
+  if (glyph === 'collapsed') {
+    ctx.moveTo(dotX, rowMid - MERGE_GLYPH_ARM)
+    ctx.lineTo(dotX, rowMid + MERGE_GLYPH_ARM)
+  }
+  ctx.stroke()
+}
+
 export function drawGraphRow(
   ctx: CanvasRenderingContext2D,
   row: RowLayout,
   yTop: number,
   isFirst: boolean,
   dim: boolean,
-  bgColor: string,
-  mergeColor: string
+  bgColor: string
 ): void {
   const batch = createEdgeBatch()
   collectRowEdges(batch, row, yTop, isFirst, dim)
   strokeEdgeBatch(ctx, batch)
-  drawCommitDot(ctx, row, yTop, dim, bgColor, mergeColor)
+  drawCommitDot(ctx, row, yTop, dim, bgColor)
 }

@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react'
-import { computeBranchFilterSet, refFilterKey } from '@/components/HistoryPanel/selectors'
+import {
+  collectTimelineTips,
+  computeCollapsedView,
+  refFilterKey
+} from '@/components/HistoryPanel/selectors'
 import type { RefKind } from '@/lib/ref-tree'
 import { effectiveVisibleTimelineRefs, toggleVisibleTimelineRef } from '@/lib/timeline-visible-refs'
 import { useCommitHistory } from '@/stores/commit-history'
@@ -10,7 +14,9 @@ import type { GitLogEntry } from '@/types'
 export interface TimelineVisibility {
   visibleRefs: ReadonlySet<string>
   filteredCommits: GitLogEntry[]
+  expandedMerges: ReadonlySet<string>
   toggle: (refKind: RefKind, fullPath: string) => void
+  toggleMergeExpansion: (mergeHash: string) => void
   isVisible: (refKind: RefKind, fullPath: string) => boolean
 }
 
@@ -26,11 +32,13 @@ export function useTimelineVisibility(): TimelineVisibility {
   const commits = log?.all ?? EMPTY_COMMITS
 
   const [selectedRefs, setSelectedRefs] = useState<ReadonlySet<string>>(new Set())
+  const [expandedMerges, setExpandedMerges] = useState<ReadonlySet<string>>(new Set())
   const [selectionRepoPath, setSelectionRepoPath] = useState(repoPath)
 
   if (selectionRepoPath !== repoPath) {
     setSelectionRepoPath(repoPath)
     setSelectedRefs(new Set())
+    setExpandedMerges(new Set())
   }
 
   const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
@@ -52,12 +60,16 @@ export function useTimelineVisibility(): TimelineVisibility {
     if (visibleRefs.size === 0) {
       return EMPTY_COMMITS
     }
-    const reachable = computeBranchFilterSet(commits, visibleRefs, remoteBranches, remoteNames)
-    if (!reachable || reachable.size === 0) {
+    const tips = collectTimelineTips(commits, visibleRefs, remoteBranches, remoteNames)
+    if (tips.length === 0) {
       return EMPTY_COMMITS
     }
-    return commits.filter((commit) => reachable.has(commit.hash))
-  }, [commits, visibleRefs, remoteBranches, remoteNames])
+    const displayed = computeCollapsedView(commits, tips, expandedMerges)
+    if (displayed.size === 0) {
+      return EMPTY_COMMITS
+    }
+    return commits.filter((commit) => displayed.has(commit.hash))
+  }, [commits, visibleRefs, remoteBranches, remoteNames, expandedMerges])
 
   const toggle = (refKind: RefKind, fullPath: string) => {
     if (refKind === 'tag') {
@@ -84,8 +96,20 @@ export function useTimelineVisibility(): TimelineVisibility {
     )
   }
 
+  const toggleMergeExpansion = (mergeHash: string) => {
+    setExpandedMerges((previous) => {
+      const next = new Set(previous)
+      if (next.has(mergeHash)) {
+        next.delete(mergeHash)
+      } else {
+        next.add(mergeHash)
+      }
+      return next
+    })
+  }
+
   const isVisible = (refKind: RefKind, fullPath: string): boolean =>
     visibleRefs.has(refFilterKey(refKind, fullPath))
 
-  return { visibleRefs, filteredCommits, toggle, isVisible }
+  return { visibleRefs, filteredCommits, expandedMerges, toggle, toggleMergeExpansion, isVisible }
 }

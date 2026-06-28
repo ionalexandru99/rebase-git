@@ -81,9 +81,11 @@ function branchesOf(partial: Partial<GitBranches>): GitBranches {
 interface Harness {
   visibleKeys: string[]
   filteredHashes: string[]
+  expandedHashes: string[]
   isMainVisible: boolean
   isFeatureVisible: boolean
   toggle: (refKind: 'local' | 'remote' | 'tag', fullPath: string) => void
+  toggleMerge: (hash: string) => void
   setFixture: (next: TimelineFixture) => void
 }
 
@@ -94,9 +96,11 @@ function TimelineProbe({ setFixture }: { setFixture: (next: TimelineFixture) => 
   harness = {
     visibleKeys: [...timeline.visibleRefs].sort(),
     filteredHashes: timeline.filteredCommits.map((commit) => commit.hash),
+    expandedHashes: [...timeline.expandedMerges].sort(),
     isMainVisible: timeline.isVisible('local', 'main'),
     isFeatureVisible: timeline.isVisible('local', 'feature'),
     toggle: timeline.toggle,
+    toggleMerge: timeline.toggleMergeExpansion,
     setFixture
   }
   return null
@@ -131,6 +135,24 @@ const baseFixture: TimelineFixture = {
   currentBranch: 'main'
 }
 
+const mergeLog = logOf([
+  entry('m4', ['m3', 'f2'], 'HEAD -> main'),
+  entry('m3', ['m2']),
+  entry('f2', ['f1']),
+  entry('f1', ['m2']),
+  entry('m2', ['m1']),
+  entry('m1', [])
+])
+
+const mergeFixture: TimelineFixture = {
+  repoPath: '/repo',
+  log: mergeLog,
+  branches: branchesOf({ current: 'main', all: ['main'] }),
+  remotes: {},
+  defaultBranch: 'main',
+  currentBranch: 'main'
+}
+
 describe('useTimelineVisibility', () => {
   it('defaults to the default branch and its tracking remote', () => {
     renderTimeline(baseFixture)
@@ -160,6 +182,54 @@ describe('useTimelineVisibility', () => {
       harness.toggle('local', 'feature')
     })
     expect(harness.filteredHashes.sort()).toEqual(['m1', 'm2'])
+  })
+
+  it('collapses a merge side branch by default and expands it from the merge', () => {
+    renderTimeline(mergeFixture)
+    expect(harness.filteredHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
+    expect(harness.expandedHashes).toEqual([])
+
+    act(() => {
+      harness.toggleMerge('m4')
+    })
+    expect(harness.expandedHashes).toEqual(['m4'])
+    expect(harness.filteredHashes).toEqual(['m4', 'm3', 'f2', 'f1', 'm2', 'm1'])
+
+    act(() => {
+      harness.toggleMerge('m4')
+    })
+    expect(harness.filteredHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
+  })
+
+  it('keeps expansion across a ref toggle on the same repo', () => {
+    renderTimeline(mergeFixture)
+    act(() => {
+      harness.toggleMerge('m4')
+    })
+    act(() => {
+      harness.toggle('local', 'feature')
+    })
+    expect(harness.expandedHashes).toEqual(['m4'])
+  })
+
+  it('resets expansion when the repo changes', () => {
+    renderTimeline(mergeFixture)
+    act(() => {
+      harness.toggleMerge('m4')
+    })
+    expect(harness.expandedHashes).toEqual(['m4'])
+
+    act(() => {
+      harness.setFixture({
+        repoPath: '/other',
+        log: logOf([entry('d2', ['d1'], 'HEAD -> develop'), entry('d1', [])]),
+        branches: branchesOf({ current: 'develop', all: ['develop'] }),
+        remotes: {},
+        defaultBranch: 'develop',
+        currentBranch: 'develop'
+      })
+    })
+    expect(harness.expandedHashes).toEqual([])
   })
 
   it('switching repos resets to the new repo defaults', () => {

@@ -63,6 +63,32 @@ describe('layoutCommits', () => {
     expect(rows[3].outgoing).toEqual([])
   })
 
+  it('keeps a merge near-linear when its side parent is hidden by collapse', () => {
+    const commits: GitLogEntry[] = [
+      entry({ hash: 'M', parents: ['m2', 'f1'] }),
+      entry({ hash: 'm2', parents: ['m1'] }),
+      entry({ hash: 'm1', parents: [] })
+    ]
+
+    const { rows, maxLanes } = layoutCommits(commits, undefined, {
+      isHiddenParent: (hash) => hash === 'f1'
+    })
+
+    expect(maxLanes).toBe(1)
+    expect(rows[0].outgoing).not.toContain('f1')
+    expect(rows.map((row) => row.commitLane)).toEqual([0, 0, 0])
+  })
+
+  it('still opens a lane for a not-yet-streamed parent', () => {
+    const commits: GitLogEntry[] = [entry({ hash: 'M', parents: ['m2', 'pending'] })]
+
+    const { rows } = layoutCommits(commits, undefined, {
+      isHiddenParent: (hash) => hash === 'f1'
+    })
+
+    expect(rows[0].outgoing).toContain('pending')
+  })
+
   it('gives every parent of an octopus merge a distinct lane', () => {
     const commits: GitLogEntry[] = [
       entry({ hash: 'm', parents: ['p1', 'p2', 'p3'] }),

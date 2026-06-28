@@ -14,7 +14,12 @@ import { CommitRow } from './CommitRow'
 import { FocusRail } from './FocusRail'
 import { HistoryHeader } from './HistoryHeader'
 import { SkeletonRows } from './SkeletonRows'
-import { computeOnBranchSet, computeVisibleSet, countVisibleBranchRefs } from './selectors'
+import {
+  computeOnBranchSet,
+  computeVisibleSet,
+  countVisibleBranchRefs,
+  mergeGlyphState
+} from './selectors'
 
 interface HistoryPanelProps {
   log: GitLog | null
@@ -27,6 +32,8 @@ interface HistoryPanelProps {
   remoteBranches?: string[]
   visibleBranchRefs?: ReadonlySet<string>
   filteredCommits?: GitLogEntry[]
+  expandedMerges?: ReadonlySet<string>
+  onToggleMergeExpansion?: (mergeHash: string) => void
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
   repoPath?: string | null
@@ -62,8 +69,16 @@ export function HistoryPanel(props: HistoryPanelProps) {
 
   const allCommits = props.log?.all ?? EMPTY_COMMITS
   const visibleBranchRefs = props.visibleBranchRefs ?? EMPTY_REF_SET
+  const expandedMerges = props.expandedMerges ?? EMPTY_REF_SET
   const remoteBranches = props.remoteBranches
   const commits = props.filteredCommits ?? EMPTY_COMMITS
+
+  const displayedSet = useMemo(() => new Set(commits.map((commit) => commit.hash)), [commits])
+  const loadedSet = useMemo(() => new Set(allCommits.map((commit) => commit.hash)), [allCommits])
+  const isHiddenParent = useCallback(
+    (hash: string) => loadedSet.has(hash) && !displayedSet.has(hash),
+    [loadedSet, displayedSet]
+  )
 
   const visibleBranchCount = useMemo(
     () => countVisibleBranchRefs(visibleBranchRefs, remoteBranches, remoteNames),
@@ -79,7 +94,8 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const graphLayout = useGraphLayout({
     commits,
     loading: props.loading || !!props.loadingMore,
-    enabled: commits.length > 0
+    enabled: commits.length > 0,
+    isHiddenParent
   })
   const layout = graphLayout.layout
   const laidOutThroughIndex = graphLayout.laidOutThroughIndex
@@ -212,6 +228,9 @@ export function HistoryPanel(props: HistoryPanelProps) {
               startIndex={startIndex}
               endIndex={endIndexValue}
               graphLayoutEndIndex={laidOutThroughIndex}
+              allCommits={allCommits}
+              displayedSet={displayedSet}
+              expandedMerges={expandedMerges}
             />
 
             {items.map((virtualItem) => {
@@ -219,6 +238,10 @@ export function HistoryPanel(props: HistoryPanelProps) {
               if (!row) {
                 return null
               }
+              const glyph =
+                row.commit.parents.length >= 2
+                  ? mergeGlyphState(allCommits, row.commit, displayedSet, expandedMerges)
+                  : 'none'
               return (
                 <CommitRow
                   key={row.commit.hash}
@@ -229,6 +252,12 @@ export function HistoryPanel(props: HistoryPanelProps) {
                   gridTail={gridTail}
                   remotes={remotes}
                   remoteNames={remoteNames}
+                  mergeGlyph={glyph === 'none' ? undefined : glyph}
+                  onToggleExpand={
+                    glyph === 'none'
+                      ? undefined
+                      : () => props.onToggleMergeExpansion?.(row.commit.hash)
+                  }
                   onCommitAction={props.onCommitAction}
                 />
               )

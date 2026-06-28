@@ -83,6 +83,25 @@ describe('useGraphLayout', () => {
     ])
   })
 
+  it('relayouts immediately on a non-append change even while history is loading', () => {
+    const { result } = renderHook(() => {
+      const [commits, setCommits] = useState([entry('a', ['b']), entry('b', ['c']), entry('c')])
+      return {
+        graphLayout: useGraphLayout({ commits, loading: true, enabled: true, debounceMs: 250 }),
+        setCommits
+      }
+    })
+
+    expect(result.current.graphLayout.layout?.rows).toHaveLength(3)
+
+    act(() => {
+      result.current.setCommits([entry('a', ['b']), entry('b')])
+    })
+
+    // No debounce timer is advanced: a collapse must take effect on the same commit, not 250ms later.
+    expect(result.current.graphLayout.layout?.rows).toHaveLength(2)
+  })
+
   it('buildDisplayRows fills beyond laid-out indices with empty graph rows', () => {
     const commits = [entry('a'), entry('b'), entry('c')]
     const layout = {

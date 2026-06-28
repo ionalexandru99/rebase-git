@@ -236,7 +236,7 @@ export function pruneAncestorTips(commits: GitLogEntry[], tipHashes: string[]): 
   return tipHashes.filter((tip) => kept.has(tip))
 }
 
-function collectTimelineTips(
+export function collectTimelineTips(
   commits: GitLogEntry[],
   selectedRefs: ReadonlySet<string>,
   remoteBranches: readonly string[],
@@ -330,6 +330,102 @@ export function computeOnBranchSet(
   const reachable = new Set<string>()
   walkAncestors(byHash, tip, reachable)
   return reachable
+}
+
+function firstParentLine(
+  byHash: Map<string, GitLogEntry>,
+  start: string,
+  boundary: ReadonlySet<string>,
+  out: Set<string>
+): void {
+  let cursor: string | undefined = start
+  while (cursor !== undefined && !boundary.has(cursor) && !out.has(cursor)) {
+    const commit = byHash.get(cursor)
+    if (!commit) {
+      return
+    }
+    out.add(cursor)
+    cursor = commit.parents[0]
+  }
+}
+
+const NO_BOUNDARY: ReadonlySet<string> = new Set()
+
+export function computeMainlineSet(commits: GitLogEntry[], tips: readonly string[]): Set<string> {
+  const { byHash } = getCommitIndex(commits)
+  const mainline = new Set<string>()
+  for (const tip of tips) {
+    firstParentLine(byHash, tip, NO_BOUNDARY, mainline)
+  }
+  return mainline
+}
+
+export function sideRange(
+  commits: GitLogEntry[],
+  merge: GitLogEntry,
+  boundary: ReadonlySet<string>
+): Set<string> {
+  const { byHash } = getCommitIndex(commits)
+  const revealed = new Set<string>()
+  for (let parentIndex = 1; parentIndex < merge.parents.length; parentIndex++) {
+    firstParentLine(byHash, merge.parents[parentIndex], boundary, revealed)
+  }
+  return revealed
+}
+
+// A merge is only revealed once it is itself displayed, so expanding an outer merge can make a
+// nested one eligible; iterate to a fixpoint. Stale entries (a merge no longer displayed) are
+// skipped because their merge commit never enters `displayed`.
+export function computeCollapsedView(
+  commits: GitLogEntry[],
+  tips: readonly string[],
+  expandedMerges: ReadonlySet<string>
+): Set<string> {
+  const { byHash, positionByHash } = getCommitIndex(commits)
+  const displayed = computeMainlineSet(commits, tips)
+  if (expandedMerges.size === 0) {
+    return displayed
+  }
+  const pending = [...expandedMerges].sort(
+    (left, right) => (positionByHash.get(left) ?? 0) - (positionByHash.get(right) ?? 0)
+  )
+  let revealedSomething = true
+  while (revealedSomething) {
+    revealedSomething = false
+    for (let index = 0; index < pending.length; index++) {
+      const mergeHash = pending[index]
+      if (mergeHash === undefined || !displayed.has(mergeHash)) {
+        continue
+      }
+      const merge = byHash.get(mergeHash)
+      pending[index] = undefined as unknown as string
+      if (!merge || merge.parents.length < 2) {
+        continue
+      }
+      for (const hash of sideRange(commits, merge, displayed)) {
+        displayed.add(hash)
+        revealedSomething = true
+      }
+    }
+  }
+  return displayed
+}
+
+export type MergeGlyph = 'collapsed' | 'expanded' | 'none'
+
+export function mergeGlyphState(
+  commits: GitLogEntry[],
+  merge: GitLogEntry,
+  displayedSet: ReadonlySet<string>,
+  expandedMerges: ReadonlySet<string>
+): MergeGlyph {
+  if (merge.parents.length < 2 || !displayedSet.has(merge.hash)) {
+    return 'none'
+  }
+  if (expandedMerges.has(merge.hash)) {
+    return 'expanded'
+  }
+  return sideRange(commits, merge, displayedSet).size > 0 ? 'collapsed' : 'none'
 }
 
 export function computeVisibleSet(filter: string, commits: GitLogEntry[]): Set<string> | null {

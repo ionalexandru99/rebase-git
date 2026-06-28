@@ -105,3 +105,53 @@ describe('CommitRow accessibility', () => {
     expect(screen.getByText('Merge commit with 2 parents')).toBeInTheDocument()
   })
 })
+
+describe('CommitRow merge expansion control', () => {
+  function renderMerge(mergeGlyph: 'collapsed' | 'expanded', onToggleExpand = vi.fn()) {
+    render(
+      <CommitRow
+        row={row({ parents: ['p1', 'p2'] })}
+        top={0}
+        dim={false}
+        offBranch={false}
+        gridTail="1fr"
+        remotes={{}}
+        remoteNames={new Set()}
+        mergeGlyph={mergeGlyph}
+        onToggleExpand={onToggleExpand}
+      />
+    )
+    return onToggleExpand
+  }
+
+  it('renders no expansion control for a plain commit', () => {
+    render(
+      <CommitRow
+        row={row()}
+        top={0}
+        dim={false}
+        offBranch={false}
+        gridTail="1fr"
+        remotes={{}}
+        remoteNames={new Set()}
+      />
+    )
+    expect(screen.queryByRole('button', { name: /side branch/i })).not.toBeInTheDocument()
+  })
+
+  it('exposes a collapsed control as not expanded and toggles on click', () => {
+    const onToggleExpand = renderMerge('collapsed')
+    const control = screen.getByRole('button', { name: /side branch/i })
+    expect(control).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(control)
+    expect(onToggleExpand).toHaveBeenCalledTimes(1)
+  })
+
+  it('exposes an expanded control as expanded', () => {
+    renderMerge('expanded')
+    expect(screen.getByRole('button', { name: /side branch/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+  })
+})

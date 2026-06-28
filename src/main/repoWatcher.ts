@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { Channel } from '@shared/channels'
 import { parseOrThrow } from '@shared/codec'
@@ -7,15 +8,52 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import type { WebContents } from 'electron'
 import { type DebouncedDrain, startDebouncedDrain } from './debounced-drain'
 
+interface CloseableWatch {
+  close: () => Promise<void> | void
+}
+
 interface Watcher {
   refs: FSWatcher
   index: FSWatcher
-  workingTree: FSWatcher
+  workingTree: CloseableWatch
   refsDrain: DebouncedDrain
   indexDrain: DebouncedDrain
   workingTreeDrain: DebouncedDrain
   webContents: WebContents
   onDestroyed: () => void
+}
+
+// macOS and Windows back recursive fs.watch with a single OS-level stream (FSEvents / ReadDirectoryChangesW)
+// for the whole subtree. chokidar 4 dropped fsevents and watches per file, which exhausts file
+// descriptors (EMFILE) on huge working trees like the linux kernel — so prefer the native recursive
+// watch where it exists and keep chokidar only on Linux, where fs.watch lacks recursive support.
+const SUPPORTS_RECURSIVE_FS_WATCH = process.platform === 'darwin' || process.platform === 'win32'
+
+function startWorkingTreeWatch(repoPath: string, onChange: () => void): CloseableWatch {
+  if (SUPPORTS_RECURSIVE_FS_WATCH) {
+    const watcher = fs.watch(
+      repoPath,
+      { recursive: true, persistent: true },
+      (_event, filename) => {
+        if (filename && ignoreWorkingTree(filename.toString())) {
+          return
+        }
+        onChange()
+      }
+    )
+    watcher.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
+    return { close: () => watcher.close() }
+  }
+
+  const watcher = chokidar.watch(repoPath, {
+    ignored: ignoreWorkingTree,
+    ignoreInitial: true,
+    persistent: true,
+    awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 }
+  })
+  watcher.on('all', () => onChange())
+  watcher.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
+  return { close: () => watcher.close() }
 }
 
 const watchers = new Map<string, Watcher>()
@@ -106,17 +144,9 @@ export function startWatching(repoPath: string, webContents: WebContents, dirs?:
   index.on('all', () => indexDrain.push())
   index.on('error', (err) => console.warn('[repoWatcher] index error', err))
 
-  // Watch the whole working tree (chokidar 4 uses native recursive fs.watch, so this no longer
-  // costs one descriptor per directory). `ignoreWorkingTree` prunes .git and heavy build dirs so
-  // edits to nested source files are detected without drowning in node_modules churn.
-  const workingTree = chokidar.watch(repoPath, {
-    ignored: ignoreWorkingTree,
-    ignoreInitial: true,
-    persistent: true,
-    awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 }
-  })
-  workingTree.on('all', () => workingTreeDrain.push())
-  workingTree.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
+  // Watch the whole working tree. `ignoreWorkingTree` prunes .git and heavy build dirs so edits to
+  // nested source files are detected without drowning in node_modules churn or git-internal events.
+  const workingTree = startWorkingTreeWatch(repoPath, () => workingTreeDrain.push())
 
   const onDestroyed = () => {
     void stopWatching(repoPath, webContents.id)
