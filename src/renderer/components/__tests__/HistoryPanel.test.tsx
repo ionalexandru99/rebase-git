@@ -106,6 +106,21 @@ describe('HistoryPanel', () => {
     expect(screen.getByText('AS')).toBeInTheDocument()
   })
 
+  it('renders metadata column headers and drops the Subject column', () => {
+    renderPanel(
+      {
+        all: [entry({ hash: 'aaa', message: 'only commit' })],
+        total: 1
+      },
+      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]) }
+    )
+
+    expect(screen.getByText('Author')).toBeInTheDocument()
+    expect(screen.getByText('SHA')).toBeInTheDocument()
+    expect(screen.getByText('Date')).toBeInTheDocument()
+    expect(screen.queryByText('Subject')).not.toBeInTheDocument()
+  })
+
   it('uses singular copy for one commit', () => {
     renderPanel(
       {

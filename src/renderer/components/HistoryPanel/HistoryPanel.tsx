@@ -161,7 +161,6 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const themeNonce = useThemeNonce()
 
   const gridTail = `${COL_AUTHOR_REM}rem ${COL_SHA_REM}rem ${COL_DATE_REM}rem`
-  const headerGridTemplate = `${graphRailWidth}px minmax(0,1fr) ${gridTail}`
 
   const hasCommits = allCommits.length > 0
   const showSkeleton = props.loading && !hasCommits
@@ -183,22 +182,19 @@ export function HistoryPanel(props: HistoryPanelProps) {
       />
 
       {commits.length > 0 ? (
-        <div
-          className="grid h-[30px] shrink-0 items-center gap-1 border-b bg-history-head px-0 text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground"
-          style={{ gridTemplateColumns: headerGridTemplate }}
-        >
-          <span aria-hidden="true" />
-          <span>Subject</span>
-          <span>Author</span>
-          <span>SHA</span>
-          <span className="pr-3 text-right">Date</span>
+        <div className="flex h-[30px] shrink-0 items-center justify-end border-b bg-history-head px-0 text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+          <div className="grid items-center gap-2" style={{ gridTemplateColumns: gridTail }}>
+            <span>Author</span>
+            <span>SHA</span>
+            <span className="pr-3 text-right">Date</span>
+          </div>
         </div>
       ) : null}
 
       <div
         ref={attachScroll}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-auto"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
         data-testid="history-scroll"
       >
         {props.log && commits.length > 0 ? (

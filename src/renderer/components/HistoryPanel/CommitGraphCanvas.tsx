@@ -123,7 +123,7 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
 
   return (
     <div
-      className="pointer-events-none sticky top-0 z-20"
+      className="pointer-events-none sticky top-0 z-0"
       style={{ height: '0px' }}
       aria-hidden="true"
     >

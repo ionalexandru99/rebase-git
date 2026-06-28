@@ -47,24 +47,25 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
   const laneHex = laneColor(props.row.commitLane)
   const rowOpacity = props.dim ? 0.35 : props.offBranch ? 0.6 : 1
   const subjectClass = props.offBranch ? 'text-muted-foreground' : 'text-foreground'
-  const gridTemplate = `${computeRowRailWidth(props.row)}px minmax(0,1fr) ${props.gridTail}`
+  const railWidth = computeRowRailWidth(props.row)
   const act = (action: CommitAction) => props.onCommitAction?.(action, commit.hash, commit.message)
 
   return (
     <ContextMenu>
       <ContextMenuTriggerArea
         data-testid="commit-row"
-        className="group/row absolute inset-x-0 z-10 grid items-center gap-2 border-b bg-card px-0 hover:bg-muted"
+        className="group/row absolute inset-x-0 z-10 border-b"
         style={{
           top: `${props.top}px`,
           height: `${ROW_H}px`,
-          gridTemplateColumns: gridTemplate,
           opacity: String(rowOpacity),
           contain: 'layout style'
         }}
       >
-        <span aria-hidden="true" />
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden text-sm">
+        <span
+          className="absolute inset-y-0 right-0 flex items-center gap-1 overflow-hidden bg-card pr-2 text-sm group-hover/row:bg-muted"
+          style={{ left: `${railWidth}px` }}
+        >
           <span className="sr-only">
             {commitTopologyLabel(commit.parents.length, props.offBranch)}
           </span>
@@ -82,20 +83,25 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
           <span className={cn('min-w-0 truncate', subjectClass)}>{commit.message}</span>
         </span>
 
-        <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-          <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground/80">
-            {initials(commit.author_name)}
+        <span
+          className="pointer-events-none absolute inset-y-0 right-0 grid items-center gap-2 bg-card group-hover/row:bg-muted"
+          style={{ gridTemplateColumns: props.gridTail }}
+        >
+          <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+            <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground/80">
+              {initials(commit.author_name)}
+            </span>
+            <span className="min-w-0 truncate">{commit.author_name}</span>
           </span>
-          <span className="min-w-0 truncate">{commit.author_name}</span>
-        </span>
 
-        <span className="cursor-default truncate text-xs tabular-nums text-muted-foreground">
-          {commit.hash.slice(0, 7)}
-        </span>
+          <span className="truncate text-xs tabular-nums text-muted-foreground">
+            {commit.hash.slice(0, 7)}
+          </span>
 
-        <time className="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground">
-          {formatCommitDate(commit.date)}
-        </time>
+          <time className="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground">
+            {formatCommitDate(commit.date)}
+          </time>
+        </span>
       </ContextMenuTriggerArea>
       <ContextMenuContent>
         <ContextMenuItem onSelect={() => act('branch-here')}>Create branch here</ContextMenuItem>
