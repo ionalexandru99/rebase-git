@@ -4,6 +4,7 @@ import {
   collectTimelineTips,
   computeCollapsedView,
   computeMainlineSet,
+  computeMergesToReveal,
   mergeGlyphState,
   refFilterKey,
   sideRange
@@ -201,5 +202,45 @@ describe('mergeGlyphState', () => {
   it('shows no glyph for a merge that is not itself displayed', () => {
     const displayed = computeCollapsedView(nested, ['M1'], new Set())
     expect(mergeGlyphState(nested, mergeOf(nested, 'M2'), displayed, new Set())).toBe('none')
+  })
+})
+
+describe('computeMergesToReveal', () => {
+  it('reveals no merges for a match already on the mainline', () => {
+    expect(computeMergesToReveal(mergeHeavy, ['m4'], new Set(['m2']))).toEqual(new Set())
+  })
+
+  it('reveals the merge whose side branch holds a one-level-deep match', () => {
+    expect(computeMergesToReveal(mergeHeavy, ['m4'], new Set(['f1']))).toEqual(new Set(['m4']))
+  })
+
+  it('reveals the full chain of merges for a deeply nested match', () => {
+    expect(computeMergesToReveal(nested, ['M1'], new Set(['D']))).toEqual(new Set(['M1', 'M2']))
+  })
+
+  it('reveals the octopus merge for a match on one of its extra parent lines', () => {
+    expect(computeMergesToReveal(octopus, ['octo'], new Set(['c']))).toEqual(new Set(['octo']))
+  })
+
+  it('reveals nothing for a match not reachable from the visible tips', () => {
+    expect(computeMergesToReveal(mergeHeavy, ['m2'], new Set(['f1']))).toEqual(new Set())
+  })
+
+  it('unions the reveal chains of several matches', () => {
+    expect(computeMergesToReveal(sharedSide, ['top'], new Set(['shared']))).toEqual(
+      new Set(['top'])
+    )
+    expect(computeMergesToReveal(sharedSide, ['top'], new Set(['shared', 'y']))).toEqual(
+      new Set(['top', 'mid'])
+    )
+  })
+
+  it('produces an expansion set whose collapsed view surfaces every reachable match', () => {
+    const matches = new Set(['D', 'B'])
+    const reveal = computeMergesToReveal(nested, ['M1'], matches)
+    const displayed = computeCollapsedView(nested, ['M1'], reveal)
+    for (const match of matches) {
+      expect(displayed.has(match)).toBe(true)
+    }
   })
 })

@@ -1,6 +1,6 @@
 import { GitCommitHorizontalIcon } from 'lucide-react'
 import type { UIEvent } from 'react'
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CommitAction } from '@/lib/git-actions'
 import { computeGraphRailWidth, OVERSCAN, ROW_H } from '@/lib/git-graph/canvas'
 import type { RefKind } from '@/lib/ref-tree'
@@ -14,12 +14,7 @@ import { CommitRow } from './CommitRow'
 import { FocusRail } from './FocusRail'
 import { HistoryHeader } from './HistoryHeader'
 import { SkeletonRows } from './SkeletonRows'
-import {
-  computeOnBranchSet,
-  computeVisibleSet,
-  countVisibleBranchRefs,
-  mergeGlyphState
-} from './selectors'
+import { computeOnBranchSet, countVisibleBranchRefs, mergeGlyphState } from './selectors'
 
 interface HistoryPanelProps {
   log: GitLog | null
@@ -33,6 +28,9 @@ interface HistoryPanelProps {
   visibleBranchRefs?: ReadonlySet<string>
   filteredCommits?: GitLogEntry[]
   expandedMerges?: ReadonlySet<string>
+  filter?: string
+  onFilterChange?: (value: string) => void
+  visibleSet?: Set<string> | null
   onToggleMergeExpansion?: (mergeHash: string) => void
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
@@ -48,6 +46,7 @@ const historyScrollPositions = new Map<string, number>()
 const EMPTY_COMMITS: GitLogEntry[] = []
 const EMPTY_REMOTES: Record<string, string> = {}
 const EMPTY_REF_SET: ReadonlySet<string> = new Set()
+const noop = () => {}
 
 function rememberHistoryScroll(repoPath: string, scrollTop: number) {
   historyScrollPositions.delete(repoPath)
@@ -62,8 +61,8 @@ function rememberHistoryScroll(repoPath: string, scrollTop: number) {
 }
 
 export function HistoryPanel(props: HistoryPanelProps) {
-  const [filter, setFilter] = useState('')
-  const deferredFilter = useDeferredValue(filter)
+  const filter = props.filter ?? ''
+  const visibleSet = props.visibleSet ?? null
   const remotes = props.remotes ?? EMPTY_REMOTES
   const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
 
@@ -103,11 +102,6 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const rows = useMemo(
     () => buildDisplayRows(commits, layout, laidOutThroughIndex),
     [commits, layout, laidOutThroughIndex]
-  )
-
-  const visibleSet = useMemo(
-    () => computeVisibleSet(deferredFilter, commits),
-    [deferredFilter, commits]
   )
 
   const [scrollEl, setScrollEl] = useState<HTMLDivElement>()
@@ -192,7 +186,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
         hasMore={props.hasMore}
         onLoadMore={props.onLoadMore}
         filter={filter}
-        onFilterChange={setFilter}
+        onFilterChange={props.onFilterChange ?? noop}
         showFilter={hasCommits}
         visibleBranchCount={visibleBranchCount}
       />

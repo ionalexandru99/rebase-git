@@ -411,6 +411,44 @@ export function computeCollapsedView(
   return displayed
 }
 
+// The set of merges to expand so every reachable match becomes displayed — the full chain from a
+// visible Mainline down to each match. A single children-first pass (a merge's container is always
+// its descendant, so it appears earlier) builds `revealedBy`, mapping each hidden commit to the
+// merge that directly surfaces it; walking that chain up from a match collects its whole reveal
+// path. Matches already on the Mainline or unreachable under these tips contribute nothing.
+export function computeMergesToReveal(
+  commits: GitLogEntry[],
+  tips: readonly string[],
+  matchSet: ReadonlySet<string>
+): Set<string> {
+  const result = new Set<string>()
+  if (matchSet.size === 0) {
+    return result
+  }
+  const displayed = computeMainlineSet(commits, tips)
+  const revealedBy = new Map<string, string>()
+  for (const commit of commits) {
+    if (commit.parents.length < 2 || !displayed.has(commit.hash)) {
+      continue
+    }
+    for (const hash of sideRange(commits, commit, displayed)) {
+      if (!displayed.has(hash)) {
+        displayed.add(hash)
+        revealedBy.set(hash, commit.hash)
+      }
+    }
+  }
+  for (const match of matchSet) {
+    let cursor: string | undefined = match
+    while (cursor !== undefined && revealedBy.has(cursor)) {
+      const merge = revealedBy.get(cursor) as string
+      result.add(merge)
+      cursor = merge
+    }
+  }
+  return result
+}
+
 export type MergeGlyph = 'collapsed' | 'expanded' | 'none'
 
 export function mergeGlyphState(

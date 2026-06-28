@@ -235,6 +235,9 @@ export function Workspace(props: WorkspaceProps) {
             visibleBranchRefs={timeline.visibleRefs}
             filteredCommits={timeline.filteredCommits}
             expandedMerges={timeline.expandedMerges}
+            filter={timeline.filter}
+            onFilterChange={timeline.setFilter}
+            visibleSet={timeline.visibleSet}
             onToggleMergeExpansion={timeline.toggleMergeExpansion}
             onToggleTimelineVisibility={timeline.toggle}
             onCommitAction={handleCommitAction}

@@ -86,6 +86,7 @@ interface Harness {
   isFeatureVisible: boolean
   toggle: (refKind: 'local' | 'remote' | 'tag', fullPath: string) => void
   toggleMerge: (hash: string) => void
+  setFilter: (value: string) => void
   setFixture: (next: TimelineFixture) => void
 }
 
@@ -101,6 +102,7 @@ function TimelineProbe({ setFixture }: { setFixture: (next: TimelineFixture) => 
     isFeatureVisible: timeline.isVisible('local', 'feature'),
     toggle: timeline.toggle,
     toggleMerge: timeline.toggleMergeExpansion,
+    setFilter: timeline.setFilter,
     setFixture
   }
   return null
@@ -153,6 +155,24 @@ const mergeFixture: TimelineFixture = {
   currentBranch: 'main'
 }
 
+const searchMergeLog = logOf([
+  entry('m4', ['m3', 'f2'], 'HEAD -> main', 'merge feature branch'),
+  entry('m3', ['m2'], '', 'mainline three'),
+  entry('f2', ['f1'], '', 'side branch two'),
+  entry('f1', ['m2'], '', 'fix login redirect'),
+  entry('m2', ['m1'], '', 'mainline two'),
+  entry('m1', [], '', 'mainline one')
+])
+
+const searchMergeFixture: TimelineFixture = {
+  repoPath: '/repo',
+  log: searchMergeLog,
+  branches: branchesOf({ current: 'main', all: ['main'] }),
+  remotes: {},
+  defaultBranch: 'main',
+  currentBranch: 'main'
+}
+
 describe('useTimelineVisibility', () => {
   it('defaults to the default branch and its tracking remote', () => {
     renderTimeline(baseFixture)
@@ -199,6 +219,44 @@ describe('useTimelineVisibility', () => {
       harness.toggleMerge('m4')
     })
     expect(harness.filteredHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
+  })
+
+  it('auto-reveals a merge whose collapsed side branch holds the only search match', () => {
+    renderTimeline(searchMergeFixture)
+    expect(harness.filteredHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
+
+    act(() => {
+      harness.setFilter('login')
+    })
+    expect(harness.filteredHashes).toContain('f1')
+    expect(harness.expandedHashes).toContain('m4')
+  })
+
+  it('restores exactly the manual expansion when the search clears', () => {
+    renderTimeline(searchMergeFixture)
+    act(() => {
+      harness.setFilter('login')
+    })
+    act(() => {
+      harness.setFilter('')
+    })
+    expect(harness.filteredHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
+    expect(harness.expandedHashes).toEqual([])
+  })
+
+  it('leaves a manually expanded merge expanded after a search clears', () => {
+    renderTimeline(searchMergeFixture)
+    act(() => {
+      harness.toggleMerge('m4')
+    })
+    act(() => {
+      harness.setFilter('login')
+    })
+    act(() => {
+      harness.setFilter('')
+    })
+    expect(harness.expandedHashes).toEqual(['m4'])
+    expect(harness.filteredHashes).toContain('f1')
   })
 
   it('keeps expansion across a ref toggle on the same repo', () => {

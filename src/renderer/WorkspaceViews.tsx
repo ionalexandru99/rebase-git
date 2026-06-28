@@ -47,6 +47,9 @@ interface WorkspaceViewProps {
   visibleBranchRefs: ReadonlySet<string>
   filteredCommits: GitLogEntry[]
   expandedMerges: ReadonlySet<string>
+  filter: string
+  onFilterChange: (value: string) => void
+  visibleSet: Set<string> | null
   onToggleMergeExpansion?: (mergeHash: string) => void
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
@@ -249,6 +252,9 @@ function HistoryView(props: WorkspaceViewProps) {
         visibleBranchRefs={props.visibleBranchRefs}
         filteredCommits={props.filteredCommits}
         expandedMerges={props.expandedMerges}
+        filter={props.filter}
+        onFilterChange={props.onFilterChange}
+        visibleSet={props.visibleSet}
         onToggleMergeExpansion={props.onToggleMergeExpansion}
         onToggleTimelineVisibility={props.onToggleTimelineVisibility}
         onCommitAction={props.onCommitAction}
