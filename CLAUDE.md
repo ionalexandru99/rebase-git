@@ -24,7 +24,7 @@ pnpm check:fix            # auto-fix biome issues
 pnpm hooks:install        # idempotent — points git at .githooks/ (also runs via `prepare` on `pnpm install`)
 
 # Four test layers — pick the one that matches the change:
-pnpm test:renderer        # vitest, jsdom, src/renderer/**/*.test.{ts,tsx}
+pnpm test:renderer        # vitest, happy-dom, src/renderer/**/*.test.{ts,tsx}
 pnpm test:main            # vitest, node, src/main/**/*.test.{ts,tsx}
 pnpm test:smoke           # builds + launches the electron binary, watches stdout/stderr
 pnpm test:e2e             # playwright against the real built app (e2e/*.spec.ts)
@@ -82,7 +82,7 @@ A "workspace" is a parent folder that contains one or more git repos. The store 
 
 ## Renderer test setup
 
-`src/test/setup.ts` (loaded by `vitest.config.ts`) mocks the entire `window.electronAPI` surface with `vi.fn()`s, plus jsdom polyfills for `matchMedia` and `ResizeObserver` (Radix/sonner/next-themes need them). `vi.resetAllMocks()` runs in `beforeEach`, so tests must set up their `electronAPI` mock returns inside the test (or `beforeEach`), not at module top level. `matchMedia` is intentionally defined as a plain function rather than a `vi.fn()` so `resetAllMocks` doesn't strip its implementation.
+`src/test/setup.ts` (loaded by `vitest.config.ts`) mocks the entire `window.electronAPI` surface with `vi.fn()`s, plus happy-dom polyfills for `matchMedia` and `ResizeObserver` (Radix/sonner/next-themes need them). `vi.resetAllMocks()` runs in `beforeEach`, so tests must set up their `electronAPI` mock returns inside the test (or `beforeEach`), not at module top level. `matchMedia` is intentionally defined as a plain function rather than a `vi.fn()` so `resetAllMocks` doesn't strip its implementation.
 
 Main-process tests run in plain Node and must only cover pure logic (store, serializers, etc.) — don't mock `BrowserWindow` / `ipcMain`; let E2E cover IPC integration. Don't unit-test Electron boilerplate (window creation, menus, updater) — smoke tests catch startup regressions.
 

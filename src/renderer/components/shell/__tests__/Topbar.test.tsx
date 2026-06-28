@@ -33,7 +33,11 @@ describe('Topbar', () => {
 
   it('copies the path and shows feedback when the path is clicked', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.assign(navigator, { clipboard: { writeText } })
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+      writable: true
+    })
     renderTopbar({ repoPath: '/projects/acme' })
 
     fireEvent.click(screen.getByRole('button', { name: '/projects/acme' }))

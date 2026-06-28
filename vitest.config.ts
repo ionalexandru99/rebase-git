@@ -13,7 +13,7 @@ export default defineConfig({
   },
   test: {
     name: 'renderer',
-    environment: 'jsdom',
+    environment: 'happy-dom',
     globals: true,
     include: ['src/renderer/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],

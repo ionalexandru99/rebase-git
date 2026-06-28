@@ -34,7 +34,7 @@ We have 4 test layers. Use the right one for the change:
 | **Smoke tests** | Build sanity, startup checks, preload path resolution | `pnpm test:smoke` |
 | **E2E tests** | Critical user flows, IPC contracts, full app integration | `pnpm test:e2e` |
 
-- **Renderer tests** run in jsdom with `window.electronAPI` mocked. Fast feedback for UI code.
+- **Renderer tests** run in happy-dom with `window.electronAPI` mocked. Fast feedback for UI code.
 - **Main tests** run in Node.js. Only test pure logic that doesn't touch `BrowserWindow`, `dialog`, or other Electron APIs.
 - **Smoke tests** build the app and launch the binary, checking stdout/stderr for fatal errors. Cheap and catches real build/packaging bugs.
 - **E2E tests** launch the real built Electron binary via Playwright. Use for flows that span main and renderer (e.g., "open repo → see branches → commit").
@@ -75,7 +75,7 @@ All dependencies in `package.json` must use exact versions — **no `^` or `~` p
 - **simple-git** for Git operations (inside the sidecar)
 - **electron-store** for persistent settings
 - **Biome** for linting and formatting
-- **Vitest** + **jsdom** for renderer tests; **Playwright** for E2E
+- **Vitest** + **happy-dom** for renderer tests; **Playwright** for E2E
 - **pnpm** as package manager (with `ignore-scripts=true` for security)
 
 ## Style
