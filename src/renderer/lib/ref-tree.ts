@@ -1,4 +1,5 @@
 import { REF_TREE_REMOTE_SECTION_KEY, REF_TREE_TAG_SECTION_KEY } from '@shared/ref-tree-toggles'
+import { fuzzyFilter, fuzzyMatchSet } from './fuzzy'
 
 export type RefKind = 'local' | 'remote' | 'tag' | 'stash'
 
@@ -138,6 +139,7 @@ interface BuildRowsOptions {
   localLoading: boolean
   tracking?: Record<string, BranchTracking>
   stashes?: StashRowData[]
+  query?: string
 }
 
 export function buildRefTreeRows({
@@ -148,26 +150,60 @@ export function buildRefTreeRows({
   currentBranch,
   localLoading,
   tracking,
-  stashes
+  stashes,
+  query
 }: BuildRowsOptions): RefRow[] {
   const out: RefRow[] = []
+  const filtering = (query ?? '').trim().length > 0
+  const localPaths = filtering ? fuzzyFilter(query ?? '', localBranches) : localBranches
+  const remotePaths = filtering ? fuzzyFilter(query ?? '', remoteBranches) : remoteBranches
+  const tagPaths = filtering ? fuzzyFilter(query ?? '', tags) : tags
+  const stashRows = filterStashes(stashes ?? [], filtering ? (query ?? '') : '')
   const noLocalData = localBranches.length === 0
   if (localLoading && noLocalData) {
     pushSkeletonSection(out, 'local', 'Local branches', toggles, 4)
   } else {
-    buildSection(out, 'local', 'Local branches', localBranches, toggles, currentBranch, tracking)
+    buildSection(
+      out,
+      'local',
+      'Local branches',
+      localPaths,
+      toggles,
+      currentBranch,
+      filtering,
+      tracking
+    )
   }
-  buildSection(out, 'remote', 'Remote branches', remoteBranches, toggles, currentBranch)
-  buildSection(out, 'tag', 'Tags', tags, toggles, currentBranch)
-  buildStashSection(out, stashes ?? [], toggles)
+  buildSection(out, 'remote', 'Remote branches', remotePaths, toggles, currentBranch, filtering)
+  buildSection(out, 'tag', 'Tags', tagPaths, toggles, currentBranch, filtering)
+  buildStashSection(out, stashRows, toggles, filtering)
+  if (filtering && out.length === 0) {
+    out.push({ kind: 'empty', refKind: 'local', label: 'No matching refs' })
+  }
   return out
 }
 
-function buildStashSection(out: RefRow[], stashes: StashRowData[], toggles: Set<string>): void {
+function filterStashes(stashes: StashRowData[], query: string): StashRowData[] {
+  if (!query.trim()) {
+    return stashes
+  }
+  const matches = fuzzyMatchSet(query, stashes, ['message'], (stash) => stash.ref)
+  if (!matches) {
+    return stashes
+  }
+  return stashes.filter((stash) => matches.has(stash.ref))
+}
+
+function buildStashSection(
+  out: RefRow[],
+  stashes: StashRowData[],
+  toggles: Set<string>,
+  filtering: boolean
+): void {
   if (stashes.length === 0) {
     return
   }
-  const expanded = isSectionExpanded(toggles, 'stash')
+  const expanded = filtering || isSectionExpanded(toggles, 'stash')
   out.push({ kind: 'section', refKind: 'stash', label: 'Stashes', count: stashes.length, expanded })
   if (!expanded) {
     return
@@ -210,9 +246,13 @@ function buildSection(
   paths: string[],
   toggles: Set<string>,
   currentBranch: string,
+  filtering: boolean,
   tracking?: Record<string, BranchTracking>
 ): void {
-  const sectionExpanded = isSectionExpanded(toggles, refKind)
+  if (filtering && paths.length === 0) {
+    return
+  }
+  const sectionExpanded = filtering || isSectionExpanded(toggles, refKind)
   out.push({
     kind: 'section',
     refKind,
@@ -257,7 +297,7 @@ function buildSection(
     }
   }
 
-  walkTree(out, root, refKind, 1, '', toggles, currentBranch, tracking)
+  walkTree(out, root, refKind, 1, '', toggles, currentBranch, filtering, tracking)
 }
 
 function walkTree(
@@ -268,6 +308,7 @@ function walkTree(
   parentPath: string,
   toggles: Set<string>,
   currentBranch: string,
+  filtering: boolean,
   tracking?: Record<string, BranchTracking>
 ): void {
   const entries = [...node.entries()].sort((a, b) => {
@@ -282,7 +323,7 @@ function walkTree(
   for (const [name, value] of entries) {
     const fullPath = parentPath ? `${parentPath}/${name}` : name
     if (value instanceof Map) {
-      const expanded = isFolderExpanded(toggles, refKind, fullPath)
+      const expanded = filtering || isFolderExpanded(toggles, refKind, fullPath)
       out.push({
         kind: 'folder',
         refKind,
@@ -293,7 +334,17 @@ function walkTree(
         childCount: value.size
       })
       if (expanded) {
-        walkTree(out, value, refKind, depth + 1, fullPath, toggles, currentBranch, tracking)
+        walkTree(
+          out,
+          value,
+          refKind,
+          depth + 1,
+          fullPath,
+          toggles,
+          currentBranch,
+          filtering,
+          tracking
+        )
       }
     } else {
       const trackingEntry = refKind === 'local' ? tracking?.[value] : undefined
