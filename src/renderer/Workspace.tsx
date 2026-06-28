@@ -53,6 +53,7 @@ export function Workspace(props: WorkspaceProps) {
 
   const sidebarTags = refs.branches?.tags ?? EMPTY_BRANCH_NAMES
   const sidebarTracking = refs.branches?.tracking
+  const currentTracking = refs.currentBranch ? sidebarTracking?.[refs.currentBranch] : undefined
   const localBranches = refs.branches?.all ?? EMPTY_BRANCH_NAMES
   const remoteBranches = refs.branches?.remotes ?? EMPTY_BRANCH_NAMES
 
@@ -219,7 +220,10 @@ export function Workspace(props: WorkspaceProps) {
       }
       onFetch={refs.fetchNow}
       onPull={actionRunner.pullNow}
-      onPush={actionRunner.pushNow}
+      push={actionRunner.push}
+      ahead={currentTracking?.ahead ?? 0}
+      behind={currentTracking?.behind ?? 0}
+      detached={!refs.currentBranch}
       pulling={actionRunner.pulling}
       pushing={actionRunner.pushing}
     >

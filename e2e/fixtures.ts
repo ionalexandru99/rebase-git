@@ -36,6 +36,40 @@ export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
   return repo
 }
 
+// A clone wired to a local bare remote with `main` already published, so a test can rewrite the local
+// tip (amend) to produce a Diverged branch and exercise the force-push flow against a real remote.
+export function createFixtureRepoWithRemote(): { repo: string; remote: string } {
+  const remoteBase = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-remote-'))
+  const remote = path.join(remoteBase, 'remote.git')
+  execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
+  const git = gitIn(repo)
+  git(['init', '-b', 'main'])
+  git(['config', 'user.email', 'test@example.com'])
+  git(['config', 'user.name', 'Test'])
+  fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
+  git(['add', '.'])
+  git(['commit', '-m', 'initial'])
+  git(['remote', 'add', 'origin', remote])
+  git(['push', '-u', 'origin', 'main'])
+  return { repo, remote }
+}
+
+// Push a new commit onto the remote's main from a throwaway clone — stands in for a teammate (or
+// another machine) publishing while the local branch holds a stale view of the remote.
+export function advanceRemote(remote: string, message: string): void {
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-teammate-'))
+  execFileSync('git', ['clone', remote, other], { stdio: 'ignore' })
+  const git = gitIn(other)
+  git(['config', 'user.email', 'teammate@example.com'])
+  git(['config', 'user.name', 'Teammate'])
+  fs.writeFileSync(path.join(other, 'README.md'), `# fixture\n${message}\n`)
+  git(['add', '.'])
+  git(['commit', '-m', message])
+  git(['push', 'origin', 'HEAD:main'])
+  fs.rmSync(other, { recursive: true, force: true })
+}
+
 export interface SeedState {
   workspaces?: string[]
   recentRepos?: string[]

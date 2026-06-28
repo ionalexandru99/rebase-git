@@ -23,3 +23,7 @@ _Avoid_: feature branch, topic branch (those name refs; a Side branch is a merge
 **Collapsed / Expanded merge**:
 A merge is **collapsed** when its Side branch commits are hidden (the default) and **expanded** when they are shown. Collapse/expand is a property of the view, not of the repository — it changes what the Timeline renders, never the underlying history.
 _Avoid_: folded/unfolded
+
+**Diverged**:
+A branch and its upstream have each gained commits the other lacks — both tips sit ahead of their common ancestor. A Diverged branch cannot be published by a normal (fast-forward) push; republishing it means rewriting the remote tip. This is the state an amend or rebase produces.
+_Avoid_: behind, out-of-date (those name the one-sided case where only the remote moved)

@@ -299,7 +299,9 @@ describe('fetch / push / pull RPC handlers', () => {
     )
     execFileSync('git', ['-C', unopened, 'init', '-b', 'main'])
     try {
-      for (const call of [fetchThroughGroup, pushThroughGroup, pullThroughGroup]) {
+      const handlers: ((payload: { repoPath: string }) => Promise<Either.Either<void, unknown>>)[] =
+        [fetchThroughGroup, pushThroughGroup, pullThroughGroup]
+      for (const call of handlers) {
         const result = await call({ repoPath: unopened })
         expect(Either.isLeft(result)).toBe(true)
         if (Either.isLeft(result)) {

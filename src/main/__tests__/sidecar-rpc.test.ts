@@ -1,4 +1,11 @@
-import { Conflict, FetchSkipped, GitError, HunkNotFound, RepoNotOpen } from '@shared/rpc'
+import {
+  Conflict,
+  FetchSkipped,
+  GitError,
+  HunkNotFound,
+  PushRejected,
+  RepoNotOpen
+} from '@shared/rpc'
 import { Exit } from 'effect'
 import { describe, expect, it, vi } from 'vitest'
 import { classifyExit, isRpcOp, SidecarRpcError } from '../sidecar-rpc'
@@ -128,6 +135,26 @@ describe('classifyExit', () => {
       TOKEN
     )
     expect(result).toEqual({ _tag: 'GitError', message: 'fatal: not a git repository' })
+  })
+
+  it('maps a typed PushRejected failure onto the PushRejected response with its loss preview', () => {
+    const result = classifyExit(
+      'push',
+      Exit.fail(
+        new PushRejected({
+          reason: 'lease-stale',
+          lostCommits: [{ sha: 'abc1234', subject: 'teammate work' }],
+          remoteSha: 'abc1234fullsha'
+        })
+      ),
+      TOKEN
+    )
+    expect(result).toEqual({
+      _tag: 'PushRejected',
+      reason: 'lease-stale',
+      lostCommits: [{ sha: 'abc1234', subject: 'teammate work' }],
+      remoteSha: 'abc1234fullsha'
+    })
   })
 
   it('throws SidecarRpcError for a transport failure instead of collapsing to GitError', () => {

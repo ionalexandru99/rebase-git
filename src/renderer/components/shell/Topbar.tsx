@@ -1,6 +1,9 @@
 import { Loader2Icon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import type { PushForce } from '@/lib/rpc-client'
 import { cn } from '@/lib/utils'
+import type { PushOutcome } from '@/stores/action-runner'
+import { PushControl } from './PushControl'
 
 export const workspaceViewTabs = [
   { view: 'history', label: 'History' },
@@ -17,7 +20,11 @@ interface TopbarProps {
   workspaceContext?: string
   onFetch?: () => void
   onPull?: () => void
-  onPush?: () => void
+  push?: (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
+  branch?: string
+  ahead?: number
+  behind?: number
+  detached?: boolean
   pulling?: boolean
   pushing?: boolean
 }
@@ -82,15 +89,16 @@ export function Topbar(props: TopbarProps) {
           {props.pulling ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
           Pull
         </button>
-        <button
-          type="button"
-          onClick={() => props.onPush?.()}
-          disabled={props.pushing}
-          className={actionButtonClass}
-        >
-          {props.pushing ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-          Push
-        </button>
+        {props.push ? (
+          <PushControl
+            branchName={props.branch ?? ''}
+            ahead={props.ahead ?? 0}
+            behind={props.behind ?? 0}
+            detached={props.detached ?? false}
+            pushing={props.pushing ?? false}
+            push={props.push}
+          />
+        ) : null}
       </div>
 
       <div className="flex min-w-0 items-center gap-2 px-2">

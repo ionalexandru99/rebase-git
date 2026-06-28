@@ -8,6 +8,8 @@ const rpcTags = new Set(SidecarRpcs.requests.keys())
 
 // The renderer↔main wire shape for an RPC op: the typed success/domain errors as data; every
 // infrastructure failure rejects the call instead (see callRpc / SidecarRpcError).
+type LostCommit = { sha: string; subject: string }
+
 type RpcResponse =
   | ({ _tag: 'Ok' } & Record<string, unknown>)
   | { _tag: 'RepoNotOpen' }
@@ -16,6 +18,12 @@ type RpcResponse =
   | { _tag: 'HunkNotFound' }
   | { _tag: 'FetchSkipped' }
   | { _tag: 'Conflict'; message: string }
+  | {
+      _tag: 'PushRejected'
+      reason: string
+      lostCommits: readonly LostCommit[]
+      remoteSha?: string
+    }
 
 const makeRuntime = (baseUrl: string, token: string) => {
   const protocol = RpcClient.layerProtocolHttp({
@@ -82,6 +90,19 @@ export function classifyExit(
     }
     if (isTaggedError(error, 'GitError') && typeof message === 'string') {
       return { _tag: 'GitError', message: scrubToken(message, token) }
+    }
+    if (isTaggedError(error, 'PushRejected')) {
+      const rejected = error as {
+        reason: string
+        lostCommits: readonly LostCommit[]
+        remoteSha?: string
+      }
+      return {
+        _tag: 'PushRejected',
+        reason: rejected.reason,
+        lostCommits: rejected.lostCommits,
+        remoteSha: rejected.remoteSha
+      }
     }
   }
   console.error(`[sidecar-rpc] ${op} failed`, scrubToken(Cause.pretty(exit.cause), token))

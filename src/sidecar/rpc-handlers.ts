@@ -220,7 +220,8 @@ export const handlersLayer = SidecarRpcs.toLayer({
   reset: ({ repoPath, sha, mode }) =>
     withResolvedRepo(repoPath, (repo) => operations.resetToCommit(repo, sha, mode)),
   fetch: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.fetchRepo(repo)),
-  push: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.pushRepo(repo)),
+  push: ({ repoPath, force, expectedRemoteSha }) =>
+    withResolvedRepo(repoPath, (repo) => operations.pushRepo(repo, force, expectedRemoteSha)),
   pull: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.pullRepo(repo)),
   getStatus: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.getStatus(repo)),
   getBranches: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.getBranches(repo)),

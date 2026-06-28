@@ -13,3 +13,17 @@ export class Conflict extends Schema.TaggedError<Conflict>()('Conflict', {
   message: Schema.String
 }) {}
 export class FetchSkipped extends Schema.TaggedError<FetchSkipped>()('FetchSkipped', {}) {}
+
+export const LostCommit = Schema.Struct({ sha: Schema.String, subject: Schema.String })
+export type LostCommit = Schema.Schema.Type<typeof LostCommit>
+
+// A push refused for a fast-forward/lease reason (as opposed to auth/network, which stays a GitError).
+// `reason` maps git's stderr to the next UI step: non-fast-forward → offer a leased force; lease-stale
+// / remote-moved → the leased force was itself refused, so the sidecar has already fetched and folded
+// in `lostCommits` (commits on the refreshed remote tip absent locally) and `remoteSha` (that tip) to
+// pin a deliberate overwrite to exactly what the user is shown.
+export class PushRejected extends Schema.TaggedError<PushRejected>()('PushRejected', {
+  reason: Schema.Literal('non-fast-forward', 'lease-stale', 'remote-moved'),
+  lostCommits: Schema.Array(LostCommit),
+  remoteSha: Schema.optional(Schema.String)
+}) {}

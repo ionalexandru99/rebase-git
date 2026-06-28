@@ -101,6 +101,8 @@ export type RefWriteResult = RpcResult<
   typeof CreateBranch.successSchema.Type,
   typeof CreateBranch.errorSchema.Type
 >
+export type PushResult = RpcResult<typeof Push.successSchema.Type, typeof Push.errorSchema.Type>
+export type PushForce = NonNullable<typeof Push.payloadSchema.Type.force>
 export type CheckoutResult = RpcResult<
   typeof Checkout.successSchema.Type,
   typeof Checkout.errorSchema.Type
@@ -314,8 +316,12 @@ export async function rpcFetch(repoPath: string): Promise<FetchResult> {
   return callSidecarRpc(Fetch, { repoPath })
 }
 
-export async function rpcPush(repoPath: string): Promise<RefWriteResult> {
-  return callSidecarRpc(Push, { repoPath })
+export async function rpcPush(
+  repoPath: string,
+  force?: PushForce,
+  expectedRemoteSha?: string
+): Promise<PushResult> {
+  return callSidecarRpc(Push, { repoPath, force, expectedRemoteSha })
 }
 
 export async function rpcPull(repoPath: string): Promise<RefWriteResult> {

@@ -1,9 +1,24 @@
+import type { LostCommit } from '@shared/git-rpc-errors'
 import { Commit, Pull, Push } from '@shared/rpc'
 import { useMutation } from '@tanstack/react-query'
 import { createContext, type RefObject, useContext } from 'react'
 import { toast } from 'sonner'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
-import { rpcCommit, rpcPull, rpcPush } from '@/lib/rpc-client'
+import { type PushForce, rpcCommit, rpcPull, rpcPush } from '@/lib/rpc-client'
+
+export type PushRejectionReason = 'non-fast-forward' | 'lease-stale' | 'remote-moved'
+
+// The result the push flow drives on: a terminal ok/error is toasted by the runner, while a rejection
+// carries the data the split-button dialogs need to advance (the loss preview + the tip to pin).
+export type PushOutcome =
+  | { kind: 'ok' }
+  | {
+      kind: 'rejected'
+      reason: PushRejectionReason
+      lostCommits: readonly LostCommit[]
+      remoteSha?: string
+    }
+  | { kind: 'error'; message: string }
 
 const formatCause = (error: unknown): string => {
   if (error instanceof Error) {
@@ -25,10 +40,21 @@ export interface ActionRunner {
   runAction: RunAction
   commit: (message: string) => Promise<boolean>
   pushNow: () => Promise<boolean>
+  push: (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
   pullNow: () => Promise<boolean>
   committing: boolean
   pushing: boolean
   pulling: boolean
+}
+
+const pushLabel = (force?: PushForce): string => {
+  if (force === 'overwrite') {
+    return 'Overwrote remote'
+  }
+  if (force === 'with-lease') {
+    return 'Force pushed'
+  }
+  return 'Pushed'
 }
 
 export interface ActionRunnerDeps {
@@ -80,21 +106,64 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
     }
   }
 
+  // Push can't use runAction: a PushRejected is neither a success nor an error to toast — it drives the
+  // split-button's two-tier dialog flow. So terminal outcomes (ok/error) toast and refresh here, while
+  // a rejection is returned verbatim with its loss preview for the caller to escalate on.
+  const runPush = async (force?: PushForce, expectedRemoteSha?: string): Promise<PushOutcome> => {
+    const repoPath = liveRepoPath.current
+    if (!repoPath) {
+      toast.error('Repository is not open')
+      return { kind: 'error', message: 'Repository is not open' }
+    }
+    const label = pushLabel(force)
+    try {
+      const response = await rpcPush(repoPath, force, expectedRemoteSha)
+      if (response._tag === 'Ok') {
+        await refreshCaches(repoPath, cachesForOperation(Push._tag))
+        toast.success(label)
+        return { kind: 'ok' }
+      }
+      if (response._tag === 'PushRejected') {
+        return {
+          kind: 'rejected',
+          reason: response.reason,
+          lostCommits: response.lostCommits,
+          remoteSha: response.remoteSha
+        }
+      }
+      if (response._tag === 'RepoNotOpen') {
+        toast.error('Repository is not open')
+        return { kind: 'error', message: 'Repository is not open' }
+      }
+      toast.error(`${label} failed`, { description: response.message })
+      return { kind: 'error', message: response.message }
+    } catch (error) {
+      const message = formatCause(error)
+      toast.error(`${label} failed`, { description: message })
+      return { kind: 'error', message }
+    }
+  }
+
   const commitMutation = useMutation({
     mutationFn: (message: string) =>
       runAction(Commit._tag, (repoPath) => rpcCommit(repoPath, message), 'Committed')
   })
   const pushMutation = useMutation({
-    mutationFn: () => runAction(Push._tag, (repoPath) => rpcPush(repoPath), 'Pushed')
+    mutationFn: (variables: { force?: PushForce; expectedRemoteSha?: string }) =>
+      runPush(variables.force, variables.expectedRemoteSha)
   })
   const pullMutation = useMutation({
     mutationFn: () => runAction(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled')
   })
 
+  const push = (force?: PushForce, expectedRemoteSha?: string) =>
+    pushMutation.mutateAsync({ force, expectedRemoteSha })
+
   return {
     runAction,
     commit: (message: string) => commitMutation.mutateAsync(message),
-    pushNow: () => pushMutation.mutateAsync(),
+    push,
+    pushNow: () => push().then((outcome) => outcome.kind === 'ok'),
     pullNow: () => pullMutation.mutateAsync(),
     committing: commitMutation.isPending,
     pushing: pushMutation.isPending,

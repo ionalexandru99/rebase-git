@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { Effect } from 'effect'
 import { fetchSemaphoreFor } from './fetch-semaphore'
 import { normalizeRepoPath } from './git/instances'
-import { FetchSkipped, GitError, type RepoNotOpen } from './git-errors'
+import { FetchSkipped, GitError, PushRejected, type RepoNotOpen } from './git-errors'
 import { requireOpen } from './op-helpers'
 import { withRepoLock } from './repo-lock'
 import { type RepoSessions, RepoSessionsLive, withSessionScope } from './repo-sessions'
@@ -75,6 +75,61 @@ function runGitCommand(key: string, args: string[]): Promise<GitCmdResult> {
   )
 }
 
+function runGitStdout(key: string, args: string[]): Promise<string | null> {
+  return spawnGit(['-C', key, ...args], { env: PROMPTLESS_ENV }).then(
+    ({ code, stdout }) => (code === 0 ? stdout.trim() : null),
+    () => null
+  )
+}
+
+// git emits a NUL via the %x00 placeholder; we split the output on the real NUL. A NUL cannot be put
+// in the argv directly (Node's spawn rejects it), so the format string carries the literal placeholder.
+const LOSS_FORMAT = '%h%x00%s'
+const NUL = '\x00'
+
+async function resolveRemoteTrackingRef(key: string): Promise<string | null> {
+  const upstream = await runGitStdout(key, [
+    'rev-parse',
+    '--abbrev-ref',
+    '--symbolic-full-name',
+    '@{upstream}'
+  ])
+  if (upstream) {
+    return upstream
+  }
+  const branch = await runGitStdout(key, ['symbolic-ref', '--short', 'HEAD'])
+  return branch ? `origin/${branch}` : null
+}
+
+// After a lease refusal the remote-tracking ref is stale by definition, so fetch first, then read the
+// refreshed remote tip and the commits it carries that HEAD lacks — exactly what the user would lose
+// and the sha a deliberate overwrite must be pinned to.
+async function fetchAndPreviewLoss(
+  key: string
+): Promise<{ lostCommits: { sha: string; subject: string }[]; remoteSha?: string }> {
+  return fetchSemaphoreFor(key).withPermits(async () => {
+    await runGitCommand(key, ['fetch', '--prune', 'origin'])
+    const remoteRef = await resolveRemoteTrackingRef(key)
+    if (remoteRef === null) {
+      return { lostCommits: [] }
+    }
+    const remoteSha = await runGitStdout(key, ['rev-parse', remoteRef])
+    const logOutput = await runGitStdout(key, [
+      'log',
+      `--format=${LOSS_FORMAT}`,
+      `HEAD..${remoteRef}`
+    ])
+    const lostCommits = (logOutput ?? '')
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [sha, subject] = line.split(NUL)
+        return { sha, subject: subject ?? '' }
+      })
+    return { lostCommits, remoteSha: remoteSha ?? undefined }
+  })
+}
+
 export function fetchRepo(
   repoPath: string
 ): Effect.Effect<void, RepoNotOpen | GitError | FetchSkipped, RepoSessions> {
@@ -96,23 +151,107 @@ export function fetchRepo(
   })
 }
 
+export type PushForce = 'with-lease' | 'overwrite'
+
+type RejectionReason = 'non-fast-forward' | 'lease-stale' | 'remote-moved'
+
+// git stamps the rejected ref line with the reason in parentheses; map only the fast-forward/lease
+// ones. Anything else (auth, network, permission) is left to surface as a generic GitError.
+function classifyRejection(stderr: string): RejectionReason | null {
+  if (stderr.includes('(stale info)')) {
+    return 'lease-stale'
+  }
+  if (stderr.includes('(remote ref updated since checkout)')) {
+    return 'remote-moved'
+  }
+  if (stderr.includes('(fetch first)')) {
+    return 'non-fast-forward'
+  }
+  return null
+}
+
+interface Upstream {
+  remote: string
+  remoteRef: string
+  hasUpstream: boolean
+}
+
+// The remote + remote-side branch the current branch publishes to, read from its tracking config so a
+// differently-named upstream (local `feature` → `origin/trunk`) targets the right ref. With no
+// upstream configured we fall back to origin + the branch's own name, matching today's plain push.
+async function resolveUpstream(key: string): Promise<Upstream | null> {
+  const branch = await runGitStdout(key, ['symbolic-ref', '--short', 'HEAD'])
+  if (branch === null) {
+    return null
+  }
+  const remote = await runGitStdout(key, ['config', `branch.${branch}.remote`])
+  const mergeRef = await runGitStdout(key, ['config', `branch.${branch}.merge`])
+  if (remote && mergeRef) {
+    return { remote, remoteRef: mergeRef.replace(/^refs\/heads\//, ''), hasUpstream: true }
+  }
+  return { remote: 'origin', remoteRef: branch, hasUpstream: false }
+}
+
+function buildPushArgs(
+  force: PushForce | undefined,
+  upstream: Upstream,
+  expectedRemoteSha: string | undefined
+): string[] {
+  // Tier 2: a lease pinned to the exact tip the user was shown — no --force-if-includes, since the
+  // whole point is to discard a remote commit the user deliberately did not integrate.
+  if (force === 'overwrite') {
+    const args = ['push', `--force-with-lease=${upstream.remoteRef}:${expectedRemoteSha ?? ''}`]
+    if (!upstream.hasUpstream) {
+      args.push('--set-upstream')
+    }
+    args.push(upstream.remote, `HEAD:${upstream.remoteRef}`)
+    return args
+  }
+  const args = ['push']
+  if (force === 'with-lease') {
+    args.push('--force-with-lease', '--force-if-includes')
+  }
+  if (!upstream.hasUpstream) {
+    args.push('--set-upstream', upstream.remote, 'HEAD')
+  }
+  return args
+}
+
 export function pushRepo(
-  repoPath: string
-): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
+  repoPath: string,
+  force?: PushForce,
+  expectedRemoteSha?: string
+): Effect.Effect<void, RepoNotOpen | GitError | PushRejected, RepoSessions> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
     yield* withRepoLock(
       key,
       Effect.gen(function* () {
-        const upstream = yield* Effect.promise(() =>
-          runGitCommand(key, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
-        )
-        const pushArgs = upstream.ok ? ['push'] : ['push', '--set-upstream', 'origin', 'HEAD']
+        const upstream = yield* Effect.promise(() => resolveUpstream(key))
+        if (upstream === null) {
+          return yield* Effect.fail(new GitError({ message: 'cannot push a detached HEAD' }))
+        }
+        const pushArgs = buildPushArgs(force, upstream, expectedRemoteSha)
         const result = yield* Effect.promise(() => runGitCommand(key, pushArgs))
-        if (!result.ok) {
+        if (result.ok) {
+          return
+        }
+        const reason = classifyRejection(result.message)
+        if (reason === null) {
           return yield* Effect.fail(new GitError({ message: result.message }))
         }
+        if (reason === 'non-fast-forward') {
+          return yield* Effect.fail(new PushRejected({ reason, lostCommits: [] }))
+        }
+        const preview = yield* Effect.promise(() => fetchAndPreviewLoss(key))
+        return yield* Effect.fail(
+          new PushRejected({
+            reason,
+            lostCommits: preview.lostCommits,
+            remoteSha: preview.remoteSha
+          })
+        )
       }),
       { timeoutMs: null }
     )

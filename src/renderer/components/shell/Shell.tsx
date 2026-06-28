@@ -3,9 +3,13 @@ import { SidebarPrefsSchema } from '@shared/schemas/ipc'
 import type { ReactNode } from 'react'
 import type { BranchAction, StashAction } from '@/lib/git-actions'
 import type { BranchTracking, RefKind, StashRowData } from '@/lib/ref-tree'
+import type { PushForce } from '@/lib/rpc-client'
+import type { PushOutcome } from '@/stores/action-runner'
 import { useDraggableWidth } from '../../hooks/useDraggableWidth'
 import { AppSidebar } from './Sidebar'
 import { Topbar, type WorkspaceView } from './Topbar'
+
+type TopbarPush = (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
 
 const SIDEBAR_WIDTH_MIN = 200
 const SIDEBAR_WIDTH_MAX = 520
@@ -44,7 +48,10 @@ interface ShellProps {
   workspaceContext?: string
   onFetch?: () => void
   onPull?: () => void
-  onPush?: () => void
+  push?: TopbarPush
+  ahead?: number
+  behind?: number
+  detached?: boolean
   pulling?: boolean
   pushing?: boolean
   children: ReactNode
@@ -90,7 +97,11 @@ export function Shell(props: ShellProps) {
           workspaceContext={props.workspaceContext}
           onFetch={props.onFetch}
           onPull={props.onPull}
-          onPush={props.onPush}
+          push={props.push}
+          branch={props.repo.branch}
+          ahead={props.ahead}
+          behind={props.behind}
+          detached={props.detached}
           pulling={props.pulling}
           pushing={props.pushing}
         />

@@ -7,6 +7,7 @@ import {
   GitError,
   HunkNotFound,
   NotARepo,
+  PushRejected,
   RepoNotOpen
 } from './git-rpc-errors'
 import {
@@ -28,6 +29,7 @@ export {
   GitError,
   HunkNotFound,
   NotARepo,
+  PushRejected,
   RepoNotOpen
 } from './git-rpc-errors'
 
@@ -227,9 +229,13 @@ export const Fetch = Rpc.make('fetch', {
 })
 
 export const Push = Rpc.make('push', {
-  payload: { repoPath: RequiredString },
+  payload: {
+    repoPath: RequiredString,
+    force: Schema.optional(Schema.Literal('with-lease', 'overwrite')),
+    expectedRemoteSha: OptionalString
+  },
   success: Schema.Void,
-  error: RefWriteError
+  error: Schema.Union(RepoNotOpen, GitError, PushRejected)
 })
 
 export const Pull = Rpc.make('pull', {
