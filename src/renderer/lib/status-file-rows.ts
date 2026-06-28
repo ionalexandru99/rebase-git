@@ -1,3 +1,5 @@
+import type { HeadCommitFile } from '@shared/schemas/git'
+import { dropStateOf, type FileDrops, type HeadDropState } from '@/lib/amend-drops'
 import type { GitStatus } from '@/types'
 
 export type StatusFileKind =
@@ -10,6 +12,10 @@ export type StatusFileKind =
 
 export type FileStageState = 'staged' | 'partial' | 'unstaged'
 
+// 'worktree' rows are uncommitted changes (stage/unstage); 'head-commit' rows are files already in the
+// commit being amended (kept/dropped) and ride in the same list so the user manages an amend in one place.
+export type FileRowSource = 'worktree' | 'head-commit'
+
 export interface UnifiedFileRow {
   file: string
   display?: string
@@ -17,6 +23,8 @@ export interface UnifiedFileRow {
   stageState: FileStageState
   isConflicted: boolean
   isUntracked: boolean
+  source: FileRowSource
+  dropState?: HeadDropState
 }
 
 const isUntrackedCode = (index: string, workingDir: string): boolean =>
@@ -69,7 +77,8 @@ function buildFromCodes(status: GitStatus): UnifiedFileRow[] {
       fileKind,
       stageState,
       isConflicted: conflicted,
-      isUntracked: untracked
+      isUntracked: untracked,
+      source: 'worktree'
     })
   }
   return rows
@@ -78,12 +87,12 @@ function buildFromCodes(status: GitStatus): UnifiedFileRow[] {
 function buildFromBuckets(status: GitStatus): UnifiedFileRow[] {
   const rows: UnifiedFileRow[] = []
   const seen = new Set<string>()
-  const push = (row: UnifiedFileRow) => {
+  const push = (row: Omit<UnifiedFileRow, 'source'>) => {
     if (seen.has(row.file)) {
       return
     }
     seen.add(row.file)
-    rows.push(row)
+    rows.push({ ...row, source: 'worktree' })
   }
 
   const stagedSet = new Set([...status.staged, ...status.created])
@@ -154,6 +163,36 @@ function buildFromBuckets(status: GitStatus): UnifiedFileRow[] {
     })
   }
   return rows
+}
+
+function headFileKind(status: string): StatusFileKind {
+  switch (status[0]) {
+    case 'A':
+      return 'created'
+    case 'D':
+      return 'deleted'
+    case 'R':
+      return 'renamed'
+    default:
+      return 'modified'
+  }
+}
+
+// The files already in the commit being amended, as rows for the same list as the working tree. Each is
+// kept by default; `drops` carries which files (or which of their hunks) the user has unchecked to
+// revert to their parent state, surfaced on the row as a kept/partial/dropped checkbox.
+export function buildHeadCommitRows(files: HeadCommitFile[], drops: FileDrops): UnifiedFileRow[] {
+  return files
+    .map((file) => ({
+      file: file.path,
+      fileKind: headFileKind(file.status),
+      stageState: 'staged' as FileStageState,
+      isConflicted: false,
+      isUntracked: false,
+      source: 'head-commit' as FileRowSource,
+      dropState: dropStateOf(drops, file.path)
+    }))
+    .sort((left, right) => left.file.localeCompare(right.file))
 }
 
 let warnedMissingFileCodes = false

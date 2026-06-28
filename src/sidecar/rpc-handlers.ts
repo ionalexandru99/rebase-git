@@ -64,6 +64,22 @@ const withResolvedFiles = <A, E, R>(
   use: (relatives: string[]) => Effect.Effect<A, E, R>
 ): Effect.Effect<A, E | GitError, R> => resolveFiles(repoRoot, files).pipe(Effect.flatMap(use))
 
+const resolveDroppedHunks = (
+  repoRoot: string,
+  entries: readonly { file: string; hunks: readonly string[] }[]
+): Effect.Effect<{ file: string; hunks: readonly string[] }[], GitError> =>
+  Effect.suspend(() => {
+    const resolved: { file: string; hunks: readonly string[] }[] = []
+    for (const entry of entries) {
+      const relative = resolveRepoRelativeFile(repoRoot, entry.file)
+      if (!relative) {
+        return Effect.fail(new GitError({ message: INVALID_REPO_PATH }))
+      }
+      resolved.push({ file: relative, hunks: entry.hunks })
+    }
+    return Effect.succeed(resolved)
+  })
+
 // scanForRepos confines enumeration to the user's home tree. The guard mirrors the previous
 // scanForReposSafely: absolute, no `..`/NUL, realpath must be a directory under the realpath'd home
 // root. Any violation fails with the typed GitError('invalid directory path').
@@ -152,10 +168,12 @@ export const handlersLayer = SidecarRpcs.toLayer({
     withResolvedRepo(repoPath, (repo) => operations.commit(repo, message)),
   getHeadCommit: ({ repoPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.getHeadCommit(repo)),
-  amendCommit: ({ repoPath, message, droppedHeadPaths }) =>
+  amendCommit: ({ repoPath, message, droppedHeadPaths, droppedHeadHunks }) =>
     withResolvedRepo(repoPath, (repo) =>
       withResolvedFiles(repo, droppedHeadPaths, (relatives) =>
-        operations.amendCommit(repo, message, relatives)
+        resolveDroppedHunks(repo, droppedHeadHunks).pipe(
+          Effect.flatMap((hunks) => operations.amendCommit(repo, message, relatives, hunks))
+        )
       )
     ),
   stageFile: ({ repoPath, file }) =>

@@ -5,7 +5,11 @@ import { cn } from '@/lib/utils'
 
 interface CommitPanelProps {
   onCommit: (message: string) => Promise<boolean>
-  onAmend: (message: string) => Promise<boolean>
+  onAmend: (
+    message: string,
+    droppedHeadPaths: string[],
+    droppedHeadHunks: { file: string; hunks: string[] }[]
+  ) => Promise<boolean>
   loadHeadMessage: () => Promise<string | null>
   amendAvailable: boolean
   amendDisabled: boolean
@@ -14,6 +18,8 @@ interface CommitPanelProps {
   stagedCount: number
   ahead?: number
   onAmendChange?: (amend: boolean) => void
+  droppedHeadPaths?: string[]
+  droppedHeadHunks?: { file: string; hunks: string[] }[]
 }
 
 const MAX_SUBJECT_LENGTH = 72
@@ -46,7 +52,9 @@ export function CommitPanel(props: CommitPanelProps) {
     if (!trimmed) {
       return
     }
-    const success = await (amend ? props.onAmend(trimmed) : props.onCommit(trimmed))
+    const success = await (amend
+      ? props.onAmend(trimmed, props.droppedHeadPaths ?? [], props.droppedHeadHunks ?? [])
+      : props.onCommit(trimmed))
     if (success) {
       setMessage('')
       setAmend(false)

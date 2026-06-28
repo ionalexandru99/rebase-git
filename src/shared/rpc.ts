@@ -80,10 +80,19 @@ export const GetHeadCommit = Rpc.make('getHeadCommit', {
   error: ReadError
 })
 
-// droppedHeadPaths is always empty in this slice (reword + fold-in only); the field is in the contract
-// now so adding drop-files later doesn't churn it. AmendRejected{head-moved} is the CAS refusal.
+// droppedHeadPaths names files in the amended commit to revert to their parent-commit state (added
+// vanishes, modified falls back, deleted reappears); droppedHeadHunks reverts only the named hunks of a
+// file, keeping the rest. Either way the reverted slice surfaces as a working change. AmendRejected
+// {head-moved} is the CAS refusal.
+const DroppedHunks = Schema.Array(Schema.Struct({ file: RequiredString, hunks: FileList }))
+
 export const AmendCommit = Rpc.make('amendCommit', {
-  payload: { repoPath: RequiredString, message: RequiredString, droppedHeadPaths: FileList },
+  payload: {
+    repoPath: RequiredString,
+    message: RequiredString,
+    droppedHeadPaths: FileList,
+    droppedHeadHunks: DroppedHunks
+  },
   success: Schema.Struct({ result: CommitSummarySchema }),
   error: Schema.Union(RepoNotOpen, GitError, AmendRejected)
 })

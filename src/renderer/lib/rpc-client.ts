@@ -167,9 +167,10 @@ export async function rpcGetHeadCommit(repoPath: string): Promise<HeadCommitResu
 export async function rpcAmendCommit(
   repoPath: string,
   message: string,
-  droppedHeadPaths: string[] = []
+  droppedHeadPaths: string[] = [],
+  droppedHeadHunks: { file: string; hunks: string[] }[] = []
 ): Promise<AmendResult> {
-  return callSidecarRpc(AmendCommit, { repoPath, message, droppedHeadPaths })
+  return callSidecarRpc(AmendCommit, { repoPath, message, droppedHeadPaths, droppedHeadHunks })
 }
 
 export async function rpcStageFile(repoPath: string, file: string): Promise<StageResult> {

@@ -1,7 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import type { HeadDropState } from '@/lib/amend-drops'
 import type { FileAction } from '@/lib/git-actions'
+import type { FileRowSource, UnifiedFileRow } from '@/lib/status-file-rows'
 import { type WorkingTreeStatus, WorkingTreeStatusProvider } from '@/stores/working-tree-status'
 import type { GitStatus } from '@/types'
 import { type SelectedFile, StatusPanel } from '../StatusPanel'
@@ -51,11 +53,13 @@ function provideStatus(status: GitStatus | null, overrides: Partial<WorkingTreeS
 function renderPanel(props: {
   status: GitStatus | null
   selected?: SelectedFile | null
-  onSelect?: (file: string) => void
+  onSelect?: (file: string, source: FileRowSource) => void
   onStage?: WorkingTreeStatus['stageFile']
   onUnstage?: WorkingTreeStatus['unstageFile']
   onStageAll?: WorkingTreeStatus['stageAll']
   onUnstageAll?: WorkingTreeStatus['unstageAll']
+  onToggleDrop?: (file: string) => void
+  amendRows?: UnifiedFileRow[]
   onFileAction?: (action: FileAction, file: string) => void
   loading?: boolean
 }) {
@@ -70,12 +74,24 @@ function renderPanel(props: {
       <StatusPanel
         selected={props.selected ?? null}
         onSelect={props.onSelect ?? vi.fn()}
+        onToggleDrop={props.onToggleDrop}
+        amendRows={props.amendRows}
         onFileAction={props.onFileAction}
         loading={props.loading ?? false}
       />
     )
   )
 }
+
+const amendRow = (path: string, dropState: HeadDropState = 'kept'): UnifiedFileRow => ({
+  file: path,
+  fileKind: 'modified',
+  stageState: 'staged',
+  isConflicted: false,
+  isUntracked: false,
+  source: 'head-commit',
+  dropState
+})
 
 describe('StatusPanel', () => {
   it('renders nothing when status is null', () => {
@@ -166,12 +182,29 @@ describe('StatusPanel', () => {
     expect(onStage).toHaveBeenCalledWith('index.ts')
   })
 
-  it('selects a file when its row is clicked', () => {
+  it('selects a file when its row is clicked, tagging the worktree source', () => {
     const onSelect = vi.fn()
     renderPanel({ status: emptyStatus({ files: [code('index.ts', ' ', 'M')] }), onSelect })
 
     fireEvent.click(screen.getByText('index.ts'))
-    expect(onSelect).toHaveBeenCalledWith('index.ts')
+    expect(onSelect).toHaveBeenCalledWith('index.ts', 'worktree')
+  })
+
+  it('folds amend rows into the same list with drop checkboxes and counts them', () => {
+    const onToggleDrop = vi.fn()
+    renderPanel({
+      status: emptyStatus({ files: [code('work.ts', ' ', 'M')] }),
+      amendRows: [amendRow('committed.ts')],
+      onToggleDrop
+    })
+
+    expect(screen.getByText('2 files · 0 staged')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Stage work.ts' })).toBeInTheDocument()
+
+    const dropBox = screen.getByRole('checkbox', { name: /drop committed\.ts from last commit/i })
+    expect(dropBox).toBeChecked()
+    fireEvent.click(dropBox)
+    expect(onToggleDrop).toHaveBeenCalledWith('committed.ts')
   })
 
   it('highlights the selected file row', () => {

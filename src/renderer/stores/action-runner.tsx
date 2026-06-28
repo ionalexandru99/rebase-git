@@ -46,7 +46,11 @@ export type RunAction = (
 export interface ActionRunner {
   runAction: RunAction
   commit: (message: string) => Promise<boolean>
-  amend: (message: string) => Promise<boolean>
+  amend: (
+    message: string,
+    droppedHeadPaths: string[],
+    droppedHeadHunks: { file: string; hunks: string[] }[]
+  ) => Promise<boolean>
   loadHeadMessage: () => Promise<string | null>
   pushNow: () => Promise<boolean>
   push: (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
@@ -157,14 +161,18 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
   // Amend can't use runAction either: AmendRejected is an expected CAS refusal (HEAD moved), not an
   // error to toast as a failure — it routes to a refresh-and-retry warning. Ok and the rejection both
   // refresh the same caches so the renderer picks up the moved/rewritten HEAD.
-  const runAmend = async (message: string): Promise<boolean> => {
+  const runAmend = async (
+    message: string,
+    droppedHeadPaths: string[],
+    droppedHeadHunks: { file: string; hunks: string[] }[]
+  ): Promise<boolean> => {
     const repoPath = liveRepoPath.current
     if (!repoPath) {
       toast.error('Repository is not open')
       return false
     }
     try {
-      const response = await rpcAmendCommit(repoPath, message)
+      const response = await rpcAmendCommit(repoPath, message, droppedHeadPaths, droppedHeadHunks)
       if (response._tag === 'Ok' || response._tag === 'AmendRejected') {
         await refreshCaches(repoPath, cachesForOperation(AmendCommit._tag))
       }
@@ -207,7 +215,13 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
     mutationFn: (message: string) =>
       runAction(Commit._tag, (repoPath) => rpcCommit(repoPath, message), 'Committed')
   })
-  const amendMutation = useMutation({ mutationFn: (message: string) => runAmend(message) })
+  const amendMutation = useMutation({
+    mutationFn: (variables: {
+      message: string
+      droppedHeadPaths: string[]
+      droppedHeadHunks: { file: string; hunks: string[] }[]
+    }) => runAmend(variables.message, variables.droppedHeadPaths, variables.droppedHeadHunks)
+  })
   const pushMutation = useMutation({
     mutationFn: (variables: { force?: PushForce; expectedRemoteSha?: string }) =>
       runPush(variables.force, variables.expectedRemoteSha)
@@ -222,7 +236,11 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
   return {
     runAction,
     commit: (message: string) => commitMutation.mutateAsync(message),
-    amend: (message: string) => amendMutation.mutateAsync(message),
+    amend: (
+      message: string,
+      droppedHeadPaths: string[],
+      droppedHeadHunks: { file: string; hunks: string[] }[]
+    ) => amendMutation.mutateAsync({ message, droppedHeadPaths, droppedHeadHunks }),
     loadHeadMessage,
     push,
     pushNow: () => push().then((outcome) => outcome.kind === 'ok'),

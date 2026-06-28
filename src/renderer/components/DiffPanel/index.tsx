@@ -2,6 +2,7 @@ import type { DiffHunk, DiffLine } from '@shared/schemas/git'
 import { useQuery } from '@tanstack/react-query'
 import { FileDiffIcon } from 'lucide-react'
 import { type CSSProperties, useMemo, useState } from 'react'
+import type { HeadDropState } from '@/lib/amend-drops'
 import {
   highlightHunk,
   hunkHighlightKey,
@@ -16,8 +17,20 @@ import type { SelectedFile } from '../StatusPanel'
 import { Checkbox } from '../ui/checkbox'
 import { EmptyState } from '../ui/empty-state'
 
+// Drop controls for a head-commit file: the whole-file tri-state plus per-hunk drop toggles, so the
+// amend diff lets the user revert a file or just some of its hunks before committing.
+export interface AmendDropControls {
+  dropState: HeadDropState
+  isHunkDropped: (hunkHeader: string) => boolean
+  onToggleFile: () => void
+  // allHeaders is the file's full hunk list, which only this panel knows; the reducer needs it to
+  // normalize (dropping every hunk collapses to a whole-file drop, keeping one expands a whole drop).
+  onToggleHunk: (hunkHeader: string, allHeaders: string[]) => void
+}
+
 interface DiffPanelProps {
   selected: SelectedFile | null
+  amendDrop?: AmendDropControls
 }
 
 export function DiffPanel(props: DiffPanelProps) {
@@ -243,6 +256,18 @@ export function DiffPanel(props: DiffPanelProps) {
               onChange={toggleFileStaged}
             />
           ) : null}
+          {hasAnyHunks && !isBinary && isHeadCommit && props.amendDrop ? (
+            <Checkbox
+              checked={props.amendDrop.dropState === 'kept'}
+              indeterminate={props.amendDrop.dropState === 'partial'}
+              aria-label={
+                props.amendDrop.dropState === 'kept'
+                  ? `Drop ${props.selected.file} from last commit`
+                  : `Keep ${props.selected.file} in last commit`
+              }
+              onChange={props.amendDrop.onToggleFile}
+            />
+          ) : null}
           <span className="min-w-0 truncate text-sm font-semibold" title={props.selected.file}>
             {props.selected.file}
           </span>
@@ -280,6 +305,18 @@ export function DiffPanel(props: DiffPanelProps) {
               staged={entry.staged}
               pending={isPendingEntry(entry)}
               hunkActionsEnabled={!isHeadCommit && (entry.staged || !isUntracked)}
+              amend={
+                isHeadCommit && props.amendDrop
+                  ? {
+                      dropped: props.amendDrop.isHunkDropped(entry.hunk.header),
+                      onToggleDrop: () =>
+                        props.amendDrop?.onToggleHunk(
+                          entry.hunk.header,
+                          mergedHunks.map((merged) => merged.hunk.header)
+                        )
+                    }
+                  : undefined
+              }
               onStageHunk={() => void stageHunk(entry)}
               onUnstageHunk={() => void unstageHunk(entry)}
             />
@@ -307,6 +344,7 @@ interface HunkCardProps {
   staged: boolean
   pending: boolean
   hunkActionsEnabled: boolean
+  amend?: { dropped: boolean; onToggleDrop: () => void }
   onStageHunk: () => void
   onUnstageHunk: () => void
 }
@@ -334,7 +372,13 @@ function HunkCard(props: HunkCardProps) {
   return (
     <div className="mb-3 overflow-hidden rounded-[10px] border" data-testid="diff-hunk">
       <div className="flex h-8 items-center gap-2.5 border-b bg-card-2 px-2.5">
-        {props.hunkActionsEnabled ? (
+        {props.amend ? (
+          <Checkbox
+            checked={!props.amend.dropped}
+            onChange={props.amend.onToggleDrop}
+            aria-label={props.amend.dropped ? 'Keep hunk' : 'Drop hunk'}
+          />
+        ) : props.hunkActionsEnabled ? (
           <Checkbox
             checked={props.staged}
             disabled={props.pending}

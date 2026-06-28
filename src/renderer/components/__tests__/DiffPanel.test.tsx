@@ -78,32 +78,40 @@ function mockPartiallyStagedDiff() {
   }))
 }
 
+type AmendDrop = Parameters<typeof DiffPanel>[0]['amendDrop']
+
 interface HarnessProps {
   tabActive: boolean
   selected: SelectedFile | null
+  amendDrop?: AmendDrop
   onSession: (session: RepoSession) => void
 }
 
 function DiffPanelHarness(props: HarnessProps) {
   return (
     <GitStoreProvider tabId="diff-test-tab" tabActive={props.tabActive}>
-      <DiffPanelProbe selected={props.selected} onSession={props.onSession} />
+      <DiffPanelProbe
+        selected={props.selected}
+        amendDrop={props.amendDrop}
+        onSession={props.onSession}
+      />
     </GitStoreProvider>
   )
 }
 
-function DiffPanelProbe(props: Pick<HarnessProps, 'selected' | 'onSession'>) {
+function DiffPanelProbe(props: Pick<HarnessProps, 'selected' | 'amendDrop' | 'onSession'>) {
   const session = useRepoSession()
   props.onSession(session)
-  return <DiffPanel selected={props.selected} />
+  return <DiffPanel selected={props.selected} amendDrop={props.amendDrop} />
 }
 
-async function renderDiffPanel(selected: SelectedFile | null) {
+async function renderDiffPanel(selected: SelectedFile | null, amendDrop?: AmendDrop) {
   let session: RepoSession | undefined
   renderWithQuery(() => (
     <DiffPanelHarness
       tabActive={true}
       selected={selected}
+      amendDrop={amendDrop}
       onSession={(value) => {
         session = value
       }}
@@ -511,5 +519,37 @@ describe('DiffPanel', () => {
     await screen.findByText('@@ -1,3 +1,4 @@')
     expect(screen.queryByRole('checkbox', { name: 'Stage hunk' })).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Stage src/app.ts' })).toBeInTheDocument()
+  })
+
+  it('renders a drop checkbox per hunk for a head-commit file and reports a hunk drop on toggle', async () => {
+    const onToggleHunk = vi.fn()
+    await renderDiffPanel(
+      { file: 'src/app.ts', source: 'head-commit', range: 'HEAD~1..HEAD' },
+      { dropState: 'kept', isHunkDropped: () => false, onToggleFile: vi.fn(), onToggleHunk }
+    )
+
+    await screen.findByText('@@ -1,3 +1,4 @@')
+    const checkbox = screen.getByRole('checkbox', { name: 'Drop hunk' })
+    expect(checkbox).toBeChecked()
+    expect(screen.queryByRole('checkbox', { name: 'Stage hunk' })).not.toBeInTheDocument()
+
+    fireEvent.click(checkbox)
+    expect(onToggleHunk).toHaveBeenCalledWith('@@ -1,3 +1,4 @@', ['@@ -1,3 +1,4 @@'])
+  })
+
+  it('renders a tri-state file drop checkbox for a head-commit file', async () => {
+    const onToggleFile = vi.fn()
+    await renderDiffPanel(
+      { file: 'src/app.ts', source: 'head-commit', range: 'HEAD~1..HEAD' },
+      { dropState: 'partial', isHunkDropped: () => false, onToggleFile, onToggleHunk: vi.fn() }
+    )
+
+    const fileCheckbox = await screen.findByRole('checkbox', {
+      name: 'Keep src/app.ts in last commit'
+    })
+    expect((fileCheckbox as HTMLInputElement).indeterminate).toBe(true)
+
+    fireEvent.click(fileCheckbox)
+    expect(onToggleFile).toHaveBeenCalled()
   })
 })

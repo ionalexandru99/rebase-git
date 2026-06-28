@@ -17,6 +17,8 @@ function renderPanel(
       stagedCount={overrides.stagedCount ?? 2}
       ahead={overrides.ahead}
       onAmendChange={overrides.onAmendChange}
+      droppedHeadPaths={overrides.droppedHeadPaths}
+      droppedHeadHunks={overrides.droppedHeadHunks}
     />
   )
 }
@@ -147,8 +149,32 @@ describe('CommitPanel', () => {
     await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('head message'))
     fireEvent.click(screen.getByRole('button', { name: 'Amend' }))
 
-    await waitFor(() => expect(onAmend).toHaveBeenCalledWith('head message'))
+    await waitFor(() => expect(onAmend).toHaveBeenCalledWith('head message', [], []))
     expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('forwards the assembled droppedHeadPaths and droppedHeadHunks into onAmend', async () => {
+    const onAmend = vi.fn().mockResolvedValue(true)
+    renderPanel({
+      amendAvailable: true,
+      stagedCount: 0,
+      onAmend,
+      droppedHeadPaths: ['src/dropped.ts', 'gone.txt'],
+      droppedHeadHunks: [{ file: 'partial.ts', hunks: ['@@ -1,3 +1,4 @@'] }],
+      loadHeadMessage: vi.fn().mockResolvedValue('head message')
+    })
+
+    fireEvent.click(amendToggle())
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('head message'))
+    fireEvent.click(screen.getByRole('button', { name: 'Amend' }))
+
+    await waitFor(() =>
+      expect(onAmend).toHaveBeenCalledWith(
+        'head message',
+        ['src/dropped.ts', 'gone.txt'],
+        [{ file: 'partial.ts', hunks: ['@@ -1,3 +1,4 @@'] }]
+      )
+    )
   })
 
   it('hides the amend toggle when there is no HEAD to amend', () => {

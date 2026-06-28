@@ -5,14 +5,21 @@ import { CommitPanel } from './components/CommitPanel'
 import { DiffPanel } from './components/DiffPanel'
 import { HistoryPanel } from './components/HistoryPanel'
 import { type SelectedFile, StatusPanel } from './components/StatusPanel'
-import { HeadCommitFilesGroup } from './components/StatusPanel/HeadCommitFilesGroup'
 import { StashControl } from './components/StatusPanel/StashControl'
 import type { WorkspaceView } from './components/shell/Topbar'
 import { useDraggableWidth } from './hooks/useDraggableWidth'
+import {
+  assembleDrops,
+  dropStateOf,
+  type FileDrops,
+  hunkDropped,
+  toggleFileDrop,
+  toggleHunkDrop
+} from './lib/amend-drops'
 import type { CommitAction, FileAction } from './lib/git-actions'
 import { buildHeadCommitRange } from './lib/head-commit-range'
 import type { RefKind } from './lib/ref-tree'
-import { buildUnifiedFileRows } from './lib/status-file-rows'
+import { buildHeadCommitRows, buildUnifiedFileRows } from './lib/status-file-rows'
 import {
   useActionRunner,
   useCommitHistory,
@@ -68,9 +75,16 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const { actions, prompt, confirm } = useWorkspaceContext()
   const [selected, setSelected] = useState<SelectedFile | null>(null)
   const [amendActive, setAmendActive] = useState(false)
+  const [drops, setDrops] = useState<FileDrops>(() => new Map())
   const headCommit = useHeadCommit(amendActive)
   const headFiles = headCommit.data?.files ?? []
   const headParentCount = headCommit.data?.parentCount ?? 0
+  // A merge commit (parentCount > 1) stays reword-only, so it contributes no droppable rows.
+  const amendRows = useMemo(
+    () => (amendActive && headParentCount <= 1 ? buildHeadCommitRows(headFiles, drops) : []),
+    [amendActive, headParentCount, headFiles, drops]
+  )
+  const { droppedHeadPaths, droppedHeadHunks } = useMemo(() => assembleDrops(drops), [drops])
 
   const promptStash = (title: string, run: (message?: string) => Promise<boolean>) => {
     prompt({
@@ -188,15 +202,37 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const handleAmendChange = (active: boolean) => {
     setAmendActive(active)
     if (!active) {
+      // Leaving amend (un-tick or a landed amend) discards the drop selection so the next session
+      // starts with every file kept.
+      setDrops(new Map())
       setSelected((current) =>
         current?.source === 'head-commit' ? (fileEntries[0] ?? null) : current
       )
     }
   }
 
+  const toggleHeadFileDrop = (file: string) => {
+    setDrops((current) => toggleFileDrop(current, file))
+  }
+
+  const toggleHeadHunkDrop = (file: string, hunkHeader: string, allHeaders: string[]) => {
+    setDrops((current) => toggleHunkDrop(current, file, hunkHeader, allHeaders))
+  }
+
   const selectHeadFile = (file: string) => {
     setSelected({ file, source: 'head-commit', range: buildHeadCommitRange(headParentCount) })
   }
+
+  const amendDrop =
+    selected?.source === 'head-commit'
+      ? {
+          dropState: dropStateOf(drops, selected.file),
+          isHunkDropped: (hunkHeader: string) => hunkDropped(drops, selected.file, hunkHeader),
+          onToggleFile: () => toggleHeadFileDrop(selected.file),
+          onToggleHunk: (hunkHeader: string, allHeaders: string[]) =>
+            toggleHeadHunkDrop(selected.file, hunkHeader, allHeaders)
+        }
+      : undefined
 
   // The commit panel stays mounted on a clean tree whenever there's a HEAD to amend, so a pure reword
   // (nothing staged) is reachable without first dirtying the working tree.
@@ -212,13 +248,17 @@ function LocalChangesView(props: WorkspaceViewProps) {
           style={{ gridTemplateColumns: `${filesWidth}px minmax(0, 1fr)` }}
         >
           <div className="relative flex min-h-0 min-w-0 flex-col border-r">
-            {totalChanges > 0 ? (
-              <div className="min-h-0 flex-1 overflow-hidden">
-                <StatusPanel
-                  selected={selected}
-                  onSelect={(file) => setSelected({ file })}
-                  onFileAction={handleFileAction}
-                  headerActions={
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <StatusPanel
+                selected={selected}
+                onSelect={(file, source) =>
+                  source === 'head-commit' ? selectHeadFile(file) : setSelected({ file })
+                }
+                onToggleDrop={toggleHeadFileDrop}
+                amendRows={amendRows}
+                onFileAction={handleFileAction}
+                headerActions={
+                  totalChanges > 0 ? (
                     <>
                       <StashControl
                         stagedFiles={stagedFiles}
@@ -234,25 +274,11 @@ function LocalChangesView(props: WorkspaceViewProps) {
                         Discard all
                       </button>
                     </>
-                  }
-                  loading={loading}
-                />
-              </div>
-            ) : null}
-            {amendActive ? (
-              <div
-                className={`min-h-0 overflow-auto ${
-                  totalChanges > 0 ? 'max-h-[45%] shrink-0' : 'flex-1'
-                }`}
-              >
-                <HeadCommitFilesGroup
-                  files={headFiles}
-                  parentCount={headParentCount}
-                  selectedFile={selected?.source === 'head-commit' ? selected.file : null}
-                  onSelect={selectHeadFile}
-                />
-              </div>
-            ) : null}
+                  ) : undefined
+                }
+                loading={loading}
+              />
+            </div>
             <span
               onMouseDown={(event) => onResizeStart(event.nativeEvent)}
               aria-hidden="true"
@@ -261,7 +287,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
               <span className="w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/60" />
             </span>
           </div>
-          <DiffPanel selected={selected} />
+          <DiffPanel selected={selected} amendDrop={amendDrop} />
         </div>
       ) : (
         <CleanWorkingTree />
@@ -271,6 +297,8 @@ function LocalChangesView(props: WorkspaceViewProps) {
         onAmend={amend}
         loadHeadMessage={loadHeadMessage}
         onAmendChange={handleAmendChange}
+        droppedHeadPaths={droppedHeadPaths}
+        droppedHeadHunks={droppedHeadHunks}
         amendAvailable={amendAvailable}
         amendDisabled={amendDisabled}
         loading={loading}

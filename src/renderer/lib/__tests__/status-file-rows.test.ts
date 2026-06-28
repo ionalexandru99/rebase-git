@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildUnifiedFileRows, type StatusFileKind } from '@/lib/status-file-rows'
+import {
+  buildHeadCommitRows,
+  buildUnifiedFileRows,
+  type StatusFileKind
+} from '@/lib/status-file-rows'
 import type { GitStatus } from '@/types'
 
 type Code = { path: string; index: string; working_dir: string }
@@ -96,6 +100,46 @@ describe('buildUnifiedFileRows (porcelain codes)', () => {
     )
     expect(rows[0].display).toBe('old.ts → new.ts')
     expect(rows[0].fileKind).toBe('renamed')
+  })
+})
+
+describe('buildHeadCommitRows', () => {
+  it('maps last-commit files to head-commit rows carrying each file’s drop state', () => {
+    const rows = buildHeadCommitRows(
+      [
+        { status: 'A', path: 'added.ts' },
+        { status: 'M', path: 'mod.ts' },
+        { status: 'D', path: 'gone.ts' },
+        { status: 'R100', path: 'renamed.ts' }
+      ],
+      new Map<string, 'all' | ReadonlySet<string>>([
+        ['mod.ts', 'all'],
+        ['gone.ts', new Set(['@@ -1 +1 @@'])]
+      ])
+    )
+
+    const byFile = Object.fromEntries(rows.map((row) => [row.file, row]))
+    expect(byFile['added.ts']).toMatchObject({
+      source: 'head-commit',
+      fileKind: 'created',
+      dropState: 'kept'
+    })
+    expect(byFile['mod.ts']).toMatchObject({
+      source: 'head-commit',
+      fileKind: 'modified',
+      dropState: 'dropped'
+    })
+    expect(byFile['gone.ts']).toMatchObject({
+      source: 'head-commit',
+      fileKind: 'deleted',
+      dropState: 'partial'
+    })
+    expect(byFile['renamed.ts']).toMatchObject({ source: 'head-commit', fileKind: 'renamed' })
+  })
+
+  it('tags working-tree rows with the worktree source', () => {
+    const rows = buildUnifiedFileRows(status({ files: [code('a.ts', 'M', ' ')] }))
+    expect(rows[0].source).toBe('worktree')
   })
 })
 

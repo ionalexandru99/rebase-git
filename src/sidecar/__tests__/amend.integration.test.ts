@@ -152,6 +152,95 @@ describe('getHeadCommit', () => {
   })
 })
 
+function workingTree(name: string): string {
+  return fs.readFileSync(path.join(repoDir, name), 'utf8')
+}
+
+describe('amendCommit — drop files', () => {
+  it('reverts a dropped modification to its parent content, surfacing the new version as a working change', async () => {
+    commitFile('a.txt', 'base\n', 'base')
+    const baseSha = git('rev-parse', 'HEAD').trim()
+    commitFile('a.txt', 'changed\n', 'second')
+
+    await runOp(amendCommit(repoDir, 'second', ['a.txt']))
+
+    expect(git('show', 'HEAD:a.txt')).toBe('base\n')
+    expect(workingTree('a.txt')).toBe('changed\n')
+    expect(git('status', '--porcelain').trim()).toBe('M a.txt')
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(baseSha)
+  })
+
+  it('removes a dropped addition from the commit, leaving it as an untracked working file', async () => {
+    commitFile('base.txt', 'base\n', 'base')
+    const baseSha = git('rev-parse', 'HEAD').trim()
+    commitFile('new.txt', 'new\n', 'second')
+
+    await runOp(amendCommit(repoDir, 'second', ['new.txt']))
+
+    expect(() => git('show', 'HEAD:new.txt')).toThrow()
+    expect(workingTree('new.txt')).toBe('new\n')
+    expect(git('status', '--porcelain').trim()).toBe('?? new.txt')
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(baseSha)
+  })
+
+  it('restores a dropped deletion to the commit, surfacing the deletion as a working change', async () => {
+    commitFile('del.txt', 'content\n', 'base')
+    const baseSha = git('rev-parse', 'HEAD').trim()
+    fs.rmSync(path.join(repoDir, 'del.txt'))
+    git('add', '-A')
+    git('commit', '-m', 'second')
+
+    await runOp(amendCommit(repoDir, 'second', ['del.txt']))
+
+    expect(git('show', 'HEAD:del.txt')).toBe('content\n')
+    expect(fs.existsSync(path.join(repoDir, 'del.txt'))).toBe(false)
+    expect(git('status', '--porcelain').trim()).toBe('D del.txt')
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(baseSha)
+  })
+
+  it('drops a file from a root commit (the absent parent means it is removed)', async () => {
+    fs.writeFileSync(path.join(repoDir, 'keep.txt'), 'keep\n')
+    fs.writeFileSync(path.join(repoDir, 'drop.txt'), 'drop\n')
+    git('add', '.')
+    git('commit', '-m', 'root')
+
+    await runOp(amendCommit(repoDir, 'root', ['drop.txt']))
+
+    expect(parentsOf()).toHaveLength(0)
+    expect(git('show', 'HEAD:keep.txt')).toBe('keep\n')
+    expect(() => git('show', 'HEAD:drop.txt')).toThrow()
+    expect(workingTree('drop.txt')).toBe('drop\n')
+    expect(git('status', '--porcelain').trim()).toBe('?? drop.txt')
+  })
+})
+
+function committedHunkHeaders(file: string): string[] {
+  const out = git('diff', '--no-color', '--no-ext-diff', '--unified=3', 'HEAD~1..HEAD', '--', file)
+  return out.split('\n').filter((line) => line.startsWith('@@ '))
+}
+
+describe('amendCommit — drop hunks', () => {
+  it('reverts only a dropped hunk, keeps the rest of the commit, and surfaces that hunk as a working change', async () => {
+    const parent = 'a1\na2\na3\na4\na5\na6\na7\na8\na9\na10\na11\na12\na13\n'
+    const head = 'A1\na2\na3\na4\na5\na6\na7\na8\na9\na10\na11\na12\nA13\n'
+    commitFile('multi.txt', parent, 'base')
+    const baseSha = git('rev-parse', 'HEAD').trim()
+    commitFile('multi.txt', head, 'second')
+
+    const headers = committedHunkHeaders('multi.txt')
+    expect(headers).toHaveLength(2)
+
+    await runOp(amendCommit(repoDir, 'second', [], [{ file: 'multi.txt', hunks: [headers[0]] }]))
+
+    const committed = git('show', 'HEAD:multi.txt')
+    expect(committed.split('\n')[0]).toBe('a1')
+    expect(committed.trimEnd().split('\n').at(-1)).toBe('A13')
+    expect(workingTree('multi.txt')).toBe(head)
+    expect(git('status', '--porcelain').trim()).toBe('M multi.txt')
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(baseSha)
+  })
+})
+
 describe('amendCommit — compare-and-swap', () => {
   it('refuses to advance HEAD when it moved underneath (head-moved)', async () => {
     commitFile('x.txt', 'a\n', 'first')

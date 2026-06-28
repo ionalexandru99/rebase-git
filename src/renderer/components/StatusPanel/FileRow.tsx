@@ -1,5 +1,6 @@
+import type { HeadDropState } from '@/lib/amend-drops'
 import type { FileAction } from '@/lib/git-actions'
-import type { FileStageState } from '@/lib/status-file-rows'
+import type { FileRowSource, FileStageState } from '@/lib/status-file-rows'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '../ui/checkbox'
 import {
@@ -16,15 +17,65 @@ interface FileRowProps {
   display?: string
   kind: StatusKind
   stageState: FileStageState
+  source?: FileRowSource
+  dropState?: HeadDropState
   isSelected: boolean
   onSelect: (file: string) => void
   onStage?: (file: string) => void
   onUnstage?: (file: string) => void
+  onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string) => void
 }
 
+const ROW_GRID =
+  'grid h-8 grid-cols-[15px_18px_minmax(0,1fr)] items-center gap-2 rounded-[var(--r-sm)] px-2 transition-colors'
+
 export function FileRow(props: FileRowProps) {
   const label = props.display ?? props.file
+  const rowClass = cn(ROW_GRID, props.isSelected ? 'bg-[var(--brand-soft)]' : 'hover:bg-muted')
+
+  const nameButton = (
+    <button
+      type="button"
+      onClick={() => props.onSelect(props.file)}
+      className="flex h-full min-w-0 items-center text-left"
+    >
+      <span className="min-w-0 truncate text-sm" title={label}>
+        {label}
+      </span>
+    </button>
+  )
+
+  // Files already in the commit being amended: a checked box keeps the file, unchecking drops it back to
+  // its parent-commit state. No stage/discard — those belong to the working tree.
+  if (props.source === 'head-commit') {
+    const dropState = props.dropState ?? 'kept'
+    const kept = dropState === 'kept'
+    return (
+      <ContextMenu>
+        <ContextMenuTriggerArea className={rowClass} data-testid="status-file-row">
+          <Checkbox
+            checked={kept}
+            indeterminate={dropState === 'partial'}
+            aria-label={kept ? `Drop ${label} from last commit` : `Keep ${label} in last commit`}
+            onChange={() => props.onToggleDrop?.(props.file)}
+          />
+          <StatusBadge kind={props.kind} />
+          {nameButton}
+        </ContextMenuTriggerArea>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={() => props.onToggleDrop?.(props.file)}>
+            {kept ? 'Drop from last commit' : 'Keep in last commit'}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => props.onFileAction?.('copy-path', props.file)}>
+            Copy path
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    )
+  }
+
   const isStaged = props.stageState === 'staged'
 
   const toggleStaged = () => {
@@ -37,13 +88,7 @@ export function FileRow(props: FileRowProps) {
 
   return (
     <ContextMenu>
-      <ContextMenuTriggerArea
-        className={cn(
-          'grid h-8 grid-cols-[15px_18px_minmax(0,1fr)] items-center gap-2 rounded-[var(--r-sm)] px-2 transition-colors',
-          props.isSelected ? 'bg-[var(--brand-soft)]' : 'hover:bg-muted'
-        )}
-        data-testid="status-file-row"
-      >
+      <ContextMenuTriggerArea className={rowClass} data-testid="status-file-row">
         <Checkbox
           checked={isStaged}
           indeterminate={props.stageState === 'partial'}
@@ -51,15 +96,7 @@ export function FileRow(props: FileRowProps) {
           onChange={() => toggleStaged()}
         />
         <StatusBadge kind={props.kind} />
-        <button
-          type="button"
-          onClick={() => props.onSelect(props.file)}
-          className="flex h-full min-w-0 items-center text-left"
-        >
-          <span className="min-w-0 truncate text-sm" title={label}>
-            {label}
-          </span>
-        </button>
+        {nameButton}
       </ContextMenuTriggerArea>
       <ContextMenuContent>
         {isStaged ? (

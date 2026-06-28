@@ -1,6 +1,10 @@
 import { type ReactNode, useMemo } from 'react'
 import type { FileAction } from '@/lib/git-actions'
-import { buildUnifiedFileRows } from '@/lib/status-file-rows'
+import {
+  buildUnifiedFileRows,
+  type FileRowSource,
+  type UnifiedFileRow
+} from '@/lib/status-file-rows'
 import { useWorkingTreeStatus } from '@/stores/git'
 import { LoadingBadge } from '../ui/loading-badge'
 import { StatusPanelSkeleton } from './Skeleton'
@@ -10,18 +14,39 @@ export type { SelectedFile } from './VirtualFileList'
 
 interface StatusPanelProps {
   selected: SelectedFile | null
-  onSelect: (file: string) => void
+  onSelect: (file: string, source: FileRowSource) => void
+  onToggleDrop?: (file: string) => void
+  amendRows?: UnifiedFileRow[]
   onFileAction?: (action: FileAction, file: string) => void
   headerActions?: ReactNode
   loading: boolean
+}
+
+// Worktree rows sort before their head-commit namesake so a file that's both edited and in the amended
+// commit reads working-change-then-committed.
+function bySourceWithinFile(left: UnifiedFileRow, right: UnifiedFileRow): number {
+  const byName = left.file.localeCompare(right.file)
+  if (byName !== 0) {
+    return byName
+  }
+  if (left.source === right.source) {
+    return 0
+  }
+  return left.source === 'worktree' ? -1 : 1
 }
 
 export function StatusPanel(props: StatusPanelProps) {
   const { status, statusLoading, stageFile, unstageFile, stageAll, unstageAll } =
     useWorkingTreeStatus()
   const loading = props.loading || statusLoading
-  const rows = useMemo(() => (status ? buildUnifiedFileRows(status) : []), [status])
-  const stageable = useMemo(() => rows.filter((row) => !row.isConflicted), [rows])
+  const rows = useMemo(() => {
+    const worktreeRows = status ? buildUnifiedFileRows(status) : []
+    return [...worktreeRows, ...(props.amendRows ?? [])].sort(bySourceWithinFile)
+  }, [status, props.amendRows])
+  const stageable = useMemo(
+    () => rows.filter((row) => row.source === 'worktree' && !row.isConflicted),
+    [rows]
+  )
   const stagedCount = stageable.filter((row) => row.stageState !== 'unstaged').length
   const allStaged = stageable.length > 0 && stageable.every((row) => row.stageState === 'staged')
   const subtitle = `${rows.length} files · ${stagedCount} staged`
@@ -60,11 +85,12 @@ export function StatusPanel(props: StatusPanelProps) {
       </div>
 
       <VirtualFileList
-        status={status}
+        rows={rows}
         selected={props.selected}
         onSelect={props.onSelect}
         onStage={stageFile}
         onUnstage={unstageFile}
+        onToggleDrop={props.onToggleDrop}
         onFileAction={props.onFileAction}
       />
     </section>
