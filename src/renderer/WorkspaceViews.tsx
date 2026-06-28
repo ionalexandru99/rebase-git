@@ -58,9 +58,10 @@ interface WorkspaceViewProps {
 
 function LocalChangesView(props: WorkspaceViewProps) {
   const { status, stageFile, unstageFile } = useWorkingTreeStatus()
-  const { commit, committing } = useActionRunner()
+  const { commit, committing, amend, amending, loadHeadMessage } = useActionRunner()
   const { opening } = useRepoSession()
-  const loading = opening || committing
+  const history = useCommitHistory()
+  const loading = opening || committing || amending
   const { actions, prompt, confirm } = useWorkspaceContext()
   const [selected, setSelected] = useState<SelectedFile | null>(null)
 
@@ -144,6 +145,10 @@ function LocalChangesView(props: WorkspaceViewProps) {
     )
   }, [status])
   const stagedCount = (status?.staged.length ?? 0) + (status?.created.length ?? 0)
+  // Amend rewrites HEAD, so it needs a commit to rewrite and a non-conflicted tree to fold in; a
+  // detached HEAD still has a commit, so it stays available.
+  const amendAvailable = (history.log?.total ?? 0) > 0
+  const amendDisabled = (status?.conflicted.length ?? 0) > 0
 
   const fileEntries = useMemo<SelectedFile[]>(() => {
     if (!status) {
@@ -170,55 +175,67 @@ function LocalChangesView(props: WorkspaceViewProps) {
     }
   }, [fileEntries, selected])
 
-  return totalChanges > 0 ? (
+  // The commit panel stays mounted on a clean tree whenever there's a HEAD to amend, so a pure reword
+  // (nothing staged) is reachable without first dirtying the working tree.
+  if (totalChanges === 0 && !amendAvailable) {
+    return <CleanWorkingTree />
+  }
+
+  return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-      <div
-        className="grid min-h-0 overflow-hidden"
-        style={{ gridTemplateColumns: `${filesWidth}px minmax(0, 1fr)` }}
-      >
-        <div className="relative min-h-0 min-w-0">
-          <StatusPanel
-            selected={selected}
-            onSelect={(file) => setSelected({ file })}
-            onFileAction={handleFileAction}
-            headerActions={
-              <>
-                <StashControl
-                  stagedFiles={stagedFiles}
-                  hasChanges={totalChanges > 0}
-                  onStashSelected={stashSelected}
-                  onStashAll={stashAll}
-                />
-                <button
-                  type="button"
-                  onClick={discardAll}
-                  className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
-                >
-                  Discard all
-                </button>
-              </>
-            }
-            loading={loading}
-          />
-          <span
-            onMouseDown={(event) => onResizeStart(event.nativeEvent)}
-            aria-hidden="true"
-            className="group/files-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
-          >
-            <span className="w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/60" />
-          </span>
+      {totalChanges > 0 ? (
+        <div
+          className="grid min-h-0 overflow-hidden"
+          style={{ gridTemplateColumns: `${filesWidth}px minmax(0, 1fr)` }}
+        >
+          <div className="relative min-h-0 min-w-0">
+            <StatusPanel
+              selected={selected}
+              onSelect={(file) => setSelected({ file })}
+              onFileAction={handleFileAction}
+              headerActions={
+                <>
+                  <StashControl
+                    stagedFiles={stagedFiles}
+                    hasChanges={totalChanges > 0}
+                    onStashSelected={stashSelected}
+                    onStashAll={stashAll}
+                  />
+                  <button
+                    type="button"
+                    onClick={discardAll}
+                    className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+                  >
+                    Discard all
+                  </button>
+                </>
+              }
+              loading={loading}
+            />
+            <span
+              onMouseDown={(event) => onResizeStart(event.nativeEvent)}
+              aria-hidden="true"
+              className="group/files-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+            >
+              <span className="w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/60" />
+            </span>
+          </div>
+          <DiffPanel selected={selected} />
         </div>
-        <DiffPanel selected={selected} />
-      </div>
+      ) : (
+        <CleanWorkingTree />
+      )}
       <CommitPanel
         onCommit={commit}
+        onAmend={amend}
+        loadHeadMessage={loadHeadMessage}
+        amendAvailable={amendAvailable}
+        amendDisabled={amendDisabled}
         loading={loading}
         branch={props.currentBranch || 'no-branch'}
         stagedCount={stagedCount}
       />
     </div>
-  ) : (
-    <CleanWorkingTree />
   )
 }
 

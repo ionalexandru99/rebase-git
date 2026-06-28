@@ -15,6 +15,7 @@ import { withRepoLock } from './repo-lock'
 import { closeSession, openSession, type RepoSessions } from './repo-sessions'
 import { runGit } from './spawn'
 
+export { amendCommit, casAdvanceHead, getHeadCommit } from './amend'
 export {
   checkoutRef,
   createBranch,

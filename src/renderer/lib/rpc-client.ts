@@ -1,5 +1,6 @@
 import { parseOrThrow } from '@shared/codec'
 import {
+  AmendCommit,
   Checkout,
   CherryPick,
   Commit,
@@ -12,6 +13,7 @@ import {
   Fetch,
   GetBranches,
   GetDiff,
+  GetHeadCommit,
   GetLocalBranches,
   GetLog,
   GetRemoteRefs,
@@ -76,6 +78,14 @@ export type CommitPayload = typeof Commit.payloadSchema.Type
 export type CommitResult = RpcResult<
   typeof Commit.successSchema.Type,
   typeof Commit.errorSchema.Type
+>
+export type HeadCommitResult = RpcResult<
+  typeof GetHeadCommit.successSchema.Type,
+  typeof GetHeadCommit.errorSchema.Type
+>
+export type AmendResult = RpcResult<
+  typeof AmendCommit.successSchema.Type,
+  typeof AmendCommit.errorSchema.Type
 >
 export type OpenRepoResult = RpcResult<
   typeof OpenRepo.successSchema.Type,
@@ -148,6 +158,18 @@ export async function rpcScanForRepos(dirPath: string): Promise<ScanForReposResu
 
 export async function rpcCommit(repoPath: string, message: string): Promise<CommitResult> {
   return callSidecarRpc(Commit, { repoPath, message })
+}
+
+export async function rpcGetHeadCommit(repoPath: string): Promise<HeadCommitResult> {
+  return callSidecarRpc(GetHeadCommit, { repoPath })
+}
+
+export async function rpcAmendCommit(
+  repoPath: string,
+  message: string,
+  droppedHeadPaths: string[] = []
+): Promise<AmendResult> {
+  return callSidecarRpc(AmendCommit, { repoPath, message, droppedHeadPaths })
 }
 
 export async function rpcStageFile(repoPath: string, file: string): Promise<StageResult> {

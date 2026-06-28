@@ -24,6 +24,7 @@ type RpcResponse =
       lostCommits: readonly LostCommit[]
       remoteSha?: string
     }
+  | { _tag: 'AmendRejected'; reason: string }
 
 const makeRuntime = (baseUrl: string, token: string) => {
   const protocol = RpcClient.layerProtocolHttp({
@@ -103,6 +104,9 @@ export function classifyExit(
         lostCommits: rejected.lostCommits,
         remoteSha: rejected.remoteSha
       }
+    }
+    if (isTaggedError(error, 'AmendRejected')) {
+      return { _tag: 'AmendRejected', reason: (error as { reason: string }).reason }
     }
   }
   console.error(`[sidecar-rpc] ${op} failed`, scrubToken(Cause.pretty(exit.cause), token))

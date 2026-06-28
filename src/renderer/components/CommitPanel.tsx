@@ -1,10 +1,14 @@
 import { Loader2Icon } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { ChangeEvent, ReactNode } from 'react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
 interface CommitPanelProps {
   onCommit: (message: string) => Promise<boolean>
+  onAmend: (message: string) => Promise<boolean>
+  loadHeadMessage: () => Promise<string | null>
+  amendAvailable: boolean
+  amendDisabled: boolean
   loading: boolean
   branch: string
   stagedCount: number
@@ -15,24 +19,45 @@ const MAX_SUBJECT_LENGTH = 72
 
 export function CommitPanel(props: CommitPanelProps) {
   const [message, setMessage] = useState('')
+  const [amend, setAmend] = useState(false)
+  const [savedDraft, setSavedDraft] = useState('')
+
+  // Entering amend prefills HEAD's full message but stashes the in-progress draft so un-ticking is a
+  // perfect no-op; nothing in the repository changes until the user presses Amend.
+  const handleAmendToggle = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (event.currentTarget.checked) {
+      setSavedDraft(message)
+      const headMessage = await props.loadHeadMessage()
+      setAmend(true)
+      if (headMessage !== null) {
+        setMessage(headMessage)
+      }
+    } else {
+      setAmend(false)
+      setMessage(savedDraft)
+    }
+  }
 
   const handleCommit = async () => {
     const trimmed = message.trim()
     if (!trimmed) {
       return
     }
-    const success = await props.onCommit(trimmed)
+    const success = await (amend ? props.onAmend(trimmed) : props.onCommit(trimmed))
     if (success) {
       setMessage('')
+      setAmend(false)
     }
   }
 
   const subjectLength = (message.split('\n')[0] ?? '').length
   const subjectWarn = subjectLength > MAX_SUBJECT_LENGTH
-  const commitLabel =
-    props.stagedCount > 0
+  const commitLabel = amend
+    ? 'Amend'
+    : props.stagedCount > 0
       ? `Commit ${props.stagedCount} file${props.stagedCount === 1 ? '' : 's'}`
       : 'Commit'
+  const commitDisabled = !message.trim() || props.loading || (!amend && props.stagedCount === 0)
 
   return (
     <div className="shrink-0 border-t px-3 pb-3 pt-2.5">
@@ -52,6 +77,19 @@ export function CommitPanel(props: CommitPanelProps) {
               <MetaChip color="var(--green)">{props.stagedCount} staged</MetaChip>
             )}
             {(props.ahead ?? 0) > 0 && <MetaChip color="var(--green)">↑{props.ahead}</MetaChip>}
+            {props.amendAvailable && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={amend}
+                  disabled={props.amendDisabled || props.loading}
+                  onChange={handleAmendToggle}
+                  aria-label="Amend last commit"
+                  className="size-3.5 accent-[var(--brand)]"
+                />
+                Amend last commit
+              </label>
+            )}
           </div>
           <div className="flex-1" />
           <span
@@ -65,7 +103,7 @@ export function CommitPanel(props: CommitPanelProps) {
           <button
             type="button"
             onClick={handleCommit}
-            disabled={!message.trim() || props.loading || props.stagedCount === 0}
+            disabled={commitDisabled}
             className="inline-flex h-8 items-center gap-1.5 rounded-[var(--r-sm)] bg-brand px-3 font-semibold text-brand-foreground transition-colors hover:bg-[var(--brand-strong)] disabled:opacity-50"
           >
             {props.loading ? (

@@ -2,6 +2,7 @@ import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
 import { NonNaNNumber, RequiredString } from './codec'
 import {
+  AmendRejected,
   Conflict,
   FetchSkipped,
   GitError,
@@ -16,6 +17,7 @@ import {
   GitBranchesSchema,
   GitLogSchema,
   GitStatusSchema,
+  HeadCommitSchema,
   LocalBranchesSchema,
   LogChunkSchema,
   RemoteRefsSchema,
@@ -24,6 +26,7 @@ import {
 import { RefKindSchema, ResetModeSchema, StashEntrySchema } from './schemas/ipc'
 
 export {
+  AmendRejected,
   Conflict,
   FetchSkipped,
   GitError,
@@ -69,6 +72,20 @@ export const Commit = Rpc.make('commit', {
   payload: { repoPath: RequiredString, message: RequiredString },
   success: Schema.Struct({ result: CommitSummarySchema }),
   error: CommitError
+})
+
+export const GetHeadCommit = Rpc.make('getHeadCommit', {
+  payload: { repoPath: RequiredString },
+  success: Schema.Struct({ result: HeadCommitSchema }),
+  error: ReadError
+})
+
+// droppedHeadPaths is always empty in this slice (reword + fold-in only); the field is in the contract
+// now so adding drop-files later doesn't churn it. AmendRejected{head-moved} is the CAS refusal.
+export const AmendCommit = Rpc.make('amendCommit', {
+  payload: { repoPath: RequiredString, message: RequiredString, droppedHeadPaths: FileList },
+  success: Schema.Struct({ result: CommitSummarySchema }),
+  error: Schema.Union(RepoNotOpen, GitError, AmendRejected)
 })
 
 export const StageFile = Rpc.make('stageFile', {
@@ -311,6 +328,8 @@ export const SidecarRpcs = RpcGroup.make(
   CloseRepo,
   ScanForRepos,
   Commit,
+  GetHeadCommit,
+  AmendCommit,
   StageFile,
   UnstageFile,
   StageAll,

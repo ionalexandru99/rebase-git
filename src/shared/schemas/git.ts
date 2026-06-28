@@ -116,6 +116,22 @@ export const CommitSummarySchema = Schema.Struct({
 })
 export type CommitSummary = typeof CommitSummarySchema.Type
 
+export const HeadCommitFileSchema = Schema.Struct({
+  status: Schema.String,
+  path: Schema.String
+})
+export type HeadCommitFile = typeof HeadCommitFileSchema.Type
+
+// HEAD as the amend toggle needs it: the full `%B` message (subject + body), the name-status file
+// list, and the parent count. Only `message` is consumed by the UI in this slice; the full shape is
+// defined now so the contract doesn't churn when drop-files lands.
+export const HeadCommitSchema = Schema.Struct({
+  message: Schema.String,
+  files: mutableArray(HeadCommitFileSchema),
+  parentCount: NonNaNNumber
+})
+export type HeadCommit = typeof HeadCommitSchema.Type
+
 export const LogChunkSchema = Schema.Struct({
   repoPath: Schema.String,
   commits: mutableArray(GitLogEntrySchema),

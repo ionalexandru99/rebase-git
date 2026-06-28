@@ -11,6 +11,9 @@ const OPERATION_CACHES = {
   // adds a ref. createBranchCheckout is a renderer-side key, not an RPC tag: both modes share the
   // createBranch RPC, split only by their cache footprint.
   commit: ['status', 'localBranches', 'diff', 'log'],
+  // Amend rewrites HEAD (log), folds in the index (status, diff), and leaves the branch diverged from
+  // its upstream (localBranches tracking, remoteRefs).
+  amendCommit: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
   push: ['localBranches', 'remoteRefs'],
   pull: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
   mergeBranch: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],

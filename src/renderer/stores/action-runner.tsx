@@ -1,10 +1,17 @@
 import type { LostCommit } from '@shared/git-rpc-errors'
-import { Commit, Pull, Push } from '@shared/rpc'
+import { AmendCommit, Commit, Pull, Push } from '@shared/rpc'
 import { useMutation } from '@tanstack/react-query'
 import { createContext, type RefObject, useContext } from 'react'
 import { toast } from 'sonner'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
-import { type PushForce, rpcCommit, rpcPull, rpcPush } from '@/lib/rpc-client'
+import {
+  type PushForce,
+  rpcAmendCommit,
+  rpcCommit,
+  rpcGetHeadCommit,
+  rpcPull,
+  rpcPush
+} from '@/lib/rpc-client'
 
 export type PushRejectionReason = 'non-fast-forward' | 'lease-stale' | 'remote-moved'
 
@@ -39,10 +46,13 @@ export type RunAction = (
 export interface ActionRunner {
   runAction: RunAction
   commit: (message: string) => Promise<boolean>
+  amend: (message: string) => Promise<boolean>
+  loadHeadMessage: () => Promise<string | null>
   pushNow: () => Promise<boolean>
   push: (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
   pullNow: () => Promise<boolean>
   committing: boolean
+  amending: boolean
   pushing: boolean
   pulling: boolean
 }
@@ -144,10 +154,60 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
     }
   }
 
+  // Amend can't use runAction either: AmendRejected is an expected CAS refusal (HEAD moved), not an
+  // error to toast as a failure — it routes to a refresh-and-retry warning. Ok and the rejection both
+  // refresh the same caches so the renderer picks up the moved/rewritten HEAD.
+  const runAmend = async (message: string): Promise<boolean> => {
+    const repoPath = liveRepoPath.current
+    if (!repoPath) {
+      toast.error('Repository is not open')
+      return false
+    }
+    try {
+      const response = await rpcAmendCommit(repoPath, message)
+      if (response._tag === 'Ok' || response._tag === 'AmendRejected') {
+        await refreshCaches(repoPath, cachesForOperation(AmendCommit._tag))
+      }
+      if (response._tag === 'Ok') {
+        toast.success('Amended')
+        return true
+      }
+      if (response._tag === 'AmendRejected') {
+        toast.warning('The last commit moved underneath the amend', {
+          description: 'A background fetch or another action advanced HEAD. Refresh and try again.'
+        })
+        return false
+      }
+      if (response._tag === 'RepoNotOpen') {
+        toast.error('Repository is not open')
+        return false
+      }
+      toast.error('Amend failed', { description: response.message })
+      return false
+    } catch (error) {
+      toast.error('Amend failed', { description: formatCause(error) })
+      return false
+    }
+  }
+
+  const loadHeadMessage = async (): Promise<string | null> => {
+    const repoPath = liveRepoPath.current
+    if (!repoPath) {
+      return null
+    }
+    try {
+      const response = await rpcGetHeadCommit(repoPath)
+      return response._tag === 'Ok' ? response.result.message : null
+    } catch {
+      return null
+    }
+  }
+
   const commitMutation = useMutation({
     mutationFn: (message: string) =>
       runAction(Commit._tag, (repoPath) => rpcCommit(repoPath, message), 'Committed')
   })
+  const amendMutation = useMutation({ mutationFn: (message: string) => runAmend(message) })
   const pushMutation = useMutation({
     mutationFn: (variables: { force?: PushForce; expectedRemoteSha?: string }) =>
       runPush(variables.force, variables.expectedRemoteSha)
@@ -162,10 +222,13 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
   return {
     runAction,
     commit: (message: string) => commitMutation.mutateAsync(message),
+    amend: (message: string) => amendMutation.mutateAsync(message),
+    loadHeadMessage,
     push,
     pushNow: () => push().then((outcome) => outcome.kind === 'ok'),
     pullNow: () => pullMutation.mutateAsync(),
     committing: commitMutation.isPending,
+    amending: amendMutation.isPending,
     pushing: pushMutation.isPending,
     pulling: pullMutation.isPending
   }

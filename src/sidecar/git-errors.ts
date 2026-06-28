@@ -1,6 +1,7 @@
 import { GitError } from '@shared/git-rpc-errors'
 
 export {
+  AmendRejected,
   Conflict,
   FetchSkipped,
   GitError,
@@ -11,6 +12,7 @@ export {
 } from '@shared/git-rpc-errors'
 
 import type {
+  AmendRejected,
   Conflict,
   FetchSkipped,
   HunkNotFound,
@@ -27,6 +29,7 @@ export type GitOpError =
   | HunkNotFound
   | FetchSkipped
   | PushRejected
+  | AmendRejected
 
 export const gitError = (error: unknown): GitError =>
   new GitError({ message: error instanceof Error ? error.message : String(error) })

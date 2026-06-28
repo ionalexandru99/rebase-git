@@ -150,6 +150,14 @@ export const handlersLayer = SidecarRpcs.toLayer({
     scanForReposGuarded(dirPath).pipe(Effect.map((repos) => ({ repos }))),
   commit: ({ repoPath, message }) =>
     withResolvedRepo(repoPath, (repo) => operations.commit(repo, message)),
+  getHeadCommit: ({ repoPath }) =>
+    withResolvedRepo(repoPath, (repo) => operations.getHeadCommit(repo)),
+  amendCommit: ({ repoPath, message, droppedHeadPaths }) =>
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFiles(repo, droppedHeadPaths, (relatives) =>
+        operations.amendCommit(repo, message, relatives)
+      )
+    ),
   stageFile: ({ repoPath, file }) =>
     withResolvedRepo(repoPath, (repo) =>
       withResolvedFile(repo, file, (relative) => operations.stageFile(repo, relative))

@@ -27,3 +27,10 @@ export class PushRejected extends Schema.TaggedError<PushRejected>()('PushReject
   lostCommits: Schema.Array(LostCommit),
   remoteSha: Schema.optional(Schema.String)
 }) {}
+
+// An amend refused because HEAD moved underneath the compare-and-swap ref update (a background fetch,
+// the .git watcher, or another action advanced it mid-amend). Like PushRejected this is an expected
+// outcome, not a failure: the renderer prompts to refresh and retry instead of showing an error.
+export class AmendRejected extends Schema.TaggedError<AmendRejected>()('AmendRejected', {
+  reason: Schema.Literal('head-moved')
+}) {}

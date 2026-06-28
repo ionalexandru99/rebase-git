@@ -1,4 +1,5 @@
 import {
+  AmendRejected,
   Conflict,
   FetchSkipped,
   GitError,
@@ -155,6 +156,15 @@ describe('classifyExit', () => {
       lostCommits: [{ sha: 'abc1234', subject: 'teammate work' }],
       remoteSha: 'abc1234fullsha'
     })
+  })
+
+  it('maps a typed AmendRejected failure onto the AmendRejected response', () => {
+    const result = classifyExit(
+      'amendCommit',
+      Exit.fail(new AmendRejected({ reason: 'head-moved' })),
+      TOKEN
+    )
+    expect(result).toEqual({ _tag: 'AmendRejected', reason: 'head-moved' })
   })
 
   it('throws SidecarRpcError for a transport failure instead of collapsing to GitError', () => {
