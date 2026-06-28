@@ -8,6 +8,9 @@ import { FileRow } from './FileRow'
 
 export interface SelectedFile {
   file: string
+  // 'head-commit' files are inspected read-only against `range`; absent/undefined means the working tree.
+  source?: 'worktree' | 'head-commit'
+  range?: string
 }
 
 interface VirtualFileListProps {

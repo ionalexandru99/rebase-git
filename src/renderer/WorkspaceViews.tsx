@@ -5,15 +5,18 @@ import { CommitPanel } from './components/CommitPanel'
 import { DiffPanel } from './components/DiffPanel'
 import { HistoryPanel } from './components/HistoryPanel'
 import { type SelectedFile, StatusPanel } from './components/StatusPanel'
+import { HeadCommitFilesGroup } from './components/StatusPanel/HeadCommitFilesGroup'
 import { StashControl } from './components/StatusPanel/StashControl'
 import type { WorkspaceView } from './components/shell/Topbar'
 import { useDraggableWidth } from './hooks/useDraggableWidth'
 import type { CommitAction, FileAction } from './lib/git-actions'
+import { buildHeadCommitRange } from './lib/head-commit-range'
 import type { RefKind } from './lib/ref-tree'
 import { buildUnifiedFileRows } from './lib/status-file-rows'
 import {
   useActionRunner,
   useCommitHistory,
+  useHeadCommit,
   useRepoSession,
   useWorkingTreeStatus
 } from './stores/git'
@@ -64,6 +67,10 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const loading = opening || committing || amending
   const { actions, prompt, confirm } = useWorkspaceContext()
   const [selected, setSelected] = useState<SelectedFile | null>(null)
+  const [amendActive, setAmendActive] = useState(false)
+  const headCommit = useHeadCommit(amendActive)
+  const headFiles = headCommit.data?.files ?? []
+  const headParentCount = headCommit.data?.parentCount ?? 0
 
   const promptStash = (title: string, run: (message?: string) => Promise<boolean>) => {
     prompt({
@@ -167,13 +174,29 @@ function LocalChangesView(props: WorkspaceViewProps) {
   }, [status])
 
   useEffect(() => {
-    const entries = fileEntries
     const current = selected
-    const stillExists = current && entries.some((entry) => entry.file === current.file)
+    // A head-commit selection lives outside the working-tree file list — don't reset it to a worktree row.
+    if (current?.source === 'head-commit') {
+      return
+    }
+    const stillExists = current && fileEntries.some((entry) => entry.file === current.file)
     if (!stillExists) {
-      setSelected(entries[0] ?? null)
+      setSelected(fileEntries[0] ?? null)
     }
   }, [fileEntries, selected])
+
+  const handleAmendChange = (active: boolean) => {
+    setAmendActive(active)
+    if (!active) {
+      setSelected((current) =>
+        current?.source === 'head-commit' ? (fileEntries[0] ?? null) : current
+      )
+    }
+  }
+
+  const selectHeadFile = (file: string) => {
+    setSelected({ file, source: 'head-commit', range: buildHeadCommitRange(headParentCount) })
+  }
 
   // The commit panel stays mounted on a clean tree whenever there's a HEAD to amend, so a pure reword
   // (nothing staged) is reachable without first dirtying the working tree.
@@ -183,35 +206,53 @@ function LocalChangesView(props: WorkspaceViewProps) {
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-      {totalChanges > 0 ? (
+      {totalChanges > 0 || amendActive ? (
         <div
           className="grid min-h-0 overflow-hidden"
           style={{ gridTemplateColumns: `${filesWidth}px minmax(0, 1fr)` }}
         >
-          <div className="relative min-h-0 min-w-0">
-            <StatusPanel
-              selected={selected}
-              onSelect={(file) => setSelected({ file })}
-              onFileAction={handleFileAction}
-              headerActions={
-                <>
-                  <StashControl
-                    stagedFiles={stagedFiles}
-                    hasChanges={totalChanges > 0}
-                    onStashSelected={stashSelected}
-                    onStashAll={stashAll}
-                  />
-                  <button
-                    type="button"
-                    onClick={discardAll}
-                    className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
-                  >
-                    Discard all
-                  </button>
-                </>
-              }
-              loading={loading}
-            />
+          <div className="relative flex min-h-0 min-w-0 flex-col border-r">
+            {totalChanges > 0 ? (
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <StatusPanel
+                  selected={selected}
+                  onSelect={(file) => setSelected({ file })}
+                  onFileAction={handleFileAction}
+                  headerActions={
+                    <>
+                      <StashControl
+                        stagedFiles={stagedFiles}
+                        hasChanges={totalChanges > 0}
+                        onStashSelected={stashSelected}
+                        onStashAll={stashAll}
+                      />
+                      <button
+                        type="button"
+                        onClick={discardAll}
+                        className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+                      >
+                        Discard all
+                      </button>
+                    </>
+                  }
+                  loading={loading}
+                />
+              </div>
+            ) : null}
+            {amendActive ? (
+              <div
+                className={`min-h-0 overflow-auto ${
+                  totalChanges > 0 ? 'max-h-[45%] shrink-0' : 'flex-1'
+                }`}
+              >
+                <HeadCommitFilesGroup
+                  files={headFiles}
+                  parentCount={headParentCount}
+                  selectedFile={selected?.source === 'head-commit' ? selected.file : null}
+                  onSelect={selectHeadFile}
+                />
+              </div>
+            ) : null}
             <span
               onMouseDown={(event) => onResizeStart(event.nativeEvent)}
               aria-hidden="true"
@@ -229,6 +270,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
         onCommit={commit}
         onAmend={amend}
         loadHeadMessage={loadHeadMessage}
+        onAmendChange={handleAmendChange}
         amendAvailable={amendAvailable}
         amendDisabled={amendDisabled}
         loading={loading}

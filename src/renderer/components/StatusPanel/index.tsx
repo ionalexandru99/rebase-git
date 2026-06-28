@@ -39,7 +39,7 @@ export function StatusPanel(props: StatusPanelProps) {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden border-r">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-3">
         <div className="min-w-0">
           <div className="text-[15px] font-semibold">Changes</div>

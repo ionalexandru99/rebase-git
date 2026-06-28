@@ -1,9 +1,10 @@
-import type { FileDiff } from '@shared/schemas/git'
+import type { FileDiff, HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
   rpcGetDiff,
+  rpcGetHeadCommit,
   rpcGetStatus,
   rpcStageAll,
   rpcStageFile,
@@ -349,19 +350,46 @@ export function useWorkingTreeStatus(): WorkingTreeStatus {
   return value
 }
 
-export function useFileDiff(file: string | null, staged: boolean) {
+export function useFileDiff(file: string | null, staged: boolean, range?: string) {
   const { repoPath } = useRepoSession()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
   return useQuery({
-    queryKey: file ? queryKeys.diff(file, staged) : queryKeys.diff('none', staged),
+    queryKey: file ? queryKeys.diff(file, staged, range) : queryKeys.diff('none', staged, range),
     enabled: Boolean(repoPath && file),
     queryFn: async (): Promise<FileDiff> => {
       if (!repoPath || !file) {
         throw new Error('No file selected')
       }
-      const response = await rpcGetDiff(repoPath, file, staged)
+      const response = await rpcGetDiff(repoPath, file, staged, range)
       if (response._tag === 'Ok') {
         return response.diff
+      }
+      if (response._tag === 'GitError') {
+        throw new Error(response.message)
+      }
+      throw new Error('Repository not open')
+    }
+  })
+}
+
+// HEAD's full message + name-status files, fetched only while the amend overlay needs them. Gating on
+// `enabled` keeps it off the hot path on a clean tree; it refetches whenever amend is re-entered.
+export function useHeadCommit(enabled: boolean) {
+  const { repoPath } = useRepoSession()
+  const queryKeys = repoQueryKeys(repoPath, { idle: 'head-commit' })
+  return useQuery({
+    queryKey: queryKeys.headCommit,
+    enabled: enabled && Boolean(repoPath),
+    // HEAD can move between amend sessions (a commit, a checkout) and this key is outside the cache-
+    // invalidation matrix, so always refetch on re-entry rather than serve the 30s-stale default.
+    staleTime: 0,
+    queryFn: async (): Promise<HeadCommit> => {
+      if (!repoPath) {
+        throw new Error('No repository open')
+      }
+      const response = await rpcGetHeadCommit(repoPath)
+      if (response._tag === 'Ok') {
+        return response.result
       }
       if (response._tag === 'GitError') {
         throw new Error(response.message)

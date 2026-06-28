@@ -291,11 +291,14 @@ export const GetLog = Rpc.make('getLog', {
   error: ReadError
 })
 
+// `range` (e.g. `HEAD~1..HEAD`) diffs a file across two commits instead of the working tree; omitting
+// it preserves the original working-tree/staged behaviour exactly.
 export const GetDiff = Rpc.make('getDiff', {
   payload: {
     repoPath: RequiredString,
     file: RequiredString,
-    staged: Schema.optional(Schema.Boolean)
+    staged: Schema.optional(Schema.Boolean),
+    range: Schema.optional(RequiredString)
   },
   success: Schema.Struct({ diff: FileDiffSchema }),
   error: ReadError

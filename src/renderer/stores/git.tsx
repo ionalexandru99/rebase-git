@@ -22,7 +22,7 @@ export { useActionRunner } from './action-runner'
 export { useCommitHistory } from './commit-history'
 export { useRefs } from './refs'
 export type { RepoSession } from './repo-session'
-export { useFileDiff, useWorkingTreeStatus } from './working-tree-status'
+export { useFileDiff, useHeadCommit, useWorkingTreeStatus } from './working-tree-status'
 export { RepoSessionProvider, useRepoSession }
 
 const formatCause = (error: unknown): string => {

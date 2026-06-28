@@ -13,6 +13,7 @@ interface CommitPanelProps {
   branch: string
   stagedCount: number
   ahead?: number
+  onAmendChange?: (amend: boolean) => void
 }
 
 const MAX_SUBJECT_LENGTH = 72
@@ -29,11 +30,13 @@ export function CommitPanel(props: CommitPanelProps) {
       setSavedDraft(message)
       const headMessage = await props.loadHeadMessage()
       setAmend(true)
+      props.onAmendChange?.(true)
       if (headMessage !== null) {
         setMessage(headMessage)
       }
     } else {
       setAmend(false)
+      props.onAmendChange?.(false)
       setMessage(savedDraft)
     }
   }
@@ -47,6 +50,7 @@ export function CommitPanel(props: CommitPanelProps) {
     if (success) {
       setMessage('')
       setAmend(false)
+      props.onAmendChange?.(false)
     }
   }
 

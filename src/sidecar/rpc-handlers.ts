@@ -239,10 +239,10 @@ export const handlersLayer = SidecarRpcs.toLayer({
     withResolvedRepo(repoPath, (repo) => operations.getRemoteRefs(repo)),
   getLog: ({ repoPath, maxCount }) =>
     withResolvedRepo(repoPath, (repo) => operations.getLog(repo, maxCount)),
-  getDiff: ({ repoPath, file, staged }) =>
+  getDiff: ({ repoPath, file, staged, range }) =>
     withResolvedRepo(repoPath, (repo) =>
       withResolvedFile(repo, file, (relative) =>
-        operations.getDiff(repo, relative, staged === true)
+        operations.getDiff(repo, relative, staged === true, range)
       )
     ),
   stashList: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.stashList(repo)),

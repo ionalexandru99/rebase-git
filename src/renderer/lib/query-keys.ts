@@ -11,8 +11,12 @@ const buildRepoQueryKeys = (root: RepoQueryRoot) => ({
   remoteRefs: [...root, 'remote-refs'] as const,
   log: [...root, 'log'] as const,
   stash: [...root, 'stash'] as const,
+  headCommit: [...root, 'head-commit'] as const,
   diffRoot: [...root, 'diff'] as const,
-  diff: (file: string, staged: boolean) => [...root, 'diff', file, staged] as const,
+  diff: (file: string, staged: boolean, range?: string) =>
+    range === undefined
+      ? ([...root, 'diff', file, staged] as const)
+      : ([...root, 'diff', file, staged, range] as const),
   hunkHighlight: (file: string, hunkKey: string) =>
     [...root, 'hunk-highlight', file, hunkKey] as const
 })

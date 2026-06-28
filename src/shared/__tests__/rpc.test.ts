@@ -26,6 +26,16 @@ describe('RPC payload schemas', () => {
     expect(Either.isLeft(decode(schema, { repoPath: '/repo' }))).toBe(true)
   })
 
+  it('accepts an optional getDiff range but rejects an empty one', () => {
+    const schema = GetDiff.payloadSchema
+    expect(
+      Either.isRight(decode(schema, { repoPath: '/repo', file: 'a.txt', range: 'HEAD~1..HEAD' }))
+    ).toBe(true)
+    expect(Either.isLeft(decode(schema, { repoPath: '/repo', file: 'a.txt', range: '' }))).toBe(
+      true
+    )
+  })
+
   it('reject a NaN getLog maxCount', () => {
     const schema = GetLog.payloadSchema
     expect(Either.isRight(decode(schema, { repoPath: '/repo' }))).toBe(true)

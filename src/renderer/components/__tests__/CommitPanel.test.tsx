@@ -16,6 +16,7 @@ function renderPanel(
       branch={overrides.branch ?? 'main'}
       stagedCount={overrides.stagedCount ?? 2}
       ahead={overrides.ahead}
+      onAmendChange={overrides.onAmendChange}
     />
   )
 }
@@ -163,6 +164,38 @@ describe('CommitPanel', () => {
   it('offers the amend toggle when available and unconflicted (e.g. detached HEAD)', () => {
     renderPanel({ amendAvailable: true, amendDisabled: false, branch: 'HEAD' })
     expect(amendToggle()).toBeEnabled()
+  })
+
+  it('reports amend state to onAmendChange as the toggle flips', async () => {
+    const onAmendChange = vi.fn()
+    renderPanel({
+      amendAvailable: true,
+      onAmendChange,
+      loadHeadMessage: vi.fn().mockResolvedValue('head message')
+    })
+
+    fireEvent.click(amendToggle())
+    await waitFor(() => expect(onAmendChange).toHaveBeenLastCalledWith(true))
+
+    fireEvent.click(amendToggle())
+    expect(onAmendChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('reports amend cleared to onAmendChange after a successful amend', async () => {
+    const onAmendChange = vi.fn()
+    renderPanel({
+      amendAvailable: true,
+      stagedCount: 0,
+      onAmendChange,
+      onAmend: vi.fn().mockResolvedValue(true),
+      loadHeadMessage: vi.fn().mockResolvedValue('head message')
+    })
+
+    fireEvent.click(amendToggle())
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('head message'))
+    fireEvent.click(screen.getByRole('button', { name: 'Amend' }))
+
+    await waitFor(() => expect(onAmendChange).toHaveBeenLastCalledWith(false))
   })
 
   it('updates the subject-length counter as the user types', () => {

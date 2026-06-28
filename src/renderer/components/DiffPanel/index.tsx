@@ -31,19 +31,31 @@ export function DiffPanel(props: DiffPanelProps) {
   } = useWorkingTreeStatus()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
 
-  const isUntracked =
-    props.selected !== null && (status?.not_added.includes(props.selected.file) ?? false)
+  // A head-commit file is inspected read-only from a single range diff; the working-tree split (staged
+  // vs unstaged, stage/unstage controls) does not apply to it.
+  const isHeadCommit = props.selected?.source === 'head-commit'
+  const worktreeFile = isHeadCommit ? null : (props.selected?.file ?? null)
+  const headFile = isHeadCommit ? (props.selected?.file ?? null) : null
 
-  const unstagedQuery = useFileDiff(props.selected?.file ?? null, false)
-  const stagedQuery = useFileDiff(props.selected?.file ?? null, true)
+  const isUntracked =
+    props.selected !== null &&
+    !isHeadCommit &&
+    (status?.not_added.includes(props.selected.file) ?? false)
+
+  const unstagedQuery = useFileDiff(worktreeFile, false)
+  const stagedQuery = useFileDiff(worktreeFile, true)
+  const rangeQuery = useFileDiff(headFile, false, props.selected?.range)
   const [pendingHunk, setPendingHunk] = useState<PendingHunk | null>(null)
 
-  const unstagedDiff = props.selected ? (unstagedQuery.data ?? null) : null
-  const stagedDiff = props.selected ? (stagedQuery.data ?? null) : null
+  const unstagedDiff = props.selected && !isHeadCommit ? (unstagedQuery.data ?? null) : null
+  const stagedDiff = props.selected && !isHeadCommit ? (stagedQuery.data ?? null) : null
+  const rangeDiff = props.selected && isHeadCommit ? (rangeQuery.data ?? null) : null
 
-  const isBinary = Boolean(unstagedDiff?.binary || stagedDiff?.binary)
-  const hasError = unstagedQuery.isError || stagedQuery.isError
-  const errorMessage = unstagedQuery.error?.message ?? stagedQuery.error?.message
+  const isBinary = Boolean(unstagedDiff?.binary || stagedDiff?.binary || rangeDiff?.binary)
+  const hasError = isHeadCommit ? rangeQuery.isError : unstagedQuery.isError || stagedQuery.isError
+  const errorMessage = isHeadCommit
+    ? rangeQuery.error?.message
+    : (unstagedQuery.error?.message ?? stagedQuery.error?.message)
 
   const activePending =
     pendingHunk && pendingHunk.file === props.selected?.file ? pendingHunk : null
@@ -54,6 +66,14 @@ export function DiffPanel(props: DiffPanelProps) {
   // numbers stable when a hunk moves between staged and unstaged.
   const actualMergedHunks = useMemo<HunkEntry[]>(() => {
     const selected = props.selected
+    if (selected && isHeadCommit) {
+      return (rangeQuery.data?.hunks ?? []).map((hunk) => ({
+        hunk,
+        display: hunk,
+        staged: false,
+        indexStart: hunk.oldStart
+      }))
+    }
     const staged = selected ? (stagedQuery.data?.hunks ?? []) : []
     const unstaged = selected ? (unstagedQuery.data?.hunks ?? []) : []
     const headShiftAt = (indexLine: number) =>
@@ -83,7 +103,7 @@ export function DiffPanel(props: DiffPanelProps) {
       }))
     ]
     return entries.sort((left, right) => left.indexStart - right.indexStart)
-  }, [props.selected, stagedQuery.data, unstagedQuery.data])
+  }, [props.selected, isHeadCommit, rangeQuery.data, stagedQuery.data, unstagedQuery.data])
 
   const mergedHunks = useMemo<HunkEntry[]>(() => {
     if (!activePending) {
@@ -211,7 +231,7 @@ export function DiffPanel(props: DiffPanelProps) {
     <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
       {props.selected ? (
         <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
-          {hasAnyHunks && !isBinary ? (
+          {hasAnyHunks && !isBinary && !isHeadCommit ? (
             <Checkbox
               checked={fileStageState === 'staged'}
               indeterminate={fileStageState === 'partial'}
@@ -259,7 +279,7 @@ export function DiffPanel(props: DiffPanelProps) {
               queryKeys={queryKeys}
               staged={entry.staged}
               pending={isPendingEntry(entry)}
-              hunkActionsEnabled={entry.staged || !isUntracked}
+              hunkActionsEnabled={!isHeadCommit && (entry.staged || !isUntracked)}
               onStageHunk={() => void stageHunk(entry)}
               onUnstageHunk={() => void unstageHunk(entry)}
             />

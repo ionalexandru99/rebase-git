@@ -79,9 +79,16 @@ export function unstageAll(
 
 const DIFF_BASE_ARGS = ['--no-color', '--no-ext-diff', '--unified=3']
 
-async function readFileDiff(repoPath: string, file: string, staged: boolean): Promise<string> {
+async function readFileDiff(
+  repoPath: string,
+  file: string,
+  staged: boolean,
+  range?: string
+): Promise<string> {
   const args = ['-C', repoPath, 'diff', ...DIFF_BASE_ARGS]
-  if (staged) {
+  if (range !== undefined) {
+    args.push(range)
+  } else if (staged) {
     args.push('--cached')
   }
   args.push('--', file)
@@ -105,12 +112,17 @@ async function readUntrackedDiff(repoPath: string, file: string): Promise<string
 export function getDiff(
   repoPath: string,
   file: string,
-  staged: boolean
+  staged: boolean,
+  range?: string
 ): Effect.Effect<{ diff: FileDiff }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     yield* requireOpen(repoPath)
-    let raw = yield* tryGit(() => readFileDiff(repoPath, file, staged))
-    if (!raw && !staged) {
+    if (range !== undefined && !isSafeRefArg(range)) {
+      return yield* Effect.fail(new GitError({ message: `unsafe diff range: ${range}` }))
+    }
+    let raw = yield* tryGit(() => readFileDiff(repoPath, file, staged, range))
+    // The untracked fallback only makes sense for the working tree; a range diff is always tracked.
+    if (!raw && !staged && range === undefined) {
       const untracked = yield* tryGit(() => isUntracked(repoPath, file))
       if (untracked) {
         raw = yield* tryGit(() => readUntrackedDiff(repoPath, file))

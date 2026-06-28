@@ -369,9 +369,10 @@ export async function rpcGetBranches(repoPath: string): Promise<BranchesResult> 
 export async function rpcGetDiff(
   repoPath: string,
   file: string,
-  staged?: boolean
+  staged?: boolean,
+  range?: string
 ): Promise<DiffResult> {
-  return callSidecarRpc(GetDiff, { repoPath, file, staged })
+  return callSidecarRpc(GetDiff, { repoPath, file, staged, range })
 }
 
 export async function rpcGetLog(repoPath: string, maxCount?: number): Promise<LogResult> {
