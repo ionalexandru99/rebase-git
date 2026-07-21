@@ -1,6 +1,7 @@
+import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
 import { act, render } from '@testing-library/react'
 import { type ReactNode, useState } from 'react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
 import { useTimelineVisibility } from '@/hooks/useTimelineVisibility'
 import { type CommitHistory, CommitHistoryProvider } from '@/stores/commit-history'
@@ -15,6 +16,7 @@ interface TimelineFixture {
   remotes: Record<string, string>
   defaultBranch: string | undefined
   currentBranch: string
+  logLoading?: boolean
 }
 
 const asyncNoop = async () => {}
@@ -26,7 +28,8 @@ function fixtureProviders(fixture: TimelineFixture, children: ReactNode): ReactN
     openGeneration: 0,
     error: null,
     openRepo: async () => null,
-    closeRepo: asyncNoop
+    closeRepo: asyncNoop,
+    disownRepo: asyncNoop
   }
   const refs: Refs = {
     branches: fixture.branches,
@@ -39,7 +42,7 @@ function fixtureProviders(fixture: TimelineFixture, children: ReactNode): ReactN
   }
   const history: CommitHistory = {
     log: fixture.log,
-    logLoading: false,
+    logLoading: fixture.logLoading ?? false,
     logLoadingMore: false,
     logHasMore: false,
     loadMoreHistory: asyncNoop
@@ -65,7 +68,7 @@ function entry(hash: string, parents: string[], refs = '', message = hash): GitL
 }
 
 function logOf(commits: GitLogEntry[]): GitLog {
-  return { all: commits, total: commits.length }
+  return { all: commits, loadedCount: commits.length }
 }
 
 function branchesOf(partial: Partial<GitBranches>): GitBranches {
@@ -81,6 +84,7 @@ function branchesOf(partial: Partial<GitBranches>): GitBranches {
 interface Harness {
   visibleKeys: string[]
   filteredHashes: string[]
+  displayedHashes: string[]
   expandedHashes: string[]
   isMainVisible: boolean
   isFeatureVisible: boolean
@@ -91,12 +95,14 @@ interface Harness {
 }
 
 let harness: Harness
+let disabledFilteredHashes: string[]
 
 function TimelineProbe({ setFixture }: { setFixture: (next: TimelineFixture) => void }) {
   const timeline = useTimelineVisibility()
   harness = {
     visibleKeys: [...timeline.visibleRefs].sort(),
     filteredHashes: timeline.filteredCommits.map((commit) => commit.hash),
+    displayedHashes: [...timeline.displayedCommitSet],
     expandedHashes: [...timeline.expandedMerges].sort(),
     isMainVisible: timeline.isVisible('local', 'main'),
     isFeatureVisible: timeline.isVisible('local', 'feature'),
@@ -113,14 +119,19 @@ function TimelineHarness({ initial }: { initial: TimelineFixture }) {
   return fixtureProviders(fixture, <TimelineProbe setFixture={setFixture} />)
 }
 
+function DisabledTimelineProbe() {
+  disabledFilteredHashes = useTimelineVisibility(false).filteredCommits.map((commit) => commit.hash)
+  return null
+}
+
 function renderTimeline(initial: TimelineFixture) {
   render(<TimelineHarness initial={initial} />)
 }
 
 const linearLog = logOf([
-  entry('f2', ['f1'], 'origin/feature, feature'),
+  entry('f2', ['f1'], `origin/feature${GIT_LOG_REF_SEPARATOR}feature`),
   entry('f1', ['m2']),
-  entry('m2', ['m1'], 'HEAD -> main, origin/main'),
+  entry('m2', ['m1'], `HEAD -> main${GIT_LOG_REF_SEPARATOR}origin/main`),
   entry('m1', [])
 ])
 
@@ -174,6 +185,16 @@ const searchMergeFixture: TimelineFixture = {
 }
 
 describe('useTimelineVisibility', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('skips commit derivation while the timeline is hidden', () => {
+    render(fixtureProviders(baseFixture, <DisabledTimelineProbe />))
+
+    expect(disabledFilteredHashes).toEqual([])
+  })
+
   it('defaults to the default branch and its tracking remote', () => {
     renderTimeline(baseFixture)
     expect(harness.visibleKeys).toEqual(
@@ -204,9 +225,89 @@ describe('useTimelineVisibility', () => {
     expect(harness.filteredHashes.sort()).toEqual(['m1', 'm2'])
   })
 
+  it('includes commits reachable from detached HEAD', () => {
+    renderTimeline({
+      ...baseFixture,
+      log: logOf([entry('detached', ['m2'], 'HEAD'), entry('m2', ['m1']), entry('m1', [])]),
+      branches: branchesOf({ current: '' }),
+      remotes: {},
+      defaultBranch: undefined,
+      currentBranch: ''
+    })
+
+    expect(harness.filteredHashes).toEqual(['detached', 'm2', 'm1'])
+    expect(harness.visibleKeys).toEqual([])
+  })
+
+  it('includes tag-only commits without selecting the tag as a timeline branch', () => {
+    renderTimeline({
+      ...baseFixture,
+      log: logOf([
+        entry('tagged', ['tag-base'], 'tag: archive'),
+        entry('tag-base', []),
+        entry('m2', ['m1'], `HEAD -> main${GIT_LOG_REF_SEPARATOR}origin/main`),
+        entry('m1', [])
+      ]),
+      branches: branchesOf({
+        current: 'main',
+        all: ['main'],
+        remotes: ['origin/main'],
+        tags: ['archive']
+      })
+    })
+
+    expect(harness.filteredHashes).toEqual(['tagged', 'tag-base', 'm2', 'm1'])
+    expect(harness.visibleKeys).not.toContain(refFilterKey('tag', 'archive'))
+  })
+
+  it('drops selected refs that no longer exist', () => {
+    renderTimeline(baseFixture)
+    act(() => {
+      harness.toggle('local', 'feature')
+    })
+
+    act(() => {
+      harness.setFixture({
+        ...baseFixture,
+        log: logOf([
+          entry('m2', ['m1'], `HEAD -> main${GIT_LOG_REF_SEPARATOR}origin/main`),
+          entry('m1', [])
+        ]),
+        branches: branchesOf({ current: 'main', all: ['main'], remotes: ['origin/main'] })
+      })
+    })
+
+    expect(harness.visibleKeys).toEqual(
+      [refFilterKey('local', 'main'), refFilterKey('remote', 'origin/main')].sort()
+    )
+    expect(harness.isFeatureVisible).toBe(false)
+    expect(harness.filteredHashes).toEqual(['m2', 'm1'])
+  })
+
+  it('coalesces commit derivation while history is streaming', async () => {
+    vi.useFakeTimers()
+    renderTimeline({ ...baseFixture, logLoading: true })
+    const nextLog = logOf([
+      entry('new-main', ['m2'], `HEAD -> main${GIT_LOG_REF_SEPARATOR}origin/main`),
+      entry('m2', ['m1']),
+      entry('m1', [])
+    ])
+
+    act(() => {
+      harness.setFixture({ ...baseFixture, log: nextLog, logLoading: true })
+    })
+    expect(harness.filteredHashes).toEqual(['m2', 'm1'])
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250)
+    })
+    expect(harness.filteredHashes).toEqual(['new-main', 'm2', 'm1'])
+  })
+
   it('collapses a merge side branch by default and expands it from the merge', () => {
     renderTimeline(mergeFixture)
     expect(harness.filteredHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
+    expect(harness.displayedHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
     expect(harness.expandedHashes).toEqual([])
 
     act(() => {
@@ -218,6 +319,23 @@ describe('useTimelineVisibility', () => {
     act(() => {
       harness.toggleMerge('m4')
     })
+    expect(harness.filteredHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
+  })
+
+  it('keeps a tagged merge side branch collapsed when it is reachable from a branch', () => {
+    renderTimeline({
+      ...mergeFixture,
+      log: logOf([
+        entry('m4', ['m3', 'f2'], 'HEAD -> main'),
+        entry('m3', ['m2']),
+        entry('f2', ['f1'], 'tag: merged-feature'),
+        entry('f1', ['m2']),
+        entry('m2', ['m1']),
+        entry('m1', [])
+      ]),
+      branches: branchesOf({ current: 'main', all: ['main'], tags: ['merged-feature'] })
+    })
+
     expect(harness.filteredHashes).toEqual(['m4', 'm3', 'm2', 'm1'])
   })
 

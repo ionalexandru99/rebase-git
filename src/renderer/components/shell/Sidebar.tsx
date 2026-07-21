@@ -15,6 +15,7 @@ export function AppSidebar(props: AppSidebarProps) {
       className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--r-sm)] border bg-card-2 shadow-[var(--shadow)]"
     >
       <RefTreePanel
+        repoPath={props.branchBrowser.repoPath}
         localBranches={props.branchBrowser.localBranches}
         remoteBranches={props.branchBrowser.remoteBranches}
         tags={props.branchBrowser.tags}

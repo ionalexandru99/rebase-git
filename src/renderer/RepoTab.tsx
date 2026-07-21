@@ -9,9 +9,11 @@ interface RepoTabProps {
   tabId: string
   tabActive: boolean
   repoPath: string
+  openRevision?: number
   catalog: WorkspaceCatalog
   onOpenRepo: (path: string) => void
-  onRepoOpened: (path: string) => void
+  onRepoOpened: (path: string) => boolean
+  onRepoOpenFailed: (path: string) => void
 }
 
 export function RepoTab(props: RepoTabProps) {
@@ -27,17 +29,33 @@ function RepoTabContent(props: RepoTabProps) {
   const lastRepoPathRequested = useRef<string | null>(null)
 
   useEffect(() => {
-    if (props.repoPath !== lastRepoPathRequested.current) {
+    const requestKey = `${props.repoPath}\0${props.openRevision ?? 0}`
+    if (requestKey !== lastRepoPathRequested.current) {
       const requestedPath = props.repoPath
-      lastRepoPathRequested.current = requestedPath
+      lastRepoPathRequested.current = requestKey
       void session.openRepo(requestedPath).then((openedPath) => {
-        if (lastRepoPathRequested.current === requestedPath && openedPath) {
-          lastRepoPathRequested.current = openedPath
-          props.onRepoOpened(openedPath)
+        if (lastRepoPathRequested.current === requestKey && openedPath) {
+          const retained = props.onRepoOpened(openedPath)
+          if (retained === false) {
+            session.disownRepo()
+          } else {
+            lastRepoPathRequested.current = `${openedPath}\0${props.openRevision ?? 0}`
+          }
+          return
+        }
+        if (lastRepoPathRequested.current === requestKey) {
+          props.onRepoOpenFailed(requestedPath)
         }
       })
     }
-  }, [session.openRepo, props.repoPath, props.onRepoOpened])
+  }, [
+    session.openRepo,
+    session.disownRepo,
+    props.repoPath,
+    props.openRevision,
+    props.onRepoOpened,
+    props.onRepoOpenFailed
+  ])
 
   const errorBanner = session.error ? (
     <div className="shrink-0 border-b px-4 py-2">

@@ -1,7 +1,15 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { createFixtureRepo, expect, gitIn, openHistory, openLocalChanges, test } from './fixtures'
+import {
+  createFixtureRepo,
+  expect,
+  fileRowCheckbox,
+  gitIn,
+  openHistory,
+  openLocalChanges,
+  test
+} from './fixtures'
 
 const gitOut = (repo: string, ...args: string[]): string =>
   execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
@@ -74,7 +82,7 @@ test('drops a file from the last commit while amending, surfacing it as a workin
   await expect.poll(headHasFeature, { timeout: 10_000 }).toBe(false)
 
   // ...and it surfaces as an untracked working-tree change.
-  await expect(page.getByRole('checkbox', { name: /stage feature\.txt/i })).toBeVisible({
+  await expect(fileRowCheckbox(page, 'feature.txt')).toBeVisible({
     timeout: 10_000
   })
 })

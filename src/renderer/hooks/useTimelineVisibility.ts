@@ -1,4 +1,5 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { GRAPH_LAYOUT_DEBOUNCE_MS } from '@shared/graph-config'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   collectTimelineTips,
   computeCollapsedView,
@@ -16,6 +17,7 @@ import type { GitLogEntry } from '@/types'
 export interface TimelineVisibility {
   visibleRefs: ReadonlySet<string>
   filteredCommits: GitLogEntry[]
+  displayedCommitSet: ReadonlySet<string>
   expandedMerges: ReadonlySet<string>
   filter: string
   setFilter: (value: string) => void
@@ -28,14 +30,55 @@ export interface TimelineVisibility {
 const EMPTY_BRANCH_NAMES: string[] = []
 const EMPTY_COMMITS: GitLogEntry[] = []
 const EMPTY_TIPS: string[] = []
+const EMPTY_COMMIT_SET: ReadonlySet<string> = new Set()
 
-export function useTimelineVisibility(): TimelineVisibility {
+export function useCoalescedCommitSnapshot(
+  commits: GitLogEntry[],
+  streaming: boolean,
+  enabled: boolean
+): GitLogEntry[] {
+  const source = enabled ? commits : EMPTY_COMMITS
+  const [snapshot, setSnapshot] = useState(source)
+  const pending = useRef(source)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  pending.current = source
+
+  useEffect(() => {
+    if (!streaming) {
+      if (timer.current !== null) {
+        clearTimeout(timer.current)
+        timer.current = null
+      }
+      setSnapshot(source)
+      return
+    }
+    if (timer.current === null) {
+      timer.current = setTimeout(() => {
+        timer.current = null
+        setSnapshot(pending.current)
+      }, GRAPH_LAYOUT_DEBOUNCE_MS)
+    }
+  }, [source, streaming])
+
+  useEffect(() => {
+    return () => {
+      if (timer.current !== null) {
+        clearTimeout(timer.current)
+      }
+    }
+  }, [])
+
+  return enabled ? snapshot : EMPTY_COMMITS
+}
+
+export function useTimelineVisibility(enabled = true): TimelineVisibility {
   const { repoPath } = useRepoSession()
   const { branches, currentBranch, defaultBranch, remotes } = useRefs()
-  const { log } = useCommitHistory()
+  const { log, logLoading, logLoadingMore } = useCommitHistory()
   const localBranches = branches?.all ?? EMPTY_BRANCH_NAMES
   const remoteBranches = branches?.remotes ?? EMPTY_BRANCH_NAMES
-  const commits = log?.all ?? EMPTY_COMMITS
+  const loadedCommits = log?.all ?? EMPTY_COMMITS
+  const commits = useCoalescedCommitSnapshot(loadedCommits, logLoading || logLoadingMore, enabled)
 
   const [selectedRefs, setSelectedRefs] = useState<ReadonlySet<string>>(new Set())
   const [expandedMerges, setExpandedMerges] = useState<ReadonlySet<string>>(new Set())
@@ -66,15 +109,15 @@ export function useTimelineVisibility(): TimelineVisibility {
   )
 
   const tips = useMemo(() => {
-    if (visibleRefs.size === 0) {
+    if (!enabled) {
       return EMPTY_TIPS
     }
-    return collectTimelineTips(commits, visibleRefs, remoteBranches, remoteNames)
-  }, [commits, visibleRefs, remoteBranches, remoteNames])
+    return collectTimelineTips(commits, visibleRefs, remoteBranches, remoteNames, currentBranch)
+  }, [enabled, commits, visibleRefs, remoteBranches, remoteNames, currentBranch])
 
   const visibleSet = useMemo(
-    () => computeVisibleSet(deferredFilter, commits),
-    [deferredFilter, commits]
+    () => (enabled ? computeVisibleSet(deferredFilter, commits) : null),
+    [enabled, deferredFilter, commits]
   )
 
   // Auto-reveal merges hide nothing the user chose to collapse: search expands a derived union, the
@@ -94,16 +137,16 @@ export function useTimelineVisibility(): TimelineVisibility {
     return merged
   }, [commits, tips, visibleSet, expandedMerges])
 
-  const filteredCommits = useMemo(() => {
-    if (tips.length === 0) {
-      return EMPTY_COMMITS
+  const collapsedView = useMemo(() => {
+    if (!enabled || tips.length === 0) {
+      return { commits: EMPTY_COMMITS, displayed: EMPTY_COMMIT_SET }
     }
     const displayed = computeCollapsedView(commits, tips, effectiveExpandedMerges)
     if (displayed.size === 0) {
-      return EMPTY_COMMITS
+      return { commits: EMPTY_COMMITS, displayed }
     }
-    return commits.filter((commit) => displayed.has(commit.hash))
-  }, [commits, tips, effectiveExpandedMerges])
+    return { commits: commits.filter((commit) => displayed.has(commit.hash)), displayed }
+  }, [enabled, commits, tips, effectiveExpandedMerges])
 
   const toggle = (refKind: RefKind, fullPath: string) => {
     if (refKind === 'tag') {
@@ -147,7 +190,8 @@ export function useTimelineVisibility(): TimelineVisibility {
 
   return {
     visibleRefs,
-    filteredCommits,
+    filteredCommits: collapsedView.commits,
+    displayedCommitSet: collapsedView.displayed,
     expandedMerges: effectiveExpandedMerges,
     filter,
     setFilter,

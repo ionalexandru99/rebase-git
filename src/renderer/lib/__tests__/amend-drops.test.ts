@@ -61,9 +61,18 @@ describe('assembleDrops', () => {
       drops([
         ['whole.ts', 'all'],
         ['part.ts', ['h2', 'h1']]
-      ])
+      ]),
+      [{ file: 'whole.ts' }, { file: 'part.ts' }]
     )
     expect(droppedHeadPaths).toEqual(['whole.ts'])
     expect(droppedHeadHunks).toEqual([{ file: 'part.ts', hunks: ['h2', 'h1'] }])
+  })
+
+  it('includes both structured paths when a renamed file is dropped', () => {
+    const { droppedHeadPaths } = assembleDrops(drops([['new *.ts', 'all']]), [
+      { file: 'new *.ts', renameSource: 'old [source].ts' }
+    ])
+
+    expect(droppedHeadPaths).toEqual(['old [source].ts', 'new *.ts'])
   })
 })

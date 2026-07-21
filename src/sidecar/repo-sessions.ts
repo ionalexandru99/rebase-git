@@ -1,22 +1,18 @@
-import { spawn } from 'node:child_process'
 import { Context, Effect, ExecutionStrategy, Exit, Layer, Scope } from 'effect'
 import type { SimpleGit } from 'simple-git'
-import { releaseFetchSemaphore } from './fetch-semaphore'
+import { removeAbandonedAmendIndexes } from './amend-index'
+import { releaseFetchSemaphore, retainFetchSemaphore } from './fetch-semaphore'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from './git/instances'
 import { type GitError, gitError, NotARepo, RepoNotOpen } from './git-errors'
 import { releaseRepoSemaphore, retainRepoSemaphore } from './repo-lock'
+import { startBackgroundGit } from './spawn'
 
 export interface RepoSessionsService {
-  // Session creation only: get-or-create the instance, reject a non-repo, ensure the commit graph.
-  // The UI's first reads (remotes, default branch, gitdirs) live in the openRepo operation.
   open(repoPath: string): Effect.Effect<SimpleGit, NotARepo | GitError>
   close(repoPath: string): Effect.Effect<void>
   requireGit(repoPath: string): Effect.Effect<SimpleGit, RepoNotOpen>
   requireOpen(repoPath: string): Effect.Effect<void, RepoNotOpen>
   isCommitGraphTracked(repoPath: string): boolean
-  // Run a scoped effect bound to the repo's session: its finalizers run when the scoped effect
-  // settles, and are force-run if the session closes first (the child scope is forked from the
-  // session's scope). Used by the cancel-safe background workers to register kill-on-close cleanup.
   withSessionScope<A, E>(
     repoPath: string,
     effect: Effect.Effect<A, E, Scope.Scope>
@@ -28,9 +24,6 @@ function makeRepoSessions(): RepoSessionsService {
   const scopes = new Map<string, Scope.CloseableScope>()
   const commitGraphWritten = new Set<string>()
 
-  // Forks a child Scope from the session's scope so the effect's finalizers run when it settles and
-  // are force-run if the session closes first; falls back to a self-contained scope when no session
-  // is open. Shared by withSessionScope and the background commit-graph write.
   function runOnSessionScope<A, E>(
     key: string,
     effect: Effect.Effect<A, E, Scope.Scope>
@@ -47,9 +40,6 @@ function makeRepoSessions(): RepoSessionsService {
     })
   }
 
-  // Generation numbers from a commit-graph file make `git log --topo-order` stream incrementally
-  // instead of walking the full history before the first row. The write child is registered on the
-  // session scope, so closing the repo kills it; the marker is cleared on close so reopen retries.
   function ensureCommitGraph(key: string): Effect.Effect<void> {
     return Effect.suspend(() => {
       if (commitGraphWritten.has(key)) {
@@ -59,24 +49,19 @@ function makeRepoSessions(): RepoSessionsService {
       const write = runOnSessionScope(
         key,
         Effect.gen(function* () {
-          const proc = yield* Effect.acquireRelease(
+          const running = yield* Effect.acquireRelease(
             Effect.sync(() =>
-              spawn('git', ['-C', key, 'commit-graph', 'write', '--reachable', '--split'], {
-                stdio: 'ignore',
+              startBackgroundGit(['-C', key, 'commit-graph', 'write', '--reachable', '--split'], {
+                collectStdout: false,
                 env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
               })
             ),
-            (child) =>
-              Effect.sync(() => {
-                if (!child.killed) {
-                  child.kill()
-                }
-              })
+            (process) => Effect.promise(() => process.terminate()).pipe(Effect.orDie)
           )
-          yield* Effect.async<void>((resume) => {
-            proc.on('close', () => resume(Effect.void))
-            proc.on('error', () => resume(Effect.void))
-          })
+          yield* Effect.promise(() => running.result).pipe(
+            Effect.asVoid,
+            Effect.catchAll(() => Effect.void)
+          )
         })
       )
       return Effect.forkDaemon(write).pipe(Effect.asVoid)
@@ -94,6 +79,11 @@ function makeRepoSessions(): RepoSessionsService {
           return yield* Effect.fail(new NotARepo())
         }
         if (!scopes.has(key)) {
+          yield* Effect.promise(async () => {
+            const gitDir = (await git.revparse(['--absolute-git-dir'])).trim()
+            await removeAbandonedAmendIndexes(gitDir)
+          }).pipe(Effect.catchAll(() => Effect.void))
+          retainFetchSemaphore(key)
           retainRepoSemaphore(key)
           const scope = yield* Scope.make()
           yield* Scope.addFinalizer(
@@ -140,9 +130,6 @@ function makeRepoSessions(): RepoSessionsService {
 
 const sessions = makeRepoSessions()
 
-// One registry value, exposed two ways: directly to the RepoNotOpen-typed helpers below, and behind
-// a Layer for the operation runtime. The single-adapter Layer is deliberate consistency, not an
-// abstraction to inline away — see docs/adr/0001-effect-everywhere.md.
 export class RepoSessions extends Context.Tag('sidecar/RepoSessions')<
   RepoSessions,
   RepoSessionsService

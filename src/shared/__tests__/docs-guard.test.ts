@@ -26,8 +26,29 @@ describe('docs ground truth', () => {
       it('does not claim the renderer uses native fetch', () => {
         expect(contents).not.toContain('native fetch')
       })
+
+      it('names the current Effect RPC stack and tab API', () => {
+        expect(contents).not.toContain('sidecarFetch')
+        expect(contents).not.toContain('Zod')
+        expect(contents).not.toContain('requestOpenRepo')
+        expect(contents).not.toContain('*-compat')
+      })
+
+      it('names the pnpm postinstall allowlist correctly', () => {
+        expect(contents).not.toContain('pnpm.onlyBuiltDependencies')
+        expect(contents).toContain('allowBuilds')
+      })
     })
   }
+})
+
+describe('plan status', () => {
+  it('does not mark the implemented graph collapse plan as not started', () => {
+    expect(readDoc('docs/plans/graph-width-and-merge-collapse.md')).not.toMatch(/not started/i)
+    expect(readDoc('docs/plans/README.md')).not.toMatch(
+      /graph-width-and-merge-collapse[^\n]*not started/i
+    )
+  })
 })
 
 const rendererDir = path.resolve(repoRoot, 'src/renderer')

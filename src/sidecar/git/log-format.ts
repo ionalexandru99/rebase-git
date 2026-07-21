@@ -2,7 +2,14 @@ import type { GitLogEntry } from '@shared/schemas/git'
 
 export const FS_SEP = '\x1F'
 export const RS_SEP = '\x00'
-export const LOG_FORMAT = ['%H', '%P', '%aI', '%aN', '%s', '%D'].join(FS_SEP)
+export const LOG_FORMAT = [
+  '%H',
+  '%P',
+  '%aI',
+  '%aN',
+  '%s',
+  '%(decorate:prefix=,suffix=,separator=%x1e,pointer= -> ,tag=tag: )'
+].join(FS_SEP)
 
 export function parseGitLogRecord(record: string): GitLogEntry | null {
   if (!record) {

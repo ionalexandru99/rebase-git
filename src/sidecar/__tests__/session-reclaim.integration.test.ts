@@ -46,6 +46,34 @@ describe('repo session reclaims its per-repo semaphore entries on close', () => 
     await runOp(closeRepo(repoDir))
   })
 
+  it('reuses an active fetch semaphore across close and reopen', async () => {
+    const key = normalizeRepoPath(repoDir)
+    await runOp(openRepo(repoDir))
+    const before = fetchSemaphoreFor(key)
+    let releaseWork: (() => void) | undefined
+    let startedResolve: (() => void) | undefined
+    const started = new Promise<void>((resolve) => {
+      startedResolve = resolve
+    })
+    const held = before.withPermits(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseWork = resolve
+          startedResolve?.()
+        })
+    )
+    await started
+
+    await runOp(closeRepo(repoDir))
+    await runOp(openRepo(repoDir))
+    const after = fetchSemaphoreFor(key)
+
+    expect(after).toBe(before)
+    releaseWork?.()
+    await held
+    await runOp(closeRepo(repoDir))
+  })
+
   it('leaves the repo lock immediately re-acquirable and still serializing after close/reopen', async () => {
     const key = normalizeRepoPath(repoDir)
 

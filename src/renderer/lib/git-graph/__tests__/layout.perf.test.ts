@@ -48,7 +48,7 @@ describe('layoutCommits performance', () => {
     const result = layoutCommits(commits)
     const elapsed = performance.now() - started
 
-    expect(result.rows).toHaveLength(10_000)
+    expect(result.rowCount).toBe(10_000)
     expect(result.maxLanes).toBe(1)
     expect(elapsed).toBeLessThan(200)
   })
@@ -59,9 +59,42 @@ describe('layoutCommits performance', () => {
     const result = layoutCommits(commits)
     const elapsed = performance.now() - started
 
-    expect(result.rows).toHaveLength(10_000)
+    expect(result.rowCount).toBe(10_000)
     // Guards the wide O(commits x lanes) path, not just the linear chain.
     expect(result.maxLanes).toBeGreaterThan(100)
     expect(elapsed).toBeLessThan(400)
+  })
+
+  it('keeps 50k linear history within deterministic storage budgets', () => {
+    const commits = buildLinearCommits(50_000)
+    const result = layoutCommits(commits)
+
+    const retainedLaneSlots = result.boundaryChunks.reduce(
+      (total, chunk) =>
+        total + chunk.boundaries.reduce((chunkTotal, boundary) => chunkTotal + boundary.length, 0),
+      0
+    )
+
+    expect(result.rowCount).toBe(50_000)
+    expect(result.boundaryCount).toBe(50_001)
+    expect(retainedLaneSlots).toBeLessThanOrEqual(50_000)
+  })
+
+  it('lays out 50k commits across 64 live lanes within scale budgets', () => {
+    const commits = buildFanOutCommits(50_000, 64)
+    const started = performance.now()
+    const result = layoutCommits(commits)
+    const elapsed = performance.now() - started
+    const retainedLaneSlots = result.boundaryChunks.reduce(
+      (total, chunk) =>
+        total + chunk.boundaries.reduce((chunkTotal, boundary) => chunkTotal + boundary.length, 0),
+      0
+    )
+
+    expect(result.rowCount).toBe(50_000)
+    expect(result.maxLanes).toBeGreaterThanOrEqual(64)
+    expect(result.boundaryCount).toBe(50_001)
+    expect(retainedLaneSlots).toBeLessThanOrEqual(3_300_000)
+    expect(elapsed).toBeLessThan(500)
   })
 })

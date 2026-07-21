@@ -1,9 +1,9 @@
 import type { PersistedTabs } from '@shared/schemas/ipc'
-import { useEffect, useMemo, useState } from 'react'
-import { rpcOpenRepo } from '@/lib/rpc-client'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { OnboardingScreen } from './components/OnboardingScreen'
 import { RepoRail } from './components/shell/RepoRail'
 import { Titlebar } from './components/shell/Titlebar'
+import { PortalContainerProvider } from './components/ui/portal-container'
 import { Toaster } from './components/ui/sonner'
 import { useOnboarding } from './hooks/useOnboarding'
 import { useTabs } from './hooks/useTabs'
@@ -13,6 +13,7 @@ import { TabView } from './TabView'
 export default function App() {
   const onboarding = useOnboarding()
   const [persistedTabs, setPersistedTabs] = useState<PersistedTabs | null>(null)
+  const [onboardingRepoPath, setOnboardingRepoPath] = useState<string | null>(null)
 
   useEffect(() => {
     window.electronAPI
@@ -45,8 +46,9 @@ export default function App() {
         onComplete={onboarding.completeOnboarding}
         onOpenRepo={async (path) => {
           try {
+            setOnboardingRepoPath(path)
+            setPersistedTabs({ tabs: [path], activeIndex: 0 })
             await onboarding.completeOnboarding()
-            await rpcOpenRepo(path)
           } catch (error) {
             console.error('[onboarding] openRepo failed', { path, error })
           }
@@ -55,7 +57,14 @@ export default function App() {
     )
   }
 
-  return <TabsShell persisted={persistedTabs} onboarding={onboarding} />
+  return (
+    <TabsShell
+      persisted={
+        onboardingRepoPath ? { tabs: [onboardingRepoPath], activeIndex: 0 } : persistedTabs
+      }
+      onboarding={onboarding}
+    />
+  )
 }
 
 interface TabsShellProps {
@@ -73,6 +82,7 @@ function TabsShell(props: TabsShellProps) {
     closeTab,
     openRepoInTab,
     confirmRepoOpen,
+    cancelRepoOpen,
     persistedSnapshot
   } = useTabs(props.persisted)
   const [recentRepos, setRecentRepos] = useState<string[]>([])
@@ -153,15 +163,7 @@ function TabsShell(props: TabsShellProps) {
             const tabActive = tab.id === activeTabId
             const tabLoaded = tabActive || activatedTabIds.has(tab.id)
             return (
-              <div
-                key={tab.id}
-                className={
-                  tabActive
-                    ? 'flex h-full min-h-0 flex-col'
-                    : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
-                }
-                aria-hidden={!tabActive}
-              >
+              <TabOwner key={tab.id} active={tabActive}>
                 {tabLoaded ? (
                   <TabView
                     tab={tab}
@@ -169,13 +171,32 @@ function TabsShell(props: TabsShellProps) {
                     catalog={workspaceCatalog}
                     onOpenRepo={openRepoInTab}
                     onRepoOpened={confirmRepoOpen}
+                    onRepoOpenFailed={cancelRepoOpen}
                   />
                 ) : null}
-              </div>
+              </TabOwner>
             )
           })}
         </div>
       </div>
+    </div>
+  )
+}
+
+function TabOwner(props: { active: boolean; children: ReactNode }) {
+  const [container, setContainer] = useState<HTMLDivElement | null>(null)
+
+  return (
+    <div
+      ref={setContainer}
+      className={
+        props.active
+          ? 'flex h-full min-h-0 flex-col'
+          : 'pointer-events-none invisible absolute inset-0 flex min-h-0 flex-col'
+      }
+      aria-hidden={!props.active}
+    >
+      <PortalContainerProvider container={container}>{props.children}</PortalContainerProvider>
     </div>
   )
 }

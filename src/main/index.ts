@@ -1,18 +1,21 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, session } from 'electron'
 import windowStateKeeper from 'electron-window-state'
 import { buildContentSecurityPolicy } from './csp'
+import { installE2eControl } from './e2e-control'
 import * as logStreamIpc from './ipc/log-stream'
 import * as repoIpc from './ipc/repo'
 import * as settingsIpc from './ipc/settings'
 import * as workspaceIpc from './ipc/workspace'
 import { setupContextMenu } from './menu'
 import { wireProcessRecovery, wireWindowRecovery } from './recovery'
+import { createBeforeQuitHandler } from './shutdown'
 import { killSidecar, startSidecar } from './sidecar'
 import { focusExistingWindow } from './single-instance'
-import { getTheme } from './store'
+import { getTheme, replaceStoreWithDefaults } from './store'
 import { resolveBackgroundColor } from './theme'
 import { setupUpdater } from './updater'
 
@@ -72,6 +75,20 @@ function applyContentSecurityPolicy(): void {
 }
 
 let mainWindow: BrowserWindow | null = null
+let appShuttingDown = false
+let sidecarRespawnCount = 0
+
+installE2eControl({
+  argv: process.argv,
+  nodeEnv: process.env.NODE_ENV,
+  userDataDir: app.getPath('userData'),
+  tempDir: os.tmpdir(),
+  target: globalThis as unknown as Record<string, unknown>,
+  replaceStoreWithDefaults,
+  getMainPid: () => process.pid,
+  getProcessMetrics: () => app.getAppMetrics(),
+  getSidecarRespawnCount: () => sidecarRespawnCount
+})
 
 function createWindow(): void {
   const mainWindowState = windowStateKeeper({
@@ -132,8 +149,11 @@ function registerIpcHandlers(): void {
   settingsIpc.register()
 }
 
-// A second launch must not spin up a rival main process (and a second sidecar) racing the same
-// persisted store/window-state; route it to the existing window instead.
+async function shutdownMainResources(): Promise<void> {
+  await repoIpc.finalizeRepoLifecycleQueue()
+  await killSidecar()
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -149,7 +169,12 @@ if (!app.requestSingleInstanceLock()) {
       return
     }
     registerIpcHandlers()
-    wireProcessRecovery()
+    wireProcessRecovery(
+      () => appShuttingDown,
+      () => {
+        sidecarRespawnCount += 1
+      }
+    )
     applyContentSecurityPolicy()
     createWindow()
     setupUpdater()
@@ -169,12 +194,15 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  void killSidecar()
+const beforeQuitHandler = createBeforeQuitHandler(shutdownMainResources, () => app.quit())
+app.on('before-quit', (event) => {
+  appShuttingDown = true
+  beforeQuitHandler(event)
 })
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    void killSidecar().finally(() => app.exit(0))
+    appShuttingDown = true
+    void shutdownMainResources().finally(() => app.exit(0))
   })
 }

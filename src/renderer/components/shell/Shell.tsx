@@ -23,6 +23,7 @@ export interface RepoChrome {
 }
 
 export interface BranchBrowser {
+  repoPath: string | null
   localBranches: string[]
   remoteBranches: string[]
   tags: string[]
@@ -33,7 +34,7 @@ export interface BranchBrowser {
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
   onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
-  onStashAction?: (action: StashAction, index: number) => void
+  onStashAction?: (action: StashAction, index: number, expectedOid: string) => void
 }
 
 export interface WorkspaceNavigation {
@@ -45,7 +46,7 @@ interface ShellProps {
   repo: RepoChrome
   branchBrowser: BranchBrowser
   navigation: WorkspaceNavigation
-  workspaceContext?: string
+  lastFetchedAt?: number | null
   onFetch?: () => void
   onPull?: () => void
   push?: TopbarPush
@@ -54,6 +55,7 @@ interface ShellProps {
   detached?: boolean
   pulling?: boolean
   pushing?: boolean
+  busy?: boolean
   children: ReactNode
 }
 
@@ -94,7 +96,7 @@ export function Shell(props: ShellProps) {
           repoPath={props.repo.repoPath}
           activeView={props.navigation.activeView}
           onSelectView={props.navigation.onSelectView}
-          workspaceContext={props.workspaceContext}
+          lastFetchedAt={props.lastFetchedAt}
           onFetch={props.onFetch}
           onPull={props.onPull}
           push={props.push}
@@ -104,6 +106,7 @@ export function Shell(props: ShellProps) {
           detached={props.detached}
           pulling={props.pulling}
           pushing={props.pushing}
+          busy={props.busy}
         />
         <div className="flex min-h-0 flex-col overflow-hidden">{props.children}</div>
       </section>

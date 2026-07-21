@@ -1,6 +1,6 @@
 # Plan: move full-recompute lane layout off the renderer main thread
 
-**Status:** Not started — reassess after `graph-width-and-merge-collapse`.
+**Status:** Implemented in the current worktree; post-collapse large-repo measurements remain.
 **Owner:** TBD
 **Created:** 2026-06-27
 
@@ -28,25 +28,24 @@ prefix of the previous one forces a full O(commits × lanes) recompute. On a 79k
 repo you reach 10k–50k loaded commits easily, so a filter toggle there is a hard
 25–118 ms input stall.
 
-## Proposed change
+## Implemented change
 
-Move the full `layoutCommits` recompute into a **Web Worker** in the renderer. The
-layout input (`filteredCommits`) is renderer-derived, so a worker is the natural
-boundary.
+Full `layoutCommits` recomputes now run in a renderer **Web Worker**. The layout
+input (`filteredCommits`) is renderer-derived, so the worker is the natural boundary.
 
-- Post the commit list (or a compact encoding — hashes + parent indices, not the
-  full messages) to the worker; receive `RowLayout[]` (or a transferable encoding)
-  back.
-- Keep the incremental extend path on the main thread (it's ≤ 9 ms and benefits from
-  zero round-trip latency), or run it in the worker too if that simplifies the code
-  — measure both.
-- Once layout is off-thread, the 250 ms `GRAPH_LAYOUT_DEBOUNCE_MS` can likely drop
-  for a snappier feel.
+- `layout.worker.ts` receives a generation, commits, and hidden-parent hashes and
+  returns the existing chunked `LayoutResult` shape.
+- Incremental prefix extensions remain on the main thread for zero round-trip latency.
+- A generation guard discards superseded worker results. Worker teardown also
+  invalidates pending generations.
+- Environments without `Worker` support retain a synchronous fallback, including
+  the renderer unit-test environment.
+- `GRAPH_LAYOUT_DEBOUNCE_MS` remains 250 ms pending post-implementation profiling.
 
 ### Considerations
 
-- **Serialization cost.** Passing 50k commits and receiving their rows crosses a
-  structured-clone boundary. Measure clone time; if it's significant, pass a compact
+- **Serialization cost.** The current implementation structured-clones commit objects
+  and the chunked layout result. Measure clone time; if it's significant, pass a compact
   representation (intern hashes to integer ids; send `Int32Array` parent lists and
   receive an `Int32Array` lane assignment + boundary table) and reconstruct
   `RowLayout` lazily on the main side. This dovetails with the lane-snapshot
@@ -56,8 +55,8 @@ boundary.
   the **unfiltered** full graph. But filtered/collapsed views must re-lane in the
   renderer, so this is only a partial win. Prefer the worker; note the sidecar
   option for the unfiltered default if it proves worthwhile.
-- **Staleness / cancellation.** A newer relayout must supersede an in-flight worker
-  result (mirror the stream-id guarding already used in `commit-history.tsx`).
+- **Staleness / cancellation.** Newer generations supersede in-flight results. The
+  worker does not abort CPU work already underway; it prevents stale results from winning.
 
 ### Dependency on `graph-width-and-merge-collapse`
 
@@ -78,9 +77,8 @@ layout, which directly lowers recompute cost. **Do that plan first, then re-meas
 
 ## Acceptance criteria
 
-- [ ] Full-recompute layout runs in a Web Worker; no synchronous `layoutCommits`
-      over large inputs on the main thread.
-- [ ] Incremental streaming latency unchanged.
-- [ ] Superseded layouts are cancelled; no stale render wins.
+- [x] Full-recompute layout runs in a Web Worker when the runtime provides one.
+- [x] Incremental streaming stays on the existing synchronous extension path.
+- [x] Superseded layout results cannot win.
 - [ ] Re-measured after `graph-width-and-merge-collapse`; priority confirmed or
       downgraded with numbers.

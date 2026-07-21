@@ -2,6 +2,7 @@ export const Channel = {
   selectFolder: 'select-folder',
   openRepo: 'open-repo',
   closeRepo: 'close-repo',
+  disownRepo: 'disown-repo',
   startLogStream: 'start-log-stream',
   cancelLogStream: 'cancel-log-stream',
   scanForRepos: 'scan-for-repos',

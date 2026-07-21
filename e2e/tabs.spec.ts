@@ -25,9 +25,12 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
   gitB(['add', '.'])
   gitB(['commit', '-m', 'beta only'])
   fs.writeFileSync(path.join(repoA, 'extra.txt'), 'extra\n')
+  const mainProcessId = await harness.mainProcessId()
 
   const page = await harness.openTabs([repoA, repoB])
 
+  expect(await harness.mainProcessId()).toBe(mainProcessId)
+  expect(harness.launchCount()).toBe(1)
   const tabA = page.getByRole('tab', { name: path.basename(repoA) })
   const tabB = page.getByRole('tab', { name: path.basename(repoB) })
   await expect(tabA).toBeVisible()
@@ -56,6 +59,31 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
   await expect(page.getByText('beta only').first()).toBeHidden()
 })
 
+test('a destructive dialog from an inactive repo is hidden and cannot be activated', async ({
+  harness
+}) => {
+  const repoA = createFixtureRepo()
+  const repoB = createFixtureRepo()
+  const readmePath = path.join(repoA, 'README.md')
+  fs.writeFileSync(readmePath, '# fixture\nrepo A change\n')
+  const page = await harness.openTabs([repoA, repoB])
+
+  await openLocalChanges(page)
+  await page.getByRole('button', { name: 'Discard all' }).click()
+
+  const dialog = page.getByRole('dialog')
+  const destructiveAction = dialog.getByRole('button', { name: 'Discard all' })
+  await expect(dialog).toBeVisible()
+
+  const tabB = page.getByRole('tab', { name: path.basename(repoB) })
+  await tabB.evaluate((element) => (element as HTMLButtonElement).click())
+
+  await expect(tabB).toHaveAttribute('aria-selected', 'true')
+  await expect(dialog).toBeHidden()
+  await expect(destructiveAction.click({ timeout: 500 })).rejects.toThrow()
+  expect(fs.readFileSync(readmePath, 'utf8')).toContain('repo A change')
+})
+
 test('opens a repo from the picker and re-opening routes to the existing tab', async ({
   harness
 }) => {
@@ -69,7 +97,7 @@ test('opens a repo from the picker and re-opening routes to the existing tab', a
     tabs: [null],
     activeIndex: 0
   })
-  const page = await harness.relaunch()
+  const page = await harness.reload()
 
   await expect(page.getByRole('heading', { name: 'Open a repository' })).toBeVisible({
     timeout: 10_000
@@ -148,8 +176,11 @@ test('persisted tabs and theme survive a second relaunch without re-seeding', as
     .poll(() => page.evaluate(() => localStorage.getItem('theme')), { timeout: 10_000 })
     .toBe('light')
 
-  const relaunched = await harness.relaunch()
+  const mainProcessId = await harness.mainProcessId()
+  const relaunched = await harness.restart()
 
+  expect(await harness.mainProcessId()).not.toBe(mainProcessId)
+  expect(harness.launchCount()).toBe(2)
   await expect(relaunched.getByRole('tab', { name: path.basename(repoA) })).toBeVisible({
     timeout: 10_000
   })
@@ -158,4 +189,8 @@ test('persisted tabs and theme survive a second relaunch without re-seeding', as
     timeout: 10_000
   })
   expect(await relaunched.evaluate(() => localStorage.getItem('theme'))).toBe('light')
+  await expect.poll(() => harness.inspectLifecycle()).toMatchObject({
+    sidecarProcessCount: 1,
+    sidecarRespawnCount: 0
+  })
 })

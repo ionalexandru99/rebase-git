@@ -14,17 +14,18 @@ import { StatusBadge, type StatusKind } from './StatusBadge'
 
 interface FileRowProps {
   file: string
+  renameSource?: string
   display?: string
   kind: StatusKind
   stageState: FileStageState
   source?: FileRowSource
   dropState?: HeadDropState
   isSelected: boolean
-  onSelect: (file: string) => void
+  onSelect: (file: string, renameSource?: string) => void
   onStage?: (file: string) => void
-  onUnstage?: (file: string) => void
+  onUnstage?: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
-  onFileAction?: (action: FileAction, file: string) => void
+  onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
 }
 
 const ROW_GRID =
@@ -33,21 +34,36 @@ const ROW_GRID =
 export function FileRow(props: FileRowProps) {
   const label = props.display ?? props.file
   const rowClass = cn(ROW_GRID, props.isSelected ? 'bg-[var(--brand-soft)]' : 'hover:bg-muted')
+  const select = () => {
+    if (props.renameSource) {
+      props.onSelect(props.file, props.renameSource)
+      return
+    }
+    props.onSelect(props.file)
+  }
+  const unstage = () => {
+    if (props.renameSource) {
+      props.onUnstage?.(props.file, props.renameSource)
+      return
+    }
+    props.onUnstage?.(props.file)
+  }
+  const fileAction = (action: FileAction) => {
+    if (props.renameSource) {
+      props.onFileAction?.(action, props.file, props.renameSource)
+      return
+    }
+    props.onFileAction?.(action, props.file)
+  }
 
   const nameButton = (
-    <button
-      type="button"
-      onClick={() => props.onSelect(props.file)}
-      className="flex h-full min-w-0 items-center text-left"
-    >
+    <button type="button" onClick={select} className="flex h-full min-w-0 items-center text-left">
       <span className="min-w-0 truncate text-sm" title={label}>
         {label}
       </span>
     </button>
   )
 
-  // Files already in the commit being amended: a checked box keeps the file, unchecking drops it back to
-  // its parent-commit state. No stage/discard — those belong to the working tree.
   if (props.source === 'head-commit') {
     const dropState = props.dropState ?? 'kept'
     const kept = dropState === 'kept'
@@ -80,7 +96,7 @@ export function FileRow(props: FileRowProps) {
 
   const toggleStaged = () => {
     if (isStaged) {
-      props.onUnstage?.(props.file)
+      unstage()
       return
     }
     props.onStage?.(props.file)
@@ -100,14 +116,11 @@ export function FileRow(props: FileRowProps) {
       </ContextMenuTriggerArea>
       <ContextMenuContent>
         {isStaged ? (
-          <ContextMenuItem onSelect={() => props.onUnstage?.(props.file)}>Unstage</ContextMenuItem>
+          <ContextMenuItem onSelect={unstage}>Unstage</ContextMenuItem>
         ) : (
           <ContextMenuItem onSelect={() => props.onStage?.(props.file)}>Stage</ContextMenuItem>
         )}
-        <ContextMenuItem
-          variant="destructive"
-          onSelect={() => props.onFileAction?.('discard', props.file)}
-        >
+        <ContextMenuItem variant="destructive" onSelect={() => fileAction('discard')}>
           Discard changes
         </ContextMenuItem>
         <ContextMenuSeparator />

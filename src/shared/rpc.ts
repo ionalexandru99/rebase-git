@@ -1,6 +1,6 @@
 import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
-import { NonNaNNumber, RequiredString } from './codec'
+import { NonNaNNumber, OpaqueHunkHeaderString, OpaqueString, RequiredString } from './codec'
 import {
   AmendRejected,
   Conflict,
@@ -8,14 +8,14 @@ import {
   GitError,
   HunkNotFound,
   NotARepo,
+  OperationInProgress,
   PushRejected,
   RepoNotOpen
 } from './git-rpc-errors'
+import type { RpcResult } from './rpc-result'
 import {
   CommitSummarySchema,
   FileDiffSchema,
-  GitBranchesSchema,
-  GitLogSchema,
   GitStatusSchema,
   HeadCommitSchema,
   LocalBranchesSchema,
@@ -32,6 +32,7 @@ export {
   GitError,
   HunkNotFound,
   NotARepo,
+  OperationInProgress,
   PushRejected,
   RepoNotOpen
 } from './git-rpc-errors'
@@ -46,134 +47,136 @@ const FetchError = Schema.Union(RepoNotOpen, GitError, FetchSkipped)
 const OpenError = Schema.Union(NotARepo, GitError)
 const ScanError = Schema.Union(GitError)
 const OptionalString = Schema.optional(RequiredString)
-const FileList = Schema.Array(RequiredString)
+const FileList = Schema.Array(OpaqueString)
 
 export const OpenRepo = Rpc.make('openRepo', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Struct({ result: RepoOpenSuccessSchema }),
   error: OpenError
 })
 
-// closeRepo is idempotent and never fails (operations.closeRepo returns Effect<void>), so the error
-// channel is Schema.Never — the handler has no failure to produce.
 export const CloseRepo = Rpc.make('closeRepo', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Void,
   error: Schema.Never
 })
 
 export const ScanForRepos = Rpc.make('scanForRepos', {
-  payload: { dirPath: RequiredString },
-  success: Schema.Struct({ repos: Schema.Array(RequiredString) }),
+  payload: { dirPath: OpaqueString },
+  success: Schema.Struct({ repos: Schema.Array(OpaqueString) }),
   error: ScanError
 })
 
 export const Commit = Rpc.make('commit', {
-  payload: { repoPath: RequiredString, message: RequiredString },
+  payload: { repoPath: OpaqueString, message: RequiredString },
   success: Schema.Struct({ result: CommitSummarySchema }),
   error: CommitError
 })
 
 export const GetHeadCommit = Rpc.make('getHeadCommit', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Struct({ result: HeadCommitSchema }),
   error: ReadError
 })
 
-// droppedHeadPaths names files in the amended commit to revert to their parent-commit state (added
-// vanishes, modified falls back, deleted reappears); droppedHeadHunks reverts only the named hunks of a
-// file, keeping the rest. Either way the reverted slice surfaces as a working change. AmendRejected
-// {head-moved} is the CAS refusal.
-const DroppedHunks = Schema.Array(Schema.Struct({ file: RequiredString, hunks: FileList }))
+const DroppedHunks = Schema.Array(
+  Schema.Struct({ file: OpaqueString, hunks: Schema.Array(OpaqueHunkHeaderString) })
+)
 
 export const AmendCommit = Rpc.make('amendCommit', {
   payload: {
-    repoPath: RequiredString,
+    repoPath: OpaqueString,
     message: RequiredString,
+    expectedHead: RequiredString,
     droppedHeadPaths: FileList,
     droppedHeadHunks: DroppedHunks
   },
   success: Schema.Struct({ result: CommitSummarySchema }),
-  error: Schema.Union(RepoNotOpen, GitError, AmendRejected)
+  error: Schema.Union(RepoNotOpen, GitError, AmendRejected, OperationInProgress, HunkNotFound)
 })
 
 export const StageFile = Rpc.make('stageFile', {
-  payload: { repoPath: RequiredString, file: RequiredString },
+  payload: { repoPath: OpaqueString, file: OpaqueString },
   success: Schema.Void,
   error: StageError
 })
 
 export const UnstageFile = Rpc.make('unstageFile', {
-  payload: { repoPath: RequiredString, file: RequiredString },
+  payload: {
+    repoPath: OpaqueString,
+    file: OpaqueString,
+    renameSource: Schema.optional(OpaqueString)
+  },
   success: Schema.Void,
   error: StageError
 })
 
 export const StageAll = Rpc.make('stageAll', {
-  payload: { repoPath: RequiredString, files: FileList },
+  payload: { repoPath: OpaqueString, files: FileList },
   success: Schema.Void,
   error: StageError
 })
 
 export const UnstageAll = Rpc.make('unstageAll', {
-  payload: { repoPath: RequiredString, files: FileList },
+  payload: { repoPath: OpaqueString, files: FileList },
   success: Schema.Void,
   error: StageError
 })
 
 export const StageHunk = Rpc.make('stageHunk', {
-  payload: { repoPath: RequiredString, file: RequiredString, hunkHeader: RequiredString },
+  payload: { repoPath: OpaqueString, file: OpaqueString, hunkHeader: OpaqueHunkHeaderString },
   success: Schema.Void,
   error: HunkError
 })
 
 export const UnstageHunk = Rpc.make('unstageHunk', {
-  payload: { repoPath: RequiredString, file: RequiredString, hunkHeader: RequiredString },
+  payload: { repoPath: OpaqueString, file: OpaqueString, hunkHeader: OpaqueHunkHeaderString },
   success: Schema.Void,
   error: HunkError
 })
 
 export const DiscardChanges = Rpc.make('discardChanges', {
-  payload: { repoPath: RequiredString, files: FileList },
+  payload: { repoPath: OpaqueString, files: FileList },
   success: Schema.Void,
   error: StageError
 })
 
 export const DiscardAll = Rpc.make('discardAll', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Void,
   error: StageError
 })
 
 export const MergeBranch = Rpc.make('mergeBranch', {
-  payload: { repoPath: RequiredString, ref: RequiredString },
+  payload: { repoPath: OpaqueString, refKind: RefKindSchema, fullPath: RequiredString },
   success: Schema.Void,
   error: ConflictableError
 })
 
 export const RevertCommit = Rpc.make('revertCommit', {
-  payload: { repoPath: RequiredString, sha: RequiredString },
+  payload: { repoPath: OpaqueString, sha: RequiredString },
   success: Schema.Void,
   error: ConflictableError
 })
 
 export const CherryPick = Rpc.make('cherryPick', {
-  payload: { repoPath: RequiredString, sha: RequiredString },
+  payload: { repoPath: OpaqueString, sha: RequiredString },
   success: Schema.Void,
   error: ConflictableError
 })
 
 export const Checkout = Rpc.make('checkout', {
-  payload: { repoPath: RequiredString, refKind: RefKindSchema, fullPath: RequiredString },
+  payload: { repoPath: OpaqueString, refKind: RefKindSchema, fullPath: RequiredString },
   success: Schema.Struct({ checkedOut: RequiredString }),
   error: RefWriteError
 })
 
 export const CreateBranch = Rpc.make('createBranch', {
   payload: {
-    repoPath: RequiredString,
+    repoPath: OpaqueString,
     name: RequiredString,
     startPoint: OptionalString,
+    startPointKind: Schema.optional(RefKindSchema),
     checkout: Schema.optional(Schema.Boolean)
   },
   success: Schema.Void,
@@ -182,7 +185,7 @@ export const CreateBranch = Rpc.make('createBranch', {
 
 export const DeleteBranch = Rpc.make('deleteBranch', {
   payload: {
-    repoPath: RequiredString,
+    repoPath: OpaqueString,
     name: RequiredString,
     force: Schema.optional(Schema.Boolean)
   },
@@ -191,16 +194,17 @@ export const DeleteBranch = Rpc.make('deleteBranch', {
 })
 
 export const RenameBranch = Rpc.make('renameBranch', {
-  payload: { repoPath: RequiredString, oldName: RequiredString, newName: RequiredString },
+  payload: { repoPath: OpaqueString, oldName: RequiredString, newName: RequiredString },
   success: Schema.Void,
   error: RefWriteError
 })
 
 export const CreateTag = Rpc.make('createTag', {
   payload: {
-    repoPath: RequiredString,
+    repoPath: OpaqueString,
     name: RequiredString,
     ref: OptionalString,
+    refKind: Schema.optional(RefKindSchema),
     message: OptionalString
   },
   success: Schema.Void,
@@ -208,32 +212,32 @@ export const CreateTag = Rpc.make('createTag', {
 })
 
 export const DeleteTag = Rpc.make('deleteTag', {
-  payload: { repoPath: RequiredString, name: RequiredString },
+  payload: { repoPath: OpaqueString, name: RequiredString },
   success: Schema.Void,
   error: RefWriteError
 })
 
 export const StashPop = Rpc.make('stashPop', {
-  payload: { repoPath: RequiredString, index: NonNaNNumber },
+  payload: { repoPath: OpaqueString, index: NonNaNNumber, expectedOid: RequiredString },
   success: Schema.Void,
   error: ConflictableError
 })
 
 export const StashApply = Rpc.make('stashApply', {
-  payload: { repoPath: RequiredString, index: NonNaNNumber },
+  payload: { repoPath: OpaqueString, index: NonNaNNumber, expectedOid: RequiredString },
   success: Schema.Void,
   error: ConflictableError
 })
 
 export const StashDrop = Rpc.make('stashDrop', {
-  payload: { repoPath: RequiredString, index: NonNaNNumber },
+  payload: { repoPath: OpaqueString, index: NonNaNNumber, expectedOid: RequiredString },
   success: Schema.Void,
   error: RefWriteError
 })
 
 export const StashPush = Rpc.make('stashPush', {
   payload: {
-    repoPath: RequiredString,
+    repoPath: OpaqueString,
     message: OptionalString,
     includeUntracked: Schema.optional(Schema.Boolean),
     files: Schema.optional(FileList)
@@ -243,20 +247,20 @@ export const StashPush = Rpc.make('stashPush', {
 })
 
 export const Reset = Rpc.make('reset', {
-  payload: { repoPath: RequiredString, sha: RequiredString, mode: ResetModeSchema },
+  payload: { repoPath: OpaqueString, sha: RequiredString, mode: ResetModeSchema },
   success: Schema.Void,
   error: RefWriteError
 })
 
 export const Fetch = Rpc.make('fetch', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Void,
   error: FetchError
 })
 
 export const Push = Rpc.make('push', {
   payload: {
-    repoPath: RequiredString,
+    repoPath: OpaqueString,
     force: Schema.optional(Schema.Literal('with-lease', 'overwrite')),
     expectedRemoteSha: OptionalString
   },
@@ -265,47 +269,33 @@ export const Push = Rpc.make('push', {
 })
 
 export const Pull = Rpc.make('pull', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Void,
   error: RefWriteError
 })
 
 export const GetStatus = Rpc.make('getStatus', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Struct({ status: GitStatusSchema }),
   error: ReadError
 })
 
-export const GetBranches = Rpc.make('getBranches', {
-  payload: { repoPath: RequiredString },
-  success: Schema.Struct({ branches: GitBranchesSchema }),
-  error: ReadError
-})
-
 export const GetLocalBranches = Rpc.make('getLocalBranches', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Struct({ branches: LocalBranchesSchema }),
   error: ReadError
 })
 
 export const GetRemoteRefs = Rpc.make('getRemoteRefs', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Struct({ refs: RemoteRefsSchema }),
   error: ReadError
 })
 
-export const GetLog = Rpc.make('getLog', {
-  payload: { repoPath: RequiredString, maxCount: Schema.optional(NonNaNNumber) },
-  success: Schema.Struct({ log: GitLogSchema }),
-  error: ReadError
-})
-
-// `range` (e.g. `HEAD~1..HEAD`) diffs a file across two commits instead of the working tree; omitting
-// it preserves the original working-tree/staged behaviour exactly.
 export const GetDiff = Rpc.make('getDiff', {
   payload: {
-    repoPath: RequiredString,
-    file: RequiredString,
+    repoPath: OpaqueString,
+    file: OpaqueString,
     staged: Schema.optional(Schema.Boolean),
     range: Schema.optional(RequiredString)
   },
@@ -314,24 +304,20 @@ export const GetDiff = Rpc.make('getDiff', {
 })
 
 export const StashList = Rpc.make('stashList', {
-  payload: { repoPath: RequiredString },
+  payload: { repoPath: OpaqueString },
   success: Schema.Struct({ stashes: Schema.Array(StashEntrySchema) }),
   error: ReadError
 })
 
-// Streaming RPC: each emitted LogChunk is one NDJSON frame on the wire; stream completion replaces
-// the old terminal "done" round-trip and stream interruption cancels the underlying `git log`. The
-// payload is the single parsing point for pagination (the deleted /stream/log route validated these
-// inline): skip is a non-negative int, maxCount a positive int.
 export const StreamLog = Rpc.make('streamLog', {
   payload: {
-    repoPath: RequiredString,
+    repoPath: OpaqueString,
     skip: Schema.optional(Schema.Int.pipe(Schema.nonNegative())),
     maxCount: Schema.optional(Schema.Int.pipe(Schema.positive())),
     streamId: Schema.optional(Schema.Int)
   },
   success: LogChunkSchema,
-  error: GitError,
+  error: Schema.Union(RepoNotOpen, GitError),
   stream: true
 })
 
@@ -368,11 +354,18 @@ export const SidecarRpcs = RpcGroup.make(
   Push,
   Pull,
   GetStatus,
-  GetBranches,
   GetLocalBranches,
   GetRemoteRefs,
-  GetLog,
   GetDiff,
   StashList,
   StreamLog
 )
+
+export type SidecarRpc = RpcGroup.Rpcs<typeof SidecarRpcs>
+export type SidecarRpcTag = SidecarRpc['_tag']
+export type SidecarRpcError = Rpc.ErrorExit<SidecarRpc>
+export type SidecarRpcErrorResponse = Rpc.ErrorExitEncoded<SidecarRpc>
+export type SidecarRpcResponse = RpcResult<
+  Rpc.SuccessExitEncoded<SidecarRpc>,
+  SidecarRpcErrorResponse
+>

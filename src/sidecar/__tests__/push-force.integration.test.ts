@@ -126,6 +126,21 @@ describe('pushRepo force-with-lease against a real repository', () => {
     }
   })
 
+  it('fetches the configured non-origin remote for a lease-loss preview', async () => {
+    git(repoDir, 'remote', 'rename', 'origin', 'team')
+    writeCommit(repoDir, 'local\n', 'local work')
+    const remoteTip = advanceRemote('teammate\n', 'teammate work')
+
+    const result = await runEither(pushRepo(repoDir, 'with-lease'))
+
+    if (result._tag === 'Left' && result.left._tag === 'PushRejected') {
+      expect(result.left.remoteSha).toBe(remoteTip)
+      expect(result.left.lostCommits.map((commit) => commit.subject)).toEqual(['teammate work'])
+    } else {
+      expect.fail('expected a PushRejected failure')
+    }
+  })
+
   it('refuses a leased push with reason remote-moved after a background fetch advanced the remote-tracking ref', async () => {
     writeCommit(repoDir, 'local\n', 'local work')
     const remoteTip = advanceRemote('teammate\n', 'teammate work')
@@ -151,6 +166,18 @@ describe('pushRepo force-with-lease against a real repository', () => {
 
     expect(sha(repoDir, 'origin/main')).toBe(sha(repoDir, 'main'))
     expect(sha(repoDir, 'origin/main')).not.toBe(remoteTip)
+  })
+
+  it('rejects an overwrite request without an expected remote SHA', async () => {
+    writeCommit(repoDir, 'local\n', 'local work')
+
+    const result = await runEither(pushRepo(repoDir, 'overwrite'))
+
+    if (result._tag === 'Left') {
+      expect(result.left._tag).toBe('GitError')
+    } else {
+      expect.fail('expected a GitError failure')
+    }
   })
 
   it('refuses a pinned overwrite when a commit landed after the captured sha and re-shows the loss', async () => {

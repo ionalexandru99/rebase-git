@@ -1,8 +1,10 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { Effect } from 'effect'
 import type { SimpleGit } from 'simple-git'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { withRepoLock } from '../../repo-lock'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from '../instances'
 
 describe('normalizeRepoPath', () => {
@@ -74,4 +76,76 @@ describe('getOrCreateGit + lookupGit', () => {
     const map = new Map<string, SimpleGit>()
     expect(lookupGit(map, tmpDir)).toBeUndefined()
   })
+
+  it('cancels a SimpleGit process on lock timeout before admitting the next owner', async () => {
+    const fakeBin = fs.realpathSync.native(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-simple-git-cancel-'))
+    )
+    const gitPath = path.join(fakeBin, 'git')
+    fs.writeFileSync(
+      gitPath,
+      `#!/bin/sh\nprintf '%s\\n' "$$" >&2\ntrap '/bin/sleep 0.1; exit 0' TERM INT\nwhile true; do /bin/sleep 0.05; done\n`
+    )
+    fs.chmodSync(gitPath, 0o755)
+    const map = new Map<string, SimpleGit>()
+    const repoPath = normalizeRepoPath(tmpDir)
+    const git = getOrCreateGit(map, repoPath)
+    git.env({
+      PATH: `${fakeBin}:${process.env.PATH ?? ''}`
+    })
+    let childPid: number | undefined
+    git.outputHandler((_command, _stdout, stderr) => {
+      stderr.on('data', (chunk) => {
+        childPid = Number(String(chunk).trim())
+      })
+    })
+    let childRunningWhenNextOwnerStarted = true
+
+    try {
+      const timedOutPromise = Effect.runPromise(
+        Effect.either(
+          withRepoLock(
+            repoPath,
+            Effect.promise(() => git.raw(['status'])),
+            { timeoutMs: 3_000 }
+          )
+        )
+      )
+      await waitUntil(() => childPid !== undefined)
+      const nextOwnerPromise = Effect.runPromise(
+        withRepoLock(
+          repoPath,
+          Effect.sync(() => {
+            try {
+              process.kill(childPid as number, 0)
+            } catch {
+              childRunningWhenNextOwnerStarted = false
+            }
+          })
+        )
+      )
+      const [timedOut] = await Promise.all([timedOutPromise, nextOwnerPromise])
+
+      expect(timedOut._tag).toBe('Left')
+      expect(childRunningWhenNextOwnerStarted).toBe(false)
+    } finally {
+      if (childPid !== undefined) {
+        try {
+          process.kill(childPid, 'SIGKILL')
+        } catch {}
+      }
+      fs.rmSync(fakeBin, { recursive: true, force: true })
+    }
+  })
 })
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error('condition timed out')
+}

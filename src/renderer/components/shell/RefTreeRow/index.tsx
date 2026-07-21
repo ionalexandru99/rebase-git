@@ -19,7 +19,7 @@ interface RefTreeRowProps {
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutLeaf?: (refKind: RefKind, fullPath: string) => void
   onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
-  onStashAction?: (action: StashAction, index: number) => void
+  onStashAction?: (action: StashAction, index: number, expectedOid: string) => void
 }
 
 export function RefTreeRow(props: RefTreeRowProps) {

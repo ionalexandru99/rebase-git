@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, openRepo, pushRepo } from '../operations'
 import { runOp } from './run-op'
@@ -60,5 +61,46 @@ describe('pushRepo against a real repository', () => {
     expect(git('rev-parse', 'feature/no-upstream').trim()).toBe(
       git('rev-parse', 'origin/feature/no-upstream').trim()
     )
+  })
+
+  it('pushes explicitly to a differently named configured upstream', async () => {
+    git('checkout', '-b', 'local-name')
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'upstream base\n')
+    git('commit', '-am', 'upstream base')
+    git('push', '--set-upstream', 'origin', 'HEAD:remote-name')
+    git('config', 'branch.local-name.merge', 'refs/heads/remote-name')
+    git('config', 'push.default', 'simple')
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'upstream update\n')
+    git('commit', '-am', 'upstream update')
+
+    await runOp(pushRepo(repoDir))
+
+    expect(git('rev-parse', 'local-name').trim()).toBe(
+      git('rev-parse', 'origin/remote-name').trim()
+    )
+  })
+
+  it('classifies the non-fast-forward porcelain wording', { timeout: 15000 }, async () => {
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-push-git-'))
+    const gitWrapper = path.join(fakeBin, 'git')
+    fs.writeFileSync(
+      gitWrapper,
+      `#!/bin/sh\ncase " $* " in *" push "*) printf '%s\\n' '! [rejected] main -> main (non-fast-forward)' >&2; exit 1;; esac\nexec "${realGit}" "$@"\n`
+    )
+    fs.chmodSync(gitWrapper, 0o755)
+    const previousPath = process.env.PATH
+    process.env.PATH = `${fakeBin}:${previousPath ?? ''}`
+
+    try {
+      const outcome = await runOp(Effect.either(pushRepo(repoDir)))
+      expect(Either.isLeft(outcome)).toBe(true)
+      if (Either.isLeft(outcome)) {
+        expect(outcome.left._tag).toBe('PushRejected')
+      }
+    } finally {
+      process.env.PATH = previousPath
+      fs.rmSync(fakeBin, { recursive: true, force: true })
+    }
   })
 })

@@ -35,15 +35,17 @@ describe('persisted numeric fields reject NaN', () => {
   })
 
   it('StashEntrySchema.index', () => {
-    const base = { ref: 'stash@{0}', message: 'wip', branch: 'main' }
+    const base = { ref: 'stash@{0}', oid: 'abc123', message: 'wip', branch: 'main' }
     expect(accepts(StashEntrySchema, { ...base, index: 0 })).toBe(true)
     expect(rejects(StashEntrySchema, { ...base, index: NaN })).toBe(true)
   })
 })
 
 describe('wire numeric fields reject NaN', () => {
-  it('GitLogSchema.total', () => {
-    expect(rejects(GitLogSchema, { all: [], total: NaN })).toBe(true)
+  it('GitLogSchema.loadedCount', () => {
+    expect(accepts(GitLogSchema, { all: [], loadedCount: 0 })).toBe(true)
+    expect(rejects(GitLogSchema, { all: [], loadedCount: NaN })).toBe(true)
+    expect(rejects(GitLogSchema, { all: [], total: 0 })).toBe(true)
   })
 
   it('DiffHunkSchema counts', () => {

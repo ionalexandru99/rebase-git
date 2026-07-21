@@ -9,10 +9,10 @@ time. Keep this index's status column current as plans land.
 | Plan | Area | Status | One-line |
 |------|------|--------|----------|
 | [electron-postinstall-cleanup](electron-postinstall-cleanup.md) | Build | Not started | Let Electron's postinstall fetch the binary; retire the runtime helper. |
-| [graph-stroke-batching](graph-stroke-batching.md) | History graph | **Done** (uncommitted on `main`) | Batch canvas strokes by lane color; hoist per-frame CSS-var/DPR reads. |
-| [graph-width-and-merge-collapse](graph-width-and-merge-collapse.md) | History graph | Decided, not started | Collapse merge side-branches by default (expand on demand) + bound the gutter. |
-| [graph-layout-web-worker](graph-layout-web-worker.md) | History graph | Not started | Move full-recompute lane layout off the renderer main thread. |
-| [graph-filter-walk-and-memory](graph-filter-walk-and-memory.md) | History graph | Not started | Debounce the filter ancestor-walk; dedupe per-row lane snapshots. |
+| [graph-stroke-batching](graph-stroke-batching.md) | History graph | **Done** (current worktree) | Batch canvas strokes by lane color; hoist per-frame CSS-var/DPR reads. |
+| [graph-width-and-merge-collapse](graph-width-and-merge-collapse.md) | History graph | **Done** (current worktree) | Collapse merge side-branches by default (expand on demand) + bound the gutter. |
+| [graph-layout-web-worker](graph-layout-web-worker.md) | History graph | **Done** (current worktree) | Full recomputes run in a worker; incremental appends stay synchronous. |
+| [graph-filter-walk-and-memory](graph-filter-walk-and-memory.md) | History graph | **Done** (current worktree) | Share lane boundaries and coalesce filter work while history streams. |
 
 ## History-graph roadmap
 
@@ -45,8 +45,10 @@ collapsing merges by default in `graph-width-and-merge-collapse`.
 
 1. **graph-width-and-merge-collapse** — biggest felt improvement; also shrinks the
    inputs that make the other plans matter (fewer lanes, fewer rows).
-2. **graph-layout-web-worker** — reassess after #1; collapsing merges may reduce
-   layout cost enough to lower its priority.
-3. **graph-filter-walk-and-memory** — cleanup that compounds with #1.
+2. **graph-layout-web-worker** — completed; full recomputes are off-thread when a
+   Worker is available, with generation-guarded results.
+3. **graph-filter-walk-and-memory** — completed; streaming snapshots are coalesced
+   to the layout debounce window and lane boundaries are shared.
 
-`graph-stroke-batching` already shipped (uncommitted on `main`).
+All four history-graph plans are implemented in the current worktree. Large-repo profiling remains
+the follow-up needed to replace the original projections with post-implementation measurements.

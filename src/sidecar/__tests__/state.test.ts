@@ -1,5 +1,12 @@
+import { ManagedRuntime } from 'effect'
 import { describe, expect, it } from 'vitest'
-import { fetchSemaphoreFor, fetchSemaphoreSize, releaseFetchSemaphore } from '../fetch-semaphore'
+import {
+  FetchSemaphores,
+  FetchSemaphoresLive,
+  fetchSemaphoreFor,
+  fetchSemaphoreSize,
+  releaseFetchSemaphore
+} from '../fetch-semaphore'
 
 describe('fetchSemaphoreFor', () => {
   it('returns the same semaphore for the same repo path', () => {
@@ -78,5 +85,34 @@ describe('releaseFetchSemaphore', () => {
     releaseFetchSemaphore('/test/repo-fresh')
     const second = fetchSemaphoreFor('/test/repo-fresh')
     expect(second).not.toBe(first)
+  })
+})
+
+describe('fetch semaphore scope', () => {
+  it('waits for owned work before scope finalization completes', async () => {
+    const runtime = ManagedRuntime.make(FetchSemaphoresLive)
+    const registry = runtime.runSync(FetchSemaphores)
+    const semaphore = registry.forRepo('/test/scoped-repo')
+    let releaseWork: () => void = () => {}
+    const work = semaphore.withPermits(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseWork = resolve
+        })
+    )
+    await Promise.resolve()
+
+    let finalized = false
+    const finalization = runtime.dispose().then(() => {
+      finalized = true
+    })
+    await Promise.resolve()
+
+    expect(finalized).toBe(false)
+
+    releaseWork()
+    await Promise.all([work, finalization])
+
+    expect(finalized).toBe(true)
   })
 })

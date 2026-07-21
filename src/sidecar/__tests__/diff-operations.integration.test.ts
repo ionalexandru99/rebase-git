@@ -160,4 +160,25 @@ describe('diff operations against a real repository', () => {
     fs.rmSync(path.join(repoDir, optionLikeName))
     git('checkout', '--', canary)
   })
+
+  it('returns displayable hunks for an unresolved merge conflict', async () => {
+    fs.writeFileSync(path.join(repoDir, 'conflict.txt'), 'base\n')
+    git('add', 'conflict.txt')
+    git('commit', '-m', 'conflict base')
+    git('checkout', '-b', 'conflict-side')
+    fs.writeFileSync(path.join(repoDir, 'conflict.txt'), 'side\n')
+    git('commit', '-am', 'side change')
+    git('checkout', 'main')
+    fs.writeFileSync(path.join(repoDir, 'conflict.txt'), 'main\n')
+    git('commit', '-am', 'main change')
+    expect(() => git('merge', 'conflict-side')).toThrow()
+
+    try {
+      const diff = await runOp(getDiff(repoDir, 'conflict.txt', false))
+      expect(diff.diff.hunks.length).toBeGreaterThan(0)
+      expect(diff.diff.hunks.flatMap((hunk) => hunk.lines).length).toBeGreaterThan(0)
+    } finally {
+      git('merge', '--abort')
+    }
+  })
 })

@@ -3,7 +3,7 @@ import { Input } from '../ui/input'
 import { LoadingBadge } from '../ui/loading-badge'
 
 interface HistoryHeaderProps {
-  total?: number
+  loadedCount: number
   visibleTotal?: number
   loading: boolean
   loadingMore?: boolean
@@ -16,8 +16,8 @@ interface HistoryHeaderProps {
 }
 
 function subtitle(props: HistoryHeaderProps): string {
-  const visible = props.visibleTotal ?? props.total
-  if (!visible && !props.total) {
+  const visible = props.visibleTotal ?? props.loadedCount
+  if (!visible && props.loadedCount === 0) {
     return 'Repository timeline'
   }
   const count = visible ?? 0
@@ -28,7 +28,7 @@ function subtitle(props: HistoryHeaderProps): string {
       ? ' · no branches visible'
       : ` · ${visibleBranchCount} branch${visibleBranchCount === 1 ? '' : 'es'} visible`
   if (props.hasMore) {
-    return `${commitLabel}${filterLabel} · more available`
+    return `${commitLabel}${filterLabel} · ${props.loadedCount.toLocaleString()} loaded · more available`
   }
   return `${commitLabel}${filterLabel}`
 }

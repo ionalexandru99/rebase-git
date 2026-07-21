@@ -11,11 +11,9 @@ import {
   DiscardAll,
   DiscardChanges,
   Fetch,
-  GetBranches,
   GetDiff,
   GetHeadCommit,
   GetLocalBranches,
-  GetLog,
   GetRemoteRefs,
   GetStatus,
   MergeBranch,
@@ -38,33 +36,8 @@ import {
   UnstageFile,
   UnstageHunk
 } from '@shared/rpc'
+import { type RpcContract, type RpcResult, rpcResultSchema } from '@shared/rpc-result'
 import type { RefKind, ResetMode } from '@shared/schemas/ipc'
-import { Schema } from 'effect'
-
-type RpcContract<Success, SuccessInput, Failure, FailureInput> = {
-  readonly _tag: string
-  readonly successSchema: Schema.Schema<Success, SuccessInput>
-  readonly errorSchema: Schema.Schema<Failure, FailureInput>
-}
-
-type RpcResult<Success, Failure> =
-  | Failure
-  | (Success extends void ? { _tag: 'Ok' } : { _tag: 'Ok' } & Success)
-
-const OkResult = Schema.Struct({ _tag: Schema.Literal('Ok') })
-
-function rpcResultSchema<Success, SuccessInput, Failure, FailureInput>(
-  rpc: RpcContract<Success, SuccessInput, Failure, FailureInput>
-): Schema.Schema<RpcResult<Success, Failure>, unknown> {
-  const success =
-    (rpc.successSchema as Schema.Schema.Any) === Schema.Void
-      ? OkResult
-      : OkResult.pipe(Schema.extend(rpc.successSchema as Schema.Schema<Record<string, unknown>>))
-  return Schema.Union(success, rpc.errorSchema) as Schema.Schema<
-    RpcResult<Success, Failure>,
-    unknown
-  >
-}
 
 async function callSidecarRpc<Success, SuccessInput, Failure, FailureInput>(
   rpc: RpcContract<Success, SuccessInput, Failure, FailureInput>,
@@ -130,26 +103,25 @@ export type RemoteRefsResult = RpcResult<
   typeof GetRemoteRefs.successSchema.Type,
   typeof GetRemoteRefs.errorSchema.Type
 >
-export type BranchesResult = RpcResult<
-  typeof GetBranches.successSchema.Type,
-  typeof GetBranches.errorSchema.Type
->
 export type DiffResult = RpcResult<
   typeof GetDiff.successSchema.Type,
   typeof GetDiff.errorSchema.Type
 >
-export type LogResult = RpcResult<typeof GetLog.successSchema.Type, typeof GetLog.errorSchema.Type>
 export type StashListResult = RpcResult<
   typeof StashList.successSchema.Type,
   typeof StashList.errorSchema.Type
 >
 
-export async function rpcOpenRepo(repoPath: string): Promise<OpenRepoResult> {
-  return parseOrThrow(rpcResultSchema(OpenRepo), await window.electronAPI.openRepo(repoPath))
+export async function rpcOpenRepo(repoPath: string, owner: number): Promise<OpenRepoResult> {
+  return parseOrThrow(rpcResultSchema(OpenRepo), await window.electronAPI.openRepo(repoPath, owner))
 }
 
-export async function rpcCloseRepo(repoPath: string): Promise<void> {
-  await window.electronAPI.closeRepo(repoPath)
+export async function rpcCloseRepo(repoPath: string, owner: number): Promise<void> {
+  await window.electronAPI.closeRepo(repoPath, owner)
+}
+
+export async function rpcDisownRepo(repoPath: string, owner: number): Promise<void> {
+  await window.electronAPI.disownRepo(repoPath, owner)
 }
 
 export async function rpcScanForRepos(dirPath: string): Promise<ScanForReposResult> {
@@ -167,18 +139,29 @@ export async function rpcGetHeadCommit(repoPath: string): Promise<HeadCommitResu
 export async function rpcAmendCommit(
   repoPath: string,
   message: string,
-  droppedHeadPaths: string[] = [],
-  droppedHeadHunks: { file: string; hunks: string[] }[] = []
+  droppedHeadPaths: string[],
+  droppedHeadHunks: { file: string; hunks: string[] }[],
+  expectedHead: string
 ): Promise<AmendResult> {
-  return callSidecarRpc(AmendCommit, { repoPath, message, droppedHeadPaths, droppedHeadHunks })
+  return callSidecarRpc(AmendCommit, {
+    repoPath,
+    message,
+    expectedHead,
+    droppedHeadPaths,
+    droppedHeadHunks
+  })
 }
 
 export async function rpcStageFile(repoPath: string, file: string): Promise<StageResult> {
   return callSidecarRpc(StageFile, { repoPath, file })
 }
 
-export async function rpcUnstageFile(repoPath: string, file: string): Promise<StageResult> {
-  return callSidecarRpc(UnstageFile, { repoPath, file })
+export async function rpcUnstageFile(
+  repoPath: string,
+  file: string,
+  renameSource?: string
+): Promise<StageResult> {
+  return callSidecarRpc(UnstageFile, { repoPath, file, renameSource })
 }
 
 export async function rpcStageAll(repoPath: string, files: string[]): Promise<StageResult> {
@@ -221,8 +204,12 @@ export async function rpcDiscardAll(repoPath: string): Promise<StageResult> {
   return callSidecarRpc(DiscardAll, { repoPath })
 }
 
-export async function rpcMergeBranch(repoPath: string, ref: string): Promise<ConflictableResult> {
-  return callSidecarRpc(MergeBranch, { repoPath, ref })
+export async function rpcMergeBranch(
+  repoPath: string,
+  refKind: RefKind,
+  fullPath: string
+): Promise<ConflictableResult> {
+  return callSidecarRpc(MergeBranch, { repoPath, refKind, fullPath })
 }
 
 export async function rpcRevertCommit(repoPath: string, sha: string): Promise<ConflictableResult> {
@@ -249,12 +236,14 @@ export async function rpcCreateBranch(
   repoPath: string,
   name: string,
   startPoint?: string,
-  checkout?: boolean
+  checkout?: boolean,
+  startPointKind?: RefKind
 ): Promise<RefWriteResult> {
   return callSidecarRpc(CreateBranch, {
     repoPath,
     name,
     startPoint,
+    startPointKind,
     checkout
   })
 }
@@ -287,12 +276,14 @@ export async function rpcCreateTag(
   repoPath: string,
   name: string,
   ref?: string,
-  message?: string
+  message?: string,
+  refKind?: RefKind
 ): Promise<RefWriteResult> {
   return callSidecarRpc(CreateTag, {
     repoPath,
     name,
     ref,
+    refKind,
     message
   })
 }
@@ -301,16 +292,28 @@ export async function rpcDeleteTag(repoPath: string, name: string): Promise<RefW
   return callSidecarRpc(DeleteTag, { repoPath, name })
 }
 
-export async function rpcStashApply(repoPath: string, index: number): Promise<ConflictableResult> {
-  return callSidecarRpc(StashApply, { repoPath, index })
+export async function rpcStashApply(
+  repoPath: string,
+  index: number,
+  expectedOid: string
+): Promise<ConflictableResult> {
+  return callSidecarRpc(StashApply, { repoPath, index, expectedOid })
 }
 
-export async function rpcStashPop(repoPath: string, index: number): Promise<ConflictableResult> {
-  return callSidecarRpc(StashPop, { repoPath, index })
+export async function rpcStashPop(
+  repoPath: string,
+  index: number,
+  expectedOid: string
+): Promise<ConflictableResult> {
+  return callSidecarRpc(StashPop, { repoPath, index, expectedOid })
 }
 
-export async function rpcStashDrop(repoPath: string, index: number): Promise<RefWriteResult> {
-  return callSidecarRpc(StashDrop, { repoPath, index })
+export async function rpcStashDrop(
+  repoPath: string,
+  index: number,
+  expectedOid: string
+): Promise<RefWriteResult> {
+  return callSidecarRpc(StashDrop, { repoPath, index, expectedOid })
 }
 
 export async function rpcStashPush(
@@ -363,10 +366,6 @@ export async function rpcGetRemoteRefs(repoPath: string): Promise<RemoteRefsResu
   return callSidecarRpc(GetRemoteRefs, { repoPath })
 }
 
-export async function rpcGetBranches(repoPath: string): Promise<BranchesResult> {
-  return callSidecarRpc(GetBranches, { repoPath })
-}
-
 export async function rpcGetDiff(
   repoPath: string,
   file: string,
@@ -374,10 +373,6 @@ export async function rpcGetDiff(
   range?: string
 ): Promise<DiffResult> {
   return callSidecarRpc(GetDiff, { repoPath, file, staged, range })
-}
-
-export async function rpcGetLog(repoPath: string, maxCount?: number): Promise<LogResult> {
-  return callSidecarRpc(GetLog, { repoPath, maxCount })
 }
 
 export async function rpcStashList(repoPath: string): Promise<StashListResult> {

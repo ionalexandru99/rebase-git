@@ -5,7 +5,9 @@ import { StashControl } from '../StashControl'
 function renderControl(
   overrides: Partial<{
     stagedFiles: string[]
+    stagedCount: number
     hasChanges: boolean
+    busy: boolean
     onStashSelected: (files: string[]) => void
     onStashAll: () => void
   }> = {}
@@ -15,7 +17,9 @@ function renderControl(
   render(
     <StashControl
       stagedFiles={overrides.stagedFiles ?? []}
+      stagedCount={overrides.stagedCount ?? overrides.stagedFiles?.length ?? 0}
       hasChanges={overrides.hasChanges ?? true}
+      busy={overrides.busy ?? false}
       onStashSelected={onStashSelected}
       onStashAll={onStashAll}
     />
@@ -35,6 +39,18 @@ describe('StashControl', () => {
     expect(onStashSelected).toHaveBeenCalledWith(['a.ts', 'b.ts'])
   })
 
+  it('passes both rename paths while counting the rename as one staged file', () => {
+    const { onStashSelected } = renderControl({
+      stagedFiles: ['old [source].ts', 'new *.ts'],
+      stagedCount: 1
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /^Stash/ }))
+
+    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(onStashSelected).toHaveBeenCalledWith(['old [source].ts', 'new *.ts'])
+  })
+
   it('opens the menu and stashes all changes', () => {
     const { onStashAll } = renderControl({ stagedFiles: [] })
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
@@ -51,11 +67,40 @@ describe('StashControl', () => {
     expect(screen.getByRole('menuitem', { name: 'Stash all changes' })).toBeDisabled()
   })
 
+  it('disables both stash actions while the repository mutation coordinator is busy', () => {
+    const { onStashSelected, onStashAll } = renderControl({
+      stagedFiles: ['a.ts'],
+      hasChanges: true,
+      busy: true
+    })
+
+    const stashSelected = screen.getByRole('button', { name: /^Stash/ })
+    expect(stashSelected).toBeDisabled()
+    fireEvent.click(stashSelected)
+
+    fireEvent.click(screen.getByRole('button', { name: 'More stash options' }))
+    const stashAll = screen.getByRole('menuitem', { name: 'Stash all changes' })
+    expect(stashAll).toBeDisabled()
+    fireEvent.click(stashAll)
+
+    expect(onStashSelected).not.toHaveBeenCalled()
+    expect(onStashAll).not.toHaveBeenCalled()
+  })
+
   it('closes the menu on an outside pointerdown', () => {
     renderControl()
     fireEvent.click(screen.getByRole('button', { name: 'More stash options' }))
     expect(screen.getByRole('menu')).toBeInTheDocument()
     fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('closes the menu on Escape', () => {
+    renderControl()
+    fireEvent.click(screen.getByRole('button', { name: 'More stash options' }))
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })

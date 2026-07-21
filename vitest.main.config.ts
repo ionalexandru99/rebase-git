@@ -6,16 +6,13 @@ export default defineConfig({
     name: 'main',
     environment: 'node',
     globals: true,
-    include: [
-      'src/main/**/*.test.{ts,tsx}',
-      'src/sidecar/**/*.test.{ts,tsx}',
-      'src/shared/**/*.test.{ts,tsx}'
-    ],
+    include: ['src/main/**/*.test.{ts,tsx}', 'src/shared/**/*.test.{ts,tsx}'],
+    exclude: ['src/main/**/*.integration.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
       reportsDirectory: './coverage/main',
-      include: ['src/main/**', 'src/sidecar/**', 'src/shared/**'],
+      include: ['src/main/**', 'src/shared/**'],
     },
   },
   resolve: {

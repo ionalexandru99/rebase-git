@@ -1,5 +1,5 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderApp, renderWithQuery } from '@/../test/render-app'
@@ -43,7 +43,9 @@ function mockBaseAPI(
 describe('App — onboarding gate', () => {
   it('shows a loading state while checking onboarding status', () => {
     vi.mocked(window.electronAPI.getOnboardingComplete).mockReturnValue(new Promise(() => {}))
-    vi.mocked(window.electronAPI.getRecentRepos).mockResolvedValue([])
+    vi.mocked(window.electronAPI.getWorkspaces).mockReturnValue(new Promise(() => {}))
+    vi.mocked(window.electronAPI.getActiveWorkspace).mockReturnValue(new Promise(() => {}))
+    vi.mocked(window.electronAPI.getPersistedTabs).mockReturnValue(new Promise(() => {}))
 
     renderApp()
 
@@ -58,6 +60,46 @@ describe('App — onboarding gate', () => {
     await waitFor(() => {
       expect(screen.getByText('Welcome to Rebase')).toBeInTheDocument()
     })
+  })
+
+  it('opens a selected onboarding repo through an owned tab session', async () => {
+    mockBaseAPI({
+      onboardingComplete: false,
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/app']
+    })
+    vi.mocked(window.electronAPI.setOnboardingComplete).mockResolvedValue(undefined)
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/home/user/projects/app', remotes: {}, defaultBranch: 'main' }
+    })
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+
+    renderApp()
+    fireEvent.click(await screen.findByText('/home/user/projects/app'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('app')
+    })
+    expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(1)
+    expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+      '/home/user/projects/app',
+      expect.any(Number)
+    )
   })
 })
 
@@ -189,7 +231,10 @@ describe('App — repo picker (no repo open)', () => {
     fireEvent.click(repoEntry)
 
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/repos/my-app')
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/home/user/repos/my-app',
+        expect.any(Number)
+      )
     })
   })
 
@@ -269,6 +314,7 @@ describe('App — persisted tabs', () => {
           }}
           onOpenRepo={vi.fn()}
           onRepoOpened={onRepoOpened}
+          onRepoOpenFailed={vi.fn()}
         />
       </StrictMode>
     ))
@@ -312,7 +358,10 @@ describe('App — persisted tabs', () => {
     renderApp()
 
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/restored')
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/home/user/projects/restored',
+        expect.any(Number)
+      )
     })
   })
 
@@ -352,7 +401,10 @@ describe('App — persisted tabs', () => {
     renderApp()
 
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/repo-b')
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/home/user/projects/repo-b',
+        expect.any(Number)
+      )
     })
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/repo-b', {
@@ -370,7 +422,10 @@ describe('App — persisted tabs', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'repo-a - not loaded yet' }))
 
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/repo-a')
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/home/user/projects/repo-a',
+        expect.any(Number)
+      )
     })
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/repo-a', {
@@ -380,7 +435,10 @@ describe('App — persisted tabs', () => {
       })
     })
 
-    expect(window.electronAPI.openRepo).not.toHaveBeenCalledWith('/home/user/projects/repo-c')
+    expect(window.electronAPI.openRepo).not.toHaveBeenCalledWith(
+      '/home/user/projects/repo-c',
+      expect.any(Number)
+    )
     expect(window.electronAPI.startLogStream).not.toHaveBeenCalledWith(
       '/home/user/projects/repo-c',
       expect.anything()
@@ -527,13 +585,77 @@ describe('App — persisted tabs', () => {
     fireEvent.click(await screen.findByText('/home/user/projects/link-to-my-app'))
 
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/link-to-my-app')
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/home/user/projects/link-to-my-app',
+        expect.any(Number)
+      )
     })
     await waitFor(() => {
       const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
       expect(setCalls.some(([state]) => state.tabs.includes('/real/repos/my-app'))).toBe(true)
     })
     expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('my-app')
+  })
+
+  it('keeps the existing canonical tab owner when an alias resolves to the same repo', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/projects',
+      scanRepos: ['/home/user/projects/repo-link']
+    })
+    vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({
+      tabs: ['/real/repos/project', null],
+      activeIndex: 0
+    })
+    vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
+      Promise.resolve({
+        _tag: 'Ok',
+        result: {
+          path: path === '/home/user/projects/repo-link' ? '/real/repos/project' : path,
+          remotes: {},
+          defaultBranch: 'main'
+        }
+      })
+    )
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+
+    renderApp()
+    await waitFor(() => {
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/real/repos/project',
+        expect.any(Number)
+      )
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
+    fireEvent.click(await screen.findByText('/home/user/projects/repo-link'))
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('tab')).toHaveLength(1)
+      expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('project')
+    })
+    await waitFor(() => {
+      const canonicalOpens = vi
+        .mocked(window.electronAPI.openRepo)
+        .mock.calls.filter(([path]) => path === '/real/repos/project')
+      expect(canonicalOpens.length).toBeGreaterThanOrEqual(2)
+    })
+    expect(window.electronAPI.closeRepo).not.toHaveBeenCalledWith(
+      '/real/repos/project',
+      expect.any(Number)
+    )
   })
 })
 
@@ -575,14 +697,14 @@ describe('App — workspace (repo open)', () => {
     refs: 'HEAD -> feature/ui'
   }
 
-  async function renderWithRepo() {
+  async function renderWithRepo(branches = branchesMock) {
     mockBaseAPI({
       workingDirectory: '/home/user/projects',
       scanRepos: ['/home/user/projects/my-app']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
     vi.mocked(sidecarMock.getStatus).mockResolvedValue(statusMock)
-    mockBranchResponses(branchesMock)
+    mockBranchResponses(branches)
     const stream = setupLogStream()
 
     renderApp()
@@ -591,7 +713,10 @@ describe('App — workspace (repo open)', () => {
     fireEvent.click(repoRow)
 
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/home/user/projects/my-app')
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/home/user/projects/my-app',
+        expect.any(Number)
+      )
     })
 
     await screen.findByText('Timeline')
@@ -616,7 +741,7 @@ describe('App — workspace (repo open)', () => {
     await waitFor(() => {
       expect(screen.getAllByText('my-app').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('feature/ui').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getByText(/1 modified, 2 staged, 1 untracked/)).toBeInTheDocument()
+      expect(screen.getByText(/4 changed files, 2 staged/)).toBeInTheDocument()
     })
   })
 
@@ -680,6 +805,77 @@ describe('App — workspace (repo open)', () => {
     })
   })
 
+  it('keeps a tag start point qualified when creating a branch from the ref tree', async () => {
+    let createBranchBody: Record<string, unknown> | undefined
+    sidecarMock.respond('createBranch', (body) => {
+      createBranchBody = body
+      return { _tag: 'Ok' }
+    })
+    await renderWithRepo({ ...branchesMock, tags: ['v1'] })
+    fireEvent.click(screen.getByText('Tags'))
+    fireEvent.contextMenu(await screen.findByTitle('v1'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'New branch from here' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Branch name' }), {
+      target: { value: 'release-fix' }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(createBranchBody).toBeDefined())
+    expect(createBranchBody).toMatchObject({
+      startPoint: 'v1',
+      startPointKind: 'tag'
+    })
+  })
+
+  it('keeps a branch target qualified when creating a tag from the ref tree', async () => {
+    let createTagBody: Record<string, unknown> | undefined
+    sidecarMock.respond('createTag', (body) => {
+      createTagBody = body
+      return { _tag: 'Ok' }
+    })
+    await renderWithRepo()
+    fireEvent.contextMenu(await screen.findByTitle('main'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Create tag here' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Tag name' }), {
+      target: { value: 'v2' }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(createTagBody).toBeDefined())
+    expect(createTagBody).toMatchObject({
+      ref: 'main',
+      refKind: 'local'
+    })
+  })
+
+  it('submits the rendered stash OID when applying a stash', async () => {
+    let stashApplyBody: Record<string, unknown> | undefined
+    sidecarMock.stashList.mockResolvedValue({
+      _tag: 'Ok',
+      stashes: [
+        {
+          index: 0,
+          ref: 'stash@{0}',
+          oid: 'stash-oid-0',
+          message: 'work in progress',
+          branch: 'feature/ui'
+        }
+      ]
+    })
+    sidecarMock.respond('stashApply', (body) => {
+      stashApplyBody = body
+      return { _tag: 'Ok' }
+    })
+    await renderWithRepo()
+
+    fireEvent.dblClick(await screen.findByText('work in progress'))
+
+    await waitFor(() => expect(stashApplyBody).toBeDefined())
+    expect(stashApplyBody).toMatchObject({ index: 0, expectedOid: 'stash-oid-0' })
+  })
+
   it('defaults to the history view and swaps to the local-changes view from the topbar', async () => {
     await renderWithRepo()
 
@@ -725,15 +921,83 @@ describe('App — workspace (repo open)', () => {
       }
     })
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
-    setupLogStream()
+    const stream = setupLogStream()
 
     renderApp()
     const repoRow = await screen.findByText('/workspace/repo')
     fireEvent.click(repoRow)
+    await waitFor(() => {
+      expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+    })
+    stream.fireDone('/workspace/repo', false)
 
     fireEvent.click(await screen.findByRole('button', { name: /Local changes/i }))
     await waitFor(() => {
       expect(screen.getByText('Working tree clean')).toBeInTheDocument()
+    })
+  })
+
+  it('does not show a clean state or hide Amend while commit availability is loading', async () => {
+    mockBaseAPI({
+      workingDirectory: '/workspace',
+      scanRepos: ['/workspace/repo']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/workspace/repo', remotes: {}, defaultBranch: 'main' }
+    })
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+    const stream = setupLogStream()
+    let resolveStart: (() => void) | undefined
+    vi.mocked(window.electronAPI.startLogStream).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = () => resolve({ _tag: 'Ok' })
+        })
+    )
+
+    renderApp()
+    fireEvent.click(await screen.findByText('/workspace/repo'))
+    fireEvent.click(await screen.findByRole('button', { name: /Local changes/i }))
+
+    const amend = await screen.findByRole('checkbox', { name: 'Amend last commit' })
+    expect(amend).toBeDisabled()
+    expect(screen.queryByText('Working tree clean')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveStart?.()
+      stream.fire({
+        repoPath: '/workspace/repo',
+        commits: [
+          {
+            hash: 'abc123',
+            message: 'Initial commit',
+            author_name: 'Test User',
+            date: '2026-01-01',
+            parents: [],
+            refs: 'HEAD -> main'
+          }
+        ]
+      })
+      stream.fireDone('/workspace/repo', false)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Amend last commit' })).toBeEnabled()
     })
   })
 
@@ -769,7 +1033,10 @@ describe('App — workspace (repo open)', () => {
 
     fireEvent.click(await screen.findByText('/projects/repo-a'))
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/projects/repo-a')
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/projects/repo-a',
+        expect.any(Number)
+      )
       expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('repo-a')
     })
 
@@ -781,7 +1048,10 @@ describe('App — workspace (repo open)', () => {
       .find((b): b is HTMLButtonElement => !!b)
     fireEvent.click(repoBPickerRow as HTMLButtonElement)
     await waitFor(() => {
-      expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/projects/repo-b')
+      expect(window.electronAPI.openRepo).toHaveBeenCalledWith(
+        '/projects/repo-b',
+        expect.any(Number)
+      )
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))

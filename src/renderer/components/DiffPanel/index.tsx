@@ -17,14 +17,10 @@ import type { SelectedFile } from '../StatusPanel'
 import { Checkbox } from '../ui/checkbox'
 import { EmptyState } from '../ui/empty-state'
 
-// Drop controls for a head-commit file: the whole-file tri-state plus per-hunk drop toggles, so the
-// amend diff lets the user revert a file or just some of its hunks before committing.
 export interface AmendDropControls {
   dropState: HeadDropState
   isHunkDropped: (hunkHeader: string) => boolean
   onToggleFile: () => void
-  // allHeaders is the file's full hunk list, which only this panel knows; the reducer needs it to
-  // normalize (dropping every hunk collapses to a whole-file drop, keeping one expands a whole drop).
   onToggleHunk: (hunkHeader: string, allHeaders: string[]) => void
 }
 
@@ -44,8 +40,6 @@ export function DiffPanel(props: DiffPanelProps) {
   } = useWorkingTreeStatus()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
 
-  // A head-commit file is inspected read-only from a single range diff; the working-tree split (staged
-  // vs unstaged, stage/unstage controls) does not apply to it.
   const isHeadCommit = props.selected?.source === 'head-commit'
   const worktreeFile = isHeadCommit ? null : (props.selected?.file ?? null)
   const headFile = isHeadCommit ? (props.selected?.file ?? null) : null
@@ -73,10 +67,6 @@ export function DiffPanel(props: DiffPanelProps) {
   const activePending =
     pendingHunk && pendingHunk.file === props.selected?.file ? pendingHunk : null
 
-  // Both diffs share the index as a coordinate system: the staged diff's "new" side and
-  // the unstaged diff's "old" side are the index. Sorting on those keeps document order,
-  // and remapping the index side to HEAD/worktree coordinates keeps the displayed line
-  // numbers stable when a hunk moves between staged and unstaged.
   const actualMergedHunks = useMemo<HunkEntry[]>(() => {
     const selected = props.selected
     if (selected && isHeadCommit) {
@@ -234,7 +224,7 @@ export function DiffPanel(props: DiffPanelProps) {
       return
     }
     if (fileStageState === 'staged') {
-      void unstageFile(file)
+      void unstageFile(file, props.selected?.renameSource)
     } else {
       void stageFile(file)
     }

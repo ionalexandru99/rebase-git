@@ -1,3 +1,5 @@
+import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
+
 export interface ParsedRef {
   label: string
   kind: 'head' | 'branch' | 'remote' | 'tag' | 'stash'
@@ -20,7 +22,7 @@ export function parseRefs(refs: string, remoteNames?: Set<string>): ParsedRef[] 
     return []
   }
   const parsed = refs
-    .split(',')
+    .split(GIT_LOG_REF_SEPARATOR)
     .map((raw) => raw.trim())
     .filter(Boolean)
     .map<ParsedRef | null>((part) => {

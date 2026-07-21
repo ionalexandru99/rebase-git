@@ -289,6 +289,17 @@ describe('DiffPanel', () => {
     })
   })
 
+  it('passes a staged rename source when unstaging from the diff header', async () => {
+    mockDiffOn('staged')
+    sidecarMock.unstageFile.mockResolvedValue({ _tag: 'Ok' })
+    await renderDiffPanel({ file: 'new.ts', renameSource: 'old.ts' })
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Unstage new.ts' }))
+    await waitFor(() => {
+      expect(sidecarMock.unstageFile).toHaveBeenCalledWith(repoPath, 'new.ts', 'old.ts')
+    })
+  })
+
   it('toggles hunk staging through the hunk checkbox', async () => {
     mockPartiallyStagedDiff()
     await renderDiffPanel({ file: 'src/app.ts' })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  childProcessRecoveryDecision,
   RECOVERY_BUTTONS,
   recoveryActionForResponse,
   shouldPromptOnRenderGone,
@@ -69,5 +70,40 @@ describe('shouldRespawnSidecar', () => {
   it('does not respawn for a zygote or unknown child without a service name', () => {
     expect(shouldRespawnSidecar({ type: 'Zygote' })).toBe(false)
     expect(shouldRespawnSidecar({})).toBe(false)
+  })
+})
+
+describe('childProcessRecoveryDecision', () => {
+  const namedSidecar = {
+    type: 'Utility',
+    serviceName: 'node.mojom.NodeService',
+    name: 'rebase git sidecar'
+  }
+
+  it('does not log or respawn during intentional application shutdown', () => {
+    expect(
+      childProcessRecoveryDecision(
+        { ...namedSidecar, reason: 'crashed' },
+        { appShuttingDown: true }
+      )
+    ).toEqual({ log: false, respawn: false })
+  })
+
+  it('does not log or respawn a clean sidecar exit', () => {
+    expect(
+      childProcessRecoveryDecision(
+        { ...namedSidecar, reason: 'clean-exit' },
+        { appShuttingDown: false }
+      )
+    ).toEqual({ log: false, respawn: false })
+  })
+
+  it('logs and respawns an unexpected named-sidecar crash', () => {
+    expect(
+      childProcessRecoveryDecision(
+        { ...namedSidecar, reason: 'crashed' },
+        { appShuttingDown: false }
+      )
+    ).toEqual({ log: true, respawn: true })
   })
 })

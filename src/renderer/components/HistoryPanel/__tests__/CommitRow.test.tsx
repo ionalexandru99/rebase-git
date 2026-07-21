@@ -15,9 +15,7 @@ function row(overrides: Partial<GitLogEntry> = {}): RowLayout {
       refs: '',
       ...overrides
     },
-    commitLane: 0,
-    incoming: [],
-    outgoing: []
+    commitLane: 0
   }
 }
 
@@ -144,7 +142,7 @@ describe('CommitRow merge expansion control', () => {
     const control = screen.getByRole('button', { name: /side branch/i })
     expect(control).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(control)
-    expect(onToggleExpand).toHaveBeenCalledTimes(1)
+    expect(onToggleExpand).toHaveBeenCalledWith('abcdef1234567890')
   })
 
   it('exposes an expanded control as expanded', () => {

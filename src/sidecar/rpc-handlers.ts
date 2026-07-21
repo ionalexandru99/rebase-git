@@ -5,9 +5,9 @@ import { Etag, FileSystem, HttpPlatform, Path } from '@effect/platform'
 import { RpcSerialization, RpcServer } from '@effect/rpc'
 import { GitError, SidecarRpcs } from '@shared/rpc'
 import { Effect, Layer, Stream } from 'effect'
-import { simpleGit } from 'simple-git'
-import { normalizeRepoPath } from './git/instances'
-import { logChunkStream } from './log-stream'
+import { createGit, normalizeRepoPath } from './git/instances'
+import { clearLogContinuation, logChunkStream } from './log-stream'
+import { requireOpen } from './op-helpers'
 import * as operations from './operations'
 import { resolveExistingRepoRoot, resolveRepoRelativeFile } from './path-guards'
 import { RepoSessionsLive } from './repo-sessions'
@@ -80,9 +80,6 @@ const resolveDroppedHunks = (
     return Effect.succeed(resolved)
   })
 
-// scanForRepos confines enumeration to the user's home tree. The guard mirrors the previous
-// scanForReposSafely: absolute, no `..`/NUL, realpath must be a directory under the realpath'd home
-// root. Any violation fails with the typed GitError('invalid directory path').
 const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], GitError> =>
   Effect.tryPromise({
     try: async () => {
@@ -136,7 +133,7 @@ const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], 
           continue
         }
         try {
-          const isRepo = await simpleGit(childPath).checkIsRepo()
+          const isRepo = await createGit(childPath).checkIsRepo()
           if (isRepo) {
             repos.push(childPath)
           }
@@ -160,7 +157,10 @@ export const handlersLayer = SidecarRpcs.toLayer({
   closeRepo: ({ repoPath }) =>
     Effect.suspend(() => {
       const resolved = resolveExistingRepoRoot(repoPath)
-      return operations.closeRepo(resolved ?? normalizeRepoPath(repoPath))
+      const normalized = resolved ?? normalizeRepoPath(repoPath)
+      return Effect.promise(() => clearLogContinuation(normalized)).pipe(
+        Effect.zipRight(operations.closeRepo(normalized))
+      )
     }),
   scanForRepos: ({ dirPath }) =>
     scanForReposGuarded(dirPath).pipe(Effect.map((repos) => ({ repos }))),
@@ -168,11 +168,13 @@ export const handlersLayer = SidecarRpcs.toLayer({
     withResolvedRepo(repoPath, (repo) => operations.commit(repo, message)),
   getHeadCommit: ({ repoPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.getHeadCommit(repo)),
-  amendCommit: ({ repoPath, message, droppedHeadPaths, droppedHeadHunks }) =>
+  amendCommit: ({ repoPath, message, expectedHead, droppedHeadPaths, droppedHeadHunks }) =>
     withResolvedRepo(repoPath, (repo) =>
       withResolvedFiles(repo, droppedHeadPaths, (relatives) =>
         resolveDroppedHunks(repo, droppedHeadHunks).pipe(
-          Effect.flatMap((hunks) => operations.amendCommit(repo, message, relatives, hunks))
+          Effect.flatMap((hunks) =>
+            operations.amendCommit(repo, message, relatives, hunks, expectedHead)
+          )
         )
       )
     ),
@@ -180,9 +182,15 @@ export const handlersLayer = SidecarRpcs.toLayer({
     withResolvedRepo(repoPath, (repo) =>
       withResolvedFile(repo, file, (relative) => operations.stageFile(repo, relative))
     ),
-  unstageFile: ({ repoPath, file }) =>
+  unstageFile: ({ repoPath, file, renameSource }) =>
     withResolvedRepo(repoPath, (repo) =>
-      withResolvedFile(repo, file, (relative) => operations.unstageFile(repo, relative))
+      withResolvedFiles(repo, renameSource ? [renameSource, file] : [file], (relatives) =>
+        operations.unstageFile(
+          repo,
+          relatives[relatives.length - 1],
+          relatives.length === 2 ? relatives[0] : undefined
+        )
+      )
     ),
   stageAll: ({ repoPath, files }) =>
     withResolvedRepo(repoPath, (repo) =>
@@ -205,34 +213,40 @@ export const handlersLayer = SidecarRpcs.toLayer({
       withResolvedFiles(repo, files, (relatives) => operations.discardChanges(repo, relatives))
     ),
   discardAll: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.discardAll(repo)),
-  mergeBranch: ({ repoPath, ref }) =>
-    withResolvedRepo(repoPath, (repo) => operations.mergeBranch(repo, ref)),
+  mergeBranch: ({ repoPath, refKind, fullPath }) =>
+    withResolvedRepo(repoPath, (repo) => operations.mergeBranch(repo, refKind, fullPath)),
   revertCommit: ({ repoPath, sha }) =>
     withResolvedRepo(repoPath, (repo) => operations.revertCommit(repo, sha)),
   cherryPick: ({ repoPath, sha }) =>
     withResolvedRepo(repoPath, (repo) => operations.cherryPick(repo, sha)),
   checkout: ({ repoPath, refKind, fullPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.checkoutRef(repo, refKind, fullPath)),
-  createBranch: ({ repoPath, name, startPoint, checkout }) =>
+  createBranch: ({ repoPath, name, startPoint, startPointKind, checkout }) =>
     withResolvedRepo(repoPath, (repo) =>
-      operations.createBranch(repo, name, startPoint || undefined, checkout === true)
+      operations.createBranch(
+        repo,
+        name,
+        startPoint || undefined,
+        checkout === true,
+        startPointKind
+      )
     ),
   deleteBranch: ({ repoPath, name, force }) =>
     withResolvedRepo(repoPath, (repo) => operations.deleteBranch(repo, name, force === true)),
   renameBranch: ({ repoPath, oldName, newName }) =>
     withResolvedRepo(repoPath, (repo) => operations.renameBranch(repo, oldName, newName)),
-  createTag: ({ repoPath, name, ref, message }) =>
+  createTag: ({ repoPath, name, ref, refKind, message }) =>
     withResolvedRepo(repoPath, (repo) =>
-      operations.createTag(repo, name, ref || undefined, message || undefined)
+      operations.createTag(repo, name, ref || undefined, message || undefined, refKind)
     ),
   deleteTag: ({ repoPath, name }) =>
     withResolvedRepo(repoPath, (repo) => operations.deleteTag(repo, name)),
-  stashPop: ({ repoPath, index }) =>
-    withResolvedRepo(repoPath, (repo) => operations.stashPop(repo, index)),
-  stashApply: ({ repoPath, index }) =>
-    withResolvedRepo(repoPath, (repo) => operations.stashApply(repo, index)),
-  stashDrop: ({ repoPath, index }) =>
-    withResolvedRepo(repoPath, (repo) => operations.stashDrop(repo, index)),
+  stashPop: ({ repoPath, index, expectedOid }) =>
+    withResolvedRepo(repoPath, (repo) => operations.stashPop(repo, index, expectedOid)),
+  stashApply: ({ repoPath, index, expectedOid }) =>
+    withResolvedRepo(repoPath, (repo) => operations.stashApply(repo, index, expectedOid)),
+  stashDrop: ({ repoPath, index, expectedOid }) =>
+    withResolvedRepo(repoPath, (repo) => operations.stashDrop(repo, index, expectedOid)),
   stashPush: ({ repoPath, message, includeUntracked, files }) =>
     withResolvedRepo(repoPath, (repo) => {
       const resolvedFiles: Effect.Effect<string[] | undefined, GitError> =
@@ -250,13 +264,10 @@ export const handlersLayer = SidecarRpcs.toLayer({
     withResolvedRepo(repoPath, (repo) => operations.pushRepo(repo, force, expectedRemoteSha)),
   pull: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.pullRepo(repo)),
   getStatus: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.getStatus(repo)),
-  getBranches: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.getBranches(repo)),
   getLocalBranches: ({ repoPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.getLocalBranches(repo)),
   getRemoteRefs: ({ repoPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.getRemoteRefs(repo)),
-  getLog: ({ repoPath, maxCount }) =>
-    withResolvedRepo(repoPath, (repo) => operations.getLog(repo, maxCount)),
   getDiff: ({ repoPath, file, staged, range }) =>
     withResolvedRepo(repoPath, (repo) =>
       withResolvedFile(repo, file, (relative) =>
@@ -267,14 +278,15 @@ export const handlersLayer = SidecarRpcs.toLayer({
   streamLog: ({ repoPath, skip, maxCount, streamId }) =>
     Stream.unwrap(
       resolveRepo(repoPath).pipe(
-        Effect.map((resolved) => logChunkStream(resolved, { skip, maxCount, streamId }))
+        Effect.flatMap((resolved) =>
+          requireOpen(resolved).pipe(
+            Effect.as(logChunkStream(resolved, { skip, maxCount, streamId }))
+          )
+        )
       )
     )
 }).pipe(Layer.provide(RepoSessionsLive))
 
-// toWebHandler is built on HttpRouter, so it asks for the HTTP platform services even though the
-// RPC path never touches the filesystem — a no-op FileSystem keeps platform-node (and its native
-// @parcel/watcher build) out of the dependency tree.
 const fileSystemLayer = FileSystem.layerNoop({})
 const platformLayer = Layer.mergeAll(
   fileSystemLayer,

@@ -26,6 +26,12 @@ function migrateLegacyWorkingDirectory(): void {
 
 migrateLegacyWorkingDirectory()
 
+export function replaceStoreWithDefaults(overrides: Partial<StoreSchema> = {}): StoreSchema {
+  const replacement = structuredClone({ ...storeDefaults, ...overrides })
+  store.store = replacement
+  return structuredClone(replacement)
+}
+
 export function getTheme(): 'dark' | 'light' {
   return store.get('theme')
 }

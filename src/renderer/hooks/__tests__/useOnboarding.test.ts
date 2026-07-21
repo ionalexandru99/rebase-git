@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useOnboarding } from '../useOnboarding'
 
@@ -21,6 +21,9 @@ describe('useOnboarding', () => {
   })
 
   it('should start with null onboardingComplete and no workspaces', () => {
+    vi.mocked(window.electronAPI.getOnboardingComplete).mockReturnValue(new Promise(() => {}))
+    vi.mocked(window.electronAPI.getWorkspaces).mockReturnValue(new Promise(() => {}))
+    vi.mocked(window.electronAPI.getActiveWorkspace).mockReturnValue(new Promise(() => {}))
     const { result } = renderHook(() => useOnboarding())
 
     expect(result.current.onboardingComplete).toBeNull()
@@ -64,7 +67,9 @@ describe('useOnboarding', () => {
       expect(result.current.onboardingComplete).toBe(false)
     })
 
-    await result.current.addWorkspace()
+    await act(async () => {
+      await result.current.addWorkspace()
+    })
 
     await waitFor(() => {
       expect(result.current.workingDirectory).toBe('/home/user/projects')
@@ -94,7 +99,9 @@ describe('useOnboarding', () => {
       expect(result.current.onboardingComplete).toBe(false)
     })
 
-    await result.current.addWorkspace()
+    await act(async () => {
+      await result.current.addWorkspace()
+    })
 
     await waitFor(() => {
       expect(result.current.error).toBe('Permission denied')
@@ -111,7 +118,9 @@ describe('useOnboarding', () => {
       expect(result.current.onboardingComplete).toBe(false)
     })
 
-    await result.current.completeOnboarding()
+    await act(async () => {
+      await result.current.completeOnboarding()
+    })
 
     await waitFor(() => {
       expect(result.current.onboardingComplete).toBe(true)
@@ -134,7 +143,9 @@ describe('useOnboarding', () => {
       expect(result.current.workingDirectory).toBe('/home/user/repos')
     })
 
-    await result.current.rescanWorkingDirectory()
+    await act(async () => {
+      await result.current.rescanWorkingDirectory()
+    })
 
     await waitFor(() => {
       expect(result.current.discoveredRepos).toEqual(['/home/user/repos/one'])
@@ -153,7 +164,9 @@ describe('useOnboarding', () => {
 
     vi.mocked(window.electronAPI.scanForRepos).mockClear()
 
-    await result.current.rescanWorkingDirectory()
+    await act(async () => {
+      await result.current.rescanWorkingDirectory()
+    })
 
     expect(window.electronAPI.scanForRepos).not.toHaveBeenCalled()
   })
@@ -177,7 +190,9 @@ describe('useOnboarding', () => {
       expect(result.current.activeWorkspace).toBe('/home/user/personal')
     })
 
-    await result.current.addWorkspace()
+    await act(async () => {
+      await result.current.addWorkspace()
+    })
 
     await waitFor(() => {
       expect(result.current.workspaces).toEqual(['/home/user/personal', '/home/user/work'])
@@ -207,7 +222,9 @@ describe('useOnboarding', () => {
       repos: ['/home/user/work/job']
     })
 
-    await result.current.switchWorkspace('/home/user/work')
+    await act(async () => {
+      await result.current.switchWorkspace('/home/user/work')
+    })
 
     await waitFor(() => {
       expect(result.current.activeWorkspace).toBe('/home/user/work')
@@ -241,22 +258,67 @@ describe('useOnboarding', () => {
       expect(result.current.activeWorkspace).toBe('/home/user/personal')
     })
 
-    const switched = result.current.switchWorkspace('/home/user/work')
+    let switched: Promise<void>
+    act(() => {
+      switched = result.current.switchWorkspace('/home/user/work')
+    })
     await waitFor(() => {
       expect(window.electronAPI.scanForRepos).toHaveBeenCalledWith('/home/user/work')
     })
-    resolveWork({ _tag: 'Ok', repos: ['/home/user/work/job'] })
-    await switched
+    await act(async () => {
+      resolveWork({ _tag: 'Ok', repos: ['/home/user/work/job'] })
+      await switched
+    })
 
     await waitFor(() => {
       expect(result.current.discoveredRepos).toEqual(['/home/user/work/job'])
     })
 
-    resolvePersonal({ _tag: 'Ok', repos: ['/home/user/personal/app'] })
-    await Promise.resolve()
+    await act(async () => {
+      resolvePersonal({ _tag: 'Ok', repos: ['/home/user/personal/app'] })
+      await Promise.resolve()
+    })
 
     expect(result.current.activeWorkspace).toBe('/home/user/work')
     expect(result.current.discoveredRepos).toEqual(['/home/user/work/job'])
+  })
+
+  it('does not let the initial workspace catalog overwrite a user-selected workspace', async () => {
+    let resolveWorkspaces: (paths: string[]) => void = () => {}
+    let resolveActive: (path: string | null) => void = () => {}
+    vi.mocked(window.electronAPI.getWorkspaces).mockReturnValue(
+      new Promise((resolve) => {
+        resolveWorkspaces = resolve
+      })
+    )
+    vi.mocked(window.electronAPI.getActiveWorkspace).mockReturnValue(
+      new Promise((resolve) => {
+        resolveActive = resolve
+      })
+    )
+    vi.mocked(window.electronAPI.selectFolder).mockResolvedValue('/home/user/new')
+    vi.mocked(window.electronAPI.addWorkspace).mockResolvedValue(['/home/user/new'])
+    vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({
+      _tag: 'Ok',
+      repos: ['/home/user/new/app']
+    })
+    const { result } = renderHook(() => useOnboarding())
+    await waitFor(() => expect(result.current.onboardingComplete).toBe(false))
+
+    await act(async () => {
+      await result.current.addWorkspace()
+    })
+    expect(result.current.activeWorkspace).toBe('/home/user/new')
+
+    await act(async () => {
+      resolveWorkspaces(['/home/user/old'])
+      resolveActive('/home/user/old')
+      await Promise.resolve()
+    })
+
+    expect(result.current.activeWorkspace).toBe('/home/user/new')
+    expect(result.current.workspaces).toEqual(['/home/user/new'])
+    expect(result.current.discoveredRepos).toEqual(['/home/user/new/app'])
   })
 
   it('should remove a workspace and fall back to the first remaining one', async () => {
@@ -274,7 +336,9 @@ describe('useOnboarding', () => {
       expect(result.current.activeWorkspace).toBe('/home/user/personal')
     })
 
-    await result.current.removeWorkspace('/home/user/personal')
+    await act(async () => {
+      await result.current.removeWorkspace('/home/user/personal')
+    })
 
     await waitFor(() => {
       expect(result.current.workspaces).toEqual(['/home/user/work'])

@@ -1,15 +1,16 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { FetchHttpClient, HttpClient, HttpClientRequest } from '@effect/platform'
 import { RpcClient, RpcSerialization } from '@effect/rpc'
-import { GitError, SidecarRpcs } from '@shared/rpc'
-import type { LogChunk } from '@shared/schemas/git'
+import { RepoNotOpen, SidecarRpcs } from '@shared/rpc'
+import { GIT_LOG_REF_SEPARATOR, type LogChunk } from '@shared/schemas/git'
 import { Chunk, Effect, Either, Fiber, Layer, Stream } from 'effect'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createSidecarServer } from '../server'
-import { makeBigRepo, makeRepo } from './repo-fixtures'
+import { git, makeBigRepo, makeRepo } from './repo-fixtures'
 
 const TOKEN = 'rpc-stream-test-token'
 let baseUrl: string
@@ -61,6 +62,7 @@ beforeAll(async () => {
   const { port } = server.address() as AddressInfo
   baseUrl = `http://127.0.0.1:${port}`
   await openRepo(repoPath)
+  await openRepo(bigRepoPath)
 })
 
 afterAll(async () => {
@@ -96,9 +98,28 @@ describe('streamLog RPC over the /rpc transport', () => {
     expect(chunks.at(-1)?.done).toBe(true)
   })
 
+  it('streams comma-containing branch and tag decorations without ambiguity', async () => {
+    const decoratedRepo = makeRepo(['decorated'])
+    try {
+      git(decoratedRepo, ['checkout', '-b', 'release,2026'])
+      git(decoratedRepo, ['tag', 'v1,stable'])
+      await openRepo(decoratedRepo)
+
+      const chunks = await collectStreamLog(decoratedRepo)
+      const tip = chunks.flatMap((chunk) => chunk.commits)[0]
+      const decorations = tip?.refs.split(GIT_LOG_REF_SEPARATOR)
+
+      expect(decorations).toContain('HEAD -> release,2026')
+      expect(decorations).toContain('tag: v1,stable')
+    } finally {
+      fs.rmSync(decoratedRepo, { recursive: true, force: true })
+    }
+  })
+
   it('reports hasMore on the terminal chunk when a maxCount page is full', async () => {
     const pagedRepo = makeBigRepo(15)
     try {
+      await openRepo(pagedRepo)
       const chunks = await collectStreamLog(pagedRepo, { maxCount: 10 })
       const commits = chunks.flatMap((chunk) => chunk.commits)
       const terminal = chunks.at(-1)
@@ -113,6 +134,7 @@ describe('streamLog RPC over the /rpc transport', () => {
   it('clears hasMore when the page exactly exhausts the history', async () => {
     const pagedRepo = makeBigRepo(10)
     try {
+      await openRepo(pagedRepo)
       const chunks = await collectStreamLog(pagedRepo, { maxCount: 10 })
       const commits = chunks.flatMap((chunk) => chunk.commits)
       const terminal = chunks.at(-1)
@@ -127,6 +149,7 @@ describe('streamLog RPC over the /rpc transport', () => {
   it('streams a later page with skip and clears hasMore on the final page', async () => {
     const pagedRepo = makeBigRepo(15)
     try {
+      await openRepo(pagedRepo)
       const chunks = await collectStreamLog(pagedRepo, { skip: 10, maxCount: 10 })
       const commits = chunks.flatMap((chunk) => chunk.commits)
       const terminal = chunks.at(-1)
@@ -134,6 +157,94 @@ describe('streamLog RPC over the /rpc transport', () => {
       expect(terminal?.done).toBe(true)
       expect(terminal?.hasMore).toBe(false)
     } finally {
+      fs.rmSync(pagedRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('continues a snapshot without duplicates when HEAD moves between pages', async () => {
+    const pagedRepo = makeBigRepo(15)
+    try {
+      await openRepo(pagedRepo)
+      const first = await collectStreamLog(pagedRepo, { maxCount: 10 })
+      const firstCommits = first.flatMap((chunk) => chunk.commits)
+
+      git(pagedRepo, ['commit', '--allow-empty', '-m', 'new tip'])
+      const second = await collectStreamLog(pagedRepo, { skip: 10, maxCount: 10 })
+      const secondCommits = second.flatMap((chunk) => chunk.commits)
+      const combined = [...firstCommits, ...secondCommits]
+
+      expect(combined).toHaveLength(15)
+      expect(new Set(combined.map((commit) => commit.hash)).size).toBe(15)
+      expect(combined.map((commit) => commit.message)).toEqual([
+        'c15',
+        'c14',
+        'c13',
+        'c12',
+        'c11',
+        'c10',
+        'c9',
+        'c8',
+        'c7',
+        'c6',
+        'c5',
+        'c4',
+        'c3',
+        'c2',
+        'c1'
+      ])
+      expect(second.at(-1)?.hasMore).toBe(false)
+    } finally {
+      fs.rmSync(pagedRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves one monolithic topo-order sequence across aged pages and moving refs', async () => {
+    const pagedRepo = makeRepo(['base'])
+    try {
+      git(pagedRepo, ['checkout', '-b', 'topic'])
+      git(pagedRepo, ['commit', '--allow-empty', '-m', 'topic one'])
+      git(pagedRepo, ['commit', '--allow-empty', '-m', 'topic two'])
+      git(pagedRepo, ['checkout', 'main'])
+      git(pagedRepo, ['commit', '--allow-empty', '-m', 'main one'])
+      git(pagedRepo, ['merge', '--no-ff', 'topic', '-m', 'merge topic'])
+      git(pagedRepo, ['commit', '--allow-empty', '-m', 'after merge'])
+      await openRepo(pagedRepo)
+
+      const monolithicHashes = execFileSync(
+        'git',
+        [
+          'log',
+          '--ignore-missing',
+          '--topo-order',
+          '--format=%H',
+          'HEAD',
+          '--branches',
+          '--remotes',
+          '--tags'
+        ],
+        { cwd: pagedRepo, encoding: 'utf8' }
+      )
+        .trim()
+        .split('\n')
+      const first = await collectStreamLog(pagedRepo, { maxCount: 2 })
+
+      vi.useFakeTimers()
+      vi.advanceTimersByTime(5 * 60_000)
+      vi.useRealTimers()
+      git(pagedRepo, ['commit', '--allow-empty', '-m', 'new ref tip'])
+
+      const second = await collectStreamLog(pagedRepo, { skip: 2, maxCount: 2 })
+      const third = await collectStreamLog(pagedRepo, { skip: 4, maxCount: 2 })
+      const fourth = await collectStreamLog(pagedRepo, { skip: 6, maxCount: 2 })
+      const pagedCommits = [...first, ...second, ...third, ...fourth].flatMap(
+        (chunk) => chunk.commits
+      )
+      const pagedHashes = pagedCommits.map((commit) => commit.hash)
+
+      expect(pagedHashes).toEqual(monolithicHashes)
+      expect(fourth.at(-1)?.hasMore).toBe(false)
+    } finally {
+      vi.useRealTimers()
       fs.rmSync(pagedRepo, { recursive: true, force: true })
     }
   })
@@ -179,7 +290,7 @@ describe('streamLog RPC over the /rpc transport', () => {
     )
   })
 
-  it('flows an invalid repo path as a typed GitError in the stream channel', async () => {
+  it('flows an unopened directory as a typed RepoNotOpen in the stream channel', async () => {
     const notARepo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-stream-notrepo-'))
     try {
       const result = await Effect.runPromise(
@@ -190,10 +301,53 @@ describe('streamLog RPC over the /rpc transport', () => {
       )
       expect(Either.isLeft(result)).toBe(true)
       if (Either.isLeft(result)) {
-        expect(result.left).toBeInstanceOf(GitError)
+        expect(result.left).toBeInstanceOf(RepoNotOpen)
       }
     } finally {
       fs.rmSync(notARepo, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects a valid repository that has no open sidecar session', async () => {
+    const unopenedRepo = makeRepo(['only'])
+    try {
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const client = yield* RpcClient.make(SidecarRpcs)
+          return yield* Effect.either(
+            Stream.runCollect(client.streamLog({ repoPath: unopenedRepo }))
+          )
+        }).pipe(Effect.scoped, Effect.provide(protocolLayer()))
+      )
+      expect(Either.isLeft(result)).toBe(true)
+      if (Either.isLeft(result)) {
+        expect(result.left).toBeInstanceOf(RepoNotOpen)
+      }
+    } finally {
+      fs.rmSync(unopenedRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('streams a commit reachable only from a tag', async () => {
+    const taggedRepo = makeRepo(['base'])
+    try {
+      git(taggedRepo, ['checkout', '--detach', 'main'])
+      git(taggedRepo, ['commit', '--allow-empty', '-m', 'tagged only'])
+      const taggedSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: taggedRepo,
+        encoding: 'utf8'
+      }).trim()
+      git(taggedRepo, ['tag', 'only-tag'])
+      git(taggedRepo, ['checkout', 'main'])
+      await openRepo(taggedRepo)
+
+      const chunks = await collectStreamLog(taggedRepo)
+
+      expect(chunks.flatMap((chunk) => chunk.commits).map((commit) => commit.hash)).toContain(
+        taggedSha
+      )
+    } finally {
+      fs.rmSync(taggedRepo, { recursive: true, force: true })
     }
   })
 })

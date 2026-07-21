@@ -3,7 +3,7 @@ import { memo, useMemo } from 'react'
 import { formatCommitDate, initials } from '@/lib/format'
 import type { CommitAction } from '@/lib/git-actions'
 import { computeRowRailWidth, laneColor, laneX, ROW_H } from '@/lib/git-graph/canvas'
-import type { RowLayout } from '@/lib/git-graph/layout'
+import type { LaneBoundary, RowLayout } from '@/lib/git-graph/layout'
 import { parseRefs } from '@/lib/git-graph/refs'
 import { cn } from '@/lib/utils'
 import {
@@ -18,6 +18,8 @@ import type { MergeGlyph } from './selectors'
 
 interface CommitRowProps {
   row: RowLayout
+  incoming?: LaneBoundary
+  outgoing?: LaneBoundary
   top: number
   dim: boolean
   offBranch: boolean
@@ -25,7 +27,7 @@ interface CommitRowProps {
   remotes: Record<string, string>
   remoteNames: Set<string>
   mergeGlyph?: MergeGlyph
-  onToggleExpand?: () => void
+  onToggleExpand?: (mergeHash: string) => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
 }
 
@@ -52,7 +54,7 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
   const laneHex = laneColor(props.row.commitLane)
   const rowOpacity = props.dim ? 0.35 : props.offBranch ? 0.6 : 1
   const subjectClass = props.offBranch ? 'text-muted-foreground' : 'text-foreground'
-  const railWidth = computeRowRailWidth(props.row)
+  const railWidth = computeRowRailWidth(props.row, props.incoming ?? [], props.outgoing ?? [])
   const glyph = props.mergeGlyph
   const expandable = glyph === 'collapsed' || glyph === 'expanded'
   const act = (action: CommitAction) => props.onCommitAction?.(action, commit.hash, commit.message)
@@ -78,7 +80,7 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
             }
             onClick={(event) => {
               event.stopPropagation()
-              props.onToggleExpand?.()
+              props.onToggleExpand?.(commit.hash)
             }}
             className="absolute z-20 -translate-y-1/2 rounded-full bg-transparent"
             style={{

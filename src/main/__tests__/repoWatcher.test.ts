@@ -4,7 +4,13 @@ import os from 'node:os'
 import path from 'node:path'
 import type { WebContents } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ignoreWorkingTree, startDebouncedDrain, startWatching, stopWatching } from '../repoWatcher'
+import {
+  ignoreWorkingTree,
+  shouldEmitWorkingTreeChange,
+  startDebouncedDrain,
+  startWatching,
+  stopWatching
+} from '../repoWatcher'
 
 describe('ignoreWorkingTree', () => {
   it('ignores the .git directory', () => {
@@ -44,6 +50,21 @@ describe('ignoreWorkingTree', () => {
     expect(ignoreWorkingTree('/repo/NODE_MODULES/foo')).toBe(true)
     expect(ignoreWorkingTree('/repo/.GIT/HEAD')).toBe(true)
     expect(ignoreWorkingTree('/repo/Target/release/bin')).toBe(true)
+  })
+})
+
+describe('shouldEmitWorkingTreeChange', () => {
+  it('does not echo git-internal watcher events as working-tree changes', () => {
+    expect(shouldEmitWorkingTreeChange('.git/index')).toBe(false)
+    expect(shouldEmitWorkingTreeChange('.git/refs/heads/main')).toBe(false)
+  })
+
+  it('ignores native watcher events without a filename', () => {
+    expect(shouldEmitWorkingTreeChange(null)).toBe(false)
+  })
+
+  it('emits source file changes', () => {
+    expect(shouldEmitWorkingTreeChange('src/main.ts')).toBe(true)
   })
 })
 

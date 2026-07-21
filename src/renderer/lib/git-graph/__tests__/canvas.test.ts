@@ -1,14 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  collectRowEdges,
+  createEdgeBatch,
   drawCommitDot,
   drawGraphRow,
   drawMergeGlyph,
+  edgeBatchCapacity,
   LANE_PALETTE,
   laneColor,
   laneX,
   MERGE_DOT_R,
   MERGE_STROKE,
-  ROW_H
+  ROW_H,
+  resetEdgeBatch
 } from '@/lib/git-graph/canvas'
 import type { RowLayout } from '@/lib/git-graph/layout'
 import type { GitLogEntry } from '@/types'
@@ -110,9 +114,7 @@ describe('drawCommitDot', () => {
     const { ctx, strokeStyles } = strokeStyleRecorder()
     const row: RowLayout = {
       commit: commit('m', ['p1', 'p2']),
-      commitLane: 2,
-      incoming: ['m'],
-      outgoing: ['p1', 'p2']
+      commitLane: 2
     }
 
     drawCommitDot(ctx, row, 0, false, '#000000')
@@ -126,12 +128,10 @@ describe('drawGraphRow', () => {
     const { ctx, raw } = mockCtx()
     const row: RowLayout = {
       commit: commit('m', ['p1', 'p2', 'p3']),
-      commitLane: 0,
-      incoming: ['m', null, null],
-      outgoing: ['p1', 'p2', 'p3']
+      commitLane: 0
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000')
+    drawGraphRow(ctx, row, ['m', null, null], ['p1', 'p2', 'p3'], 0, false, false, '#000000')
 
     // p2 and p3 fan out into freshly opened lanes, each drawn as a bezier from the merge dot.
     expect(raw.bezierCurveTo.mock.calls.length).toBeGreaterThanOrEqual(2)
@@ -141,12 +141,10 @@ describe('drawGraphRow', () => {
     const { ctx, arcRadii, lineWidths } = mockCtx()
     const row: RowLayout = {
       commit: commit('m', ['p1', 'p2']),
-      commitLane: 0,
-      incoming: ['m'],
-      outgoing: ['p1', 'p2']
+      commitLane: 0
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000')
+    drawGraphRow(ctx, row, ['m'], ['p1', 'p2'], 0, false, false, '#000000')
 
     expect(arcRadii).toContain(MERGE_DOT_R)
     expect(lineWidths).toContain(MERGE_STROKE)
@@ -157,12 +155,10 @@ describe('drawGraphRow', () => {
     const wideOutgoing = Array.from({ length: 16 }, (_, lane) => `p${lane}`)
     const row: RowLayout = {
       commit: commit('c', []),
-      commitLane: 0,
-      incoming: ['c'],
-      outgoing: wideOutgoing
+      commitLane: 0
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000')
+    drawGraphRow(ctx, row, ['c'], wideOutgoing, 0, false, false, '#000000')
 
     expect(raw.stroke.mock.calls.length).toBeLessThanOrEqual(LANE_PALETTE.length)
   })
@@ -173,10 +169,10 @@ describe('drawGraphRow', () => {
       eightLanes.ctx,
       {
         commit: commit('c', []),
-        commitLane: 0,
-        incoming: ['c'],
-        outgoing: Array.from({ length: 8 }, (_, lane) => `p${lane}`)
+        commitLane: 0
       },
+      ['c'],
+      Array.from({ length: 8 }, (_, lane) => `p${lane}`),
       0,
       false,
       false,
@@ -188,10 +184,10 @@ describe('drawGraphRow', () => {
       sixteenLanes.ctx,
       {
         commit: commit('c', []),
-        commitLane: 0,
-        incoming: ['c'],
-        outgoing: Array.from({ length: 16 }, (_, lane) => `p${lane}`)
+        commitLane: 0
       },
+      ['c'],
+      Array.from({ length: 16 }, (_, lane) => `p${lane}`),
       0,
       false,
       false,
@@ -205,12 +201,10 @@ describe('drawGraphRow', () => {
     const { ctx, commands } = recordingCtx()
     const row: RowLayout = {
       commit: commit('c', ['p1', 'p2']),
-      commitLane: 1,
-      incoming: ['x', 'c', null],
-      outgoing: ['x', 'p1', 'p2']
+      commitLane: 1
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000')
+    drawGraphRow(ctx, row, ['x', 'c', null], ['x', 'p1', 'p2'], 0, false, false, '#000000')
 
     const rowMid = ROW_H / 2
     const rowBot = ROW_H
@@ -252,13 +246,24 @@ describe('drawGraphRow', () => {
     const { ctx, arcRadii } = mockCtx()
     const row: RowLayout = {
       commit: commit('c', ['p']),
-      commitLane: 0,
-      incoming: ['c'],
-      outgoing: ['p']
+      commitLane: 0
     }
 
-    drawGraphRow(ctx, row, 0, false, false, '#000000')
+    drawGraphRow(ctx, row, ['c'], ['p'], 0, false, false, '#000000')
 
     expect(arcRadii).not.toContain(MERGE_DOT_R)
+  })
+
+  it('reuses retained edge segment capacity across draw frames', () => {
+    const batch = createEdgeBatch()
+    const row: RowLayout = { commit: commit('c', ['p1', 'p2']), commitLane: 0 }
+
+    collectRowEdges(batch, row, ['c'], ['p1', 'p2'], 0, false, false)
+    const firstFrameCapacity = edgeBatchCapacity(batch)
+    resetEdgeBatch(batch)
+    collectRowEdges(batch, row, ['c'], ['p1', 'p2'], 0, false, false)
+
+    expect(firstFrameCapacity).toBeGreaterThan(0)
+    expect(edgeBatchCapacity(batch)).toBe(firstFrameCapacity)
   })
 })

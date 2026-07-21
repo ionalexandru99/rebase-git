@@ -2,10 +2,10 @@ import { Channel } from '@shared/channels'
 import { app, type BrowserWindow, dialog, shell, webContents } from 'electron'
 import log from 'electron-log'
 import {
+  childProcessRecoveryDecision,
   RECOVERY_BUTTONS,
   recoveryActionForResponse,
-  shouldPromptOnRenderGone,
-  shouldRespawnSidecar
+  shouldPromptOnRenderGone
 } from './recovery-decision'
 import { restartSidecar } from './sidecar'
 
@@ -116,14 +116,23 @@ function broadcastSidecarRestarted(): void {
   }
 }
 
-export function wireProcessRecovery(): void {
+export function wireProcessRecovery(
+  isAppShuttingDown: () => boolean,
+  onSidecarRespawn: () => void
+): void {
   app.on('child-process-gone', (_event, details) => {
-    log.error('[recovery] child process gone', details)
-    if (!shouldRespawnSidecar(details)) {
+    const decision = childProcessRecoveryDecision(details, {
+      appShuttingDown: isAppShuttingDown()
+    })
+    if (decision.log) {
+      log.error('[recovery] child process gone', details)
+    }
+    if (!decision.respawn) {
       return
     }
     restartSidecar()
       .then(() => {
+        onSidecarRespawn()
         broadcastSidecarRestarted()
       })
       .catch((error: unknown) => {

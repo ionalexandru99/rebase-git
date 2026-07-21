@@ -1,3 +1,4 @@
+import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
 import { fuzzyMatchSet } from '@/lib/fuzzy'
 import { parseRefs } from '@/lib/git-graph/refs'
 import type { RefKind } from '@/lib/ref-tree'
@@ -57,27 +58,34 @@ export function getCommitIndex(commits: GitLogEntry[]): CommitIndex {
 export interface RefTipIndex {
   tipByRefKey: Map<string, string>
   headTip: string | undefined
+  fallbackTagTips: string[]
 }
 
-const refTipIndexCache = new WeakMap<
-  GitLogEntry[],
-  { remoteNames: ReadonlySet<string> | undefined; index: RefTipIndex }
->()
+const refTipIndexCache = new WeakMap<GitLogEntry[], Map<string, RefTipIndex>>()
+
+function remoteNamesKey(remoteNames: ReadonlySet<string> | undefined): string {
+  return remoteNames ? JSON.stringify([...remoteNames].sort()) : 'undefined'
+}
 
 function hasHeadMarker(refs: string): boolean {
-  return refs.split(',').some((part) => {
+  return refs.split(GIT_LOG_REF_SEPARATOR).some((part) => {
     const trimmed = part.trim()
     return trimmed === 'HEAD' || trimmed.startsWith('HEAD -> ')
   })
 }
 
 export function getRefTipIndex(commits: GitLogEntry[], remoteNames?: Set<string>): RefTipIndex {
-  const cached = refTipIndexCache.get(commits)
-  if (cached && cached.remoteNames === remoteNames) {
-    return cached.index
+  const cacheKey = remoteNamesKey(remoteNames)
+  const cached = refTipIndexCache.get(commits)?.get(cacheKey)
+  if (cached) {
+    return cached
   }
   const tipByRefKey = new Map<string, string>()
   let headTip: string | undefined
+  const branchTips: string[] = []
+  const tagTips: string[] = []
+  const seenBranchTips = new Set<string>()
+  const seenTagTips = new Set<string>()
   for (const commit of commits) {
     if (!commit.refs) {
       continue
@@ -86,8 +94,19 @@ export function getRefTipIndex(commits: GitLogEntry[], remoteNames?: Set<string>
       headTip = commit.hash
     }
     for (const ref of parseRefs(commit.refs, remoteNames)) {
+      if (ref.kind === 'tag') {
+        if (!seenTagTips.has(commit.hash)) {
+          seenTagTips.add(commit.hash)
+          tagTips.push(commit.hash)
+        }
+        continue
+      }
       if (ref.kind !== 'branch' && ref.kind !== 'remote') {
         continue
+      }
+      if (!seenBranchTips.has(commit.hash)) {
+        seenBranchTips.add(commit.hash)
+        branchTips.push(commit.hash)
       }
       const key = refFilterKey(ref.kind === 'branch' ? 'local' : 'remote', ref.label)
       if (!tipByRefKey.has(key)) {
@@ -95,8 +114,22 @@ export function getRefTipIndex(commits: GitLogEntry[], remoteNames?: Set<string>
       }
     }
   }
-  const index = { tipByRefKey, headTip }
-  refTipIndexCache.set(commits, { remoteNames, index })
+  let fallbackTagTips: string[] = []
+  if (tagTips.length > 0) {
+    const { byHash } = getCommitIndex(commits)
+    const reachableFromBranches = new Set<string>()
+    for (const tip of branchTips) {
+      walkAncestors(byHash, tip, reachableFromBranches)
+    }
+    fallbackTagTips = pruneAncestorTips(
+      commits,
+      tagTips.filter((tip) => !reachableFromBranches.has(tip))
+    )
+  }
+  const index = { tipByRefKey, headTip, fallbackTagTips }
+  const entries = refTipIndexCache.get(commits) ?? new Map<string, RefTipIndex>()
+  entries.set(cacheKey, index)
+  refTipIndexCache.set(commits, entries)
   return index
 }
 
@@ -240,9 +273,10 @@ export function collectTimelineTips(
   commits: GitLogEntry[],
   selectedRefs: ReadonlySet<string>,
   remoteBranches: readonly string[],
-  remoteNames: Set<string>
+  remoteNames: Set<string>,
+  currentBranch?: string
 ): string[] {
-  const { tipByRefKey } = getRefTipIndex(commits, remoteNames)
+  const { tipByRefKey, headTip, fallbackTagTips } = getRefTipIndex(commits, remoteNames)
   const tips: string[] = []
   const seen = new Set<string>()
 
@@ -284,6 +318,24 @@ export function collectTimelineTips(
       if (remoteTip === localTip) {
         addTip(remoteTip)
       }
+    }
+  }
+
+  if (currentBranch === '') {
+    addTip(headTip)
+  }
+
+  if (currentBranch !== undefined && fallbackTagTips.length > 0) {
+    let reachableFromDetachedHead: Set<string> | undefined
+    if (currentBranch === '' && headTip) {
+      reachableFromDetachedHead = new Set()
+      walkAncestors(getCommitIndex(commits).byHash, headTip, reachableFromDetachedHead)
+    }
+    for (const tip of fallbackTagTips) {
+      if (reachableFromDetachedHead?.has(tip)) {
+        continue
+      }
+      addTip(tip)
     }
   }
 
@@ -455,15 +507,60 @@ export function mergeGlyphState(
   commits: GitLogEntry[],
   merge: GitLogEntry,
   displayedSet: ReadonlySet<string>,
-  expandedMerges: ReadonlySet<string>
+  expandedMerges: ReadonlySet<string>,
+  expansionBoundary: ReadonlySet<string> = displayedSet
 ): MergeGlyph {
   if (merge.parents.length < 2 || !displayedSet.has(merge.hash)) {
+    return 'none'
+  }
+  if (sideRange(commits, merge, expansionBoundary).size === 0) {
     return 'none'
   }
   if (expandedMerges.has(merge.hash)) {
     return 'expanded'
   }
-  return sideRange(commits, merge, displayedSet).size > 0 ? 'collapsed' : 'none'
+  return 'collapsed'
+}
+
+export interface MergeSideRange {
+  commits: ReadonlySet<string>
+  glyph: Exclude<MergeGlyph, 'none'>
+}
+
+export function computeMergeSideRangeIndex(
+  commits: GitLogEntry[],
+  displayedCommits: GitLogEntry[],
+  displayedSet: ReadonlySet<string>,
+  expandedMerges: ReadonlySet<string>,
+  tips: readonly string[] = []
+): ReadonlyMap<string, MergeSideRange> {
+  const sideRanges = new Map<string, MergeSideRange>()
+  const independentBoundary =
+    tips.length > 0 ? computeCollapsedView(commits, tips, new Set()) : displayedSet
+  for (const commit of displayedCommits) {
+    if (commit.parents.length < 2) {
+      continue
+    }
+    const range = sideRange(commits, commit, independentBoundary)
+    if (range.size === 0) {
+      continue
+    }
+    if (expandedMerges.has(commit.hash)) {
+      sideRanges.set(commit.hash, { commits: range, glyph: 'expanded' })
+      continue
+    }
+    let hiddenCommit = false
+    for (const hash of range) {
+      if (!displayedSet.has(hash)) {
+        hiddenCommit = true
+        break
+      }
+    }
+    if (hiddenCommit) {
+      sideRanges.set(commit.hash, { commits: range, glyph: 'collapsed' })
+    }
+  }
+  return sideRanges
 }
 
 export function computeVisibleSet(filter: string, commits: GitLogEntry[]): Set<string> | null {

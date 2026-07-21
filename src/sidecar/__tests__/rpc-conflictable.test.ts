@@ -46,7 +46,11 @@ const cherryPickThroughGroup = (payload: { repoPath: string; sha: string }) =>
     }).pipe(Effect.scoped, Effect.provide(handlersLayer))
   )
 
-const mergeThroughGroup = (payload: { repoPath: string; ref: string }) =>
+const mergeThroughGroup = (payload: {
+  repoPath: string
+  refKind: 'local' | 'remote' | 'tag'
+  fullPath: string
+}) =>
   runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
@@ -80,11 +84,15 @@ describe('conflictable RPC payload schemas', () => {
     }
   })
 
-  it('accepts a well-formed ref payload and rejects a missing or blank ref', () => {
+  it('accepts a well-formed ref payload and rejects missing identity or a blank path', () => {
     const schema = MergeBranch.payloadSchema
-    expect(Either.isRight(decode(schema, { repoPath: '/repo', ref: 'feature' }))).toBe(true)
+    expect(
+      Either.isRight(decode(schema, { repoPath: '/repo', refKind: 'local', fullPath: 'feature' }))
+    ).toBe(true)
     expect(Either.isLeft(decode(schema, { repoPath: '/repo' }))).toBe(true)
-    expect(Either.isLeft(decode(schema, { repoPath: '/repo', ref: '   ' }))).toBe(true)
+    expect(
+      Either.isLeft(decode(schema, { repoPath: '/repo', refKind: 'local', fullPath: '   ' }))
+    ).toBe(true)
   })
 })
 
@@ -188,7 +196,11 @@ describe('cherryPick RPC handler', () => {
 
 describe('mergeBranch RPC handler', () => {
   it('fails with a typed GitError when the repo path does not resolve', async () => {
-    const result = await mergeThroughGroup({ repoPath: '/no/such/path/here', ref: 'main' })
+    const result = await mergeThroughGroup({
+      repoPath: '/no/such/path/here',
+      refKind: 'local',
+      fullPath: 'main'
+    })
     expect(Either.isLeft(result)).toBe(true)
     if (Either.isLeft(result)) {
       expect(result.left).toBeInstanceOf(GitError)
@@ -201,7 +213,11 @@ describe('mergeBranch RPC handler', () => {
     commitFile('clean.txt', 'clean\n', 'add clean file')
     git('checkout', 'main')
 
-    const result = await mergeThroughGroup({ repoPath: repoDir, ref: 'merge/clean' })
+    const result = await mergeThroughGroup({
+      repoPath: repoDir,
+      refKind: 'local',
+      fullPath: 'merge/clean'
+    })
     expect(Either.isRight(result)).toBe(true)
     expect(fs.existsSync(path.join(repoDir, 'clean.txt'))).toBe(true)
   })
@@ -213,7 +229,11 @@ describe('mergeBranch RPC handler', () => {
     commitFile('merge-conflict.txt', 'branch-side\n', 'branch side of merge conflict')
     git('checkout', 'main')
 
-    const result = await mergeThroughGroup({ repoPath: repoDir, ref: 'merge/conflict' })
+    const result = await mergeThroughGroup({
+      repoPath: repoDir,
+      refKind: 'local',
+      fullPath: 'merge/conflict'
+    })
     expect(Either.isLeft(result)).toBe(true)
     if (Either.isLeft(result)) {
       expect(result.left).toBeInstanceOf(Conflict)

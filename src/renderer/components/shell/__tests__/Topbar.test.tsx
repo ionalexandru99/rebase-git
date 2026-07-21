@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Topbar } from '../Topbar'
 
 function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
@@ -9,7 +9,7 @@ function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
       repoPath={'repoPath' in overrides ? (overrides.repoPath ?? null) : '/home/user/my-repo'}
       activeView={overrides.activeView ?? 'history'}
       onSelectView={overrides.onSelectView ?? vi.fn()}
-      workspaceContext={overrides.workspaceContext}
+      lastFetchedAt={overrides.lastFetchedAt}
       onFetch={overrides.onFetch}
       onPull={overrides.onPull}
       push={overrides.push ?? vi.fn(async () => ({ kind: 'ok' }) as const)}
@@ -19,11 +19,15 @@ function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
       detached={overrides.detached}
       pulling={overrides.pulling}
       pushing={overrides.pushing}
+      busy={overrides.busy}
     />
   )
 }
 
 describe('Topbar', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   it('renders the repo name and path', () => {
     renderTopbar({ repoName: 'acme' })
     expect(screen.getByText('acme')).toBeInTheDocument()
@@ -66,9 +70,17 @@ describe('Topbar', () => {
     expect(onSelectView).toHaveBeenCalledWith('local-changes')
   })
 
-  it('shows the workspace context when provided', () => {
-    renderTopbar({ workspaceContext: 'Fetched 3m ago' })
-    expect(screen.getByText('Fetched 3m ago')).toBeInTheDocument()
+  it('updates the fetched-relative-time without an unrelated render', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-21T12:00:00Z'))
+    renderTopbar({ lastFetchedAt: Date.now() })
+    expect(screen.getByText('Fetched just now')).toBeInTheDocument()
+
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+
+    expect(screen.getByText('Fetched 1m ago')).toBeInTheDocument()
   })
 
   it('fires onFetch when Fetch is clicked', () => {
@@ -100,5 +112,16 @@ describe('Topbar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     expect(onPull).not.toHaveBeenCalled()
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('disables every remote action while another repository action is busy', () => {
+    const onFetch = vi.fn()
+    const onPull = vi.fn()
+    const push = vi.fn(async () => ({ kind: 'ok' }) as const)
+    renderTopbar({ onFetch, onPull, push, busy: true })
+
+    expect(screen.getByRole('button', { name: 'Fetch' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Pull' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Push' })).toBeDisabled()
   })
 })

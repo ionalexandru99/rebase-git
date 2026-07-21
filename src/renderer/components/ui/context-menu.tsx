@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+import { usePortalContainer } from './portal-container'
 
 interface MenuPosition {
   x: number
@@ -90,6 +91,7 @@ function ContextMenuGroup(props: HTMLAttributes<HTMLDivElement>) {
 const VIEWPORT_MARGIN = 6
 
 function ContextMenuContent(props: HTMLAttributes<HTMLDivElement>) {
+  const portalContainer = usePortalContainer()
   const { open, position, close } = useContextMenu()
   const { className, style, ...rest } = props
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -168,7 +170,7 @@ function ContextMenuContent(props: HTMLAttributes<HTMLDivElement>) {
       )}
       {...rest}
     />,
-    document.body
+    portalContainer
   )
 }
 

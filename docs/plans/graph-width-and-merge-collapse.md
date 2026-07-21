@@ -1,6 +1,6 @@
 # Plan: collapse merges by default; bound the gutter by underlap occlusion
 
-**Status:** Decided (design grilled 2026-06-27). PRD: issue #128. Not started.
+**Status:** Implemented in the current worktree. PRD: issue #128.
 **Owner:** TBD
 **Created:** 2026-06-27
 
@@ -109,10 +109,11 @@ Each PR is one self-contained commit (per CLAUDE.md):
 
 ## Acceptance criteria
 
-- [ ] One uniform left layer; Author/SHA/Date pinned, opaque, always legible; no
+- [x] One uniform left layer; Author/SHA/Date pinned, opaque, always legible; no
       message column to squeeze to zero.
-- [ ] Merges collapse their Side-branch commits by default (union of Mainlines).
-- [ ] A `+`/`−` merge-dot control reveals/hides Side-branch commits, one level, recursive.
-- [ ] `expandedMerges` is per-tab, ephemeral, survives streaming + ref toggles.
-- [ ] Search auto-reveals matches hidden in Collapsed merges, non-destructively.
-- [ ] `linux` and `phoenix-api` are legible and stable while scrolling/loading.
+- [x] Merges collapse their Side-branch commits by default (union of Mainlines).
+- [x] A `+`/`−` merge-dot control reveals/hides Side-branch commits, one level, recursive.
+- [x] `expandedMerges` is per-tab, ephemeral, survives streaming + ref toggles.
+- [x] Search auto-reveals matches hidden in Collapsed merges, non-destructively.
+- [ ] Re-verify `linux` and `phoenix-api` against the completed implementation; this
+      is the remaining validation item across the graph-plan set.

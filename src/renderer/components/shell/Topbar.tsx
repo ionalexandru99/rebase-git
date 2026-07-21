@@ -1,5 +1,6 @@
 import { Loader2Icon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { formatRelativeTime } from '@/lib/format'
 import type { PushForce } from '@/lib/rpc-client'
 import { cn } from '@/lib/utils'
 import type { PushOutcome } from '@/stores/action-runner'
@@ -17,7 +18,7 @@ interface TopbarProps {
   repoPath: string | null
   activeView: WorkspaceView
   onSelectView: (view: WorkspaceView) => void
-  workspaceContext?: string
+  lastFetchedAt?: number | null
   onFetch?: () => void
   onPull?: () => void
   push?: (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
@@ -27,6 +28,7 @@ interface TopbarProps {
   detached?: boolean
   pulling?: boolean
   pushing?: boolean
+  busy?: boolean
 }
 
 const actionButtonClass =
@@ -36,6 +38,7 @@ const COPY_FEEDBACK_MS = 1100
 
 export function Topbar(props: TopbarProps) {
   const [copied, setCopied] = useState(false)
+  const [relativeTimeNow, setRelativeTimeNow] = useState(Date.now())
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -45,6 +48,28 @@ export function Topbar(props: TopbarProps) {
       }
     }
   }, [])
+
+  useEffect(() => {
+    const fetchedAt = props.lastFetchedAt
+    if (!fetchedAt) {
+      return
+    }
+    const update = () => setRelativeTimeNow(Date.now())
+    update()
+    const elapsed = Math.max(0, Date.now() - fetchedAt)
+    const delay = 60_000 - (elapsed % 60_000)
+    let interval: ReturnType<typeof setInterval> | null = null
+    const timeout = setTimeout(() => {
+      update()
+      interval = setInterval(update, 60_000)
+    }, delay)
+    return () => {
+      clearTimeout(timeout)
+      if (interval !== null) {
+        clearInterval(interval)
+      }
+    }
+  }, [props.lastFetchedAt])
 
   const copyPath = () => {
     const path = props.repoPath
@@ -77,13 +102,18 @@ export function Topbar(props: TopbarProps) {
           </button>
         ) : null}
         <div className="flex-1" />
-        <button type="button" onClick={() => props.onFetch?.()} className={actionButtonClass}>
+        <button
+          type="button"
+          onClick={() => props.onFetch?.()}
+          disabled={props.busy}
+          className={actionButtonClass}
+        >
           Fetch
         </button>
         <button
           type="button"
           onClick={() => props.onPull?.()}
-          disabled={props.pulling}
+          disabled={props.busy || props.pulling}
           className={actionButtonClass}
         >
           {props.pulling ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
@@ -96,6 +126,7 @@ export function Topbar(props: TopbarProps) {
             behind={props.behind ?? 0}
             detached={props.detached ?? false}
             pushing={props.pushing ?? false}
+            disabled={props.busy}
             push={props.push}
           />
         ) : null}
@@ -120,9 +151,9 @@ export function Topbar(props: TopbarProps) {
             </button>
           ))}
         </div>
-        {props.workspaceContext ? (
+        {props.lastFetchedAt ? (
           <span className="min-w-0 truncate text-[13px] text-muted-foreground">
-            {props.workspaceContext}
+            Fetched {formatRelativeTime(props.lastFetchedAt, relativeTimeNow)}
           </span>
         ) : null}
       </div>

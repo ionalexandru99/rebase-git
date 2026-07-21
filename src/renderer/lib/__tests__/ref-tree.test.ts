@@ -45,8 +45,8 @@ describe('ref-tree default section expansion', () => {
 
 describe('ref-tree stashes section', () => {
   const stashes = [
-    { index: 0, ref: 'stash@{0}', message: 'wip', branch: 'main' },
-    { index: 1, ref: 'stash@{1}', message: 'older', branch: 'main' }
+    { index: 0, ref: 'stash@{0}', oid: 'stash-oid-0', message: 'wip', branch: 'main' },
+    { index: 1, ref: 'stash@{1}', oid: 'stash-oid-1', message: 'older', branch: 'main' }
   ]
 
   it('omits the stashes section when there are no stashes', () => {
@@ -140,7 +140,7 @@ describe('ref-tree name filter', () => {
       toggles: new Set<string>(),
       currentBranch: 'main',
       localLoading: false,
-      stashes: [{ index: 0, ref: 'stash@{0}', message: 'wip', branch: 'main' }]
+      stashes: [{ index: 0, ref: 'stash@{0}', oid: 'stash-oid-0', message: 'wip', branch: 'main' }]
     }
     const unfiltered = buildRefTreeRows(options)
     expect(buildRefTreeRows({ ...options, query: '   ' })).toEqual(unfiltered)
@@ -155,8 +155,14 @@ describe('ref-tree name filter', () => {
       currentBranch: 'main',
       localLoading: false,
       stashes: [
-        { index: 0, ref: 'stash@{0}', message: 'main wip', branch: 'main' },
-        { index: 1, ref: 'stash@{1}', message: 'other', branch: 'main' }
+        {
+          index: 0,
+          ref: 'stash@{0}',
+          oid: 'stash-oid-0',
+          message: 'main wip',
+          branch: 'main'
+        },
+        { index: 1, ref: 'stash@{1}', oid: 'stash-oid-1', message: 'other', branch: 'main' }
       ],
       query: 'main'
     })
@@ -285,7 +291,7 @@ describe('ref-tree name filter', () => {
       toggles: new Set(),
       currentBranch: 'main',
       localLoading: false,
-      stashes: [{ index: 0, ref: 'stash@{0}', message: 'wip', branch: 'main' }],
+      stashes: [{ index: 0, ref: 'stash@{0}', oid: 'stash-oid-0', message: 'wip', branch: 'main' }],
       query: 'zzzznomatch'
     })
     expect(rows).toHaveLength(1)

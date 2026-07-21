@@ -12,12 +12,11 @@ export type StatusFileKind =
 
 export type FileStageState = 'staged' | 'partial' | 'unstaged'
 
-// 'worktree' rows are uncommitted changes (stage/unstage); 'head-commit' rows are files already in the
-// commit being amended (kept/dropped) and ride in the same list so the user manages an amend in one place.
 export type FileRowSource = 'worktree' | 'head-commit'
 
 export interface UnifiedFileRow {
   file: string
+  renameSource?: string
   display?: string
   fileKind: StatusFileKind
   stageState: FileStageState
@@ -47,14 +46,13 @@ function kindFromCodes(index: string, workingDir: string): StatusFileKind {
 
 function buildFromCodes(status: GitStatus): UnifiedFileRow[] {
   const conflictedSet = new Set(status.conflicted)
-  const renameDisplay = new Map(
-    status.renamed.map((entry) => [entry.to, `${entry.from} → ${entry.to}`])
-  )
+  const renameByDestination = new Map(status.renamed.map((entry) => [entry.to, entry]))
 
   const rows: UnifiedFileRow[] = []
   for (const entry of status.files ?? []) {
     const conflicted = conflictedSet.has(entry.path)
     const untracked = isUntrackedCode(entry.index, entry.working_dir)
+    const rename = renameByDestination.get(entry.path)
 
     let stageState: FileStageState
     if (conflicted || untracked) {
@@ -73,7 +71,8 @@ function buildFromCodes(status: GitStatus): UnifiedFileRow[] {
 
     rows.push({
       file: entry.path,
-      display: renameDisplay.get(entry.path),
+      renameSource: rename?.from,
+      display: rename ? `${rename.from} → ${rename.to}` : undefined,
       fileKind,
       stageState,
       isConflicted: conflicted,
@@ -104,6 +103,17 @@ function buildFromBuckets(status: GitStatus): UnifiedFileRow[] {
       fileKind: 'conflicted',
       stageState: 'unstaged',
       isConflicted: true,
+      isUntracked: false
+    })
+  }
+  for (const entry of status.renamed) {
+    push({
+      file: entry.to,
+      renameSource: entry.from,
+      display: `${entry.from} → ${entry.to}`,
+      fileKind: 'renamed',
+      stageState: 'staged',
+      isConflicted: false,
       isUntracked: false
     })
   }
@@ -143,16 +153,6 @@ function buildFromBuckets(status: GitStatus): UnifiedFileRow[] {
       isUntracked: false
     })
   }
-  for (const entry of status.renamed) {
-    push({
-      file: entry.to,
-      display: `${entry.from} → ${entry.to}`,
-      fileKind: 'renamed',
-      stageState: 'staged',
-      isConflicted: false,
-      isUntracked: false
-    })
-  }
   for (const file of status.not_added) {
     push({
       file,
@@ -178,13 +178,12 @@ function headFileKind(status: string): StatusFileKind {
   }
 }
 
-// The files already in the commit being amended, as rows for the same list as the working tree. Each is
-// kept by default; `drops` carries which files (or which of their hunks) the user has unchecked to
-// revert to their parent state, surfaced on the row as a kept/partial/dropped checkbox.
 export function buildHeadCommitRows(files: HeadCommitFile[], drops: FileDrops): UnifiedFileRow[] {
   return files
     .map((file) => ({
       file: file.path,
+      renameSource: file.renameSource,
+      display: file.renameSource ? `${file.renameSource} → ${file.path}` : undefined,
       fileKind: headFileKind(file.status),
       stageState: 'staged' as FileStageState,
       isConflicted: false,
@@ -193,6 +192,12 @@ export function buildHeadCommitRows(files: HeadCommitFile[], drops: FileDrops): 
       dropState: dropStateOf(drops, file.path)
     }))
     .sort((left, right) => left.file.localeCompare(right.file))
+}
+
+export function buildStagedFilePaths(rows: readonly UnifiedFileRow[]): string[] {
+  return rows
+    .filter((row) => !row.isConflicted && row.stageState !== 'unstaged')
+    .flatMap((row) => (row.renameSource ? [row.renameSource, row.file] : [row.file]))
 }
 
 let warnedMissingFileCodes = false

@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { Effect } from 'effect'
 import { fetchSemaphoreFor } from './fetch-semaphore'
 import { normalizeRepoPath } from './git/instances'
@@ -6,78 +5,64 @@ import { FetchSkipped, GitError, PushRejected, type RepoNotOpen } from './git-er
 import { requireOpen } from './op-helpers'
 import { withRepoLock } from './repo-lock'
 import { type RepoSessions, RepoSessionsLive, withSessionScope } from './repo-sessions'
-import { capStderr, spawnGit } from './spawn'
+import { runGit, spawnGit, startGit } from './spawn'
 
 type GitCmdResult = { ok: true } | { ok: false; message: string }
 
-const PROMPTLESS_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-
-// `git fetch` forks transport helpers (e.g. ssh/remote-ext) that survive a signal aimed only at the
-// git parent, so the child runs in its own process group and the finalizer signals the whole group.
-function killFetchGroup(child: ReturnType<typeof spawn>): void {
-  if (child.killed || child.pid === undefined) {
-    return
-  }
-  try {
-    process.kill(-child.pid, 'SIGTERM')
-  } catch {
-    child.kill()
-  }
-}
+const promptlessEnv = (): NodeJS.ProcessEnv => ({
+  ...process.env,
+  GIT_TERMINAL_PROMPT: '0',
+  LC_ALL: 'C'
+})
 
 function runFetch(key: string): Effect.Effect<GitCmdResult, never, RepoSessions> {
   return withSessionScope(
     key,
     Effect.gen(function* () {
-      const child = yield* Effect.acquireRelease(
+      const running = yield* Effect.acquireRelease(
         Effect.sync(() =>
-          spawn('git', ['-c', 'fetch.writeCommitGraph=true', '-C', key, 'fetch', '--prune'], {
-            stdio: ['ignore', 'ignore', 'pipe'],
-            detached: true,
-            env: PROMPTLESS_ENV
+          startGit(['-c', 'fetch.writeCommitGraph=true', '-C', key, 'fetch', '--prune'], {
+            collectStdout: false,
+            env: promptlessEnv()
           })
         ),
-        (proc) => Effect.sync(() => killFetchGroup(proc))
+        (process) => Effect.promise(() => process.terminate()).pipe(Effect.orDie)
       )
-      return yield* Effect.async<GitCmdResult>((resume) => {
-        let stderr = ''
-        child.stderr?.setEncoding('utf8')
-        child.stderr?.on('data', (chunk: string) => {
-          stderr = capStderr(stderr + chunk)
-        })
-        child.on('error', (error: Error) => {
-          resume(Effect.succeed({ ok: false, message: error.message }))
-        })
-        child.on('close', (code) => {
-          resume(
-            Effect.succeed(
-              code === 0
-                ? { ok: true }
-                : { ok: false, message: stderr.trim() || `git fetch exited with code ${code}` }
-            )
-          )
-        })
-      })
+      return yield* Effect.promise(() => running.result).pipe(
+        Effect.map(
+          ({ code, stderr }): GitCmdResult =>
+            code === 0
+              ? { ok: true }
+              : { ok: false, message: stderr.trim() || `git fetch exited with code ${code}` }
+        ),
+        Effect.catchAll((error: Error) =>
+          Effect.succeed({ ok: false as const, message: error.message })
+        )
+      )
     })
   )
 }
 
 function runGitCommand(key: string, args: string[]): Promise<GitCmdResult> {
   return spawnGit(['-C', key, ...args], {
-    env: PROMPTLESS_ENV,
-    collectStdout: false
+    env: promptlessEnv()
   }).then<GitCmdResult, GitCmdResult>(
-    ({ code, stderr }) =>
+    ({ code, stdout, stderr }) =>
       code === 0
         ? { ok: true }
-        : { ok: false, message: stderr.trim() || `git ${args[0]} exited with code ${code}` },
+        : {
+            ok: false,
+            message:
+              [stderr.trim(), stdout.trim()].filter(Boolean).join('\n') ||
+              `git ${args[0]} exited with code ${code}`
+          },
     (error: Error) => ({ ok: false, message: error.message })
   )
 }
 
 function runGitStdout(key: string, args: string[]): Promise<string | null> {
-  return spawnGit(['-C', key, ...args], { env: PROMPTLESS_ENV }).then(
-    ({ code, stdout }) => (code === 0 ? stdout.trim() : null),
+  return runGit(['-C', key, ...args], { env: promptlessEnv() }).then(
+    (stdout) => stdout.trim(),
     () => null
   )
 }
@@ -105,10 +90,11 @@ async function resolveRemoteTrackingRef(key: string): Promise<string | null> {
 // refreshed remote tip and the commits it carries that HEAD lacks — exactly what the user would lose
 // and the sha a deliberate overwrite must be pinned to.
 async function fetchAndPreviewLoss(
-  key: string
+  key: string,
+  upstream: Upstream
 ): Promise<{ lostCommits: { sha: string; subject: string }[]; remoteSha?: string }> {
   return fetchSemaphoreFor(key).withPermits(async () => {
-    await runGitCommand(key, ['fetch', '--prune', 'origin'])
+    await runGitCommand(key, ['fetch', '--prune', upstream.remote])
     const remoteRef = await resolveRemoteTrackingRef(key)
     if (remoteRef === null) {
       return { lostCommits: [] }
@@ -164,7 +150,7 @@ function classifyRejection(stderr: string): RejectionReason | null {
   if (stderr.includes('(remote ref updated since checkout)')) {
     return 'remote-moved'
   }
-  if (stderr.includes('(fetch first)')) {
+  if (stderr.includes('(fetch first)') || stderr.includes('(non-fast-forward)')) {
     return 'non-fast-forward'
   }
   return null
@@ -197,23 +183,29 @@ function buildPushArgs(
   upstream: Upstream,
   expectedRemoteSha: string | undefined
 ): string[] {
+  const remoteRef = `refs/heads/${upstream.remoteRef}`
   // Tier 2: a lease pinned to the exact tip the user was shown — no --force-if-includes, since the
   // whole point is to discard a remote commit the user deliberately did not integrate.
   if (force === 'overwrite') {
-    const args = ['push', `--force-with-lease=${upstream.remoteRef}:${expectedRemoteSha ?? ''}`]
+    const args = [
+      'push',
+      '--porcelain',
+      `--force-with-lease=${remoteRef}:${expectedRemoteSha ?? ''}`
+    ]
     if (!upstream.hasUpstream) {
       args.push('--set-upstream')
     }
-    args.push(upstream.remote, `HEAD:${upstream.remoteRef}`)
+    args.push(upstream.remote, `HEAD:${remoteRef}`)
     return args
   }
-  const args = ['push']
+  const args = ['push', '--porcelain']
   if (force === 'with-lease') {
-    args.push('--force-with-lease', '--force-if-includes')
+    args.push(`--force-with-lease=${remoteRef}`, '--force-if-includes')
   }
   if (!upstream.hasUpstream) {
-    args.push('--set-upstream', upstream.remote, 'HEAD')
+    args.push('--set-upstream')
   }
+  args.push(upstream.remote, `HEAD:${remoteRef}`)
   return args
 }
 
@@ -225,6 +217,11 @@ export function pushRepo(
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
+    if (force === 'overwrite' && expectedRemoteSha === undefined) {
+      return yield* Effect.fail(
+        new GitError({ message: 'overwrite requires an expected remote SHA' })
+      )
+    }
     yield* withRepoLock(
       key,
       Effect.gen(function* () {
@@ -244,7 +241,7 @@ export function pushRepo(
         if (reason === 'non-fast-forward') {
           return yield* Effect.fail(new PushRejected({ reason, lostCommits: [] }))
         }
-        const preview = yield* Effect.promise(() => fetchAndPreviewLoss(key))
+        const preview = yield* Effect.promise(() => fetchAndPreviewLoss(key, upstream))
         return yield* Effect.fail(
           new PushRejected({
             reason,
@@ -252,8 +249,7 @@ export function pushRepo(
             remoteSha: preview.remoteSha
           })
         )
-      }),
-      { timeoutMs: null }
+      })
     )
   })
 }
@@ -275,8 +271,7 @@ export function pullRepo(
         Effect.flatMap((result) =>
           result.ok ? Effect.void : Effect.fail(new GitError({ message: result.message }))
         )
-      ),
-      { timeoutMs: null }
+      )
     )
   })
 }

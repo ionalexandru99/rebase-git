@@ -1,6 +1,7 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+import { usePortalContainer } from './portal-container'
 
 export interface PromptRequest {
   title: string
@@ -22,6 +23,7 @@ export interface ConfirmRequest {
 }
 
 function Overlay(props: { onDismiss: () => void; children: ReactNode }) {
+  const portalContainer = usePortalContainer()
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -49,7 +51,7 @@ function Overlay(props: { onDismiss: () => void; children: ReactNode }) {
         {props.children}
       </div>
     </div>,
-    document.body
+    portalContainer
   )
 }
 
@@ -165,16 +167,19 @@ export function ConfirmDialog(props: { request: ConfirmRequest | null; onClose: 
 export function useDialogs() {
   const [promptRequest, setPromptRequest] = useState<PromptRequest | null>(null)
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null)
-  const dialogs: ReactNode = (
-    <>
-      <PromptDialog request={promptRequest} onClose={() => setPromptRequest(null)} />
-      <ConfirmDialog request={confirmRequest} onClose={() => setConfirmRequest(null)} />
-    </>
+  const closePrompt = useCallback(() => setPromptRequest(null), [])
+  const closeConfirm = useCallback(() => setConfirmRequest(null), [])
+  const prompt = useCallback((request: PromptRequest) => setPromptRequest(request), [])
+  const confirm = useCallback((request: ConfirmRequest) => setConfirmRequest(request), [])
+  const dialogs = useMemo<ReactNode>(
+    () => (
+      <>
+        <PromptDialog request={promptRequest} onClose={closePrompt} />
+        <ConfirmDialog request={confirmRequest} onClose={closeConfirm} />
+      </>
+    ),
+    [promptRequest, confirmRequest, closePrompt, closeConfirm]
   )
 
-  return {
-    prompt: (request: PromptRequest) => setPromptRequest(request),
-    confirm: (request: ConfirmRequest) => setConfirmRequest(request),
-    dialogs
-  }
+  return useMemo(() => ({ prompt, confirm, dialogs }), [prompt, confirm, dialogs])
 }

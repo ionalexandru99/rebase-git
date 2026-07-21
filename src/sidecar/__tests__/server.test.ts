@@ -1,13 +1,14 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import type { AddressInfo } from 'node:net'
+import { createConnection } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { FetchHttpClient, HttpClient, HttpClientRequest } from '@effect/platform'
 import { RpcClient, RpcSerialization } from '@effect/rpc'
 import { RepoNotOpen } from '@shared/git-rpc-errors'
 import { SidecarRpcs } from '@shared/rpc'
-import { Effect, Either, Layer } from 'effect'
+import { Effect, Either, Fiber, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createSidecarServer } from '../server'
 
@@ -16,7 +17,7 @@ let baseUrl: string
 let repoPath: string
 let server: ReturnType<typeof createSidecarServer>
 
-function git(cwd: string, args: string[]): void {
+function git(cwd: string, args: string[]): string {
   const commandArgs =
     args[0] === 'commit'
       ? [
@@ -29,7 +30,11 @@ function git(cwd: string, args: string[]): void {
           ...args.slice(1)
         ]
       : args
-  execFileSync('git', commandArgs, { cwd, stdio: 'ignore' })
+  return execFileSync('git', commandArgs, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore']
+  })
 }
 
 async function call(op: string, body: Record<string, unknown>, token = TOKEN): Promise<Response> {
@@ -37,6 +42,26 @@ async function call(op: string, body: Record<string, unknown>, token = TOKEN): P
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify(body)
+  })
+}
+
+function rawRequest(target: string, authorization?: string): Promise<string> {
+  const { hostname, port } = new URL(baseUrl)
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    const socket = createConnection(Number(port), hostname, () => {
+      const authHeader = authorization ? `Authorization: ${authorization}\r\n` : ''
+      socket.write(
+        `GET ${target} HTTP/1.1\r\nHost: ${hostname}:${port}\r\n${authHeader}Connection: close\r\n\r\n`
+      )
+    })
+    socket.setTimeout(1000, () => {
+      socket.destroy()
+      reject(new Error('raw request timed out'))
+    })
+    socket.on('data', (chunk) => chunks.push(chunk))
+    socket.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    socket.on('error', reject)
   })
 }
 
@@ -112,24 +137,6 @@ function rpcGetStatus(repoPath: string) {
   )
 }
 
-function rpcGetLog(repoPath: string) {
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const client = yield* RpcClient.make(SidecarRpcs)
-      return yield* Effect.either(client.getLog({ repoPath }))
-    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
-  )
-}
-
-function rpcGetBranches(repoPath: string) {
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const client = yield* RpcClient.make(SidecarRpcs)
-      return yield* Effect.either(client.getBranches({ repoPath }))
-    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
-  )
-}
-
 function rpcGetLocalBranches(repoPath: string) {
   return Effect.runPromise(
     Effect.gen(function* () {
@@ -194,6 +201,19 @@ describe('sidecar server', () => {
     expect(response.status).toBe(401)
   })
 
+  it('authenticates before parsing a malformed request target and remains healthy', async () => {
+    const unauthorized = await rawRequest('http://[')
+    expect(unauthorized).toContain('HTTP/1.1 401 Unauthorized')
+
+    const malformed = await rawRequest('http://[', `Bearer ${TOKEN}`)
+    expect(malformed).toContain('HTTP/1.1 400 Bad Request')
+
+    const health = await fetch(`${baseUrl}/health`, {
+      headers: { authorization: `Bearer ${TOKEN}` }
+    })
+    expect(health.status).toBe(200)
+  })
+
   it('rejects rpc requests without a valid token', async () => {
     const response = await fetch(`${baseUrl}/rpc`, {
       method: 'POST',
@@ -222,7 +242,53 @@ describe('sidecar server', () => {
     }
   })
 
-  it('stages (via /rpc), commits (via /rpc), and reflects in the log', async () => {
+  it('terminates a nonlocked SimpleGit read when its RPC request is cancelled', async () => {
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-read-cancel-'))
+    const pidFile = path.join(fakeBin, 'pid')
+    const gitPath = path.join(fakeBin, 'git')
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
+    const previousPath = process.env.PATH
+    const previousPidFile = process.env.REBASE_TEST_PID_FILE
+    let childPid: number | undefined
+    fs.writeFileSync(
+      gitPath,
+      `#!/bin/sh\nif [ "$1" = "status" ]; then\n  printf '%s\\n' "$$" > "$REBASE_TEST_PID_FILE"\n  trap 'exit 0' TERM INT\n  while true; do /bin/sleep 1; done\nfi\nexec "${realGit}" "$@"\n`
+    )
+    fs.chmodSync(gitPath, 0o755)
+    process.env.PATH = `${fakeBin}:${previousPath ?? ''}`
+    process.env.REBASE_TEST_PID_FILE = pidFile
+
+    try {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const client = yield* RpcClient.make(SidecarRpcs)
+          const request = yield* Effect.fork(client.getStatus({ repoPath }))
+          yield* Effect.promise(() => waitUntil(() => fs.existsSync(pidFile)))
+          childPid = Number(fs.readFileSync(pidFile, 'utf8').trim())
+          yield* Fiber.interrupt(request)
+        }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+      )
+
+      await waitUntil(() => childPid !== undefined && !processRunning(childPid))
+    } finally {
+      process.env.PATH = previousPath
+      if (previousPidFile === undefined) {
+        delete process.env.REBASE_TEST_PID_FILE
+      } else {
+        process.env.REBASE_TEST_PID_FILE = previousPidFile
+      }
+      if (childPid !== undefined && processRunning(childPid)) {
+        try {
+          process.kill(-childPid, 'SIGKILL')
+        } catch {
+          process.kill(childPid, 'SIGKILL')
+        }
+      }
+      fs.rmSync(fakeBin, { recursive: true, force: true })
+    }
+  })
+
+  it('stages and commits through /rpc', async () => {
     const staged = await rpcStageFile(repoPath, 'new.txt')
     expect(Either.isRight(staged)).toBe(true)
 
@@ -232,11 +298,7 @@ describe('sidecar server', () => {
       expect(committed.right.result.commit).toBeTruthy()
     }
 
-    const log = await rpcGetLog(repoPath)
-    expect(Either.isRight(log)).toBe(true)
-    if (Either.isRight(log)) {
-      expect(log.right.log.all[0].message).toBe('add new.txt')
-    }
+    expect(git(repoPath, ['log', '-1', '--format=%s']).trim()).toBe('add new.txt')
   })
 
   it('stages and unstages many files in one call', async () => {
@@ -282,51 +344,53 @@ describe('sidecar server', () => {
     fs.rmSync(other, { recursive: true, force: true })
   })
 
-  it('pushes a commit to its upstream and pulls it into another clone', async () => {
-    const remote = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-remote-'))
-    execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
+  describe('push and pull', () => {
+    let remote: string
+    let clone: string
+    let downstream: string
 
-    const clone = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-clone-'))
-    execFileSync('git', ['clone', remote, clone], { stdio: 'ignore' })
-    git(clone, ['config', 'user.email', 'test@example.com'])
-    git(clone, ['config', 'user.name', 'Test'])
-    fs.writeFileSync(path.join(clone, 'a.txt'), 'a\n')
-    git(clone, ['add', '.'])
-    git(clone, ['commit', '-m', 'first'])
-    git(clone, ['push', '-u', 'origin', 'main'])
+    beforeAll(async () => {
+      remote = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-remote-'))
+      execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
 
-    const downstream = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-downstream-'))
-    execFileSync('git', ['clone', remote, downstream], { stdio: 'ignore' })
+      clone = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-clone-'))
+      execFileSync('git', ['clone', remote, clone], { stdio: 'ignore' })
+      git(clone, ['config', 'user.email', 'test@example.com'])
+      git(clone, ['config', 'user.name', 'Test'])
+      fs.writeFileSync(path.join(clone, 'a.txt'), 'a\n')
+      git(clone, ['add', '.'])
+      git(clone, ['commit', '-m', 'first'])
+      git(clone, ['push', '-u', 'origin', 'main'])
 
-    fs.writeFileSync(path.join(clone, 'b.txt'), 'b\n')
-    git(clone, ['add', '.'])
-    git(clone, ['commit', '-m', 'second'])
-    await rpcOpenRepo(clone)
-    const pushed = await rpcPush(clone)
-    expect(Either.isRight(pushed)).toBe(true)
+      downstream = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-downstream-'))
+      execFileSync('git', ['clone', remote, downstream], { stdio: 'ignore' })
 
-    await rpcOpenRepo(downstream)
-    const pulled = await rpcPull(downstream)
-    expect(Either.isRight(pulled)).toBe(true)
+      fs.writeFileSync(path.join(clone, 'b.txt'), 'b\n')
+      git(clone, ['add', '.'])
+      git(clone, ['commit', '-m', 'second'])
+      await rpcOpenRepo(clone)
+      await rpcOpenRepo(downstream)
+    })
 
-    const log = await rpcGetLog(downstream)
-    expect(Either.isRight(log)).toBe(true)
-    if (Either.isRight(log)) {
-      expect(log.right.log.all[0].message).toBe('second')
-    }
+    afterAll(() => {
+      for (const dir of [remote, clone, downstream]) {
+        fs.rmSync(dir, { recursive: true, force: true })
+      }
+    })
 
-    for (const dir of [remote, clone, downstream]) {
-      fs.rmSync(dir, { recursive: true, force: true })
-    }
-  }, 10_000)
+    it('pushes a commit to its upstream and pulls it into another clone', async () => {
+      const pushed = await rpcPush(clone)
+      expect(Either.isRight(pushed)).toBe(true)
 
-  it('lists branches', async () => {
-    const branches = await rpcGetBranches(repoPath)
-    expect(Either.isRight(branches)).toBe(true)
-    if (Either.isRight(branches)) {
-      expect(branches.right.branches.current).toBe('main')
-      expect(branches.right.branches.all).toContain('main')
-    }
+      const pulled = await rpcPull(downstream)
+      expect(Either.isRight(pulled)).toBe(true)
+
+      const subject = execFileSync('git', ['log', '-1', '--format=%s'], {
+        cwd: downstream,
+        encoding: 'utf8'
+      })
+      expect(subject.trim()).toBe('second')
+    }, 5_000)
   })
 
   it('lists local branches separately', async () => {
@@ -395,3 +459,23 @@ describe('sidecar server', () => {
     expect(response.headers.get('access-control-allow-origin')).toBeNull()
   })
 })
+
+function processRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error('condition timed out')
+}

@@ -114,7 +114,7 @@ export function buildHunksPatch(
   }
   const wanted = new Set(hunkHeaders)
   const hunks = parsed.hunks.filter((hunk) => wanted.has(hunk.header))
-  if (hunks.length === 0) {
+  if (hunks.length !== wanted.size) {
     return null
   }
   return parsed.rawHeader + hunks.map((hunk) => hunk.raw).join('')

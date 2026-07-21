@@ -16,11 +16,15 @@ export async function workingTreeHasConflicts(git: RawGit): Promise<boolean> {
 export function runWithConflictDetection(
   repoPath: string,
   git: RawGit,
-  args: string[]
+  args: string[],
+  before?: () => Promise<void>
 ): Effect.Effect<void, GitError | Conflict> {
   return withRepoLock(
     repoPath,
     Effect.gen(function* () {
+      if (before) {
+        yield* tryGit(before)
+      }
       const failure = yield* Effect.promise(() =>
         git.raw(args).then(
           () => null as string | null,

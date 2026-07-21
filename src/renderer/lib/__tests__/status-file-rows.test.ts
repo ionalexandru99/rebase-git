@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildHeadCommitRows,
+  buildStagedFilePaths,
   buildUnifiedFileRows,
   type StatusFileKind
 } from '@/lib/status-file-rows'
@@ -99,6 +100,7 @@ describe('buildUnifiedFileRows (porcelain codes)', () => {
       })
     )
     expect(rows[0].display).toBe('old.ts → new.ts')
+    expect(rows[0].renameSource).toBe('old.ts')
     expect(rows[0].fileKind).toBe('renamed')
   })
 })
@@ -110,7 +112,7 @@ describe('buildHeadCommitRows', () => {
         { status: 'A', path: 'added.ts' },
         { status: 'M', path: 'mod.ts' },
         { status: 'D', path: 'gone.ts' },
-        { status: 'R100', path: 'renamed.ts' }
+        { status: 'R100', path: 'renamed.ts', renameSource: 'original.ts' }
       ],
       new Map<string, 'all' | ReadonlySet<string>>([
         ['mod.ts', 'all'],
@@ -134,12 +136,29 @@ describe('buildHeadCommitRows', () => {
       fileKind: 'deleted',
       dropState: 'partial'
     })
-    expect(byFile['renamed.ts']).toMatchObject({ source: 'head-commit', fileKind: 'renamed' })
+    expect(byFile['renamed.ts']).toMatchObject({
+      source: 'head-commit',
+      fileKind: 'renamed',
+      renameSource: 'original.ts'
+    })
   })
 
   it('tags working-tree rows with the worktree source', () => {
     const rows = buildUnifiedFileRows(status({ files: [code('a.ts', 'M', ' ')] }))
     expect(rows[0].source).toBe('worktree')
+  })
+})
+
+describe('buildStagedFilePaths', () => {
+  it('includes both structured paths of a staged rename', () => {
+    const rows = buildUnifiedFileRows(
+      status({
+        renamed: [{ from: 'old [source].ts', to: 'new *.ts' }],
+        files: [code('new *.ts', 'R', ' ')]
+      })
+    )
+
+    expect(buildStagedFilePaths(rows)).toEqual(['old [source].ts', 'new *.ts'])
   })
 })
 
@@ -157,5 +176,22 @@ describe('buildUnifiedFileRows (bucket fallback)', () => {
     expect(byFile['b.ts'].stageState).toBe('unstaged')
     expect(byFile['c.ts'].stageState).toBe('unstaged')
     expect(byFile['c.ts'].isUntracked).toBe(true)
+  })
+
+  it('keeps rename source identity when the destination is also in staged', () => {
+    const rows = buildUnifiedFileRows(
+      status({
+        staged: ['new.ts'],
+        renamed: [{ from: 'old.ts', to: 'new.ts' }]
+      })
+    )
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      file: 'new.ts',
+      renameSource: 'old.ts',
+      display: 'old.ts → new.ts',
+      fileKind: 'renamed'
+    })
   })
 })

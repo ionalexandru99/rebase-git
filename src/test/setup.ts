@@ -1,26 +1,42 @@
 import '@testing-library/jest-dom/vitest'
-import type { GitBranches } from '@shared/schemas/git'
 import type {
-  BranchesResponse,
-  CommitResponse,
-  GetDiffResponse,
-  LocalBranchesResponse,
-  LogResponse,
-  RemoteRefsResponse,
-  StageHunkResponse,
-  StageResponse,
-  StashListResponse,
-  StatusResponse,
-  UnstageResponse
-} from '@shared/schemas/ipc'
-import { cleanup } from '@testing-library/react'
+  Commit,
+  Fetch,
+  GetDiff,
+  GetLocalBranches,
+  GetRemoteRefs,
+  GetStatus,
+  StageFile,
+  StageHunk,
+  StashList
+} from '@shared/rpc'
+import type { RpcEncodedResult } from '@shared/rpc-result'
+import type { GitBranches } from '@shared/schemas/git'
+import { act, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 
-type VoidWriteWire =
-  | { _tag: 'Ok' }
-  | { _tag: 'RepoNotOpen' }
-  | { _tag: 'GitError'; message: string }
-type FetchWire = VoidWriteWire | { _tag: 'FetchSkipped' }
+type StatusResponse = RpcEncodedResult<typeof GetStatus.successSchema, typeof GetStatus.errorSchema>
+type LocalBranchesResponse = RpcEncodedResult<
+  typeof GetLocalBranches.successSchema,
+  typeof GetLocalBranches.errorSchema
+>
+type RemoteRefsResponse = RpcEncodedResult<
+  typeof GetRemoteRefs.successSchema,
+  typeof GetRemoteRefs.errorSchema
+>
+type StageResponse = RpcEncodedResult<typeof StageFile.successSchema, typeof StageFile.errorSchema>
+type CommitResponse = RpcEncodedResult<typeof Commit.successSchema, typeof Commit.errorSchema>
+type GetDiffResponse = RpcEncodedResult<typeof GetDiff.successSchema, typeof GetDiff.errorSchema>
+type StageHunkResponse = RpcEncodedResult<
+  typeof StageHunk.successSchema,
+  typeof StageHunk.errorSchema
+>
+type StashListResponse = RpcEncodedResult<
+  typeof StashList.successSchema,
+  typeof StashList.errorSchema
+>
+type VoidWriteWire = StageResponse
+type FetchWire = RpcEncodedResult<typeof Fetch.successSchema, typeof Fetch.errorSchema>
 
 const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown | Promise<unknown>>()
 
@@ -29,12 +45,11 @@ export const sidecarMock = {
     opHandlers.set(op, handler)
   },
   getStatus: vi.fn<(repoPath: string) => Promise<StatusResponse>>(),
-  getBranches: vi.fn<(repoPath: string) => Promise<BranchesResponse>>(),
   getLocalBranches: vi.fn<(repoPath: string) => Promise<LocalBranchesResponse>>(),
   getRemoteRefs: vi.fn<(repoPath: string) => Promise<RemoteRefsResponse>>(),
-  getLog: vi.fn<(repoPath: string) => Promise<LogResponse>>(),
   stageFile: vi.fn<(repoPath: string, file: string) => Promise<StageResponse>>(),
-  unstageFile: vi.fn<(repoPath: string, file: string) => Promise<UnstageResponse>>(),
+  unstageFile:
+    vi.fn<(repoPath: string, file: string, renameSource?: string) => Promise<StageResponse>>(),
   commit: vi.fn<(repoPath: string, message: string) => Promise<CommitResponse>>(),
   fetchRepo: vi.fn<(repoPath: string) => Promise<FetchWire>>(),
   pushRepo: vi.fn<(repoPath: string) => Promise<VoidWriteWire>>(),
@@ -100,6 +115,7 @@ const mockElectronAPI = {
   selectFolder: vi.fn(),
   openRepo: vi.fn(),
   closeRepo: vi.fn(),
+  disownRepo: vi.fn(),
   startLogStream: vi.fn(),
   cancelLogStream: vi.fn(),
   onLogChunk: vi.fn(),
@@ -162,14 +178,18 @@ export function setupLogStream(): LogStreamHandle {
   vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
   return {
     fire: (chunk) => {
-      for (const callback of listeners.slice()) {
-        callback({ done: false, ...chunk })
-      }
+      act(() => {
+        for (const callback of listeners.slice()) {
+          callback({ done: false, ...chunk })
+        }
+      })
     },
     fireDone: (repoPath, hasMore) => {
-      for (const callback of listeners.slice()) {
-        callback({ repoPath, commits: [], done: true, hasMore })
-      }
+      act(() => {
+        for (const callback of listeners.slice()) {
+          callback({ repoPath, commits: [], done: true, hasMore })
+        }
+      })
     }
   }
 }
@@ -191,9 +211,11 @@ export function setupRepoChanged(): RepoChangedHandle {
   })
   return {
     fire: (evt) => {
-      for (const callback of listeners.slice()) {
-        callback(evt)
-      }
+      act(() => {
+        for (const callback of listeners.slice()) {
+          callback(evt)
+        }
+      })
     }
   }
 }
@@ -216,16 +238,6 @@ export function mockBranchResponses(
     _tag: 'Ok',
     refs: { remotes, tags }
   })
-  vi.mocked(sidecarMock.getBranches).mockResolvedValue({
-    _tag: 'Ok',
-    branches: {
-      current: branches.current,
-      all: branches.all,
-      remotes,
-      tags,
-      tracking: branches.tracking
-    }
-  })
 }
 
 beforeEach(() => {
@@ -245,14 +257,10 @@ beforeEach(() => {
         return sidecarMock.commit(repoPath, body.message as string)
       case 'getStatus':
         return sidecarMock.getStatus(repoPath)
-      case 'getBranches':
-        return sidecarMock.getBranches(repoPath)
       case 'getLocalBranches':
         return sidecarMock.getLocalBranches(repoPath)
       case 'getRemoteRefs':
         return sidecarMock.getRemoteRefs(repoPath)
-      case 'getLog':
-        return sidecarMock.getLog(repoPath)
       case 'getDiff':
         return sidecarMock.getDiff(repoPath, body.file as string, body.staged === true)
       case 'stashList':
@@ -260,7 +268,9 @@ beforeEach(() => {
       case 'stageFile':
         return sidecarMock.stageFile(repoPath, body.file as string)
       case 'unstageFile':
-        return sidecarMock.unstageFile(repoPath, body.file as string)
+        return typeof body.renameSource === 'string'
+          ? sidecarMock.unstageFile(repoPath, body.file as string, body.renameSource)
+          : sidecarMock.unstageFile(repoPath, body.file as string)
       case 'stageHunk':
         return sidecarMock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
       case 'unstageHunk':
@@ -283,6 +293,7 @@ beforeEach(() => {
     }
   })
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.disownRepo).mockResolvedValue(undefined)
   sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })
   sidecarMock.checkout.mockResolvedValue({ _tag: 'Ok', checkedOut: 'main' })
   sidecarMock.fetchRepo.mockResolvedValue({ _tag: 'Ok' })

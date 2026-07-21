@@ -191,6 +191,7 @@ describe('RefTreeRow stash', () => {
     refKind: 'stash',
     index: 1,
     ref: 'stash@{1}',
+    oid: 'stash-oid-1',
     message: 'wip on main',
     branch: 'main'
   }
@@ -216,7 +217,7 @@ describe('RefTreeRow stash', () => {
   it('applies the stash on double-click', () => {
     const onStashAction = renderStash()
     fireEvent.dblClick(screen.getByText('wip on main'))
-    expect(onStashAction).toHaveBeenCalledWith('apply', 1)
+    expect(onStashAction).toHaveBeenCalledWith('apply', 1, 'stash-oid-1')
   })
 
   it.each<[string, string]>([
@@ -227,6 +228,6 @@ describe('RefTreeRow stash', () => {
     const onStashAction = renderStash()
     fireEvent.contextMenu(screen.getByText('wip on main'))
     fireEvent.click(await screen.findByRole('menuitem', { name: label }))
-    expect(onStashAction).toHaveBeenCalledWith(action, 1)
+    expect(onStashAction).toHaveBeenCalledWith(action, 1, 'stash-oid-1')
   })
 })

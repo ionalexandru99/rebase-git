@@ -19,7 +19,7 @@ import {
 import type { CommitAction, FileAction } from './lib/git-actions'
 import { buildHeadCommitRange } from './lib/head-commit-range'
 import type { RefKind } from './lib/ref-tree'
-import { buildHeadCommitRows, buildUnifiedFileRows } from './lib/status-file-rows'
+import { buildHeadCommitRows, buildStagedFilePaths } from './lib/status-file-rows'
 import {
   useActionRunner,
   useCommitHistory,
@@ -56,6 +56,7 @@ interface WorkspaceViewProps {
   remoteBranches: string[]
   visibleBranchRefs: ReadonlySet<string>
   filteredCommits: GitLogEntry[]
+  displayedCommitSet: ReadonlySet<string>
   expandedMerges: ReadonlySet<string>
   filter: string
   onFilterChange: (value: string) => void
@@ -67,11 +68,11 @@ interface WorkspaceViewProps {
 }
 
 function LocalChangesView(props: WorkspaceViewProps) {
-  const { status, stageFile, unstageFile } = useWorkingTreeStatus()
-  const { commit, committing, amend, amending, loadHeadMessage } = useActionRunner()
+  const { status, rows, statusState, stageFile, unstageFile } = useWorkingTreeStatus()
+  const { commit, amend, loadHeadMessage, busy } = useActionRunner()
   const { opening } = useRepoSession()
   const history = useCommitHistory()
-  const loading = opening || committing || amending
+  const loading = opening || busy
   const { actions, prompt, confirm } = useWorkspaceContext()
   const [selected, setSelected] = useState<SelectedFile | null>(null)
   const [amendActive, setAmendActive] = useState(false)
@@ -79,12 +80,14 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const headCommit = useHeadCommit(amendActive)
   const headFiles = headCommit.data?.files ?? []
   const headParentCount = headCommit.data?.parentCount ?? 0
-  // A merge commit (parentCount > 1) stays reword-only, so it contributes no droppable rows.
   const amendRows = useMemo(
     () => (amendActive && headParentCount <= 1 ? buildHeadCommitRows(headFiles, drops) : []),
     [amendActive, headParentCount, headFiles, drops]
   )
-  const { droppedHeadPaths, droppedHeadHunks } = useMemo(() => assembleDrops(drops), [drops])
+  const { droppedHeadPaths, droppedHeadHunks } = useMemo(
+    () => assembleDrops(drops, amendRows),
+    [amendRows, drops]
+  )
 
   const promptStash = (title: string, run: (message?: string) => Promise<boolean>) => {
     prompt({
@@ -108,13 +111,13 @@ function LocalChangesView(props: WorkspaceViewProps) {
     promptStash('Stash all changes', (message) => actions.stashPush(message, true))
   }
 
-  const handleFileAction = (action: FileAction, file: string) => {
+  const handleFileAction = (action: FileAction, file: string, renameSource?: string) => {
     switch (action) {
       case 'stage':
         void stageFile(file)
         return
       case 'unstage':
-        void unstageFile(file)
+        void unstageFile(file, renameSource)
         return
       case 'discard':
         confirm({
@@ -122,7 +125,11 @@ function LocalChangesView(props: WorkspaceViewProps) {
           message: 'Local edits to this file are lost. Untracked files are deleted.',
           confirmText: 'Discard',
           destructive: true,
-          onConfirm: () => void actions.discardChanges([file], `Discarded ${file}`)
+          onConfirm: () =>
+            void actions.discardChanges(
+              renameSource ? [renameSource, file] : [file],
+              `Discarded ${file}`
+            )
         })
         return
       case 'copy-path':
@@ -151,45 +158,22 @@ function LocalChangesView(props: WorkspaceViewProps) {
     save: saveFilesPanelWidth
   })
 
-  const totalChanges = useMemo(() => {
-    if (!status) {
-      return 0
-    }
-    return (
-      status.modified.length +
-      status.staged.length +
-      status.not_added.length +
-      status.conflicted.length +
-      status.deleted.length +
-      status.created.length +
-      status.renamed.length
-    )
-  }, [status])
-  const stagedCount = (status?.staged.length ?? 0) + (status?.created.length ?? 0)
-  // Amend rewrites HEAD, so it needs a commit to rewrite and a non-conflicted tree to fold in; a
-  // detached HEAD still has a commit, so it stays available.
-  const amendAvailable = (history.log?.total ?? 0) > 0
-  const amendDisabled = (status?.conflicted.length ?? 0) > 0
+  const totalChanges = rows.length
+  const stagedCount = rows.filter((row) => row.stageState !== 'unstaged').length
+  const hasHeadCommit = (history.log?.all.length ?? 0) > 0
+  const headAvailabilityLoading = history.logLoading && !hasHeadCommit
+  const amendAvailable = hasHeadCommit || headAvailabilityLoading
+  const amendDisabled = headAvailabilityLoading || (status?.conflicted.length ?? 0) > 0
 
-  const fileEntries = useMemo<SelectedFile[]>(() => {
-    if (!status) {
-      return []
-    }
-    return buildUnifiedFileRows(status).map((row) => ({ file: row.file }))
-  }, [status])
+  const fileEntries = useMemo<SelectedFile[]>(
+    () => rows.map((row) => ({ file: row.file, renameSource: row.renameSource })),
+    [rows]
+  )
 
-  const stagedFiles = useMemo<string[]>(() => {
-    if (!status) {
-      return []
-    }
-    return buildUnifiedFileRows(status)
-      .filter((row) => !row.isConflicted && row.stageState !== 'unstaged')
-      .map((row) => row.file)
-  }, [status])
+  const stagedFiles = useMemo(() => buildStagedFilePaths(rows), [rows])
 
   useEffect(() => {
     const current = selected
-    // A head-commit selection lives outside the working-tree file list — don't reset it to a worktree row.
     if (current?.source === 'head-commit') {
       return
     }
@@ -202,8 +186,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const handleAmendChange = (active: boolean) => {
     setAmendActive(active)
     if (!active) {
-      // Leaving amend (un-tick or a landed amend) discards the drop selection so the next session
-      // starts with every file kept.
       setDrops(new Map())
       setSelected((current) =>
         current?.source === 'head-commit' ? (fileEntries[0] ?? null) : current
@@ -219,8 +201,17 @@ function LocalChangesView(props: WorkspaceViewProps) {
     setDrops((current) => toggleHunkDrop(current, file, hunkHeader, allHeaders))
   }
 
-  const selectHeadFile = (file: string) => {
-    setSelected({ file, source: 'head-commit', range: buildHeadCommitRange(headParentCount) })
+  const selectHeadFile = (file: string, renameSource?: string) => {
+    const headSha = headCommit.data?.sha
+    if (!headSha) {
+      return
+    }
+    setSelected({
+      file,
+      renameSource,
+      source: 'head-commit',
+      range: buildHeadCommitRange(headParentCount, headSha)
+    })
   }
 
   const amendDrop =
@@ -234,8 +225,10 @@ function LocalChangesView(props: WorkspaceViewProps) {
         }
       : undefined
 
-  // The commit panel stays mounted on a clean tree whenever there's a HEAD to amend, so a pure reword
-  // (nothing staged) is reachable without first dirtying the working tree.
+  if (!status && statusState !== 'ready') {
+    return <StatusPanel selected={null} onSelect={() => {}} loading={loading} />
+  }
+
   if (totalChanges === 0 && !amendAvailable) {
     return <CleanWorkingTree />
   }
@@ -251,8 +244,10 @@ function LocalChangesView(props: WorkspaceViewProps) {
             <div className="min-h-0 flex-1 overflow-hidden">
               <StatusPanel
                 selected={selected}
-                onSelect={(file, source) =>
-                  source === 'head-commit' ? selectHeadFile(file) : setSelected({ file })
+                onSelect={(file, source, renameSource) =>
+                  source === 'head-commit'
+                    ? selectHeadFile(file, renameSource)
+                    : setSelected({ file, renameSource })
                 }
                 onToggleDrop={toggleHeadFileDrop}
                 amendRows={amendRows}
@@ -262,7 +257,9 @@ function LocalChangesView(props: WorkspaceViewProps) {
                     <>
                       <StashControl
                         stagedFiles={stagedFiles}
+                        stagedCount={stagedCount}
                         hasChanges={totalChanges > 0}
+                        busy={busy}
                         onStashSelected={stashSelected}
                         onStashAll={stashAll}
                       />
@@ -289,6 +286,8 @@ function LocalChangesView(props: WorkspaceViewProps) {
           </div>
           <DiffPanel selected={selected} amendDrop={amendDrop} />
         </div>
+      ) : headAvailabilityLoading ? (
+        <StatusPanel selected={null} onSelect={() => {}} loading={true} />
       ) : (
         <CleanWorkingTree />
       )}
@@ -299,6 +298,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
         onAmendChange={handleAmendChange}
         droppedHeadPaths={droppedHeadPaths}
         droppedHeadHunks={droppedHeadHunks}
+        expectedHead={headCommit.data?.sha}
         amendAvailable={amendAvailable}
         amendDisabled={amendDisabled}
         loading={loading}
@@ -338,6 +338,7 @@ function HistoryView(props: WorkspaceViewProps) {
         remoteBranches={props.remoteBranches}
         visibleBranchRefs={props.visibleBranchRefs}
         filteredCommits={props.filteredCommits}
+        displayedCommitSet={props.displayedCommitSet}
         expandedMerges={props.expandedMerges}
         filter={props.filter}
         onFilterChange={props.onFilterChange}

@@ -1,5 +1,5 @@
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   createContext,
   type RefObject,
@@ -11,26 +11,16 @@ import {
   useState
 } from 'react'
 import { useLatestRef } from '@/hooks/useLatestRef'
+import { formatCause } from '@/lib/format-cause'
+import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcFetch, rpcGetLocalBranches, rpcGetRemoteRefs } from '@/lib/rpc-client'
+import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import type { GitBranches } from '@/types'
+import type { RepoMutationCoordinator } from './action-runner'
+import type { RepoSessionErrorSource } from './repo-session'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
-// Closed repos keep their branches cached this long so reopening repaints instantly — scoped to
-// these queries (not the global default) so transient diff/hunk-highlight queries still expire on
-// the normal schedule.
-const WARM_REOPEN_GC_TIME_MS = 30 * 60 * 1000
-
-const formatCause = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
-  return String(error)
-}
-
 const combineBranches = (
   local: LocalBranches | undefined,
   remote: RemoteRefs | undefined
@@ -47,42 +37,12 @@ const combineBranches = (
   }
 }
 
-const parseLocalBranchesResponse = (response: {
-  _tag: string
-  branches?: LocalBranches
-  message?: string
-}): LocalBranches => {
-  if (response._tag === 'Ok' && response.branches) {
-    return response.branches
-  }
-  if (response._tag === 'GitError') {
-    throw new Error(response.message ?? 'Git error')
-  }
-  throw new Error('Repository not open')
-}
-
-const parseRemoteRefsResponse = (response: {
-  _tag: string
-  refs?: RemoteRefs
-  message?: string
-}): RemoteRefs => {
-  if (response._tag === 'Ok' && response.refs) {
-    return response.refs
-  }
-  if (response._tag === 'GitError') {
-    throw new Error(response.message ?? 'Git error')
-  }
-  throw new Error('Repository not open')
-}
-
 const fetchLocalBranches = async (path: string): Promise<LocalBranches> => {
-  const response = await rpcGetLocalBranches(path)
-  return parseLocalBranchesResponse(response)
+  return unwrapOk(await rpcGetLocalBranches(path)).branches
 }
 
 const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
-  const response = await rpcGetRemoteRefs(path)
-  return parseRemoteRefsResponse(response)
+  return unwrapOk(await rpcGetRemoteRefs(path)).refs
 }
 
 export interface RefsDeps {
@@ -95,7 +55,10 @@ export interface RefsDeps {
   liveRepoPath: RefObject<string | null>
   openGenerationRef: RefObject<number>
   isCurrentRepo: (generation: number, repoPath: string) => boolean
-  setError: (error: string | null) => void
+  setError: (source: RepoSessionErrorSource, error: string) => void
+  clearError: (source: RepoSessionErrorSource) => void
+  mutationCoordinator: RepoMutationCoordinator
+  refreshAfterFetch: (repoPath: string) => Promise<unknown>
 }
 
 export interface Refs {
@@ -120,7 +83,6 @@ export interface RefsController {
 }
 
 export function useRefsController(deps: RefsDeps): RefsController {
-  const queryClient = useQueryClient()
   const {
     repoPath,
     tabId,
@@ -131,7 +93,10 @@ export function useRefsController(deps: RefsDeps): RefsController {
     liveRepoPath,
     openGenerationRef,
     isCurrentRepo,
-    setError
+    setError,
+    clearError,
+    mutationCoordinator,
+    refreshAfterFetch
   } = deps
 
   const repoKeys = repoQueryKeys(repoPath, { idle: tabId })
@@ -140,8 +105,7 @@ export function useRefsController(deps: RefsDeps): RefsController {
   tabActiveRef.current = tabActive
 
   const [fetchTick, setFetchTick] = useState(0)
-  // Scope the fetched timestamp to the repo it was fetched for so a tab that switches repos does not
-  // surface the previous repo's "Fetched …" status until the new repo is fetched.
+  const pendingRefresh = useRef<string | null>(null)
   const [lastFetch, setLastFetch] = useState<{ repoPath: string; fetchedAt: number } | null>(null)
   const lastFetchedAt = lastFetch?.repoPath === repoPath ? lastFetch.fetchedAt : null
 
@@ -164,45 +128,38 @@ export function useRefsController(deps: RefsDeps): RefsController {
     [localBranchesQuery.data, remoteRefsQuery.data]
   )
 
-  // Prefer the dedicated branch source over status.current: a branch-only refresh (e.g. renaming
-  // the checked-out branch) updates localBranches but not status, and status.current would
-  // otherwise keep showing the old name until an unrelated status refetch. Falls back to
-  // status.current when there is no named branch (detached HEAD reports an empty current).
   const currentBranch = localBranchesQuery.data?.current || statusCurrent || ''
   const branchesLoading = localBranchesQuery.isFetching && !localBranchesQuery.data
 
-  const refreshRefsCaches = (path: string): Promise<unknown> =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: repoQueryKeys(path).localBranches }),
-      queryClient.invalidateQueries({ queryKey: repoQueryKeys(path).remoteRefs })
-    ])
-
-  // Owns its own error handling so both callers — the manual fetch and the fire-and-forget auto-fetch
-  // interval — surface a rejected rpcFetch/refresh instead of leaking an unhandled rejection.
-  const runFetchAndRefresh = async (path: string) => {
-    const generation = openGenerationRef.current
-    if (!isCurrentRepo(generation, path)) {
-      return
-    }
-    try {
-      const response = await rpcFetch(path)
+  const runFetchAndRefresh = (path: string) =>
+    mutationCoordinator.run('fetch', undefined, async () => {
+      const generation = openGenerationRef.current
       if (!isCurrentRepo(generation, path)) {
         return
       }
-      if (response._tag === 'Ok') {
-        setLastFetch({ repoPath: path, fetchedAt: Date.now() })
-        if (tabActiveRef.current) {
-          await refreshRefsCaches(path)
+      try {
+        const response = await rpcFetch(path)
+        if (!isCurrentRepo(generation, path)) {
+          return
         }
-      } else if (response._tag === 'GitError') {
-        setError(response.message)
+        if (response._tag === 'Ok') {
+          clearError('fetch')
+          setLastFetch({ repoPath: path, fetchedAt: Date.now() })
+          if (tabActiveRef.current) {
+            await refreshAfterFetch(path)
+          } else {
+            pendingRefresh.current = path
+          }
+        } else if (response._tag === 'GitError') {
+          setError('fetch', response.message)
+        }
+      } catch (error) {
+        if (isCurrentRepo(generation, path)) {
+          const message = formatCause(error)
+          setError('fetch', message)
+        }
       }
-    } catch (error) {
-      if (isCurrentRepo(generation, path)) {
-        setError(formatCause(error))
-      }
-    }
-  }
+    })
 
   const fetchNowImpl = async () => {
     const path = liveRepoPath.current
@@ -216,16 +173,21 @@ export function useRefsController(deps: RefsDeps): RefsController {
   const latest = useLatestRef({
     isTabActive: () => tabActiveRef.current,
     runFetchAndRefresh,
-    fetchNow: fetchNowImpl
+    fetchNow: fetchNowImpl,
+    refreshAfterFetch
   })
 
   const fetchNow = useCallback(() => latest.current.fetchNow(), [])
 
   useEffect(() => {
-    // fetchTick is a dependency on purpose: a manual fetch bumps it, re-running this effect and
-    // restarting the interval, so the 5-minute cadence resets and we never auto-fetch right after a
-    // manual one. Trade-off: fetching manually more often than every 5 minutes postpones the
-    // independent auto-fetch indefinitely — acceptable, since the user is already fetching.
+    if (!tabActive || !repoPath || pendingRefresh.current !== repoPath) {
+      return
+    }
+    pendingRefresh.current = null
+    void latest.current.refreshAfterFetch(repoPath)
+  }, [repoPath, tabActive])
+
+  useEffect(() => {
     void fetchTick
     if (!repoPath) {
       return
