@@ -1,4 +1,5 @@
-import type { GitBranches, LocalBranches, RemoteRefs } from '@shared/schemas/git'
+import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
+import type { RefKind } from '@shared/schemas/ipc'
 import { Effect } from 'effect'
 import { deriveLocalShortName } from './git/checkout'
 import {
@@ -37,14 +38,6 @@ export function getRemoteRefs(
   })
 }
 
-export function getBranches(
-  repoPath: string
-): Effect.Effect<{ branches: GitBranches }, RepoNotOpen | GitError, RepoSessions> {
-  return Effect.all([getLocalBranches(repoPath), getRemoteRefs(repoPath)], {
-    concurrency: 'unbounded'
-  }).pipe(Effect.map(([local, remote]) => ({ branches: { ...local.branches, ...remote.refs } })))
-}
-
 export function checkoutRef(
   repoPath: string,
   refKind: 'local' | 'remote' | 'tag',
@@ -64,6 +57,9 @@ export function checkoutRef(
             catch: () => new GitError({ message: `Remote branch '${fullPath}' does not exist` })
           })
           const shortName = deriveLocalShortName(fullPath)
+          if (!isSafeCheckoutRef(shortName)) {
+            return yield* Effect.fail(new GitError({ message: 'invalid ref name' }))
+          }
           const existing = yield* tryGit(() => git.branch(['--list', shortName]))
           if (existing.all.length > 0) {
             const upstreamRaw = yield* tryGit(() =>
@@ -83,6 +79,15 @@ export function checkoutRef(
           }
           return { checkedOut: shortName }
         }
+        if (refKind === 'tag') {
+          const tagRef = `refs/tags/${fullPath}`
+          yield* Effect.tryPromise({
+            try: () => git.raw(['show-ref', '--verify', tagRef]),
+            catch: () => new GitError({ message: `Tag '${fullPath}' does not exist` })
+          })
+          yield* tryGit(() => git.checkout(['--detach', tagRef, '--']))
+          return { checkedOut: fullPath }
+        }
         yield* tryGit(() => git.checkout([fullPath, '--']))
         return { checkedOut: fullPath }
       })
@@ -94,7 +99,8 @@ export function createBranch(
   repoPath: string,
   name: string,
   startPoint?: string,
-  checkout?: boolean
+  checkout?: boolean,
+  startPointKind?: RefKind
 ): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
@@ -106,12 +112,25 @@ export function createBranch(
       tryGit(() => {
         const args = checkout ? ['checkout', '-b', name] : ['branch', name]
         if (startPoint) {
-          args.push(startPoint)
+          args.push(qualifyRef(startPointKind, startPoint))
         }
         return git.raw(args)
       })
     )
   })
+}
+
+function qualifyRef(refKind: RefKind | undefined, ref: string): string {
+  if (refKind === 'local') {
+    return `refs/heads/${ref}`
+  }
+  if (refKind === 'remote') {
+    return `refs/remotes/${ref}`
+  }
+  if (refKind === 'tag') {
+    return `refs/tags/${ref}`
+  }
+  return ref
 }
 
 export function deleteBranch(

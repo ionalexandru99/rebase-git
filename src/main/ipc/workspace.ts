@@ -1,6 +1,7 @@
 import { parseOrThrow } from '@shared/codec'
 import { ScanForRepos } from '@shared/rpc'
-import { Channel, ScanForReposResponseSchema } from '@shared/schemas/ipc'
+import { rpcResultSchema } from '@shared/rpc-result'
+import { Channel } from '@shared/schemas/ipc'
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
 import { sidecarRpcCall } from '../sidecar'
 import {
@@ -41,6 +42,9 @@ export function register(getMainWindow: () => BrowserWindow | null): void {
   )
 
   ipcMain.handle(Channel.scanForRepos, async (_, dirPath: string) =>
-    parseOrThrow(ScanForReposResponseSchema, await sidecarRpcCall(ScanForRepos._tag, { dirPath }))
+    parseOrThrow(
+      rpcResultSchema(ScanForRepos),
+      await sidecarRpcCall(ScanForRepos._tag, { dirPath })
+    )
   )
 }

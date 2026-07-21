@@ -117,14 +117,15 @@ describe('rpcStageHunk', () => {
 })
 
 describe('rpcMergeBranch', () => {
-  it('sends the ref under the mergeBranch tag and decodes a void Ok', async () => {
+  it('sends the selected ref identity under the mergeBranch tag and decodes a void Ok', async () => {
     vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
 
-    const result = await rpcMergeBranch('/repo', 'feature')
+    const result = await rpcMergeBranch('/repo', 'remote', 'origin/feature')
 
     expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('mergeBranch', {
       repoPath: '/repo',
-      ref: 'feature'
+      refKind: 'remote',
+      fullPath: 'origin/feature'
     })
     expect(result._tag).toBe('Ok')
   })
@@ -135,7 +136,7 @@ describe('rpcMergeBranch', () => {
       message: 'merge stopped on conflicts'
     })
 
-    const result = await rpcMergeBranch('/repo', 'feature')
+    const result = await rpcMergeBranch('/repo', 'local', 'feature')
 
     expect(result._tag).toBe('Conflict')
     if (result._tag === 'Conflict') {
@@ -148,7 +149,7 @@ describe('rpcMergeBranch', () => {
       new Error("sidecar RPC 'mergeBranch' failed")
     )
 
-    await expect(rpcMergeBranch('/repo', 'feature')).rejects.toThrow(
+    await expect(rpcMergeBranch('/repo', 'local', 'feature')).rejects.toThrow(
       "sidecar RPC 'mergeBranch' failed"
     )
   })
@@ -229,6 +230,20 @@ describe('rpcCheckout', () => {
 })
 
 describe('rpcCreateBranch', () => {
+  it('sends the start-point ref kind so an ambiguous ref keeps its identity', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    await rpcCreateBranch('/repo', 'release-fix', 'v1', true, 'tag')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('createBranch', {
+      repoPath: '/repo',
+      name: 'release-fix',
+      startPoint: 'v1',
+      startPointKind: 'tag',
+      checkout: true
+    })
+  })
+
   it('sends the branch payload under the createBranch tag and decodes a void Ok', async () => {
     vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
 
@@ -286,6 +301,20 @@ describe('rpcRenameBranch', () => {
 })
 
 describe('rpcCreateTag', () => {
+  it('sends the target ref kind so an ambiguous ref keeps its identity', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    await rpcCreateTag('/repo', 'release', 'main', undefined, 'remote')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('createTag', {
+      repoPath: '/repo',
+      name: 'release',
+      ref: 'main',
+      refKind: 'remote',
+      message: undefined
+    })
+  })
+
   it('sends the tag payload under the createTag tag and decodes a void Ok', async () => {
     vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
 
@@ -316,14 +345,15 @@ describe('rpcDeleteTag', () => {
 })
 
 describe('rpcStashApply', () => {
-  it('sends the index under the stashApply tag and decodes a void Ok', async () => {
+  it('sends the expected OID under the stashApply tag and decodes a void Ok', async () => {
     vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
 
-    const result = await rpcStashApply('/repo', 2)
+    const result = await rpcStashApply('/repo', 2, 'stash-oid-2')
 
     expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('stashApply', {
       repoPath: '/repo',
-      index: 2
+      index: 2,
+      expectedOid: 'stash-oid-2'
     })
     expect(result._tag).toBe('Ok')
   })
@@ -334,7 +364,7 @@ describe('rpcStashApply', () => {
       message: 'stash apply hit conflicts'
     })
 
-    const result = await rpcStashApply('/repo', 0)
+    const result = await rpcStashApply('/repo', 0, 'stash-oid-0')
 
     expect(result._tag).toBe('Conflict')
     if (result._tag === 'Conflict') {
@@ -344,31 +374,33 @@ describe('rpcStashApply', () => {
 })
 
 describe('rpcStashPop', () => {
-  it('sends the index under the stashPop tag and decodes a typed Conflict', async () => {
+  it('sends the expected OID under the stashPop tag and decodes a typed Conflict', async () => {
     vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
       _tag: 'Conflict',
       message: 'stash pop hit conflicts'
     })
 
-    const result = await rpcStashPop('/repo', 1)
+    const result = await rpcStashPop('/repo', 1, 'stash-oid-1')
 
     expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('stashPop', {
       repoPath: '/repo',
-      index: 1
+      index: 1,
+      expectedOid: 'stash-oid-1'
     })
     expect(result._tag).toBe('Conflict')
   })
 })
 
 describe('rpcStashDrop', () => {
-  it('sends the index under the stashDrop tag and decodes a void Ok', async () => {
+  it('sends the expected OID under the stashDrop tag and decodes a void Ok', async () => {
     vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
 
-    const result = await rpcStashDrop('/repo', 0)
+    const result = await rpcStashDrop('/repo', 0, 'stash-oid-0')
 
     expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('stashDrop', {
       repoPath: '/repo',
-      index: 0
+      index: 0,
+      expectedOid: 'stash-oid-0'
     })
     expect(result._tag).toBe('Ok')
   })

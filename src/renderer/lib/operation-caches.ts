@@ -1,47 +1,72 @@
+import type { SidecarRpcTag } from '@shared/rpc'
 import type { RepoChangeKind } from '@shared/schemas/git'
 
-export type RepoCache = 'status' | 'localBranches' | 'remoteRefs' | 'log' | 'stash' | 'diff'
+export type RepoCache =
+  | 'status'
+  | 'localBranches'
+  | 'remoteRefs'
+  | 'log'
+  | 'stash'
+  | 'diff'
+  | 'headCommit'
 
-// Keyed by the typed RPC operation tag. Stays renderer-side: cache invalidation is a renderer
-// concern and must never cross the wire into the shared contract.
 const OPERATION_CACHES = {
-  // History ops move HEAD or rewrite the graph: they touch the working tree, the refs, and the
-  // timeline (log). checkout is the union too — switching HEAD changes the working tree and which
-  // commits the log shows. createBranchCheckout is the same footprint; a plain createBranch only
-  // adds a ref. createBranchCheckout is a renderer-side key, not an RPC tag: both modes share the
-  // createBranch RPC, split only by their cache footprint.
-  commit: ['status', 'localBranches', 'diff', 'log'],
-  // Amend rewrites HEAD (log), folds in the index (status, diff), and leaves the branch diverged from
-  // its upstream (localBranches tracking, remoteRefs).
-  amendCommit: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
-  push: ['localBranches', 'remoteRefs'],
-  pull: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
-  mergeBranch: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
-  reset: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
-  revertCommit: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
-  cherryPick: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
-  checkout: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
-  createBranchCheckout: ['status', 'localBranches', 'remoteRefs', 'diff', 'log'],
+  openRepo: null,
+  closeRepo: null,
+  scanForRepos: null,
+  commit: ['status', 'localBranches', 'diff', 'log', 'headCommit'],
+  getHeadCommit: null,
+  amendCommit: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  stageFile: null,
+  unstageFile: null,
+  stageAll: null,
+  unstageAll: null,
+  stageHunk: null,
+  unstageHunk: null,
+  discardChanges: ['status', 'diff', 'stash'],
+  discardAll: ['status', 'diff', 'stash'],
+  mergeBranch: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  revertCommit: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  cherryPick: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  checkout: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
   createBranch: ['localBranches', 'remoteRefs'],
   deleteBranch: ['localBranches', 'remoteRefs'],
   renameBranch: ['localBranches', 'remoteRefs'],
   createTag: ['localBranches', 'remoteRefs'],
   deleteTag: ['localBranches', 'remoteRefs'],
-  discardChanges: ['status', 'diff', 'stash'],
-  discardAll: ['status', 'diff', 'stash'],
-  stashPush: ['status', 'diff', 'stash'],
-  stashApply: ['status', 'diff', 'stash'],
   stashPop: ['status', 'diff', 'stash'],
-  stashDrop: ['stash']
-} satisfies Record<string, readonly RepoCache[]>
+  stashApply: ['status', 'diff', 'stash'],
+  stashDrop: ['stash'],
+  stashPush: ['status', 'diff', 'stash'],
+  reset: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  fetch: null,
+  push: ['localBranches', 'remoteRefs', 'log'],
+  pull: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  getStatus: null,
+  getLocalBranches: null,
+  getRemoteRefs: null,
+  getDiff: null,
+  stashList: null,
+  streamLog: null,
+  createBranchCheckout: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit']
+} satisfies Record<SidecarRpcTag | 'createBranchCheckout', readonly RepoCache[] | null>
 
-export type MappedOperation = keyof typeof OPERATION_CACHES
+export type MappedOperation = {
+  [Operation in keyof typeof OPERATION_CACHES]: (typeof OPERATION_CACHES)[Operation] extends readonly RepoCache[]
+    ? Operation
+    : never
+}[keyof typeof OPERATION_CACHES]
 
-export const cachesForOperation = (operation: MappedOperation): readonly RepoCache[] =>
-  OPERATION_CACHES[operation]
+export const cachesForOperation = (operation: MappedOperation): readonly RepoCache[] => {
+  const caches = OPERATION_CACHES[operation]
+  if (caches === null) {
+    throw new Error(`No caches mapped for ${operation}`)
+  }
+  return caches
+}
 
 const REPO_CHANGE_CACHES = {
-  refs: ['localBranches', 'remoteRefs', 'log', 'stash'],
+  refs: ['localBranches', 'remoteRefs', 'log', 'stash', 'headCommit'],
   workingTree: ['status', 'diff', 'stash'],
   index: ['status', 'diff', 'stash']
 } satisfies Record<RepoChangeKind, readonly RepoCache[]>

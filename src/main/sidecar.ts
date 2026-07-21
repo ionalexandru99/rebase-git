@@ -3,8 +3,14 @@ import { createServer } from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { LogChunk } from '@shared/schemas/git'
-import { type UtilityProcess, utilityProcess } from 'electron'
+import { Context, Effect, ManagedRuntime } from 'effect'
+import { utilityProcess } from 'electron'
 import type { SidecarMessage } from '../sidecar/protocol'
+import {
+  createSidecarLifecycleLayer,
+  type SidecarLifecycle,
+  type SidecarResource
+} from './sidecar-lifecycle'
 import { callRpcByTag, runStreamLog } from './sidecar-rpc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -12,15 +18,9 @@ const START_TIMEOUT_MS = 30_000
 const STOP_TIMEOUT_MS = 5_000
 
 interface Sidecar {
-  child: UtilityProcess
   baseUrl: string
   token: string
 }
-
-let sidecar: Sidecar | null = null
-let startup: Promise<Sidecar> | null = null
-let isShuttingDown = false
-let restartPromise: Promise<void> | null = null
 
 function allocatePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -42,7 +42,8 @@ function allocatePort(): Promise<number> {
 async function checkHealth(baseUrl: string, token: string): Promise<boolean> {
   try {
     const response = await fetch(`${baseUrl}/health`, {
-      headers: { authorization: `Bearer ${token}` }
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(1_000)
     })
     return response.ok
   } catch {
@@ -61,7 +62,7 @@ async function waitForHealth(baseUrl: string, token: string): Promise<void> {
   throw new Error('sidecar health check timed out')
 }
 
-async function spawn(): Promise<Sidecar> {
+async function launchSidecar(): Promise<SidecarResource<Sidecar>> {
   const hostname = '127.0.0.1'
   const port = await allocatePort()
   const token = randomUUID()
@@ -74,91 +75,104 @@ async function spawn(): Promise<Sidecar> {
   child.stderr?.on('data', (chunk: Buffer) => {
     console.error('[sidecar]', chunk.toString('utf8').trimEnd())
   })
+  child.stdout?.resume()
 
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('sidecar start timed out')), START_TIMEOUT_MS)
-    const onMessage = (message: SidecarMessage) => {
-      if (message.type === 'ready') {
-        clearTimeout(timeout)
-        child.off('message', onMessage)
-        resolve()
-      } else if (message.type === 'error') {
-        clearTimeout(timeout)
-        child.off('message', onMessage)
-        reject(new Error(message.message))
-      }
-    }
-    child.on('message', onMessage)
-    child.once('exit', (code) => {
-      clearTimeout(timeout)
-      reject(new Error(`sidecar exited before ready (code ${code})`))
-    })
-    child.postMessage({ type: 'start', hostname, port, token })
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => resolve())
   })
 
-  await waitForHealth(baseUrl, token)
-  return { child, baseUrl, token }
+  const ready = (async () => {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('sidecar start timed out')),
+        START_TIMEOUT_MS
+      )
+      const cleanup = () => {
+        clearTimeout(timeout)
+        child.off('message', onMessage)
+        child.off('exit', onExit)
+      }
+      const onMessage = (message: SidecarMessage) => {
+        if (message.type === 'ready') {
+          cleanup()
+          resolve()
+        } else if (message.type === 'error') {
+          cleanup()
+          reject(new Error(message.message))
+        }
+      }
+      const onExit = (code: number) => {
+        cleanup()
+        reject(new Error(`sidecar exited before ready (code ${code})`))
+      }
+      child.on('message', onMessage)
+      child.once('exit', onExit)
+      child.postMessage({ type: 'start', hostname, port, token })
+    })
+    await Promise.race([
+      waitForHealth(baseUrl, token),
+      exited.then(() => {
+        throw new Error('sidecar exited before health check completed')
+      })
+    ])
+  })()
+
+  let stopPromise: Promise<void> | null = null
+  const stop = (): Promise<void> => {
+    if (stopPromise) {
+      return stopPromise
+    }
+    stopPromise = (async () => {
+      try {
+        child.postMessage({ type: 'stop' })
+      } catch {
+        try {
+          child.kill()
+        } catch {}
+      }
+      const forceKill = setTimeout(() => {
+        try {
+          child.kill()
+        } catch {}
+      }, STOP_TIMEOUT_MS)
+      try {
+        await exited
+      } finally {
+        clearTimeout(forceKill)
+      }
+    })()
+    return stopPromise
+  }
+
+  return { value: { baseUrl, token }, ready, exited, stop }
+}
+
+const SidecarLifecycleService =
+  Context.GenericTag<SidecarLifecycle<Sidecar>>('main/SidecarLifecycle')
+const sidecarRuntime = ManagedRuntime.make(
+  createSidecarLifecycleLayer(SidecarLifecycleService, { launch: launchSidecar })
+)
+
+function runWithSidecarLifecycle<A>(
+  operation: (lifecycle: SidecarLifecycle<Sidecar>) => Promise<A>
+): Promise<A> {
+  return sidecarRuntime.runPromise(
+    SidecarLifecycleService.pipe(
+      Effect.flatMap((lifecycle) => Effect.promise(() => operation(lifecycle)))
+    )
+  )
 }
 
 export function startSidecar(): Promise<Sidecar> {
-  if (isShuttingDown) {
-    return Promise.reject(new Error('sidecar is shutting down'))
-  }
-  if (startup) {
-    return startup
-  }
-  startup = spawn().then((started) => {
-    sidecar = started
-    started.child.once('exit', () => {
-      if (sidecar?.child === started.child) {
-        sidecar = null
-        startup = null
-      }
-    })
-    return started
-  })
-  startup.catch(() => {
-    startup = null
-  })
-  return startup
+  return runWithSidecarLifecycle((lifecycle) => lifecycle.start())
 }
 
 async function ensureSidecar(): Promise<Sidecar> {
-  if (isShuttingDown) {
-    return Promise.reject(new Error('sidecar is shutting down'))
-  }
-  if (sidecar) {
-    return sidecar
-  }
-  return startSidecar()
+  return runWithSidecarLifecycle((lifecycle) => lifecycle.start())
 }
 
 export async function restartSidecar(): Promise<void> {
-  if (isShuttingDown) {
-    return
-  }
-  // Concurrent child-process-gone events (or a manual restart racing one) must not each spawn a
-  // sidecar; dedupe on the in-flight restart and stop the previous child before respawning so a
-  // still-alive process can't be orphaned.
-  if (restartPromise) {
-    return restartPromise
-  }
-  restartPromise = (async () => {
-    const previous = sidecar
-    sidecar = null
-    startup = null
-    if (previous) {
-      try {
-        previous.child.kill()
-      } catch {}
-    }
-    await startSidecar()
-  })()
-  try {
-    await restartPromise
-  } finally {
-    restartPromise = null
-  }
+  await runWithSidecarLifecycle((lifecycle) => lifecycle.restart())
 }
 
 export async function sidecarRpcCall(
@@ -200,27 +214,5 @@ export async function sidecarLogStream(
 }
 
 export async function killSidecar(): Promise<void> {
-  isShuttingDown = true
-  const current = sidecar
-  sidecar = null
-  startup = null
-  if (!current) {
-    return
-  }
-  await new Promise<void>((resolve) => {
-    let settled = false
-    const done = () => {
-      if (settled) {
-        return
-      }
-      settled = true
-      resolve()
-    }
-    current.child.once('exit', done)
-    current.child.postMessage({ type: 'stop' })
-    setTimeout(() => {
-      current.child.kill()
-      done()
-    }, STOP_TIMEOUT_MS)
-  })
+  await sidecarRuntime.dispose()
 }

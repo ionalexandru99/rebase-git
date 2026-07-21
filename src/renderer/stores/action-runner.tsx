@@ -1,8 +1,17 @@
 import type { LostCommit } from '@shared/git-rpc-errors'
 import { AmendCommit, Commit, Pull, Push } from '@shared/rpc'
 import { useMutation } from '@tanstack/react-query'
-import { createContext, type RefObject, useContext } from 'react'
+import {
+  createContext,
+  type RefObject,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import { toast } from 'sonner'
+import { formatCause } from '@/lib/format-cause'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
 import {
   type PushForce,
@@ -15,8 +24,6 @@ import {
 
 export type PushRejectionReason = 'non-fast-forward' | 'lease-stale' | 'remote-moved'
 
-// The result the push flow drives on: a terminal ok/error is toasted by the runner, while a rejection
-// carries the data the split-button dialogs need to advance (the loss preview + the tip to pin).
 export type PushOutcome =
   | { kind: 'ok' }
   | {
@@ -26,16 +33,6 @@ export type PushOutcome =
       remoteSha?: string
     }
   | { kind: 'error'; message: string }
-
-const formatCause = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
-  return String(error)
-}
 
 export type RunAction = (
   operation: MappedOperation,
@@ -49,7 +46,8 @@ export interface ActionRunner {
   amend: (
     message: string,
     droppedHeadPaths: string[],
-    droppedHeadHunks: { file: string; hunks: string[] }[]
+    droppedHeadHunks: { file: string; hunks: string[] }[],
+    expectedHead: string
   ) => Promise<boolean>
   loadHeadMessage: () => Promise<string | null>
   pushNow: () => Promise<boolean>
@@ -59,6 +57,7 @@ export interface ActionRunner {
   amending: boolean
   pushing: boolean
   pulling: boolean
+  busy: boolean
 }
 
 const pushLabel = (force?: PushForce): string => {
@@ -73,24 +72,62 @@ const pushLabel = (force?: PushForce): string => {
 
 export interface ActionRunnerDeps {
   liveRepoPath: RefObject<string | null>
+  openGenerationRef: RefObject<number>
+  isCurrentRepo: (generation: number, repoPath: string) => boolean
   refreshCaches: (repoPath: string, caches: readonly RepoCache[]) => Promise<unknown>
+  mutationCoordinator: RepoMutationCoordinator
+}
+
+export interface RepoMutationCoordinator {
+  activeOperation: string | null
+  run: <Result>(
+    operation: string,
+    rejectedResult: Result,
+    task: () => Promise<Result>
+  ) => Promise<Result>
+}
+
+export function useRepoMutationCoordinator(): RepoMutationCoordinator {
+  const activeRef = useRef<string | null>(null)
+  const [activeOperation, setActiveOperation] = useState<string | null>(null)
+  const run = useCallback(
+    async <Result,>(operation: string, rejectedResult: Result, task: () => Promise<Result>) => {
+      if (activeRef.current) {
+        return rejectedResult
+      }
+      activeRef.current = operation
+      setActiveOperation(operation)
+      try {
+        return await task()
+      } finally {
+        activeRef.current = null
+        setActiveOperation(null)
+      }
+    },
+    []
+  )
+  return useMemo(() => ({ activeOperation, run }), [activeOperation, run])
 }
 
 export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner {
-  const { liveRepoPath, refreshCaches } = deps
+  const { liveRepoPath, openGenerationRef, isCurrentRepo, refreshCaches, mutationCoordinator } =
+    deps
+  const depsRef = useRef(deps)
+  depsRef.current = deps
 
-  // The single action runner: call the typed op, then refresh exactly the caches the op→caches map
-  // names — no per-action refresh-bundle choice. Ok toasts success; a Conflict refreshes the same
-  // caches but routes to the resolve-the-conflict path (warning, not error). A Git error (or any
-  // other non-Ok outcome) toasts and refreshes nothing.
-  const runAction: RunAction = async (operation, call, label) => {
+  const runActionAttempt = useCallback<RunAction>(async (operation, call, label) => {
+    const { liveRepoPath, openGenerationRef, isCurrentRepo, refreshCaches } = depsRef.current
     const repoPath = liveRepoPath.current
     if (!repoPath) {
       toast.error('Repository is not open')
       return false
     }
+    const generation = openGenerationRef.current
     try {
       const response = await call(repoPath)
+      if (!isCurrentRepo(generation, repoPath)) {
+        return false
+      }
       if (response._tag === 'Ok' || response._tag === 'Conflict') {
         await refreshCaches(repoPath, cachesForOperation(operation))
       }
@@ -115,23 +152,33 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       toast.error(`${label} failed`, { description: `Unexpected response: ${response._tag}` })
       return false
     } catch (error) {
+      if (!isCurrentRepo(generation, repoPath)) {
+        return false
+      }
       toast.error(`${label} failed`, { description: formatCause(error) })
       return false
     }
-  }
+  }, [])
 
-  // Push can't use runAction: a PushRejected is neither a success nor an error to toast — it drives the
-  // split-button's two-tier dialog flow. So terminal outcomes (ok/error) toast and refresh here, while
-  // a rejection is returned verbatim with its loss preview for the caller to escalate on.
+  const runAction = useCallback<RunAction>(
+    (operation, call, label) =>
+      mutationCoordinator.run(operation, false, () => runActionAttempt(operation, call, label)),
+    [mutationCoordinator.run, runActionAttempt]
+  )
+
   const runPush = async (force?: PushForce, expectedRemoteSha?: string): Promise<PushOutcome> => {
     const repoPath = liveRepoPath.current
     if (!repoPath) {
       toast.error('Repository is not open')
       return { kind: 'error', message: 'Repository is not open' }
     }
+    const generation = openGenerationRef.current
     const label = pushLabel(force)
     try {
       const response = await rpcPush(repoPath, force, expectedRemoteSha)
+      if (!isCurrentRepo(generation, repoPath)) {
+        return { kind: 'error', message: 'Repository changed' }
+      }
       if (response._tag === 'Ok') {
         await refreshCaches(repoPath, cachesForOperation(Push._tag))
         toast.success(label)
@@ -153,27 +200,43 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       return { kind: 'error', message: response.message }
     } catch (error) {
       const message = formatCause(error)
+      if (!isCurrentRepo(generation, repoPath)) {
+        return { kind: 'error', message }
+      }
       toast.error(`${label} failed`, { description: message })
       return { kind: 'error', message }
     }
   }
 
-  // Amend can't use runAction either: AmendRejected is an expected CAS refusal (HEAD moved), not an
-  // error to toast as a failure — it routes to a refresh-and-retry warning. Ok and the rejection both
-  // refresh the same caches so the renderer picks up the moved/rewritten HEAD.
   const runAmend = async (
     message: string,
     droppedHeadPaths: string[],
-    droppedHeadHunks: { file: string; hunks: string[] }[]
+    droppedHeadHunks: { file: string; hunks: string[] }[],
+    expectedHead: string
   ): Promise<boolean> => {
     const repoPath = liveRepoPath.current
     if (!repoPath) {
       toast.error('Repository is not open')
       return false
     }
+    const generation = openGenerationRef.current
     try {
-      const response = await rpcAmendCommit(repoPath, message, droppedHeadPaths, droppedHeadHunks)
-      if (response._tag === 'Ok' || response._tag === 'AmendRejected') {
+      const response = await rpcAmendCommit(
+        repoPath,
+        message,
+        droppedHeadPaths,
+        droppedHeadHunks,
+        expectedHead
+      )
+      if (!isCurrentRepo(generation, repoPath)) {
+        return false
+      }
+      if (
+        response._tag === 'Ok' ||
+        response._tag === 'AmendRejected' ||
+        response._tag === 'HunkNotFound' ||
+        response._tag === 'GitError'
+      ) {
         await refreshCaches(repoPath, cachesForOperation(AmendCommit._tag))
       }
       if (response._tag === 'Ok') {
@@ -186,6 +249,18 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         })
         return false
       }
+      if (response._tag === 'HunkNotFound') {
+        toast.warning('The commit changed since this view loaded', {
+          description: 'A dropped hunk no longer matches the last commit. Refresh and try again.'
+        })
+        return false
+      }
+      if (response._tag === 'OperationInProgress') {
+        toast.warning('Amend blocked', {
+          description: `Finish or abort the in-progress ${response.operation} first.`
+        })
+        return false
+      }
       if (response._tag === 'RepoNotOpen') {
         toast.error('Repository is not open')
         return false
@@ -193,6 +268,9 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       toast.error('Amend failed', { description: response.message })
       return false
     } catch (error) {
+      if (!isCurrentRepo(generation, repoPath)) {
+        return false
+      }
       toast.error('Amend failed', { description: formatCause(error) })
       return false
     }
@@ -213,42 +291,59 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
 
   const commitMutation = useMutation({
     mutationFn: (message: string) =>
-      runAction(Commit._tag, (repoPath) => rpcCommit(repoPath, message), 'Committed')
+      runActionAttempt(Commit._tag, (repoPath) => rpcCommit(repoPath, message), 'Committed')
   })
   const amendMutation = useMutation({
     mutationFn: (variables: {
       message: string
       droppedHeadPaths: string[]
       droppedHeadHunks: { file: string; hunks: string[] }[]
-    }) => runAmend(variables.message, variables.droppedHeadPaths, variables.droppedHeadHunks)
+      expectedHead: string
+    }) =>
+      runAmend(
+        variables.message,
+        variables.droppedHeadPaths,
+        variables.droppedHeadHunks,
+        variables.expectedHead
+      )
   })
   const pushMutation = useMutation({
     mutationFn: (variables: { force?: PushForce; expectedRemoteSha?: string }) =>
       runPush(variables.force, variables.expectedRemoteSha)
   })
   const pullMutation = useMutation({
-    mutationFn: () => runAction(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled')
+    mutationFn: () => runActionAttempt(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled')
   })
 
   const push = (force?: PushForce, expectedRemoteSha?: string) =>
-    pushMutation.mutateAsync({ force, expectedRemoteSha })
+    mutationCoordinator.run<PushOutcome>(
+      Push._tag,
+      { kind: 'error', message: 'Another repository action is in progress' },
+      () => pushMutation.mutateAsync({ force, expectedRemoteSha })
+    )
 
   return {
     runAction,
-    commit: (message: string) => commitMutation.mutateAsync(message),
+    commit: (message: string) =>
+      mutationCoordinator.run(Commit._tag, false, () => commitMutation.mutateAsync(message)),
     amend: (
       message: string,
       droppedHeadPaths: string[],
-      droppedHeadHunks: { file: string; hunks: string[] }[]
-    ) => amendMutation.mutateAsync({ message, droppedHeadPaths, droppedHeadHunks }),
+      droppedHeadHunks: { file: string; hunks: string[] }[],
+      expectedHead: string
+    ) =>
+      mutationCoordinator.run(AmendCommit._tag, false, () =>
+        amendMutation.mutateAsync({ message, droppedHeadPaths, droppedHeadHunks, expectedHead })
+      ),
     loadHeadMessage,
     push,
     pushNow: () => push().then((outcome) => outcome.kind === 'ok'),
-    pullNow: () => pullMutation.mutateAsync(),
-    committing: commitMutation.isPending,
-    amending: amendMutation.isPending,
-    pushing: pushMutation.isPending,
-    pulling: pullMutation.isPending
+    pullNow: () => mutationCoordinator.run(Pull._tag, false, () => pullMutation.mutateAsync()),
+    committing: mutationCoordinator.activeOperation === Commit._tag,
+    amending: mutationCoordinator.activeOperation === AmendCommit._tag,
+    pushing: mutationCoordinator.activeOperation === Push._tag,
+    pulling: mutationCoordinator.activeOperation === Pull._tag,
+    busy: mutationCoordinator.activeOperation !== null
   }
 }
 

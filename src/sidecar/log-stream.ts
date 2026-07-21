@@ -1,10 +1,16 @@
-import { type ChildProcessByStdio, spawn } from 'node:child_process'
+import type { ChildProcessByStdio } from 'node:child_process'
 import type { Readable } from 'node:stream'
 import type { GitLogEntry, LogChunk } from '@shared/schemas/git'
-import { Chunk, Effect, Ref, Stream } from 'effect'
+import { Context, Effect, Layer, ManagedRuntime, Stream } from 'effect'
 import { LOG_FORMAT, parseGitLogRecord, RS_SEP } from './git/log-format'
 import { GitError } from './git-errors'
-import { capStderr } from './spawn'
+import {
+  attachRequestChild,
+  capStderr,
+  detachRequestChild,
+  type RunningGitProcess,
+  startGit
+} from './spawn'
 
 export const STREAM_BATCH_SIZE = 500
 
@@ -16,53 +22,63 @@ export interface LogStreamOptions {
 
 type GitStdioProc = ChildProcessByStdio<null, Readable, Readable>
 
-function spawnGitLog(repoPath: string, options?: LogStreamOptions): GitStdioProc {
-  const args = [
-    '-C',
-    repoPath,
-    'log',
-    '-z',
-    '--branches',
-    '--remotes',
-    '--topo-order',
-    `--format=${LOG_FORMAT}`
-  ]
-  if (typeof options?.maxCount === 'number' && options.maxCount > 0) {
-    args.push(`--max-count=${options.maxCount}`)
-  }
-  if (typeof options?.skip === 'number' && options.skip > 0) {
-    args.push(`--skip=${options.skip}`)
-  }
-  return spawn('git', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+interface LogContinuation {
+  repoPath: string
+  offset: number
+  running: RunningGitProcess
+  iterator: AsyncIterator<string | Buffer>
+  buffer: string
+  lookahead: GitLogEntry | undefined
+  done: boolean
 }
 
-// The parsed-record producer: a Stream whose lifetime is the spawned `git log`. NUL-delimited (-z)
-// records are parsed and pushed; a nonzero exit fails the Stream, a clean exit ends it. The process
-// is killed when the Stream's scope closes (completion, error, or interruption) — so a restart that
-// interrupts this Stream can never leak the child or interleave with a fresh one.
-//
-// The buffer is intentionally unbounded so commits are never dropped (do NOT switch to a
-// `dropping`/`sliding` strategy). The sole consumer is the main process draining the loopback socket,
-// which keeps up with `git log`, so the queue stays shallow in practice.
+interface LogPage {
+  commits: GitLogEntry[]
+  hasMore: boolean
+}
+
+function gitError(error: unknown): GitError {
+  return error instanceof GitError ? error : new GitError({ message: String(error) })
+}
+
+function startGitLog(repoPath: string): RunningGitProcess {
+  return startGit(
+    [
+      '-C',
+      repoPath,
+      'log',
+      '-z',
+      '--ignore-missing',
+      '--topo-order',
+      `--format=${LOG_FORMAT}`,
+      'HEAD',
+      '--branches',
+      '--remotes',
+      '--tags'
+    ],
+    { collectStdout: false, pipeStdout: true }
+  )
+}
+
 function commitStream(proc: GitStdioProc): Stream.Stream<GitLogEntry, GitError> {
   return Stream.asyncPush<GitLogEntry, GitError>((emit) =>
     Effect.sync(() => {
       let buffer = ''
-      let stderrBuf = ''
+      let stderrBuffer = ''
 
       proc.stdout.setEncoding('utf8')
       proc.stdout.on('data', (chunk: string) => {
         buffer += chunk
         const batch: GitLogEntry[] = []
-        let idx = buffer.indexOf(RS_SEP)
-        while (idx !== -1) {
-          const record = buffer.slice(0, idx)
-          buffer = buffer.slice(idx + 1)
+        let index = buffer.indexOf(RS_SEP)
+        while (index !== -1) {
+          const record = buffer.slice(0, index)
+          buffer = buffer.slice(index + 1)
           const parsed = parseGitLogRecord(record)
           if (parsed) {
             batch.push(parsed)
           }
-          idx = buffer.indexOf(RS_SEP)
+          index = buffer.indexOf(RS_SEP)
         }
         if (batch.length > 0) {
           emit.array(batch)
@@ -71,7 +87,7 @@ function commitStream(proc: GitStdioProc): Stream.Stream<GitLogEntry, GitError> 
 
       proc.stderr.setEncoding('utf8')
       proc.stderr.on('data', (chunk: string) => {
-        stderrBuf = capStderr(stderrBuf + chunk)
+        stderrBuffer = capStderr(stderrBuffer + chunk)
       })
 
       proc.on('error', (error) => {
@@ -81,7 +97,7 @@ function commitStream(proc: GitStdioProc): Stream.Stream<GitLogEntry, GitError> 
       proc.on('close', (code) => {
         if (code !== 0 && code !== null) {
           emit.fail(
-            new GitError({ message: stderrBuf.trim() || `git log exited with code ${code}` })
+            new GitError({ message: stderrBuffer.trim() || `git log exited with code ${code}` })
           )
         } else {
           emit.end()
@@ -91,61 +107,261 @@ function commitStream(proc: GitStdioProc): Stream.Stream<GitLogEntry, GitError> 
   )
 }
 
-// The streaming-RPC producer: the same `git log` history modeled as a Stream of LogChunks instead of
-// written onto a ServerResponse. The terminal `done` chunk carries `hasMore` (pagination) exactly as
-// the dedicated endpoint did; stream errors flow through the GitError channel. The spawned child is
-// killed when the stream's scope closes (completion, error, or interruption), so a superseded stream
-// never leaks the child.
+function createContinuation(repoPath: string): LogContinuation {
+  const running = startGitLog(repoPath)
+  const stdout = running.child.stdout as Readable
+  stdout.setEncoding('utf8')
+  return {
+    repoPath,
+    offset: 0,
+    running,
+    iterator: stdout[Symbol.asyncIterator]() as AsyncIterator<string | Buffer>,
+    buffer: '',
+    lookahead: undefined,
+    done: false
+  }
+}
+
+async function nextCommit(continuation: LogContinuation): Promise<GitLogEntry | undefined> {
+  if (continuation.lookahead) {
+    const commit = continuation.lookahead
+    continuation.lookahead = undefined
+    return commit
+  }
+
+  while (true) {
+    const separator = continuation.buffer.indexOf(RS_SEP)
+    if (separator !== -1) {
+      const record = continuation.buffer.slice(0, separator)
+      continuation.buffer = continuation.buffer.slice(separator + 1)
+      const commit = parseGitLogRecord(record)
+      if (commit) {
+        return commit
+      }
+      continue
+    }
+    if (continuation.done) {
+      return undefined
+    }
+    const chunk = await continuation.iterator.next()
+    if (!chunk.done) {
+      continuation.buffer += chunk.value.toString()
+      continue
+    }
+    continuation.done = true
+    const { code, stderr } = await continuation.running.result
+    if (code !== 0 && code !== null) {
+      throw new GitError({ message: stderr.trim() || `git log exited with code ${code}` })
+    }
+    const commit = parseGitLogRecord(continuation.buffer)
+    continuation.buffer = ''
+    if (commit) {
+      return commit
+    }
+  }
+}
+
+async function readPage(
+  continuation: LogContinuation,
+  skip: number,
+  limit: number
+): Promise<LogPage> {
+  while (continuation.offset < skip) {
+    const discarded = await nextCommit(continuation)
+    if (!discarded) {
+      return { commits: [], hasMore: false }
+    }
+    continuation.offset += 1
+  }
+
+  const commits: GitLogEntry[] = []
+  while (commits.length < limit) {
+    const commit = await nextCommit(continuation)
+    if (!commit) {
+      return { commits, hasMore: false }
+    }
+    commits.push(commit)
+    continuation.offset += 1
+  }
+
+  continuation.lookahead = await nextCommit(continuation)
+  return { commits, hasMore: continuation.lookahead !== undefined }
+}
+
+export interface LogContinuationsService {
+  clear(repoPath: string): Promise<void>
+  loadPage(repoPath: string, skip: number, limit: number, signal: AbortSignal): Promise<LogPage>
+}
+
+interface ManagedLogContinuations extends LogContinuationsService {
+  close(): Promise<void>
+}
+
+function makeLogContinuations(): ManagedLogContinuations {
+  const continuations = new Map<string, LogContinuation>()
+
+  const finish = async (continuation: LogContinuation): Promise<void> => {
+    if (continuations.get(continuation.repoPath) === continuation) {
+      continuations.delete(continuation.repoPath)
+    }
+    if (!continuation.done) {
+      await continuation.running.terminate()
+    }
+  }
+
+  const clear = async (repoPath: string): Promise<void> => {
+    const continuation = continuations.get(repoPath)
+    if (continuation) {
+      await finish(continuation)
+    }
+  }
+
+  return {
+    clear,
+    loadPage: async (repoPath, skip, limit, signal) => {
+      let continuation = continuations.get(repoPath)
+      if (skip === 0 || !continuation || continuation.offset !== skip) {
+        if (continuation) {
+          await finish(continuation)
+        }
+        continuation = createContinuation(repoPath)
+        continuations.set(repoPath, continuation)
+      } else {
+        attachRequestChild(continuation.running.child)
+      }
+
+      const abort = () => {
+        void finish(continuation)
+      }
+      signal.addEventListener('abort', abort, { once: true })
+      try {
+        const page = await readPage(continuation, skip, limit)
+        detachRequestChild(continuation.running.child)
+        return page
+      } catch (error) {
+        await finish(continuation)
+        throw error
+      } finally {
+        signal.removeEventListener('abort', abort)
+      }
+    },
+    close: async () => {
+      await Promise.all([...continuations.values()].map(finish))
+    }
+  }
+}
+
+export class LogContinuations extends Context.Tag('sidecar/LogContinuations')<
+  LogContinuations,
+  LogContinuationsService
+>() {}
+
+export const LogContinuationsLive = Layer.scoped(
+  LogContinuations,
+  Effect.acquireRelease(Effect.sync(makeLogContinuations), (registry) =>
+    Effect.promise(() => registry.close())
+  )
+)
+
+const logContinuationsRuntime = ManagedRuntime.make(LogContinuationsLive)
+
+function withLogContinuations<T>(
+  use: (registry: LogContinuationsService) => Promise<T>
+): Promise<T> {
+  return logContinuationsRuntime.runPromise(
+    LogContinuations.pipe(Effect.flatMap((registry) => Effect.promise(() => use(registry))))
+  )
+}
+
+export function clearLogContinuation(repoPath: string): Promise<void> {
+  return withLogContinuations((registry) => registry.clear(repoPath))
+}
+
+function loadPage(
+  repoPath: string,
+  skip: number,
+  limit: number,
+  signal: AbortSignal
+): Promise<LogPage> {
+  return withLogContinuations((registry) => registry.loadPage(repoPath, skip, limit, signal))
+}
+
+export function finalizeLogContinuations(): Promise<void> {
+  return logContinuationsRuntime.dispose()
+}
+
+function pageStream(
+  repoPath: string,
+  page: LogPage,
+  streamId: number | undefined
+): Stream.Stream<LogChunk> {
+  const chunks: LogChunk[] = []
+  for (let index = 0; index < page.commits.length; index += STREAM_BATCH_SIZE) {
+    chunks.push({
+      repoPath,
+      commits: page.commits.slice(index, index + STREAM_BATCH_SIZE),
+      done: false,
+      streamId
+    })
+  }
+  chunks.push({
+    repoPath,
+    commits: [],
+    done: true,
+    hasMore: page.hasMore,
+    streamId
+  })
+  return Stream.fromIterable(chunks)
+}
+
 export function logChunkStream(
   repoPath: string,
   options?: LogStreamOptions
 ): Stream.Stream<LogChunk, GitError> {
   const streamId = options?.streamId
-  const pageSize = options?.maxCount
-  // One-record lookahead: ask git for one commit past the page so `hasMore` reflects whether a real
-  // next commit exists, not merely that the page filled exactly. The extra record is read but never
-  // emitted, so a page that exactly exhausts the history reports `hasMore: false`.
-  const limit = typeof pageSize === 'number' && pageSize > 0 ? pageSize : undefined
-  const spawnOptions = limit !== undefined ? { ...options, maxCount: limit + 1 } : options
+  const limit = options?.maxCount
+  const skip = options?.skip ?? 0
+  if (limit !== undefined) {
+    return Stream.unwrap(
+      Effect.tryPromise({
+        try: (signal) => loadPage(repoPath, skip, limit, signal),
+        catch: gitError
+      }).pipe(Effect.map((page) => pageStream(repoPath, page, streamId)))
+    )
+  }
+
   return Stream.unwrapScoped(
     Effect.gen(function* () {
-      const proc = yield* Effect.acquireRelease(
-        Effect.sync(() => spawnGitLog(repoPath, spawnOptions)),
-        (child) =>
-          Effect.sync(() => {
-            if (!child.killed) {
-              child.kill()
-            }
-          })
+      yield* Effect.tryPromise({
+        try: () => clearLogContinuation(repoPath),
+        catch: gitError
+      })
+      const running = yield* Effect.acquireRelease(
+        Effect.sync(() => startGitLog(repoPath)),
+        (process) => Effect.promise(() => process.terminate()).pipe(Effect.orDie)
       )
-      const emitted = yield* Ref.make(0)
-      const hasMoreRef = yield* Ref.make(false)
-      const data = commitStream(proc).pipe(
+      const data = commitStream(running.child as GitStdioProc).pipe(
+        Stream.drop(skip),
         Stream.grouped(STREAM_BATCH_SIZE),
-        Stream.mapEffect((group) =>
-          Effect.gen(function* () {
-            const records = Chunk.toReadonlyArray(group) as GitLogEntry[]
-            const already = yield* Ref.get(emitted)
-            const room = limit === undefined ? records.length : Math.max(0, limit - already)
-            const commits = room >= records.length ? records : records.slice(0, room)
-            if (records.length > room) {
-              yield* Ref.set(hasMoreRef, true)
-            }
-            yield* Ref.update(emitted, (total) => total + commits.length)
-            return commits
+        Stream.map(
+          (group): LogChunk => ({
+            repoPath,
+            commits: Array.from(group),
+            done: false,
+            streamId
           })
-        ),
-        Stream.filter((commits) => commits.length > 0),
-        Stream.map((commits): LogChunk => ({ repoPath, commits, done: false, streamId }))
-      )
-      const terminal = Stream.fromEffect(
-        Ref.get(hasMoreRef).pipe(
-          Effect.map(
-            (hasMore): LogChunk => ({ repoPath, commits: [], done: true, hasMore, streamId })
-          )
         )
       )
-      return Stream.concat(data, terminal)
+      return Stream.concat(
+        data,
+        Stream.succeed({
+          repoPath,
+          commits: [],
+          done: true,
+          hasMore: false,
+          streamId
+        })
+      )
     })
   )
 }

@@ -1,17 +1,21 @@
+import { rm } from 'node:fs/promises'
+import path from 'node:path'
 import type { StashEntry } from '@shared/schemas/ipc'
 import { Effect } from 'effect'
 import { runWithConflictDetection } from './conflict'
 import { type Conflict, GitError, type RepoNotOpen } from './git-errors'
 import { requireGit, tryGit } from './op-helpers'
-import { isSafeRefArg } from './ref-args'
+import { isValidPathArg, literalPathspecs } from './pathspec'
 import { withRepoLock } from './repo-lock'
 import type { RepoSessions } from './repo-sessions'
+import { spawnGit } from './spawn'
 
 const STASH_FIELD_SEP = '\x1f'
 
 interface ParsedStash {
   index: number
   ref: string
+  oid: string
   message: string
   branch: string
 }
@@ -22,7 +26,7 @@ function parseStashList(raw: string): ParsedStash[] {
     if (!line) {
       continue
     }
-    const [ref, subject = ''] = line.split(STASH_FIELD_SEP)
+    const [oid, ref, subject = ''] = line.split(STASH_FIELD_SEP)
     const indexMatch = ref.match(/^stash@\{(\d+)\}$/)
     if (!indexMatch) {
       continue
@@ -31,6 +35,7 @@ function parseStashList(raw: string): ParsedStash[] {
     stashes.push({
       index: Number(indexMatch[1]),
       ref,
+      oid,
       branch: subjectMatch ? subjectMatch[1] : '',
       message: subjectMatch ? subjectMatch[2] : subject
     })
@@ -43,7 +48,9 @@ export function stashList(
 ): Effect.Effect<{ stashes: StashEntry[] }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
-    const raw = yield* tryGit(() => git.raw(['stash', 'list', `--format=%gd${STASH_FIELD_SEP}%gs`]))
+    const raw = yield* tryGit(() =>
+      git.raw(['stash', 'list', `--format=%H${STASH_FIELD_SEP}%gd${STASH_FIELD_SEP}%gs`])
+    )
     return { stashes: parseStashList(raw) }
   })
 }
@@ -56,21 +63,60 @@ export function stashPush(
 ): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
-    if (files?.some((file) => !isSafeRefArg(file))) {
+    if (files?.some((file) => !isValidPathArg(file))) {
       return yield* Effect.fail(new GitError({ message: 'invalid file path' }))
     }
     yield* withRepoLock(
       repoPath,
-      tryGit(() => {
+      tryGit(async () => {
+        const selectedStagedFiles = files !== undefined && files.length > 0
+        if (selectedStagedFiles) {
+          const gitDir = (await git.raw(['rev-parse', '--absolute-git-dir'])).trim()
+          const temporaryIndex = path.join(gitDir, `rebase-stash-index-${process.pid}`)
+          const env = { ...process.env, GIT_INDEX_FILE: temporaryIndex }
+          const run = async (args: string[], stdin?: string): Promise<string> => {
+            const result = await spawnGit(['-C', repoPath, ...args], { env, stdin })
+            if (result.code !== 0) {
+              throw new Error(
+                result.stderr.trim() || `git ${args[0]} exited with code ${result.code}`
+              )
+            }
+            return result.stdout
+          }
+          try {
+            await run(['read-tree', 'HEAD'])
+            const patch = await git.raw([
+              'diff',
+              '--cached',
+              '--binary',
+              '--full-index',
+              '--',
+              ...literalPathspecs(files)
+            ])
+            await run(['apply', '--cached', '--whitespace=nowarn', '-'], patch)
+            const args = ['stash', 'push', '--staged']
+            if (message) {
+              args.push('-m', message)
+            }
+            const output = await run(args)
+            await git.raw([
+              'restore',
+              '--staged',
+              '--source=HEAD',
+              '--',
+              ...literalPathspecs(files)
+            ])
+            return output
+          } finally {
+            await rm(temporaryIndex, { force: true })
+          }
+        }
         const args = ['stash', 'push']
         if (includeUntracked) {
           args.push('--include-untracked')
         }
         if (message) {
           args.push('-m', message)
-        }
-        if (files && files.length > 0) {
-          args.push('--', ...files)
         }
         return git.raw(args)
       })
@@ -82,9 +128,21 @@ function stashRef(index: number): string | null {
   return Number.isInteger(index) && index >= 0 ? `stash@{${index}}` : null
 }
 
+async function verifyStashOid(
+  git: { raw: (args: string[]) => Promise<string> },
+  ref: string,
+  expectedOid: string
+): Promise<void> {
+  const actualOid = (await git.raw(['rev-parse', ref])).trim()
+  if (actualOid !== expectedOid) {
+    throw new Error('stash changed since it was listed')
+  }
+}
+
 export function stashApply(
   repoPath: string,
-  index: number
+  index: number,
+  expectedOid: string
 ): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
@@ -92,13 +150,16 @@ export function stashApply(
     if (!ref) {
       return yield* Effect.fail(new GitError({ message: 'invalid stash index' }))
     }
-    yield* runWithConflictDetection(repoPath, git, ['stash', 'apply', ref])
+    yield* runWithConflictDetection(repoPath, git, ['stash', 'apply', ref], () =>
+      verifyStashOid(git, ref, expectedOid)
+    )
   })
 }
 
 export function stashPop(
   repoPath: string,
-  index: number
+  index: number,
+  expectedOid: string
 ): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
@@ -106,13 +167,16 @@ export function stashPop(
     if (!ref) {
       return yield* Effect.fail(new GitError({ message: 'invalid stash index' }))
     }
-    yield* runWithConflictDetection(repoPath, git, ['stash', 'pop', ref])
+    yield* runWithConflictDetection(repoPath, git, ['stash', 'pop', ref], () =>
+      verifyStashOid(git, ref, expectedOid)
+    )
   })
 }
 
 export function stashDrop(
   repoPath: string,
-  index: number
+  index: number,
+  expectedOid: string
 ): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
@@ -122,7 +186,10 @@ export function stashDrop(
     }
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.raw(['stash', 'drop', ref]))
+      Effect.gen(function* () {
+        yield* tryGit(() => verifyStashOid(git, ref, expectedOid))
+        yield* tryGit(() => git.raw(['stash', 'drop', ref]))
+      })
     )
   })
 }

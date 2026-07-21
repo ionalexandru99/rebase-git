@@ -1,5 +1,6 @@
 import { Duration, Effect } from 'effect'
 import { GitError } from './git-errors'
+import { beginRepoOperation, cancelRepoOperation, endRepoOperation } from './spawn'
 
 const repoSemaphores = new Map<string, Effect.Semaphore>()
 const heldLocks = new Map<string, number>()
@@ -33,40 +34,32 @@ function unmarkHeld(repoPath: string): void {
 }
 
 interface RepoLockOptions {
-  // Local git ops get a watchdog timeout so a hung process can't hold the lock forever; pass null
-  // for network ops (pull/push) that legitimately run long.
-  timeoutMs?: number | null
+  timeoutMs?: number
 }
 
-// Serialize Git work per repo on an Effect Semaphore. The permit is released on every exit path —
-// success, failure, timeout, and interruption — because withPermits is built on `ensuring`, so a
-// hung or cancelled op can never strand the lock.
-//
-// The watchdog timeout frees the lock if a local git op wedges (e.g. blocked on an externally-held
-// `.git/index.lock`); the wedged child may still be running when the next op proceeds, but git's own
-// `index.lock` serializes index mutation at the OS level, so the worst case is a transient GitError
-// for that next op rather than a corrupt index. Network ops pass `timeoutMs: null` (they run long).
 export function withRepoLock<A, E, R>(
   repoPath: string,
   work: Effect.Effect<A, E, R>,
   options?: RepoLockOptions
 ): Effect.Effect<A, E | GitError, R> {
   const timeoutMs = options?.timeoutMs === undefined ? DEFAULT_LOCK_TIMEOUT_MS : options.timeoutMs
-  const guarded =
-    timeoutMs === null
-      ? work
-      : Effect.timeoutFail(work, {
-          duration: Duration.millis(timeoutMs),
-          onTimeout: () => new GitError({ message: 'git operation timed out' })
-        })
-  // markHeld/unmarkHeld run inside the permit so repoLockCount reflects only held locks; the
-  // release runs on every exit path (acquireUseRelease finalizers are uninterruptible).
   const tracked = Effect.acquireUseRelease(
-    Effect.sync(() => markHeld(repoPath)),
-    () => guarded,
-    () => Effect.sync(() => unmarkHeld(repoPath))
+    Effect.sync(() => {
+      markHeld(repoPath)
+      return beginRepoOperation(repoPath)
+    }),
+    (operation) =>
+      work.pipe(Effect.onInterrupt(() => Effect.promise(() => cancelRepoOperation(operation)))),
+    (operation) =>
+      Effect.promise(() => endRepoOperation(operation)).pipe(
+        Effect.ensuring(Effect.sync(() => unmarkHeld(repoPath)))
+      )
   )
-  return Effect.suspend(() => semaphoreFor(repoPath).withPermits(1)(tracked))
+  const locked = Effect.suspend(() => semaphoreFor(repoPath).withPermits(1)(tracked))
+  return Effect.timeoutFail(locked, {
+    duration: Duration.millis(timeoutMs),
+    onTimeout: () => new GitError({ message: 'git operation timed out' })
+  })
 }
 
 export function repoLockCount(): number {

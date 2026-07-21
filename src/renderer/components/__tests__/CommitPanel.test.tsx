@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { CommitPanel } from '../CommitPanel'
 
@@ -19,6 +19,7 @@ function renderPanel(
       onAmendChange={overrides.onAmendChange}
       droppedHeadPaths={overrides.droppedHeadPaths}
       droppedHeadHunks={overrides.droppedHeadHunks}
+      expectedHead={overrides.expectedHead}
     />
   )
 }
@@ -92,6 +93,44 @@ describe('CommitPanel', () => {
     expect(textarea.value).toBe('keep me')
   })
 
+  it('submits only once when the commit button is clicked twice before loading renders', async () => {
+    let resolveCommit: (success: boolean) => void = () => {}
+    const onCommit = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveCommit = resolve
+        })
+    )
+    renderPanel({ onCommit })
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'one commit' } })
+    const button = screen.getByRole('button', { name: /Commit 2 files/i })
+
+    fireEvent.click(button)
+    fireEvent.click(button)
+
+    expect(onCommit).toHaveBeenCalledTimes(1)
+    await act(async () => resolveCommit(true))
+  })
+
+  it('preserves a newer draft when an earlier commit succeeds', async () => {
+    let resolveCommit: (success: boolean) => void = () => {}
+    const onCommit = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveCommit = resolve
+        })
+    )
+    renderPanel({ onCommit })
+    const textarea = screen.getByRole('textbox')
+    fireEvent.input(textarea, { target: { value: 'submitted draft' } })
+    fireEvent.click(screen.getByRole('button', { name: /Commit 2 files/i }))
+    fireEvent.input(textarea, { target: { value: 'next draft' } })
+
+    await act(async () => resolveCommit(true))
+
+    expect(textarea).toHaveValue('next draft')
+  })
+
   it('prefills HEAD’s full message and relabels the button to Amend when amend is ticked', async () => {
     const loadHeadMessage = vi.fn().mockResolvedValue('original subject\n\noriginal body')
     renderPanel({ amendAvailable: true, loadHeadMessage })
@@ -103,6 +142,24 @@ describe('CommitPanel', () => {
     })
     expect(screen.getByRole('button', { name: 'Amend' })).toBeInTheDocument()
     expect(loadHeadMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not overwrite text edited while the amend message is loading', async () => {
+    let resolveHeadMessage: (message: string) => void = () => {}
+    const loadHeadMessage = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveHeadMessage = resolve
+        })
+    )
+    renderPanel({ amendAvailable: true, loadHeadMessage })
+    const textarea = screen.getByRole('textbox')
+
+    fireEvent.click(amendToggle())
+    fireEvent.input(textarea, { target: { value: 'edited amend message' } })
+    await act(async () => resolveHeadMessage('stale head message'))
+
+    expect(textarea).toHaveValue('edited amend message')
   })
 
   it('restores the prior draft message when amend is un-ticked', async () => {
@@ -125,6 +182,7 @@ describe('CommitPanel', () => {
     renderPanel({
       amendAvailable: true,
       stagedCount: 0,
+      expectedHead: 'head-sha',
       loadHeadMessage: vi.fn().mockResolvedValue('head message')
     })
 
@@ -132,6 +190,20 @@ describe('CommitPanel', () => {
     await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('head message'))
 
     expect(screen.getByRole('button', { name: 'Amend' })).toBeEnabled()
+  })
+
+  it('keeps Amend disabled until the rendered HEAD SHA is available', async () => {
+    renderPanel({
+      amendAvailable: true,
+      stagedCount: 0,
+      expectedHead: undefined,
+      loadHeadMessage: vi.fn().mockResolvedValue('head message')
+    })
+
+    fireEvent.click(amendToggle())
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('head message'))
+
+    expect(screen.getByRole('button', { name: 'Amend' })).toBeDisabled()
   })
 
   it('invokes onAmend (not onCommit) when committing in amend mode', async () => {
@@ -142,6 +214,7 @@ describe('CommitPanel', () => {
       stagedCount: 0,
       onAmend,
       onCommit,
+      expectedHead: 'head-sha',
       loadHeadMessage: vi.fn().mockResolvedValue('head message')
     })
 
@@ -149,7 +222,7 @@ describe('CommitPanel', () => {
     await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('head message'))
     fireEvent.click(screen.getByRole('button', { name: 'Amend' }))
 
-    await waitFor(() => expect(onAmend).toHaveBeenCalledWith('head message', [], []))
+    await waitFor(() => expect(onAmend).toHaveBeenCalledWith('head message', [], [], 'head-sha'))
     expect(onCommit).not.toHaveBeenCalled()
   })
 
@@ -159,6 +232,7 @@ describe('CommitPanel', () => {
       amendAvailable: true,
       stagedCount: 0,
       onAmend,
+      expectedHead: 'head-sha',
       droppedHeadPaths: ['src/dropped.ts', 'gone.txt'],
       droppedHeadHunks: [{ file: 'partial.ts', hunks: ['@@ -1,3 +1,4 @@'] }],
       loadHeadMessage: vi.fn().mockResolvedValue('head message')
@@ -172,9 +246,42 @@ describe('CommitPanel', () => {
       expect(onAmend).toHaveBeenCalledWith(
         'head message',
         ['src/dropped.ts', 'gone.txt'],
-        [{ file: 'partial.ts', hunks: ['@@ -1,3 +1,4 @@'] }]
+        [{ file: 'partial.ts', hunks: ['@@ -1,3 +1,4 @@'] }],
+        'head-sha'
       )
     )
+  })
+
+  it('warns that dropped files also exclude their staged changes', async () => {
+    renderPanel({
+      amendAvailable: true,
+      expectedHead: 'head-sha',
+      droppedHeadPaths: ['src/dropped.ts'],
+      loadHeadMessage: vi.fn().mockResolvedValue('head message')
+    })
+
+    fireEvent.click(amendToggle())
+
+    expect(
+      await screen.findByText(/staged changes in dropped files will also be excluded/i)
+    ).toBeInTheDocument()
+  })
+
+  it('forwards the expectedHead sha the panel rendered against into onAmend', async () => {
+    const onAmend = vi.fn().mockResolvedValue(true)
+    renderPanel({
+      amendAvailable: true,
+      stagedCount: 0,
+      onAmend,
+      expectedHead: 'abc123',
+      loadHeadMessage: vi.fn().mockResolvedValue('head message')
+    })
+
+    fireEvent.click(amendToggle())
+    await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('head message'))
+    fireEvent.click(screen.getByRole('button', { name: 'Amend' }))
+
+    await waitFor(() => expect(onAmend).toHaveBeenCalledWith('head message', [], [], 'abc123'))
   })
 
   it('hides the amend toggle when there is no HEAD to amend', () => {
@@ -214,6 +321,7 @@ describe('CommitPanel', () => {
       stagedCount: 0,
       onAmendChange,
       onAmend: vi.fn().mockResolvedValue(true),
+      expectedHead: 'head-sha',
       loadHeadMessage: vi.fn().mockResolvedValue('head message')
     })
 

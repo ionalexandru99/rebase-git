@@ -175,9 +175,10 @@ describe('mergeGlyphState', () => {
   it('marks an expanded merge as expanded', () => {
     const expanded = new Set(['m4'])
     const displayed = computeCollapsedView(mergeHeavy, ['m4'], expanded)
-    expect(mergeGlyphState(mergeHeavy, mergeOf(mergeHeavy, 'm4'), displayed, expanded)).toBe(
-      'expanded'
-    )
+    const collapsed = computeCollapsedView(mergeHeavy, ['m4'], new Set())
+    expect(
+      mergeGlyphState(mergeHeavy, mergeOf(mergeHeavy, 'm4'), displayed, expanded, collapsed)
+    ).toBe('expanded')
   })
 
   it('shows no glyph for a non-merge commit', () => {
@@ -196,6 +197,20 @@ describe('mergeGlyphState', () => {
     const displayed = computeCollapsedView(featureAlsoVisible, ['m', 'f2'], new Set())
     expect(
       mergeGlyphState(featureAlsoVisible, mergeOf(featureAlsoVisible, 'm'), displayed, new Set())
+    ).toBe('none')
+  })
+
+  it('shows no expanded glyph after another visible tip exposes the side branch', () => {
+    const displayed = computeCollapsedView(featureAlsoVisible, ['m', 'f2'], new Set(['m']))
+    const independentlyDisplayed = computeCollapsedView(featureAlsoVisible, ['m', 'f2'], new Set())
+    expect(
+      mergeGlyphState(
+        featureAlsoVisible,
+        mergeOf(featureAlsoVisible, 'm'),
+        displayed,
+        new Set(['m']),
+        independentlyDisplayed
+      )
     ).toBe('none')
   })
 

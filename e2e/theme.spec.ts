@@ -7,7 +7,7 @@ test('theme toggle flips the html dark class and the button label', async ({ har
       localStorage.setItem('theme', 'dark')
     } catch {}
   })
-  const page = await harness.relaunch()
+  const page = await harness.reload()
 
   const html = page.locator('html')
   await expect(html).toHaveClass(/dark/)

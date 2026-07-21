@@ -1,11 +1,11 @@
 import { Channel } from '@shared/channels'
+import type { OpenRepo, ScanForRepos } from '@shared/rpc'
+import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import type {
   CancelLogStreamResponse,
-  OpenRepoResponse,
   PersistedTabs,
   RefTreeToggles,
-  ScanForReposResponse,
   SidebarPrefs,
   StartLogStreamResponse
 } from '@shared/schemas/ipc'
@@ -15,10 +15,17 @@ import { contextBridge, ipcRenderer } from 'electron'
 export type LogChunkEvent = LogChunk
 export type { RepoChangedEvent }
 
+type OpenRepoResponse = RpcEncodedResult<typeof OpenRepo.successSchema, typeof OpenRepo.errorSchema>
+type ScanForReposResponse = RpcEncodedResult<
+  typeof ScanForRepos.successSchema,
+  typeof ScanForRepos.errorSchema
+>
+
 export interface IElectronAPI {
   selectFolder: () => Promise<string | null>
-  openRepo: (path: string) => Promise<OpenRepoResponse>
-  closeRepo: (path: string) => Promise<void>
+  openRepo: (path: string, owner: number) => Promise<OpenRepoResponse>
+  closeRepo: (path: string, owner: number) => Promise<void>
+  disownRepo: (path: string, owner: number) => Promise<void>
   startLogStream: (repoPath: string, options?: LogStreamOptions) => Promise<StartLogStreamResponse>
   cancelLogStream: (repoPath?: string) => Promise<CancelLogStreamResponse>
   onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
@@ -44,8 +51,9 @@ export interface IElectronAPI {
 
 const api: IElectronAPI = {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
-  openRepo: (path: string) => ipcRenderer.invoke(Channel.openRepo, path),
-  closeRepo: (path: string) => ipcRenderer.invoke(Channel.closeRepo, path),
+  openRepo: (path: string, owner: number) => ipcRenderer.invoke(Channel.openRepo, path, owner),
+  closeRepo: (path: string, owner: number) => ipcRenderer.invoke(Channel.closeRepo, path, owner),
+  disownRepo: (path: string, owner: number) => ipcRenderer.invoke(Channel.disownRepo, path, owner),
   startLogStream: (repoPath: string, options?: LogStreamOptions) =>
     ipcRenderer.invoke(Channel.startLogStream, repoPath, options),
   cancelLogStream: (repoPath?: string) =>

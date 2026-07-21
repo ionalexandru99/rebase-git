@@ -3,7 +3,7 @@ import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import { RefTreeTogglesSchema } from '@shared/schemas/ipc'
 import { SearchIcon, XIcon } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { BranchAction, StashAction } from '@/lib/git-actions'
 import {
   type BranchTracking,
@@ -21,6 +21,7 @@ import { RefTreeRow } from './RefTreeRow'
 export type { RefKind } from '@/lib/ref-tree'
 
 interface RefTreePanelProps {
+  repoPath: string | null
   localBranches: string[]
   remoteBranches: string[]
   tags: string[]
@@ -32,7 +33,7 @@ interface RefTreePanelProps {
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
   onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
-  onStashAction?: (action: StashAction, index: number) => void
+  onStashAction?: (action: StashAction, index: number, expectedOid: string) => void
 }
 
 interface VirtualRefTreeRowProps {
@@ -46,7 +47,7 @@ interface VirtualRefTreeRowProps {
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
   onBranchAction?: (action: BranchAction, refKind: RefKind, fullPath: string) => void
-  onStashAction?: (action: StashAction, index: number) => void
+  onStashAction?: (action: StashAction, index: number, expectedOid: string) => void
 }
 
 function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
@@ -70,16 +71,47 @@ function VirtualRefTreeRow(props: VirtualRefTreeRowProps) {
   )
 }
 
-function persistToggles(next: Set<string>): void {
-  window.electronAPI.setRefTreeToggles(filterPersistedRefTreeToggles([...next]))
+const scopedTogglePrefix = (repoPath: string): string => `repo:${encodeURIComponent(repoPath)}:`
+
+const togglesForRepo = (persisted: readonly string[], repoPath: string): Set<string> => {
+  const prefix = scopedTogglePrefix(repoPath)
+  return new Set(
+    persisted.filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length))
+  )
+}
+
+async function persistToggles(repoPath: string, toggles: Set<string>): Promise<void> {
+  const prefix = scopedTogglePrefix(repoPath)
+  const current = parseOrThrow(RefTreeTogglesSchema, await window.electronAPI.getRefTreeToggles())
+  const otherRepos = current.filter((key) => !key.startsWith(prefix))
+  const scoped = filterPersistedRefTreeToggles([...toggles]).map((key) => `${prefix}${key}`)
+  await window.electronAPI.setRefTreeToggles([...otherRepos, ...scoped])
+}
+
+let persistQueue = Promise.resolve()
+
+function enqueuePersist(repoPath: string, toggles: Set<string>): void {
+  persistQueue = persistQueue
+    .then(() => persistToggles(repoPath, toggles))
+    .catch((err: unknown) => {
+      console.warn('[RefTreePanel] failed to persist toggles', err)
+    })
 }
 
 export function RefTreePanel(props: RefTreePanelProps) {
   const [toggles, setToggles] = useState<Set<string>>(new Set())
+  const togglesRef = useRef(toggles)
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query)
 
   useEffect(() => {
+    const repoPath = props.repoPath
+    const empty = new Set<string>()
+    togglesRef.current = empty
+    setToggles(empty)
+    if (!repoPath) {
+      return
+    }
     let cancelled = false
     window.electronAPI
       .getRefTreeToggles()
@@ -88,7 +120,9 @@ export function RefTreePanel(props: RefTreePanelProps) {
           return
         }
         const decoded = parseOrThrow(RefTreeTogglesSchema, res)
-        setToggles(new Set(filterPersistedRefTreeToggles(decoded)))
+        const loaded = togglesForRepo(decoded, repoPath)
+        togglesRef.current = loaded
+        setToggles(loaded)
       })
       .catch((err: unknown) => {
         console.warn('[RefTreePanel] failed to load toggles', err)
@@ -96,7 +130,7 @@ export function RefTreePanel(props: RefTreePanelProps) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [props.repoPath])
 
   const rows = useMemo(
     () =>
@@ -139,18 +173,20 @@ export function RefTreePanel(props: RefTreePanelProps) {
   }
 
   const toggle = (key: string) => {
-    setToggles((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) {
-        next.delete(key)
-      } else {
-        next.add(key)
-      }
-      persistToggles(next)
-      queueMicrotask(() => {
-        virtualizer.measure()
-      })
-      return next
+    const next = new Set(togglesRef.current)
+    if (next.has(key)) {
+      next.delete(key)
+    } else {
+      next.add(key)
+    }
+    togglesRef.current = next
+    setToggles(next)
+    const repoPath = props.repoPath
+    if (repoPath) {
+      enqueuePersist(repoPath, next)
+    }
+    queueMicrotask(() => {
+      virtualizer.measure()
     })
   }
 

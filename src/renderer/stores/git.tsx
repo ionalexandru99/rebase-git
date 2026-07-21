@@ -2,9 +2,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useLatestRef } from '@/hooks/useLatestRef'
+import { formatCause } from '@/lib/format-cause'
 import { cachesForRepoChange, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
-import { ActionRunnerProvider, useActionRunnerController } from './action-runner'
+import {
+  ActionRunnerProvider,
+  useActionRunnerController,
+  useRepoMutationCoordinator
+} from './action-runner'
 import { CommitHistoryProvider, useCommitHistoryController } from './commit-history'
 import { RefsProvider, useRefsController } from './refs'
 import {
@@ -25,16 +30,6 @@ export type { RepoSession } from './repo-session'
 export { useFileDiff, useHeadCommit, useWorkingTreeStatus } from './working-tree-status'
 export { RepoSessionProvider, useRepoSession }
 
-const formatCause = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
-  return String(error)
-}
-
 function useGitStoreValue(tabId: string, tabActive: boolean) {
   const queryClient = useQueryClient()
   const sessionLifecycle = useRef<RepoSessionLifecycle>(emptyRepoSessionLifecycle)
@@ -42,14 +37,12 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
 
   const path = session.repoPath
 
-  // Long-lived async closures (IPC subscriptions and query/mutation callbacks) must
-  // read the live repo, not the render-zero value, so they go through this ref refreshed each
-  // render.
   const liveRepoPath = session.liveRepoPath
   const tabActiveRef = useRef(tabActive)
   tabActiveRef.current = tabActive
 
   const openGeneration = session.openGenerationRef
+  const mutationCoordinator = useRepoMutationCoordinator()
 
   const isCurrentRepo = (generation: number, repoPath: string) =>
     generation === openGeneration.current && liveRepoPath.current === repoPath
@@ -60,7 +53,9 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     liveRepoPath,
     openGenerationRef: openGeneration,
     isCurrentRepo,
-    setError: session.setError
+    setError: session.setError,
+    clearError: session.clearError,
+    mutationCoordinator
   })
 
   const commitHistory = useCommitHistoryController({
@@ -70,8 +65,16 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     liveRepoPath,
     openGenerationRef: openGeneration,
     isCurrentRepo,
-    setError: session.setError
+    setError: session.setError,
+    clearError: session.clearError
   })
+
+  const refreshAfterFetch = (repoPath: string): Promise<unknown> =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).localBranches }),
+      queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).remoteRefs }),
+      commitHistory.restart(repoPath)
+    ])
 
   const refs = useRefsController({
     repoPath: path,
@@ -83,20 +86,29 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     liveRepoPath,
     openGenerationRef: openGeneration,
     isCurrentRepo,
-    setError: session.setError
+    setError: session.setError,
+    clearError: session.clearError,
+    mutationCoordinator,
+    refreshAfterFetch
   })
 
   useEffect(() => {
-    const error = workingTreeStatus.statusError ?? refs.localBranchesError ?? refs.remoteRefsError
+    const error = workingTreeStatus.statusError
     if (error) {
-      session.setError(formatCause(error))
+      session.setError('status', formatCause(error))
+      return
     }
-  }, [
-    workingTreeStatus.statusError,
-    refs.localBranchesError,
-    refs.remoteRefsError,
-    session.setError
-  ])
+    session.clearError('status')
+  }, [workingTreeStatus.statusError, session.setError, session.clearError])
+
+  useEffect(() => {
+    const error = refs.localBranchesError ?? refs.remoteRefsError
+    if (error) {
+      session.setError('refs', formatCause(error))
+      return
+    }
+    session.clearError('refs')
+  }, [refs.localBranchesError, refs.remoteRefsError, session.setError, session.clearError])
 
   const reset = () => {
     commitHistory.reset()
@@ -117,19 +129,16 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
         return queryKeys.stash
       case 'diff':
         return queryKeys.diffRoot
+      case 'headCommit':
+        return queryKeys.headCommit
     }
   }
 
-  // The log is push-based (chunks written via setQueryData), so "dirtying" it means restarting the
-  // stream, not invalidating a query — every other cache is a normal query refetch.
   const refreshMappedCache = (repoPath: string, cache: RepoCache): Promise<unknown> =>
     cache === 'log'
       ? commitHistory.restart(repoPath)
       : queryClient.invalidateQueries({ queryKey: repoCacheQueryKey(repoPath, cache) })
 
-  // The one invalidation primitive every path shares: name the caches a change dirties and they
-  // refresh through the same cache→key switch. Actions read their list from the op→caches map; the
-  // bespoke paths (open, fetch, external change) pass an explicit list.
   const refreshCaches = (repoPath: string, caches: readonly RepoCache[]): Promise<unknown> =>
     Promise.all(caches.map((cache) => refreshMappedCache(repoPath, cache)))
 
@@ -142,10 +151,14 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     onSessionReset: reset
   }
 
-  const actionRunner = useActionRunnerController({ liveRepoPath, refreshCaches })
+  const actionRunner = useActionRunnerController({
+    liveRepoPath,
+    openGenerationRef: openGeneration,
+    isCurrentRepo,
+    refreshCaches,
+    mutationCoordinator
+  })
 
-  // The IPC subscription below registers once (`[]` deps) and must read the current helpers, not
-  // render-zero closures. The helpers are recreated each render, so it reads them through this ref.
   const latest = useLatestRef({
     getRepoPath: () => liveRepoPath.current,
     isTabActive: () => tabActiveRef.current,

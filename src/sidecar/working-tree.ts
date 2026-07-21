@@ -1,9 +1,10 @@
 import type { FileDiff, GitStatus } from '@shared/schemas/git'
-import { Effect } from 'effect'
+import { Effect, Either } from 'effect'
 import { buildHunkPatch, parseUnifiedDiff, toFileDiff } from './git/diff'
 import { serializeStatus } from './git/serialize'
 import { GitError, HunkNotFound, type RepoNotOpen } from './git-errors'
 import { requireGit, requireOpen, tryGit } from './op-helpers'
+import { isValidPathArg, literalPathspec, literalPathspecs } from './pathspec'
 import { isSafeRefArg } from './ref-args'
 import { withRepoLock } from './repo-lock'
 import type { RepoSessions } from './repo-sessions'
@@ -27,20 +28,22 @@ export function stageFile(
     const git = yield* requireGit(repoPath)
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.add(file))
+      tryGit(() => git.raw(['add', '--', literalPathspec(file)]))
     )
   })
 }
 
 export function unstageFile(
   repoPath: string,
-  file: string
+  file: string,
+  renameSource?: string
 ): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
+    const files = renameSource ? [renameSource, file] : [file]
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.reset(['HEAD', '--', file]))
+      tryGit(() => git.reset(['HEAD', '--', ...literalPathspecs(files)]))
     )
   })
 }
@@ -56,7 +59,7 @@ export function stageAll(
     }
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.add(files))
+      tryGit(() => git.raw(['add', '--', ...literalPathspecs(files)]))
     )
   })
 }
@@ -72,7 +75,7 @@ export function unstageAll(
     }
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.reset(['HEAD', '--', ...files]))
+      tryGit(() => git.reset(['HEAD', '--', ...literalPathspecs(files)]))
     )
   })
 }
@@ -91,12 +94,20 @@ async function readFileDiff(
   } else if (staged) {
     args.push('--cached')
   }
-  args.push('--', file)
+  args.push('--', literalPathspec(file))
   return runGit(args)
 }
 
 async function isUntracked(repoPath: string, file: string): Promise<boolean> {
-  const out = await runGit(['-C', repoPath, 'status', '--porcelain', '-z', '--', file])
+  const out = await runGit([
+    '-C',
+    repoPath,
+    'status',
+    '--porcelain',
+    '-z',
+    '--',
+    literalPathspec(file)
+  ])
   return out.startsWith('??')
 }
 
@@ -107,6 +118,10 @@ async function readUntrackedDiff(repoPath: string, file: string): Promise<string
       okExitCodes: [0, 1]
     }
   )
+}
+
+async function readConflictDiff(repoPath: string, file: string): Promise<string> {
+  return runGit(['-C', repoPath, 'diff', ...DIFF_BASE_ARGS, '--ours', '--', literalPathspec(file)])
 }
 
 export function getDiff(
@@ -121,14 +136,18 @@ export function getDiff(
       return yield* Effect.fail(new GitError({ message: `unsafe diff range: ${range}` }))
     }
     let raw = yield* tryGit(() => readFileDiff(repoPath, file, staged, range))
-    // The untracked fallback only makes sense for the working tree; a range diff is always tracked.
     if (!raw && !staged && range === undefined) {
       const untracked = yield* tryGit(() => isUntracked(repoPath, file))
       if (untracked) {
         raw = yield* tryGit(() => readUntrackedDiff(repoPath, file))
       }
     }
-    return { diff: toFileDiff(file, parseUnifiedDiff(raw)) }
+    let parsed = parseUnifiedDiff(raw)
+    if (parsed.hunks.length === 0 && raw.includes('@@@') && !staged && range === undefined) {
+      raw = yield* tryGit(() => readConflictDiff(repoPath, file))
+      parsed = parseUnifiedDiff(raw)
+    }
+    return { diff: toFileDiff(file, parsed) }
   })
 }
 
@@ -175,8 +194,6 @@ export function unstageHunk(
   return applyHunk(repoPath, file, hunkHeader, 'unstage')
 }
 
-// Discard local edits to the given paths: untracked paths are deleted, tracked paths are restored
-// to their committed/index baseline. The two cases need different git verbs, so classify first.
 export function discardChanges(
   repoPath: string,
   files: string[]
@@ -186,14 +203,14 @@ export function discardChanges(
     if (files.length === 0) {
       return
     }
-    if (files.some((file) => !isSafeRefArg(file))) {
+    if (files.some((file) => !isValidPathArg(file))) {
       return yield* Effect.fail(new GitError({ message: 'invalid file path' }))
     }
     yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
         const statusRaw = yield* tryGit(() =>
-          git.raw(['status', '--porcelain', '-z', '--', ...files])
+          git.raw(['status', '--porcelain', '-z', '--', ...literalPathspecs(files)])
         )
         const untracked = new Set<string>()
         for (const entry of statusRaw.split('\0')) {
@@ -203,10 +220,27 @@ export function discardChanges(
         }
         const tracked = files.filter((file) => !untracked.has(file))
         if (tracked.length > 0) {
-          yield* tryGit(() => git.raw(['restore', '--', ...tracked]))
+          const headCheck = yield* Effect.either(
+            tryGit(() => git.raw(['rev-parse', '--verify', '--quiet', 'HEAD']))
+          )
+          const headExists = Either.isRight(headCheck) && headCheck.right.trim().length > 0
+          if (headExists) {
+            yield* tryGit(() =>
+              git.raw([
+                'restore',
+                '--source=HEAD',
+                '--staged',
+                '--worktree',
+                '--',
+                ...literalPathspecs(tracked)
+              ])
+            )
+          } else {
+            yield* tryGit(() => git.raw(['rm', '-rf', '--', ...literalPathspecs(tracked)]))
+          }
         }
         if (untracked.size > 0) {
-          yield* tryGit(() => git.raw(['clean', '-fd', '--', ...untracked]))
+          yield* tryGit(() => git.raw(['clean', '-fd', '--', ...literalPathspecs([...untracked])]))
         }
       })
     )
@@ -221,7 +255,15 @@ export function discardAll(
     yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
-        yield* tryGit(() => git.raw(['reset', '--hard', 'HEAD']))
+        const headCheck = yield* Effect.either(
+          tryGit(() => git.raw(['rev-parse', '--verify', '--quiet', 'HEAD']))
+        )
+        const headExists = Either.isRight(headCheck) && headCheck.right.trim().length > 0
+        if (headExists) {
+          yield* tryGit(() => git.raw(['reset', '--hard', 'HEAD']))
+        } else {
+          yield* tryGit(() => git.raw(['rm', '-rf', '--cached', '--ignore-unmatch', '--', '.']))
+        }
         yield* tryGit(() => git.raw(['clean', '-fd']))
       })
     )

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PushForce } from '@/lib/rpc-client'
 import type { PushOutcome } from '@/stores/action-runner'
@@ -175,5 +175,66 @@ describe('PushControl', () => {
     fireEvent.click(screen.getByRole('button', { name: /push options/i }))
 
     expect(screen.getByRole('menuitem', { name: /force push \(with lease\)/i })).toBeDisabled()
+  })
+
+  it('disables the primary push action in detached HEAD', () => {
+    renderControl({ detached: true })
+
+    expect(screen.getByRole('button', { name: 'Push' })).toBeDisabled()
+  })
+
+  it('dismisses the push menu with Escape', () => {
+    renderControl()
+    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('does not reopen escalation after a pending force push dialog is cancelled', async () => {
+    let resolveForce: (outcome: PushOutcome) => void = () => {}
+    const push = vi.fn((force?: PushForce): Promise<PushOutcome> => {
+      if (force === 'with-lease') {
+        return new Promise((resolve) => {
+          resolveForce = resolve
+        })
+      }
+      return Promise.resolve(ok)
+    })
+    renderControl({ ahead: 2, behind: 3, push })
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    resolveForce({
+      kind: 'rejected',
+      reason: 'remote-moved',
+      lostCommits: [{ sha: 'abc1234', subject: 'late result' }],
+      remoteSha: 'abc1234'
+    })
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByText('late result')).not.toBeInTheDocument()
+  })
+
+  it('shows a pending force confirmation and submits it only once', async () => {
+    let resolveForce: (outcome: PushOutcome) => void = () => {}
+    const push = vi.fn(
+      () =>
+        new Promise<PushOutcome>((resolve) => {
+          resolveForce = resolve
+        })
+    )
+    renderControl({ ahead: 2, behind: 3, push })
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    const confirm = screen.getByRole('button', { name: /force push \(with lease\)/i })
+
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Force pushing…' })).toBeDisabled()
+    await act(async () => resolveForce(ok))
   })
 })

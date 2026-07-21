@@ -1,3 +1,4 @@
+import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
 import { describe, expect, it } from 'vitest'
 import type { GitLogEntry } from '@/types'
 import {
@@ -97,7 +98,11 @@ describe('computeBranchFilterSet', () => {
 
   it('does not add commits when a selected branch is already contained in main', () => {
     const commits = [
-      entry({ hash: 'main-tip', refs: 'main, origin/main', parents: ['feature-tip'] }),
+      entry({
+        hash: 'main-tip',
+        refs: `main${GIT_LOG_REF_SEPARATOR}origin/main`,
+        parents: ['feature-tip']
+      }),
       entry({ hash: 'feature-tip', refs: 'feature', parents: ['shared'] }),
       entry({ hash: 'shared', refs: '', parents: [] })
     ]
@@ -134,7 +139,7 @@ describe('computeBranchFilterSet', () => {
 
   it('includes a tracking remote at the same commit as the local branch', () => {
     const commits = [
-      entry({ hash: 'tip', refs: 'main, origin/main', parents: ['base'] }),
+      entry({ hash: 'tip', refs: `main${GIT_LOG_REF_SEPARATOR}origin/main`, parents: ['base'] }),
       entry({ hash: 'base', refs: '', parents: [] })
     ]
     const selected = new Set([refFilterKey('local', 'main')])
@@ -208,7 +213,16 @@ describe('commit index cache', () => {
 })
 
 describe('ref tip index cache', () => {
-  it('retains each repo and recomputes when remoteNames change', () => {
+  it('indexes comma-containing branches and the HEAD decoration independently', () => {
+    const commits = [entry({ hash: 'tip', refs: `release,2026${GIT_LOG_REF_SEPARATOR}HEAD` })]
+
+    const index = getRefTipIndex(commits)
+
+    expect(index.tipByRefKey.get(refFilterKey('local', 'release,2026'))).toBe('tip')
+    expect(index.headTip).toBe('tip')
+  })
+
+  it('retains each repo and reuses equivalent remote-name sets', () => {
     const repoA = [entry({ hash: 'a1', refs: 'HEAD -> main' })]
     const repoB = [entry({ hash: 'b1', refs: 'HEAD -> main' })]
     const remotes = new Set(['origin'])
@@ -217,7 +231,7 @@ describe('ref tip index cache', () => {
     getRefTipIndex(repoB, remotes)
 
     expect(getRefTipIndex(repoA, remotes)).toBe(indexA)
-    // A different remoteNames identity invalidates the entry for the same commits array.
-    expect(getRefTipIndex(repoA, new Set(['origin']))).not.toBe(indexA)
+    expect(getRefTipIndex(repoA, new Set(['origin']))).toBe(indexA)
+    expect(getRefTipIndex(repoA, new Set(['upstream']))).not.toBe(indexA)
   })
 })

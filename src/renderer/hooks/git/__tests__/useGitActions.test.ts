@@ -63,6 +63,16 @@ function actionsFor() {
   return result.current
 }
 
+it('keeps the broad action surface stable while its runner is unchanged', () => {
+  const runner = { runAction } as unknown as ActionRunner
+  const { result, rerender } = renderHook(() => useGitActions(runner))
+  const first = result.current
+
+  rerender()
+
+  expect(result.current).toBe(first)
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
 })
@@ -71,10 +81,14 @@ describe('useGitActions conflictable ops route through the runner', () => {
   it('routes mergeBranch through the runner with the mapped tag, call, and label', async () => {
     vi.mocked(rpcMergeBranch).mockResolvedValue(conflictable({ _tag: 'Ok' }))
 
-    const ok = await actionsFor().mergeBranch('feature')
+    const ok = await actionsFor().mergeBranch('remote', 'origin/feature')
 
-    expect(runAction).toHaveBeenCalledWith('mergeBranch', expect.any(Function), 'Merged feature')
-    expect(rpcMergeBranch).toHaveBeenCalledWith('/repo', 'feature')
+    expect(runAction).toHaveBeenCalledWith(
+      'mergeBranch',
+      expect.any(Function),
+      'Merged origin/feature'
+    )
+    expect(rpcMergeBranch).toHaveBeenCalledWith('/repo', 'remote', 'origin/feature')
     expect(ok).toBe(true)
   })
 
@@ -115,7 +129,7 @@ describe('useGitActions conflictable ops route through the runner', () => {
   it('reports a conflictable op that hits conflicts as not-ok', async () => {
     vi.mocked(rpcMergeBranch).mockResolvedValue(conflictable({ _tag: 'Conflict' }))
 
-    const ok = await actionsFor().mergeBranch('feature')
+    const ok = await actionsFor().mergeBranch('local', 'feature')
 
     expect(runAction).toHaveBeenCalledWith('mergeBranch', expect.any(Function), 'Merged feature')
     expect(ok).toBe(false)
@@ -126,14 +140,14 @@ describe('useGitActions branch & tag ops route through the runner', () => {
   it('routes createBranch+checkout through the runner with the switched label', async () => {
     vi.mocked(rpcCreateBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
 
-    const ok = await actionsFor().createBranch('feature', 'main', true)
+    const ok = await actionsFor().createBranch('feature', 'main', true, 'remote')
 
     expect(runAction).toHaveBeenCalledWith(
       'createBranchCheckout',
       expect.any(Function),
       'Created and switched to feature'
     )
-    expect(rpcCreateBranch).toHaveBeenCalledWith('/repo', 'feature', 'main', true)
+    expect(rpcCreateBranch).toHaveBeenCalledWith('/repo', 'feature', 'main', true, 'remote')
     expect(ok).toBe(true)
   })
 
@@ -147,7 +161,13 @@ describe('useGitActions branch & tag ops route through the runner', () => {
       expect.any(Function),
       'Created branch feature'
     )
-    expect(rpcCreateBranch).toHaveBeenCalledWith('/repo', 'feature', undefined, undefined)
+    expect(rpcCreateBranch).toHaveBeenCalledWith(
+      '/repo',
+      'feature',
+      undefined,
+      undefined,
+      undefined
+    )
   })
 
   it('routes deleteBranch through the runner', async () => {
@@ -181,10 +201,10 @@ describe('useGitActions branch & tag ops route through the runner', () => {
   it('routes createTag through the runner', async () => {
     vi.mocked(rpcCreateTag).mockResolvedValue(refWrite({ _tag: 'Ok' }))
 
-    const ok = await actionsFor().createTag('v1', 'main')
+    const ok = await actionsFor().createTag('v1', 'main', undefined, 'local')
 
     expect(runAction).toHaveBeenCalledWith('createTag', expect.any(Function), 'Created tag v1')
-    expect(rpcCreateTag).toHaveBeenCalledWith('/repo', 'v1', 'main', undefined)
+    expect(rpcCreateTag).toHaveBeenCalledWith('/repo', 'v1', 'main', undefined, 'local')
     expect(ok).toBe(true)
   })
 
@@ -237,30 +257,30 @@ describe('useGitActions working-tree & stash ops route through the runner', () =
   it('routes stashApply through the runner', async () => {
     vi.mocked(rpcStashApply).mockResolvedValue(conflictable({ _tag: 'Ok' }))
 
-    const ok = await actionsFor().stashApply(2)
+    const ok = await actionsFor().stashApply(2, 'stash-oid-2')
 
     expect(runAction).toHaveBeenCalledWith('stashApply', expect.any(Function), 'Applied stash')
-    expect(rpcStashApply).toHaveBeenCalledWith('/repo', 2)
+    expect(rpcStashApply).toHaveBeenCalledWith('/repo', 2, 'stash-oid-2')
     expect(ok).toBe(true)
   })
 
   it('routes stashPop through the runner', async () => {
     vi.mocked(rpcStashPop).mockResolvedValue(conflictable({ _tag: 'Ok' }))
 
-    const ok = await actionsFor().stashPop(1)
+    const ok = await actionsFor().stashPop(1, 'stash-oid-1')
 
     expect(runAction).toHaveBeenCalledWith('stashPop', expect.any(Function), 'Popped stash')
-    expect(rpcStashPop).toHaveBeenCalledWith('/repo', 1)
+    expect(rpcStashPop).toHaveBeenCalledWith('/repo', 1, 'stash-oid-1')
     expect(ok).toBe(true)
   })
 
   it('routes stashDrop through the runner', async () => {
     vi.mocked(rpcStashDrop).mockResolvedValue(refWrite({ _tag: 'Ok' }))
 
-    const ok = await actionsFor().stashDrop(0)
+    const ok = await actionsFor().stashDrop(0, 'stash-oid-0')
 
     expect(runAction).toHaveBeenCalledWith('stashDrop', expect.any(Function), 'Dropped stash')
-    expect(rpcStashDrop).toHaveBeenCalledWith('/repo', 0)
+    expect(rpcStashDrop).toHaveBeenCalledWith('/repo', 0, 'stash-oid-0')
     expect(ok).toBe(true)
   })
 })

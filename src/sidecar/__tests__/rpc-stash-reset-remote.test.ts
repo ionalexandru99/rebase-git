@@ -70,7 +70,11 @@ const stashPushThroughGroup = (payload: {
     }).pipe(Effect.scoped, Effect.provide(handlersLayer))
   )
 
-const stashApplyThroughGroup = (payload: { repoPath: string; index: number }) =>
+const stashApplyThroughGroup = (payload: {
+  repoPath: string
+  index: number
+  expectedOid: string
+}) =>
   runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
@@ -78,7 +82,7 @@ const stashApplyThroughGroup = (payload: { repoPath: string; index: number }) =>
     }).pipe(Effect.scoped, Effect.provide(handlersLayer))
   )
 
-const stashPopThroughGroup = (payload: { repoPath: string; index: number }) =>
+const stashPopThroughGroup = (payload: { repoPath: string; index: number; expectedOid: string }) =>
   runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
@@ -86,7 +90,7 @@ const stashPopThroughGroup = (payload: { repoPath: string; index: number }) =>
     }).pipe(Effect.scoped, Effect.provide(handlersLayer))
   )
 
-const stashDropThroughGroup = (payload: { repoPath: string; index: number }) =>
+const stashDropThroughGroup = (payload: { repoPath: string; index: number; expectedOid: string }) =>
   runOp(
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(SidecarRpcs)
@@ -169,7 +173,10 @@ describe('stash / reset / remote RPC payload schemas', () => {
       StashPop.payloadSchema,
       StashDrop.payloadSchema
     ]) {
-      expect(Either.isRight(decode(schema, { repoPath: '/repo', index: 0 }))).toBe(true)
+      expect(
+        Either.isRight(decode(schema, { repoPath: '/repo', index: 0, expectedOid: 'abc123' }))
+      ).toBe(true)
+      expect(Either.isLeft(decode(schema, { repoPath: '/repo', index: 0 }))).toBe(true)
       expect(Either.isLeft(decode(schema, { repoPath: '/repo' }))).toBe(true)
       expect(Either.isLeft(decode(schema, { repoPath: '/repo', index: 'x' }))).toBe(true)
     }
@@ -243,7 +250,11 @@ describe('stashPush / stashApply / stashPop / stashDrop RPC handlers', () => {
     writeFile('drop-target.txt', 'two\n')
     git('stash', 'push', '-m', 'doomed')
 
-    const result = await stashDropThroughGroup({ repoPath: repoDir, index: 0 })
+    const result = await stashDropThroughGroup({
+      repoPath: repoDir,
+      index: 0,
+      expectedOid: git('rev-parse', 'stash@{0}').trim()
+    })
     expect(Either.isRight(result)).toBe(true)
     expect(git('stash', 'list').trim()).toBe('')
     git('checkout', '--', 'drop-target.txt')
@@ -255,7 +266,11 @@ describe('stashPush / stashApply / stashPop / stashDrop RPC handlers', () => {
     writeFile('apply-target.txt', 'two\n')
     git('stash', 'push', '-m', 'to-apply')
 
-    const result = await stashApplyThroughGroup({ repoPath: repoDir, index: 0 })
+    const result = await stashApplyThroughGroup({
+      repoPath: repoDir,
+      index: 0,
+      expectedOid: git('rev-parse', 'stash@{0}').trim()
+    })
     expect(Either.isRight(result)).toBe(true)
     expect(fs.readFileSync(path.join(repoDir, 'apply-target.txt'), 'utf8')).toBe('two\n')
     git('checkout', '--', 'apply-target.txt')
@@ -268,7 +283,11 @@ describe('stashPush / stashApply / stashPop / stashDrop RPC handlers', () => {
     writeFile('pop-target.txt', 'two\n')
     git('stash', 'push', '-m', 'to-pop')
 
-    const result = await stashPopThroughGroup({ repoPath: repoDir, index: 0 })
+    const result = await stashPopThroughGroup({
+      repoPath: repoDir,
+      index: 0,
+      expectedOid: git('rev-parse', 'stash@{0}').trim()
+    })
     expect(Either.isRight(result)).toBe(true)
     expect(fs.readFileSync(path.join(repoDir, 'pop-target.txt'), 'utf8')).toBe('two\n')
     expect(git('stash', 'list').trim()).toBe('')
@@ -282,7 +301,11 @@ describe('stashPush / stashApply / stashPop / stashDrop RPC handlers', () => {
     git('stash', 'push', '-m', 'conflicting')
     commitFile('stash-conflict.txt', 'committed\n', 'diverge from stash')
 
-    const result = await stashPopThroughGroup({ repoPath: repoDir, index: 0 })
+    const result = await stashPopThroughGroup({
+      repoPath: repoDir,
+      index: 0,
+      expectedOid: git('rev-parse', 'stash@{0}').trim()
+    })
     expect(Either.isLeft(result)).toBe(true)
     if (Either.isLeft(result)) {
       expect(result.left).toBeInstanceOf(Conflict)

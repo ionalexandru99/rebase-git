@@ -1,6 +1,6 @@
 # Plan: debounce the filter ancestor-walk; dedupe per-row lane snapshots
 
-**Status:** Not started — cleanup that compounds with `graph-width-and-merge-collapse`.
+**Status:** Implemented in the current worktree; retained-heap measurement remains.
 **Owner:** TBD
 **Created:** 2026-06-27
 
@@ -28,29 +28,25 @@ snapshots — `incoming = [...lanes]` and `outgoing = [...lanes]` (`layout.ts`).
 is almost identical to `outgoing[N-1]` (a boundary is shared between adjacent rows).
 Across multiple repo tabs this multiplies.
 
-## Proposed change
+## Implemented change
 
-### A. Coalesce the filter recompute
+### A. Coalesced filter recompute
 
-- Debounce/coalesce the `computeBranchFilterSet` recompute so it runs at most once
-  per animation frame (or once per layout debounce window), not once per flush.
-- Or maintain the reachable set incrementally as commits append (the stream is
-  topo-ordered, children before parents — the same property `pruneAncestorTips`
-  already relies on), so a flush only walks the newly arrived commits.
-- The existing `WeakMap` index caches (`getCommitIndex`, `getRefTipIndex`) already
-  release per commits-array; keep that property.
+- `useCoalescedCommitSnapshot` publishes streaming commit snapshots at most once per
+  `GRAPH_LAYOUT_DEBOUNCE_MS` window instead of once per 100 ms log-cache flush.
+- The final snapshot publishes immediately when streaming completes, and pending
+  timers are cancelled on unmount.
+- The existing `WeakMap` index caches (`getCommitIndex`, `getRefTipIndex`) retain
+  their per-array release behavior.
 
-### B. Store each lane boundary once
+### B. Shared lane boundaries
 
-- Represent the layout as a single array of lane **boundaries** (length `rows + 1`):
-  `incoming` of row `i` is `boundaries[i]`, `outgoing` is `boundaries[i + 1]`. Halves
-  the slot count and the allocations.
-- Or go further and pack boundaries as typed arrays of **interned commit indices**
-  (`Int32Array`) instead of `(string | null)[]` — smaller, GC-friendly, and exactly
-  the encoding the worker plan (`graph-layout-web-worker`) wants to transfer.
-- `drawGraphRow` / `CommitRow` read `incoming`/`outgoing` — adapt them to the
-  boundary representation (or expose `incoming`/`outgoing` as thin views) so the
-  public row shape stays convenient.
+- `LayoutResult` stores chunked lane **boundaries**. Row `i` reads its incoming
+  boundary at `i` and outgoing boundary at `i + 1`, so adjacent rows share storage.
+- Rows and boundaries remain chunked, allowing incremental layout to retain previous
+  chunks without copying the entire result.
+- Typed-array interning was not added: the worker currently uses the same layout
+  shape and structured cloning. Revisit only if profiling identifies clone or heap cost.
 
 ## Dependency / sequencing
 
@@ -78,8 +74,8 @@ designed once.
 
 ## Acceptance criteria
 
-- [ ] Filter ancestor-walk no longer runs per flush; coalesced or incremental.
-- [ ] Per-row lane state stored once (boundary array), not as `incoming` + `outgoing`
+- [x] Filter ancestor-walk no longer runs per 100 ms log flush while streaming.
+- [x] Per-row lane state stored once (boundary array), not as `incoming` + `outgoing`
       duplicates.
 - [ ] Layout memory measurably reduced on a large repo.
-- [ ] No visual regression in the graph; existing geometry tests pass.
+- [x] Existing layout, canvas geometry, and graph component tests cover the new shape.

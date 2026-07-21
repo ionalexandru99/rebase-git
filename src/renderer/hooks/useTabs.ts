@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export interface TabDescriptor {
   id: string
@@ -17,6 +17,7 @@ interface RepoTabRecord {
   id: string
   kind: 'repo'
   repoPath: string
+  openRevision?: number
 }
 
 interface OpeningRepoTabRecord {
@@ -25,7 +26,13 @@ interface OpeningRepoTabRecord {
   repoPath: string
 }
 
-export type TabRecord = NewTabRecord | RepoTabRecord | OpeningRepoTabRecord
+interface FailedRepoTabRecord {
+  id: string
+  kind: 'failed-repo'
+  repoPath: string
+}
+
+export type TabRecord = NewTabRecord | RepoTabRecord | OpeningRepoTabRecord | FailedRepoTabRecord
 
 export interface PersistedTabState {
   tabs: (string | null)[]
@@ -51,14 +58,32 @@ function hydrateFromPersisted(persisted: PersistedTabState | undefined): {
 } {
   const sourcePaths =
     persisted && persisted.tabs.length > 0 ? persisted.tabs : ([null] as (string | null)[])
-  const tabs = sourcePaths.map<TabRecord>((path) =>
-    path ? { id: nextTabId(), kind: 'repo', repoPath: path } : { id: nextTabId(), kind: 'new' }
-  )
+  const tabs: TabRecord[] = []
+  const hydratedIds: string[] = []
+  const repoIdsByPath = new Map<string, string>()
+  for (const path of sourcePaths) {
+    if (!path) {
+      const tab = { id: nextTabId(), kind: 'new' } satisfies NewTabRecord
+      tabs.push(tab)
+      hydratedIds.push(tab.id)
+      continue
+    }
+    const key = repoPathKey(path)
+    const existingId = repoIdsByPath.get(key)
+    if (existingId) {
+      hydratedIds.push(existingId)
+      continue
+    }
+    const tab = { id: nextTabId(), kind: 'repo', repoPath: path } satisfies RepoTabRecord
+    tabs.push(tab)
+    hydratedIds.push(tab.id)
+    repoIdsByPath.set(key, tab.id)
+  }
   const activeIdx =
-    persisted && persisted.activeIndex >= 0 && persisted.activeIndex < tabs.length
+    persisted && persisted.activeIndex >= 0 && persisted.activeIndex < hydratedIds.length
       ? persisted.activeIndex
       : 0
-  return { tabs, activeTabId: tabs[activeIdx].id }
+  return { tabs, activeTabId: hydratedIds[activeIdx] ?? tabs[0].id }
 }
 
 export interface TabsStore {
@@ -69,7 +94,8 @@ export interface TabsStore {
   newTab: () => void
   closeTab: (id: string) => void
   openRepoInTab: (sourceTabId: string, path: string) => boolean
-  confirmRepoOpen: (id: string, path: string) => void
+  confirmRepoOpen: (id: string, path: string) => boolean
+  cancelRepoOpen: (id: string, path: string) => void
   persistedSnapshot: PersistedTabState
 }
 
@@ -77,94 +103,129 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   const [initial] = useState(() => hydrateFromPersisted(persisted))
   const [tabs, setTabs] = useState<TabRecord[]>(initial.tabs)
   const [activeTabId, setActiveTabId] = useState<string>(initial.activeTabId)
+  const tabsRef = useRef(tabs)
+  const activeTabIdRef = useRef(activeTabId)
 
-  const newTab = useCallback(() => {
-    const id = nextTabId()
-    setTabs((prev) => [...prev, { id, kind: 'new' }])
+  const replaceTabs = useCallback((next: TabRecord[]) => {
+    tabsRef.current = next
+    setTabs(next)
+  }, [])
+
+  const activateTab = useCallback((id: string) => {
+    activeTabIdRef.current = id
     setActiveTabId(id)
   }, [])
 
+  const newTab = useCallback(() => {
+    const id = nextTabId()
+    replaceTabs([...tabsRef.current, { id, kind: 'new' }])
+    activateTab(id)
+  }, [activateTab, replaceTabs])
+
   const closeTab = useCallback(
     (id: string) => {
-      const current = tabs
+      const current = tabsRef.current
       if (current.length <= 1) {
         const freshId = nextTabId()
-        setTabs([{ id: freshId, kind: 'new' }])
-        setActiveTabId(freshId)
+        replaceTabs([{ id: freshId, kind: 'new' }])
+        activateTab(freshId)
         return
       }
       const idx = current.findIndex((tab) => tab.id === id)
       const next = current.filter((tab) => tab.id !== id)
-      setTabs(next)
-      if (activeTabId === id) {
-        setActiveTabId(next[Math.min(idx, next.length - 1)].id)
+      replaceTabs(next)
+      if (activeTabIdRef.current === id) {
+        activateTab(next[Math.min(idx, next.length - 1)].id)
       }
     },
-    [activeTabId, tabs]
+    [activateTab, replaceTabs]
   )
 
   const openRepoInTab = useCallback(
     (sourceTabId: string, path: string): boolean => {
-      const match = tabs.find(
+      const current = tabsRef.current
+      const match = current.find(
         (tab) =>
           (tab.kind === 'repo' || tab.kind === 'opening-repo') &&
           sameRepoPath(tab.repoPath, path) &&
           tab.id !== sourceTabId
       )
       if (match) {
-        setActiveTabId(match.id)
-        setTabs((prev) => prev.filter((tab) => tab.id !== sourceTabId))
+        activateTab(match.id)
+        replaceTabs(current.filter((tab) => tab.id !== sourceTabId))
         return true
       }
 
-      setTabs((prev) => {
-        let found = false
-        const next = prev.map((tab) => {
-          if (tab.id !== sourceTabId) {
-            return tab
-          }
-          found = true
-          return { id: tab.id, kind: 'opening-repo', repoPath: path } satisfies OpeningRepoTabRecord
-        })
-        return found ? next : prev
-      })
-      setActiveTabId(sourceTabId)
+      const next = current.map((tab) =>
+        tab.id === sourceTabId
+          ? ({ id: tab.id, kind: 'opening-repo', repoPath: path } satisfies OpeningRepoTabRecord)
+          : tab
+      )
+      replaceTabs(next)
+      activateTab(sourceTabId)
       return false
     },
-    [tabs]
+    [activateTab, replaceTabs]
   )
 
-  const confirmRepoOpen = useCallback((id: string, path: string) => {
-    setTabs((prev) => {
-      let changed = false
-      const next = prev.map((tab) => {
-        if (tab.id !== id) {
-          return tab
-        }
-        if (tab.kind === 'repo' && sameRepoPath(tab.repoPath, path)) {
-          return tab
-        }
-        changed = true
-        return { id, kind: 'repo', repoPath: path } satisfies RepoTabRecord
-      })
-      return changed ? next : prev
-    })
-  }, [])
+  const confirmRepoOpen = useCallback(
+    (id: string, path: string): boolean => {
+      const current = tabsRef.current
+      const existing = current.find(
+        (tab) =>
+          tab.id !== id &&
+          (tab.kind === 'repo' || tab.kind === 'opening-repo') &&
+          sameRepoPath(tab.repoPath, path)
+      )
+      if (existing) {
+        replaceTabs(
+          current
+            .filter((tab) => tab.id !== id)
+            .map((tab) =>
+              tab.id === existing.id && tab.kind === 'repo'
+                ? { ...tab, openRevision: (tab.openRevision ?? 0) + 1 }
+                : tab
+            )
+        )
+        activateTab(existing.id)
+        return false
+      }
+      const next = current.map((tab) =>
+        tab.id === id ? ({ ...tab, id, kind: 'repo', repoPath: path } satisfies RepoTabRecord) : tab
+      )
+      replaceTabs(next)
+      return true
+    },
+    [activateTab, replaceTabs]
+  )
+
+  const cancelRepoOpen = useCallback(
+    (id: string, path: string) => {
+      const current = tabsRef.current
+      const next = current.map((tab) =>
+        tab.id === id && tab.kind === 'opening-repo' && sameRepoPath(tab.repoPath, path)
+          ? ({ id, kind: 'failed-repo', repoPath: path } satisfies FailedRepoTabRecord)
+          : tab
+      )
+      replaceTabs(next)
+    },
+    [replaceTabs]
+  )
 
   const cycleTab = useCallback(
     (direction: 1 | -1) => {
-      const current = tabs
+      const current = tabsRef.current
       if (current.length <= 1) {
         return
       }
-      const idx = current.findIndex((tab) => tab.id === activeTabId)
+      const idx = current.findIndex((tab) => tab.id === activeTabIdRef.current)
       if (idx === -1) {
         return
       }
       const nextIdx = (idx + direction + current.length) % current.length
-      setActiveTabId(current[nextIdx].id)
+      activateTab(current[nextIdx].id)
     },
-    [activeTabId, tabs]
+    [activateTab]
   )
 
   useEffect(() => {
@@ -221,12 +282,13 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   return {
     tabs,
     activeTabId,
-    setActiveTabId,
+    setActiveTabId: activateTab,
     tabDescriptors,
     newTab,
     closeTab,
     openRepoInTab,
     confirmRepoOpen,
+    cancelRepoOpen,
     persistedSnapshot
   }
 }

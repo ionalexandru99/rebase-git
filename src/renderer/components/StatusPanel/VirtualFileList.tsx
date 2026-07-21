@@ -6,7 +6,7 @@ import { FileRow } from './FileRow'
 
 export interface SelectedFile {
   file: string
-  // 'head-commit' files are inspected read-only against `range`; absent/undefined means the working tree.
+  renameSource?: string
   source?: 'worktree' | 'head-commit'
   range?: string
 }
@@ -14,22 +14,22 @@ export interface SelectedFile {
 interface VirtualFileListProps {
   rows: UnifiedFileRow[]
   selected: SelectedFile | null
-  onSelect: (file: string, source: FileRowSource) => void
+  onSelect: (file: string, source: FileRowSource, renameSource?: string) => void
   onStage: (file: string) => void
-  onUnstage: (file: string) => void
+  onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
-  onFileAction?: (action: FileAction, file: string) => void
+  onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
 }
 
 function StatusVirtualRow(props: {
   row: UnifiedFileRow
   top: number
   selected: SelectedFile | null
-  onSelect: (file: string, source: FileRowSource) => void
+  onSelect: (file: string, source: FileRowSource, renameSource?: string) => void
   onStage: (file: string) => void
-  onUnstage: (file: string) => void
+  onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
-  onFileAction?: (action: FileAction, file: string) => void
+  onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
 }) {
   const rowStyle = {
     top: '0',
@@ -43,13 +43,20 @@ function StatusVirtualRow(props: {
     <li className="absolute inset-x-0 list-none" style={rowStyle}>
       <FileRow
         file={props.row.file}
+        renameSource={props.row.renameSource}
         display={props.row.display}
         kind={props.row.fileKind}
         stageState={props.row.stageState}
         source={props.row.source}
         dropState={props.row.dropState}
         isSelected={isSelected}
-        onSelect={(file) => props.onSelect(file, props.row.source)}
+        onSelect={(file, renameSource) => {
+          if (renameSource) {
+            props.onSelect(file, props.row.source, renameSource)
+            return
+          }
+          props.onSelect(file, props.row.source)
+        }}
         onStage={props.onStage}
         onUnstage={props.onUnstage}
         onToggleDrop={props.onToggleDrop}

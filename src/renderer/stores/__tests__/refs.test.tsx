@@ -7,7 +7,8 @@ import {
   GitStoreProvider,
   useActionRunner,
   useCommitHistory,
-  useRepoSession
+  useRepoSession,
+  useWorkingTreeStatus
 } from '@/stores/git'
 import { useRefs } from '@/stores/refs'
 
@@ -174,7 +175,7 @@ describe('useRefs — concern isolation', () => {
     }
     function HistoryProbe() {
       const history = useCommitHistory()
-      return <div data-testid="log-total">{history.log?.total ?? 0}</div>
+      return <div data-testid="log-total">{history.log?.loadedCount ?? 0}</div>
     }
     function OpenController() {
       openRepo = useRepoSession().openRepo
@@ -212,6 +213,131 @@ describe('useRefs — concern isolation', () => {
 })
 
 describe('useRefs — auto-fetch', () => {
+  it('retains a status error after a newer fetch error recovers', async () => {
+    sidecarMock.getStatus.mockResolvedValueOnce({
+      _tag: 'GitError',
+      message: 'status unavailable'
+    })
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    let fetchNow: (() => Promise<void>) | undefined
+    function Probe() {
+      const refs = useRefs()
+      const session = useRepoSession()
+      openRepo = session.openRepo
+      fetchNow = refs.fetchNow
+      return <div data-testid="error">{session.error ?? ''}</div>
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Probe />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('error')).toHaveTextContent('status unavailable')
+    })
+
+    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'GitError', message: 'network down' })
+    await act(async () => {
+      await fetchNow?.()
+    })
+    expect(screen.getByTestId('error')).toHaveTextContent('network down')
+
+    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'Ok' })
+    await act(async () => {
+      await fetchNow?.()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('error')).toHaveTextContent('status unavailable')
+    })
+  })
+
+  it('clears only its matching session error after a later successful fetch', async () => {
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    let fetchNow: (() => Promise<void>) | undefined
+    let stageFile: ((file: string) => Promise<unknown>) | undefined
+    function Probe() {
+      const refs = useRefs()
+      const session = useRepoSession()
+      openRepo = session.openRepo
+      fetchNow = refs.fetchNow
+      stageFile = useWorkingTreeStatus().stageFile
+      return <div data-testid="error">{session.error ?? ''}</div>
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Probe />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'GitError', message: 'network down' })
+    await act(async () => {
+      await fetchNow?.()
+    })
+    expect(screen.getByTestId('error')).toHaveTextContent('network down')
+
+    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'Ok' })
+    await act(async () => {
+      await fetchNow?.()
+    })
+
+    expect(screen.getByTestId('error')).toBeEmptyDOMElement()
+
+    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'GitError', message: 'network down again' })
+    await act(async () => {
+      await fetchNow?.()
+    })
+    sidecarMock.stageFile.mockResolvedValueOnce({ _tag: 'GitError', message: 'cannot stage' })
+    await act(async () => {
+      await stageFile?.('src/app.ts')
+    })
+    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'Ok' })
+    await act(async () => {
+      await fetchNow?.()
+    })
+
+    expect(screen.getByTestId('error')).toHaveTextContent('cannot stage')
+  })
+
+  it('refreshes the timeline after a successful fetch', async () => {
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    let fetchNow: (() => Promise<void>) | undefined
+    function Controller() {
+      openRepo = useRepoSession().openRepo
+      fetchNow = useRefs().fetchNow
+      return null
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Controller />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+    await waitFor(() => {
+      expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+    })
+    await act(async () => {
+      logStream.fireDone(repoPath, false)
+    })
+    const startsBeforeFetch = vi.mocked(window.electronAPI.startLogStream).mock.calls.length
+
+    await act(async () => {
+      await fetchNow?.()
+    })
+
+    expect(window.electronAPI.startLogStream).toHaveBeenCalledTimes(startsBeforeFetch + 1)
+  })
+
   it('auto-fetches and refreshes branches every 5 minutes while the tab is active', async () => {
     vi.useFakeTimers()
     let openRepo: ((path: string) => Promise<string | null>) | undefined

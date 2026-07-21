@@ -24,6 +24,7 @@ export function useOnboarding(): OnboardingStore {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scanGeneration = useRef(0)
+  const catalogGeneration = useRef(0)
 
   const scanWorkspace = useCallback(async (path: string | null) => {
     const generation = scanGeneration.current + 1
@@ -59,15 +60,27 @@ export function useOnboarding(): OnboardingStore {
   }, [])
 
   useEffect(() => {
+    const generation = catalogGeneration.current
+    let mounted = true
     window.electronAPI
       .getOnboardingComplete()
-      .then(setOnboardingComplete)
+      .then((complete) => {
+        if (mounted) {
+          setOnboardingComplete(complete)
+        }
+      })
       .catch((error: unknown) => {
+        if (!mounted) {
+          return
+        }
         console.error('[onboarding] failed to load onboarding state', error)
         setOnboardingComplete(false)
       })
     Promise.all([window.electronAPI.getWorkspaces(), window.electronAPI.getActiveWorkspace()])
       .then(([list, active]) => {
+        if (!mounted || generation !== catalogGeneration.current) {
+          return
+        }
         const safeList = list ?? []
         setWorkspaces(safeList)
         const resolved = active ?? safeList[0] ?? null
@@ -77,10 +90,16 @@ export function useOnboarding(): OnboardingStore {
         }
       })
       .catch((error: unknown) => {
+        if (!mounted || generation !== catalogGeneration.current) {
+          return
+        }
         console.error('[onboarding] failed to load workspaces', error)
         setWorkspaces([])
         setActiveWorkspace(null)
       })
+    return () => {
+      mounted = false
+    }
   }, [scanWorkspace])
 
   const completeOnboarding = async () => {
@@ -108,6 +127,7 @@ export function useOnboarding(): OnboardingStore {
     if (!path) {
       return null
     }
+    catalogGeneration.current += 1
     setLoading(true)
     try {
       const list = await window.electronAPI.addWorkspace(path)
@@ -123,6 +143,7 @@ export function useOnboarding(): OnboardingStore {
   }
 
   const removeWorkspace = async (path: string) => {
+    catalogGeneration.current += 1
     setError(null)
     try {
       const list = await window.electronAPI.removeWorkspace(path)
@@ -143,6 +164,7 @@ export function useOnboarding(): OnboardingStore {
     if (path === activeWorkspace) {
       return
     }
+    catalogGeneration.current += 1
     setError(null)
     setActiveWorkspace(path)
     await window.electronAPI.setActiveWorkspace(path)

@@ -1,18 +1,27 @@
 import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react'
 import {
+  type ButtonHTMLAttributes,
   createContext,
+  forwardRef,
   type HTMLAttributes,
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
+  type RefObject,
   useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
   useState
 } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
+import { usePortalContainer } from './portal-container'
 
 interface MenuContextValue {
   open: boolean
   setOpen: (open: boolean) => void
+  triggerRef: RefObject<HTMLButtonElement | null>
 }
 
 const MenuContext = createContext<MenuContextValue | null>(null)
@@ -25,100 +34,191 @@ function useMenuContext() {
   return context
 }
 
-function DropdownMenu(props: { children?: ReactNode }) {
+function DropdownMenu(props: { children?: ReactNode; className?: string }) {
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   return (
-    <MenuContext.Provider value={{ open, setOpen }}>
-      <div className="relative w-full">{props.children}</div>
+    <MenuContext.Provider value={{ open, setOpen, triggerRef }}>
+      <div className={cn('relative', props.className)}>{props.children}</div>
     </MenuContext.Provider>
   )
 }
 
-function DropdownMenuTrigger(
-  props: React.ButtonHTMLAttributes<HTMLButtonElement> & { children?: ReactNode }
-) {
-  const { setOpen, open } = useMenuContext()
+const DropdownMenuTrigger = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { children?: ReactNode }
+>((props, forwardedRef) => {
+  const { setOpen, open, triggerRef } = useMenuContext()
+  const openedOnPointerDown = useRef(false)
   const { onClick, onPointerDown, ...rest } = props
-  const toggle = () => setOpen(!open)
   return (
     <button
+      ref={(element) => {
+        triggerRef.current = element
+        if (typeof forwardedRef === 'function') {
+          forwardedRef(element)
+        } else if (forwardedRef) {
+          forwardedRef.current = element
+        }
+      }}
       type="button"
-      aria-haspopup="true"
+      aria-haspopup="menu"
       aria-expanded={open}
       data-slot="dropdown-menu-trigger"
       onPointerDown={(event) => {
         onPointerDown?.(event)
-        if (event.pointerType !== 'touch' && event.button === 0) {
-          toggle()
+        if (!event.defaultPrevented && event.pointerType !== 'touch' && event.button === 0) {
+          openedOnPointerDown.current = true
+          setOpen(!open)
         }
       }}
       onClick={(event) => {
         onClick?.(event)
-        if ((event.currentTarget as HTMLButtonElement).dataset.pointerType === 'touch') {
-          toggle()
+        if (openedOnPointerDown.current) {
+          openedOnPointerDown.current = false
+          return
+        }
+        if (!event.defaultPrevented) {
+          setOpen(!open)
         }
       }}
       {...rest}
     />
   )
-}
+})
+DropdownMenuTrigger.displayName = 'DropdownMenuTrigger'
 
 function DropdownMenuGroup(props: HTMLAttributes<HTMLDivElement>) {
   return <div data-slot="dropdown-menu-group" {...props} />
 }
 
-function DropdownMenuContent(props: HTMLAttributes<HTMLDivElement> & { gutter?: number }) {
-  const { open, setOpen } = useMenuContext()
-  const { className, gutter: _gutter, ...rest } = props
+const VIEWPORT_MARGIN = 6
+
+function DropdownMenuContent(
+  props: HTMLAttributes<HTMLDivElement> & {
+    gutter?: number
+    portal?: boolean
+    align?: 'start' | 'end'
+  }
+) {
+  const portalContainer = usePortalContainer()
+  const { open, setOpen, triggerRef } = useMenuContext()
+  const { className, gutter = 4, portal = false, align = 'end', style, ...rest } = props
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!open || !portal) {
+      setPosition(null)
+      return
+    }
+    const trigger = triggerRef.current
+    const content = contentRef.current
+    if (!trigger || !content) {
+      return
+    }
+    const triggerRect = trigger.getBoundingClientRect()
+    const contentRect = content.getBoundingClientRect()
+    let left = align === 'start' ? triggerRect.left : triggerRect.right - contentRect.width
+    let top = triggerRect.bottom + gutter
+    left = Math.max(
+      VIEWPORT_MARGIN,
+      Math.min(left, window.innerWidth - contentRect.width - VIEWPORT_MARGIN)
+    )
+    if (top + contentRect.height > window.innerHeight - VIEWPORT_MARGIN) {
+      top = Math.max(VIEWPORT_MARGIN, triggerRect.top - contentRect.height - gutter)
+    }
+    setPosition({ top, left })
+  }, [align, gutter, open, portal, triggerRef])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    const onPointerDown = (event: Event) => {
+      const target = event.target as Node | null
+      if (
+        target &&
+        (contentRef.current?.contains(target) || triggerRef.current?.contains(target))
+      ) {
+        return
+      }
+      setOpen(false)
+    }
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+    const dismiss = () => setOpen(false)
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('resize', dismiss)
+    window.addEventListener('blur', dismiss)
+    window.addEventListener('scroll', dismiss, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('resize', dismiss)
+      window.removeEventListener('blur', dismiss)
+      window.removeEventListener('scroll', dismiss, true)
+    }
+  }, [open, setOpen, triggerRef])
+
   if (!open) {
     return null
   }
-  return (
-    <>
-      <button
-        type="button"
-        aria-label="Close menu"
-        tabIndex={-1}
-        className="fixed inset-0 z-40 cursor-default"
-        onClick={() => setOpen(false)}
-      />
-      <div
-        data-slot="dropdown-menu-content"
-        role="menu"
-        className={cn(
-          'scroll-host absolute right-0 top-[calc(100%+4px)] z-50 max-h-[60vh] min-w-[12rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
-          className
-        )}
-        {...rest}
-      />
-    </>
+  const content = (
+    <div
+      ref={contentRef}
+      data-slot="dropdown-menu-content"
+      role="menu"
+      style={
+        portal ? { position: 'fixed', top: position?.top, left: position?.left, ...style } : style
+      }
+      className={cn(
+        'scroll-host z-50 max-h-[60vh] min-w-[12rem] overflow-x-hidden overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
+        !portal &&
+          (align === 'start'
+            ? 'absolute left-0 top-[calc(100%+4px)]'
+            : 'absolute right-0 top-[calc(100%+4px)]'),
+        className
+      )}
+      {...rest}
+    />
   )
+  return portal ? createPortal(content, portalContainer) : content
 }
 
 function DropdownMenuItem(
-  props: HTMLAttributes<HTMLDivElement> & {
+  props: ButtonHTMLAttributes<HTMLButtonElement> & {
     inset?: boolean
     variant?: 'default' | 'destructive'
     onSelect?: () => void
   }
 ) {
   const { setOpen } = useMenuContext()
+  const selectedOnPointerUp = useRef(false)
   const {
     className,
     inset,
     variant = 'default',
     onSelect,
-    onPointerUp,
     onClick,
+    onPointerUp,
     onKeyDown,
+    disabled,
     ...rest
   } = props
-  const select = (event: MouseEvent<HTMLDivElement>) => {
+  const select = (event: MouseEvent<HTMLButtonElement>) => {
+    if (disabled) {
+      return
+    }
     onClick?.(event)
     onSelect?.()
     setOpen(false)
   }
-  const selectFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
+  const selectFromKeyboard = (event: KeyboardEvent<HTMLButtonElement>) => {
     onKeyDown?.(event)
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -127,9 +227,11 @@ function DropdownMenuItem(
     }
   }
   return (
-    <div
+    <button
+      type="button"
       role="menuitem"
-      tabIndex={0}
+      disabled={disabled}
+      data-disabled={disabled ? '' : undefined}
       data-slot="dropdown-menu-item"
       data-inset={inset}
       data-variant={variant}
@@ -137,13 +239,21 @@ function DropdownMenuItem(
         "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         className
       )}
+      onClick={(event) => {
+        if (selectedOnPointerUp.current) {
+          selectedOnPointerUp.current = false
+          return
+        }
+        select(event)
+      }}
       onPointerUp={(event) => {
         onPointerUp?.(event)
-        if (event.button === 0) {
-          select(event)
+        if (!event.defaultPrevented && event.button === 0 && !disabled) {
+          selectedOnPointerUp.current = true
+          onSelect?.()
+          setOpen(false)
         }
       }}
-      onClick={select}
       onKeyDown={selectFromKeyboard}
       {...rest}
     />
@@ -151,7 +261,7 @@ function DropdownMenuItem(
 }
 
 function DropdownMenuCheckboxItem(
-  props: Omit<HTMLAttributes<HTMLDivElement>, 'onSelect'> & { onSelect?: () => void }
+  props: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onSelect'> & { onSelect?: () => void }
 ) {
   const { className, children, onSelect, ...rest } = props
   return (
@@ -169,7 +279,7 @@ function DropdownMenuRadioGroup(props: HTMLAttributes<HTMLDivElement>) {
 }
 
 function DropdownMenuRadioItem(
-  props: Omit<HTMLAttributes<HTMLDivElement>, 'onSelect'> & { onSelect?: () => void }
+  props: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onSelect'> & { onSelect?: () => void }
 ) {
   const { className, children, onSelect, ...rest } = props
   return (

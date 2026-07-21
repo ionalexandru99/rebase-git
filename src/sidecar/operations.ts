@@ -1,26 +1,23 @@
 import path from 'node:path'
-import type { CommitSummary, GitLog } from '@shared/schemas/git'
-import type { ResetMode } from '@shared/schemas/ipc'
+import type { CommitSummary } from '@shared/schemas/git'
+import type { RefKind, ResetMode } from '@shared/schemas/ipc'
 import { Effect } from 'effect'
 import type { SimpleGit } from 'simple-git'
 import { runWithConflictDetection } from './conflict'
 import { resolveDefaultBranch } from './git/defaultBranch'
 import { normalizeRepoPath } from './git/instances'
-import { LOG_FORMAT, parseGitLogOutput } from './git/log-format'
 import { serializeRemotes } from './git/serialize'
 import { type Conflict, GitError, type NotARepo, type RepoNotOpen } from './git-errors'
-import { requireGit, requireOpen, tryGit } from './op-helpers'
+import { requireGit, tryGit } from './op-helpers'
 import { isSafeRefArg } from './ref-args'
 import { withRepoLock } from './repo-lock'
 import { closeSession, openSession, type RepoSessions } from './repo-sessions'
-import { runGit } from './spawn'
 
 export { amendCommit, casAdvanceHead, getHeadCommit } from './amend'
 export {
   checkoutRef,
   createBranch,
   deleteBranch,
-  getBranches,
   getLocalBranches,
   getRemoteRefs,
   renameBranch
@@ -74,23 +71,25 @@ export function openRepo(
 ): Effect.Effect<OpenRepoResult, GitError | NotARepo, RepoSessions> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
-    const git = yield* openSession(key)
-    const [remotes, defaultBranch, gitDirs] = yield* tryGit(() =>
-      Promise.all([
-        git.getRemotes(true),
-        resolveDefaultBranch(git, undefined),
-        resolveGitDirs(key, git)
-      ])
-    )
-    return {
-      result: {
-        remotes: serializeRemotes(remotes),
-        defaultBranch,
-        path: key,
-        gitDir: gitDirs.gitDir,
-        commonDir: gitDirs.commonDir
+    return yield* Effect.gen(function* () {
+      const git = yield* openSession(key)
+      const [remotes, defaultBranch, gitDirs] = yield* tryGit(() =>
+        Promise.all([
+          git.getRemotes(true),
+          resolveDefaultBranch(git, undefined),
+          resolveGitDirs(key, git)
+        ])
+      )
+      return {
+        result: {
+          remotes: serializeRemotes(remotes),
+          defaultBranch,
+          path: key,
+          gitDir: gitDirs.gitDir,
+          commonDir: gitDirs.commonDir
+        }
       }
-    }
+    }).pipe(Effect.onError(() => closeSession(key)))
   })
 }
 
@@ -127,41 +126,18 @@ export function commit(
   })
 }
 
-export function getLog(
-  repoPath: string,
-  maxCount?: number
-): Effect.Effect<{ log: GitLog }, RepoNotOpen | GitError, RepoSessions> {
-  return Effect.gen(function* () {
-    yield* requireOpen(repoPath)
-    const args = [
-      '-C',
-      repoPath,
-      'log',
-      '-z',
-      '--branches',
-      '--remotes',
-      '--topo-order',
-      `--format=${LOG_FORMAT}`
-    ]
-    if (typeof maxCount === 'number' && maxCount > 0) {
-      args.splice(4, 0, `--max-count=${maxCount}`)
-    }
-    const raw = yield* tryGit(() => runGit(args))
-    const all = parseGitLogOutput(raw)
-    return { log: { all, total: all.length } }
-  })
-}
-
 export function mergeBranch(
   repoPath: string,
-  ref: string
+  refKind: RefKind,
+  fullPath: string
 ): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
-    if (!isSafeRefArg(ref)) {
+    if (!isSafeRefArg(fullPath)) {
       return yield* Effect.fail(new GitError({ message: 'invalid ref name' }))
     }
-    yield* runWithConflictDetection(repoPath, git, ['merge', '--no-edit', ref, '--'])
+    const qualifiedRef = qualifyRef(refKind, fullPath)
+    yield* runWithConflictDetection(repoPath, git, ['merge', '--no-edit', qualifiedRef, '--'])
   })
 }
 
@@ -212,7 +188,8 @@ export function createTag(
   repoPath: string,
   name: string,
   ref?: string,
-  message?: string
+  message?: string,
+  refKind?: RefKind
 ): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
@@ -224,12 +201,25 @@ export function createTag(
       tryGit(() => {
         const args = message ? ['tag', '-a', name, '-m', message] : ['tag', name]
         if (ref) {
-          args.push(ref)
+          args.push(qualifyRef(refKind, ref))
         }
         return git.raw(args)
       })
     )
   })
+}
+
+function qualifyRef(refKind: RefKind | undefined, ref: string): string {
+  if (refKind === 'local') {
+    return `refs/heads/${ref}`
+  }
+  if (refKind === 'remote') {
+    return `refs/remotes/${ref}`
+  }
+  if (refKind === 'tag') {
+    return `refs/tags/${ref}`
+  }
+  return ref
 }
 
 export function deleteTag(

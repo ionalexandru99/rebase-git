@@ -1,10 +1,6 @@
 import { type ReactNode, useMemo } from 'react'
 import type { FileAction } from '@/lib/git-actions'
-import {
-  buildUnifiedFileRows,
-  type FileRowSource,
-  type UnifiedFileRow
-} from '@/lib/status-file-rows'
+import type { FileRowSource, UnifiedFileRow } from '@/lib/status-file-rows'
 import { useWorkingTreeStatus } from '@/stores/git'
 import { LoadingBadge } from '../ui/loading-badge'
 import { StatusPanelSkeleton } from './Skeleton'
@@ -14,16 +10,14 @@ export type { SelectedFile } from './VirtualFileList'
 
 interface StatusPanelProps {
   selected: SelectedFile | null
-  onSelect: (file: string, source: FileRowSource) => void
+  onSelect: (file: string, source: FileRowSource, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   amendRows?: UnifiedFileRow[]
-  onFileAction?: (action: FileAction, file: string) => void
+  onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
   headerActions?: ReactNode
   loading: boolean
 }
 
-// Worktree rows sort before their head-commit namesake so a file that's both edited and in the amended
-// commit reads working-change-then-committed.
 function bySourceWithinFile(left: UnifiedFileRow, right: UnifiedFileRow): number {
   const byName = left.file.localeCompare(right.file)
   if (byName !== 0) {
@@ -36,13 +30,20 @@ function bySourceWithinFile(left: UnifiedFileRow, right: UnifiedFileRow): number
 }
 
 export function StatusPanel(props: StatusPanelProps) {
-  const { status, statusLoading, stageFile, unstageFile, stageAll, unstageAll } =
-    useWorkingTreeStatus()
+  const {
+    status,
+    rows: worktreeRows,
+    statusState,
+    statusLoading,
+    stageFile,
+    unstageFile,
+    stageAll,
+    unstageAll
+  } = useWorkingTreeStatus()
   const loading = props.loading || statusLoading
   const rows = useMemo(() => {
-    const worktreeRows = status ? buildUnifiedFileRows(status) : []
     return [...worktreeRows, ...(props.amendRows ?? [])].sort(bySourceWithinFile)
-  }, [status, props.amendRows])
+  }, [worktreeRows, props.amendRows])
   const stageable = useMemo(
     () => rows.filter((row) => row.source === 'worktree' && !row.isConflicted),
     [rows]
@@ -53,13 +54,22 @@ export function StatusPanel(props: StatusPanelProps) {
 
   const toggleAll = () => {
     if (allStaged) {
-      void unstageAll(stageable.map((row) => row.file))
+      void unstageAll(
+        stageable.flatMap((row) => (row.renameSource ? [row.renameSource, row.file] : [row.file]))
+      )
       return
     }
     void stageAll(stageable.filter((row) => row.stageState !== 'staged').map((row) => row.file))
   }
 
   if (!status) {
+    if (statusState === 'error') {
+      return (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          Changes unavailable
+        </div>
+      )
+    }
     return loading ? <StatusPanelSkeleton /> : null
   }
 

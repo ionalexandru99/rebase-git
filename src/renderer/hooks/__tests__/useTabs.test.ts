@@ -148,4 +148,58 @@ describe('useTabs persistence', () => {
     expect(result.current.tabs[0]).toMatchObject({ kind: 'repo', repoPath: '/repo/a' })
     expect(result.current.activeTabId).toBe(result.current.tabs[0].id)
   })
+
+  it('deduplicates persisted repo paths and preserves the active repo', () => {
+    const { result } = renderHook(() =>
+      useTabs({ tabs: ['/repo/a', '/repo/b', '/repo/a/'], activeIndex: 2 })
+    )
+
+    expect(result.current.tabs).toHaveLength(2)
+    expect(result.current.persistedSnapshot.tabs).toEqual(['/repo/a', '/repo/b'])
+    expect(result.current.tabs.find((tab) => tab.id === result.current.activeTabId)).toMatchObject({
+      kind: 'repo',
+      repoPath: '/repo/a'
+    })
+  })
+
+  it('reconciles a canonical path with an existing tab', () => {
+    const { result } = renderHook(() => useTabs({ tabs: ['/real/repo', null], activeIndex: 1 }))
+    const sourceTabId = result.current.activeTabId
+
+    act(() => {
+      result.current.openRepoInTab(sourceTabId, '/links/repo')
+      const retained = result.current.confirmRepoOpen(sourceTabId, '/real/repo')
+      expect(retained).toBe(false)
+    })
+
+    expect(result.current.tabs).toHaveLength(1)
+    expect(result.current.tabs[0]).toMatchObject({ kind: 'repo', repoPath: '/real/repo' })
+    expect(result.current.activeTabId).toBe(result.current.tabs[0].id)
+  })
+
+  it('releases a failed opening path so another tab can try it', () => {
+    const { result } = renderHook(() => useTabs({ tabs: [null], activeIndex: 0 }))
+    const sourceTabId = result.current.activeTabId
+
+    act(() => {
+      result.current.openRepoInTab(sourceTabId, '/repo/missing')
+      result.current.cancelRepoOpen(sourceTabId, '/repo/missing')
+    })
+
+    expect(result.current.tabs[0]).toMatchObject({ id: sourceTabId, kind: 'failed-repo' })
+    expect(result.current.persistedSnapshot.tabs).toEqual([null])
+
+    act(() => {
+      result.current.newTab()
+    })
+    const retryTabId = result.current.activeTabId
+    act(() => {
+      const redirected = result.current.openRepoInTab(retryTabId, '/repo/missing')
+      expect(redirected).toBe(false)
+    })
+    expect(result.current.tabs.find((tab) => tab.id === retryTabId)).toMatchObject({
+      kind: 'opening-repo',
+      repoPath: '/repo/missing'
+    })
+  })
 })

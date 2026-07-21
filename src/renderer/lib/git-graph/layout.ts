@@ -1,16 +1,30 @@
 import type { GitLogEntry } from '@/types'
+import { matchesCommitPrefix } from './commit-sequence'
+
+export type LaneBoundary = readonly (string | null)[]
 
 export interface RowLayout {
   commit: GitLogEntry
   commitLane: number
-  incoming: (string | null)[]
-  outgoing: (string | null)[]
+}
+
+export interface LayoutRowChunk {
+  startIndex: number
+  rows: RowLayout[]
+}
+
+export interface LayoutBoundaryChunk {
+  startIndex: number
+  boundaries: LaneBoundary[]
 }
 
 export interface LayoutResult {
-  rows: RowLayout[]
+  rowChunks: LayoutRowChunk[]
+  boundaryChunks: LayoutBoundaryChunk[]
+  rowCount: number
+  boundaryCount: number
   maxLanes: number
-  lanesAfter: (string | null)[]
+  lanesAfter: LaneBoundary
   commits: GitLogEntry[]
   laidOutThroughIndex: number
 }
@@ -22,7 +36,7 @@ export interface LayoutCommitsOptions {
   isHiddenParent?: (hash: string) => boolean
 }
 
-function laneIndexOf(lanes: (string | null)[], hash: string): number {
+function laneIndexOf(lanes: LaneBoundary, hash: string): number {
   for (let index = 0; index < lanes.length; index++) {
     if (lanes[index] === hash) {
       return index
@@ -31,17 +45,13 @@ function laneIndexOf(lanes: (string | null)[], hash: string): number {
   return -1
 }
 
-function firstNullLane(lanes: (string | null)[]): number {
+function firstNullLane(lanes: LaneBoundary): number {
   for (let index = 0; index < lanes.length; index++) {
     if (lanes[index] === null) {
       return index
     }
   }
   return -1
-}
-
-function parentLaneIndex(lanes: (string | null)[], parent: string): number {
-  return laneIndexOf(lanes, parent)
 }
 
 function trimTrailingNullLanes(lanes: (string | null)[]): void {
@@ -52,11 +62,10 @@ function trimTrailingNullLanes(lanes: (string | null)[]): void {
 
 function layoutRow(
   commit: GitLogEntry,
-  lanes: (string | null)[],
+  incoming: LaneBoundary,
   isHiddenParent?: (hash: string) => boolean
-): { row: Omit<RowLayout, 'commit'>; maxLanes: number } {
-  const incoming = [...lanes]
-
+): { row: RowLayout; outgoing: LaneBoundary; maxLanes: number } {
+  const lanes = [...incoming]
   let commitLane = laneIndexOf(lanes, commit.hash)
   if (commitLane === -1) {
     commitLane = firstNullLane(lanes)
@@ -72,15 +81,12 @@ function layoutRow(
     }
   }
 
-  for (let parentIdx = 0; parentIdx < commit.parents.length; parentIdx++) {
-    const parent = commit.parents[parentIdx]
-    if (isHiddenParent?.(parent)) {
+  for (let parentIndex = 0; parentIndex < commit.parents.length; parentIndex++) {
+    const parent = commit.parents[parentIndex]
+    if (isHiddenParent?.(parent) || laneIndexOf(lanes, parent) !== -1) {
       continue
     }
-    if (parentLaneIndex(lanes, parent) !== -1) {
-      continue
-    }
-    if (parentIdx === 0 && (lanes[commitLane] === null || lanes[commitLane] === undefined)) {
+    if (parentIndex === 0 && (lanes[commitLane] === null || lanes[commitLane] === undefined)) {
       lanes[commitLane] = parent
       continue
     }
@@ -94,13 +100,58 @@ function layoutRow(
 
   trimTrailingNullLanes(lanes)
 
-  const outgoing = [...lanes]
-  const maxLanes = Math.max(incoming.length, outgoing.length, commitLane + 1)
-
   return {
-    row: { commitLane, incoming, outgoing },
-    maxLanes
+    row: { commit, commitLane },
+    outgoing: lanes,
+    maxLanes: Math.max(incoming.length, lanes.length, commitLane + 1)
   }
+}
+
+function chunkAt<T extends { startIndex: number }>(
+  chunks: readonly T[],
+  index: number
+): T | undefined {
+  let low = 0
+  let high = chunks.length - 1
+  while (low <= high) {
+    const middle = (low + high) >> 1
+    const chunk = chunks[middle]
+    const nextStart = chunks[middle + 1]?.startIndex ?? Number.POSITIVE_INFINITY
+    if (index < chunk.startIndex) {
+      high = middle - 1
+    } else if (index >= nextStart) {
+      low = middle + 1
+    } else {
+      return chunk
+    }
+  }
+  return undefined
+}
+
+export function getLayoutRow(layout: LayoutResult, index: number): RowLayout | undefined {
+  if (index < 0 || index >= layout.rowCount) {
+    return undefined
+  }
+  const chunk = chunkAt(layout.rowChunks, index)
+  return chunk?.rows[index - chunk.startIndex]
+}
+
+export function getLayoutBoundary(layout: LayoutResult, index: number): LaneBoundary {
+  if (index < 0 || index >= layout.boundaryCount) {
+    return []
+  }
+  const chunk = chunkAt(layout.boundaryChunks, index)
+  return chunk?.boundaries[index - chunk.startIndex] ?? []
+}
+
+export function layoutRows(layout: LayoutResult): RowLayout[] {
+  const rows = new Array<RowLayout>(layout.rowCount)
+  for (const chunk of layout.rowChunks) {
+    for (let offset = 0; offset < chunk.rows.length; offset++) {
+      rows[chunk.startIndex + offset] = chunk.rows[offset]
+    }
+  }
+  return rows
 }
 
 export function layoutCommits(
@@ -108,47 +159,65 @@ export function layoutCommits(
   prev?: LayoutResult,
   options?: LayoutCommitsOptions
 ): LayoutResult {
-  const maxCommits = options?.maxCommits ?? commits.length
+  const maxCommits = Math.min(options?.maxCommits ?? commits.length, commits.length)
   const cappedCommits = commits.slice(0, maxCommits)
   const endIndex = Math.min(options?.endIndex ?? cappedCommits.length, cappedCommits.length)
-  let startIdx = options?.startIndex ?? 0
-
-  let lanes: (string | null)[] = []
-  let rows: RowLayout[] = []
+  let startIndex = options?.startIndex ?? 0
+  let rowChunks: LayoutRowChunk[] = []
+  let boundaryChunks: LayoutBoundaryChunk[] = []
   let maxLanes = 0
 
-  if (
-    prev &&
-    startIdx === 0 &&
-    prev.rows.length > 0 &&
-    cappedCommits.length >= prev.rows.length &&
-    cappedCommits[0]?.hash === prev.rows[0]?.commit.hash &&
-    cappedCommits[prev.rows.length - 1]?.hash === prev.rows[prev.rows.length - 1]?.commit.hash
-  ) {
-    startIdx = prev.rows.length
-    lanes = prev.lanesAfter.slice()
-    rows = prev.rows.slice()
-    maxLanes = prev.maxLanes
-  } else if (prev && startIdx > 0 && startIdx === prev.laidOutThroughIndex) {
-    lanes = prev.lanesAfter.slice()
-    rows = prev.rows.slice()
+  const extendsPrefix =
+    prev !== undefined &&
+    startIndex === 0 &&
+    prev.rowCount > 0 &&
+    matchesCommitPrefix(prev.commits, cappedCommits, prev.rowCount)
+  const extendsWindow =
+    prev !== undefined && startIndex > 0 && startIndex === prev.laidOutThroughIndex
+
+  if (extendsPrefix || extendsWindow) {
+    startIndex = extendsPrefix ? prev.rowCount : startIndex
+    rowChunks = prev.rowChunks
+    boundaryChunks = prev.boundaryChunks
     maxLanes = prev.maxLanes
   } else {
-    startIdx = 0
-    rows = []
+    startIndex = 0
   }
 
-  for (let idx = startIdx; idx < endIndex; idx++) {
-    const commit = cappedCommits[idx]
-    const { row, maxLanes: rowMaxLanes } = layoutRow(commit, lanes, options?.isHiddenParent)
+  let incoming =
+    startIndex === 0 || !prev ? ([] as LaneBoundary) : getLayoutBoundary(prev, startIndex)
+  const nextRows: RowLayout[] = []
+  const nextBoundaries: LaneBoundary[] = startIndex === 0 ? [incoming] : []
+
+  for (let index = startIndex; index < endIndex; index++) {
+    const {
+      row,
+      outgoing,
+      maxLanes: rowMaxLanes
+    } = layoutRow(cappedCommits[index], incoming, options?.isHiddenParent)
     maxLanes = Math.max(maxLanes, rowMaxLanes)
-    rows.push({ commit, ...row })
+    nextRows.push(row)
+    nextBoundaries.push(outgoing)
+    incoming = outgoing
+  }
+
+  if (nextRows.length > 0) {
+    rowChunks = [...rowChunks, { startIndex, rows: nextRows }]
+  }
+  if (nextBoundaries.length > 0) {
+    boundaryChunks = [
+      ...boundaryChunks,
+      { startIndex: startIndex === 0 ? 0 : startIndex + 1, boundaries: nextBoundaries }
+    ]
   }
 
   return {
-    rows,
+    rowChunks,
+    boundaryChunks,
+    rowCount: endIndex,
+    boundaryCount: endIndex + 1,
     maxLanes,
-    lanesAfter: lanes,
+    lanesAfter: incoming,
     commits: cappedCommits,
     laidOutThroughIndex: endIndex
   }

@@ -22,3 +22,6 @@ export const NonNaNNumber = Schema.NonNaN
 // Trims and rejects empty — the canonical non-empty request string shared by the sidecar HTTP
 // registry and the @effect/rpc payload schemas, so both validate request fields identically.
 export const RequiredString = Schema.Trim.pipe(Schema.minLength(1))
+
+export const OpaqueString = Schema.String.pipe(Schema.minLength(1))
+export const OpaqueHunkHeaderString = Schema.String.pipe(Schema.pattern(/\S/))

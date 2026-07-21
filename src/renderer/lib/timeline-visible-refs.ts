@@ -45,7 +45,20 @@ export function effectiveVisibleTimelineRefs(
   remoteNames?: ReadonlySet<string>
 ): ReadonlySet<string> {
   if (selected.size > 0) {
-    return selected
+    const available = new Set<string>()
+    for (const branch of localBranches) {
+      available.add(refFilterKey('local', branch))
+    }
+    for (const branch of remoteBranches) {
+      available.add(refFilterKey('remote', branch))
+    }
+    const existing = new Set([...selected].filter((key) => available.has(key)))
+    if (existing.size === selected.size) {
+      return selected
+    }
+    if (existing.size > 0) {
+      return existing
+    }
   }
   return defaultVisibleTimelineRefs(
     localBranches,

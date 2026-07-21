@@ -7,7 +7,7 @@ import {
 } from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
 import { sidecarRpcCall } from '../sidecar'
-import { isRpcOp } from '../sidecar-rpc'
+import { isRendererRpcOp } from '../sidecar-rpc'
 import {
   getPersistedTabs,
   getRefTreeToggles,
@@ -26,7 +26,7 @@ export function register(): void {
     if (!isRecord(body)) {
       throw new Error('invalid sidecar request')
     }
-    if (typeof op !== 'string' || !isRpcOp(op)) {
+    if (typeof op !== 'string' || !isRendererRpcOp(op)) {
       throw new Error('invalid sidecar request')
     }
     return sidecarRpcCall(op, body)

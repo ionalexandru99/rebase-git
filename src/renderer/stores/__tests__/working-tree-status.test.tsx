@@ -40,7 +40,7 @@ function StatusProbe() {
 
 function HistoryProbe() {
   const history = useCommitHistory()
-  return <div data-testid="log-total">{history.log?.total ?? 0}</div>
+  return <div data-testid="log-total">{history.log?.loadedCount ?? 0}</div>
 }
 
 function streamedCommit(hash: string) {

@@ -1,96 +1,120 @@
-import { test, expect, _electron as electron } from '@playwright/test'
-import type { ElectronApplication, Page } from 'playwright-core'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { createFixtureRepo, expect, test } from './fixtures'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-function createFixtureRepo(): string {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
-  const git = (args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
-  git(['init', '-b', 'main'])
-  git(['config', 'user.email', 'test@example.com'])
-  git(['config', 'user.name', 'Test'])
-  fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
-  git(['add', '.'])
-  git(['commit', '-m', 'initial'])
-  return repo
-}
-
-test.describe.configure({ mode: 'serial' })
+const statusReadOwner = 10_001
+const commitOwner = 10_002
+const mergeOwner = 10_003
 
 test.describe('Git GUI E2E', () => {
-  let electronApp: ElectronApplication
-  let page: Page
-  let userDataDir: string
-
-  async function launchApp(): Promise<void> {
-    electronApp = await electron.launch({
-      args: [path.join(__dirname, '..', 'out', 'main', 'index.js'), `--user-data-dir=${userDataDir}`],
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-      },
-    })
-
-    page = await electronApp.firstWindow()
-  }
-
-  test.beforeAll(async () => {
-    userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
-    await launchApp()
-  })
-
-  test.afterAll(async () => {
-    await electronApp?.close()
-    fs.rmSync(userDataDir, { recursive: true, force: true })
-  })
-
-  test('window opens and title is correct', async () => {
+  test('window opens and title is correct', async ({ harness }) => {
+    const page = harness.page
     const title = await page.title()
     expect(title).toBeTruthy()
   })
 
-  test('window becomes visible after ready-to-show', async () => {
+  test('window becomes visible after ready-to-show', async ({ harness }) => {
     await expect
       .poll(
         () =>
-          electronApp.evaluate(({ BrowserWindow }) => {
+          harness.app().evaluate(({ BrowserWindow }) => {
             const win = BrowserWindow.getAllWindows()[0]
             return win ? win.isVisible() : false
           }),
         { timeout: 10_000 }
       )
       .toBe(true)
+    expect(harness.launchCount()).toBe(1)
+    await expect.poll(() => harness.inspectLifecycle()).toMatchObject({
+      sidecarProcessCount: 1,
+      sidecarRespawnCount: 0
+    })
   })
 
-  test('shows the onboarding screen on first launch', async () => {
+  test('shows the onboarding screen on first launch', async ({ harness }) => {
+    const page = harness.page
     await page.waitForLoadState('domcontentloaded')
 
+    const state = await page.evaluate(async () => {
+      const api = (
+        window as unknown as {
+          electronAPI: {
+            getActiveWorkspace: () => Promise<string | null>
+            getOnboardingComplete: () => Promise<boolean>
+            getPersistedTabs: () => Promise<{ tabs: Array<string | null>; activeIndex: number }>
+            getRecentRepos: () => Promise<string[]>
+            getRefTreeToggles: () => Promise<string[]>
+            getSidebarPrefs: () => Promise<{ open: boolean; width: number }>
+            getWorkspaces: () => Promise<string[]>
+          }
+        }
+      ).electronAPI
+      const [
+        activeWorkspace,
+        onboardingComplete,
+        persistedTabs,
+        recentRepos,
+        refTreeToggles,
+        sidebarPrefs,
+        workspaces
+      ] = await Promise.all([
+        api.getActiveWorkspace(),
+        api.getOnboardingComplete(),
+        api.getPersistedTabs(),
+        api.getRecentRepos(),
+        api.getRefTreeToggles(),
+        api.getSidebarPrefs(),
+        api.getWorkspaces()
+      ])
+      return {
+        activeWorkspace,
+        onboardingComplete,
+        persistedTabs,
+        recentRepos,
+        refTreeToggles,
+        sidebarPrefs,
+        workspaces,
+        localStorageKeys: Object.keys(localStorage)
+      }
+    })
+
+    expect(state).toEqual({
+      activeWorkspace: null,
+      onboardingComplete: false,
+      persistedTabs: { tabs: [null], activeIndex: 0 },
+      recentRepos: [],
+      refTreeToggles: [],
+      sidebarPrefs: { open: true, width: 244 },
+      workspaces: [],
+      localStorageKeys: []
+    })
     await expect(page.getByRole('heading', { name: 'Welcome to Rebase' })).toBeVisible()
   })
 
-  test('shows the select working folder button', async () => {
+  test('shows the select working folder button', async ({ harness }) => {
+    const page = harness.page
     await page.waitForLoadState('domcontentloaded')
 
     await expect(page.getByRole('button', { name: 'Select Working Folder' })).toBeVisible()
   })
 
-  test('renderer reaches the sidecar through the preload proxy for status + branches', async () => {
+  test('renderer reaches the sidecar through the preload proxy for status and local branches', async ({
+    harness
+  }) => {
     const repo = createFixtureRepo()
+    harness.track(repo)
+    const page = harness.page
     try {
-      const result = await page.evaluate(async (repoPath) => {
+      const result = await page.evaluate(async ({ owner, repoPath }) => {
         const api = (
           window as unknown as {
             electronAPI: Record<string, (...args: unknown[]) => Promise<unknown>>
           }
         ).electronAPI
-        const open = (await api.openRepo(repoPath)) as { _tag: string }
+        const open = (await api.openRepo(repoPath, owner)) as { _tag: string }
         const status = (await api.sidecarRequest('getStatus', { repoPath })) as { _tag: string }
-        const branches = (await api.sidecarRequest('getBranches', { repoPath })) as {
+        const branches = (await api.sidecarRequest('getLocalBranches', { repoPath })) as {
           _tag: string
           branches?: { current: string }
         }
@@ -101,7 +125,7 @@ test.describe('Git GUI E2E', () => {
           branchesTag: branches._tag,
           currentBranch: branches.branches?.current
         }
-      }, repo)
+      }, { owner: statusReadOwner, repoPath: repo })
 
       expect(result.open).toBe('Ok')
       expect(result.exposesSidecarConfig).toBe(false)
@@ -110,30 +134,31 @@ test.describe('Git GUI E2E', () => {
       expect(result.currentBranch).toBe('main')
     } finally {
       await page
-        .evaluate(async (repoPath) => {
+        .evaluate(async ({ owner, repoPath }) => {
           const api = (
             window as unknown as {
-              electronAPI?: { closeRepo?: (path: string) => Promise<unknown> }
+              electronAPI?: { closeRepo?: (path: string, owner: number) => Promise<unknown> }
             }
           ).electronAPI
-          await api?.closeRepo?.(repoPath)
-        }, repo)
+          await api?.closeRepo?.(repoPath, owner)
+        }, { owner: statusReadOwner, repoPath: repo })
         .catch(() => {})
-      fs.rmSync(repo, { recursive: true, force: true })
     }
   })
 
-  test('commits through the typed RPC write seam end to end', async () => {
+  test('commits through the typed RPC write seam end to end', async ({ harness }) => {
     const repo = createFixtureRepo()
+    harness.track(repo)
+    const page = harness.page
     fs.writeFileSync(path.join(repo, 'second.txt'), 'second\n')
     try {
-      const result = await page.evaluate(async (repoPath) => {
+      const result = await page.evaluate(async ({ owner, repoPath }) => {
         const api = (
           window as unknown as {
             electronAPI: Record<string, (...args: unknown[]) => Promise<unknown>>
           }
         ).electronAPI
-        const open = (await api.openRepo(repoPath)) as { _tag: string }
+        const open = (await api.openRepo(repoPath, owner)) as { _tag: string }
         await api.sidecarRequest('stageFile', { repoPath, file: 'second.txt' })
         const committed = (await api.sidecarRequest('commit', {
           repoPath,
@@ -151,7 +176,7 @@ test.describe('Git GUI E2E', () => {
           committedHash: committed.result?.commit ?? '',
           unopenedTag: unopened._tag
         }
-      }, repo)
+      }, { owner: commitOwner, repoPath: repo })
 
       expect(result.open).toBe('Ok')
       expect(result.committedTag).toBe('Ok')
@@ -159,21 +184,24 @@ test.describe('Git GUI E2E', () => {
       expect(result.unopenedTag).toBe('GitError')
     } finally {
       await page
-        .evaluate(async (repoPath) => {
+        .evaluate(async ({ owner, repoPath }) => {
           const api = (
             window as unknown as {
-              electronAPI?: { closeRepo?: (path: string) => Promise<unknown> }
+              electronAPI?: { closeRepo?: (path: string, owner: number) => Promise<unknown> }
             }
           ).electronAPI
-          await api?.closeRepo?.(repoPath)
-        }, repo)
+          await api?.closeRepo?.(repoPath, owner)
+        }, { owner: commitOwner, repoPath: repo })
         .catch(() => {})
-      fs.rmSync(repo, { recursive: true, force: true })
     }
   })
 
-  test('a merge conflict flows end to end as a typed Conflict through the RPC seam', async () => {
+  test('a merge conflict flows end to end as a typed Conflict through the RPC seam', async ({
+    harness
+  }) => {
     const repo = createFixtureRepo()
+    harness.track(repo)
+    const page = harness.page
     const git = (args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
     git(['checkout', '-b', 'feature'])
     fs.writeFileSync(path.join(repo, 'conflict.txt'), 'feature-side\n')
@@ -184,21 +212,23 @@ test.describe('Git GUI E2E', () => {
     git(['add', '.'])
     git(['commit', '-m', 'main side'])
     try {
-      const result = await page.evaluate(async (repoPath) => {
+      const result = await page.evaluate(async ({ owner, repoPath }) => {
         const api = (
           window as unknown as {
             electronAPI: Record<string, (...args: unknown[]) => Promise<unknown>>
           }
         ).electronAPI
-        const open = (await api.openRepo(repoPath)) as { _tag: string }
+        const open = (await api.openRepo(repoPath, owner)) as { _tag: string }
         const conflicted = (await api.sidecarRequest('mergeBranch', {
           repoPath,
-          ref: 'feature'
+          refKind: 'local',
+          fullPath: 'feature'
         })) as { _tag: string; message?: string }
 
         const cleanRepo = (await api.sidecarRequest('mergeBranch', {
           repoPath: '/no/such/path/from/e2e',
-          ref: 'feature'
+          refKind: 'local',
+          fullPath: 'feature'
         })) as { _tag: string }
 
         return {
@@ -207,7 +237,7 @@ test.describe('Git GUI E2E', () => {
           conflictedMessage: conflicted.message ?? '',
           missingTag: cleanRepo._tag
         }
-      }, repo)
+      }, { owner: mergeOwner, repoPath: repo })
 
       expect(result.open).toBe('Ok')
       expect(result.conflictedTag).toBe('Conflict')
@@ -218,65 +248,27 @@ test.describe('Git GUI E2E', () => {
         git(['merge', '--abort'])
       } catch {}
       await page
-        .evaluate(async (repoPath) => {
+        .evaluate(async ({ owner, repoPath }) => {
           const api = (
             window as unknown as {
-              electronAPI?: { closeRepo?: (path: string) => Promise<unknown> }
+              electronAPI?: { closeRepo?: (path: string, owner: number) => Promise<unknown> }
             }
           ).electronAPI
-          await api?.closeRepo?.(repoPath)
-        }, repo)
+          await api?.closeRepo?.(repoPath, owner)
+        }, { owner: mergeOwner, repoPath: repo })
         .catch(() => {})
-      fs.rmSync(repo, { recursive: true, force: true })
     }
   })
 
-  test('restored repo renders branches and history in the UI', async () => {
+  test('restored repo renders branches and history in the UI', async ({ harness }) => {
     const repo = createFixtureRepo()
-    try {
-      await page.evaluate(
-        async ({ repoPath, workspacePath }) => {
-          const api = (
-            window as unknown as {
-              electronAPI: {
-                addWorkspace: (path: string) => Promise<string[]>
-                setOnboardingComplete: (complete: boolean) => Promise<void>
-                setPersistedTabs: (state: {
-                  tabs: Array<string | null>
-                  activeIndex: number
-                }) => Promise<void>
-              }
-            }
-          ).electronAPI
-          await api.addWorkspace(workspacePath)
-          await api.setOnboardingComplete(true)
-          await api.setPersistedTabs({ tabs: [repoPath], activeIndex: 0 })
-        },
-        { repoPath: repo, workspacePath: path.dirname(repo) }
-      )
+    const page = await harness.openRepo(repo)
 
-      await electronApp.close()
-      await launchApp()
-      await page.waitForLoadState('domcontentloaded')
-
-      await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible()
-      await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({
-        timeout: 10_000
-      })
-      await expect(page.getByText('initial').first()).toBeVisible({ timeout: 10_000 })
-      await expect(page.getByText(/0 commits/)).not.toBeVisible()
-    } finally {
-      await page
-        .evaluate(async (repoPath) => {
-          const api = (
-            window as unknown as {
-              electronAPI?: { closeRepo?: (path: string) => Promise<unknown> }
-            }
-          ).electronAPI
-          await api?.closeRepo?.(repoPath)
-        }, repo)
-        .catch(() => {})
-      fs.rmSync(repo, { recursive: true, force: true })
-    }
+    await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({
+      timeout: 10_000
+    })
+    await expect(page.getByText('initial').first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(/0 commits/)).not.toBeVisible()
   })
 })

@@ -58,14 +58,24 @@ export function toggleHunkDrop(
   return next
 }
 
-export function assembleDrops(drops: FileDrops): {
+export function assembleDrops(
+  drops: FileDrops,
+  files: readonly { file: string; renameSource?: string }[]
+): {
   droppedHeadPaths: string[]
   droppedHeadHunks: { file: string; hunks: string[] }[]
 } {
   const droppedHeadPaths: string[] = []
   const droppedHeadHunks: { file: string; hunks: string[] }[] = []
+  const renameSources = new Map(
+    files.flatMap(({ file, renameSource }) => (renameSource ? [[file, renameSource]] : []))
+  )
   for (const [file, entry] of drops) {
     if (entry === 'all') {
+      const renameSource = renameSources.get(file)
+      if (renameSource) {
+        droppedHeadPaths.push(renameSource)
+      }
       droppedHeadPaths.push(file)
     } else if (entry.size > 0) {
       droppedHeadHunks.push({ file, hunks: [...entry] })

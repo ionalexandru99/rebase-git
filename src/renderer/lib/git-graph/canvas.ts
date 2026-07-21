@@ -1,27 +1,49 @@
-import type { RowLayout } from './layout'
-
-function getRootFontPx(): number {
-  if (typeof document === 'undefined') {
-    return 16
-  }
-  const px = parseFloat(getComputedStyle(document.documentElement).fontSize)
-  return Number.isFinite(px) && px > 0 ? px : 16
-}
-const ROOT_PX = getRootFontPx()
-
-export const ROW_H = Math.round(ROOT_PX * 2.5)
-export const COL_W = Math.round(ROOT_PX)
-export const RAIL_PAD = Math.round(ROOT_PX * 0.875)
-export const DOT_R = ROOT_PX * 0.3125
-// Merge nodes are drawn as a ring (stroke, no fill) one notch larger than the solid commit dot, both
-// derived from the root font size so the graph scales with zoom instead of using fixed pixels.
-export const MERGE_DOT_R = ROOT_PX * 0.25
-export const MERGE_STROKE = Math.max(1, ROOT_PX * 0.1)
-export const MERGE_GLYPH_ARM = ROOT_PX * 0.2
-export const MERGE_GLYPH_STROKE = Math.max(1, ROOT_PX * 0.09)
-
 import { HISTORY_OVERSCAN } from '@/lib/virtual-config'
+import type { LaneBoundary, RowLayout } from './layout'
 
+export interface GraphMetrics {
+  rootPx: number
+  rowHeight: number
+  columnWidth: number
+  railPadding: number
+  dotRadius: number
+  mergeDotRadius: number
+  mergeStroke: number
+  mergeGlyphArm: number
+  mergeGlyphStroke: number
+}
+
+export function readGraphMetrics(): GraphMetrics {
+  let rootPx = 16
+  if (typeof document !== 'undefined') {
+    const measured = parseFloat(getComputedStyle(document.documentElement).fontSize)
+    if (Number.isFinite(measured) && measured > 0) {
+      rootPx = measured
+    }
+  }
+  return {
+    rootPx,
+    rowHeight: Math.round(rootPx * 2.5),
+    columnWidth: Math.round(rootPx),
+    railPadding: Math.round(rootPx * 0.875),
+    dotRadius: rootPx * 0.3125,
+    mergeDotRadius: rootPx * 0.25,
+    mergeStroke: Math.max(1, rootPx * 0.1),
+    mergeGlyphArm: rootPx * 0.2,
+    mergeGlyphStroke: Math.max(1, rootPx * 0.09)
+  }
+}
+
+const DEFAULT_METRICS = readGraphMetrics()
+
+export const ROW_H = DEFAULT_METRICS.rowHeight
+export const COL_W = DEFAULT_METRICS.columnWidth
+export const RAIL_PAD = DEFAULT_METRICS.railPadding
+export const DOT_R = DEFAULT_METRICS.dotRadius
+export const MERGE_DOT_R = DEFAULT_METRICS.mergeDotRadius
+export const MERGE_STROKE = DEFAULT_METRICS.mergeStroke
+export const MERGE_GLYPH_ARM = DEFAULT_METRICS.mergeGlyphArm
+export const MERGE_GLYPH_STROKE = DEFAULT_METRICS.mergeGlyphStroke
 export const OVERSCAN = HISTORY_OVERSCAN
 
 export const LANE_PALETTE = [
@@ -39,24 +61,28 @@ export function laneColor(lane: number): string {
   return LANE_PALETTE[lane % LANE_PALETTE.length]
 }
 
-export function laneX(lane: number): number {
-  return RAIL_PAD + lane * COL_W
+export function laneX(lane: number, metrics = DEFAULT_METRICS): number {
+  return metrics.railPadding + lane * metrics.columnWidth
 }
 
-export function computeGraphRailWidth(maxLanes: number): number {
-  return Math.max(28, RAIL_PAD * 2 + Math.max(maxLanes - 1, 0) * COL_W)
+export function computeGraphRailWidth(maxLanes: number, metrics = DEFAULT_METRICS): number {
+  return Math.max(28, metrics.railPadding * 2 + Math.max(maxLanes - 1, 0) * metrics.columnWidth)
 }
 
-export function computeRowRailWidth(row: RowLayout): number {
+export function computeRowRailWidth(
+  row: RowLayout,
+  incoming: LaneBoundary,
+  outgoing: LaneBoundary
+): number {
   let maxLane = row.commitLane
-  for (let lane = row.incoming.length - 1; lane > maxLane; lane--) {
-    if (row.incoming[lane] !== null) {
+  for (let lane = incoming.length - 1; lane > maxLane; lane--) {
+    if (incoming[lane] !== null) {
       maxLane = lane
       break
     }
   }
-  for (let lane = row.outgoing.length - 1; lane > maxLane; lane--) {
-    if (row.outgoing[lane] !== null) {
+  for (let lane = outgoing.length - 1; lane > maxLane; lane--) {
+    if (outgoing[lane] !== null) {
       maxLane = lane
       break
     }
@@ -75,163 +101,196 @@ export function readCssVar(name: string, fallback: string): string {
 interface EdgeSegment {
   startX: number
   startY: number
-  control: readonly [number, number, number, number] | null
+  controlX1: number
+  controlY1: number
+  controlX2: number
+  controlY2: number
   endX: number
   endY: number
+  curved: boolean
 }
 
 interface EdgeGroup {
   strokeStyle: string
   alpha: number
   segments: EdgeSegment[]
+  used: number
 }
 
-export type EdgeBatch = Map<string, EdgeGroup>
+export interface EdgeBatch {
+  groups: EdgeGroup[]
+}
 
 export function createEdgeBatch(): EdgeBatch {
-  return new Map()
+  const groups: EdgeGroup[] = []
+  for (const alpha of [0.85, 0.2]) {
+    for (const strokeStyle of LANE_PALETTE) {
+      groups.push({ strokeStyle, alpha, segments: [], used: 0 })
+    }
+  }
+  return { groups }
 }
 
-function lineSegment(startX: number, startY: number, endX: number, endY: number): EdgeSegment {
-  return { startX, startY, control: null, endX, endY }
+export function resetEdgeBatch(batch: EdgeBatch): void {
+  for (const group of batch.groups) {
+    group.used = 0
+  }
 }
 
-function bezierSegment(
+export function edgeBatchCapacity(batch: EdgeBatch): number {
+  let capacity = 0
+  for (const group of batch.groups) {
+    capacity += group.segments.length
+  }
+  return capacity
+}
+
+function addEdge(
+  batch: EdgeBatch,
+  lane: number,
+  dim: boolean,
   startX: number,
   startY: number,
-  controlX1: number,
-  controlY1: number,
-  controlX2: number,
-  controlY2: number,
   endX: number,
-  endY: number
-): EdgeSegment {
-  return { startX, startY, control: [controlX1, controlY1, controlX2, controlY2], endX, endY }
-}
-
-function addEdge(batch: EdgeBatch, strokeStyle: string, alpha: number, segment: EdgeSegment): void {
-  const key = `${alpha}|${strokeStyle}`
-  let group = batch.get(key)
-  if (!group) {
-    group = { strokeStyle, alpha, segments: [] }
-    batch.set(key, group)
+  endY: number,
+  controlX1?: number,
+  controlY1?: number,
+  controlX2?: number,
+  controlY2?: number
+): void {
+  const group = batch.groups[(dim ? LANE_PALETTE.length : 0) + (lane % LANE_PALETTE.length)]
+  const index = group.used++
+  const segment = group.segments[index] ?? {
+    startX: 0,
+    startY: 0,
+    controlX1: 0,
+    controlY1: 0,
+    controlX2: 0,
+    controlY2: 0,
+    endX: 0,
+    endY: 0,
+    curved: false
   }
-  group.segments.push(segment)
+  segment.startX = startX
+  segment.startY = startY
+  segment.endX = endX
+  segment.endY = endY
+  segment.curved = controlX1 !== undefined
+  segment.controlX1 = controlX1 ?? 0
+  segment.controlY1 = controlY1 ?? 0
+  segment.controlX2 = controlX2 ?? 0
+  segment.controlY2 = controlY2 ?? 0
+  if (index === group.segments.length) {
+    group.segments.push(segment)
+  }
 }
 
 export function collectRowEdges(
   batch: EdgeBatch,
   row: RowLayout,
+  incoming: LaneBoundary,
+  outgoing: LaneBoundary,
   yTop: number,
   isFirst: boolean,
-  dim: boolean
+  dim: boolean,
+  metrics = DEFAULT_METRICS
 ): void {
-  const rowMid = yTop + ROW_H / 2
-  const rowBot = yTop + ROW_H
-  const dotX = laneX(row.commitLane)
-  const edgeAlpha = dim ? 0.2 : 0.85
+  const rowMid = yTop + metrics.rowHeight / 2
+  const rowBottom = yTop + metrics.rowHeight
+  const dotX = laneX(row.commitLane, metrics)
 
   if (!isFirst) {
-    for (let j = 0; j < row.incoming.length; j++) {
-      const hash = row.incoming[j]
+    for (let lane = 0; lane < incoming.length; lane++) {
+      const hash = incoming[lane]
       if (hash === null) {
         continue
       }
-      const color = laneColor(j)
-      if (hash === row.commit.hash) {
-        if (j === row.commitLane) {
-          addEdge(batch, color, edgeAlpha, lineSegment(laneX(j), yTop, dotX, rowMid))
-        } else {
-          addEdge(
-            batch,
-            color,
-            edgeAlpha,
-            bezierSegment(
-              laneX(j),
-              yTop,
-              laneX(j),
-              rowMid - ROW_H / 4,
-              dotX,
-              rowMid - ROW_H / 4,
-              dotX,
-              rowMid
-            )
-          )
-        }
+      const startX = laneX(lane, metrics)
+      if (hash === row.commit.hash && lane !== row.commitLane) {
+        addEdge(
+          batch,
+          lane,
+          dim,
+          startX,
+          yTop,
+          dotX,
+          rowMid,
+          startX,
+          rowMid - metrics.rowHeight / 4,
+          dotX,
+          rowMid - metrics.rowHeight / 4
+        )
       } else {
-        addEdge(batch, color, edgeAlpha, lineSegment(laneX(j), yTop, laneX(j), rowMid))
+        addEdge(batch, lane, dim, startX, yTop, hash === row.commit.hash ? dotX : startX, rowMid)
       }
     }
   }
 
-  for (let j = 0; j < row.outgoing.length; j++) {
-    const hash = row.outgoing[j]
+  for (let lane = 0; lane < outgoing.length; lane++) {
+    const hash = outgoing[lane]
     if (hash === null) {
       continue
     }
-    const color = laneColor(j)
-    const passThrough = row.incoming[j] === hash
-    if (passThrough) {
-      addEdge(batch, color, edgeAlpha, lineSegment(laneX(j), rowMid, laneX(j), rowBot))
-      continue
-    }
-    const endX = laneX(j)
-    if (dotX === endX) {
-      addEdge(batch, color, edgeAlpha, lineSegment(endX, rowMid, endX, rowBot))
+    const endX = laneX(lane, metrics)
+    if (incoming[lane] === hash || dotX === endX) {
+      addEdge(batch, lane, dim, incoming[lane] === hash ? endX : dotX, rowMid, endX, rowBottom)
     } else {
       addEdge(
         batch,
-        color,
-        edgeAlpha,
-        bezierSegment(
-          dotX,
-          rowMid,
-          dotX,
-          rowMid + ROW_H / 4,
-          endX,
-          rowMid + ROW_H / 4,
-          endX,
-          rowBot
-        )
+        lane,
+        dim,
+        dotX,
+        rowMid,
+        endX,
+        rowBottom,
+        dotX,
+        rowMid + metrics.rowHeight / 4,
+        endX,
+        rowMid + metrics.rowHeight / 4
       )
     }
   }
 
   for (const parent of row.commit.parents) {
-    const j = row.outgoing.indexOf(parent)
-    if (j === -1 || j === row.commitLane) {
+    const lane = outgoing.indexOf(parent)
+    if (lane === -1 || lane === row.commitLane || incoming[lane] !== parent) {
       continue
     }
-    if (row.incoming[j] !== parent) {
-      continue
-    }
-    const endX = laneX(j)
+    const endX = laneX(lane, metrics)
     addEdge(
       batch,
-      laneColor(j),
-      edgeAlpha,
-      bezierSegment(dotX, rowMid, dotX, rowMid + ROW_H / 4, endX, rowMid + ROW_H / 4, endX, rowBot)
+      lane,
+      dim,
+      dotX,
+      rowMid,
+      endX,
+      rowBottom,
+      dotX,
+      rowMid + metrics.rowHeight / 4,
+      endX,
+      rowMid + metrics.rowHeight / 4
     )
   }
 }
 
 export function strokeEdgeBatch(ctx: CanvasRenderingContext2D, batch: EdgeBatch): void {
-  if (batch.size === 0) {
-    return
-  }
   ctx.lineWidth = 2
-  for (const group of batch.values()) {
+  for (const group of batch.groups) {
+    if (group.used === 0) {
+      continue
+    }
     ctx.globalAlpha = group.alpha
     ctx.strokeStyle = group.strokeStyle
     ctx.beginPath()
-    for (const segment of group.segments) {
+    for (let index = 0; index < group.used; index++) {
+      const segment = group.segments[index]
       ctx.moveTo(segment.startX, segment.startY)
-      if (segment.control) {
+      if (segment.curved) {
         ctx.bezierCurveTo(
-          segment.control[0],
-          segment.control[1],
-          segment.control[2],
-          segment.control[3],
+          segment.controlX1,
+          segment.controlY1,
+          segment.controlX2,
+          segment.controlY2,
           segment.endX,
           segment.endY
         )
@@ -248,24 +307,24 @@ export function drawCommitDot(
   row: RowLayout,
   yTop: number,
   dim: boolean,
-  bgColor: string
+  bgColor: string,
+  metrics = DEFAULT_METRICS
 ): void {
-  const rowMid = yTop + ROW_H / 2
-  const dotX = laneX(row.commitLane)
-  const isMerge = row.commit.parents.length >= 2
-  if (isMerge) {
+  const rowMid = yTop + metrics.rowHeight / 2
+  const dotX = laneX(row.commitLane, metrics)
+  if (row.commit.parents.length >= 2) {
     ctx.globalAlpha = dim ? 0.25 : 0.95
     ctx.beginPath()
-    ctx.arc(dotX, rowMid, MERGE_DOT_R, 0, Math.PI * 2)
+    ctx.arc(dotX, rowMid, metrics.mergeDotRadius, 0, Math.PI * 2)
     ctx.fillStyle = bgColor
     ctx.fill()
     ctx.strokeStyle = laneColor(row.commitLane)
-    ctx.lineWidth = MERGE_STROKE
+    ctx.lineWidth = metrics.mergeStroke
     ctx.stroke()
   } else {
     ctx.globalAlpha = dim ? 0.25 : 1
     ctx.beginPath()
-    ctx.arc(dotX, rowMid, DOT_R, 0, Math.PI * 2)
+    ctx.arc(dotX, rowMid, metrics.dotRadius, 0, Math.PI * 2)
     ctx.fillStyle = laneColor(row.commitLane)
     ctx.fill()
   }
@@ -276,17 +335,18 @@ export function drawMergeGlyph(
   dotX: number,
   rowMid: number,
   glyph: 'collapsed' | 'expanded',
-  color: string
+  color: string,
+  metrics = DEFAULT_METRICS
 ): void {
   ctx.globalAlpha = 1
   ctx.strokeStyle = color
-  ctx.lineWidth = MERGE_GLYPH_STROKE
+  ctx.lineWidth = metrics.mergeGlyphStroke
   ctx.beginPath()
-  ctx.moveTo(dotX - MERGE_GLYPH_ARM, rowMid)
-  ctx.lineTo(dotX + MERGE_GLYPH_ARM, rowMid)
+  ctx.moveTo(dotX - metrics.mergeGlyphArm, rowMid)
+  ctx.lineTo(dotX + metrics.mergeGlyphArm, rowMid)
   if (glyph === 'collapsed') {
-    ctx.moveTo(dotX, rowMid - MERGE_GLYPH_ARM)
-    ctx.lineTo(dotX, rowMid + MERGE_GLYPH_ARM)
+    ctx.moveTo(dotX, rowMid - metrics.mergeGlyphArm)
+    ctx.lineTo(dotX, rowMid + metrics.mergeGlyphArm)
   }
   ctx.stroke()
 }
@@ -294,13 +354,15 @@ export function drawMergeGlyph(
 export function drawGraphRow(
   ctx: CanvasRenderingContext2D,
   row: RowLayout,
+  incoming: LaneBoundary,
+  outgoing: LaneBoundary,
   yTop: number,
   isFirst: boolean,
   dim: boolean,
   bgColor: string
 ): void {
   const batch = createEdgeBatch()
-  collectRowEdges(batch, row, yTop, isFirst, dim)
+  collectRowEdges(batch, row, incoming, outgoing, yTop, isFirst, dim)
   strokeEdgeBatch(ctx, batch)
   drawCommitDot(ctx, row, yTop, dim, bgColor)
 }

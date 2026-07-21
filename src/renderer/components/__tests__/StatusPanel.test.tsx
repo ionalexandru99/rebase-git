@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { HeadDropState } from '@/lib/amend-drops'
 import type { FileAction } from '@/lib/git-actions'
 import type { FileRowSource, UnifiedFileRow } from '@/lib/status-file-rows'
+import { buildUnifiedFileRows } from '@/lib/status-file-rows'
 import { type WorkingTreeStatus, WorkingTreeStatusProvider } from '@/stores/working-tree-status'
 import type { GitStatus } from '@/types'
 import { type SelectedFile, StatusPanel } from '../StatusPanel'
@@ -36,6 +37,8 @@ function emptyStatus(overrides: Partial<GitStatus> = {}): GitStatus {
 function provideStatus(status: GitStatus | null, overrides: Partial<WorkingTreeStatus>) {
   const value: WorkingTreeStatus = {
     status,
+    rows: status ? buildUnifiedFileRows(status) : [],
+    statusState: status ? 'ready' : 'loading',
     statusLoading: false,
     stageFile: vi.fn(),
     unstageFile: vi.fn(),
@@ -52,6 +55,7 @@ function provideStatus(status: GitStatus | null, overrides: Partial<WorkingTreeS
 
 function renderPanel(props: {
   status: GitStatus | null
+  statusState?: WorkingTreeStatus['statusState']
   selected?: SelectedFile | null
   onSelect?: (file: string, source: FileRowSource) => void
   onStage?: WorkingTreeStatus['stageFile']
@@ -60,10 +64,11 @@ function renderPanel(props: {
   onUnstageAll?: WorkingTreeStatus['unstageAll']
   onToggleDrop?: (file: string) => void
   amendRows?: UnifiedFileRow[]
-  onFileAction?: (action: FileAction, file: string) => void
+  onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
   loading?: boolean
 }) {
   const wrap = provideStatus(props.status, {
+    statusState: props.statusState ?? (props.status ? 'ready' : 'loading'),
     stageFile: props.onStage ?? vi.fn(),
     unstageFile: props.onUnstage ?? vi.fn(),
     stageAll: props.onStageAll ?? vi.fn(),
@@ -97,6 +102,13 @@ describe('StatusPanel', () => {
   it('renders nothing when status is null', () => {
     renderPanel({ status: null })
     expect(screen.queryByText('Changes')).not.toBeInTheDocument()
+  })
+
+  it('shows status as unavailable instead of calling the working tree clean', () => {
+    renderPanel({ status: null, statusState: 'error' })
+
+    expect(screen.getByText('Changes unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('Working tree clean')).not.toBeInTheDocument()
   })
 
   it('fires file actions from the row context menu', async () => {
@@ -149,6 +161,26 @@ describe('StatusPanel', () => {
     })
     expect(screen.getByText('old.ts → new.ts')).toBeInTheDocument()
     expect(screen.getByLabelText('renamed')).toBeInTheDocument()
+  })
+
+  it('passes a staged rename source to unstage and discard actions', async () => {
+    const onUnstage = vi.fn()
+    const onFileAction = vi.fn()
+    renderPanel({
+      status: emptyStatus({
+        renamed: [{ from: 'old.ts', to: 'new.ts' }],
+        files: [code('new.ts', 'R', ' ')]
+      }),
+      onUnstage,
+      onFileAction
+    })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Unstage old.ts → new.ts' }))
+    expect(onUnstage).toHaveBeenCalledWith('new.ts', 'old.ts')
+
+    fireEvent.contextMenu(screen.getByText('old.ts → new.ts'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Discard changes' }))
+    expect(onFileAction).toHaveBeenCalledWith('discard', 'new.ts', 'old.ts')
   })
 
   it('shows a loading badge while loading', () => {
@@ -241,6 +273,20 @@ describe('StatusPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Unstage all' }))
     expect(onUnstageAll).toHaveBeenCalledTimes(1)
     expect(onUnstageAll).toHaveBeenCalledWith(['a.ts', 'b.ts'])
+  })
+
+  it('includes both paths of a staged rename when unstaging all', () => {
+    const onUnstageAll = vi.fn()
+    renderPanel({
+      status: emptyStatus({
+        renamed: [{ from: 'old.ts', to: 'new.ts' }],
+        files: [code('new.ts', 'R', ' ')]
+      }),
+      onUnstageAll
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage all' }))
+    expect(onUnstageAll).toHaveBeenCalledWith(['old.ts', 'new.ts'])
   })
 
   it('truncates long file names and exposes the full path as a title attribute', () => {

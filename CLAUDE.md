@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Rebase** — a desktop Git GUI built with Electron 41 + TypeScript + Tailwind 4. `pnpm` is the package manager.
 
-> Git work runs in a forked HTTP **sidecar** (main thread never blocks). The **React 19** renderer uses **@tanstack/react-query** + `@tanstack/react-virtual`, and reaches the sidecar over IPC via `sidecarFetch` (Zod contracts in `src/shared/`). Commit history streams over IPC. See **`AGENTS.md`** for binding rules.
+> Git work runs in a forked HTTP **sidecar** (main thread never blocks). The **React 19** renderer uses **@tanstack/react-query** + `@tanstack/react-virtual`, and reaches the sidecar through typed `callSidecarRpc` helpers over IPC (Effect Schema contracts in `src/shared/`). Commit history streams over IPC. See **`AGENTS.md`** for binding rules.
 
-`AGENTS.md` contains the binding rules: main thread never blocks on Git, tests required for every behaviour change, exact dependency versions (no `^`/`~`), restricted postinstall scripts (`pnpm.onlyBuiltDependencies`).
+`AGENTS.md` contains the binding rules: main thread never blocks on Git, tests required for every behaviour change, exact dependency versions (no `^`/`~`), restricted postinstall scripts (`allowBuilds` in `pnpm-workspace.yaml`).
 
 ## Commands
 
@@ -23,17 +23,19 @@ pnpm check                # biome format + lint check
 pnpm check:fix            # auto-fix biome issues
 pnpm hooks:install        # idempotent — points git at .githooks/ (also runs via `prepare` on `pnpm install`)
 
-# Four test layers — pick the one that matches the change:
+# Test layers — pick the one that matches the change:
 pnpm test:renderer        # vitest, happy-dom, src/renderer/**/*.test.{ts,tsx}
-pnpm test:main            # vitest, node, src/main/**/*.test.{ts,tsx}
+pnpm test:main            # vitest, node, src/main + src/shared unit tests
+pnpm test:sidecar         # vitest, node, sidecar unit + real-git integration tests
 pnpm test:smoke           # builds + launches the electron binary, watches stdout/stderr
 pnpm test:e2e             # playwright against the real built app (e2e/*.spec.ts)
 pnpm test                 # alias for test:renderer
-pnpm test:ci              # renderer + main + e2e
+pnpm test:ci              # renderer + main + sidecar + e2e
 
 # Single test
 pnpm vitest run src/renderer/components/__tests__/CommitPanel.test.tsx
 pnpm vitest run --config vitest.main.config.ts src/main/__tests__/store.test.ts
+pnpm vitest run --config vitest.sidecar.config.ts src/sidecar/__tests__/amend.integration.test.ts
 pnpm playwright test e2e/app-launches.spec.ts
 ```
 
@@ -56,9 +58,9 @@ Four processes, hard boundary between them:
 - `src/main/` — Node/Electron. Owns window lifecycle, dialogs, `electron-store` persistence, updater/menu, sidecar spawn/health/kill, and proxies every Git IPC to the sidecar over loopback HTTP. **No Git logic.**
 - `src/sidecar/` — forked `utilityProcess` HTTP server on loopback (`127.0.0.1:<random-port>`, bearer-token auth); owns all `simple-git` work.
 - `src/preload/` — typed `window.electronAPI` bridge for OS/window concerns plus a `sidecarRequest` IPC channel. Context isolation is enabled; the renderer has no Node access. The sidecar URL and bearer token stay inside main + sidecar and never reach the renderer or preload.
-- `src/renderer/` — React 19 UI; @tanstack/react-query + `sidecarFetch` for Git ops; @tanstack/react-virtual for long lists. `sidecarFetch` does NOT hit the network directly — it calls `window.electronAPI.sidecarRequest`, which IPCs to main, which forwards over loopback HTTP to the sidecar. Vite alias `@` → `src/renderer`. `src/renderer/lib/*-compat.*` is a transitional shim that mimics the old Solid-era reactive API, scheduled for removal (see REMEDIATION_PLAN.md Phase 1/5). Do not add new imports from it.
+- `src/renderer/` — React 19 UI; @tanstack/react-query + typed `callSidecarRpc` helpers for Git ops; @tanstack/react-virtual for long lists. The RPC helper calls `window.electronAPI.sidecarRequest`, which IPCs to main, which forwards over loopback HTTP to the sidecar. Vite alias `@` → `src/renderer`.
 
-Before changing architecture, read **`AGENTS.md`** (tests, exact dependency versions, `pnpm.onlyBuiltDependencies`).
+Before changing architecture, read **`AGENTS.md`** (tests, exact dependency versions, restricted postinstall scripts through `allowBuilds`).
 
 ### Multi-tab, multi-repo model
 
@@ -66,7 +68,7 @@ The renderer supports N tabs, each independently holding a different repo. Git o
 
 ### Git responses
 
-The sidecar returns Zod-validated JSON (`{ _tag: 'Ok' | 'GitError' | 'RepoNotOpen', ... }`). The renderer parses these via `parseOrThrow` in `src/shared/codec.ts` — don't assume legacy `{ success: boolean }` shapes for new code.
+The sidecar uses Effect RPC and Effect Schema for tagged success/domain-error responses. The renderer derives each response decoder from the shared RPC contract and parses it via `parseOrThrow` in `src/shared/codec.ts` — don't assume legacy `{ success: boolean }` shapes for new code.
 
 ### Workspaces
 
@@ -84,7 +86,7 @@ A "workspace" is a parent folder that contains one or more git repos. The store 
 
 `src/test/setup.ts` (loaded by `vitest.config.ts`) mocks the entire `window.electronAPI` surface with `vi.fn()`s, plus happy-dom polyfills for `matchMedia` and `ResizeObserver` (Radix/sonner/next-themes need them). `vi.resetAllMocks()` runs in `beforeEach`, so tests must set up their `electronAPI` mock returns inside the test (or `beforeEach`), not at module top level. `matchMedia` is intentionally defined as a plain function rather than a `vi.fn()` so `resetAllMocks` doesn't strip its implementation.
 
-Main-process tests run in plain Node and must only cover pure logic (store, serializers, etc.) — don't mock `BrowserWindow` / `ipcMain`; let E2E cover IPC integration. Don't unit-test Electron boilerplate (window creation, menus, updater) — smoke tests catch startup regressions.
+Main-process and shared tests run in plain Node with a short unit-test timeout. Sidecar tests use their own Node configuration with a longer timeout because they include real Git repositories and processes. Don't mock `BrowserWindow` / `ipcMain`; let E2E cover IPC integration. Don't unit-test Electron boilerplate (window creation, menus, updater) — smoke tests catch startup regressions.
 
 ## Style
 
@@ -96,7 +98,7 @@ Default to writing **no comments**. Only add one when the WHY is non-obvious —
 
 ### Per-tab isolation in main
 
-The renderer runs N tabs sharing one `webContents`, with an enforced invariant of **at most one tab per repo** — `useTabs.requestOpenRepo` (`src/renderer/hooks/useTabs.ts:84`) routes any attempt to open an already-open repo to the existing tab and discards the new one. So `repoPath` is effectively the per-tab key in main.
+The renderer runs N tabs sharing one `webContents`, with an enforced invariant of **at most one tab per repo** — `useTabs.openRepoInTab` routes any attempt to open an already-open repo to the existing tab and discards the new one. So `repoPath` is effectively the per-tab key in main.
 
 Two consequences:
 

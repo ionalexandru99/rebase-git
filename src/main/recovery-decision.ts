@@ -17,11 +17,8 @@ export function shouldPromptOnRenderGone(reason: string): boolean {
   return reason !== 'clean-exit'
 }
 
-const SIDECAR_SERVICE_NAME = 'rebase git sidecar'
+export const SIDECAR_SERVICE_NAME = 'rebase git sidecar'
 
-// Electron surfaces the `utilityProcess.fork` serviceName option as `details.name`; `serviceName`
-// holds the non-localized service id (e.g. `node.mojom.NodeService`). Match `name` first, keep the
-// id as a defensive fallback, and otherwise only respawn an anonymous utility child.
 export function shouldRespawnSidecar(details: {
   type?: string
   serviceName?: string
@@ -31,4 +28,36 @@ export function shouldRespawnSidecar(details: {
     return true
   }
   return details.type === 'Utility' && !details.name && !details.serviceName
+}
+
+interface ChildProcessGoneDetails {
+  type?: string
+  serviceName?: string
+  name?: string
+  reason?: string
+}
+
+interface ChildProcessRecoveryState {
+  appShuttingDown: boolean
+}
+
+export interface ChildProcessRecoveryDecision {
+  log: boolean
+  respawn: boolean
+}
+
+export function childProcessRecoveryDecision(
+  details: ChildProcessGoneDetails,
+  state: ChildProcessRecoveryState
+): ChildProcessRecoveryDecision {
+  if (state.appShuttingDown) {
+    return { log: false, respawn: false }
+  }
+
+  const sidecar = shouldRespawnSidecar(details)
+  if (sidecar && details.reason === 'clean-exit') {
+    return { log: false, respawn: false }
+  }
+
+  return { log: true, respawn: sidecar }
 }

@@ -41,7 +41,7 @@ jobs:
   test-unit:
     name: Unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -66,6 +66,9 @@ jobs:
 
       - name: Main-process tests
         run: pnpm test:main
+
+      - name: Sidecar and integration tests
+        run: pnpm test:sidecar
 
   test-e2e:
     name: Build & integration
@@ -102,7 +105,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: End-to-end tests
-        run: xvfb-run -a pnpm test:e2e
+        run: xvfb-run -a pnpm exec playwright test
 
       - name: Smoke test
-        run: xvfb-run -a pnpm test:smoke
+        run: xvfb-run -a node scripts/smoke-test.mjs

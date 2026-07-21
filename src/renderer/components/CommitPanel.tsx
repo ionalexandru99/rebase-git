@@ -1,6 +1,6 @@
 import { Loader2Icon } from 'lucide-react'
 import type { ChangeEvent, ReactNode } from 'react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 interface CommitPanelProps {
@@ -8,8 +8,10 @@ interface CommitPanelProps {
   onAmend: (
     message: string,
     droppedHeadPaths: string[],
-    droppedHeadHunks: { file: string; hunks: string[] }[]
+    droppedHeadHunks: { file: string; hunks: string[] }[],
+    expectedHead: string
   ) => Promise<boolean>
+  expectedHead: string | undefined
   loadHeadMessage: () => Promise<string | null>
   amendAvailable: boolean
   amendDisabled: boolean
@@ -28,37 +30,77 @@ export function CommitPanel(props: CommitPanelProps) {
   const [message, setMessage] = useState('')
   const [amend, setAmend] = useState(false)
   const [savedDraft, setSavedDraft] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const messageRef = useRef(message)
+  const amendRef = useRef(amend)
+  const amendLoadGeneration = useRef(0)
+  const submittingRef = useRef(false)
 
-  // Entering amend prefills HEAD's full message but stashes the in-progress draft so un-ticking is a
-  // perfect no-op; nothing in the repository changes until the user presses Amend.
   const handleAmendToggle = async (event: ChangeEvent<HTMLInputElement>) => {
     if (event.currentTarget.checked) {
       setSavedDraft(message)
-      const headMessage = await props.loadHeadMessage()
+      amendRef.current = true
       setAmend(true)
       props.onAmendChange?.(true)
-      if (headMessage !== null) {
+      const generation = amendLoadGeneration.current + 1
+      amendLoadGeneration.current = generation
+      const headMessage = await props.loadHeadMessage()
+      if (headMessage !== null && amendRef.current && amendLoadGeneration.current === generation) {
+        messageRef.current = headMessage
         setMessage(headMessage)
       }
     } else {
+      amendLoadGeneration.current += 1
+      amendRef.current = false
       setAmend(false)
       props.onAmendChange?.(false)
+      messageRef.current = savedDraft
       setMessage(savedDraft)
     }
   }
 
   const handleCommit = async () => {
-    const trimmed = message.trim()
+    if (submittingRef.current) {
+      return
+    }
+    const submittedMessage = messageRef.current
+    const trimmed = submittedMessage.trim()
     if (!trimmed) {
       return
     }
-    const success = await (amend
-      ? props.onAmend(trimmed, props.droppedHeadPaths ?? [], props.droppedHeadHunks ?? [])
-      : props.onCommit(trimmed))
-    if (success) {
-      setMessage('')
-      setAmend(false)
-      props.onAmendChange?.(false)
+    submittingRef.current = true
+    setSubmitting(true)
+    try {
+      let success: boolean
+      if (amendRef.current) {
+        const expectedHead = props.expectedHead
+        if (!expectedHead) {
+          return
+        }
+        success = await props.onAmend(
+          trimmed,
+          props.droppedHeadPaths ?? [],
+          props.droppedHeadHunks ?? [],
+          expectedHead
+        )
+      } else {
+        success = await props.onCommit(trimmed)
+      }
+      if (success) {
+        setMessage((current) => {
+          if (current !== submittedMessage) {
+            return current
+          }
+          messageRef.current = ''
+          return ''
+        })
+        amendRef.current = false
+        setAmend(false)
+        props.onAmendChange?.(false)
+      }
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
     }
   }
 
@@ -69,19 +111,36 @@ export function CommitPanel(props: CommitPanelProps) {
     : props.stagedCount > 0
       ? `Commit ${props.stagedCount} file${props.stagedCount === 1 ? '' : 's'}`
       : 'Commit'
-  const commitDisabled = !message.trim() || props.loading || (!amend && props.stagedCount === 0)
+  const loading = props.loading || submitting
+  const hasDroppedFiles = amend && (props.droppedHeadPaths?.length ?? 0) > 0
+  const commitDisabled =
+    !message.trim() ||
+    loading ||
+    (!amend && props.stagedCount === 0) ||
+    (amend && !props.expectedHead)
 
   return (
     <div className="shrink-0 border-t px-3 pb-3 pt-2.5">
       <div className="rounded-[var(--r-md)] border bg-background p-2 transition-shadow focus-within:border-[var(--brand-line)] focus-within:shadow-[0_0_0_3px_var(--brand-soft)]">
         <textarea
           value={message}
-          onChange={(event) => setMessage(event.currentTarget.value)}
+          onChange={(event) => {
+            const nextMessage = event.currentTarget.value
+            amendLoadGeneration.current += 1
+            messageRef.current = nextMessage
+            setMessage(nextMessage)
+          }}
           placeholder="Describe your changes…"
           aria-label="Commit message"
           rows={2}
           className="max-h-36 min-h-[50px] w-full resize-none border-0 bg-transparent px-1.5 py-1 text-sm text-foreground outline-none"
         />
+        {hasDroppedFiles ? (
+          <p className="px-1.5 pb-1 text-xs text-amber-foreground">
+            Amend restores dropped files from the parent commit. Staged changes in dropped files
+            will also be excluded.
+          </p>
+        ) : null}
         <div className="flex items-center gap-2 px-1 pb-0.5 pt-1.5">
           <div className="flex items-center gap-1.5">
             <MetaChip color="var(--blue)">{props.branch}</MetaChip>
@@ -94,7 +153,7 @@ export function CommitPanel(props: CommitPanelProps) {
                 <input
                   type="checkbox"
                   checked={amend}
-                  disabled={props.amendDisabled || props.loading}
+                  disabled={props.amendDisabled || loading}
                   onChange={handleAmendToggle}
                   aria-label="Amend last commit"
                   className="size-3.5 accent-[var(--brand)]"
@@ -118,7 +177,7 @@ export function CommitPanel(props: CommitPanelProps) {
             disabled={commitDisabled}
             className="inline-flex h-8 items-center gap-1.5 rounded-[var(--r-sm)] bg-brand px-3 font-semibold text-brand-foreground transition-colors hover:bg-[var(--brand-strong)] disabled:opacity-50"
           >
-            {props.loading ? (
+            {loading ? (
               <>
                 <Loader2Icon className="size-3.5 animate-spin" />
                 Committing…

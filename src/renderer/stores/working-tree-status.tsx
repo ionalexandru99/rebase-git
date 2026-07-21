@@ -1,6 +1,8 @@
 import type { FileDiff, HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
+import { formatCause } from '@/lib/format-cause'
+import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
   rpcGetDiff,
@@ -13,12 +15,11 @@ import {
   rpcUnstageFile,
   rpcUnstageHunk
 } from '@/lib/rpc-client'
+import { buildUnifiedFileRows, type UnifiedFileRow } from '@/lib/status-file-rows'
+import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import type { GitStatus } from '@/types'
-import { useRepoSession } from './repo-session'
-
-// Closed repos keep their status cached this long so reopening repaints instantly — scoped to this
-// query (not the global default) so transient diff/hunk-highlight queries still expire normally.
-const WARM_REOPEN_GC_TIME_MS = 30 * 60 * 1000
+import type { RepoMutationCoordinator } from './action-runner'
+import { type RepoSessionErrorSource, useRepoSession } from './repo-session'
 
 export interface HunkStageOptions {
   fullyStagesFile?: boolean
@@ -39,14 +40,9 @@ interface StatusMutationContext {
   hadOptimistic: boolean
 }
 
-const formatCause = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
-  return String(error)
+interface FileMutationVars {
+  file: string
+  renameSource?: string
 }
 
 const withoutFile = (files: string[], file: string): string[] => files.filter((f) => f !== file)
@@ -106,14 +102,18 @@ export interface WorkingTreeStatusDeps {
   liveRepoPath: RefObject<string | null>
   openGenerationRef: RefObject<number>
   isCurrentRepo: (generation: number, repoPath: string) => boolean
-  setError: (error: string | null) => void
+  setError: (source: RepoSessionErrorSource, error: string) => void
+  clearError: (source: RepoSessionErrorSource) => void
+  mutationCoordinator: RepoMutationCoordinator
 }
 
 export interface WorkingTreeStatus {
   status: GitStatus | null
+  rows: UnifiedFileRow[]
+  statusState: 'loading' | 'ready' | 'error'
   statusLoading: boolean
   stageFile: (file: string) => Promise<StatusMutationResult | null>
-  unstageFile: (file: string) => Promise<StatusMutationResult | null>
+  unstageFile: (file: string, renameSource?: string) => Promise<StatusMutationResult | null>
   stageAll: (files: string[]) => Promise<StatusMutationResult | null>
   unstageAll: (files: string[]) => Promise<StatusMutationResult | null>
   stageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) => Promise<boolean>
@@ -131,25 +131,25 @@ export function useWorkingTreeStatusController(
   deps: WorkingTreeStatusDeps
 ): WorkingTreeStatusController {
   const queryClient = useQueryClient()
-  const { repoPath, tabId, liveRepoPath, openGenerationRef, isCurrentRepo, setError } = deps
+  const {
+    repoPath,
+    tabId,
+    liveRepoPath,
+    openGenerationRef,
+    isCurrentRepo,
+    setError,
+    clearError,
+    mutationCoordinator
+  } = deps
+  const runMutation = mutationCoordinator.run
 
-  // The queryFn fetches the repo encoded in its own key, not `liveRepoPath`: a refetch already in
-  // flight when this tab is redirected to another repo must still resolve against the repo it was
-  // started for, never write another repo's data under this key.
   const statusQuery = useQuery({
     queryKey: repoQueryKeys(repoPath, { idle: tabId }).status,
     enabled: Boolean(repoPath),
     gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: async ({ queryKey }) => {
       const path = queryKey[1] as string
-      const response = await rpcGetStatus(path)
-      if (response._tag === 'GitError') {
-        throw new Error(response.message)
-      }
-      if (response._tag !== 'Ok') {
-        throw new Error('Repository not open')
-      }
-      return response.status
+      return unwrapOk(await rpcGetStatus(path)).status
     }
   })
 
@@ -159,11 +159,6 @@ export function useWorkingTreeStatusController(
       queryClient.invalidateQueries({ queryKey: repoQueryKeys(context.path).diffRoot })
     ])
 
-  // Every mutation re-syncs status+diffs from the sidecar after it settles, success or failure.
-  // On failure the optimistic write is first rolled back to the snapshot, but the snapshot can
-  // itself be a concurrent same-file mutation's optimistic value (the rollback target is captured
-  // in onMutate), so the authoritative refetch is what guarantees the cache converges — and it also
-  // corrects a stale diff behind a HunkNotFound.
   const statusMutationOptions = <Vars,>(
     applyOptimistic: (current: GitStatus, vars: Vars) => GitStatus | null,
     request: (path: string, vars: Vars) => Promise<StatusMutationResult>
@@ -200,7 +195,8 @@ export function useWorkingTreeStatusController(
         queryClient.setQueryData<GitStatus>(context.key, context.previous)
       }
       if (context && isCurrentRepo(context.generation, context.path)) {
-        setError(formatCause(error))
+        const message = formatCause(error)
+        setError('mutation', message)
       }
       if (context) {
         return resyncStatusAndDiffs(context)
@@ -216,13 +212,16 @@ export function useWorkingTreeStatusController(
         return undefined
       }
       if (response._tag === 'Ok') {
+        if (isCurrentRepo(context.generation, context.path)) {
+          clearError('mutation')
+        }
         return resyncStatusAndDiffs(context)
       }
       if (context.hadOptimistic && context.previous) {
         queryClient.setQueryData<GitStatus>(context.key, context.previous)
       }
       if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
-        setError(response.message)
+        setError('mutation', response.message)
       }
       return resyncStatusAndDiffs(context)
     }
@@ -236,9 +235,9 @@ export function useWorkingTreeStatusController(
   )
 
   const unstageMutation = useMutation(
-    statusMutationOptions<string>(
-      (current, file) => applyUnstage(current, file),
-      (path, file) => rpcUnstageFile(path, file)
+    statusMutationOptions<FileMutationVars>(
+      (current, vars) => applyUnstage(current, vars.file),
+      (path, vars) => rpcUnstageFile(path, vars.file, vars.renameSource)
     )
   )
 
@@ -274,10 +273,6 @@ export function useWorkingTreeStatusController(
     )
   )
 
-  // The IPC-free mutation handles below are stable across renders so the context value only changes
-  // when status data does — a status-only consumer never re-renders on an unrelated concern (e.g. a
-  // streamed commit). The mutations are read through a ref because react-query hands back a fresh
-  // result object each render.
   const mutations = useRef({
     stage: stageMutation,
     unstage: unstageMutation,
@@ -293,37 +288,56 @@ export function useWorkingTreeStatusController(
     hunk: hunkMutation
   }
 
-  const stageFile = useCallback((file: string) => mutations.current.stage.mutateAsync(file), [])
-  const unstageFile = useCallback((file: string) => mutations.current.unstage.mutateAsync(file), [])
+  const stageFile = useCallback(
+    (file: string) => runMutation('stage', null, () => mutations.current.stage.mutateAsync(file)),
+    [runMutation]
+  )
+  const unstageFile = useCallback(
+    (file: string, renameSource?: string) =>
+      runMutation('unstage', null, () =>
+        mutations.current.unstage.mutateAsync({ file, renameSource })
+      ),
+    [runMutation]
+  )
   const stageAll = useCallback(
-    (files: string[]) => mutations.current.stageAll.mutateAsync(files),
-    []
+    (files: string[]) =>
+      runMutation('stage', null, () => mutations.current.stageAll.mutateAsync(files)),
+    [runMutation]
   )
   const unstageAll = useCallback(
-    (files: string[]) => mutations.current.unstageAll.mutateAsync(files),
-    []
+    (files: string[]) =>
+      runMutation('unstage', null, () => mutations.current.unstageAll.mutateAsync(files)),
+    [runMutation]
   )
   const stageHunk = useCallback(
     (file: string, hunkHeader: string, options: HunkStageOptions = {}) =>
-      mutations.current.hunk
-        .mutateAsync({ op: 'stage', file, hunkHeader, options })
-        .then((response) => response?._tag === 'Ok'),
-    []
+      runMutation('stage', false, () =>
+        mutations.current.hunk
+          .mutateAsync({ op: 'stage', file, hunkHeader, options })
+          .then((response) => response?._tag === 'Ok')
+      ),
+    [runMutation]
   )
   const unstageHunk = useCallback(
     (file: string, hunkHeader: string, options: HunkStageOptions = {}) =>
-      mutations.current.hunk
-        .mutateAsync({ op: 'unstage', file, hunkHeader, options })
-        .then((response) => response?._tag === 'Ok'),
-    []
+      runMutation('unstage', false, () =>
+        mutations.current.hunk
+          .mutateAsync({ op: 'unstage', file, hunkHeader, options })
+          .then((response) => response?._tag === 'Ok')
+      ),
+    [runMutation]
   )
 
   const status = statusQuery.data ?? null
+  const rows = useMemo(() => (status ? buildUnifiedFileRows(status) : []), [status])
+  const statusState = status ? 'ready' : statusQuery.isError ? 'error' : 'loading'
   const statusLoading = statusQuery.isFetching && !statusQuery.data
 
   const value = useMemo<WorkingTreeStatus>(
     () => ({
       status,
+      rows,
+      statusState,
       statusLoading,
       stageFile,
       unstageFile,
@@ -332,7 +346,18 @@ export function useWorkingTreeStatusController(
       stageHunk,
       unstageHunk
     }),
-    [status, statusLoading, stageFile, unstageFile, stageAll, unstageAll, stageHunk, unstageHunk]
+    [
+      status,
+      rows,
+      statusState,
+      statusLoading,
+      stageFile,
+      unstageFile,
+      stageAll,
+      unstageAll,
+      stageHunk,
+      unstageHunk
+    ]
   )
 
   return { status, statusLoading, statusError: statusQuery.error, value }
@@ -360,41 +385,23 @@ export function useFileDiff(file: string | null, staged: boolean, range?: string
       if (!repoPath || !file) {
         throw new Error('No file selected')
       }
-      const response = await rpcGetDiff(repoPath, file, staged, range)
-      if (response._tag === 'Ok') {
-        return response.diff
-      }
-      if (response._tag === 'GitError') {
-        throw new Error(response.message)
-      }
-      throw new Error('Repository not open')
+      return unwrapOk(await rpcGetDiff(repoPath, file, staged, range)).diff
     }
   })
 }
 
-// HEAD's full message + name-status files, fetched only while the amend overlay needs them. Gating on
-// `enabled` keeps it off the hot path on a clean tree; it refetches whenever amend is re-entered.
 export function useHeadCommit(enabled: boolean) {
   const { repoPath } = useRepoSession()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'head-commit' })
   return useQuery({
     queryKey: queryKeys.headCommit,
     enabled: enabled && Boolean(repoPath),
-    // HEAD can move between amend sessions (a commit, a checkout) and this key is outside the cache-
-    // invalidation matrix, so always refetch on re-entry rather than serve the 30s-stale default.
     staleTime: 0,
     queryFn: async (): Promise<HeadCommit> => {
       if (!repoPath) {
         throw new Error('No repository open')
       }
-      const response = await rpcGetHeadCommit(repoPath)
-      if (response._tag === 'Ok') {
-        return response.result
-      }
-      if (response._tag === 'GitError') {
-        throw new Error(response.message)
-      }
-      throw new Error('Repository not open')
+      return unwrapOk(await rpcGetHeadCommit(repoPath)).result
     }
   })
 }

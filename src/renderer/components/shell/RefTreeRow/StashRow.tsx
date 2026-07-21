@@ -13,11 +13,11 @@ import {
 interface StashRowProps {
   row: RefStashRow
   style: CSSProperties
-  onStashAction?: (action: StashAction, index: number) => void
+  onStashAction?: (action: StashAction, index: number, expectedOid: string) => void
 }
 
 export function StashRow(props: StashRowProps) {
-  const act = (action: StashAction) => props.onStashAction?.(action, props.row.index)
+  const act = (action: StashAction) => props.onStashAction?.(action, props.row.index, props.row.oid)
   const title = `stash@{${props.row.index}} (on ${props.row.branch}): ${props.row.message}`
 
   return (

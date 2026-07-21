@@ -1,6 +1,8 @@
 import { Schema } from 'effect'
 import { mutableArray, NonNaNNumber } from '../codec'
 
+export const GIT_LOG_REF_SEPARATOR = '\x1e'
+
 export const RenamedFileSchema = Schema.Struct({
   from: Schema.String,
   to: Schema.String
@@ -39,7 +41,7 @@ export type GitLogEntry = typeof GitLogEntrySchema.Type
 
 export const GitLogSchema = Schema.Struct({
   all: mutableArray(GitLogEntrySchema),
-  total: NonNaNNumber
+  loadedCount: NonNaNNumber
 })
 export type GitLog = typeof GitLogSchema.Type
 
@@ -118,14 +120,13 @@ export type CommitSummary = typeof CommitSummarySchema.Type
 
 export const HeadCommitFileSchema = Schema.Struct({
   status: Schema.String,
-  path: Schema.String
+  path: Schema.String,
+  renameSource: Schema.optional(Schema.String)
 })
 export type HeadCommitFile = typeof HeadCommitFileSchema.Type
 
-// HEAD as the amend toggle needs it: the full `%B` message (subject + body), the name-status file
-// list, and the parent count. Only `message` is consumed by the UI in this slice; the full shape is
-// defined now so the contract doesn't churn when drop-files lands.
 export const HeadCommitSchema = Schema.Struct({
+  sha: Schema.String,
   message: Schema.String,
   files: mutableArray(HeadCommitFileSchema),
   parentCount: NonNaNNumber

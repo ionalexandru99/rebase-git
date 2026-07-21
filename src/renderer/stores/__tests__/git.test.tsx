@@ -109,6 +109,7 @@ function useAggregateGit() {
     stageHunk: workingTree.stageHunk,
     unstageHunk: workingTree.unstageHunk,
     commit: actions.commit,
+    amend: actions.amend,
     fetchNow: refs.fetchNow,
     pushNow: actions.pushNow,
     pullNow: actions.pullNow,
@@ -144,6 +145,43 @@ function GitStoreHarness(props: HarnessProps) {
   )
 }
 
+function createActProxy<T extends object>(latest: () => T | undefined): T {
+  return new Proxy({} as T, {
+    get: (_target, prop) => {
+      const current = latest()
+      const value = current?.[prop as keyof T]
+      if (typeof value !== 'function') {
+        return value
+      }
+      return async (...args: unknown[]) => {
+        let result: unknown
+        await act(async () => {
+          result = await (value as (...callArgs: unknown[]) => unknown).apply(current, args)
+        })
+        return result
+      }
+    }
+  })
+}
+
+function startCall<T extends object, Result>(
+  current: () => T | undefined,
+  call: (value: T) => Promise<Result>
+): Promise<Result> {
+  let result: Promise<Result> | undefined
+  act(() => {
+    const value = current()
+    if (!value) {
+      throw new Error('store not initialized')
+    }
+    result = call(value)
+  })
+  if (!result) {
+    throw new Error('call did not start')
+  }
+  return result
+}
+
 function renderGitStore(initialTabActive = true) {
   const queryClient = createQueryClient({ gcTime: Number.POSITIVE_INFINITY })
   let latestGit: AggregateGit | undefined
@@ -168,62 +206,13 @@ function renderGitStore(initialTabActive = true) {
       latestSetTabActive?.(next)
     })
   }
-  // The store and its `state` are recreated every render now that `createStore` hands back a fresh
-  // identity per update. Forward to the latest render's store, and after an awaited store method
-  // settles, commit its pending re-render with an empty `act` so the next synchronous `state` read
-  // (and the store's own onLogChunk/onRepoChanged handlers reading the live state) observe it —
-  // restoring the synchronous semantics the old in-place mutation gave these tests. The empty `act`
-  // only drains React's work queue; it never awaits the store's fire-and-forget promises, so it
-  // cannot hang on the never-resolving log-stream restarts some tests set up.
-  const git = new Proxy({} as AggregateGit, {
-    get: (_target, prop) => {
-      const value = latestGit?.[prop as keyof AggregateGit]
-      if (typeof value !== 'function') {
-        return value
-      }
-      return (...args: unknown[]) => {
-        const result = (value as (...callArgs: unknown[]) => unknown).apply(latestGit, args)
-        if (!(result instanceof Promise)) {
-          return result
-        }
-        return result.then(
-          async (resolved) => {
-            await act(async () => {})
-            return resolved
-          },
-          async (error) => {
-            await act(async () => {})
-            throw error
-          }
-        )
-      }
-    }
-  })
-  const session = new Proxy({} as RepoSession, {
-    get: (_target, prop) => {
-      const value = latestSession?.[prop as keyof RepoSession]
-      if (typeof value !== 'function') {
-        return value
-      }
-      return (...args: unknown[]) => {
-        const result = (value as (...callArgs: unknown[]) => unknown).apply(latestSession, args)
-        if (!(result instanceof Promise)) {
-          return result
-        }
-        return result.then(
-          async (resolved) => {
-            await act(async () => {})
-            return resolved
-          },
-          async (error) => {
-            await act(async () => {})
-            throw error
-          }
-        )
-      }
-    }
-  })
-  return { git, session, setTabActive, queryClient }
+  const git = createActProxy(() => latestGit)
+  const session = createActProxy(() => latestSession)
+  const startGitCall = <Result,>(call: (value: AggregateGit) => Promise<Result>) =>
+    startCall(() => latestGit, call)
+  const startSessionCall = <Result,>(call: (value: RepoSession) => Promise<Result>) =>
+    startCall(() => latestSession, call)
+  return { git, session, setTabActive, queryClient, startGitCall, startSessionCall }
 }
 
 // Advance fake timers and commit the re-render the fired flush schedules, so the captured store
@@ -265,7 +254,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
 
     const { git, session } = renderGitStore()
     const initialGeneration = session.openGeneration
-    const openPromise = session.openRepo(repoPath)
+    await session.openRepo(repoPath)
 
     await waitFor(() => {
       expect(session.opening).toBe(false)
@@ -282,8 +271,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
       streamId: expect.any(Number)
     })
 
-    resolveLogStart()
-    await openPromise
+    await act(async () => resolveLogStart())
 
     await waitFor(() => {
       expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
@@ -299,8 +287,8 @@ describe('GitStoreProvider — parallel repo loading', () => {
         })
     )
 
-    const { session } = renderGitStore()
-    const openPromise = session.openRepo(repoPath)
+    const { session, startSessionCall } = renderGitStore()
+    const openPromise = startSessionCall((current) => current.openRepo(repoPath))
 
     await waitFor(() => {
       expect(session.opening).toBe(true)
@@ -308,11 +296,12 @@ describe('GitStoreProvider — parallel repo loading', () => {
     const openingGeneration = session.openGeneration
     await session.closeRepo()
     expect(session.openGeneration).toBeGreaterThan(openingGeneration)
-    resolveOpen()
-
-    await expect(openPromise).resolves.toBeNull()
+    await act(async () => {
+      resolveOpen()
+      await expect(openPromise).resolves.toBeNull()
+    })
     await waitFor(() => {
-      expect(window.electronAPI.closeRepo).toHaveBeenCalledWith(repoPath)
+      expect(window.electronAPI.closeRepo).toHaveBeenCalledWith(repoPath, expect.any(Number))
     })
   })
 
@@ -328,8 +317,8 @@ describe('GitStoreProvider — parallel repo loading', () => {
         : Promise.resolve(openRepoOkFor(requestedPath))
     )
 
-    const { session } = renderGitStore()
-    const obsoleteOpen = session.openRepo(repoPath)
+    const { session, startSessionCall } = renderGitStore()
+    const obsoleteOpen = startSessionCall((current) => current.openRepo(repoPath))
     await waitFor(() => {
       expect(session.opening).toBe(true)
     })
@@ -339,10 +328,12 @@ describe('GitStoreProvider — parallel repo loading', () => {
       expect(session.repoPath).toBe(repoPath)
     })
 
-    resolveFirstOpen()
-    await expect(obsoleteOpen).resolves.toBeNull()
+    await act(async () => {
+      resolveFirstOpen()
+      await expect(obsoleteOpen).resolves.toBeNull()
+    })
 
-    expect(window.electronAPI.closeRepo).not.toHaveBeenCalledWith(repoPath)
+    expect(window.electronAPI.closeRepo).not.toHaveBeenCalledWith(repoPath, expect.any(Number))
     await session.closeRepo()
   })
 
@@ -360,7 +351,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
     await session.openRepo(otherRepoPath)
 
     expect(session.repoPath).toBe(otherRepoPath)
-    expect(window.electronAPI.closeRepo).toHaveBeenCalledWith(repoPath)
+    expect(window.electronAPI.closeRepo).toHaveBeenCalledWith(repoPath, expect.any(Number))
     await session.closeRepo()
   })
 
@@ -434,6 +425,159 @@ describe('GitStoreProvider — parallel repo loading', () => {
     vi.useRealTimers()
   })
 
+  it('does not let a closed tab tear down the same repo after another tab reopens it', async () => {
+    vi.useFakeTimers()
+    let firstSession: RepoSession | undefined
+    const firstRender = render(
+      <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+        <GitStoreHarness
+          initialTabActive={true}
+          onGit={() => {}}
+          onSession={(session) => (firstSession = session)}
+          onSetTabActive={() => {}}
+        />
+      </QueryProvider>
+    )
+    await act(async () => {
+      await firstSession?.openRepo(repoPath)
+    })
+    vi.mocked(window.electronAPI.closeRepo).mockClear()
+    firstRender.unmount()
+
+    let reopenedSession: RepoSession | undefined
+    render(
+      <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+        <GitStoreHarness
+          initialTabActive={true}
+          onGit={() => {}}
+          onSession={(session) => (reopenedSession = session)}
+          onSetTabActive={() => {}}
+        />
+      </QueryProvider>
+    )
+    await act(async () => {
+      await reopenedSession?.openRepo(repoPath)
+    })
+    await advanceTimers(0)
+
+    expect(reopenedSession?.repoPath).toBe(repoPath)
+    expect(window.electronAPI.closeRepo).not.toHaveBeenCalledWith(repoPath, expect.any(Number))
+  })
+
+  it('does not delay one repo cleanup while a different repo is opening', async () => {
+    vi.useFakeTimers()
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValueOnce(openRepoOk)
+    let resolveOtherOpen: () => void = () => {}
+    vi.mocked(window.electronAPI.openRepo).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOtherOpen = () => resolve(openRepoOkFor(otherRepoPath))
+        })
+    )
+    let firstSession: RepoSession | undefined
+    const firstRender = render(
+      <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+        <GitStoreHarness
+          initialTabActive={true}
+          onGit={() => {}}
+          onSession={(session) => (firstSession = session)}
+          onSetTabActive={() => {}}
+        />
+      </QueryProvider>
+    )
+    await act(async () => {
+      await firstSession?.openRepo(repoPath)
+    })
+    vi.mocked(window.electronAPI.closeRepo).mockClear()
+    firstRender.unmount()
+
+    let otherSession: RepoSession | undefined
+    const otherRender = render(
+      <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+        <GitStoreHarness
+          initialTabActive={true}
+          onGit={() => {}}
+          onSession={(session) => (otherSession = session)}
+          onSetTabActive={() => {}}
+        />
+      </QueryProvider>
+    )
+    let otherOpen: Promise<string | null> | undefined
+    act(() => {
+      otherOpen = otherSession?.openRepo(otherRepoPath)
+    })
+    await advanceTimers(0)
+
+    expect(window.electronAPI.closeRepo).toHaveBeenCalledWith(repoPath, expect.any(Number))
+
+    await act(async () => {
+      resolveOtherOpen()
+      await otherOpen
+    })
+    await act(async () => {
+      await otherSession?.closeRepo()
+    })
+    otherRender.unmount()
+  })
+
+  it('holds a canonical deferred close while a known alias resolves to that repo', async () => {
+    vi.useFakeTimers()
+    const aliasPath = '/home/user/project-link'
+    let resolveAlias: () => void = () => {}
+    vi.mocked(window.electronAPI.openRepo)
+      .mockResolvedValueOnce(openRepoOk)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveAlias = () => resolve(openRepoOk)
+          })
+      )
+    let firstSession: RepoSession | undefined
+    const firstRender = render(
+      <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+        <GitStoreHarness
+          initialTabActive={true}
+          onGit={() => {}}
+          onSession={(session) => (firstSession = session)}
+          onSetTabActive={() => {}}
+        />
+      </QueryProvider>
+    )
+    await act(async () => {
+      await firstSession?.openRepo(aliasPath)
+    })
+    vi.mocked(window.electronAPI.closeRepo).mockClear()
+    firstRender.unmount()
+
+    let reopenedSession: RepoSession | undefined
+    render(
+      <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+        <GitStoreHarness
+          initialTabActive={true}
+          onGit={() => {}}
+          onSession={(session) => (reopenedSession = session)}
+          onSetTabActive={() => {}}
+        />
+      </QueryProvider>
+    )
+    let reopen: Promise<string | null> | undefined
+    act(() => {
+      reopen = reopenedSession?.openRepo(aliasPath)
+    })
+    await advanceTimers(0)
+
+    expect(window.electronAPI.closeRepo).not.toHaveBeenCalledWith(repoPath, expect.any(Number))
+
+    await act(async () => {
+      resolveAlias()
+      await reopen
+    })
+    await advanceTimers(20)
+
+    expect(reopenedSession?.repoPath).toBe(repoPath)
+    expect(window.electronAPI.closeRepo).not.toHaveBeenCalledWith(repoPath, expect.any(Number))
+  })
+
   it('local branches paint before log stream completes', async () => {
     vi.mocked(window.electronAPI.startLogStream).mockImplementation(() => new Promise(() => {}))
     sidecarMock.getLocalBranches.mockImplementation(async () => {
@@ -441,7 +585,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
 
     const { git } = renderGitStore()
-    void git.openRepo(repoPath)
+    await git.openRepo(repoPath)
 
     await waitFor(() => {
       expect(git.state.branches?.all).toEqual(['main', 'dev'])
@@ -461,7 +605,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
       .mockResolvedValue(remoteRefsOk)
 
     const { git } = renderGitStore()
-    void git.openRepo(repoPath)
+    await git.openRepo(repoPath)
 
     await waitFor(() => {
       expect(git.state.branches?.all).toEqual(['main', 'dev'])
@@ -469,7 +613,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
     expect(git.state.branches?.remotes).toEqual([])
 
-    resolveRemote()
+    await act(async () => resolveRemote())
     await waitFor(() => {
       expect(git.state.branches?.remotes).toEqual(['origin/main'])
       expect(git.state.branches?.tags).toEqual(['v1'])
@@ -485,18 +629,16 @@ describe('GitStoreProvider — parallel repo loading', () => {
         })
     )
 
-    const { git } = renderGitStore()
-    void git.openRepo(repoPath)
+    const { git, startGitCall } = renderGitStore()
+    await git.openRepo(repoPath)
 
     await waitFor(() => {
       expect(git.state.branches?.all).toEqual(['main', 'dev'])
     })
 
     // A branch action invalidates the branch caches through the runner, forcing a refetch.
-    const refresh = git.runAction(
-      'createBranch',
-      () => Promise.resolve({ _tag: 'Ok' as const }),
-      'Created'
+    const refresh = startGitCall((current) =>
+      current.runAction('createBranch', () => Promise.resolve({ _tag: 'Ok' as const }), 'Created')
     )
 
     await waitFor(() => {
@@ -504,8 +646,10 @@ describe('GitStoreProvider — parallel repo loading', () => {
       expect(git.state.branchesLoading).toBe(false)
     })
 
-    resolveRefetch()
-    await refresh
+    await act(async () => {
+      resolveRefetch()
+      await refresh
+    })
   })
 
   it('checkout updates the current branch from fresh sidecar reads', async () => {
@@ -619,6 +763,26 @@ describe('GitStoreProvider — parallel repo loading', () => {
     expect(git.state.log?.all.some((commit) => commit.message === 'Deferred commit')).toBe(true)
 
     vi.useRealTimers()
+  })
+
+  it('replays an inactive fetch refresh, including the timeline, when the tab activates', async () => {
+    const { git, setTabActive } = renderGitStore(false)
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+    sidecarMock.getLocalBranches.mockClear()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+
+    await git.fetchNow()
+
+    expect(sidecarMock.getLocalBranches).not.toHaveBeenCalled()
+    expect(window.electronAPI.startLogStream).not.toHaveBeenCalled()
+
+    setTabActive(true)
+
+    await waitFor(() => {
+      expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+      expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+    })
   })
 
   it('flushes log updates while the sidebar is being resized', async () => {
@@ -743,7 +907,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
         })
     )
 
-    const { git } = renderGitStore()
+    const { git, startGitCall } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => {
       expect(git.state.status?.files?.[0]).toEqual({
@@ -753,12 +917,9 @@ describe('GitStoreProvider — parallel repo loading', () => {
       })
     })
 
-    let stagePromise: Promise<boolean> | undefined
-    // stageHunk applies its optimistic status update synchronously; commit it so the read below
-    // observes the optimistic state before the in-flight mutation resolves.
-    await act(async () => {
-      stagePromise = git.stageHunk('a.ts', '@@ -1,1 +1,1 @@', { fullyStagesFile: true })
-    })
+    const stagePromise = startGitCall((current) =>
+      current.stageHunk('a.ts', '@@ -1,1 +1,1 @@', { fullyStagesFile: true })
+    )
 
     await waitFor(() => {
       expect(git.state.status?.files?.[0]).toEqual({
@@ -770,8 +931,10 @@ describe('GitStoreProvider — parallel repo loading', () => {
     expect(git.state.status?.modified).toEqual([])
     expect(git.state.status?.staged).toEqual(['a.ts'])
 
-    resolveStageHunk()
-    await stagePromise
+    await act(async () => {
+      resolveStageHunk()
+      await stagePromise
+    })
 
     expect(git.state.status?.files?.[0]).toEqual({
       path: 'a.ts',
@@ -806,26 +969,50 @@ describe('GitStoreProvider — parallel repo loading', () => {
         })
     )
 
-    const { git } = renderGitStore()
+    const { git, startGitCall } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => {
       expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: ' ', working_dir: 'M' })
     })
 
-    let stagePromise: Promise<unknown> | undefined
-    await act(async () => {
-      stagePromise = git.stageFile('a.ts')
-    })
+    const stagePromise = startGitCall((current) => current.stageFile('a.ts'))
 
     await waitFor(() => {
       expect(git.state.status?.staged).toEqual(['a.ts'])
       expect(git.state.status?.modified).toEqual([])
     })
 
-    resolveStage()
-    await stagePromise
+    await act(async () => {
+      resolveStage()
+      await stagePromise
+    })
     await waitFor(() => {
       expect(git.state.status?.files?.[0]).toEqual({ path: 'a.ts', index: 'M', working_dir: ' ' })
+    })
+  })
+
+  it('does not start a stash mutation while staging is in flight', async () => {
+    let resolveStage: () => void = () => {}
+    sidecarMock.stageFile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStage = () => resolve({ _tag: 'Ok' })
+        })
+    )
+    const stashCall = vi.fn().mockResolvedValue({ _tag: 'Ok' })
+    const { git, startGitCall } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    const stagePromise = startGitCall((current) => current.stageFile('a.ts'))
+    await waitFor(() => expect(sidecarMock.stageFile).toHaveBeenCalled())
+    const stashed = await git.runAction('stashPush', stashCall, 'Stashed changes')
+
+    expect(stashed).toBe(false)
+    expect(stashCall).not.toHaveBeenCalled()
+    await act(async () => {
+      resolveStage()
+      await stagePromise
     })
   })
 
@@ -854,6 +1041,57 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
     expect(git.state.status?.staged).toEqual([])
     expect(git.state.status?.modified).toEqual(['a.ts'])
+  })
+
+  it('clears a mutation error banner after a later mutation succeeds', async () => {
+    const modifiedStatus = {
+      _tag: 'Ok' as const,
+      status: {
+        ...statusOk.status,
+        modified: ['a.ts'],
+        files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
+      }
+    }
+    sidecarMock.getStatus.mockResolvedValue(modifiedStatus)
+    sidecarMock.stageFile
+      .mockResolvedValueOnce({ _tag: 'GitError', message: 'cannot stage' })
+      .mockResolvedValueOnce({ _tag: 'Ok' })
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status?.modified).toEqual(['a.ts'])
+    })
+
+    await git.stageFile('a.ts')
+    await waitFor(() => {
+      expect(git.state.error).toBe('cannot stage')
+    })
+
+    await git.stageFile('a.ts')
+
+    await waitFor(() => {
+      expect(git.state.error).toBeNull()
+    })
+  })
+
+  it('clears a status error banner after a later status refresh succeeds', async () => {
+    const repoChanged = setupRepoChanged()
+    sidecarMock.getStatus.mockResolvedValueOnce({ _tag: 'GitError', message: 'index.lock exists' })
+    const { git } = renderGitStore()
+
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.error).toBe('index.lock exists')
+    })
+
+    sidecarMock.getStatus.mockResolvedValue(statusOk)
+    repoChanged.fire({ repoPath, kind: 'workingTree' })
+
+    await waitFor(() => {
+      expect(git.state.status).not.toBeNull()
+      expect(git.state.error).toBeNull()
+    })
   })
 
   it('re-syncs status after a failed hunk op (stale diff)', async () => {
@@ -916,7 +1154,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
     // paint status and branches.
     sidecarMock.getStatus.mockImplementation(() => new Promise(() => {}))
     sidecarMock.getLocalBranches.mockImplementation(() => new Promise(() => {}))
-    void git.openRepo(repoPath)
+    await git.openRepo(repoPath)
 
     await waitFor(() => {
       expect(git.state.repoPath).toBe(repoPath)
@@ -955,6 +1193,95 @@ describe('GitStoreProvider — parallel repo loading', () => {
     expect(git.state.committing).toBe(false)
   })
 
+  it('amend maps OperationInProgress to a finish-or-abort warning and reports failure', async () => {
+    sidecarMock.respond('amendCommit', () => ({
+      _tag: 'OperationInProgress',
+      operation: 'merge'
+    }))
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+    })
+
+    const amended = await git.amend('rewritten message', [], [], 'headsha123')
+
+    expect(amended).toBe(false)
+    expect(toast.warning).toHaveBeenCalledWith('Amend blocked', {
+      description: 'Finish or abort the in-progress merge first.'
+    })
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('amend forwards the expectedHead sha the UI rendered against into the RPC payload', async () => {
+    let amendBody: Record<string, unknown> | undefined
+    sidecarMock.respond('amendCommit', (body) => {
+      amendBody = body
+      return {
+        _tag: 'Ok',
+        result: {
+          commit: 'def5678',
+          branch: 'main',
+          summary: { changes: 1, insertions: 1, deletions: 0 }
+        }
+      }
+    })
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+    })
+
+    const amended = await git.amend('rewritten message', [], [], 'headsha123')
+
+    expect(amended).toBe(true)
+    expect(amendBody?.expectedHead).toBe('headsha123')
+  })
+
+  it('amend refreshes the repo caches even when it fails with a GitError', async () => {
+    sidecarMock.respond('amendCommit', () => ({ _tag: 'GitError', message: 'index locked' }))
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+    })
+
+    sidecarMock.getStatus.mockClear()
+    sidecarMock.getLocalBranches.mockClear()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
+
+    const amended = await git.amend('rewritten message', [], [], 'headsha123')
+
+    expect(amended).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith('Amend failed', { description: 'index locked' })
+    expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+    expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+  })
+
+  it('amend maps HunkNotFound to a stale-view warning and refreshes the caches', async () => {
+    sidecarMock.respond('amendCommit', () => ({ _tag: 'HunkNotFound' }))
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.repoPath).toBe(repoPath)
+    })
+
+    sidecarMock.getStatus.mockClear()
+    const amended = await git.amend('rewritten message', [], [], 'headsha123')
+
+    expect(amended).toBe(false)
+    expect(toast.warning).toHaveBeenCalledWith('The commit changed since this view loaded', {
+      description: 'A dropped hunk no longer matches the last commit. Refresh and try again.'
+    })
+    expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
   it('rolls back and surfaces the error when staging throws', async () => {
     const modifiedStatus = {
       _tag: 'Ok' as const,
@@ -965,15 +1292,26 @@ describe('GitStoreProvider — parallel repo loading', () => {
       }
     }
     sidecarMock.getStatus.mockResolvedValue(modifiedStatus)
-    sidecarMock.stageFile.mockRejectedValue(new Error('network down'))
+    let rejectStage: (error: Error) => void = () => {}
+    sidecarMock.stageFile.mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          rejectStage = reject
+        })
+    )
 
-    const { git } = renderGitStore()
+    const { git, startGitCall } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => {
       expect(git.state.status?.modified).toEqual(['a.ts'])
     })
 
-    await git.stageFile('a.ts').catch(() => {})
+    const stagePromise = startGitCall((current) => current.stageFile('a.ts'))
+    await waitFor(() => expect(sidecarMock.stageFile).toHaveBeenCalledWith(repoPath, 'a.ts'))
+    await act(async () => {
+      rejectStage(new Error('network down'))
+      await stagePromise.catch(() => {})
+    })
 
     await waitFor(() => {
       expect(git.state.error).toBe('network down')
@@ -988,20 +1326,22 @@ describe('GitStoreProvider — parallel repo loading', () => {
 
     await git.openRepo(repoPath)
 
-    stream.fire({
-      repoPath,
-      commits: [
-        {
-          hash: 'page1',
-          message: 'Page one',
-          author_name: 'Test',
-          date: '2026-01-01T00:00:00Z',
-          parents: [],
-          refs: ''
-        }
-      ]
+    act(() => {
+      stream.fire({
+        repoPath,
+        commits: [
+          {
+            hash: 'page1',
+            message: 'Page one',
+            author_name: 'Test',
+            date: '2026-01-01T00:00:00Z',
+            parents: [],
+            refs: ''
+          }
+        ]
+      })
+      stream.fireDone(repoPath, true)
     })
-    stream.fireDone(repoPath, true)
 
     await waitFor(() => {
       expect(git.state.logHasMore).toBe(true)
@@ -1017,20 +1357,22 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
     expect(git.state.logLoadingMore).toBe(true)
 
-    stream.fire({
-      repoPath,
-      commits: [
-        {
-          hash: 'page2',
-          message: 'Page two',
-          author_name: 'Test',
-          date: '2026-01-01T00:00:00Z',
-          parents: ['page1'],
-          refs: ''
-        }
-      ]
+    act(() => {
+      stream.fire({
+        repoPath,
+        commits: [
+          {
+            hash: 'page2',
+            message: 'Page two',
+            author_name: 'Test',
+            date: '2026-01-01T00:00:00Z',
+            parents: ['page1'],
+            refs: ''
+          }
+        ]
+      })
+      stream.fireDone(repoPath, false)
     })
-    stream.fireDone(repoPath, false)
 
     await waitFor(() => {
       expect(git.state.log?.all.map((commit) => commit.message)).toEqual(['Page one', 'Page two'])
@@ -1056,7 +1398,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
     // through the latest ref is what lets the refs handler pass its repoPath guard and refresh
     // branches even though the store object's identity has since changed.
     sidecarMock.getLocalBranches.mockClear()
-    repoChanged({ repoPath, kind: 'refs' })
+    await act(async () => repoChanged({ repoPath, kind: 'refs' }))
 
     await waitFor(() => {
       expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
@@ -1079,17 +1421,19 @@ describe('GitStoreProvider — push and pull', () => {
     sidecarMock.getRemoteRefs.mockResolvedValue(remoteRefsOk)
   })
 
-  it('pushNow refreshes branches and clears the pushing flag on success', async () => {
+  it('pushNow refreshes branches and history and clears the pushing flag on success', async () => {
     sidecarMock.pushRepo.mockResolvedValue({ _tag: 'Ok' })
     const { git } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
 
     sidecarMock.getLocalBranches.mockClear()
+    vi.mocked(window.electronAPI.startLogStream).mockClear()
     await git.pushNow()
 
     expect(sidecarMock.pushRepo).toHaveBeenCalledWith(repoPath)
     expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
+    expect(window.electronAPI.startLogStream).toHaveBeenCalled()
     expect(toast.success).toHaveBeenCalledWith('Pushed')
     expect(git.state.pushing).toBe(false)
     expect(git.state.error).toBeNull()
@@ -1103,18 +1447,51 @@ describe('GitStoreProvider — push and pull', () => {
           resolvePush = () => resolve({ _tag: 'Ok' })
         })
     )
-    const { git } = renderGitStore()
+    const { git, startGitCall } = renderGitStore()
     await git.openRepo(repoPath)
     await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
 
-    const pushPromise = git.pushNow()
+    const pushPromise = startGitCall((current) => current.pushNow())
     await waitFor(() => expect(git.state.pushing).toBe(true))
     expect(git.state.committing).toBe(false)
     expect(git.state.pulling).toBe(false)
 
-    resolvePush()
-    await pushPromise
+    await act(async () => {
+      resolvePush()
+      await pushPromise
+    })
     await waitFor(() => expect(git.state.pushing).toBe(false))
+  })
+
+  it('does not queue a commit while a push is already in flight', async () => {
+    let resolvePush: () => void = () => {}
+    sidecarMock.pushRepo.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePush = () => resolve({ _tag: 'Ok' })
+        })
+    )
+    sidecarMock.commit.mockResolvedValue({
+      _tag: 'Ok',
+      result: {
+        commit: 'abc1234',
+        branch: 'main',
+        summary: { changes: 1, insertions: 1, deletions: 0 }
+      }
+    })
+    const { git, startGitCall } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    const pushPromise = startGitCall((current) => current.pushNow())
+    const committed = await git.commit('must not queue')
+
+    expect(committed).toBe(false)
+    expect(sidecarMock.commit).not.toHaveBeenCalled()
+    await act(async () => {
+      resolvePush()
+      await pushPromise
+    })
   })
 
   it('pushNow toasts a GitError without touching session error', async () => {
@@ -1145,21 +1522,26 @@ describe('GitStoreProvider — push and pull', () => {
         })
     )
 
-    const { git, session } = renderGitStore()
+    const { git, session, startGitCall } = renderGitStore()
     await session.openRepo(repoPath)
     await waitFor(() => expect(session.repoPath).toBe(repoPath))
 
-    const pushPromise = git.pushNow()
+    const pushPromise = startGitCall((current) => current.pushNow())
     await waitFor(() => {
       expect(git.state.pushing).toBe(true)
     })
     await session.openRepo(otherRepoPath)
 
-    resolvePush()
-    await pushPromise
+    await act(async () => {
+      resolvePush()
+      await pushPromise
+    })
 
     expect(session.repoPath).toBe(otherRepoPath)
     expect(session.error).toBeNull()
+    expect(toast.error).not.toHaveBeenCalledWith('Pushed failed', {
+      description: 'old push failed'
+    })
     await session.closeRepo()
   })
 
@@ -1245,7 +1627,7 @@ describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
 
     vi.mocked(window.electronAPI.startLogStream).mockClear()
     sidecarMock.getLocalBranches.mockClear()
-    repoChanged.fire({ repoPath, kind: 'refs' })
+    await act(async () => repoChanged.fire({ repoPath, kind: 'refs' }))
 
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalled()
@@ -1259,8 +1641,10 @@ describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
     await git.openRepo(repoPath)
     await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
 
-    stream.fire({ repoPath, streamId: 1, commits: [makeCommit('c1', 'first')] })
-    stream.fireDone(repoPath, false)
+    act(() => {
+      stream.fire({ repoPath, streamId: 1, commits: [makeCommit('c1', 'first')] })
+      stream.fireDone(repoPath, false)
+    })
     await waitFor(() => {
       expect(git.state.log?.all.map((commit) => commit.message)).toEqual(['first'])
     })
@@ -1268,9 +1652,11 @@ describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
     // pullNow restarts the stream, bumping the generation and clearing the log.
     await git.pullNow()
 
-    stream.fire({ repoPath, streamId: 1, commits: [makeCommit('stale', 'stale-generation')] })
-    stream.fire({ repoPath, streamId: 2, commits: [makeCommit('c2', 'second')] })
-    stream.fireDone(repoPath, false)
+    act(() => {
+      stream.fire({ repoPath, streamId: 1, commits: [makeCommit('stale', 'stale-generation')] })
+      stream.fire({ repoPath, streamId: 2, commits: [makeCommit('c2', 'second')] })
+      stream.fireDone(repoPath, false)
+    })
 
     await waitFor(() => {
       expect(git.state.log?.all.map((commit) => commit.message)).toEqual(['second'])
@@ -1284,8 +1670,10 @@ describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
     await git.openRepo(repoPath)
 
     setTabActive(false)
-    stream.fire({ repoPath, commits: [makeCommit('a', 'A'), makeCommit('b', 'B')] })
-    stream.fireDone(repoPath, true)
+    act(() => {
+      stream.fire({ repoPath, commits: [makeCommit('a', 'A'), makeCommit('b', 'B')] })
+      stream.fireDone(repoPath, true)
+    })
     await advanceTimers(200)
 
     expect(git.state.log?.all.length ?? 0).toBe(0)
@@ -1317,7 +1705,7 @@ describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
     })
 
     const callsAfterOpen = sidecarMock.stashList.mock.calls.length
-    repoChanged.fire({ repoPath, kind: 'workingTree' })
+    await act(async () => repoChanged.fire({ repoPath, kind: 'workingTree' }))
 
     await waitFor(() => {
       expect(sidecarMock.stashList.mock.calls.length).toBeGreaterThan(callsAfterOpen)

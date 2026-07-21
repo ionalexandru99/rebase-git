@@ -3,8 +3,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { test as base, expect, _electron as electron } from '@playwright/test'
-import type { ElectronApplication, Page } from 'playwright-core'
+import {
+  test as base,
+  type ElectronApplication,
+  _electron as electron,
+  expect,
+  type Page
+} from '@playwright/test'
 
 export { expect }
 
@@ -78,17 +83,14 @@ export interface SeedState {
   activeIndex?: number
 }
 
-interface SeedApi {
-  addWorkspace: (workspacePath: string) => Promise<string[]>
-  openRepo: (repoPath: string) => Promise<unknown>
-  setOnboardingComplete: (complete: boolean) => Promise<void>
-  setPersistedTabs: (state: { tabs: Array<string | null>; activeIndex: number }) => Promise<void>
-}
-
 export interface AppHarness {
   readonly page: Page
   app(): ElectronApplication
-  relaunch(): Promise<Page>
+  launchCount(): number
+  mainProcessId(): Promise<number>
+  inspectLifecycle(): Promise<LifecycleSnapshot>
+  reload(): Promise<Page>
+  restart(): Promise<Page>
   seed(state: SeedState): Promise<void>
   openRepo(repo: string, options?: { recentRepos?: string[] }): Promise<Page>
   openTabs(repos: Array<string | null>, options?: { activeIndex?: number }): Promise<Page>
@@ -98,57 +100,445 @@ export interface AppHarness {
 
 const uniquePaths = (values: string[]): string[] => Array.from(new Set(values))
 
-export const test = base.extend<{ harness: AppHarness }>({
-  // biome-ignore lint/correctness/noEmptyPattern: Playwright fixture signature requires the deps arg
-  harness: async ({}, use) => {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
-    const trackedRepos: string[] = []
-    let electronApp: ElectronApplication
-    let page: Page
+interface StoreOverrides {
+  recentRepos?: string[]
+  workspaces?: string[]
+  activeWorkspace?: string | null
+  workingDirectory?: string | null
+  onboardingComplete?: boolean
+  persistedTabRepoPaths?: Array<string | null>
+  persistedActiveTabIndex?: number
+}
 
-    const launch = async (): Promise<Page> => {
-      electronApp = await electron.launch({
-        args: [mainEntry, `--user-data-dir=${userDataDir}`],
-        env: { ...process.env, NODE_ENV: 'test' }
-      })
-      page = await electronApp.firstWindow()
-      await page.waitForLoadState('domcontentloaded')
-      return page
+export interface LifecycleSnapshot {
+  mainPid: number
+  sidecarPids: number[]
+  sidecarProcessCount: number
+  sidecarRespawnCount: number
+}
+
+interface MainControl {
+  replaceStore: (overrides?: StoreOverrides) => unknown
+  inspectLifecycle: () => LifecycleSnapshot
+}
+
+interface SharedApp {
+  readonly page: Page
+  app(): ElectronApplication
+  inspectLifecycle(): Promise<LifecycleSnapshot>
+  launchCount(): number
+  reload(): Promise<Page>
+  restart(): Promise<Page>
+  replaceStore(overrides?: StoreOverrides): Promise<void>
+  restoreFolderDialog(): Promise<void>
+  stubFolderDialog(dir: string | null): Promise<void>
+  trackRepo(repo: string): void
+  untrackRepos(repos: string[]): void
+}
+
+type CleanupStep = () => Promise<void> | void
+
+interface FixtureTeardownOptions {
+  beforeCloseRepos?: CleanupStep[]
+  closeRepos: CleanupStep
+  afterCloseRepos?: CleanupStep[]
+  closeApp?: CleanupStep
+  removeFixturePaths: CleanupStep
+  afterRemoveFixturePaths?: CleanupStep[]
+}
+
+const E2E_CONTROL_KEY = '__REBASE_E2E_CONTROL__'
+const DIALOG_ORIGINAL_KEY = '__REBASE_E2E_DIALOG_ORIGINAL__'
+const forbiddenShutdownLogs = [
+  'sidecar is shutting down',
+  'sidecar respawn failed',
+  'child process gone'
+]
+
+async function waitForPage(page: Page): Promise<Page> {
+  await page.waitForLoadState('domcontentloaded')
+  return page
+}
+
+async function clearRendererState(page: Page): Promise<void> {
+  await page.evaluate(() => localStorage.clear())
+}
+
+async function closeRepoTabs(page: Page, repos: string[]): Promise<void> {
+  const closeButtons = page.getByRole('button', { name: /^Close tab / })
+  while ((await closeButtons.count()) > 0) {
+    await closeButtons.first().click({ force: true })
+  }
+  await verifyReposClosed(page, repos)
+}
+
+export async function runWithFailureSafeCleanup(
+  operation: () => Promise<void>,
+  cleanupSteps: CleanupStep[]
+): Promise<void> {
+  let operationError: unknown
+  let operationFailed = false
+  let cleanupError: unknown
+  let cleanupFailed = false
+
+  try {
+    await operation()
+  } catch (error) {
+    operationError = error
+    operationFailed = true
+  } finally {
+    for (const cleanupStep of cleanupSteps) {
+      try {
+        await cleanupStep()
+      } catch (error) {
+        if (!cleanupFailed) {
+          cleanupError = error
+          cleanupFailed = true
+        }
+      }
     }
+  }
 
-    await launch()
+  if (operationFailed) {
+    throw operationError
+  }
+  if (cleanupFailed) {
+    throw cleanupError
+  }
+}
+
+export async function runWithFailureSafeFixtureTeardown(
+  operation: () => Promise<void>,
+  options: FixtureTeardownOptions
+): Promise<void> {
+  let reposClosed = false
+  let appClosed = false
+  const closeApp = options.closeApp
+
+  await runWithFailureSafeCleanup(operation, [
+    ...(options.beforeCloseRepos ?? []),
+    async () => {
+      await options.closeRepos()
+      reposClosed = true
+    },
+    ...(options.afterCloseRepos ?? []),
+    ...(closeApp
+      ? [
+          async () => {
+            await closeApp()
+            appClosed = true
+          }
+        ]
+      : []),
+    async () => {
+      if (reposClosed || appClosed) {
+        await options.removeFixturePaths()
+      }
+    },
+    ...(options.afterRemoveFixturePaths ?? [])
+  ])
+}
+
+function removeFixturePaths(paths: string[]): void {
+  let firstError: unknown
+  let failed = false
+  for (const fixturePath of uniquePaths(paths)) {
+    try {
+      fs.rmSync(fixturePath, { recursive: true, force: true })
+    } catch (error) {
+      if (!failed) {
+        firstError = error
+        failed = true
+      }
+    }
+  }
+  if (failed) {
+    throw firstError
+  }
+}
+
+export async function verifyReposClosed(
+  page: Page,
+  repos: string[],
+  timeout = 10_000
+): Promise<void> {
+  const repoPaths = uniquePaths(repos)
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (paths) => {
+          const api = (
+            window as unknown as {
+              electronAPI: {
+                sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
+              }
+            }
+          ).electronAPI
+
+          return Promise.all(
+            paths.map(async (repoPath) => {
+              const response = (await api.sidecarRequest('getStatus', { repoPath })) as {
+                _tag: string
+              }
+              return { repoPath, tag: response._tag }
+            })
+          )
+        }, repoPaths),
+      { message: 'expected every tracked E2E repository to be closed', timeout }
+    )
+    .toEqual(repoPaths.map((repoPath) => ({ repoPath, tag: 'RepoNotOpen' })))
+}
+
+export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp }>({
+  sharedApp: [
+    async ({}, use) => {
+      const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
+      const trackedRepos = new Set<string>()
+      let electronApp: ElectronApplication | undefined
+      let page: Page | undefined
+      let launches = 0
+      let liveApps = 0
+      let maximumLiveApps = 0
+      let restarts = 0
+      const stderr: string[] = []
+
+      const launch = async (): Promise<Page> => {
+        if (liveApps !== 0) {
+          throw new Error('refusing to launch a second live Electron application')
+        }
+        launches += 1
+        electronApp = await electron.launch({
+          args: [mainEntry, `--user-data-dir=${userDataDir}`, '--e2e'],
+          env: { ...process.env, NODE_ENV: 'test' }
+        })
+        liveApps += 1
+        maximumLiveApps = Math.max(maximumLiveApps, liveApps)
+        electronApp.process().stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()))
+        page = await electronApp.firstWindow()
+        return waitForPage(page)
+      }
+
+      const currentApp = (): ElectronApplication => {
+        if (!electronApp) {
+          throw new Error('Electron application is unavailable')
+        }
+        return electronApp
+      }
+
+      const currentPage = (): Page => {
+        if (!page) {
+          throw new Error('Electron page is unavailable')
+        }
+        return page
+      }
+
+      const sharedApp: SharedApp = {
+        get page() {
+          return currentPage()
+        },
+        app: currentApp,
+        launchCount: () => launches,
+        inspectLifecycle: () =>
+          currentApp().evaluate((_, key): LifecycleSnapshot => {
+            const control = (globalThis as Record<string, unknown>)[key] as MainControl | undefined
+            if (!control) {
+              throw new Error('main E2E control is unavailable; launch the app with --e2e')
+            }
+            return control.inspectLifecycle()
+          }, E2E_CONTROL_KEY),
+        reload: async () => {
+          const activePage = currentPage()
+          await activePage.reload()
+          return waitForPage(activePage)
+        },
+        replaceStore: async (overrides = {}) => {
+          await currentApp().evaluate(
+            (_, input): void => {
+              const control = (globalThis as Record<string, unknown>)[input.key] as
+                | MainControl
+                | undefined
+              if (!control) {
+                throw new Error('main E2E control is unavailable; launch the app with --e2e')
+              }
+              control.replaceStore(input.overrides)
+            },
+            { key: E2E_CONTROL_KEY, overrides }
+          )
+        },
+        restart: async () => {
+          if (restarts !== 0) {
+            throw new Error('only one intentional Electron restart is allowed per E2E run')
+          }
+          restarts += 1
+          await currentPage().close()
+          await currentApp().close()
+          liveApps -= 1
+          electronApp = undefined
+          page = undefined
+          return launch()
+        },
+        stubFolderDialog: async (dir: string | null) => {
+          await currentApp().evaluate(
+            ({ dialog }, input: { chosen: string | null; key: string }) => {
+              const target = globalThis as Record<string, unknown>
+              target[input.key] ??= dialog.showOpenDialog
+              dialog.showOpenDialog = (async () =>
+                input.chosen
+                  ? { canceled: false, filePaths: [input.chosen] }
+                  : { canceled: true, filePaths: [] }) as typeof dialog.showOpenDialog
+            },
+            { chosen: dir, key: DIALOG_ORIGINAL_KEY }
+          )
+        },
+        restoreFolderDialog: async () => {
+          await currentApp().evaluate(({ dialog }, key: string) => {
+            const target = globalThis as Record<string, unknown>
+            const original = target[key] as typeof dialog.showOpenDialog | undefined
+            if (original) {
+              dialog.showOpenDialog = original
+              delete target[key]
+            }
+          }, DIALOG_ORIGINAL_KEY)
+        },
+        trackRepo: (repo: string) => trackedRepos.add(repo),
+        untrackRepos: (repos: string[]) => {
+          for (const repo of repos) {
+            trackedRepos.delete(repo)
+          }
+        }
+      }
+
+      await runWithFailureSafeFixtureTeardown(
+        async () => {
+          await launch()
+          await use(sharedApp)
+        },
+        {
+          beforeCloseRepos: [
+            async () => {
+              if (!electronApp) {
+                return
+              }
+              const finalLifecycle = await sharedApp.inspectLifecycle()
+              if (
+                finalLifecycle.sidecarProcessCount !== 1 ||
+                finalLifecycle.sidecarRespawnCount !== 0
+              ) {
+                throw new Error(`unexpected final lifecycle: ${JSON.stringify(finalLifecycle)}`)
+              }
+            },
+            async () => {
+              if (electronApp) {
+                await sharedApp.restoreFolderDialog()
+              }
+            },
+            async () => {
+              if (page && !page.isClosed()) {
+                await closeRepoTabs(page, Array.from(trackedRepos))
+              }
+            },
+            async () => {
+              if (electronApp) {
+                await sharedApp.replaceStore()
+              }
+            },
+            async () => {
+              if (page && !page.isClosed()) {
+                await clearRendererState(page)
+              }
+            },
+            async () => {
+              if (page && !page.isClosed()) {
+                await sharedApp.reload()
+              }
+            }
+          ],
+          closeRepos: async () => {
+            const repos = Array.from(trackedRepos)
+            if (repos.length === 0) {
+              return
+            }
+            if (!page || page.isClosed()) {
+              throw new Error('cannot close E2E repositories without a live renderer')
+            }
+            await verifyReposClosed(page, repos)
+          },
+          closeApp: async () => {
+            if (!electronApp) {
+              return
+            }
+            await electronApp.close()
+            electronApp = undefined
+            page = undefined
+            liveApps -= 1
+          },
+          removeFixturePaths: () => removeFixturePaths(Array.from(trackedRepos)),
+          afterRemoveFixturePaths: [
+            () => fs.rmSync(userDataDir, { recursive: true, force: true }),
+            () => {
+              if (maximumLiveApps !== 1) {
+                throw new Error(
+                  `expected one live Electron application, observed ${maximumLiveApps}`
+                )
+              }
+            },
+            () => {
+              if (launches > 2) {
+                throw new Error(`expected at most two Electron launches, observed ${launches}`)
+              }
+            },
+            () => {
+              const forbiddenLog = forbiddenShutdownLogs.find((message) =>
+                stderr.join('\n').toLowerCase().includes(message)
+              )
+              if (forbiddenLog) {
+                const matchingLines = stderr
+                  .join('\n')
+                  .split('\n')
+                  .filter((line) => line.toLowerCase().includes(forbiddenLog))
+                throw new Error(
+                  `intentional lifecycle emitted forbidden stderr:\n${matchingLines.join('\n')}`
+                )
+              }
+            }
+          ]
+        }
+      )
+    },
+    { scope: 'worker' }
+  ],
+  harness: async ({ sharedApp }, use, testInfo) => {
+    const trackedRepos: string[] = []
 
     const harness: AppHarness = {
       get page() {
-        return page
+        return sharedApp.page
       },
-      app: () => electronApp,
-      relaunch: async () => {
-        await electronApp.close()
-        return launch()
-      },
+      app: () => sharedApp.app(),
+      launchCount: () => sharedApp.launchCount(),
+      mainProcessId: async () => (await sharedApp.inspectLifecycle()).mainPid,
+      inspectLifecycle: () => sharedApp.inspectLifecycle(),
+      reload: () => sharedApp.reload(),
+      restart: () => sharedApp.restart(),
       track: (repo: string) => {
         trackedRepos.push(repo)
+        sharedApp.trackRepo(repo)
       },
       seed: async (state: SeedState) => {
-        await page.evaluate(async (input: SeedState) => {
-          const api = (window as unknown as { electronAPI: SeedApi }).electronAPI
-          for (const workspacePath of input.workspaces ?? []) {
-            await api.addWorkspace(workspacePath)
-          }
-          for (const recent of input.recentRepos ?? []) {
-            await api.openRepo(recent)
-          }
-          if (input.onboardingComplete !== undefined) {
-            await api.setOnboardingComplete(input.onboardingComplete)
-          }
-          if (input.tabs !== undefined) {
-            await api.setPersistedTabs({ tabs: input.tabs, activeIndex: input.activeIndex ?? 0 })
-          }
-        }, state)
+        const workspaces = state.workspaces ?? []
+        const activeWorkspace = workspaces[workspaces.length - 1] ?? null
+        await sharedApp.replaceStore({
+          workspaces,
+          recentRepos: state.recentRepos ?? [],
+          activeWorkspace,
+          workingDirectory: activeWorkspace,
+          onboardingComplete: state.onboardingComplete ?? false,
+          persistedTabRepoPaths: state.tabs ?? [null],
+          persistedActiveTabIndex: state.activeIndex ?? 0
+        })
       },
       openRepo: async (repo: string, options) => {
-        trackedRepos.push(repo)
+        harness.track(repo)
         await harness.seed({
           workspaces: [path.dirname(repo)],
           recentRepos: options?.recentRepos,
@@ -156,12 +546,12 @@ export const test = base.extend<{ harness: AppHarness }>({
           tabs: [repo],
           activeIndex: 0
         })
-        return harness.relaunch()
+        return harness.reload()
       },
       openTabs: async (repos: Array<string | null>, options) => {
         for (const repo of repos) {
           if (repo) {
-            trackedRepos.push(repo)
+            harness.track(repo)
           }
         }
         const workspaces = uniquePaths(
@@ -173,35 +563,52 @@ export const test = base.extend<{ harness: AppHarness }>({
           tabs: repos,
           activeIndex: options?.activeIndex ?? 0
         })
-        return harness.relaunch()
+        return harness.reload()
       },
-      stubFolderDialog: async (dir: string | null) => {
-        await electronApp.evaluate(({ dialog }, chosen: string | null) => {
-          dialog.showOpenDialog = (async () =>
-            chosen
-              ? { canceled: false, filePaths: [chosen] }
-              : { canceled: true, filePaths: [] }) as typeof dialog.showOpenDialog
-        }, dir)
-      }
+      stubFolderDialog: (dir: string | null) => sharedApp.stubFolderDialog(dir)
     }
 
-    await use(harness)
-
-    await electronApp.close().catch(() => {})
-    fs.rmSync(userDataDir, { recursive: true, force: true })
-    for (const repo of trackedRepos) {
-      fs.rmSync(repo, { recursive: true, force: true })
+    try {
+      await runWithFailureSafeFixtureTeardown(
+        async () => {
+          await sharedApp.restoreFolderDialog()
+          await sharedApp.replaceStore()
+          await clearRendererState(sharedApp.page)
+          await sharedApp.reload()
+          await use(harness)
+        },
+        {
+          beforeCloseRepos: [
+            () => sharedApp.restoreFolderDialog(),
+            () => closeRepoTabs(sharedApp.page, trackedRepos),
+            () => sharedApp.replaceStore(),
+            () => clearRendererState(sharedApp.page),
+            () => sharedApp.reload().then(() => undefined)
+          ],
+          closeRepos: () => verifyReposClosed(sharedApp.page, trackedRepos),
+          removeFixturePaths: () => {
+            removeFixturePaths(trackedRepos)
+            sharedApp.untrackRepos(trackedRepos)
+          }
+        }
+      )
+    } catch (error) {
+      if (testInfo.status === testInfo.expectedStatus) {
+        throw error
+      }
     }
   }
 })
 
 export const refTree = (page: Page) => page.getByTestId('ref-tree-scroll')
-export const fileRowCheckbox = (page: Page, file: string) =>
-  page.getByTestId('status-file-row').filter({ hasText: file }).getByRole('checkbox')
+export const fileRowCheckbox = (page: Page, file: string) => {
+  const escapedFile = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return page
+    .getByTestId('status-file-row')
+    .filter({ hasText: file })
+    .getByRole('checkbox', { name: new RegExp(`^(Stage|Unstage) ${escapedFile}$`) })
+}
 export const openLocalChanges = (page: Page) =>
-  page
-    .getByRole('button', { name: 'Local changes', exact: true })
-    .filter({ visible: true })
-    .click()
+  page.getByRole('button', { name: 'Local changes', exact: true }).filter({ visible: true }).click()
 export const openHistory = (page: Page) =>
   page.getByRole('button', { name: 'History', exact: true }).filter({ visible: true }).click()

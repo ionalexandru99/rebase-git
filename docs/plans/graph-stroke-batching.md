@@ -1,6 +1,6 @@
 # Plan: batch canvas strokes by color, hoist per-frame style reads
 
-**Status:** Done — implemented on `main`, **uncommitted** (awaiting the user's commit).
+**Status:** Implemented in the current worktree.
 **Owner:** TBD
 **Created:** 2026-06-27
 
@@ -51,5 +51,5 @@ main-thread costs that recur on every scroll frame:
 
 ## Follow-up
 
-Commit with a Conventional Commits message, e.g.
-`perf(renderer): batch graph strokes by color and hoist per-frame style reads`.
+Re-profile the combined graph pipeline on the original large repositories after the
+worker, coalescing, collapse, and boundary-storage changes are integrated.

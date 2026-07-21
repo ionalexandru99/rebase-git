@@ -83,6 +83,21 @@ describe('RepoSessions spine', () => {
     expect(resolved).toBe(created)
   })
 
+  it('removes abandoned amend indexes when a repo session opens', async () => {
+    const gitDir = execFileSync('git', ['-C', repoDir, 'rev-parse', '--absolute-git-dir'], {
+      encoding: 'utf8'
+    }).trim()
+    const staleIndex = path.join(gitDir, 'rebase-amend-index-12345')
+    const unrelatedFile = path.join(gitDir, 'rebase-amend-state')
+    fs.writeFileSync(staleIndex, 'stale')
+    fs.writeFileSync(unrelatedFile, 'keep')
+
+    await runOp(openSession(repoDir))
+
+    expect(fs.existsSync(staleIndex)).toBe(false)
+    expect(fs.readFileSync(unrelatedFile, 'utf8')).toBe('keep')
+  })
+
   it('exposes the same session state through its Layer-provided service', async () => {
     const created = await runOp(openSession(repoDir))
     const viaService = await runOp(

@@ -13,22 +13,13 @@ import {
   useState
 } from 'react'
 import { useLatestRef } from '@/hooks/useLatestRef'
+import { formatCause } from '@/lib/format-cause'
+import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import type { GitLog, GitLogEntry } from '@/types'
-import type { OpenedRepo } from './repo-session'
+import type { OpenedRepo, RepoSessionErrorSource } from './repo-session'
 
 const LOG_FLUSH_MS = 100
-const WARM_REOPEN_GC_TIME_MS = 30 * 60 * 1000
-
-const formatCause = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
-  return String(error)
-}
 
 interface LogUiState {
   logLoading: boolean
@@ -60,7 +51,8 @@ export interface CommitHistoryDeps {
   liveRepoPath: RefObject<string | null>
   openGenerationRef: RefObject<number>
   isCurrentRepo: (generation: number, repoPath: string) => boolean
-  setError: (error: string | null) => void
+  setError: (source: RepoSessionErrorSource, error: string) => void
+  clearError: (source: RepoSessionErrorSource) => void
 }
 
 export interface CommitHistory {
@@ -85,8 +77,16 @@ export interface CommitHistoryController {
 
 export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHistoryController {
   const queryClient = useQueryClient()
-  const { repoPath, tabId, tabActive, liveRepoPath, openGenerationRef, isCurrentRepo, setError } =
-    deps
+  const {
+    repoPath,
+    tabId,
+    tabActive,
+    liveRepoPath,
+    openGenerationRef,
+    isCurrentRepo,
+    setError,
+    clearError
+  } = deps
 
   const [logUi, setLogUiState] = useState<LogUiState>({ ...initialLogUiState })
   const setLogUi = useCallback(
@@ -108,52 +108,57 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
   tabActiveRef.current = tabActive
 
   const logBuffer = useRef<GitLogEntry[]>([])
+  const publishedLogBuffer = useRef<GitLogEntry[] | null>(null)
+  const bufferedHashes = useRef(new Set<string>())
+  const bufferRevision = useRef(0)
+  const flushedRevision = useRef(-1)
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logStreamSeq = useRef(0)
+  const historyErrorRef = useRef<{ message: string; streamId: number } | null>(null)
 
-  // The log is push-based: chunks arrive over IPC and are written into the Query cache via
-  // setQueryData. This disabled query subscribes the component to those cache writes — it never
-  // fetches on its own.
   const logQuery = useQuery({
     queryKey: repoQueryKeys(repoPath, { idle: tabId }).log,
     enabled: false,
     gcTime: WARM_REOPEN_GC_TIME_MS,
+    structuralSharing: false,
     queryFn: () => Promise.resolve<GitLog | null>(null)
   })
 
-  const flushLogToStore = (expectedGen: number, expectedPath: string | null) => {
-    logFlushTimer.current = null
-    if (expectedGen !== openGenerationRef.current || expectedPath !== liveRepoPath.current) {
-      return
-    }
-    if (!expectedPath) {
-      return
-    }
-    const logKey = repoQueryKeys(expectedPath).log
-    const previous = queryClient.getQueryData<GitLog>(logKey)
-    const nextLength = logBuffer.current.length
-    if (nextLength === (previous?.all.length ?? 0) && previous?.total === nextLength) {
-      return
-    }
-    queryClient.setQueryData<GitLog>(logKey, { all: [...logBuffer.current], total: nextLength })
-  }
+  const flushLogToStore = useCallback(
+    (expectedGen: number, expectedPath: string | null) => {
+      logFlushTimer.current = null
+      if (expectedGen !== openGenerationRef.current || expectedPath !== liveRepoPath.current) {
+        return
+      }
+      if (!expectedPath) {
+        return
+      }
+      const logKey = repoQueryKeys(expectedPath).log
+      const next = logBuffer.current
+      if (flushedRevision.current === bufferRevision.current) {
+        return
+      }
+      queryClient.setQueryData<GitLog>(logKey, { all: next, loadedCount: next.length })
+      publishedLogBuffer.current = next
+      flushedRevision.current = bufferRevision.current
+    },
+    [liveRepoPath, openGenerationRef, queryClient]
+  )
 
-  const scheduleLogFlush = () => {
+  const scheduleLogFlush = useCallback(() => {
     if (logFlushTimer.current !== null) {
       return
     }
     const expectedGen = openGenerationRef.current
     const expectedPath = liveRepoPath.current
     logFlushTimer.current = setTimeout(() => {
-      // While inactive, drop the timer and let the tabActive effect reschedule on activation —
-      // rescheduling here would busy-poll a fresh timer every LOG_FLUSH_MS until the tab returns.
       if (!tabActiveRef.current) {
         logFlushTimer.current = null
         return
       }
       flushLogToStore(expectedGen, expectedPath)
     }, LOG_FLUSH_MS)
-  }
+  }, [flushLogToStore, liveRepoPath, openGenerationRef])
 
   const restart = async (repoPath: string, options?: RestartLogStreamOptions) => {
     const generation = openGenerationRef.current
@@ -161,21 +166,29 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
       return
     }
     const skip = options?.skip ?? 0
-    const maxCount = options?.maxCount ?? LOG_PAGE_SIZE
+    const cachedLog = queryClient.getQueryData<GitLog>(repoQueryKeys(repoPath).log)
+    const maxCount = options?.maxCount ?? Math.max(LOG_PAGE_SIZE, cachedLog?.all.length ?? 0)
     const append = skip > 0
-    const clearLog = options?.clearLog ?? !append
+    const clearLog = options?.clearLog ?? (!append && !cachedLog)
 
-    // Stamp this start so in-flight chunks from a previous stream (same repoPath, older id) are
-    // dropped by onLogChunk instead of landing in the freshly-cleared buffer. The same stamp guards
-    // the response below: a newer restart (same repo, same generation) supersedes this one, so its
-    // late success/failure must not clear loading or report a stale error over the newer stream.
     const streamId = ++logStreamSeq.current
     const isLatestStream = () => streamId === logStreamSeq.current
 
     if (!append) {
+      if (logFlushTimer.current !== null) {
+        clearTimeout(logFlushTimer.current)
+        logFlushTimer.current = null
+      }
       logBuffer.current = []
+      publishedLogBuffer.current = null
+      bufferedHashes.current.clear()
+      bufferRevision.current += 1
       if (clearLog) {
-        queryClient.setQueryData<GitLog>(repoQueryKeys(repoPath).log, { all: [], total: 0 })
+        queryClient.setQueryData<GitLog>(repoQueryKeys(repoPath).log, {
+          all: logBuffer.current,
+          loadedCount: 0
+        })
+        publishedLogBuffer.current = logBuffer.current
         setLogUi('logHasMore', false)
       }
       setLogUi({ logLoading: true, logLoadingMore: false })
@@ -184,7 +197,6 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
     }
 
     try {
-      await window.electronAPI.cancelLogStream(repoPath).catch(() => {})
       const response = parseOrThrow(
         StartLogStreamResponseSchema,
         await window.electronAPI.startLogStream(repoPath, { skip, maxCount, streamId })
@@ -193,14 +205,23 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         return
       }
       if (response._tag === 'GitError') {
-        setError(response.message)
+        historyErrorRef.current = { message: response.message, streamId }
+        setError('history', response.message)
         setLogUi({ logLoading: false, logLoadingMore: false })
+      } else {
+        const previousError = historyErrorRef.current
+        if (previousError && previousError.streamId !== streamId) {
+          historyErrorRef.current = null
+          clearError('history')
+        }
       }
     } catch (error) {
       if (!isCurrentRepo(generation, repoPath) || !isLatestStream()) {
         return
       }
-      setError(formatCause(error))
+      const message = formatCause(error)
+      historyErrorRef.current = { message, streamId }
+      setError('history', message)
       setLogUi({ logLoading: false, logLoadingMore: false })
     }
   }
@@ -210,8 +231,6 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
     if (!repoPath || !logUi.logHasMore || logUi.logLoadingMore || logUi.logLoading) {
       return
     }
-    // The cache holds the last throttled flush; the buffer may already hold more commits still
-    // draining in. Skipping by the smaller of the two would re-request buffered commits or gap.
     const cached = queryClient.getQueryData<GitLog>(repoQueryKeys(repoPath).log)
     const skip = Math.max(logBuffer.current.length, cached?.all.length ?? 0)
     await restart(repoPath, { skip, maxCount: LOG_PAGE_SIZE, clearLog: false })
@@ -232,7 +251,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         return
       }
       console.error(`[git] ${label} failed for ${repoPath}:`, formatCause(error))
-      setError(formatCause(error))
+      setError('history', formatCause(error))
     })
   }
 
@@ -240,6 +259,10 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
     const cachedLog = queryClient.getQueryData<GitLog>(repoQueryKeys(opened.path).log)
     setLogUi({ logLoading: false, logLoadingMore: false, logHasMore: false })
     logBuffer.current = cachedLog?.all ? [...cachedLog.all] : []
+    publishedLogBuffer.current = null
+    bufferedHashes.current = new Set(logBuffer.current.map((commit) => commit.hash))
+    bufferRevision.current += 1
+    flushedRevision.current = cachedLog ? bufferRevision.current : -1
     runIfCurrent(generation, opened.path, 'restartLogStream', async () => {
       await restart(opened.path, { clearLog: !cachedLog })
     })
@@ -252,6 +275,11 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
 
   const reset = () => {
     logBuffer.current = []
+    publishedLogBuffer.current = null
+    bufferedHashes.current.clear()
+    historyErrorRef.current = null
+    bufferRevision.current += 1
+    flushedRevision.current = -1
     if (logFlushTimer.current !== null) {
       clearTimeout(logFlushTimer.current)
       logFlushTimer.current = null
@@ -263,10 +291,8 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
     if (tabActive && logBuffer.current.length > 0) {
       scheduleLogFlush()
     }
-  })
+  }, [tabActive, scheduleLogFlush])
 
-  // The IPC subscription below registers once (`[]` deps) and must read the current helpers, not
-  // render-zero closures. The helpers are recreated each render, so it reads them through this ref.
   const latest = useLatestRef({
     getOpenGeneration: () => openGenerationRef.current,
     getRepoPath: () => liveRepoPath.current,
@@ -293,13 +319,30 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         return
       }
       if (chunk.commits.length > 0) {
+        let appended = false
         for (const commit of chunk.commits) {
+          if (bufferedHashes.current.has(commit.hash)) {
+            continue
+          }
+          if (!appended && publishedLogBuffer.current === logBuffer.current) {
+            logBuffer.current = [...logBuffer.current]
+            publishedLogBuffer.current = null
+          }
+          bufferedHashes.current.add(commit.hash)
           logBuffer.current.push(commit)
+          appended = true
         }
-        scheduleLogFlush()
+        if (appended) {
+          bufferRevision.current += 1
+          scheduleLogFlush()
+        }
       }
       if (chunk.error) {
-        setError(chunk.error)
+        historyErrorRef.current = {
+          message: chunk.error,
+          streamId: chunk.streamId ?? logStreamSeq.current
+        }
+        setError('history', chunk.error)
       }
       if (chunk.done) {
         if (chunk.hasMore !== undefined) {

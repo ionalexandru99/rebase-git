@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { useFixedVirtualizer } from '@/hooks/useFixedVirtualizer'
 
-function ScrollHarness() {
+function ScrollHarness({ onRender }: { onRender?: () => void }) {
+  onRender?.()
   const virtualizer = useFixedVirtualizer({
     count: 500,
     rowHeight: 32,
@@ -40,9 +41,22 @@ describe('useFixedVirtualizer', () => {
     expect(screen.getByTestId('row-0')).toBeInTheDocument()
 
     scroller.scrollTop = 640
-    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    fireEvent.scroll(scroller)
 
     expect(screen.queryByTestId('row-0')).not.toBeInTheDocument()
     expect(screen.getByTestId('row-20')).toBeInTheDocument()
+  })
+
+  it('renders its virtual window once for one scroll event', () => {
+    let renderCount = 0
+    render(<ScrollHarness onRender={() => renderCount++} />)
+    const scroller = screen.getByTestId('scroller') as HTMLDivElement
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 320 })
+    const rendersBeforeScroll = renderCount
+
+    scroller.scrollTop = 640
+    fireEvent.scroll(scroller)
+
+    expect(renderCount - rendersBeforeScroll).toBe(1)
   })
 })

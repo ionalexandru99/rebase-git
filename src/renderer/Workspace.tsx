@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useDialogs } from '@/components/ui/prompt-dialog'
 import { useTimelineVisibility } from '@/hooks/useTimelineVisibility'
@@ -13,7 +13,6 @@ import type { WorkspaceView } from './components/shell/Topbar'
 import { useCheckoutRef } from './hooks/git/useCheckoutRef'
 import { useGitActions } from './hooks/git/useGitActions'
 import { useStashes } from './hooks/git/useStashes'
-import { formatRelativeTime } from './lib/format'
 import { type RefKind, shortRefName } from './lib/ref-tree'
 import { repoDisplayName } from './lib/repoDisplayName'
 import { useActionRunner, useRefs, useRepoSession, useWorkingTreeStatus } from './stores/git'
@@ -41,14 +40,12 @@ const EMPTY_BRANCH_NAMES: string[] = []
 export function Workspace(props: WorkspaceProps) {
   const refs = useRefs()
   const actionRunner = useActionRunner()
-  const { status } = useWorkingTreeStatus()
+  const { rows } = useWorkingTreeStatus()
   const { repoPath } = useRepoSession()
   const repoName = repoDisplayName(repoPath)
   const branch = refs.currentBranch || 'no-branch'
-  const modifiedCount = status?.modified.length ?? 0
-  const stagedCount = status?.staged.length ?? 0
-  const untrackedCount = status?.not_added.length ?? 0
-  const totalChanges = modifiedCount + stagedCount + untrackedCount
+  const stagedCount = rows.filter((row) => row.stageState !== 'unstaged').length
+  const totalChanges = rows.length
   const [activeView, setActiveView] = useState<WorkspaceView>('history')
 
   const sidebarTags = refs.branches?.tags ?? EMPTY_BRANCH_NAMES
@@ -57,7 +54,7 @@ export function Workspace(props: WorkspaceProps) {
   const localBranches = refs.branches?.all ?? EMPTY_BRANCH_NAMES
   const remoteBranches = refs.branches?.remotes ?? EMPTY_BRANCH_NAMES
 
-  const timeline = useTimelineVisibility()
+  const timeline = useTimelineVisibility(activeView === 'history' && (props.tabActive ?? true))
 
   const handleCheckoutRef = useCheckoutRef(actionRunner)
 
@@ -65,13 +62,13 @@ export function Workspace(props: WorkspaceProps) {
   const stashList = useStashes(repoPath)
   const { prompt, confirm, dialogs } = useDialogs()
 
-  const handleStashAction = (action: StashAction, index: number) => {
+  const handleStashAction = (action: StashAction, index: number, expectedOid: string) => {
     switch (action) {
       case 'apply':
-        void actions.stashApply(index)
+        void actions.stashApply(index, expectedOid)
         return
       case 'pop':
-        void actions.stashPop(index)
+        void actions.stashPop(index, expectedOid)
         return
       case 'drop':
         confirm({
@@ -79,19 +76,25 @@ export function Workspace(props: WorkspaceProps) {
           message: 'The stashed changes are permanently discarded.',
           confirmText: 'Drop',
           destructive: true,
-          onConfirm: () => void actions.stashDrop(index)
+          onConfirm: () => void actions.stashDrop(index, expectedOid)
         })
         return
     }
   }
 
-  const workspaceContextValue = { actions, stashList, prompt, confirm }
+  const workspaceContextValue = useMemo(
+    () => ({ actions, stashList, prompt, confirm }),
+    [actions, stashList, prompt, confirm]
+  )
 
   const handleBranchAction = (action: BranchAction, refKind: RefKind, fullPath: string) => {
+    if (refKind === 'stash') {
+      return
+    }
     const shortName = shortRefName(refKind, fullPath)
     switch (action) {
       case 'merge':
-        void actions.mergeBranch(fullPath)
+        void actions.mergeBranch(refKind, fullPath)
         return
       case 'rename':
         prompt({
@@ -125,7 +128,7 @@ export function Workspace(props: WorkspaceProps) {
           label: 'Branch name',
           initialValue: refKind === 'remote' ? shortName : '',
           confirmText: 'Create',
-          onConfirm: (name) => void actions.createBranch(name, fullPath, true)
+          onConfirm: (name) => void actions.createBranch(name, fullPath, true, refKind)
         })
         return
       case 'create-tag':
@@ -133,7 +136,7 @@ export function Workspace(props: WorkspaceProps) {
           title: `Create tag at ${fullPath}`,
           label: 'Tag name',
           confirmText: 'Create',
-          onConfirm: (name) => void actions.createTag(name, fullPath)
+          onConfirm: (name) => void actions.createTag(name, fullPath, undefined, refKind)
         })
         return
       case 'copy-name':
@@ -201,6 +204,7 @@ export function Workspace(props: WorkspaceProps) {
         onSelectView: setActiveView
       }}
       branchBrowser={{
+        repoPath,
         localBranches,
         remoteBranches,
         tags: sidebarTags,
@@ -213,11 +217,7 @@ export function Workspace(props: WorkspaceProps) {
         onBranchAction: handleBranchAction,
         onStashAction: handleStashAction
       }}
-      workspaceContext={
-        refs.lastFetchedAt
-          ? `Fetched ${formatRelativeTime(refs.lastFetchedAt, Date.now())}`
-          : undefined
-      }
+      lastFetchedAt={refs.lastFetchedAt}
       onFetch={refs.fetchNow}
       onPull={actionRunner.pullNow}
       push={actionRunner.push}
@@ -226,6 +226,7 @@ export function Workspace(props: WorkspaceProps) {
       detached={!refs.currentBranch}
       pulling={actionRunner.pulling}
       pushing={actionRunner.pushing}
+      busy={actionRunner.busy}
     >
       {props.errorBanner}
       <WorkspaceProvider value={workspaceContextValue}>
@@ -238,6 +239,7 @@ export function Workspace(props: WorkspaceProps) {
             remoteBranches={remoteBranches}
             visibleBranchRefs={timeline.visibleRefs}
             filteredCommits={timeline.filteredCommits}
+            displayedCommitSet={timeline.displayedCommitSet}
             expandedMerges={timeline.expandedMerges}
             filter={timeline.filter}
             onFilterChange={timeline.setFilter}
@@ -251,7 +253,7 @@ export function Workspace(props: WorkspaceProps) {
       </WorkspaceProvider>
 
       <span className="sr-only">
-        {modifiedCount} modified, {stagedCount} staged, {untrackedCount} untracked
+        {totalChanges} changed files, {stagedCount} staged
       </span>
       {dialogs}
     </Shell>

@@ -1,11 +1,14 @@
 import { REF_TREE_REMOTE_SECTION_KEY, REF_TREE_TAG_SECTION_KEY } from '@shared/ref-tree-toggles'
+import type { RefKind as GitRefKind } from '@shared/schemas/ipc'
+import { REF_TREE_OVERSCAN as REF_TREE_OVERSCAN_VALUE } from '@/lib/virtual-config'
 import { fuzzyFilter, fuzzyMatchSet } from './fuzzy'
 
-export type RefKind = 'local' | 'remote' | 'tag' | 'stash'
+export type RefKind = GitRefKind | 'stash'
 
 export interface StashRowData {
   index: number
   ref: string
+  oid: string
   message: string
   branch: string
 }
@@ -41,6 +44,7 @@ export interface RefStashRow {
   refKind: 'stash'
   index: number
   ref: string
+  oid: string
   message: string
   branch: string
 }
@@ -74,8 +78,6 @@ export type RefRow =
   | RefSkeletonRow
 
 export const REF_TREE_ROW_HEIGHT = 30
-
-import { REF_TREE_OVERSCAN as REF_TREE_OVERSCAN_VALUE } from '@/lib/virtual-config'
 
 export const REF_TREE_OVERSCAN = REF_TREE_OVERSCAN_VALUE
 export const REF_TREE_INDENT_PX = 12
@@ -214,6 +216,7 @@ function buildStashSection(
       refKind: 'stash',
       index: stash.index,
       ref: stash.ref,
+      oid: stash.oid,
       message: stash.message,
       branch: stash.branch
     })

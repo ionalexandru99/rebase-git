@@ -36,6 +36,19 @@ describe('effectiveVisibleTimelineRefs', () => {
       new Set([refFilterKey('local', 'main'), refFilterKey('remote', 'origin/main')])
     )
   })
+
+  it('drops refs that no longer exist and falls back to the current default', () => {
+    const effective = effectiveVisibleTimelineRefs(
+      new Set([refFilterKey('local', 'deleted'), refFilterKey('remote', 'origin/deleted')]),
+      ['develop'],
+      ['origin/develop'],
+      'develop'
+    )
+
+    expect(effective).toEqual(
+      new Set([refFilterKey('local', 'develop'), refFilterKey('remote', 'origin/develop')])
+    )
+  })
 })
 
 describe('toggleVisibleTimelineRef', () => {

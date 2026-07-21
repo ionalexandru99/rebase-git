@@ -1,13 +1,16 @@
 import type { Server } from 'node:http'
+import { finalizeFetchSemaphores } from './fetch-semaphore'
+import { finalizeLogContinuations } from './log-stream'
 import type { SidecarCommand, SidecarMessage, SidecarStartMessage } from './protocol'
 import { createSidecarServer } from './server'
+import { finalizeTrackedChildren, installTrackedChildShutdownHooks } from './spawn'
 
-// The sidecar runs git non-interactively; without this a credentialed fetch/commit/checkout can
-// block forever on a terminal prompt. Set process-wide so both simple-git and raw spawns inherit it.
 process.env.GIT_TERMINAL_PROMPT = '0'
+const removeTrackedChildShutdownHooks = installTrackedChildShutdownHooks()
 
 const parentPort = process.parentPort
 let server: Server | undefined
+let shutdownPromise: Promise<void> | undefined
 
 function post(message: SidecarMessage): void {
   parentPort.postMessage(message)
@@ -18,26 +21,43 @@ function start(command: SidecarStartMessage): void {
     server = createSidecarServer(command.token)
     server.on('error', (error) => {
       post({ type: 'error', message: error.message })
-      setImmediate(() => process.exit(1))
+      void shutdown(1)
     })
     server.listen(command.port, command.hostname, () => {
       post({ type: 'ready' })
     })
   } catch (error) {
     post({ type: 'error', message: error instanceof Error ? error.message : String(error) })
-    setImmediate(() => process.exit(1))
+    void shutdown(1)
   }
 }
 
-function stop(): void {
+function closeServer(): Promise<void> {
   const current = server
   server = undefined
   if (!current) {
-    process.exit(0)
-    return
+    return Promise.resolve()
   }
-  current.close(() => process.exit(0))
-  setTimeout(() => process.exit(0), 2000).unref()
+  return new Promise((resolve) => {
+    current.close(() => resolve())
+    current.closeAllConnections()
+  })
+}
+
+function shutdown(exitCode: number): Promise<void> {
+  if (shutdownPromise) {
+    return shutdownPromise
+  }
+  shutdownPromise = (async () => {
+    const serverClosed = closeServer()
+    removeTrackedChildShutdownHooks()
+    await finalizeLogContinuations()
+    await finalizeTrackedChildren()
+    await finalizeFetchSemaphores()
+    await serverClosed
+    process.exit(exitCode)
+  })()
+  return shutdownPromise
 }
 
 parentPort.on('message', (event: { data: SidecarCommand }) => {
@@ -45,6 +65,6 @@ parentPort.on('message', (event: { data: SidecarCommand }) => {
   if (command.type === 'start') {
     start(command)
   } else if (command.type === 'stop') {
-    stop()
+    void shutdown(0)
   }
 })

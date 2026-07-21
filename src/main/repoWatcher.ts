@@ -35,7 +35,7 @@ function startWorkingTreeWatch(repoPath: string, onChange: () => void): Closeabl
       repoPath,
       { recursive: true, persistent: true },
       (_event, filename) => {
-        if (filename && ignoreWorkingTree(filename.toString())) {
+        if (!shouldEmitWorkingTreeChange(filename)) {
           return
         }
         onChange()
@@ -88,6 +88,10 @@ export function ignoreWorkingTree(targetPath: string): boolean {
     }
   }
   return false
+}
+
+export function shouldEmitWorkingTreeChange(filename: string | Buffer | null): boolean {
+  return filename !== null && !ignoreWorkingTree(filename.toString())
 }
 
 export { startDebouncedDrain } from './debounced-drain'
