@@ -13,6 +13,7 @@
   },
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:playwright-mcp": "electron-vite --rendererOnly --mode playwright-mcp",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-builder",

@@ -17,7 +17,7 @@ function packagedCspPlugin(): Plugin {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   main: {
     plugins: [externalizeDepsPlugin()],
     resolve: {
@@ -48,6 +48,14 @@ export default defineConfig({
   },
   renderer: {
     plugins: [packagedCspPlugin(), tailwindcss(), react()],
+    server:
+      mode === 'playwright-mcp'
+        ? {
+            host: '127.0.0.1',
+            port: 5173,
+            strictPort: true
+          }
+        : undefined,
     resolve: {
       alias: {
         '@': path.resolve('src/renderer'),
@@ -71,4 +79,4 @@ export default defineConfig({
       }
     }
   }
-})
+}))

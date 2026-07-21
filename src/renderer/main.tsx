@@ -9,10 +9,20 @@ if (!rootElement) {
   throw new Error('Root element not found')
 }
 
-createRoot(rootElement).render(
-  <StrictMode>
+async function start(container: HTMLElement): Promise<void> {
+  const playwrightMcpMode = import.meta.env.DEV && import.meta.env.MODE === 'playwright-mcp'
+  if (playwrightMcpMode) {
+    const { installPlaywrightMcpElectronApi } = await import('./manual-testing/electron-api')
+    const onboardingComplete = new URLSearchParams(window.location.search).get('onboarding') !== '1'
+    installPlaywrightMcpElectronApi({ onboardingComplete })
+  }
+
+  const app = (
     <QueryProvider>
       <App />
     </QueryProvider>
-  </StrictMode>
-)
+  )
+  createRoot(container).render(playwrightMcpMode ? app : <StrictMode>{app}</StrictMode>)
+}
+
+void start(rootElement)
