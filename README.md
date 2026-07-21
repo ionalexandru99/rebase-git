@@ -180,6 +180,24 @@ pnpm check:fix
 pnpm typecheck
 ```
 
+### Manual Playwright MCP Testing
+
+Start the renderer-only manual test environment:
+
+```bash
+pnpm dev:playwright-mcp
+```
+
+Open `http://127.0.0.1:5173` with Playwright MCP. The page uses a deterministic in-memory
+repository that supports browsing history and diffs, staging files, committing, refs, and stashes.
+Reloading the page resets the fixture. To test first-run setup, open
+`http://127.0.0.1:5173/?onboarding=1`.
+
+This mode tests the real renderer in Chromium. It does not launch Electron, access the filesystem,
+or exercise the main-process and sidecar integration. It also omits React Strict Mode because the
+in-memory boundary does not reproduce IPC scheduling; use renderer tests and `pnpm test:e2e` for
+effect replay and Electron boundaries.
+
 ### Packaging
 
 ```bash
