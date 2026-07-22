@@ -109,7 +109,7 @@ describe('closing a repo terminates an in-flight fetch', () => {
       () => 'rejected'
     )
 
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await waitUntil(() => transportChildCount() > 0)
     expect(transportChildCount()).toBeGreaterThan(0)
 
     const startedAt = Date.now()
@@ -120,7 +120,18 @@ describe('closing a repo terminates an in-flight fetch', () => {
     expect(settled).toBe('rejected')
     expect(elapsedMs).toBeLessThan(5000)
 
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await waitUntil(() => transportChildCount() === 0)
     expect(transportChildCount()).toBe(0)
   })
 })
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error('condition timed out')
+}

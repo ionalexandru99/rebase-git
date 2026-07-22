@@ -10,12 +10,14 @@ import { type DebouncedDrain, startDebouncedDrain } from './debounced-drain'
 
 interface CloseableWatch {
   close: () => Promise<void> | void
+  ready: Promise<void>
 }
 
 interface Watcher {
   refs: FSWatcher
   index: FSWatcher
   workingTree: CloseableWatch
+  ready: Promise<void>
   refsDrain: DebouncedDrain
   indexDrain: DebouncedDrain
   workingTreeDrain: DebouncedDrain
@@ -42,7 +44,7 @@ function startWorkingTreeWatch(repoPath: string, onChange: () => void): Closeabl
       }
     )
     watcher.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
-    return { close: () => watcher.close() }
+    return { close: () => watcher.close(), ready: Promise.resolve() }
   }
 
   const watcher = chokidar.watch(repoPath, {
@@ -51,9 +53,10 @@ function startWorkingTreeWatch(repoPath: string, onChange: () => void): Closeabl
     persistent: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 }
   })
+  const ready = new Promise<void>((resolve) => watcher.once('ready', resolve))
   watcher.on('all', () => onChange())
   watcher.on('error', (err) => console.warn('[repoWatcher] workingTree error', err))
-  return { close: () => watcher.close() }
+  return { close: () => watcher.close(), ready }
 }
 
 const watchers = new Map<string, Watcher>()
@@ -104,12 +107,16 @@ export interface GitDirs {
 // gitDir/commonDir come resolved from the sidecar's open response (git logic stays out of main);
 // they differ from `<repo>/.git` for linked worktrees and submodules. Fall back to the plain
 // layout when absent.
-export function startWatching(repoPath: string, webContents: WebContents, dirs?: GitDirs): void {
+export function startWatching(
+  repoPath: string,
+  webContents: WebContents,
+  dirs?: GitDirs
+): Promise<void> {
   const key = tabResourceKey(webContents.id, repoPath)
   const existing = watchers.get(key)
   if (existing) {
     if (existing.webContents === webContents && !webContents.isDestroyed()) {
-      return
+      return existing.ready
     }
     void stopWatching(repoPath, webContents.id)
   }
@@ -138,6 +145,7 @@ export function startWatching(repoPath: string, webContents: WebContents, dirs?:
     ignoreInitial: true,
     persistent: true
   })
+  const refsReady = new Promise<void>((resolve) => refs.once('ready', resolve))
   refs.on('all', () => refsDrain.push())
   refs.on('error', (err) => console.warn('[repoWatcher] refs error', err))
 
@@ -145,6 +153,7 @@ export function startWatching(repoPath: string, webContents: WebContents, dirs?:
     ignoreInitial: true,
     persistent: true
   })
+  const indexReady = new Promise<void>((resolve) => index.once('ready', resolve))
   index.on('all', () => indexDrain.push())
   index.on('error', (err) => console.warn('[repoWatcher] index error', err))
 
@@ -156,17 +165,21 @@ export function startWatching(repoPath: string, webContents: WebContents, dirs?:
     void stopWatching(repoPath, webContents.id)
   }
   webContents.once('destroyed', onDestroyed)
+  const ready = Promise.all([refsReady, indexReady, workingTree.ready]).then(() => undefined)
 
   watchers.set(key, {
     refs,
     index,
     workingTree,
+    ready,
     refsDrain,
     indexDrain,
     workingTreeDrain,
     webContents,
     onDestroyed
   })
+
+  return ready
 }
 
 export async function stopWatching(repoPath: string, webContentsId: number): Promise<void> {

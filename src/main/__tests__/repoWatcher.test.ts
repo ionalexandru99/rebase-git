@@ -161,9 +161,7 @@ describe('startWatching working-tree detection', () => {
   })
 
   it('emits a workingTree change when a nested file is edited', async () => {
-    startWatching(repoDir, fakeWebContents)
-    // give the watcher time to finish its initial scan before mutating
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await startWatching(repoDir, fakeWebContents)
 
     fs.writeFileSync(path.join(repoDir, 'src', 'nested.ts'), 'export const x = 1\n')
 
@@ -172,8 +170,7 @@ describe('startWatching working-tree detection', () => {
   })
 
   it('detects edits inside directories created after the watch starts', async () => {
-    startWatching(repoDir, fakeWebContents)
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await startWatching(repoDir, fakeWebContents)
 
     const deepDir = path.join(repoDir, 'src', 'feature', 'deep')
     fs.mkdirSync(deepDir, { recursive: true })
@@ -251,8 +248,7 @@ describe('startWatching index detection', () => {
   })
 
   it('emits an index change when a file is staged via the git CLI', async () => {
-    startWatching(repoDir, fakeWebContents)
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await startWatching(repoDir, fakeWebContents)
 
     fs.writeFileSync(path.join(repoDir, 'staged.ts'), 'export const staged = 1\n')
     execFileSync('git', ['-C', repoDir, 'add', 'staged.ts'])
@@ -283,8 +279,8 @@ describe('startWatching linked-worktree refs detection', () => {
   })
 
   it('emits a refs change when a commit moves HEAD in the worktree', async () => {
-    startWatching(worktreeDir, fakeWebContents, resolveGitDirsViaCli(worktreeDir))
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await startWatching(worktreeDir, fakeWebContents, resolveGitDirsViaCli(worktreeDir))
+    await new Promise((resolve) => setTimeout(resolve, 50))
 
     fs.writeFileSync(path.join(worktreeDir, 'feature.ts'), 'export const feature = 1\n')
     execFileSync('git', ['-C', worktreeDir, 'add', 'feature.ts'])

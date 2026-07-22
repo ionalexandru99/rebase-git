@@ -107,7 +107,7 @@ describe('getOrCreateGit + lookupGit', () => {
           withRepoLock(
             repoPath,
             Effect.promise(() => git.raw(['status'])),
-            { timeoutMs: 3_000 }
+            { timeoutMs: 500 }
           )
         )
       )
