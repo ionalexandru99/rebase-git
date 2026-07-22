@@ -22,7 +22,11 @@ beforeEach(() => {
     gitPath,
     `#!/bin/sh
 (
-  trap '' TERM INT
+  if [ "$REBASE_TEST_IGNORE_TERM" = "1" ]; then
+    trap '' TERM INT
+  else
+    trap 'exit 0' TERM INT
+  fi
   while true; do /bin/sleep 0.05; done
 ) &
 printf '%s %s\n' "$$" "$!" >> "$REBASE_TEST_STATE"
@@ -47,7 +51,12 @@ import {
 } from ${JSON.stringify(spawnModule)}
 
 const [mode, gitPath, statePath] = process.argv.slice(2)
-const env = { ...process.env, PATH: \`${tempDir}:\${process.env.PATH ?? ''}\`, REBASE_TEST_STATE: statePath }
+const env = {
+  ...process.env,
+  PATH: \`${tempDir}:\${process.env.PATH ?? ''}\`,
+  REBASE_TEST_STATE: statePath,
+  REBASE_TEST_IGNORE_TERM: mode === 'finalize' ? '1' : '0'
+}
 const waitForChildren = async (count) => {
   while (!fs.existsSync(statePath) || fs.readFileSync(statePath, 'utf8').trim().split('\\n').length < count) {
     await new Promise((resolve) => setTimeout(resolve, 5))

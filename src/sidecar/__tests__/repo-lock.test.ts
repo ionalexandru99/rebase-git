@@ -94,7 +94,7 @@ describe('repo lock', () => {
                 collectStdout: false
               })
             ),
-            { timeoutMs: 3_000 }
+            { timeoutMs: 500 }
           )
         )
       )
@@ -158,7 +158,7 @@ describe('repo lock', () => {
                   collectStdout: false
                 })
               ),
-              { timeoutMs: 1_000 }
+              { timeoutMs: 500 }
             )
           )
         )

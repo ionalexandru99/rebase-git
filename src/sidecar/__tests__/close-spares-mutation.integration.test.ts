@@ -110,15 +110,15 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
     const baseline = repoSemaphoreSize()
     const git = await prepareStagedRepo()
 
-    // `ext::sleep 30` makes `git fetch` block on a transport child that never speaks the protocol.
-    gitIn(repoDir, 'remote', 'add', 'origin', 'ext::sleep 30')
+    // `ext::sleep 31` makes `git fetch` block on a transport child that never speaks the protocol.
+    gitIn(repoDir, 'remote', 'add', 'origin', 'ext::sleep 31')
     gitIn(repoDir, 'config', 'protocol.ext.allow', 'always')
 
     const fetching = runOp(fetchRepo(repoDir)).then(
       () => 'resolved',
       () => 'rejected'
     )
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    await waitUntil(() => transportChildCount() > 0)
 
     await runOp(withSparedCommit(git, key, closeRepo(repoDir)))
 
@@ -145,3 +145,26 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
     expect(repoSemaphoreSize()).toBe(baseline)
   })
 })
+
+function transportChildCount(): number {
+  const listing = execFileSync('ps', ['-A', '-o', 'command='], { encoding: 'utf8' })
+  return listing
+    .split('\n')
+    .filter(
+      (line) =>
+        (line.includes('git remote-ext origin sleep 31') || line.includes('/bin/sleep 31')) &&
+        !line.includes('node') &&
+        !line.includes('vitest')
+    ).length
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error('condition timed out')
+}
