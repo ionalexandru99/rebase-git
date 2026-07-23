@@ -29,6 +29,8 @@ export function makeRepo(messages: string[]): string {
 export function makeBigRepo(count: number): string {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-stream-big-'))
   git(repo, ['init', '-b', 'main'])
+  git(repo, ['config', 'user.email', 'test@example.com'])
+  git(repo, ['config', 'user.name', 'Test'])
   const lines: string[] = []
   for (let index = 1; index <= count; index++) {
     const message = `c${index}`
