@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { closeRepo, isCommitGraphTracked, openRepo } from '../operations'
+import { requireOpen } from '../repo-sessions'
 import { runOp } from './run-op'
 
 let baseDir: string
@@ -28,7 +29,7 @@ function commitGraphWriteProcesses(dir: string): number {
 
 // A `git` shim that hangs on `commit-graph` and forwards everything else to the real binary, so the
 // write child is reliably in flight (not racing a sub-100ms real write) when close kills it.
-function installSlowGitShim(): string {
+function installSlowGitShim(delaySeconds = 30): string {
   const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
   const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-git-shim-'))
   const shimPath = path.join(shimDir, 'git')
@@ -37,7 +38,7 @@ function installSlowGitShim(): string {
     `#!/bin/sh
 for arg in "$@"; do
   if [ "$arg" = "commit-graph" ]; then
-    sleep 30
+    sleep ${delaySeconds}
     break
   fi
 done
@@ -130,4 +131,31 @@ describe('openRepo gitdir resolution', () => {
       fs.rmSync(shimDir, { recursive: true, force: true })
     }
   }, 15000)
+
+  it('waits for the background commit-graph write before admitting repo operations', async () => {
+    const shimDir = installSlowGitShim(0.5)
+    const originalPath = process.env.PATH
+    process.env.PATH = `${shimDir}${path.delimiter}${originalPath}`
+    try {
+      await runOp(openRepo(repoDir))
+      let inFlight = 0
+      for (let attempt = 0; attempt < 40 && inFlight === 0; attempt++) {
+        await sleep(25)
+        inFlight = commitGraphWriteProcesses(repoDir)
+      }
+      expect(inFlight).toBeGreaterThan(0)
+
+      let admitted = false
+      const admission = runOp(requireOpen(repoDir)).then(() => {
+        admitted = true
+      })
+      await sleep(50)
+      expect(admitted).toBe(false)
+      await admission
+      expect(admitted).toBe(true)
+    } finally {
+      process.env.PATH = originalPath
+      fs.rmSync(shimDir, { recursive: true, force: true })
+    }
+  })
 })

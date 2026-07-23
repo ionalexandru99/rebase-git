@@ -111,12 +111,12 @@ When introducing a new per-repo resource in main, pick the narrower of the two k
 
 ### Issue tracker
 
-Issues (and external PRs) are tracked in this repo's GitHub Issues via the `gh` CLI; `/triage` treats external pull requests as a request surface alongside issues. See `docs/agents/issue-tracker.md`.
+Issues (and external PRs) are tracked in this repo's GitHub Issues via the `gh` CLI; `/triage` treats external pull requests as a request surface alongside issues.
 
 ### Triage labels
 
-Default vocabulary — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+Default vocabulary — `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`.
 
 ### Domain docs
 
-Single-context — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context — one `CONTEXT.md` at the repo root.

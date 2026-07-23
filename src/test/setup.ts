@@ -13,6 +13,7 @@ import type {
 import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { GitBranches } from '@shared/schemas/git'
 import { act, cleanup } from '@testing-library/react'
+import { Storage } from 'happy-dom'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 type StatusResponse = RpcEncodedResult<typeof GetStatus.successSchema, typeof GetStatus.errorSchema>
@@ -69,6 +70,21 @@ type CheckoutResult =
   | { _tag: 'RepoNotOpen' }
   | { _tag: 'GitError'; message: string }
 ;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
+
+const localStorageMock = new Storage()
+const sessionStorageMock = new Storage()
+for (const storageTarget of [globalThis, window]) {
+  Object.defineProperties(storageTarget, {
+    localStorage: {
+      configurable: true,
+      value: localStorageMock
+    },
+    sessionStorage: {
+      configurable: true,
+      value: sessionStorageMock
+    }
+  })
+}
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

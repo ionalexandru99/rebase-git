@@ -8,6 +8,10 @@ describe('ThemeToggle', () => {
     document.documentElement.classList.remove('dark')
   })
 
+  it('uses the renderer environment storage', () => {
+    expect(localStorage).toBe(window.localStorage)
+  })
+
   it('defaults to dark and offers a switch to light', () => {
     render(<ThemeToggle />)
 
