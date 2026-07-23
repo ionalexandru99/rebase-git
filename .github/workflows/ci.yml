@@ -10,18 +10,22 @@ permissions:
 
 jobs:
   quality:
-    name: Type check & lint
+    name: Type check & lint (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24, 26]
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
-          node-version-file: package.json
+          node-version: ${{ matrix.node-version }}
 
       - name: Enable pnpm
-        run: corepack enable && corepack prepare pnpm@11.2.2 --activate
+        run: npm install --global pnpm@11.2.2
 
       - uses: actions/cache@v5
         with:
@@ -39,18 +43,22 @@ jobs:
         run: pnpm check
 
   test-unit:
-    name: Unit tests
+    name: Unit tests (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24, 26]
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
-          node-version-file: package.json
+          node-version: ${{ matrix.node-version }}
 
       - name: Enable pnpm
-        run: corepack enable && corepack prepare pnpm@11.2.2 --activate
+        run: npm install --global pnpm@11.2.2
 
       - uses: actions/cache@v5
         with:
@@ -71,19 +79,23 @@ jobs:
         run: pnpm test:sidecar
 
   test-e2e:
-    name: Build & integration
+    name: Build & integration (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24, 26]
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
-          node-version-file: package.json
+          node-version: ${{ matrix.node-version }}
           package-manager-cache: false
 
       - name: Enable pnpm
-        run: corepack enable && corepack prepare pnpm@11.2.2 --activate
+        run: npm install --global pnpm@11.2.2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -102,7 +114,7 @@ jobs:
           grep -q "electronAPI" "$preload" || { echo "electronAPI missing from preload"; exit 1; }
 
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: End-to-end tests
         run: xvfb-run -a pnpm exec playwright test

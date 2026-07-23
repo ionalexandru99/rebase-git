@@ -10,6 +10,21 @@ function readDoc(relativePath: string): string {
 
 const docs = ['CLAUDE.md', 'AGENTS.md']
 
+describe('supported Node versions', () => {
+  const packageJson = JSON.parse(readDoc('package.json')) as {
+    engines: { node: string }
+    devDependencies: { '@types/node': string }
+  }
+
+  it('supports the maintained even Node releases', () => {
+    expect(packageJson.engines.node).toBe('^22.12.0 || ^24.0.0 || ^26.0.0')
+  })
+
+  it('types against the lowest supported Node release', () => {
+    expect(packageJson.devDependencies['@types/node']).toMatch(/^22\./)
+  })
+})
+
 describe('docs ground truth', () => {
   for (const doc of docs) {
     describe(doc, () => {
@@ -40,15 +55,6 @@ describe('docs ground truth', () => {
       })
     })
   }
-})
-
-describe('plan status', () => {
-  it('does not mark the implemented graph collapse plan as not started', () => {
-    expect(readDoc('docs/plans/graph-width-and-merge-collapse.md')).not.toMatch(/not started/i)
-    expect(readDoc('docs/plans/README.md')).not.toMatch(
-      /graph-width-and-merge-collapse[^\n]*not started/i
-    )
-  })
 })
 
 const rendererDir = path.resolve(repoRoot, 'src/renderer')

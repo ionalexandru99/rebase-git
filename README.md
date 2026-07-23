@@ -37,19 +37,19 @@ A professional Git GUI built with Electron, React, TypeScript, and TailwindCSS.
 
 ### Prerequisites
 
-- Node.js 24
-- pnpm 10 or higher
+- Node.js 22.12 or newer within major 22, 24, or 26
+- pnpm 11.2.2
 - Git
 
-The supported Node version is declared in `package.json`. If you use a Node version manager, run this project with Node 24 before installing dependencies.
+The supported Node versions are declared in `package.json`. Node 24 is recommended for local
+development, while CI verifies Node 22, 24, and 26.
 
 ### macOS Setup
 
-Install Node.js 24 and pnpm, then install dependencies:
+Install a supported Node.js version and pnpm, then install dependencies:
 
 ```bash
-corepack enable
-corepack prepare pnpm@10.33.0 --activate
+npm install --global pnpm@11.2.2
 pnpm install
 ```
 
@@ -106,11 +106,10 @@ sudo apt install -y \
 
 On older Ubuntu/Debian releases, the audio package may be named `libasound2` instead of `libasound2t64`.
 
-Install Node.js 24 and pnpm, then install dependencies:
+Install a supported Node.js version and pnpm, then install dependencies:
 
 ```bash
-corepack enable
-corepack prepare pnpm@10.33.0 --activate
+npm install --global pnpm@11.2.2
 pnpm install
 ```
 

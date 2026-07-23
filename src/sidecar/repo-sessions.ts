@@ -23,6 +23,7 @@ function makeRepoSessions(): RepoSessionsService {
   const instances = new Map<string, SimpleGit>()
   const scopes = new Map<string, Scope.CloseableScope>()
   const commitGraphWritten = new Set<string>()
+  const commitGraphReady = new Map<string, Promise<void>>()
 
   function runOnSessionScope<A, E>(
     key: string,
@@ -45,7 +46,12 @@ function makeRepoSessions(): RepoSessionsService {
       if (commitGraphWritten.has(key)) {
         return Effect.void
       }
+      let markReady = () => {}
+      const ready = new Promise<void>((resolve) => {
+        markReady = resolve
+      })
       commitGraphWritten.add(key)
+      commitGraphReady.set(key, ready)
       const write = runOnSessionScope(
         key,
         Effect.gen(function* () {
@@ -63,8 +69,35 @@ function makeRepoSessions(): RepoSessionsService {
             Effect.catchAll(() => Effect.void)
           )
         })
-      )
+      ).pipe(Effect.ensuring(Effect.sync(markReady)))
       return Effect.forkDaemon(write).pipe(Effect.asVoid)
+    })
+  }
+
+  function awaitCommitGraph(key: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const ready = commitGraphReady.get(key)
+      return ready ? Effect.promise(() => ready) : Effect.void
+    })
+  }
+
+  function requireSessionGit(key: string): Effect.Effect<SimpleGit, RepoNotOpen> {
+    return Effect.gen(function* () {
+      yield* awaitCommitGraph(key)
+      const git = lookupGit(instances, key)
+      if (!git) {
+        return yield* Effect.fail(new RepoNotOpen())
+      }
+      return git
+    })
+  }
+
+  function requireSessionOpen(key: string): Effect.Effect<void, RepoNotOpen> {
+    return Effect.gen(function* () {
+      yield* awaitCommitGraph(key)
+      if (!lookupGit(instances, key)) {
+        return yield* Effect.fail(new RepoNotOpen())
+      }
     })
   }
 
@@ -112,18 +145,12 @@ function makeRepoSessions(): RepoSessionsService {
           scopes.delete(key)
           yield* Scope.close(scope, Exit.void)
         }
+        commitGraphReady.delete(key)
         commitGraphWritten.delete(key)
       }),
     withSessionScope: (repoPath, effect) => runOnSessionScope(normalizeRepoPath(repoPath), effect),
-    requireGit: (repoPath) =>
-      Effect.suspend(() => {
-        const git = lookupGit(instances, repoPath)
-        return git ? Effect.succeed(git) : Effect.fail(new RepoNotOpen())
-      }),
-    requireOpen: (repoPath) =>
-      Effect.suspend(() =>
-        lookupGit(instances, repoPath) ? Effect.void : Effect.fail(new RepoNotOpen())
-      ),
+    requireGit: (repoPath) => requireSessionGit(normalizeRepoPath(repoPath)),
+    requireOpen: (repoPath) => requireSessionOpen(normalizeRepoPath(repoPath)),
     isCommitGraphTracked: (repoPath) => commitGraphWritten.has(normalizeRepoPath(repoPath))
   }
 }
