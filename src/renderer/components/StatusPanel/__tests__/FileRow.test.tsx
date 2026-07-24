@@ -45,6 +45,7 @@ describe('FileRow — head-commit (amend)', () => {
     expect(checkbox).toBeChecked()
     fireEvent.click(checkbox)
     expect(onToggleDrop).toHaveBeenCalledWith('src/app.ts')
+    expect(screen.getByText('Last commit')).toBeInTheDocument()
   })
 
   it('renders a dropped file as unchecked', () => {

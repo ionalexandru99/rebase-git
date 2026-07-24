@@ -89,6 +89,47 @@ describe('Playwright MCP Electron API', () => {
     )
   })
 
+  it('paginates a large manual history without gaps or duplicates', async () => {
+    const api = createPlaywrightMcpElectronApi({ historyCount: 2_005 })
+    const onLogChunk = vi.fn()
+    api.onLogChunk(onLogChunk)
+
+    await api.startLogStream(PLAYWRIGHT_MCP_REPO_PATH, {
+      streamId: 1,
+      maxCount: 2_000
+    })
+    await Promise.resolve()
+    await api.startLogStream(PLAYWRIGHT_MCP_REPO_PATH, {
+      streamId: 2,
+      skip: 2_000,
+      maxCount: 2_000
+    })
+    await Promise.resolve()
+
+    const first = onLogChunk.mock.calls[0]?.[0] as LogChunk
+    const second = onLogChunk.mock.calls[1]?.[0] as LogChunk
+    const commits = [...first.commits, ...second.commits]
+    expect(first.hasMore).toBe(true)
+    expect(second.hasMore).toBe(false)
+    expect(commits).toHaveLength(2_005)
+    expect(new Set(commits.map((commit) => commit.hash)).size).toBe(2_005)
+  })
+
+  it('can expose a deterministic conflict for visual testing', async () => {
+    const api = createPlaywrightMcpElectronApi({ conflicted: true })
+
+    await expect(
+      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
+    ).resolves.toMatchObject({
+      status: {
+        conflicted: ['src/conflict.ts'],
+        files: expect.arrayContaining([
+          expect.objectContaining({ path: 'src/conflict.ts', index: 'U', working_dir: 'U' })
+        ])
+      }
+    })
+  })
+
   it('keeps streamed history decorations aligned with checkout', async () => {
     const api = createPlaywrightMcpElectronApi()
     const onLogChunk = vi.fn()

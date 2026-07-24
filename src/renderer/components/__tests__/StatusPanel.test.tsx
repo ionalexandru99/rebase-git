@@ -152,6 +152,20 @@ describe('StatusPanel', () => {
     expect(screen.getByLabelText('deleted')).toBeInTheDocument()
   })
 
+  it('keeps conflict resolution guidance visible while files are conflicted', () => {
+    renderPanel({
+      status: emptyStatus({
+        conflicted: ['src/conflict.ts'],
+        files: [code('src/conflict.ts', 'U', 'U')]
+      })
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('1 merge conflict')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Resolve the file, then stage it to continue'
+    )
+  })
+
   it('renders renamed files as "from → to"', () => {
     renderPanel({
       status: emptyStatus({
@@ -231,6 +245,8 @@ describe('StatusPanel', () => {
     })
 
     expect(screen.getByText('2 files · 0 staged')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Working tree' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Last commit' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Stage work.ts' })).toBeInTheDocument()
 
     const dropBox = screen.getByRole('checkbox', { name: /drop committed\.ts from last commit/i })

@@ -307,14 +307,28 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           throw new Error('refusing to launch a second live Electron application')
         }
         launches += 1
+        const electronEnv = { ...process.env, NODE_ENV: 'test' }
+        delete electronEnv.ELECTRON_RUN_AS_NODE
+        if (process.platform === 'linux') {
+          electronEnv.ELECTRON_OZONE_PLATFORM_HINT = 'x11'
+        }
+        const electronArgs = [
+          mainEntry,
+          `--user-data-dir=${userDataDir}`,
+          '--e2e',
+          ...(process.platform === 'linux' ? ['--ozone-platform=x11'] : [])
+        ]
         electronApp = await electron.launch({
-          args: [mainEntry, `--user-data-dir=${userDataDir}`, '--e2e'],
-          env: { ...process.env, NODE_ENV: 'test' }
+          args: electronArgs,
+          env: electronEnv
         })
         liveApps += 1
         maximumLiveApps = Math.max(maximumLiveApps, liveApps)
         electronApp.process().stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()))
         page = await electronApp.firstWindow()
+        await electronApp.evaluate(({ BrowserWindow }) => {
+          BrowserWindow.getAllWindows()[0]?.setSize(1200, 800)
+        })
         return waitForPage(page)
       }
 

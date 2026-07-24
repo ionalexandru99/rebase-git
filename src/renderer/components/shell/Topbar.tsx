@@ -1,9 +1,16 @@
-import { Loader2Icon } from 'lucide-react'
+import { Loader2Icon, MenuIcon, MoreHorizontalIcon, PanelLeftIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { formatRelativeTime } from '@/lib/format'
 import type { PushForce } from '@/lib/rpc-client'
 import { cn } from '@/lib/utils'
 import type { PushOutcome } from '@/stores/action-runner'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '../ui/dropdown-menu'
 import { PushControl } from './PushControl'
 
 export const workspaceViewTabs = [
@@ -29,6 +36,9 @@ interface TopbarProps {
   pulling?: boolean
   pushing?: boolean
   busy?: boolean
+  sidebarOpen?: boolean
+  onToggleSidebar?: () => void
+  onResetLayout?: () => void
 }
 
 const actionButtonClass =
@@ -87,6 +97,17 @@ export function Topbar(props: TopbarProps) {
   return (
     <div className="grid shrink-0 grid-rows-[40px_40px] border-b p-1">
       <div className="flex min-w-0 items-center gap-2.5 px-2">
+        {props.onToggleSidebar ? (
+          <button
+            type="button"
+            aria-label={props.sidebarOpen ? 'Hide branches' : 'Show branches'}
+            title={props.sidebarOpen ? 'Hide branches' : 'Show branches'}
+            onClick={props.onToggleSidebar}
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <PanelLeftIcon className="size-4" />
+          </button>
+        ) : null}
         <span className="shrink-0 font-semibold">{props.repoName}</span>
         {props.repoPath ? (
           <button
@@ -102,23 +123,25 @@ export function Topbar(props: TopbarProps) {
           </button>
         ) : null}
         <div className="flex-1" />
-        <button
-          type="button"
-          onClick={() => props.onFetch?.()}
-          disabled={props.busy}
-          className={actionButtonClass}
-        >
-          Fetch
-        </button>
-        <button
-          type="button"
-          onClick={() => props.onPull?.()}
-          disabled={props.busy || props.pulling}
-          className={actionButtonClass}
-        >
-          {props.pulling ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-          Pull
-        </button>
+        <div className="flex shrink-0 items-center gap-2 max-[899px]:hidden">
+          <button
+            type="button"
+            onClick={() => props.onFetch?.()}
+            disabled={props.busy}
+            className={actionButtonClass}
+          >
+            Fetch
+          </button>
+          <button
+            type="button"
+            onClick={() => props.onPull?.()}
+            disabled={props.busy || props.pulling}
+            className={actionButtonClass}
+          >
+            {props.pulling ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
+            Pull
+          </button>
+        </div>
         {props.push ? (
           <PushControl
             branchName={props.branch ?? ''}
@@ -130,6 +153,28 @@ export function Topbar(props: TopbarProps) {
             push={props.push}
           />
         ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Repository actions"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-muted transition-colors hover:bg-border-strong"
+          >
+            <MoreHorizontalIcon className="size-4 min-[900px]:hidden" />
+            <MenuIcon className="hidden size-4 min-[900px]:block" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent portal className="min-w-48">
+            <DropdownMenuItem disabled={props.busy} onSelect={() => props.onFetch?.()}>
+              Fetch from remotes
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={props.busy || props.pulling}
+              onSelect={() => props.onPull?.()}
+            >
+              Pull from upstream
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={props.onResetLayout}>Reset layout</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="flex min-w-0 items-center gap-2 px-2">

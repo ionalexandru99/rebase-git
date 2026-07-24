@@ -189,6 +189,34 @@ describe('HistoryPanel', () => {
     expect(screen.getByText('v1.0')).toBeInTheDocument()
   })
 
+  it('uses the graph lane color for visible refs and their commit badges', () => {
+    renderPanel({
+      all: [
+        entry({
+          hash: 'aaa',
+          message: 'tip commit',
+          refs: `HEAD -> main${GIT_LOG_REF_SEPARATOR}origin/main`
+        })
+      ],
+      loadedCount: 1
+    })
+
+    const visibleMain = screen.getByText('Visible:').closest('button')
+    const mainBadge = screen.getByTitle('main')
+    expect(visibleMain).toHaveStyle({ color: '#7c8cff' })
+    expect(mainBadge).toHaveStyle({ color: '#7c8cff' })
+  })
+
+  it('marks responsive metadata columns so compact history can hide them', () => {
+    renderPanel({
+      all: [entry({ hash: 'aaa', message: 'tip commit', refs: 'main' })],
+      loadedCount: 1
+    })
+
+    expect(screen.getByText('SHA')).toHaveAttribute('data-history-column', 'sha')
+    expect(screen.getByText('Date')).toHaveAttribute('data-history-column', 'date')
+  })
+
   it('renders complete branch and tag badges when their names contain commas', () => {
     renderPanel(
       {
@@ -393,6 +421,45 @@ describe('HistoryPanel', () => {
     await waitFor(() => {
       expect(onLoadMore).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('auto-loads each successive page once while the viewport remains near the end', async () => {
+    const onLoadMore = vi.fn()
+    const first = {
+      all: [entry({ hash: 'a', message: 'first', refs: 'main' })],
+      loadedCount: 1
+    }
+    const view = renderPanel(first, {
+      hasMore: true,
+      onLoadMore,
+      repoPath: '/repo/paginated'
+    })
+
+    await waitFor(() => expect(onLoadMore).toHaveBeenCalledTimes(1))
+
+    const second = {
+      all: [
+        entry({ hash: 'a', message: 'first', refs: 'main', parents: ['b'] }),
+        entry({ hash: 'b', message: 'second' })
+      ],
+      loadedCount: 2
+    }
+    const visibleBranchRefs = new Set([refFilterKey('local', 'main')])
+    view.rerender(
+      <HistoryPanel
+        log={second}
+        loading={false}
+        loadingMore={false}
+        hasMore={true}
+        onLoadMore={onLoadMore}
+        visibleBranchRefs={visibleBranchRefs}
+        filteredCommits={filterCommits(second, visibleBranchRefs, [])}
+        remoteBranches={[]}
+        repoPath="/repo/paginated"
+      />
+    )
+
+    await waitFor(() => expect(onLoadMore).toHaveBeenCalledTimes(2))
   })
 
   it('restores the previous scroll position for a repo', () => {

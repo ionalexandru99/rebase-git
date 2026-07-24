@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { FileAction } from '@/lib/git-actions'
 import type { FileRowSource, UnifiedFileRow } from '@/lib/status-file-rows'
 import { STATUS_FILE_OVERSCAN, STATUS_FILE_ROW_HEIGHT } from '@/lib/virtual-config'
@@ -13,13 +14,19 @@ export interface SelectedFile {
 
 interface VirtualFileListProps {
   rows: UnifiedFileRow[]
+  sections?: Array<{ label: string; rows: UnifiedFileRow[] }>
   selected: SelectedFile | null
   onSelect: (file: string, source: FileRowSource, renameSource?: string) => void
   onStage: (file: string) => void
   onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
+  showSources?: boolean
 }
+
+type StatusListItem =
+  | { kind: 'section'; key: string; label: string; count: number }
+  | { kind: 'file'; key: string; row: UnifiedFileRow }
 
 function StatusVirtualRow(props: {
   row: UnifiedFileRow
@@ -30,6 +37,7 @@ function StatusVirtualRow(props: {
   onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
+  showSources?: boolean
 }) {
   const rowStyle = {
     top: '0',
@@ -61,15 +69,37 @@ function StatusVirtualRow(props: {
         onUnstage={props.onUnstage}
         onToggleDrop={props.onToggleDrop}
         onFileAction={props.onFileAction}
+        showSource={props.showSources}
       />
     </li>
   )
 }
 
 export function VirtualFileList(props: VirtualFileListProps) {
-  const rows = props.rows
+  const items = useMemo<StatusListItem[]>(() => {
+    if (!props.sections) {
+      return props.rows.map((row) => ({
+        kind: 'file',
+        key: `${row.source}:${row.file}`,
+        row
+      }))
+    }
+    return props.sections.flatMap((section) => [
+      {
+        kind: 'section' as const,
+        key: `section:${section.label}`,
+        label: section.label,
+        count: section.rows.length
+      },
+      ...section.rows.map((row) => ({
+        kind: 'file' as const,
+        key: `${row.source}:${row.file}`,
+        row
+      }))
+    ])
+  }, [props.rows, props.sections])
   const { setScrollRef, onScroll, virtualItems, totalHeight } = useFixedVirtualizer({
-    count: rows.length,
+    count: items.length,
     rowHeight: STATUS_FILE_ROW_HEIGHT,
     overscan: STATUS_FILE_OVERSCAN,
     initialViewportHeight: 480
@@ -84,14 +114,29 @@ export function VirtualFileList(props: VirtualFileListProps) {
     >
       <ul className="relative m-0 list-none p-0" style={{ height: `${totalHeight}px` }}>
         {virtualItems.map((virtualItem) => {
-          const row = rows[virtualItem.index]
-          if (!row) {
+          const item = items[virtualItem.index]
+          if (!item) {
             return null
+          }
+          if (item.kind === 'section') {
+            return (
+              <li
+                key={item.key}
+                className="absolute inset-x-0 flex list-none items-center justify-between bg-card-2 px-2 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground"
+                style={{
+                  height: `${STATUS_FILE_ROW_HEIGHT}px`,
+                  transform: `translateY(${virtualItem.start}px)`
+                }}
+              >
+                <h3 className="m-0 text-xs font-semibold">{item.label}</h3>
+                <span className="tabular-nums">{item.count}</span>
+              </li>
+            )
           }
           return (
             <StatusVirtualRow
-              key={`${row.source}:${row.file}`}
-              row={row}
+              key={item.key}
+              row={item.row}
               top={virtualItem.start}
               selected={props.selected}
               onSelect={props.onSelect}
@@ -99,6 +144,7 @@ export function VirtualFileList(props: VirtualFileListProps) {
               onUnstage={props.onUnstage}
               onToggleDrop={props.onToggleDrop}
               onFileAction={props.onFileAction}
+              showSources={props.showSources}
             />
           )
         })}

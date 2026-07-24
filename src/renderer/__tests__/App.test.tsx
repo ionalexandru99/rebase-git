@@ -262,6 +262,24 @@ describe('App — repo picker (no repo open)', () => {
     expect(screen.queryByText('/home/user/repos/other-thing')).not.toBeInTheDocument()
     expect(screen.queryByText('/recent/something-else')).not.toBeInTheDocument()
   })
+
+  it('clears repository search from an explicit control', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/repos',
+      scanRepos: ['/home/user/repos/my-app'],
+      recentRepos: ['/recent/cool-repo']
+    })
+    renderApp()
+    await screen.findByText('/home/user/repos/my-app')
+
+    fireEvent.input(screen.getByRole('searchbox', { name: /Search repositories/i }), {
+      target: { value: 'cool' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear repository search' }))
+
+    expect(screen.getByRole('searchbox', { name: /Search repositories/i })).toHaveValue('')
+    expect(screen.getByText('/home/user/repos/my-app')).toBeInTheDocument()
+  })
 })
 
 describe('App — persisted tabs', () => {

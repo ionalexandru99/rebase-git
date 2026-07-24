@@ -191,9 +191,12 @@ export function PushControl(props: PushControlProps) {
         <Modal onDismiss={dismissFlow}>
           <h2 className="text-sm font-semibold">Force push {props.branchName}?</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            {props.branchName} has diverged from its upstream — it is {props.ahead} ahead and{' '}
-            {props.behind} behind. A leased force republishes your rewritten history without
-            destroying remote work you haven't seen.
+            {isDiverged
+              ? `${props.branchName} has diverged from its upstream`
+              : `${props.branchName} is ${props.ahead} ahead and ${props.behind} behind its upstream`}
+            {isDiverged ? ` — it is ${props.ahead} ahead and ${props.behind} behind` : ''}. A leased
+            force republishes your rewritten history without destroying remote work you haven't
+            seen.
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <button

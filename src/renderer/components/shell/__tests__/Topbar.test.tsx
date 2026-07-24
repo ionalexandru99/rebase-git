@@ -20,6 +20,9 @@ function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
       pulling={overrides.pulling}
       pushing={overrides.pushing}
       busy={overrides.busy}
+      sidebarOpen={overrides.sidebarOpen}
+      onToggleSidebar={overrides.onToggleSidebar}
+      onResetLayout={overrides.onResetLayout}
     />
   )
 }
@@ -95,6 +98,34 @@ describe('Topbar', () => {
     renderTopbar({ onPull })
     fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
     expect(onPull).toHaveBeenCalledOnce()
+  })
+
+  it('toggles the branch sidebar from the toolbar', () => {
+    const onToggleSidebar = vi.fn()
+    renderTopbar({ sidebarOpen: false, onToggleSidebar })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show branches' }))
+
+    expect(onToggleSidebar).toHaveBeenCalledOnce()
+  })
+
+  it('offers remote actions and layout reset from the repository actions menu', async () => {
+    const onFetch = vi.fn()
+    const onPull = vi.fn()
+    const onResetLayout = vi.fn()
+    renderTopbar({ onFetch, onPull, onResetLayout })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Fetch from remotes' }))
+    expect(onFetch).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Pull from upstream' }))
+    expect(onPull).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset layout' }))
+    expect(onResetLayout).toHaveBeenCalledOnce()
   })
 
   it('pushes through the PushControl when Push is clicked on a fast-forwardable branch', () => {

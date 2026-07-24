@@ -23,15 +23,17 @@ A professional Git GUI built with Electron, React, TypeScript, and TailwindCSS.
 
 ## Features
 
-- Open and browse git repositories
-- View working directory status (modified, staged, untracked files)
-- Stage and unstage files
-- Commit changes
-- View commit history
-- Recent repositories
-- Window state persistence
-- Auto-updater (via GitHub releases)
-- Right-click context menus
+- Open multiple repositories in isolated tabs and quickly reopen recent or workspace repositories
+- Browse, search, create, check out, rename, merge, and delete branches
+- Create and delete tags; create, apply, pop, and drop stashes
+- Stream and paginate virtualized commit history with topology graphs and branch visibility controls
+- Inspect syntax-highlighted diffs and stage or unstage files and individual hunks
+- Commit, amend, reword, and selectively remove files or hunks from the previous commit
+- Fetch, pull, publish, push, and safely escalate force pushes with remote-loss previews
+- Surface merge conflicts with persistent resolution guidance
+- Persist window, theme, tab, sidebar, and local-pane state with responsive compact layouts
+- Run Git outside the main and renderer processes through an authenticated loopback sidecar
+- Use context menus for file, commit, branch, tag, and stash actions
 
 ## Getting Started
 
@@ -191,6 +193,9 @@ Open `http://127.0.0.1:5173` with Playwright MCP. The page uses a deterministic 
 repository that supports browsing history and diffs, staging files, committing, refs, and stashes.
 Reloading the page resets the fixture. To test first-run setup, open
 `http://127.0.0.1:5173/?onboarding=1`.
+To exercise the 2,000-commit page boundary and automatic continuation, open
+`http://127.0.0.1:5173/?pagination=1`.
+For persistent merge-conflict presentation, open `http://127.0.0.1:5173/?conflict=1`.
 
 This mode tests the real renderer in Chromium. It does not launch Electron, access the filesystem,
 or exercise the main-process and sidecar integration. It also omits React Strict Mode because the
@@ -214,26 +219,19 @@ pnpm package:linux
 ```
 git-gui/
 ├── src/
-│   ├── main/
-│   │   ├── index.ts          # Main process entry
-│   │   ├── store.ts          # electron-store settings
-│   │   ├── updater.ts        # Auto-updater setup
-│   │   └── menu.ts           # Context menu setup
+│   ├── main/                 # Window lifecycle, IPC proxy, settings, updater
+│   ├── sidecar/              # HTTP service that owns Git operations
 │   ├── preload/
-│   │   └── index.ts          # Preload script (IPC bridge)
+│   │   └── index.ts          # Sandboxed IPC bridge
+│   ├── shared/               # Effect Schema RPC and IPC contracts
 │   └── renderer/
 │       ├── index.html        # HTML entry
 │       ├── main.tsx          # React entry
 │       ├── App.tsx           # Root component
 │       ├── index.css         # Tailwind entry
-│       ├── types.ts          # Shared types
-│       ├── components/
-│       │   ├── Header.tsx
-│       │   ├── StatusPanel.tsx
-│       │   ├── CommitPanel.tsx
-│       │   └── HistoryPanel.tsx
-│       └── hooks/
-│           └── useGit.ts
+│       ├── components/       # History, status, diff, shell, and reusable UI
+│       ├── hooks/            # Renderer interaction and layout hooks
+│       └── stores/           # Query-backed per-repository state
 ├── electron.vite.config.ts   # electron-vite config
 ├── electron-builder.config.js # electron-builder config
 ├── biome.json                # Biome config
@@ -249,21 +247,10 @@ This app follows Electron's secure best practices:
 - **Context Isolation** enabled
 - **Sandbox** enabled for renderer
 - **Preload script** exposes a typed API via `contextBridge`
-- Main process handles all system/git operations
-- Renderer is a standard React app with no Node.js access
-
-## Next Steps / Ideas
-
-- Show diffs for modified files
-- Branch creation, switching, and management
-- Push/pull/fetch remote operations
-- Merge conflict resolution
-- Stash management
-- Tag management
-- File tree browser
-- Settings panel (theme, git config)
-- Keyboard shortcuts
-- Custom themes
+- The main process handles lifecycle, dialogs, settings, and authenticated sidecar proxying
+- A forked utility-process sidecar owns all Git operations
+- The renderer uses typed IPC requests and has no Node.js or sidecar credentials
+- Repository state and streaming resources remain isolated per tab
 
 ## License
 

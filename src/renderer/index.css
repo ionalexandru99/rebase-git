@@ -63,6 +63,7 @@
 }
 
 :root {
+  --history-grid-tail: 12rem 4.5rem 7.5rem;
   --radius: 0.625rem;
   --background: oklch(0.955 0.004 260);
   --foreground: oklch(0.2 0.006 260);
@@ -131,6 +132,26 @@
   --untracked-bg: oklch(0.91 0.032 245);
   --deleted-bg: oklch(0.91 0.032 25);
   --shadow: 0 12px 30px oklch(0.25 0.01 260 / 7%);
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --history-grid-tail: 12rem 4.5rem;
+  }
+
+  [data-history-column="date"] {
+    display: none;
+  }
+}
+
+@media (max-width: 899px) {
+  :root {
+    --history-grid-tail: 10rem;
+  }
+
+  [data-history-column="sha"] {
+    display: none;
+  }
 }
 
 .dark {

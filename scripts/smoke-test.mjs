@@ -34,18 +34,27 @@ async function runSmokeTest() {
   console.log(`Binary: ${electronBin}`)
   console.log(`Main: ${mainJs}`)
 
-  const electronArgs = [mainJs, '--no-sandbox']
+  const electronArgs = [
+    mainJs,
+    '--no-sandbox',
+    ...(process.platform === 'linux' ? ['--ozone-platform=x11'] : []),
+  ]
   const args = electronBin === 'npx' ? ['electron', ...electronArgs] : electronArgs
+  const electronEnv = {
+    ...process.env,
+    VITE_DEV_SERVER_URL: '',
+    ELECTRON_ENABLE_LOGGING: '1',
+    NODE_ENV: 'test',
+  }
+  delete electronEnv.ELECTRON_RUN_AS_NODE
+  if (process.platform === 'linux') {
+    electronEnv.ELECTRON_OZONE_PLATFORM_HINT = 'x11'
+  }
 
   const child = spawn(electronBin, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: rootDir,
-    env: {
-      ...process.env,
-      VITE_DEV_SERVER_URL: '',
-      ELECTRON_ENABLE_LOGGING: '1',
-      NODE_ENV: 'test',
-    },
+    env: electronEnv,
   })
 
   let output = ''

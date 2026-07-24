@@ -169,6 +169,16 @@ describe('PushControl', () => {
     expect(push).not.toHaveBeenCalled()
   })
 
+  it('does not call an ahead-only branch diverged in a manual force confirmation', async () => {
+    renderControl({ branchName: 'feature/x', ahead: 1, behind: 0 })
+
+    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('has diverged')
+    expect(screen.getByRole('dialog')).toHaveTextContent('1 ahead and 0 behind')
+  })
+
   it('disables the force option in detached HEAD', () => {
     renderControl({ detached: true, ahead: 0, behind: 0 })
 

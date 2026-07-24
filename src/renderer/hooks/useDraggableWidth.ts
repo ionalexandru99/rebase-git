@@ -1,5 +1,6 @@
 import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
 import { useEffect, useRef, useState } from 'react'
+import { LAYOUT_RESET_EVENT } from '@/lib/layout'
 
 interface PaneState {
   open: boolean
@@ -80,6 +81,17 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     setIsOpen(next)
     persist(next, dragWidth.current)
   }
+
+  useEffect(() => {
+    const reset = () => {
+      dragWidth.current = defaultWidth
+      setWidth(defaultWidth)
+      setIsOpen(true)
+      persist(true, defaultWidth)
+    }
+    window.addEventListener(LAYOUT_RESET_EVENT, reset)
+    return () => window.removeEventListener(LAYOUT_RESET_EVENT, reset)
+  })
 
   const onResizeStart = (event: MouseEvent) => {
     event.preventDefault()
