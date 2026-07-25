@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { sidecarMock } from '@/../test/setup'
 import {
   rpcCheckout,
   rpcCherryPick,
@@ -22,6 +21,7 @@ import {
   rpcStashPop,
   rpcStashPush
 } from '@/lib/rpc-client'
+import { sidecarMock } from '../../../test/setup'
 
 describe('rpcCommit', () => {
   it('decodes a typed Ok result from the contract-derived wire shape', async () => {

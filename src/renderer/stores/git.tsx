@@ -5,13 +5,14 @@ import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
 import { cachesForRepoChange, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
+import { CommitHistoryProvider, useCommitHistoryController } from '../features/history/store'
+import { RefsProvider, useRefsController } from '../features/refs/store'
+import { useWorkingTreeStatusController, WorkingTreeStatusProvider } from '../features/status/store'
 import {
   ActionRunnerProvider,
   useActionRunnerController,
   useRepoMutationCoordinator
 } from './action-runner'
-import { CommitHistoryProvider, useCommitHistoryController } from './commit-history'
-import { RefsProvider, useRefsController } from './refs'
 import {
   emptyRepoSessionLifecycle,
   RepoSessionContext,
@@ -20,14 +21,13 @@ import {
   useRepoSession,
   useRepoSessionController
 } from './repo-session'
-import { useWorkingTreeStatusController, WorkingTreeStatusProvider } from './working-tree-status'
 
+export { useCommitHistory } from '../features/history/store'
+export { useRefs } from '../features/refs/store'
+export { useFileDiff, useHeadCommit, useWorkingTreeStatus } from '../features/status/store'
 export type { ActionRunner } from './action-runner'
 export { useActionRunner } from './action-runner'
-export { useCommitHistory } from './commit-history'
-export { useRefs } from './refs'
 export type { RepoSession } from './repo-session'
-export { useFileDiff, useHeadCommit, useWorkingTreeStatus } from './working-tree-status'
 export { RepoSessionProvider, useRepoSession }
 
 function useGitStoreValue(tabId: string, tabActive: boolean) {

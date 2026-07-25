@@ -2,11 +2,9 @@ import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import { act, render, waitFor } from '@testing-library/react'
 import { StrictMode, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderWithQuery } from '@/../test/render-app'
-import { setupLogStream, setupRepoChanged, sidecarMock } from '@/../test/setup'
+import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
 import { useStashes } from '@/hooks/git/useStashes'
 import { repoQueryKeys } from '@/lib/query-keys'
-import { createQueryClient, QueryProvider } from '@/providers/QueryProvider'
 import {
   GitStoreProvider,
   type RepoSession,
@@ -16,6 +14,8 @@ import {
   useRepoSession,
   useWorkingTreeStatus
 } from '@/stores/git'
+import { renderWithQuery } from '../../../test/render-app'
+import { setupLogStream, setupRepoChanged, sidecarMock } from '../../../test/setup'
 
 const toast = vi.hoisted(() => ({
   success: vi.fn(),

@@ -1,8 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import { type ReactElement, StrictMode } from 'react'
-import App from '@/App'
-import { createQueryClient, QueryProvider } from '@/providers/QueryProvider'
+import App from '@/app/App'
+import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
 
 export function renderApp(options?: { strictMode?: boolean }) {
   const app = (

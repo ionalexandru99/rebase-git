@@ -5,10 +5,10 @@ import { rpcResultSchema } from '@shared/rpc-result'
 import { Channel } from '@shared/schemas/ipc'
 import { ManagedRuntime } from 'effect'
 import { ipcMain } from 'electron'
-import { RepoLifecycleQueue, RepoLifecycleQueueLive } from '../repo-lifecycle-queue'
-import { startWatching, stopWatching } from '../repoWatcher'
-import { sidecarRpcCall } from '../sidecar'
-import { addRecentRepo } from '../store'
+import { RepoLifecycleQueue, RepoLifecycleQueueLive } from '../repo/lifecycle-queue'
+import { startWatching, stopWatching } from '../repo/watcher'
+import { sidecarRpcCall } from '../sidecar/process'
+import { addRecentRepo } from '../store/index'
 
 const lifecycleRuntime = ManagedRuntime.make(RepoLifecycleQueueLive)
 const lifecycleQueue = lifecycleRuntime.runPromise(RepoLifecycleQueue)

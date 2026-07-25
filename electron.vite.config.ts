@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import type { Plugin } from 'vite'
-import { injectContentSecurityPolicyMeta } from './src/main/csp'
+import { injectContentSecurityPolicyMeta } from './src/main/app/csp'
 
 const sharedAlias = {
   '@shared': path.resolve('src/shared')

@@ -6,8 +6,8 @@ import {
   SidebarPrefsSchema
 } from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
-import { sidecarRpcCall } from '../sidecar'
-import { isRendererRpcOp } from '../sidecar-rpc'
+import { sidecarRpcCall } from '../sidecar/process'
+import { isRendererRpcOp } from '../sidecar/rpc'
 import {
   getPersistedTabs,
   getRefTreeToggles,
@@ -15,7 +15,7 @@ import {
   setPersistedTabs,
   setRefTreeToggles,
   setSidebarPrefs
-} from '../store'
+} from '../store/index'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

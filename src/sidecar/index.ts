@@ -1,9 +1,9 @@
 import type { Server } from 'node:http'
-import { finalizeFetchSemaphores } from './fetch-semaphore'
-import { finalizeLogContinuations } from './log-stream'
-import type { SidecarCommand, SidecarMessage, SidecarStartMessage } from './protocol'
-import { createSidecarServer } from './server'
-import { finalizeTrackedChildren, installTrackedChildShutdownHooks } from './spawn'
+import { finalizeTrackedChildren, installTrackedChildShutdownHooks } from './git/spawn'
+import { finalizeLogContinuations } from './operations/log-stream'
+import { createSidecarServer } from './server/http'
+import type { SidecarCommand, SidecarMessage, SidecarStartMessage } from './server/protocol'
+import { finalizeFetchSemaphores } from './session/fetch-semaphore'
 
 process.env.GIT_TERMINAL_PROMPT = '0'
 const removeTrackedChildShutdownHooks = installTrackedChildShutdownHooks()
