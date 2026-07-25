@@ -16,12 +16,12 @@ describe('supported Node versions', () => {
     devDependencies: { '@types/node': string }
   }
 
-  it('supports the maintained even Node releases', () => {
-    expect(packageJson.engines.node).toBe('^22.12.0 || ^24.0.0 || ^26.0.0')
+  it('supports only the Node release Electron bundles', () => {
+    expect(packageJson.engines.node).toBe('^24.15.0')
   })
 
-  it('types against the lowest supported Node release', () => {
-    expect(packageJson.devDependencies['@types/node']).toMatch(/^22\./)
+  it('types against the supported Node release', () => {
+    expect(packageJson.devDependencies['@types/node']).toMatch(/^24\./)
   })
 })
 

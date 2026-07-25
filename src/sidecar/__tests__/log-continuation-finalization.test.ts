@@ -1,68 +1,59 @@
 import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { ManagedRuntime } from 'effect'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { LogContinuations, LogContinuationsLive } from '../log-stream'
+import type { RunningGitProcess, SpawnGitOptions } from '../spawn'
+import { processAlive, waitUntil } from './hanging-git'
+import { makeBigRepo } from './repo-fixtures'
 
-let tempDir: string
-let statePath: string
-let originalPath: string | undefined
+const startedGitProcesses: RunningGitProcess[] = []
 
-beforeEach(() => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-log-continuation-'))
-  statePath = path.join(tempDir, 'state')
-  const gitPath = path.join(tempDir, 'git')
-  fs.writeFileSync(
-    gitPath,
-    `#!/bin/sh
-printf 'hash-1\\037\\0372026-01-01T00:00:00Z\\037Test\\037one\\037\\000hash-2\\037\\0372026-01-01T00:00:00Z\\037Test\\037two\\037\\000'
-printf '%s' "$$" > "$REBASE_TEST_STATE"
-trap 'printf exited > "$REBASE_TEST_STATE"; exit 0' TERM INT
-while true; do /bin/sleep 0.05; done
-`
-  )
-  fs.chmodSync(gitPath, 0o755)
-  originalPath = process.env.PATH
-  process.env.PATH = `${tempDir}:${originalPath ?? ''}`
-  process.env.REBASE_TEST_STATE = statePath
-})
-
-afterEach(() => {
-  process.env.PATH = originalPath
-  delete process.env.REBASE_TEST_STATE
-  if (fs.existsSync(statePath)) {
-    const state = fs.readFileSync(statePath, 'utf8')
-    if (/^\d+$/.test(state)) {
-      try {
-        process.kill(Number(state), 'SIGKILL')
-      } catch {}
+// The registry keeps its paging process private, so the only way to name the pid the test has to
+// watch die is to record what the production code spawned.
+vi.mock('../spawn', async (importOriginal) => {
+  const spawn = await importOriginal<typeof import('../spawn')>()
+  return {
+    ...spawn,
+    startGit: (args: string[], options?: SpawnGitOptions) => {
+      const running = spawn.startGit(args, options)
+      startedGitProcesses.push(running)
+      return running
     }
   }
-  fs.rmSync(tempDir, { recursive: true, force: true })
+})
+
+let repoPath: string
+
+beforeAll(() => {
+  repoPath = makeBigRepo(4000)
+}, 60_000)
+
+afterAll(() => {
+  fs.rmSync(repoPath, { recursive: true, force: true })
 })
 
 describe('log continuation scope', () => {
   it('terminates a retained paging process when its managed runtime is disposed', async () => {
     const runtime = ManagedRuntime.make(LogContinuationsLive)
     const registry = await runtime.runPromise(LogContinuations)
-    const page = await registry.loadPage('/repo', 0, 1, new AbortController().signal)
 
-    expect(page.hasMore).toBe(true)
+    const firstPage = await registry.loadPage(repoPath, 0, 1, new AbortController().signal)
+    expect(firstPage.commits.map((commit) => commit.message)).toEqual(['c4000'])
+    expect(firstPage.hasMore).toBe(true)
+
+    expect(startedGitProcesses).toHaveLength(1)
+    const pagingPid = startedGitProcesses[0].child.pid
+    expect(processAlive(pagingPid)).toBe(true)
+
+    const secondPage = await registry.loadPage(repoPath, 1, 1, new AbortController().signal)
+    expect(secondPage.commits.map((commit) => commit.message)).toEqual(['c3999'])
+    expect(secondPage.hasMore).toBe(true)
+    expect(startedGitProcesses).toHaveLength(1)
+    expect(processAlive(pagingPid)).toBe(true)
+
     await runtime.dispose()
-    await waitUntil(() => fs.readFileSync(statePath, 'utf8') === 'exited')
 
-    expect(fs.readFileSync(statePath, 'utf8')).toBe('exited')
-  })
+    await waitUntil(() => !processAlive(pagingPid), 10_000, 'paging git process exit')
+    expect(processAlive(pagingPid)).toBe(false)
+  }, 60_000)
 })
-
-async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5))
-  }
-  throw new Error('condition timed out')
-}

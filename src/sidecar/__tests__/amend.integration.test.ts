@@ -5,6 +5,7 @@ import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { amendCommit, casAdvanceHead, closeRepo, getHeadCommit, openRepo } from '../operations'
+import { installRefTransactionHook } from './ref-transaction-hook'
 import { runOp } from './run-op'
 
 let repoDir: string
@@ -178,9 +179,11 @@ describe('getHeadCommit', () => {
     expect(head.result.message).toBe('merge feature')
   })
 
+  // Win32 forbids control characters in filenames, so only the unicode case is creatable there.
   it('returns tab, newline, and unicode file names without quoting or truncation', async () => {
     commitFile('base.txt', 'base\n', 'base')
-    const names = ['tab\tname.txt', 'line\nbreak.txt', 'café.txt']
+    const names =
+      process.platform === 'win32' ? ['café.txt'] : ['tab\tname.txt', 'line\nbreak.txt', 'café.txt']
     for (const name of names) {
       fs.writeFileSync(path.join(repoDir, name), name)
     }
@@ -240,8 +243,10 @@ describe('amendCommit — drop files', () => {
   })
 
   it('restores a renamed file at its parent path when the rename is dropped', async () => {
+    // Both names carry glob metacharacters so the rename exercises literal pathspecs;
+    // `[` and `]` are the only such characters Win32 permits in a filename.
     const source = 'old [source].txt'
-    const destination = 'new *.txt'
+    const destination = 'new [dest].txt'
     commitFile(source, 'renamed contents\n', 'base')
     git('mv', source, destination)
     git('commit', '-m', 'rename file')
@@ -277,28 +282,16 @@ describe('amendCommit — drop files', () => {
     expect(git('status', '--porcelain').trim()).toBe('?? drop.txt')
   })
 
-  it('rolls HEAD back and preserves staged state when the prepared index cannot be installed', {
-    timeout: 15000
-  }, async () => {
+  it('rolls HEAD back and preserves staged state when the prepared index cannot be installed', async () => {
     commitFile('locked.txt', 'base\n', 'base')
     commitFile('locked.txt', 'changed\n', 'second')
     const headBefore = git('rev-parse', 'HEAD').trim()
     fs.writeFileSync(path.join(repoDir, 'staged.txt'), 'staged\n')
     git('add', 'staged.txt')
     const stagedOid = git('rev-parse', ':staged.txt').trim()
-    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-amend-git-'))
-    const gitWrapper = path.join(fakeBin, 'git')
-    const indexPath = path.join(repoDir, '.git', 'index')
-    const savedIndexPath = path.join(fakeBin, 'saved-index')
-    const sabotagedMarker = path.join(fakeBin, 'sabotaged')
-    fs.writeFileSync(
-      gitWrapper,
-      `#!/bin/sh\ncase " $* " in *" update-ref -m amend: rewrite HEAD HEAD "*) "${realGit}" "$@"; status=$?; if [ "$status" -eq 0 ] && [ ! -e "${sabotagedMarker}" ]; then touch "${sabotagedMarker}"; mv "${indexPath}" "${savedIndexPath}"; mkdir "${indexPath}"; fi; exit "$status";; esac\nexec "${realGit}" "$@"\n`
-    )
-    fs.chmodSync(gitWrapper, 0o755)
-    const previousPath = process.env.PATH
-    process.env.PATH = `${fakeBin}:${previousPath ?? ''}`
+    const hook = installRefTransactionHook(repoDir, [
+      { transaction: 1, state: 'committed', actions: [{ kind: 'replaceIndexWithDirectory' }] }
+    ])
 
     try {
       const outcome = await runOp(
@@ -306,40 +299,23 @@ describe('amendCommit — drop files', () => {
       )
       expect(Either.isLeft(outcome)).toBe(true)
       expect(git('rev-parse', 'HEAD').trim()).toBe(headBefore)
-      fs.rmdirSync(indexPath)
-      fs.renameSync(savedIndexPath, indexPath)
+      hook.restoreIndex()
       expect(git('rev-parse', ':staged.txt').trim()).toBe(stagedOid)
     } finally {
-      if (fs.existsSync(savedIndexPath)) {
-        fs.rmSync(indexPath, { recursive: true, force: true })
-        fs.renameSync(savedIndexPath, indexPath)
-      }
-      process.env.PATH = previousPath
-      fs.rmSync(fakeBin, { recursive: true, force: true })
+      hook.cleanup()
     }
   })
 
-  it('repairs the index and reports the landed amend if index install and HEAD rollback fail', {
-    timeout: 15000
-  }, async () => {
+  it('repairs the index and reports the landed amend if index install and HEAD rollback fail', async () => {
     commitFile('landed.txt', 'base\n', 'base')
     commitFile('landed.txt', 'changed\n', 'second')
     const headBefore = git('rev-parse', 'HEAD').trim()
     fs.writeFileSync(path.join(repoDir, 'landed.txt'), 'staged next\n')
     git('add', 'landed.txt')
-    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-amend-git-'))
-    const gitWrapper = path.join(fakeBin, 'git')
-    const updateCount = path.join(fakeBin, 'update-count')
-    const indexPath = path.join(repoDir, '.git', 'index')
-    const savedIndexPath = path.join(fakeBin, 'saved-index')
-    fs.writeFileSync(
-      gitWrapper,
-      `#!/bin/sh\ncase " $* " in *" update-ref -m amend: rewrite HEAD HEAD "*) count=$(($(cat "${updateCount}" 2>/dev/null || echo 0) + 1)); echo "$count" > "${updateCount}"; if [ "$count" -gt 1 ]; then rmdir "${indexPath}"; mv "${savedIndexPath}" "${indexPath}"; exit 74; fi; "${realGit}" "$@"; status=$?; if [ "$status" -eq 0 ]; then mv "${indexPath}" "${savedIndexPath}"; mkdir "${indexPath}"; fi; exit "$status";; esac\nexec "${realGit}" "$@"\n`
-    )
-    fs.chmodSync(gitWrapper, 0o755)
-    const previousPath = process.env.PATH
-    process.env.PATH = `${fakeBin}:${previousPath ?? ''}`
+    const hook = installRefTransactionHook(repoDir, [
+      { transaction: 1, state: 'committed', actions: [{ kind: 'replaceIndexWithDirectory' }] },
+      { transaction: 2, state: 'prepared', actions: [{ kind: 'restoreIndex' }], abort: true }
+    ])
 
     try {
       const outcome = await runOp(
@@ -355,35 +331,18 @@ describe('amendCommit — drop files', () => {
       expect(workingTree('landed.txt')).toBe('staged next\n')
       expect(git('status', '--porcelain')).toBe(' M landed.txt\n')
     } finally {
-      if (fs.existsSync(savedIndexPath)) {
-        fs.rmSync(indexPath, { recursive: true, force: true })
-        fs.renameSync(savedIndexPath, indexPath)
-      }
-      process.env.PATH = previousPath
-      fs.rmSync(fakeBin, { recursive: true, force: true })
+      hook.cleanup()
     }
   })
 
-  it('reports a landed amend as unsafe to retry if independent index repair fails', {
-    timeout: 15000
-  }, async () => {
+  it('reports a landed amend as unsafe to retry if independent index repair fails', async () => {
     commitFile('unrecovered.txt', 'base\n', 'base')
     commitFile('unrecovered.txt', 'changed\n', 'second')
     const headBefore = git('rev-parse', 'HEAD').trim()
-    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-amend-git-'))
-    const gitWrapper = path.join(fakeBin, 'git')
-    const updateCount = path.join(fakeBin, 'update-count')
-    const rollbackFailed = path.join(fakeBin, 'rollback-failed')
-    const indexPath = path.join(repoDir, '.git', 'index')
-    const savedIndexPath = path.join(fakeBin, 'saved-index')
-    fs.writeFileSync(
-      gitWrapper,
-      `#!/bin/sh\ncase " $* " in *" update-ref -m amend: rewrite HEAD HEAD "*) count=$(($(cat "${updateCount}" 2>/dev/null || echo 0) + 1)); echo "$count" > "${updateCount}"; if [ "$count" -gt 1 ]; then rmdir "${indexPath}"; mv "${savedIndexPath}" "${indexPath}"; touch "${rollbackFailed}"; exit 74; fi; "${realGit}" "$@"; status=$?; if [ "$status" -eq 0 ]; then mv "${indexPath}" "${savedIndexPath}"; mkdir "${indexPath}"; fi; exit "$status";; esac\ncase " $* " in *" read-tree "*) if [ -e "${rollbackFailed}" ]; then exit 75; fi;; esac\nexec "${realGit}" "$@"\n`
-    )
-    fs.chmodSync(gitWrapper, 0o755)
-    const previousPath = process.env.PATH
-    process.env.PATH = `${fakeBin}:${previousPath ?? ''}`
+    const hook = installRefTransactionHook(repoDir, [
+      { transaction: 1, state: 'committed', actions: [{ kind: 'replaceIndexWithDirectory' }] },
+      { transaction: 2, state: 'prepared', abort: true }
+    ])
 
     try {
       const outcome = await runOp(
@@ -398,14 +357,10 @@ describe('amendCommit — drop files', () => {
         }
       }
       expect(git('rev-parse', 'HEAD').trim()).not.toBe(headBefore)
+      hook.restoreIndex()
       expect(git('write-tree').trim()).not.toBe(show('%T'))
     } finally {
-      if (fs.existsSync(savedIndexPath)) {
-        fs.rmSync(indexPath, { recursive: true, force: true })
-        fs.renameSync(savedIndexPath, indexPath)
-      }
-      process.env.PATH = previousPath
-      fs.rmSync(fakeBin, { recursive: true, force: true })
+      hook.cleanup()
     }
   })
 
@@ -689,9 +644,7 @@ describe('amendCommit — compare-and-swap', () => {
     expect(git('status', '--porcelain').trim()).toBe('')
   })
 
-  it('preserves a staged same-file change when HEAD moves during a dropped-file amend', {
-    timeout: 15000
-  }, async () => {
+  it('preserves a staged same-file change when HEAD moves during a dropped-file amend', async () => {
     commitFile('same.txt', 'base\n', 'base')
     commitFile('same.txt', 'committed\n', 'second')
     const observed = git('rev-parse', 'HEAD').trim()
@@ -699,17 +652,14 @@ describe('amendCommit — compare-and-swap', () => {
     git('add', 'same.txt')
     const stagedOid = git('rev-parse', ':same.txt').trim()
     const external = git('commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'external move').trim()
-    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-amend-git-'))
-    const gitWrapper = path.join(fakeBin, 'git')
-    const movedMarker = path.join(fakeBin, 'moved')
-    fs.writeFileSync(
-      gitWrapper,
-      `#!/bin/sh\ncase " $* " in *" update-ref -m amend: rewrite HEAD HEAD "*) if [ ! -e "${movedMarker}" ]; then touch "${movedMarker}"; "${realGit}" -C "${repoDir}" update-ref refs/heads/main "${external}"; fi;; esac\nexec "${realGit}" "$@"\n`
-    )
-    fs.chmodSync(gitWrapper, 0o755)
-    const previousPath = process.env.PATH
-    process.env.PATH = `${fakeBin}:${previousPath ?? ''}`
+    const hook = installRefTransactionHook(repoDir, [
+      {
+        transaction: 1,
+        state: 'prepared',
+        actions: [{ kind: 'writeRef', ref: 'refs/heads/main', value: external }],
+        abort: true
+      }
+    ])
 
     try {
       const outcome = await runOp(
@@ -724,8 +674,7 @@ describe('amendCommit — compare-and-swap', () => {
       expect(git('rev-parse', ':same.txt').trim()).toBe(stagedOid)
       expect(workingTree('same.txt')).toBe('staged next\n')
     } finally {
-      process.env.PATH = previousPath
-      fs.rmSync(fakeBin, { recursive: true, force: true })
+      hook.cleanup()
     }
   })
 

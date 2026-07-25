@@ -39,12 +39,13 @@ A professional Git GUI built with Electron, React, TypeScript, and TailwindCSS.
 
 ### Prerequisites
 
-- Node.js 22.12 or newer within major 22, 24, or 26
+- Node.js 24.15 or newer within major 24
 - pnpm 11.2.2
 - Git
 
-The supported Node versions are declared in `package.json`. Node 24 is recommended for local
-development, while CI verifies Node 22, 24, and 26.
+The supported Node version is declared in `package.json` and matches the Node release bundled
+with Electron, which is what the packaged app actually runs. CI verifies that version on Linux,
+Windows, and macOS.
 
 ### macOS Setup
 

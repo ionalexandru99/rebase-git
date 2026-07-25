@@ -11,6 +11,7 @@ import { SidecarRpcs } from '@shared/rpc'
 import { Effect, Either, Fiber, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createSidecarServer } from '../server'
+import { killIfAlive, processAlive, waitUntil } from './hanging-git'
 
 const TOKEN = 'test-token'
 let baseUrl: string
@@ -167,6 +168,15 @@ async function rpcOpenRepo(repoPath: string): Promise<void> {
   }
 }
 
+async function rpcCloseRepo(repoPath: string): Promise<void> {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      yield* client.closeRepo({ repoPath })
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
 beforeAll(async () => {
   repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sidecar-'))
   git(repoPath, ['init', '-b', 'main'])
@@ -243,50 +253,31 @@ describe('sidecar server', () => {
   })
 
   it('terminates a nonlocked SimpleGit read when its RPC request is cancelled', async () => {
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-read-cancel-'))
-    const pidFile = path.join(fakeBin, 'pid')
-    const gitPath = path.join(fakeBin, 'git')
-    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
-    const previousPath = process.env.PATH
-    const previousPidFile = process.env.REBASE_TEST_PID_FILE
-    let childPid: number | undefined
-    fs.writeFileSync(
-      gitPath,
-      `#!/bin/sh\nif [ "$1" = "status" ]; then\n  printf '%s\\n' "$$" > "$REBASE_TEST_PID_FILE"\n  trap 'exit 0' TERM INT\n  while true; do /bin/sleep 1; done\nfi\nexec "${realGit}" "$@"\n`
-    )
-    fs.chmodSync(gitPath, 0o755)
-    process.env.PATH = `${fakeBin}:${previousPath ?? ''}`
-    process.env.REBASE_TEST_PID_FILE = pidFile
+    const hangingRepo = createHangingStatusRepo()
+    await rpcOpenRepo(hangingRepo.repoPath)
+    let filterPid: number | undefined
 
     try {
       await Effect.runPromise(
         Effect.gen(function* () {
           const client = yield* RpcClient.make(SidecarRpcs)
-          const request = yield* Effect.fork(client.getStatus({ repoPath }))
-          yield* Effect.promise(() => waitUntil(() => fs.existsSync(pidFile)))
-          childPid = Number(fs.readFileSync(pidFile, 'utf8').trim())
+          const request = yield* Effect.fork(client.getStatus({ repoPath: hangingRepo.repoPath }))
+          yield* Effect.promise(() =>
+            waitUntil(() => hangingRepo.filterPid() !== undefined, 10_000, 'clean filter start')
+          )
+          filterPid = hangingRepo.filterPid()
           yield* Fiber.interrupt(request)
         }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
       )
 
-      await waitUntil(() => childPid !== undefined && !processRunning(childPid))
+      expect(filterPid).toBeDefined()
+      await waitUntil(() => !processAlive(filterPid), 10_000, 'clean filter exit')
     } finally {
-      process.env.PATH = previousPath
-      if (previousPidFile === undefined) {
-        delete process.env.REBASE_TEST_PID_FILE
-      } else {
-        process.env.REBASE_TEST_PID_FILE = previousPidFile
-      }
-      if (childPid !== undefined && processRunning(childPid)) {
-        try {
-          process.kill(-childPid, 'SIGKILL')
-        } catch {
-          process.kill(childPid, 'SIGKILL')
-        }
-      }
-      fs.rmSync(fakeBin, { recursive: true, force: true })
+      killIfAlive(hangingRepo.filterPid())
+      await rpcCloseRepo(hangingRepo.repoPath)
+      hangingRepo.cleanup()
     }
-  })
+  }, 30_000)
 
   it('stages and commits through /rpc', async () => {
     const staged = await rpcStageFile(repoPath, 'new.txt')
@@ -460,22 +451,61 @@ describe('sidecar server', () => {
   })
 })
 
-function processRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
+interface HangingStatusRepo {
+  repoPath: string
+  filterPid: () => number | undefined
+  cleanup: () => void
 }
 
-async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5))
+// A repo whose `git status` blocks forever inside a real descendant process, so the RPC's SimpleGit
+// child can be observed dying with its tree. git runs a clean filter through a shell on every
+// platform — unlike a PATH shim, which Win32 cannot execute by bare name. git only reaches for the
+// filter when it has to hash a tracked file to decide whether it changed, and it only has to do that
+// when the worktree file's size still matches the index, hence the same-length dirty content.
+function createHangingStatusRepo(): HangingStatusRepo {
+  const dir = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-read-cancel-'))
+  )
+  const repoPath = path.join(dir, 'repo')
+  const pidPath = path.join(dir, 'filter-pid')
+  const filterScript = path.join(dir, 'clean-filter.mjs')
+  fs.writeFileSync(
+    filterScript,
+    [
+      "import fs from 'node:fs'",
+      'fs.writeFileSync(process.argv[2], String(process.pid))',
+      'process.stdin.resume()',
+      'setInterval(() => {}, 1 << 30)',
+      ''
+    ].join('\n')
+  )
+
+  fs.mkdirSync(repoPath)
+  git(repoPath, ['init', '-b', 'main'])
+  git(repoPath, ['config', 'user.email', 'test@example.com'])
+  git(repoPath, ['config', 'user.name', 'Test'])
+  fs.writeFileSync(path.join(repoPath, 'tracked.txt'), 'hello\n')
+  git(repoPath, ['add', '.'])
+  git(repoPath, ['commit', '-m', 'initial'])
+
+  const toShellPath = (value: string) => `"${value.replace(/\\/g, '/')}"`
+  git(repoPath, [
+    'config',
+    'filter.hang.clean',
+    `${toShellPath(process.execPath)} ${toShellPath(filterScript)} ${toShellPath(pidPath)}`
+  ])
+  fs.writeFileSync(path.join(repoPath, '.gitattributes'), 'tracked.txt filter=hang\n')
+  fs.writeFileSync(path.join(repoPath, 'tracked.txt'), 'world\n')
+
+  return {
+    repoPath,
+    filterPid: () => {
+      if (!fs.existsSync(pidPath)) {
+        return undefined
+      }
+      const raw = fs.readFileSync(pidPath, 'utf8').trim()
+      return /^\d+$/.test(raw) ? Number(raw) : undefined
+    },
+    cleanup: () => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 })
   }
-  throw new Error('condition timed out')
 }

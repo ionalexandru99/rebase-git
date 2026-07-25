@@ -10,6 +10,7 @@ import { type GitError, RepoNotOpen } from '../git-errors'
 import { closeRepo, fetchRepo, openRepo } from '../operations'
 import { repoLockCount, repoSemaphoreSize, withRepoLock } from '../repo-lock'
 import { requireGit } from '../repo-sessions'
+import { createHangingRemote, killIfAlive, processAlive, waitUntil } from './hanging-git'
 import { runOp } from './run-op'
 
 let baseDir: string
@@ -109,24 +110,31 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
     const key = normalizeRepoPath(repoDir)
     const baseline = repoSemaphoreSize()
     const git = await prepareStagedRepo()
+    const hangingRemote = createHangingRemote('rebase-close-spare-remote-')
 
-    // `ext::sleep 31` makes `git fetch` block on a transport child that never speaks the protocol.
-    gitIn(repoDir, 'remote', 'add', 'origin', 'ext::sleep 31')
-    gitIn(repoDir, 'config', 'protocol.ext.allow', 'always')
+    try {
+      gitIn(repoDir, 'remote', 'add', 'origin', hangingRemote.remoteDir)
+      gitIn(repoDir, 'config', 'remote.origin.uploadpack', hangingRemote.uploadPack)
 
-    const fetching = runOp(fetchRepo(repoDir)).then(
-      () => 'resolved',
-      () => 'rejected'
-    )
-    await waitUntil(() => transportChildCount() > 0)
+      const fetching = runOp(fetchRepo(repoDir)).then(
+        () => 'resolved',
+        () => 'rejected'
+      )
+      await waitUntil(() => hangingRemote.childPid() !== undefined)
+      const transportPid = hangingRemote.childPid()
 
-    await runOp(withSparedCommit(git, key, closeRepo(repoDir)))
+      await runOp(withSparedCommit(git, key, closeRepo(repoDir)))
 
-    expect(await fetching).toBe('rejected')
-    expect(gitIn(repoDir, 'log', '--format=%s')).toContain(COMMIT_MESSAGE)
-    expect(repoLockCount()).toBe(0)
-    expect(repoSemaphoreSize()).toBe(baseline)
-  }, 15000)
+      expect(processAlive(transportPid)).toBe(false)
+      expect(await fetching).toBe('rejected')
+      expect(gitIn(repoDir, 'log', '--format=%s')).toContain(COMMIT_MESSAGE)
+      expect(repoLockCount()).toBe(0)
+      expect(repoSemaphoreSize()).toBe(baseline)
+    } finally {
+      killIfAlive(hangingRemote.childPid())
+      hangingRemote.cleanup()
+    }
+  }, 30_000)
 
   it('retains the in-flight lock for a session reopened before the spared mutation settles', async () => {
     const key = normalizeRepoPath(repoDir)
@@ -145,26 +153,3 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
     expect(repoSemaphoreSize()).toBe(baseline)
   })
 })
-
-function transportChildCount(): number {
-  const listing = execFileSync('ps', ['-A', '-o', 'command='], { encoding: 'utf8' })
-  return listing
-    .split('\n')
-    .filter(
-      (line) =>
-        (line.includes('git remote-ext origin sleep 31') || line.includes('/bin/sleep 31')) &&
-        !line.includes('node') &&
-        !line.includes('vitest')
-    ).length
-}
-
-async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
-  throw new Error('condition timed out')
-}
