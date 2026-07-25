@@ -1,19 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createFixtureRepo, expect, openLocalChanges, test } from './fixtures'
-
-async function setWindowSize(
-  harness: { app: () => import('@playwright/test').ElectronApplication },
-  width: number,
-  height: number
-) {
-  await harness.app().evaluate(
-    ({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height)
-    },
-    { width, height }
-  )
-}
+import { createFixtureRepo, expect, openLocalChanges, setWindowSize, test } from './fixtures'
 
 test('keeps history and diffs usable at the minimum window size', async ({ harness }) => {
   const repo = createFixtureRepo()
@@ -31,11 +18,15 @@ test('keeps history and diffs usable at the minimum window size', async ({ harne
   })
   page = await harness.reload()
 
-  await setWindowSize(harness, 800, 600)
+  await setWindowSize(harness.app(), 800, 600)
   await expect(page.getByRole('button', { name: 'Show branches' })).toBeVisible()
   await expect(page.getByText('initial', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('Date', { exact: true })).toBeHidden()
-  await expect(page.getByText('SHA', { exact: true })).toBeHidden()
+  const dateColumnHeader = page.getByText('Date', { exact: true })
+  const shaColumnHeader = page.getByText('SHA', { exact: true })
+  await expect(dateColumnHeader).toBeAttached()
+  await expect(dateColumnHeader).not.toBeVisible()
+  await expect(shaColumnHeader).toBeAttached()
+  await expect(shaColumnHeader).not.toBeVisible()
 
   await openLocalChanges(page)
   await expect(page.getByRole('button', { name: 'Files', exact: true })).toBeVisible()
@@ -52,7 +43,7 @@ test('keeps history and diffs usable at the minimum window size', async ({ harne
   await page.getByRole('button', { name: 'Close branches' }).last().click()
   await expect(page.getByRole('button', { name: 'Show branches' })).toBeVisible()
 
-  await setWindowSize(harness, 1280, 800)
+  await setWindowSize(harness.app(), 1280, 800)
   await page.getByRole('button', { name: 'Repository actions' }).click()
   await page.getByRole('menuitem', { name: 'Reset layout' }).click()
 

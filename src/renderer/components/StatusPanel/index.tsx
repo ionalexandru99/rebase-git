@@ -1,11 +1,10 @@
-import { AlertTriangleIcon } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import type { FileAction } from '@/lib/git-actions'
 import type { FileRowSource, UnifiedFileRow } from '@/lib/status-file-rows'
 import { useWorkingTreeStatus } from '@/stores/git'
 import { LoadingBadge } from '../ui/loading-badge'
 import { StatusPanelSkeleton } from './Skeleton'
-import { type SelectedFile, VirtualFileList } from './VirtualFileList'
+import { type FileListInput, type SelectedFile, VirtualFileList } from './VirtualFileList'
 
 export type { SelectedFile } from './VirtualFileList'
 
@@ -42,9 +41,18 @@ export function StatusPanel(props: StatusPanelProps) {
     unstageAll
   } = useWorkingTreeStatus()
   const loading = props.loading || statusLoading
-  const rows = useMemo(() => {
-    return [...worktreeRows, ...(props.amendRows ?? [])].sort(bySourceWithinFile)
-  }, [worktreeRows, props.amendRows])
+  const sortedWorktreeRows = useMemo(
+    () => [...worktreeRows].sort(bySourceWithinFile),
+    [worktreeRows]
+  )
+  const sortedAmendRows = useMemo(
+    () => [...(props.amendRows ?? [])].sort(bySourceWithinFile),
+    [props.amendRows]
+  )
+  const rows = useMemo(
+    () => [...sortedWorktreeRows, ...sortedAmendRows],
+    [sortedWorktreeRows, sortedAmendRows]
+  )
   const stageable = useMemo(
     () => rows.filter((row) => row.source === 'worktree' && !row.isConflicted),
     [rows]
@@ -52,25 +60,18 @@ export function StatusPanel(props: StatusPanelProps) {
   const stagedCount = stageable.filter((row) => row.stageState !== 'unstaged').length
   const allStaged = stageable.length > 0 && stageable.every((row) => row.stageState === 'staged')
   const subtitle = `${rows.length} files · ${stagedCount} staged`
-  const conflictCount = status?.conflicted.length ?? 0
-  const showSources = (props.amendRows?.length ?? 0) > 0
-  const sections = useMemo(() => {
-    if (!showSources) {
-      return undefined
+  const listInput = useMemo<FileListInput>(() => {
+    if (sortedAmendRows.length === 0) {
+      return { kind: 'flat', rows: sortedWorktreeRows }
     }
-    return [
-      {
-        label: 'Working tree',
-        rows: [...worktreeRows].sort((left, right) => left.file.localeCompare(right.file))
-      },
-      {
-        label: 'Last commit',
-        rows: [...(props.amendRows ?? [])].sort((left, right) =>
-          left.file.localeCompare(right.file)
-        )
-      }
-    ]
-  }, [props.amendRows, showSources, worktreeRows])
+    return {
+      kind: 'sections',
+      sections: [
+        { label: 'Working tree', rows: sortedWorktreeRows },
+        { label: 'Last commit', rows: sortedAmendRows }
+      ].filter((section) => section.rows.length > 0)
+    }
+  }, [sortedAmendRows, sortedWorktreeRows])
 
   const toggleAll = () => {
     if (allStaged) {
@@ -120,33 +121,14 @@ export function StatusPanel(props: StatusPanelProps) {
         ) : null}
       </div>
 
-      {conflictCount > 0 ? (
-        <div
-          role="status"
-          className="m-2 mb-0 flex shrink-0 items-start gap-2 rounded-[var(--r-sm)] border border-orange/40 bg-orange/10 px-3 py-2 text-sm"
-        >
-          <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-orange" />
-          <div>
-            <div className="font-semibold">
-              {conflictCount} merge conflict{conflictCount === 1 ? '' : 's'}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Resolve the file, then stage it to continue.
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <VirtualFileList
-        rows={rows}
-        sections={sections}
+        input={listInput}
         selected={props.selected}
         onSelect={props.onSelect}
         onStage={stageFile}
         onUnstage={unstageFile}
         onToggleDrop={props.onToggleDrop}
         onFileAction={props.onFileAction}
-        showSources={showSources}
       />
     </section>
   )

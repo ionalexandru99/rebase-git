@@ -20,6 +20,7 @@ function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
       pulling={overrides.pulling}
       pushing={overrides.pushing}
       busy={overrides.busy}
+      compact={overrides.compact}
       sidebarOpen={overrides.sidebarOpen}
       onToggleSidebar={overrides.onToggleSidebar}
       onResetLayout={overrides.onResetLayout}
@@ -126,6 +127,34 @@ describe('Topbar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset layout' }))
     expect(onResetLayout).toHaveBeenCalledOnce()
+  })
+
+  it('hides the repository actions menu when no repository action is available', () => {
+    renderTopbar()
+    expect(screen.queryByRole('button', { name: 'Repository actions' })).not.toBeInTheDocument()
+  })
+
+  it('lists only the repository actions whose handler was provided', async () => {
+    renderTopbar({ onResetLayout: vi.fn() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Reset layout' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Fetch from remotes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Pull from upstream' })).not.toBeInTheDocument()
+  })
+
+  it('moves the remote actions into the menu when compact', async () => {
+    const onFetch = vi.fn()
+    renderTopbar({ compact: true, onFetch, onPull: vi.fn() })
+
+    expect(screen.queryByRole('button', { name: 'Fetch' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pull' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Fetch from remotes' }))
+
+    expect(onFetch).toHaveBeenCalledOnce()
   })
 
   it('pushes through the PushControl when Push is clicked on a fast-forwardable branch', () => {

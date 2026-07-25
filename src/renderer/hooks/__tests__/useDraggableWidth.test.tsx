@@ -27,18 +27,21 @@ describe('useDraggableWidth', () => {
     expect(save).toHaveBeenLastCalledWith({ open: true, width: 256 })
   })
 
-  it('keeps one reset listener while unrelated renders occur', () => {
+  it('keeps one reset listener when every render passes a new save identity', () => {
     const addEventListener = vi.spyOn(window, 'addEventListener')
     const removeEventListener = vi.spyOn(window, 'removeEventListener')
-    const save = vi.fn()
-    const { rerender, unmount } = renderHook(
+    const savesByRender: Array<ReturnType<typeof vi.fn>> = []
+    const { result, rerender, unmount } = renderHook(
       ({ marker }) => {
         void marker
+        const save = vi.fn()
+        savesByRender.push(save)
         return useDraggableWidth({
           min: 200,
           max: 520,
           defaultWidth: 256,
-          save
+          save,
+          onSaveError: vi.fn()
         })
       },
       { initialProps: { marker: 0 } }
@@ -53,6 +56,14 @@ describe('useDraggableWidth', () => {
     expect(
       removeEventListener.mock.calls.filter(([event]) => event === LAYOUT_RESET_EVENT)
     ).toHaveLength(0)
+
+    act(() => result.current.setOpen(false))
+    const latestSave = savesByRender[savesByRender.length - 1]
+
+    act(() => window.dispatchEvent(new Event(LAYOUT_RESET_EVENT)))
+
+    expect(latestSave).toHaveBeenCalledWith({ open: true, width: 256 })
+    expect(savesByRender[0]).not.toHaveBeenCalled()
 
     unmount()
     expect(

@@ -65,6 +65,22 @@ interface LossPreview {
   remoteSha?: string
 }
 
+const leasedForceNote =
+  "A leased force republishes your rewritten history without destroying remote work you haven't seen."
+
+function forceConfirmDescription(branchName: string, ahead: number, behind: number) {
+  if (ahead > 0 && behind > 0) {
+    return `${branchName} has diverged from its upstream — it is ${ahead} ahead and ${behind} behind. ${leasedForceNote}`
+  }
+  if (ahead > 0) {
+    return `${branchName} is ${ahead} ahead and ${behind} behind its upstream. ${leasedForceNote}`
+  }
+  if (behind > 0) {
+    return `${branchName} is ${behind} behind its upstream with nothing of its own to publish — a leased force would rewind the remote to your older tip.`
+  }
+  return `${branchName} already matches its upstream — a leased force would republish the same commits and change nothing.`
+}
+
 export function PushControl(props: PushControlProps) {
   const [mode, setMode] = useState<Mode>('idle')
   const [loss, setLoss] = useState<LossPreview | null>(null)
@@ -191,12 +207,7 @@ export function PushControl(props: PushControlProps) {
         <Modal onDismiss={dismissFlow}>
           <h2 className="text-sm font-semibold">Force push {props.branchName}?</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            {isDiverged
-              ? `${props.branchName} has diverged from its upstream`
-              : `${props.branchName} is ${props.ahead} ahead and ${props.behind} behind its upstream`}
-            {isDiverged ? ` — it is ${props.ahead} ahead and ${props.behind} behind` : ''}. A leased
-            force republishes your rewritten history without destroying remote work you haven't
-            seen.
+            {forceConfirmDescription(props.branchName, props.ahead, props.behind)}
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <button

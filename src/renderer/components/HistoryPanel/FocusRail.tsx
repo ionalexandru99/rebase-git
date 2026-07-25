@@ -1,7 +1,8 @@
-import { laneColor } from '@/lib/git-graph/canvas'
 import type { RefKind } from '@/lib/ref-tree'
 import { cn } from '@/lib/utils'
 import { parseFilterRefKey } from './selectors'
+
+const UNRESOLVED_REF_COLOR = 'var(--muted-foreground)'
 
 interface FocusRailProps {
   visibleRefs: ReadonlySet<string>
@@ -23,7 +24,7 @@ export function FocusRail(props: FocusRailProps) {
     <div className="scroll-host flex shrink-0 items-center gap-1 overflow-x-auto border-b px-3 py-2.5">
       {refs.map((ref, index) => {
         const key = `${ref.kind}:${ref.fullPath}`
-        const color = props.colorByRefKey?.get(key) ?? laneColor(0)
+        const color = props.colorByRefKey?.get(key) ?? UNRESOLVED_REF_COLOR
         return (
           <button
             key={key}

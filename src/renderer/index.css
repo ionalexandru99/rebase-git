@@ -134,12 +134,14 @@
   --shadow: 0 12px 30px oklch(0.25 0.01 260 / 7%);
 }
 
+/* Widths mirror HISTORY_DATE_MAX_WIDTH and COMPACT_MAX_WIDTH in src/renderer/lib/breakpoints.ts;
+   media query features cannot read custom properties, so the numbers stay literal here. */
 @media (max-width: 1100px) {
   :root {
     --history-grid-tail: 12rem 4.5rem;
   }
 
-  [data-history-column="date"] {
+  [data-history-panel] [data-history-column="date"] {
     display: none;
   }
 }
@@ -149,7 +151,7 @@
     --history-grid-tail: 10rem;
   }
 
-  [data-history-column="sha"] {
+  [data-history-panel] [data-history-column="sha"] {
     display: none;
   }
 }

@@ -12,16 +12,23 @@ export interface SelectedFile {
   range?: string
 }
 
-interface VirtualFileListProps {
+export interface FileListSection {
+  label: string
   rows: UnifiedFileRow[]
-  sections?: Array<{ label: string; rows: UnifiedFileRow[] }>
+}
+
+export type FileListInput =
+  | { kind: 'flat'; rows: UnifiedFileRow[] }
+  | { kind: 'sections'; sections: FileListSection[] }
+
+interface VirtualFileListProps {
+  input: FileListInput
   selected: SelectedFile | null
   onSelect: (file: string, source: FileRowSource, renameSource?: string) => void
   onStage: (file: string) => void
   onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
-  showSources?: boolean
 }
 
 type StatusListItem =
@@ -37,7 +44,7 @@ function StatusVirtualRow(props: {
   onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
-  showSources?: boolean
+  showSource: boolean
 }) {
   const rowStyle = {
     top: '0',
@@ -69,22 +76,23 @@ function StatusVirtualRow(props: {
         onUnstage={props.onUnstage}
         onToggleDrop={props.onToggleDrop}
         onFileAction={props.onFileAction}
-        showSource={props.showSources}
+        showSource={props.showSource}
       />
     </li>
   )
 }
 
 export function VirtualFileList(props: VirtualFileListProps) {
+  const input = props.input
   const items = useMemo<StatusListItem[]>(() => {
-    if (!props.sections) {
-      return props.rows.map((row) => ({
+    if (input.kind === 'flat') {
+      return input.rows.map((row) => ({
         kind: 'file',
         key: `${row.source}:${row.file}`,
         row
       }))
     }
-    return props.sections.flatMap((section) => [
+    return input.sections.flatMap((section) => [
       {
         kind: 'section' as const,
         key: `section:${section.label}`,
@@ -97,7 +105,7 @@ export function VirtualFileList(props: VirtualFileListProps) {
         row
       }))
     ])
-  }, [props.rows, props.sections])
+  }, [input])
   const { setScrollRef, onScroll, virtualItems, totalHeight } = useFixedVirtualizer({
     count: items.length,
     rowHeight: STATUS_FILE_ROW_HEIGHT,
@@ -144,7 +152,7 @@ export function VirtualFileList(props: VirtualFileListProps) {
               onUnstage={props.onUnstage}
               onToggleDrop={props.onToggleDrop}
               onFileAction={props.onFileAction}
-              showSources={props.showSources}
+              showSource={input.kind === 'flat' && item.row.source === 'head-commit'}
             />
           )
         })}

@@ -1,6 +1,7 @@
 import { parseOrThrow } from '@shared/codec'
 import { SidebarPrefsSchema } from '@shared/schemas/ipc'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { COMPACT_MEDIA_QUERY, MIN_CONTENT_WIDTH } from '@/lib/breakpoints'
 import type { BranchAction, StashAction } from '@/lib/git-actions'
 import { LAYOUT_RESET_EVENT } from '@/lib/layout'
 import type { BranchTracking, RefKind, StashRowData } from '@/lib/ref-tree'
@@ -80,14 +81,34 @@ export function Shell(props: ShellProps) {
     decode: decodeSidebarPrefs,
     onLoadError: logSidebarPrefsError
   })
-  const compact = useMediaQuery('(max-width: 899px)')
+  const compact = useMediaQuery(COMPACT_MEDIA_QUERY)
   const [compactSidebarOpen, setCompactSidebarOpen] = useState(false)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const sidebarToggleRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (compact) {
       setCompactSidebarOpen(false)
     }
   }, [compact])
+
+  useEffect(() => {
+    if (!compact || !compactSidebarOpen) {
+      return
+    }
+    const toggleButton = sidebarToggleRef.current
+    overlayRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setCompactSidebarOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      toggleButton?.focus()
+    }
+  }, [compact, compactSidebarOpen])
 
   const sidebarOpen = compact ? compactSidebarOpen : isOpen
   const toggleSidebar = () => {
@@ -102,41 +123,51 @@ export function Shell(props: ShellProps) {
     setCompactSidebarOpen(false)
   }
 
+  const sidebar = (
+    <AppSidebar
+      branchBrowser={props.branchBrowser}
+      currentBranch={props.repo.branch}
+      onClose={compact ? () => setCompactSidebarOpen(false) : undefined}
+      onResizeStart={compact ? undefined : (event) => onResizeStart(event.nativeEvent)}
+    />
+  )
+
   return (
     <div
       className="relative grid h-full min-h-0 gap-1.5 bg-chrome p-1.5"
       style={{
         gridTemplateColumns:
           sidebarOpen && !compact
-            ? `min(${width}px, calc(100vw - 520px)) minmax(0, 1fr)`
+            ? `min(${width}px, calc(100% - ${MIN_CONTENT_WIDTH}px)) minmax(0, 1fr)`
             : 'minmax(0, 1fr)'
       }}
     >
-      {sidebarOpen ? (
+      {sidebarOpen && compact ? (
         <>
-          {compact ? (
-            <button
-              type="button"
-              aria-label="Dismiss branches overlay"
-              onClick={() => setCompactSidebarOpen(false)}
-              className="absolute inset-0 z-40 bg-black/40"
-            />
-          ) : null}
           <div
-            className={compact ? 'absolute inset-y-1.5 left-1.5 z-50' : 'min-h-0 min-w-0'}
-            style={compact ? { width: `min(${width}px, calc(100vw - 4rem))` } : undefined}
+            aria-hidden="true"
+            onClick={() => setCompactSidebarOpen(false)}
+            className="absolute inset-0 z-40 bg-black/40"
+          />
+          <div
+            ref={overlayRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Branches"
+            tabIndex={-1}
+            className="absolute inset-y-1.5 left-1.5 z-50 outline-none"
+            style={{ width: `min(${width}px, calc(100vw - 4rem))` }}
           >
-            <AppSidebar
-              branchBrowser={props.branchBrowser}
-              currentBranch={props.repo.branch}
-              onClose={compact ? () => setCompactSidebarOpen(false) : undefined}
-              onResizeStart={compact ? undefined : (event) => onResizeStart(event.nativeEvent)}
-            />
+            {sidebar}
           </div>
         </>
       ) : null}
+      {sidebarOpen && !compact ? <div className="min-h-0 min-w-0">{sidebar}</div> : null}
 
-      <section className="relative z-[1] grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[var(--r-sm)] border bg-card shadow-[var(--shadow)]">
+      <section
+        inert={compact && sidebarOpen}
+        className="relative z-[1] grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[var(--r-sm)] border bg-card shadow-[var(--shadow)]"
+      >
         <Topbar
           repoName={props.repo.repoName}
           repoPath={props.repo.repoPath}
@@ -153,7 +184,9 @@ export function Shell(props: ShellProps) {
           pulling={props.pulling}
           pushing={props.pushing}
           busy={props.busy}
+          compact={compact}
           sidebarOpen={sidebarOpen}
+          sidebarToggleRef={sidebarToggleRef}
           onToggleSidebar={toggleSidebar}
           onResetLayout={resetLayout}
         />

@@ -57,6 +57,8 @@ export function FileRow(props: FileRowProps) {
     props.onFileAction?.(action, props.file)
   }
 
+  const showSourceBadge = props.showSource ?? props.source === 'head-commit'
+
   const nameButton = (
     <button
       type="button"
@@ -66,7 +68,7 @@ export function FileRow(props: FileRowProps) {
       <span className="min-w-0 truncate text-sm" title={label}>
         {label}
       </span>
-      {props.showSource || props.source === 'head-commit' ? (
+      {showSourceBadge ? (
         <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
           {props.source === 'head-commit' ? 'Last commit' : 'Working tree'}
         </span>

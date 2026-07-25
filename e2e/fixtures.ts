@@ -16,10 +16,68 @@ export { expect }
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const mainEntry = path.join(currentDir, '..', 'out', 'main', 'index.js')
 
+const launchWindowWidth = 1200
+const launchWindowHeight = 800
+
+export async function setWindowSize(
+  app: ElectronApplication,
+  width: number,
+  height: number
+): Promise<void> {
+  await app.evaluate(
+    ({ BrowserWindow }, size) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height)
+    },
+    { width, height }
+  )
+}
+
 export type Git = (args: string[]) => void
 
 export function gitIn(repo: string): Git {
   return (args) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
+}
+
+export function gitOut(repo: string, args: string[]): string {
+  return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
+}
+
+export function revParse(repo: string, ref: string): string {
+  return gitOut(repo, ['rev-parse', ref])
+}
+
+export function commitSubjects(repo: string, ref = 'HEAD'): string[] {
+  const log = gitOut(repo, ['log', '--format=%s', ref])
+  return log === '' ? [] : log.split('\n')
+}
+
+export function commitParents(repo: string, ref = 'HEAD'): string[] {
+  const parents = gitOut(repo, ['rev-list', '--parents', '-n', '1', ref]).split(' ')
+  return parents.slice(1)
+}
+
+export function porcelainStatus(repo: string): string[] {
+  const status = gitOut(repo, ['status', '--porcelain'])
+  return status === '' ? [] : status.split('\n')
+}
+
+export function currentBranch(repo: string): string {
+  return gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])
+}
+
+export function localBranches(repo: string): string[] {
+  const branches = gitOut(repo, ['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+  return branches === '' ? [] : branches.split('\n')
+}
+
+export function tags(repo: string): string[] {
+  const tagList = gitOut(repo, ['tag', '--list'])
+  return tagList === '' ? [] : tagList.split('\n')
+}
+
+export function stashEntries(repo: string): string[] {
+  const list = gitOut(repo, ['stash', 'list'])
+  return list === '' ? [] : list.split('\n')
 }
 
 export interface FixtureRepoOptions {
@@ -83,6 +141,20 @@ export interface SeedState {
   activeIndex?: number
 }
 
+export type ToastType = 'success' | 'error' | 'warning' | 'info'
+
+export interface RecordedToast {
+  type: string
+  title: string
+  description: string
+}
+
+export interface ExpectedToast {
+  type: ToastType
+  title: string | RegExp
+  description?: string | RegExp
+}
+
 export interface AppHarness {
   readonly page: Page
   app(): ElectronApplication
@@ -96,7 +168,26 @@ export interface AppHarness {
   openTabs(repos: Array<string | null>, options?: { activeIndex?: number }): Promise<Page>
   track(repo: string): void
   stubFolderDialog(dir: string | null): Promise<void>
+  toasts(): Promise<RecordedToast[]>
+  // Asserts a toast was raised AND marks it expected, so the end-of-test guard stops treating it as
+  // an unexplained failure. Every error/warning toast a test provokes must go through here.
+  expectToast(expected: ExpectedToast): Promise<RecordedToast>
 }
+
+const matchesText = (value: string, matcher: string | RegExp): boolean =>
+  typeof matcher === 'string' ? value === matcher : matcher.test(value)
+
+const matchesToast = (toast: RecordedToast, expected: ExpectedToast): boolean => {
+  if (toast.type !== expected.type || !matchesText(toast.title, expected.title)) {
+    return false
+  }
+  return expected.description === undefined
+    ? true
+    : matchesText(toast.description, expected.description)
+}
+
+const describeToast = (toast: RecordedToast): string =>
+  `${toast.type}: ${toast.title}${toast.description ? ` — ${toast.description}` : ''}`
 
 const uniquePaths = (values: string[]): string[] => Array.from(new Set(values))
 
@@ -130,6 +221,8 @@ interface SharedApp {
   reload(): Promise<Page>
   restart(): Promise<Page>
   replaceStore(overrides?: StoreOverrides): Promise<void>
+  restoreWindowSize(): Promise<void>
+  readStderr(): string[]
   restoreFolderDialog(): Promise<void>
   stubFolderDialog(dir: string | null): Promise<void>
   trackRepo(repo: string): void
@@ -154,6 +247,52 @@ const forbiddenShutdownLogs = [
   'sidecar respawn failed',
   'child process gone'
 ]
+
+const TOAST_RECORD_KEY = '__REBASE_E2E_TOASTS__'
+
+// Toasts auto-dismiss, so polling the DOM from the test side races them away. Record every toast as
+// it mounts instead, and assert against the recording.
+async function installToastRecorder(page: Page): Promise<void> {
+  await page.addInitScript((key: string) => {
+    const recorded: Array<{ type: string; title: string; description: string }> = []
+    ;(window as unknown as Record<string, unknown>)[key] = recorded
+    const seen = new WeakSet<Element>()
+    const readToast = (node: Element) => {
+      if (seen.has(node)) {
+        return
+      }
+      seen.add(node)
+      recorded.push({
+        type: node.getAttribute('data-type') ?? 'unknown',
+        title: node.querySelector('[data-title]')?.textContent?.trim() ?? '',
+        description: node.querySelector('[data-description]')?.textContent?.trim() ?? ''
+      })
+    }
+    const scan = () => {
+      for (const node of document.querySelectorAll('[data-sonner-toast]')) {
+        readToast(node)
+      }
+    }
+    const observer = new MutationObserver(() => requestAnimationFrame(scan))
+    const start = () => {
+      observer.observe(document.body, { childList: true, subtree: true })
+      scan()
+    }
+    if (document.body) {
+      start()
+      return
+    }
+    document.addEventListener('DOMContentLoaded', start)
+  }, TOAST_RECORD_KEY)
+}
+
+async function readRecordedToasts(page: Page): Promise<RecordedToast[]> {
+  return page.evaluate(
+    (key: string) =>
+      ((window as unknown as Record<string, unknown>)[key] as RecordedToast[] | undefined) ?? [],
+    TOAST_RECORD_KEY
+  )
+}
 
 async function waitForPage(page: Page): Promise<Page> {
   await page.waitForLoadState('domcontentloaded')
@@ -326,9 +465,8 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
         maximumLiveApps = Math.max(maximumLiveApps, liveApps)
         electronApp.process().stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()))
         page = await electronApp.firstWindow()
-        await electronApp.evaluate(({ BrowserWindow }) => {
-          BrowserWindow.getAllWindows()[0]?.setSize(1200, 800)
-        })
+        await installToastRecorder(page)
+        await setWindowSize(electronApp, launchWindowWidth, launchWindowHeight)
         return waitForPage(page)
       }
 
@@ -391,6 +529,10 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           page = undefined
           return launch()
         },
+        restoreWindowSize: async () => {
+          await setWindowSize(currentApp(), launchWindowWidth, launchWindowHeight)
+        },
+        readStderr: () => [...stderr],
         stubFolderDialog: async (dir: string | null) => {
           await currentApp().evaluate(
             ({ dialog }, input: { chosen: string | null; key: string }) => {
@@ -523,8 +665,31 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
   ],
   harness: async ({ sharedApp }, use, testInfo) => {
     const trackedRepos: string[] = []
+    const expectedToasts: ExpectedToast[] = []
+    const stderrOffset = sharedApp.readStderr().length
 
     const harness: AppHarness = {
+      toasts: () => readRecordedToasts(sharedApp.page),
+      expectToast: async (expected: ExpectedToast) => {
+        expectedToasts.push(expected)
+        let matched: RecordedToast | undefined
+        await expect
+          .poll(
+            async () => {
+              const recorded = await readRecordedToasts(sharedApp.page)
+              matched = recorded.find((toast) => matchesToast(toast, expected))
+              if (matched) {
+                return 'matched'
+              }
+              return recorded.length === 0
+                ? '<no toasts raised>'
+                : recorded.map(describeToast).join(' | ')
+            },
+            { timeout: 10_000 }
+          )
+          .toBe('matched')
+        return matched as RecordedToast
+      },
       get page() {
         return sharedApp.page
       },
@@ -593,6 +758,24 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
         },
         {
           beforeCloseRepos: [
+            // Must run before the teardown reload, which resets the per-document toast recording.
+            async () => {
+              const recorded = await readRecordedToasts(sharedApp.page)
+              const unexplained = recorded.filter(
+                (toast) =>
+                  (toast.type === 'error' || toast.type === 'warning') &&
+                  !expectedToasts.some((expected) => matchesToast(toast, expected))
+              )
+              if (unexplained.length > 0) {
+                const appStderr = sharedApp.readStderr().slice(stderrOffset).join('').trim()
+                throw new Error(
+                  `unexplained ${unexplained.length > 1 ? 'toasts' : 'toast'} raised during the test:\n` +
+                    `${unexplained.map((toast) => `  ${describeToast(toast)}`).join('\n')}` +
+                    (appStderr ? `\napplication stderr:\n${appStderr}` : '')
+                )
+              }
+            },
+            () => sharedApp.restoreWindowSize(),
             () => sharedApp.restoreFolderDialog(),
             () => closeRepoTabs(sharedApp.page, trackedRepos),
             () => sharedApp.replaceStore(),

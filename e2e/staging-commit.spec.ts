@@ -1,11 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
+  commitSubjects,
   createFixtureRepo,
   expect,
   fileRowCheckbox,
   openHistory,
   openLocalChanges,
+  porcelainStatus,
   test
 } from './fixtures'
 
@@ -36,6 +38,9 @@ test('stages a file via checkbox and commits through the UI, draining the tree i
   await openHistory(page)
   await expect(page.getByText('add note from ui').first()).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText(/2 commits/)).toBeVisible({ timeout: 10_000 })
+
+  expect(commitSubjects(repo)).toEqual(['add note from ui', 'initial'])
+  expect(porcelainStatus(repo)).toEqual([])
 })
 
 test('Stage all / Unstage all toggles every row and gates the Commit button', async ({

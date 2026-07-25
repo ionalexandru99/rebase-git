@@ -227,6 +227,49 @@ describe('HistoryPanel', () => {
     expect(commitRow.querySelector('[data-history-column="date"]')).not.toBeEmptyDOMElement()
   })
 
+  it('nests every responsive column inside the history panel scope', () => {
+    const { container } = renderPanel({
+      all: [
+        entry({
+          hash: 'abcdef1234567890',
+          date: '2026-07-21T09:42:00.000Z',
+          message: 'tip commit',
+          refs: 'main'
+        })
+      ],
+      loadedCount: 1
+    })
+
+    const panel = container.querySelector('[data-history-panel]')
+    expect(panel).not.toBeNull()
+    const columns = [...container.querySelectorAll('[data-history-column]')]
+    expect(columns.length).toBeGreaterThan(0)
+    for (const column of columns) {
+      expect(panel?.contains(column)).toBe(true)
+    }
+  })
+
+  it('leaves refs without a laid out tip uncolored so they stay visually unresolved', () => {
+    renderPanel(
+      {
+        all: [entry({ hash: 'aaa', message: 'tip commit', refs: 'main' })],
+        loadedCount: 1
+      },
+      {
+        visibleBranchRefs: new Set([
+          refFilterKey('local', 'main'),
+          refFilterKey('local', 'not-loaded')
+        ]),
+        remoteBranches: []
+      }
+    )
+
+    const unresolved = screen.getByText('not-loaded').closest('button')
+    expect(unresolved?.style.color).toBe('var(--muted-foreground)')
+    const resolved = screen.getByText('Visible:').closest('button')
+    expect(resolved).toHaveStyle({ color: '#7c8cff' })
+  })
+
   it('renders complete branch and tag badges when their names contain commas', () => {
     renderPanel(
       {

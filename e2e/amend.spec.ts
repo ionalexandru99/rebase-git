@@ -2,12 +2,14 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
+  commitSubjects,
   createFixtureRepo,
   expect,
   fileRowCheckbox,
   gitIn,
   openHistory,
   openLocalChanges,
+  porcelainStatus,
   test
 } from './fixtures'
 
@@ -39,6 +41,9 @@ test('rewords the last commit via the amend toggle and lands the new message in 
   await openHistory(page)
   await expect(page.getByText('reworded via amend').first()).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('initial', { exact: true })).toHaveCount(0)
+
+  expect(commitSubjects(repo)).toEqual(['reworded via amend'])
+  expect(porcelainStatus(repo)).toEqual([])
 })
 
 test('drops a file from the last commit while amending, surfacing it as a working change', async ({

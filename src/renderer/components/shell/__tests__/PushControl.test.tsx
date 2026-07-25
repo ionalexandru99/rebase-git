@@ -185,6 +185,31 @@ describe('PushControl', () => {
     expect(dialog).toHaveTextContent(/without destroying remote work you haven't seen/i)
   })
 
+  it('does not claim a behind-only branch has remote work to preserve', async () => {
+    renderControl({ branchName: 'feature/x', ahead: 0, behind: 2 })
+
+    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('feature/x is 2 behind its upstream')
+    expect(dialog).toHaveTextContent(/rewind the remote to your older tip/i)
+    expect(dialog).not.toHaveTextContent(/without destroying remote work/i)
+    expect(dialog).not.toHaveTextContent('0 ahead')
+  })
+
+  it('does not report zero counts for a branch level with its upstream', async () => {
+    renderControl({ branchName: 'feature/x', ahead: 0, behind: 0 })
+
+    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('feature/x already matches its upstream')
+    expect(dialog).not.toHaveTextContent('0 ahead')
+    expect(dialog).not.toHaveTextContent('0 behind')
+  })
+
   it('disables the force option in detached HEAD', () => {
     renderControl({ detached: true, ahead: 0, behind: 0 })
 

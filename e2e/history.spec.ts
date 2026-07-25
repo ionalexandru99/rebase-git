@@ -1,6 +1,15 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createFixtureRepo, expect, fileRowCheckbox, gitIn, openLocalChanges, test } from './fixtures'
+import {
+  commitSubjects,
+  createFixtureRepo,
+  expect,
+  fileRowCheckbox,
+  gitIn,
+  openLocalChanges,
+  porcelainStatus,
+  test
+} from './fixtures'
 
 function createMergeRepo(): string {
   const repo = createFixtureRepo()
@@ -57,6 +66,9 @@ test('resets the branch to an earlier commit via the history context menu', asyn
 
   await openLocalChanges(page)
   await expect(fileRowCheckbox(page, 'a.txt')).toBeChecked({ timeout: 10_000 })
+
+  expect(commitSubjects(repo)).toEqual(['initial'])
+  expect(porcelainStatus(repo)).toEqual(['A  a.txt'])
 })
 
 test('collapses a merge by default and expands/collapses its side branch from the merge dot', async ({

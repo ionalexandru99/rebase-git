@@ -28,6 +28,7 @@ import {
   computeOnBranchSet,
   countVisibleBranchRefs,
   findRefTip,
+  getCommitIndex,
   type MergeSideRange,
   parseFilterRefKey,
   refFilterKey
@@ -148,18 +149,22 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const gridTail = 'var(--history-grid-tail)'
   const colorByRefKey = useMemo(() => {
     const colors = new Map<string, string>()
+    const { positionByHash } = getCommitIndex(commits)
     for (const key of visibleBranchRefs) {
       const ref = parseFilterRefKey(key)
       if (!ref) {
         continue
       }
       const tip = findRefTip(commits, ref.kind, ref.fullPath, remoteNames)
-      const commitIndex = tip ? commits.findIndex((commit) => commit.hash === tip) : -1
+      const commitIndex = tip === undefined ? -1 : (positionByHash.get(tip) ?? -1)
       const row =
         commitIndex >= 0 && layout && commitIndex < laidOutThroughIndex
           ? getLayoutRow(layout, commitIndex)
           : undefined
-      colors.set(refFilterKey(ref.kind, ref.fullPath), laneColor(row?.commitLane ?? 0))
+      if (!row) {
+        continue
+      }
+      colors.set(refFilterKey(ref.kind, ref.fullPath), laneColor(row.commitLane))
     }
     return colors
   }, [commits, laidOutThroughIndex, layout, remoteNames, visibleBranchRefs])
@@ -168,7 +173,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const showSkeleton = props.loading && !hasCommits
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" data-history-panel="">
       <FocusRail
         visibleRefs={visibleBranchRefs}
         colorByRefKey={colorByRefKey}
