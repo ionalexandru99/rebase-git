@@ -18,7 +18,7 @@ import { ConflictBanner } from '../features/status/ConflictBanner'
 import { StashControl } from '../features/status/StashControl'
 import { type SelectedFile, StatusPanel } from '../features/status/StatusPanel'
 import { buildHeadCommitRows, buildStagedFilePaths } from '../features/status/status-file-rows'
-import { useDraggableWidth } from '../hooks/useDraggableWidth'
+import { useDraggablePane } from '../hooks/useDraggablePane'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { COMPACT_MEDIA_QUERY } from '../lib/breakpoints'
 import type { CommitAction, FileAction } from '../lib/git-actions'
@@ -43,13 +43,13 @@ const loadFilesPanelWidth = async () => {
   const stored = Number(localStorage.getItem(FILES_PANEL_WIDTH_KEY))
   return {
     open: true,
-    width: Number.isFinite(stored) && stored > 0 ? stored : FILES_PANEL_WIDTH_DEFAULT
+    size: Number.isFinite(stored) && stored > 0 ? stored : FILES_PANEL_WIDTH_DEFAULT
   }
 }
 
-const saveFilesPanelWidth = (state: { width: number }) => {
+const saveFilesPanelWidth = (state: { size: number }) => {
   try {
-    localStorage.setItem(FILES_PANEL_WIDTH_KEY, String(state.width))
+    localStorage.setItem(FILES_PANEL_WIDTH_KEY, String(state.size))
   } catch {}
 }
 
@@ -158,10 +158,10 @@ function LocalChangesView(props: WorkspaceViewProps) {
       onConfirm: () => void actions.discardAll()
     })
   }
-  const { width: filesWidth, onResizeStart } = useDraggableWidth({
+  const { size: filesWidth, onResizeStart } = useDraggablePane({
     min: FILES_PANEL_WIDTH_MIN,
     max: FILES_PANEL_WIDTH_MAX,
-    defaultWidth: FILES_PANEL_WIDTH_DEFAULT,
+    defaultSize: FILES_PANEL_WIDTH_DEFAULT,
     load: loadFilesPanelWidth,
     save: saveFilesPanelWidth
   })

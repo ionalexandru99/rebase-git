@@ -11,6 +11,7 @@ import {
   DiscardAll,
   DiscardChanges,
   Fetch,
+  GetCommitDetail,
   GetDiff,
   GetHeadCommit,
   GetLocalBranches,
@@ -106,6 +107,10 @@ export type RemoteRefsResult = RpcResult<
 export type DiffResult = RpcResult<
   typeof GetDiff.successSchema.Type,
   typeof GetDiff.errorSchema.Type
+>
+export type CommitDetailResult = RpcResult<
+  typeof GetCommitDetail.successSchema.Type,
+  typeof GetCommitDetail.errorSchema.Type
 >
 export type StashListResult = RpcResult<
   typeof StashList.successSchema.Type,
@@ -366,13 +371,33 @@ export async function rpcGetRemoteRefs(repoPath: string): Promise<RemoteRefsResu
   return callSidecarRpc(GetRemoteRefs, { repoPath })
 }
 
+export interface DiffScope {
+  range?: string
+  commit?: string
+  renameSource?: string
+}
+
 export async function rpcGetDiff(
   repoPath: string,
   file: string,
   staged?: boolean,
-  range?: string
+  scope?: DiffScope
 ): Promise<DiffResult> {
-  return callSidecarRpc(GetDiff, { repoPath, file, staged, range })
+  return callSidecarRpc(GetDiff, {
+    repoPath,
+    file,
+    staged,
+    range: scope?.range,
+    commit: scope?.commit,
+    renameSource: scope?.renameSource
+  })
+}
+
+export async function rpcGetCommitDetail(
+  repoPath: string,
+  sha: string
+): Promise<CommitDetailResult> {
+  return callSidecarRpc(GetCommitDetail, { repoPath, sha })
 }
 
 export async function rpcStashList(repoPath: string): Promise<StashListResult> {

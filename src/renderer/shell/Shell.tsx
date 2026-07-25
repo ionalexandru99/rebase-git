@@ -7,7 +7,7 @@ import type { BranchAction, StashAction } from '@/lib/git-actions'
 import { LAYOUT_RESET_EVENT } from '@/lib/layout'
 import type { PushForce } from '@/lib/rpc-client'
 import type { PushOutcome } from '@/stores/action-runner'
-import { useDraggableWidth } from '../hooks/useDraggableWidth'
+import { useDraggablePane } from '../hooks/useDraggablePane'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { AppSidebar } from './Sidebar'
 import { Topbar, type WorkspaceView } from './Topbar'
@@ -62,23 +62,28 @@ interface ShellProps {
   children: ReactNode
 }
 
-const loadSidebarPrefs = () => window.electronAPI.getSidebarPrefs()
-const saveSidebarPrefs = (state: { open: boolean; width: number }) =>
-  window.electronAPI.setSidebarPrefs(state)
-const decodeSidebarPrefs = (raw: { open: boolean; width: number }) =>
-  parseOrThrow(SidebarPrefsSchema, raw)
+const loadSidebarPrefs = async () => {
+  const prefs = parseOrThrow(SidebarPrefsSchema, await window.electronAPI.getSidebarPrefs())
+  return { open: prefs.open, size: prefs.width }
+}
+const saveSidebarPrefs = (state: { open: boolean; size: number }) =>
+  window.electronAPI.setSidebarPrefs({ open: state.open, width: state.size })
 const logSidebarPrefsError = (err: unknown) => {
   console.warn('[Shell] failed to load sidebar prefs', err)
 }
 
 export function Shell(props: ShellProps) {
-  const { width, isOpen, setOpen, onResizeStart } = useDraggableWidth({
+  const {
+    size: width,
+    isOpen,
+    setOpen,
+    onResizeStart
+  } = useDraggablePane({
     min: SIDEBAR_WIDTH_MIN,
     max: SIDEBAR_WIDTH_MAX,
-    defaultWidth: SIDEBAR_WIDTH_DEFAULT,
+    defaultSize: SIDEBAR_WIDTH_DEFAULT,
     load: loadSidebarPrefs,
     save: saveSidebarPrefs,
-    decode: decodeSidebarPrefs,
     onLoadError: logSidebarPrefsError
   })
   const compact = useMediaQuery(COMPACT_MEDIA_QUERY)

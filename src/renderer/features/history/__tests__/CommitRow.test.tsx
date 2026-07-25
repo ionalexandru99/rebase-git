@@ -31,7 +31,8 @@ function rowProps(overrides: Partial<GitLogEntry> = {}) {
     offBranch: false,
     gridTail: '1fr',
     remotes: REMOTES,
-    remoteNames: REMOTE_NAMES
+    remoteNames: REMOTE_NAMES,
+    selected: false
   }
 }
 

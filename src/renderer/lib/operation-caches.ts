@@ -46,6 +46,7 @@ const OPERATION_CACHES = {
   getLocalBranches: null,
   getRemoteRefs: null,
   getDiff: null,
+  getCommitDetail: null,
   stashList: null,
   streamLog: null,
   createBranchCheckout: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit']

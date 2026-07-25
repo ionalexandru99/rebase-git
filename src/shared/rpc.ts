@@ -14,6 +14,7 @@ import {
 } from './git-rpc-errors'
 import type { RpcResult } from './rpc-result'
 import {
+  CommitDetailSchema,
   CommitSummarySchema,
   FileDiffSchema,
   GitStatusSchema,
@@ -297,9 +298,17 @@ export const GetDiff = Rpc.make('getDiff', {
     repoPath: OpaqueString,
     file: OpaqueString,
     staged: Schema.optional(Schema.Boolean),
-    range: Schema.optional(RequiredString)
+    range: Schema.optional(RequiredString),
+    commit: Schema.optional(RequiredString),
+    renameSource: Schema.optional(OpaqueString)
   },
   success: Schema.Struct({ diff: FileDiffSchema }),
+  error: ReadError
+})
+
+export const GetCommitDetail = Rpc.make('getCommitDetail', {
+  payload: { repoPath: OpaqueString, sha: RequiredString },
+  success: Schema.Struct({ detail: CommitDetailSchema }),
   error: ReadError
 })
 
@@ -357,6 +366,7 @@ export const SidecarRpcs = RpcGroup.make(
   GetLocalBranches,
   GetRemoteRefs,
   GetDiff,
+  GetCommitDetail,
   StashList,
   StreamLog
 )

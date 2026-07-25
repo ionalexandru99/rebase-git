@@ -24,7 +24,12 @@ import {
 
 export { useCommitHistory } from '../features/history/store'
 export { useRefs } from '../features/refs/store'
-export { useFileDiff, useHeadCommit, useWorkingTreeStatus } from '../features/status/store'
+export {
+  useCommitFileDiff,
+  useFileDiff,
+  useHeadCommit,
+  useWorkingTreeStatus
+} from '../features/status/store'
 export type { ActionRunner } from './action-runner'
 export { useActionRunner } from './action-runner'
 export type { RepoSession } from './repo-session'

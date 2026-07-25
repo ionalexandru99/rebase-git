@@ -46,14 +46,16 @@ afterAll(async () => {
 
 describe('getDiff with a commit range', () => {
   it("shows a committed file's change across HEAD~1..HEAD", async () => {
-    const diff = await runOp(getDiff(repoDir, 'sample.txt', false, 'HEAD~1..HEAD'))
+    const diff = await runOp(getDiff(repoDir, 'sample.txt', false, { range: 'HEAD~1..HEAD' }))
 
     expect(diff.diff.hunks).toHaveLength(1)
     expect(diff.diff.hunks[0].lines.some((line) => line.text === 'line 1 EDITED')).toBe(true)
   })
 
   it('lists a root commit as all additions against the empty tree', async () => {
-    const diff = await runOp(getDiff(repoDir, 'sample.txt', false, `${GIT_EMPTY_TREE_OID}..HEAD~1`))
+    const diff = await runOp(
+      getDiff(repoDir, 'sample.txt', false, { range: `${GIT_EMPTY_TREE_OID}..HEAD~1` })
+    )
 
     expect(diff.diff.hunks).toHaveLength(1)
     const added = diff.diff.hunks[0].lines.filter((line) => line.kind === 'add')
@@ -74,7 +76,7 @@ describe('getDiff with a commit range', () => {
 
   it('rejects an option-like range as a GitError', async () => {
     const result = await runOp(
-      Effect.either(getDiff(repoDir, 'sample.txt', false, '--output=/tmp/pwned'))
+      Effect.either(getDiff(repoDir, 'sample.txt', false, { range: '--output=/tmp/pwned' }))
     )
 
     expect(Either.isLeft(result)).toBe(true)
