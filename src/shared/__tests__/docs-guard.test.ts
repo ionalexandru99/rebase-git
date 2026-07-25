@@ -8,7 +8,7 @@ function readDoc(relativePath: string): string {
   return readFileSync(path.resolve(repoRoot, relativePath), 'utf8')
 }
 
-const docs = ['CLAUDE.md', 'AGENTS.md']
+const docs = ['AGENTS.md']
 
 describe('supported Node versions', () => {
   const packageJson = JSON.parse(readDoc('package.json')) as {
@@ -22,6 +22,15 @@ describe('supported Node versions', () => {
 
   it('types against the lowest supported Node release', () => {
     expect(packageJson.devDependencies['@types/node']).toMatch(/^22\./)
+  })
+})
+
+describe('CLAUDE.md', () => {
+  const contents = readDoc('CLAUDE.md')
+
+  it('delegates to AGENTS.md instead of duplicating it', () => {
+    expect(contents).toContain('@AGENTS.md')
+    expect(contents.split('\n').length).toBeLessThan(15)
   })
 })
 

@@ -1,107 +1,79 @@
 # Agent Instructions
 
-## What This App Is
+Single source of truth for agents in this repo. `CLAUDE.md` imports this file — edit this one.
 
-This is **Rebase**, a Git GUI built with **Electron + TypeScript**. It's a desktop-only application for managing Git repositories with a fast, native-feeling UI.
+## What this is
 
-> Git work runs in a forked HTTP **sidecar**; the React 19 renderer uses **@tanstack/react-query** and typed `callSidecarRpc` helpers to reach the sidecar over IPC (`window.electronAPI.sidecarRequest`), using Effect Schema contracts in `src/shared/`. Commit history streams over IPC.
+**Rebase** — a desktop Git GUI: Electron + React 19 + TypeScript + Tailwind, `pnpm` as package
+manager. Users open repos, stage files, and commit hundreds of times a day, so the app has to feel
+fast: Git runs in a forked sidecar process and the main thread never blocks on it.
 
-## Core Principles
+## Commands
 
-### 1. Lightweight and Performant
+```bash
+pnpm dev                  # electron-vite dev (hot reload)
+pnpm build                # → out/
+pnpm package              # electron-builder; :mac / :win / :linux for one target
 
-This app must feel fast. Users open repos, stage files, and commit hundreds of times per day. Every interaction should be snappy.
+pnpm typecheck
+pnpm check:fix            # biome format + lint, autofix
 
-- **Avoid unnecessary abstractions.** Don't add layers that don't solve a real problem.
-- **The main thread must never block on Git.** Git work runs in a forked `utilityProcess` sidecar exposing an HTTP server on loopback (`127.0.0.1:<random-port>`, bearer-token auth). The main process manages window lifecycle, dialogs, the store, the updater, the sidecar's spawn/health/kill, and proxies every Git IPC to the sidecar over loopback HTTP — it does **not** call `simple-git`. Renderer `callSidecarRpc` helpers call `window.electronAPI.sidecarRequest` (IPC) → main → loopback HTTP → sidecar; the sidecar URL and bearer token never reach the renderer or preload.
-- **Keep bundle size small.** Don't pull in heavy dependencies unless they're essential.
-- **Profile before optimizing, but don't write slow code.** Prefer fine-grained reactivity over broad re-renders. Virtualize unbounded lists.
-- **Git operations are blocking by nature.** Keep the UI responsive with clear loading states. Don't freeze the renderer.
-- **No comments unless absolutely necessary.** Default to writing none. Only add one when the WHY is non-obvious: a hidden constraint, a subtle invariant, a workaround for a specific bug, behavior that would surprise a reader. If removing the comment wouldn't confuse a future reader, don't write it. Don't explain WHAT the code does — well-named identifiers do that. Don't reference the current task, fix, or callers ("used by X", "added for the Y flow", "handles the case from issue #123") — those belong in the PR description and rot as the codebase evolves.
-- **One tab per repo is an enforced invariant.** `useTabs.openRepoInTab` blocks opening a second tab on a repo that's already open — the call routes the user to the existing tab and discards the new (empty) one. Treat "two tabs on the same repo" as unreachable; do not add refcount/sharing logic for that case. `repoPath` is effectively the per-tab identifier in main.
-- **Each tab is its own world.** Tabs hold *different* repos and must not interfere. Every main-process resource that streams or mutates state must be keyed so a different-repo tab's IPC can't cancel or starve another's (e.g. `Map<\`${webContentsId}:${repoPath}\`, …>`, not `Map<webContentsId, …>`). Same-repo conflict is impossible by the invariant above, but cross-repo isolation is real and must be designed for.
+pnpm test:renderer        # components, hooks, UI state (happy-dom)
+pnpm test:main            # store, pure logic (node)
+pnpm test:sidecar         # sidecar logic + real-git integration (node)
+pnpm test:smoke           # builds, launches the binary, checks for startup errors
+pnpm test:e2e             # playwright against the real built app
+pnpm test:ci              # renderer + main + sidecar + e2e
+```
 
-### 2. Tests Are Always Required
+Single test: `pnpm vitest run <file>` (add `--config vitest.main.config.ts` or
+`vitest.sidecar.config.ts` for those layers), `pnpm playwright test <file>` for e2e.
 
-Every code change that adds or modifies behavior must include tests. No exceptions.
-
-Use the right test layer for the change:
-
-| Layer | When to Use | How to Run |
-|-------|-------------|------------|
-| **Renderer unit tests** | React components, hooks, UI state logic | `pnpm test:renderer` |
-| **Main process unit tests** | Pure functions, store logic, data transformations | `pnpm test:main` |
-| **Sidecar tests** | Sidecar logic and real-Git integrations | `pnpm test:sidecar` |
-| **Smoke tests** | Build sanity, startup checks, preload path resolution | `pnpm test:smoke` |
-| **E2E tests** | Critical user flows, IPC contracts, full app integration | `pnpm test:e2e` |
-
-- **Renderer tests** run in happy-dom with `window.electronAPI` mocked. Fast feedback for UI code.
-- **Main tests** run in Node.js. Only test pure logic that doesn't touch `BrowserWindow`, `dialog`, or other Electron APIs.
-- **Sidecar tests** run in Node.js with a longer timeout because real Git repositories and processes are integration boundaries.
-- **Smoke tests** build the app and launch the binary, checking stdout/stderr for fatal errors. Cheap and catches real build/packaging bugs.
-- **E2E tests** launch the real built Electron binary via Playwright. Use for flows that span main and renderer (e.g., "open repo → see branches → commit").
-
-### What NOT to test in unit tests
-
-- Don't mock `BrowserWindow` or `ipcMain` in unit tests. That's brittle and low value. Let E2E cover IPC integration.
-- Don't test Electron boilerplate (window creation, menu bar, updater). Let smoke tests catch startup failures.
+A `pre-push` hook runs `pnpm typecheck` and `pnpm check`; `pnpm install` wires it up.
 
 ## Architecture
 
+Four processes, hard boundary between them:
 
-- `src/main/` — Electron main process. Window lifecycle, splash, dialogs, `electron-store`, updater, menu, the sidecar's spawn/health/kill, and proxying every Git IPC to the sidecar over loopback HTTP. **No Git logic.**
-- `src/sidecar/` — forked `utilityProcess` running a Node HTTP server on loopback. Owns all `simple-git` work and the `Map<repoPath, SimpleGit>`.
-- `src/preload/` — Safe `contextBridge` bridge. Exposes window/OS IPC (dialogs, store, zoom) plus a `sidecarRequest` IPC channel. The sidecar URL and bearer token stay inside main + sidecar and are never exposed to the renderer or preload.
-- `src/shared/` — Effect Schema contracts shared by sidecar, main IPC, and renderer (HTTP + IPC wire shapes).
-- `src/renderer/` — React 19 UI. Git reads/writes via @tanstack/react-query + typed `callSidecarRpc` helpers, which IPC to main (`window.electronAPI.sidecarRequest`) and never touch the sidecar HTTP server directly; log stream and repo open/close stay imperative over IPC.
+- `src/main/` — Electron main. Windows, dialogs, menu, updater, `electron-store`, and the sidecar's
+  lifecycle. Proxies Git IPC to the sidecar. **No Git logic.**
+- `src/sidecar/` — forked `utilityProcess` HTTP server on loopback. Owns all `simple-git` work.
+- `src/preload/` — `contextBridge` bridge exposing `window.electronAPI`. Context isolation is on;
+  the renderer has no Node access, and the sidecar's URL and token never leave main + sidecar.
+- `src/renderer/` — React 19 UI. Git through @tanstack/react-query + typed `callSidecarRpc` helpers;
+  @tanstack/react-virtual for long lists.
 
-Keep this architecture clean. The renderer is Electron-native, not a general web app — but the sidecar boundary is HTTP, so domain logic stays browser-portable.
+`src/shared/` holds the Effect Schema contracts all of them speak.
 
-### 3. Exact Dependencies
+The renderer supports N tabs, each holding a different repo, so every Git call carries a `repoPath` —
+there's no implicit "current repo" anywhere below the UI. One tab per repo is an enforced invariant.
 
-All dependencies in `package.json` must use exact versions — **no `^` or `~` prefixes**. This is a security measure: we audit and approve every version that goes into the app, and we don't want `npm install` pulling in unreviewed updates.
+## Rules
 
-- When adding a dependency, specify the exact version: `pnpm add package@1.2.3`
-- When updating, explicitly review the changelog and bump the exact version in `package.json`
-- Lockfiles (`pnpm-lock.yaml`) are required in the repo
-- **Postinstall scripts are restricted** via `allowBuilds` in `pnpm-workspace.yaml` (pnpm 11+). Only explicitly allowed packages (e.g., `electron`) can run install scripts. All others are blocked.
-
-## Tech Stack
-
-- **Electron** 41.x with `electron-vite`
-- **Effect Schema** for shared contracts (`src/shared/schemas/`, `rpc.ts`, `codec.ts`)
-- **`@tanstack/react-query`** for sidecar data (status, branches, mutations) with per-tab `queryKey` prefixes
-- **`@tanstack/react-virtual`** for unbounded lists (history, ref tree, status files)
-- **React 19** for the renderer
-- **Tailwind CSS** 4.x
-- **simple-git** for Git operations (inside the sidecar)
-- **electron-store** for persistent settings
-- **Biome** for linting and formatting
-- **Vitest** + **happy-dom** for renderer tests; **Playwright** for E2E
-- **pnpm** as package manager (with `ignore-scripts=true` for security)
+- **Never block the main thread on Git.** It stays in the sidecar.
+- **Every behaviour change ships with tests**, at the layer that matches it (see the table above).
+  Don't mock `BrowserWindow`/`ipcMain` or unit-test Electron boilerplate — E2E and smoke cover those.
+- **Exact dependency versions**, no `^` or `~`: we review every version that lands. Add with
+  `pnpm add package@1.2.3`. Postinstall scripts are restricted via `allowBuilds` in
+  `pnpm-workspace.yaml` — only listed packages run them.
+- **Don't add abstractions or heavy dependencies** that aren't solving a real problem.
 
 ## Style
 
-Biome enforces formatting and lint rules — run `pnpm check:fix` before committing.
+Biome enforces the mechanics — run `pnpm check:fix` before committing. Beyond that:
 
-- **Always use block statements** for `if`, `else`, `for`, `while`, and `do` — even for one-liners. Never write `if (x) return`; write `if (x) { return }`. Enforced by Biome `useBlockStatements`.
-- Single quotes (JS), double quotes (JSX), no semicolons, 2-space indent, 100-column lines, `useImportType` as error.
-- Default to **no comments** unless the WHY is non-obvious (same rule as Core Principles §1).
-- Use descriptive variable names; avoid terse abbreviations except loop indices (`i`/`j`), event params (`e`), and `_` for unused bindings.
+- **Always brace** `if`/`else`/`for`/`while`/`do`, even one-liners.
+- **Descriptive names.** No `r`, `g`, `ps`, `vh` — write `result`, `git`, `parents`,
+  `viewportHeight`. Short names are fine for loop indices, event params, and unused bindings.
+- **Default to no comments.** Write one only when the WHY is non-obvious: a hidden constraint, a
+  subtle invariant, a workaround. Never explain WHAT the code does, and never reference the current
+  task, fix, or PR — that rots.
+- shadcn components live in `src/renderer/components/ui/`.
 
-## Investigation Notes
+## Pull requests
 
-When discussing, diagnosing, debugging, or exploring implementation details, keep a Markdown handoff document in `.agent-investigations/`.
+PRs are squash-merged into `main`, so the PR title becomes the commit message — it follows
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Commit freely on the branch.
 
-- Use one Markdown file per investigation, named with the date and a short slug, for example `.agent-investigations/2026-06-11-sidecar-startup-debug.md`.
-- Create the file early for any non-trivial debugging or architectural discussion, then update it as new facts are discovered.
-- Do not begin implementation for diagnostic/debugging work until the user has reviewed and approved the investigation file.
-- Write self-contained Markdown that renders well in GitHub-style viewers. Do not require a build step, external assets, or network access.
-- Include meaningful structure, visual hierarchy, and multiple visual artifacts. Prefer Mermaid code blocks, Markdown tables, ASCII diagrams, and fenced code blocks over external diagram dependencies.
-- Include the current problem statement, timeline of investigation, files inspected, commands run, evidence gathered, hypotheses, confirmed findings, discarded leads, and the current status.
-- Include diagrams, sequence flows, graphs, tables, and structured sections whenever they make the investigation easier to understand.
-- Include enough context for a future agent to resume after context reset: repo state assumptions, relevant code paths, decisions made, next steps, open questions, and verification still needed.
-- Keep the document factual. Distinguish confirmed facts from hypotheses and guesses.
-- If code changes are made during the investigation, summarize each changed file and the reason for the change.
-- Before ending the session, update the Markdown file with the final outcome, tests run, remaining risks, and recommended next action.
-- Mention the investigation file path in the final response so the user can reopen it or provide it to a future agent.
+Issues and external PRs live in this repo's GitHub Issues (`gh` CLI). Triage labels: `needs-triage`,
+`needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. Domain notes go in `CONTEXT.md`.
