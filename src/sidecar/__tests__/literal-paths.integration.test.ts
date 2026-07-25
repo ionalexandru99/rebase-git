@@ -100,7 +100,9 @@ const rpcGetDiff = (payload: { repoPath: string; file: string; staged?: boolean 
     }).pipe(Effect.scoped, Effect.provide(handlersLayer))
   )
 
-describe('glob-named files are matched literally', () => {
+// `*` and `:` are illegal in Win32 filenames, so these fixtures cannot exist there. The
+// bracket-glob suite below covers the same literal-pathspec contract with Windows-legal names.
+describe.skipIf(process.platform === 'win32')('glob-named files are matched literally', () => {
   let repo: TestRepo
 
   beforeAll(async () => {
@@ -202,6 +204,96 @@ describe('glob-named files are matched literally', () => {
   })
 })
 
+// `[abc]` is a glob character class that Win32 permits in filenames, so this runs everywhere.
+// `a.txt` is the decoy the class would match if a pathspec were ever passed unescaped.
+describe('bracket-globbed files are matched literally', () => {
+  let repo: TestRepo
+
+  beforeAll(async () => {
+    repo = createRepo('rebase-literal-bracket-')
+    repo.write('[abc].txt', 'bracket base\n')
+    repo.write('a.txt', 'decoy base\n')
+    repo.git('add', '.')
+    repo.git('commit', '-m', 'base')
+    await runOp(openRepo(repo.dir))
+  })
+
+  afterAll(async () => {
+    await runOp(closeRepo(repo.dir))
+    destroyRepo(repo)
+  })
+
+  beforeEach(() => {
+    resetRepo(repo)
+  })
+
+  it('stageFile stages only the file literally named [abc].txt', async () => {
+    repo.write('[abc].txt', 'bracket changed\n')
+    repo.write('a.txt', 'decoy changed\n')
+    const result = await rpcStageFile({ repoPath: repo.dir, file: '[abc].txt' })
+    expect(Either.isRight(result)).toBe(true)
+    expect(stagedNames(repo)).toEqual(['[abc].txt'])
+    expect(unstagedNames(repo)).toEqual(['a.txt'])
+  })
+
+  it('stageAll stages only the file literally named [abc].txt', async () => {
+    repo.write('[abc].txt', 'bracket changed\n')
+    repo.write('a.txt', 'decoy changed\n')
+    const result = await rpcStageAll({ repoPath: repo.dir, files: ['[abc].txt'] })
+    expect(Either.isRight(result)).toBe(true)
+    expect(stagedNames(repo)).toEqual(['[abc].txt'])
+    expect(unstagedNames(repo)).toEqual(['a.txt'])
+  })
+
+  it('unstageFile unstages only the file literally named [abc].txt', async () => {
+    repo.write('[abc].txt', 'bracket changed\n')
+    repo.write('a.txt', 'decoy changed\n')
+    repo.git('add', '.')
+    const result = await rpcUnstageFile({ repoPath: repo.dir, file: '[abc].txt' })
+    expect(Either.isRight(result)).toBe(true)
+    expect(stagedNames(repo)).toEqual(['a.txt'])
+    expect(unstagedNames(repo)).toEqual(['[abc].txt'])
+  })
+
+  it('unstageAll unstages only the file literally named [abc].txt', async () => {
+    repo.write('[abc].txt', 'bracket changed\n')
+    repo.write('a.txt', 'decoy changed\n')
+    repo.git('add', '.')
+    const result = await rpcUnstageAll({ repoPath: repo.dir, files: ['[abc].txt'] })
+    expect(Either.isRight(result)).toBe(true)
+    expect(stagedNames(repo)).toEqual(['a.txt'])
+    expect(unstagedNames(repo)).toEqual(['[abc].txt'])
+  })
+
+  it('discardChanges reverts only the file literally named [abc].txt', async () => {
+    repo.write('[abc].txt', 'bracket changed\n')
+    repo.write('a.txt', 'decoy changed\n')
+    const result = await rpcDiscardChanges({ repoPath: repo.dir, files: ['[abc].txt'] })
+    expect(Either.isRight(result)).toBe(true)
+    expect(repo.read('[abc].txt')).toBe('bracket base\n')
+    expect(repo.read('a.txt')).toBe('decoy changed\n')
+    expect(unstagedNames(repo)).toEqual(['a.txt'])
+  })
+
+  it('getDiff for [abc].txt does not leak the decoy diff', async () => {
+    repo.write('a.txt', 'decoy changed\n')
+    const result = await rpcGetDiff({ repoPath: repo.dir, file: '[abc].txt' })
+    expect(Either.isRight(result)).toBe(true)
+    if (Either.isRight(result)) {
+      expect(result.right.diff.hunks).toHaveLength(0)
+    }
+  })
+
+  it('stashPush stashes only the file literally named [abc].txt', async () => {
+    repo.write('[abc].txt', 'bracket changed\n')
+    repo.write('a.txt', 'decoy changed\n')
+    repo.git('add', '--', ':(literal)[abc].txt')
+    await runOp(stashPush(repo.dir, 'partial', false, ['[abc].txt']))
+    expect(repo.read('[abc].txt')).toBe('bracket base\n')
+    expect(repo.read('a.txt')).toBe('decoy changed\n')
+  })
+})
+
 describe('dash-named files are file arguments, not options', () => {
   let repo: TestRepo
 
@@ -273,7 +365,9 @@ describe('dash-named files are file arguments, not options', () => {
   })
 })
 
-describe('whitespace-edged and unicode names survive end to end', () => {
+// Win32 forbids tab characters and silently strips trailing spaces, so these names are
+// uncreatable there — the fixture itself cannot be built, not just the assertions.
+describe.skipIf(process.platform === 'win32')('whitespace-edged names survive end to end', () => {
   let repo: TestRepo
 
   beforeAll(async () => {
@@ -281,7 +375,6 @@ describe('whitespace-edged and unicode names survive end to end', () => {
     repo.write(' padded.txt ', 'padded base\n')
     repo.write('padded.txt', 'decoy base\n')
     repo.write('a\tb.txt', 'tab base\n')
-    repo.write('café.txt', 'unicode base\n')
     repo.git('add', '.')
     repo.git('commit', '-m', 'base')
     await runOp(openRepo(repo.dir))
@@ -319,6 +412,27 @@ describe('whitespace-edged and unicode names survive end to end', () => {
     const result = await rpcStageFile({ repoPath: repo.dir, file: 'a\tb.txt' })
     expect(Either.isRight(result)).toBe(true)
     expect(stagedNames(repo)).toEqual(['a\tb.txt'])
+  })
+})
+
+describe('unicode names survive end to end', () => {
+  let repo: TestRepo
+
+  beforeAll(async () => {
+    repo = createRepo('rebase-literal-unicode-')
+    repo.write('café.txt', 'unicode base\n')
+    repo.git('add', '.')
+    repo.git('commit', '-m', 'base')
+    await runOp(openRepo(repo.dir))
+  })
+
+  afterAll(async () => {
+    await runOp(closeRepo(repo.dir))
+    destroyRepo(repo)
+  })
+
+  beforeEach(() => {
+    resetRepo(repo)
   })
 
   it('stageFile stages a unicode-named file', async () => {

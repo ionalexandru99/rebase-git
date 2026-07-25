@@ -160,25 +160,38 @@ describe('startWatching working-tree detection', () => {
     fs.rmSync(repoDir, { recursive: true, force: true })
   })
 
+  // The native recursive watch (macOS/Windows) reports ready before FSEvents/ReadDirectoryChangesW
+  // has armed, so a single write can land in the gap. Each retry needs its own quiet window: the
+  // drain is debounced, so edits on every poll tick would keep resetting it and never flush.
+  const waitForWorkingTreeChange = async (edit: (attempt: number) => void) => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      edit(attempt)
+      if (await waitFor(() => events.some((event) => event.kind === 'workingTree'), 2000)) {
+        return true
+      }
+    }
+    return false
+  }
+
   it('emits a workingTree change when a nested file is edited', async () => {
     await startWatching(repoDir, fakeWebContents)
 
-    fs.writeFileSync(path.join(repoDir, 'src', 'nested.ts'), 'export const x = 1\n')
-
-    const seen = await waitFor(() => events.some((event) => event.kind === 'workingTree'))
+    const seen = await waitForWorkingTreeChange((attempt) => {
+      fs.writeFileSync(path.join(repoDir, 'src', `nested-${attempt}.ts`), 'export const x = 1\n')
+    })
     expect(seen).toBe(true)
-  })
+  }, 20_000)
 
   it('detects edits inside directories created after the watch starts', async () => {
     await startWatching(repoDir, fakeWebContents)
 
-    const deepDir = path.join(repoDir, 'src', 'feature', 'deep')
-    fs.mkdirSync(deepDir, { recursive: true })
-    fs.writeFileSync(path.join(deepDir, 'new.ts'), 'export const y = 2\n')
-
-    const seen = await waitFor(() => events.some((event) => event.kind === 'workingTree'))
+    const seen = await waitForWorkingTreeChange((attempt) => {
+      const deepDir = path.join(repoDir, 'src', `feature-${attempt}`, 'deep')
+      fs.mkdirSync(deepDir, { recursive: true })
+      fs.writeFileSync(path.join(deepDir, 'new.ts'), 'export const y = 2\n')
+    })
     expect(seen).toBe(true)
-  })
+  }, 20_000)
 })
 
 function initRepo(dir: string): void {
@@ -218,6 +231,23 @@ const waitFor = async (predicate: () => boolean, timeoutMs = 5000) => {
   return predicate()
 }
 
+// Watchers report ready before the OS has armed them, so a mutation issued immediately after
+// startWatching can be missed entirely. Retry, giving each attempt its own quiet window — the
+// drain is debounced, so mutating on every poll tick would keep resetting it and never flush.
+const waitForEvent = async (
+  events: Array<{ repoPath: string; kind: string }>,
+  kind: string,
+  mutate: (attempt: number) => void
+) => {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    mutate(attempt)
+    if (await waitFor(() => events.some((event) => event.kind === kind), 2000)) {
+      return true
+    }
+  }
+  return false
+}
+
 function resolveGitDirsViaCli(repoPath: string): { gitDir: string; commonDir: string } {
   const output = execFileSync(
     'git',
@@ -250,12 +280,13 @@ describe('startWatching index detection', () => {
   it('emits an index change when a file is staged via the git CLI', async () => {
     await startWatching(repoDir, fakeWebContents)
 
-    fs.writeFileSync(path.join(repoDir, 'staged.ts'), 'export const staged = 1\n')
-    execFileSync('git', ['-C', repoDir, 'add', 'staged.ts'])
-
-    const seen = await waitFor(() => events.some((event) => event.kind === 'index'))
+    const seen = await waitForEvent(events, 'index', (attempt) => {
+      const name = `staged-${attempt}.ts`
+      fs.writeFileSync(path.join(repoDir, name), 'export const staged = 1\n')
+      execFileSync('git', ['-C', repoDir, 'add', name])
+    })
     expect(seen).toBe(true)
-  })
+  }, 20_000)
 })
 
 describe('startWatching linked-worktree refs detection', () => {
@@ -280,13 +311,13 @@ describe('startWatching linked-worktree refs detection', () => {
 
   it('emits a refs change when a commit moves HEAD in the worktree', async () => {
     await startWatching(worktreeDir, fakeWebContents, resolveGitDirsViaCli(worktreeDir))
-    await new Promise((resolve) => setTimeout(resolve, 50))
 
-    fs.writeFileSync(path.join(worktreeDir, 'feature.ts'), 'export const feature = 1\n')
-    execFileSync('git', ['-C', worktreeDir, 'add', 'feature.ts'])
-    execFileSync('git', ['-C', worktreeDir, 'commit', '-m', 'feature commit'])
-
-    const seen = await waitFor(() => events.some((event) => event.kind === 'refs'))
+    const seen = await waitForEvent(events, 'refs', (attempt) => {
+      const name = `feature-${attempt}.ts`
+      fs.writeFileSync(path.join(worktreeDir, name), 'export const feature = 1\n')
+      execFileSync('git', ['-C', worktreeDir, 'add', name])
+      execFileSync('git', ['-C', worktreeDir, 'commit', '-m', `feature commit ${attempt}`])
+    })
     expect(seen).toBe(true)
-  })
+  }, 20_000)
 })

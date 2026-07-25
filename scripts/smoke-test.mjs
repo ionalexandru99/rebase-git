@@ -7,12 +7,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const rootDir = resolve(__dirname, '..')
 
 async function findElectron() {
-  const candidates = [
-    resolve(rootDir, 'node_modules/.bin/electron'),
-    resolve(rootDir, 'node_modules/.bin/electron.cmd'),
-    resolve(rootDir, 'node_modules/electron/dist/electron'),
-    resolve(rootDir, 'node_modules/electron/dist/electron.exe'),
-  ]
+  // The extensionless `.bin/electron` is a shell script that spawn() cannot execute on Windows,
+  // and it exists there alongside the .cmd shim — so probe the native binaries first.
+  const candidates =
+    process.platform === 'win32'
+      ? [resolve(rootDir, 'node_modules/electron/dist/electron.exe')]
+      : [
+          resolve(rootDir, 'node_modules/.bin/electron'),
+          resolve(rootDir, 'node_modules/electron/dist/electron'),
+        ]
 
   for (const candidate of candidates) {
     try {
@@ -40,6 +43,7 @@ async function runSmokeTest() {
   const child = spawn(electronBin, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: rootDir,
+    shell: electronBin === 'npx' && process.platform === 'win32',
     env: {
       ...process.env,
       VITE_DEV_SERVER_URL: '',

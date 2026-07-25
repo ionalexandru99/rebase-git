@@ -169,9 +169,11 @@ describe('getHeadCommit', () => {
     expect(head.result.message).toBe('merge feature')
   })
 
+  // Win32 forbids control characters in filenames, so only the unicode case is creatable there.
   it('returns tab, newline, and unicode file names without quoting or truncation', async () => {
     commitFile('base.txt', 'base\n', 'base')
-    const names = ['tab\tname.txt', 'line\nbreak.txt', 'café.txt']
+    const names =
+      process.platform === 'win32' ? ['café.txt'] : ['tab\tname.txt', 'line\nbreak.txt', 'café.txt']
     for (const name of names) {
       fs.writeFileSync(path.join(repoDir, name), name)
     }
@@ -231,8 +233,10 @@ describe('amendCommit — drop files', () => {
   })
 
   it('restores a renamed file at its parent path when the rename is dropped', async () => {
+    // Both names carry glob metacharacters so the rename exercises literal pathspecs;
+    // `[` and `]` are the only such characters Win32 permits in a filename.
     const source = 'old [source].txt'
-    const destination = 'new *.txt'
+    const destination = 'new [dest].txt'
     commitFile(source, 'renamed contents\n', 'base')
     git('mv', source, destination)
     git('commit', '-m', 'rename file')
