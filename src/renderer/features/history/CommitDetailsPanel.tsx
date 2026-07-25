@@ -1,5 +1,5 @@
 import type { CommitDetail, CommitDetailFile } from '@shared/schemas/git'
-import { ChevronsDownUpIcon, CopyIcon, GitCommitHorizontalIcon } from 'lucide-react'
+import { CopyIcon, GitCommitHorizontalIcon, XIcon } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { DiffPanel } from '@/features/diff/DiffPanel'
 import { parseRefs } from '@/features/history/graph/refs'
@@ -10,6 +10,7 @@ import { EmptyState } from '../../components/ui/empty-state'
 import { LoadingBadge } from '../../components/ui/loading-badge'
 import { CommitFileList } from './CommitFileList'
 import { CommitMeta } from './CommitMeta'
+import { firstCommitTreeFile } from './commit-file-tree'
 import type { CommitSelection } from './commit-selection'
 import { useCommitDetail, useCommitDetails } from './hooks/useCommitDetail'
 import { RefBadge } from './RefBadge'
@@ -90,10 +91,10 @@ function DetailsHeader(props: { title: string; onClose: () => void; children?: R
       <button
         type="button"
         onClick={props.onClose}
-        aria-label="Collapse commit details"
+        aria-label="Close commit details"
         className="flex size-6 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
-        <ChevronsDownUpIcon className="size-3.5" />
+        <XIcon className="size-4" />
       </button>
     </header>
   )
@@ -123,13 +124,13 @@ function SingleCommitDetails(props: {
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const files = detail?.files ?? []
 
-  // Story: content shows up without an extra click. Re-runs when the commit changes, since the
-  // previously selected path is rarely in the new commit.
+  // Content shows up without an extra click, on whichever file reads first in the tree. Re-runs when
+  // the commit changes, since the previously selected path is rarely in the new commit.
   useEffect(() => {
     setSelectedPath((current) =>
       current !== null && files.some((file) => file.path === current)
         ? current
-        : (files[0]?.path ?? null)
+        : (firstCommitTreeFile(files)?.path ?? null)
     )
   }, [files])
 

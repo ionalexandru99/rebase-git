@@ -1,4 +1,3 @@
-import { PanelBottomIcon } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { LoadingBadge } from '../../components/ui/loading-badge'
@@ -14,8 +13,6 @@ interface HistoryHeaderProps {
   onFilterChange: (value: string) => void
   showFilter: boolean
   visibleBranchCount?: number
-  detailsOpen?: boolean
-  onToggleDetails?: () => void
 }
 
 function subtitle(props: HistoryHeaderProps): string {
@@ -54,18 +51,6 @@ export function HistoryHeader(props: HistoryHeaderProps) {
           onClick={() => props.onLoadMore?.()}
         >
           {props.loadingMore ? 'Loading…' : 'Load more'}
-        </Button>
-      ) : null}
-      {props.onToggleDetails ? (
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8"
-          aria-pressed={props.detailsOpen === true}
-          onClick={props.onToggleDetails}
-        >
-          <PanelBottomIcon aria-hidden="true" className="size-3.5" />
-          Details
         </Button>
       ) : null}
       {props.showFilter ? (

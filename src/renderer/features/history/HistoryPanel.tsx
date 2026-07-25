@@ -215,8 +215,6 @@ export function HistoryPanel(props: HistoryPanelProps) {
         onFilterChange={props.onFilterChange ?? noop}
         showFilter={hasCommits}
         visibleBranchCount={visibleBranchCount}
-        detailsOpen={details.detailsOpen}
-        onToggleDetails={details.toggleDetails}
       />
 
       {commits.length > 0 ? (

@@ -15,7 +15,6 @@ export interface CommitDetailsView {
   selectedShas: ReadonlySet<string>
   selectCommit: (sha: string, modifiers: SelectionModifiers) => void
   openDetails: (sha: string) => void
-  toggleDetails: () => void
   closeDetails: () => void
 }
 
@@ -88,7 +87,6 @@ export function useCommitDetailsView(
     setDetailsOpen(true)
   })
 
-  const toggleDetails = useCallback(() => setDetailsOpen((open) => !open), [])
   const closeDetails = useCallback(() => setDetailsOpen(false), [])
   const selectedShas = useMemo(() => new Set(selection.shas), [selection.shas])
 
@@ -98,7 +96,6 @@ export function useCommitDetailsView(
     selectedShas,
     selectCommit: select,
     openDetails,
-    toggleDetails,
     closeDetails
   }
 }

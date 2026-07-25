@@ -46,8 +46,9 @@ function detailFor(sha: string, overrides: Partial<CommitDetail> = {}): CommitDe
     subject: 'newest change',
     body: 'Why this change was needed.',
     files: [
-      { path: 'src/alpha.ts', status: 'M', additions: 3, deletions: 1, binary: false },
-      { path: 'src/beta.ts', status: 'A', additions: 5, deletions: 0, binary: false }
+      { path: 'README.md', status: 'M', additions: 1, deletions: 0, binary: false },
+      { path: 'src/deep/alpha.ts', status: 'M', additions: 3, deletions: 1, binary: false },
+      { path: 'src/deep/beta.ts', status: 'A', additions: 5, deletions: 0, binary: false }
     ],
     ...overrides
   }
@@ -182,24 +183,20 @@ describe('commit details panel visibility', () => {
     expect(sidecarMock.getCommitDetail).toHaveBeenCalledWith(repoPath, 'aaaaaaa1')
   })
 
-  it('opens from the header toggle with an empty state when nothing is selected', async () => {
+  it('offers no timeline header control, so the graph header stays uncluttered', async () => {
     await renderHistory()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
-
-    expect(within(panel()).getByText('No commit selected')).toBeInTheDocument()
-    expect(sidecarMock.getCommitDetail).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Details' })).not.toBeInTheDocument()
   })
 
-  it('closes again from the header toggle', async () => {
+  it('shows an empty state when the last selected commit is toggled back off', async () => {
     await renderHistory()
-    const toggle = screen.getByRole('button', { name: 'Details' })
+    fireEvent.doubleClick(rowFor('newest change'))
+    await waitFor(() => expect(panel()).toBeInTheDocument())
 
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(rowFor('newest change'), { metaKey: true })
 
-    fireEvent.click(toggle)
-    expect(screen.queryByTestId('commit-details-panel')).not.toBeInTheDocument()
+    expect(within(panel()).getByText('No commit selected')).toBeInTheDocument()
   })
 
   it('selects on a single click without popping the panel open', async () => {
@@ -211,12 +208,12 @@ describe('commit details panel visibility', () => {
     expect(screen.queryByTestId('commit-details-panel')).not.toBeInTheDocument()
   })
 
-  it('keeps the selection when collapsed from the panel button', async () => {
+  it('keeps the selection when closed from the panel button', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
     await waitFor(() => expect(panel()).toBeInTheDocument())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse commit details' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close commit details' }))
 
     expect(screen.queryByTestId('commit-details-panel')).not.toBeInTheDocument()
     expect(rowFor('newest change')).toHaveAttribute('data-selected', 'true')
@@ -230,26 +227,67 @@ describe('commit details panel contents', () => {
     fireEvent.doubleClick(rowFor('newest change'))
 
     await waitFor(() =>
-      expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/alpha.ts')).toBeInTheDocument()
+      expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')).toBeInTheDocument()
     )
-    expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/alpha.ts', false, {
+    expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/deep/alpha.ts', false, {
       range: undefined,
       commit: 'aaaaaaa1',
       renameSource: undefined
     })
     expect(screen.queryByRole('checkbox', { name: 'Stage hunk' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: 'Stage src/alpha.ts' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Stage src/deep/alpha.ts' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('groups the changed files into a tree, collapsing single-child directory chains', async () => {
+    await renderHistory()
+
+    fireEvent.doubleClick(rowFor('newest change'))
+
+    const fileList = await within(panel()).findByTestId('commit-file-scroll')
+    const directories = within(fileList).getAllByTestId('commit-directory-row')
+    expect(directories).toHaveLength(1)
+    expect(directories[0]).toHaveTextContent('src/deep')
+    expect(directories[0]).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      within(fileList)
+        .getAllByTestId('commit-file-row')
+        .map((row) => row.textContent)
+    ).toEqual([
+      expect.stringContaining('alpha.ts'),
+      expect.stringContaining('beta.ts'),
+      expect.stringContaining('README.md')
+    ])
+  })
+
+  it('collapses a directory to hide its files and expands it again', async () => {
+    await renderHistory()
+    fireEvent.doubleClick(rowFor('newest change'))
+    await screen.findByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')
+    const fileList = within(panel()).getByTestId('commit-file-scroll')
+
+    fireEvent.click(within(fileList).getByTestId('commit-directory-row'))
+
+    expect(within(fileList).queryByTitle('alpha.ts')).not.toBeInTheDocument()
+    expect(within(fileList).getByTitle('README.md')).toBeInTheDocument()
+    // The diff stays put: collapsing a directory hides rows, it does not change the selection.
+    expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')).toBeInTheDocument()
+
+    fireEvent.click(within(fileList).getByTestId('commit-directory-row'))
+
+    expect(within(fileList).getByTitle('alpha.ts')).toBeInTheDocument()
   })
 
   it('shows the clicked file’s diff for that commit', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
-    await screen.findByText('@@ -1,2 +1,3 @@ src/alpha.ts')
+    await screen.findByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')
 
-    fireEvent.click(within(panel()).getByText('src/beta.ts'))
+    fireEvent.click(within(panel()).getByText('beta.ts'))
 
     await waitFor(() =>
-      expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/beta.ts')).toBeInTheDocument()
+      expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/deep/beta.ts')).toBeInTheDocument()
     )
   })
 
@@ -261,14 +299,14 @@ describe('commit details panel contents', () => {
     const meta = await within(panel()).findByTestId('commit-meta')
     expect(meta).toHaveTextContent('Ada Author')
     expect(meta).toHaveTextContent('<ada@example.com>')
-    expect(meta).toHaveTextContent('2 files')
-    expect(meta).toHaveTextContent('+8')
+    expect(meta).toHaveTextContent('3 files')
+    expect(meta).toHaveTextContent('+9')
     expect(meta).toHaveTextContent('−1')
     expect(meta).toHaveTextContent('bbbbbbb')
     const fileList = within(panel()).getByTestId('commit-file-scroll')
-    expect(within(fileList).getByTitle('src/alpha.ts')).toBeInTheDocument()
+    expect(within(fileList).getByTitle('alpha.ts')).toBeInTheDocument()
     expect(within(fileList).getByText('+3')).toBeInTheDocument()
-    expect(within(fileList).getByText('−1')).toBeInTheDocument()
+    expect(within(fileList).getAllByText('−1')).not.toHaveLength(0)
   })
 
   it('says a merge commit is shown against its first parent', async () => {
@@ -309,11 +347,11 @@ describe('commit details panel contents', () => {
   it('follows the selection to another commit while open', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
-    await screen.findByText('@@ -1,2 +1,3 @@ src/alpha.ts')
+    await screen.findByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')
 
     fireEvent.click(rowFor('middle change'))
 
-    await waitFor(() => expect(within(panel()).getByText('src/gamma.ts')).toBeInTheDocument())
+    await waitFor(() => expect(within(panel()).getByText('gamma.ts')).toBeInTheDocument())
     expect(sidecarMock.getCommitDetail).toHaveBeenCalledWith(repoPath, 'bbbbbbb2')
   })
 })
@@ -322,7 +360,7 @@ describe('commit multi-selection', () => {
   it('summarises several selected commits instead of guessing a merged diff', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
-    await screen.findByText('@@ -1,2 +1,3 @@ src/alpha.ts')
+    await screen.findByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')
 
     fireEvent.click(rowFor('oldest change'), { metaKey: true })
 
@@ -332,7 +370,7 @@ describe('commit multi-selection', () => {
     expect(summary).toHaveTextContent('newest change')
     expect(summary).toHaveTextContent('ccccccc')
     expect(summary).toHaveTextContent('oldest change')
-    expect(within(panel()).queryByText('@@ -1,2 +1,3 @@ src/alpha.ts')).not.toBeInTheDocument()
+    expect(within(panel()).queryByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')).not.toBeInTheDocument()
   })
 
   it('selects a contiguous range on shift-click', async () => {

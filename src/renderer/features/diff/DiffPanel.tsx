@@ -259,7 +259,7 @@ export function DiffPanel(props: DiffPanelProps) {
   }
 
   return (
-    <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+    <section className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
       {props.selected ? (
         <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
           {hasAnyHunks && !isBinary && isWorktree ? (
