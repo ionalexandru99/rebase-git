@@ -5,8 +5,13 @@ import path from 'node:path'
 import { Effect } from 'effect'
 import type { SimpleGit } from 'simple-git'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createHangingGit, killIfAlive, processAlive, waitUntil } from '../../__tests__/hanging-git'
-import { withRepoLock } from '../../repo-lock'
+import { withRepoLock } from '../../session/lock'
+import {
+  createHangingGit,
+  killIfAlive,
+  processAlive,
+  waitUntil
+} from '../../test-support/hanging-git'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from '../instances'
 
 describe('normalizeRepoPath', () => {

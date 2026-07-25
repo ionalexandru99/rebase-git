@@ -37,13 +37,27 @@ Four processes, hard boundary between them:
 
 - `src/main/` — Electron main. Windows, dialogs, menu, updater, `electron-store`, and the sidecar's
   lifecycle. Proxies Git IPC to the sidecar. **No Git logic.**
+  - `app/` window + app chrome (menu, theme, updater, CSP, shutdown), `ipc/` channel handlers,
+    `sidecar/` process spawn + lifecycle + RPC + crash recovery, `repo/` filesystem watching,
+    `store/` `electron-store` schema and migrations.
 - `src/sidecar/` — forked `utilityProcess` HTTP server on loopback. Owns all `simple-git` work.
+  - `server/` HTTP + protocol + RPC handlers, `session/` per-repo sessions, locks and semaphores,
+    `git/` process spawning and Git primitives, `operations/` the Git operations themselves,
+    `test-support/` fixtures shared by tests.
 - `src/preload/` — `contextBridge` bridge exposing `window.electronAPI`. Context isolation is on;
   the renderer has no Node access, and the sidecar's URL and token never leave main + sidecar.
 - `src/renderer/` — React 19 UI. Git through @tanstack/react-query + typed `callSidecarRpc` helpers;
   @tanstack/react-virtual for long lists.
+  - `app/` bootstrap, tabs and workspace composition; `shell/` app chrome (Shell, Sidebar, Topbar,
+    Titlebar, RepoRail); `features/<slice>/` one folder per domain slice — `history`, `status`,
+    `diff`, `commit`, `refs`, `repos`, `onboarding`, `sync` — each owning its components, its
+    `store.tsx`, and its own pure logic; `components/ui/` shadcn primitives; `lib/` and `hooks/`
+    for genuinely cross-cutting code only; `stores/` for cross-slice state.
 
 `src/shared/` holds the Effect Schema contracts all of them speak.
+
+A feature slice may import from `lib/`, `hooks/`, `stores/`, `components/ui/` and `shared/`. Prefer
+not to reach across slices — if two slices need the same thing, it belongs one level up.
 
 The renderer supports N tabs, each holding a different repo, so every Git call carries a `repoPath` —
 there's no implicit "current repo" anywhere below the UI. One tab per repo is an enforced invariant.

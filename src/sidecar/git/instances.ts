@@ -1,7 +1,7 @@
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import { normalizeRepoPath } from '@shared/repo-path'
 import { type SimpleGit, simpleGit } from 'simple-git'
-import { registerRepoChild } from '../spawn'
+import { registerRepoChild } from './spawn'
 
 export { normalizeRepoPath }
 

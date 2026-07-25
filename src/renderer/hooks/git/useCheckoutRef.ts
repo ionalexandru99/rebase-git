@@ -1,5 +1,5 @@
 import { Checkout } from '@shared/rpc'
-import { type RefKind, shortRefName } from '@/lib/ref-tree'
+import { type RefKind, shortRefName } from '@/features/refs/ref-tree'
 import { rpcCheckout } from '@/lib/rpc-client'
 import type { ActionRunner } from '@/stores/git'
 

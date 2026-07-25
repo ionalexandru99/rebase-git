@@ -3,7 +3,7 @@ import { ScanForRepos } from '@shared/rpc'
 import { rpcResultSchema } from '@shared/rpc-result'
 import { Channel } from '@shared/schemas/ipc'
 import { type BrowserWindow, dialog, ipcMain } from 'electron'
-import { sidecarRpcCall } from '../sidecar'
+import { sidecarRpcCall } from '../sidecar/process'
 import {
   addWorkspace,
   getActiveWorkspace,
@@ -13,7 +13,7 @@ import {
   removeWorkspace,
   setActiveWorkspace,
   setOnboardingComplete
-} from '../store'
+} from '../store/index'
 
 export function register(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle('select-folder', async () => {

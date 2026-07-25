@@ -8,7 +8,7 @@ import {
   StartLogStreamResponseSchema
 } from '@shared/schemas/ipc'
 import { ipcMain, webContents as webContentsApi } from 'electron'
-import { sidecarLogStream } from '../sidecar'
+import { sidecarLogStream } from '../sidecar/process'
 
 interface ActiveStream {
   controller: AbortController
