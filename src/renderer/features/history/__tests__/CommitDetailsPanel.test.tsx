@@ -41,8 +41,6 @@ function detailFor(sha: string, overrides: Partial<CommitDetail> = {}): CommitDe
     parents: ['bbbbbbb2'],
     author: { name: 'Ada Author', email: 'ada@example.com' },
     authorDate: '2026-07-21T09:42:00.000Z',
-    committer: { name: 'Ada Author', email: 'ada@example.com' },
-    commitDate: '2026-07-21T09:42:00.000Z',
     subject: 'newest change',
     body: 'Why this change was needed.',
     files: [
@@ -304,33 +302,6 @@ describe('commit details panel contents', () => {
     expect(within(meta).getByText('bbbbbbb')).toBeInTheDocument()
     // The author line owns the date; the run-on single line it replaced did not.
     expect(within(meta).getByText('Author').nextElementSibling).toHaveTextContent(/2026/)
-  })
-
-  it('omits the committer row when it matches the author', async () => {
-    await renderHistory()
-
-    fireEvent.doubleClick(rowFor('newest change'))
-
-    const meta = await within(panel()).findByTestId('commit-meta')
-    expect(within(meta).queryByText('Committer')).not.toBeInTheDocument()
-  })
-
-  it('adds a committer row with its own date when it differs from the author', async () => {
-    sidecarMock.getCommitDetail.mockResolvedValue({
-      _tag: 'Ok',
-      detail: detailFor('aaaaaaa1', {
-        committer: { name: 'Cass Committer', email: 'cass@example.com' },
-        commitDate: '2026-07-22T11:00:00.000Z'
-      })
-    })
-    await renderHistory()
-
-    fireEvent.doubleClick(rowFor('newest change'))
-
-    const meta = await within(panel()).findByTestId('commit-meta')
-    expect(within(meta).getByText('Committer')).toBeInTheDocument()
-    expect(within(meta).getByText('Cass Committer')).toBeInTheDocument()
-    expect(within(meta).getByText('cass@example.com')).toBeInTheDocument()
   })
 
   it('summarises the commit totals in the panel header, next to its sha', async () => {

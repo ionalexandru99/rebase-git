@@ -80,11 +80,9 @@ describe('getCommitDetail', () => {
     expect(detail.sha).toBe(sha.second)
     expect(detail.parents).toEqual([sha.root])
     expect(detail.author).toEqual({ name: 'Ada Author', email: 'author@example.com' })
-    expect(detail.committer).toEqual({ name: 'Ada Author', email: 'author@example.com' })
     expect(detail.subject).toBe('second commit')
     expect(detail.body).toBe('A body paragraph.\nAnd a second line.')
     expect(Date.parse(detail.authorDate)).not.toBeNaN()
-    expect(Date.parse(detail.commitDate)).not.toBeNaN()
     expect(detail.files).toEqual([
       { path: 'added.txt', status: 'A', additions: 1, deletions: 0, binary: false },
       {
@@ -122,7 +120,6 @@ describe('getCommitDetail', () => {
     const { detail } = await runOp(getCommitDetail(repoDir, sha.merge))
 
     expect(detail.parents).toEqual([sha.second, sha.side])
-    expect(detail.committer).toEqual({ name: 'Cass Committer', email: 'committer@example.com' })
     expect(detail.files).toEqual([
       { path: 'side.txt', status: 'A', additions: 1, deletions: 0, binary: false }
     ])

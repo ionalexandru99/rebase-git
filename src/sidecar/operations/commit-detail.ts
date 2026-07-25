@@ -10,7 +10,7 @@ import { requireOpen, tryGit } from './helpers'
 
 const NUL = '\x00'
 const NUL_FORMAT = '%x00'
-const META_FIELDS = ['%H', '%P', '%an', '%ae', '%aI', '%cn', '%ce', '%cI', '%s', '%b'] as const
+const META_FIELDS = ['%H', '%P', '%an', '%ae', '%aI', '%s', '%b'] as const
 const META_FORMAT = META_FIELDS.join(NUL_FORMAT)
 
 interface CommitMeta {
@@ -18,32 +18,17 @@ interface CommitMeta {
   parents: string[]
   author: { name: string; email: string }
   authorDate: string
-  committer: { name: string; email: string }
-  commitDate: string
   subject: string
   body: string
 }
 
 function parseCommitMeta(output: string): CommitMeta {
-  const [
-    sha,
-    parentsField,
-    authorName,
-    authorEmail,
-    authorDate,
-    committerName,
-    committerEmail,
-    commitDate,
-    subject,
-    body
-  ] = output.split(NUL)
+  const [sha, parentsField, authorName, authorEmail, authorDate, subject, body] = output.split(NUL)
   return {
     sha,
     parents: parentsField.split(' ').filter((parent) => parent.length > 0),
     author: { name: authorName, email: authorEmail },
     authorDate,
-    committer: { name: committerName, email: committerEmail },
-    commitDate,
     subject,
     // %b keeps the trailing newlines git stores; the panel renders the body verbatim.
     body: body.replace(/\n+$/, '')

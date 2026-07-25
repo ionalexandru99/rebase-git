@@ -159,8 +159,6 @@ export const CommitDetailSchema = Schema.Struct({
   parents: mutableArray(Schema.String),
   author: CommitIdentitySchema,
   authorDate: Schema.String,
-  committer: CommitIdentitySchema,
-  commitDate: Schema.String,
   subject: Schema.String,
   body: Schema.String,
   files: mutableArray(CommitDetailFileSchema)

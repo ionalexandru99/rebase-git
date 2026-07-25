@@ -1,4 +1,4 @@
-import type { CommitDetail, CommitIdentity } from '@shared/schemas/git'
+import type { CommitDetail } from '@shared/schemas/git'
 import type { ReactNode } from 'react'
 
 const TIMESTAMP_FORMATTER = new Intl.DateTimeFormat(undefined, {
@@ -11,18 +11,12 @@ function formatTimestamp(value: string): string {
   return Number.isNaN(parsed) ? value : TIMESTAMP_FORMATTER.format(parsed)
 }
 
-const sameIdentity = (left: CommitIdentity, right: CommitIdentity): boolean =>
-  left.name === right.name && left.email === right.email
-
 interface CommitMetaProps {
   detail: CommitDetail
 }
 
 export function CommitMeta(props: CommitMetaProps) {
   const detail = props.detail
-  // A committer that differs from the author is the tell for a rebased, amended or applied patch,
-  // so it only earns a row when it actually differs.
-  const showCommitter = !sameIdentity(detail.author, detail.committer)
 
   return (
     <div className="shrink-0 space-y-2 border-b px-3 py-2" data-testid="commit-meta">
@@ -34,13 +28,11 @@ export function CommitMeta(props: CommitMetaProps) {
 
       <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[13px]">
         <MetaRow label="Author" timestamp={formatTimestamp(detail.authorDate)}>
-          <Identity identity={detail.author} />
+          <span className="shrink-0 font-medium text-foreground">{detail.author.name}</span>
+          <span className="min-w-0 truncate text-muted-foreground" title={detail.author.email}>
+            {detail.author.email}
+          </span>
         </MetaRow>
-        {showCommitter ? (
-          <MetaRow label="Committer" timestamp={formatTimestamp(detail.commitDate)}>
-            <Identity identity={detail.committer} />
-          </MetaRow>
-        ) : null}
         <MetaRow label={detail.parents.length === 1 ? 'Parent' : 'Parents'}>
           {detail.parents.length === 0 ? (
             <span className="text-muted-foreground">none — root commit</span>
@@ -69,17 +61,6 @@ function MetaRow(props: { label: string; timestamp?: string; children: ReactNode
           </time>
         ) : null}
       </dd>
-    </>
-  )
-}
-
-function Identity(props: { identity: CommitIdentity }) {
-  return (
-    <>
-      <span className="shrink-0 font-medium text-foreground">{props.identity.name}</span>
-      <span className="min-w-0 truncate text-muted-foreground" title={props.identity.email}>
-        {props.identity.email}
-      </span>
     </>
   )
 }
