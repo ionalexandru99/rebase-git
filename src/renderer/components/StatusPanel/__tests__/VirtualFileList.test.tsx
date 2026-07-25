@@ -129,8 +129,12 @@ describe('VirtualFileList — sections', () => {
       />
     )
 
-    expect(screen.getByRole('heading', { name: 'Working tree' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Last commit' })).toBeInTheDocument()
+    const workingTreeHeading = screen.getByRole('heading', { name: 'Working tree' })
+    const lastCommitHeading = screen.getByRole('heading', { name: 'Last commit' })
+    expect(workingTreeHeading).toBeInTheDocument()
+    expect(lastCommitHeading).toBeInTheDocument()
+    expect(workingTreeHeading.closest('li')).toHaveTextContent('1')
+    expect(lastCommitHeading.closest('li')).toHaveTextContent('1')
     expect(screen.getAllByRole('heading')).toHaveLength(2)
     expect(screen.getByText('a.ts')).toBeInTheDocument()
     expect(screen.getByText('b.ts')).toBeInTheDocument()

@@ -97,7 +97,8 @@ export function Topbar(props: TopbarProps) {
   }
 
   const hasRemoteActions = Boolean(props.onFetch || props.onPull)
-  const hasRepositoryActions = hasRemoteActions || Boolean(props.onResetLayout)
+  const hasRepositoryActions =
+    Boolean(props.onResetLayout) || Boolean(props.compact && hasRemoteActions)
 
   return (
     <div className="grid shrink-0 grid-rows-[40px_40px] border-b p-1">
@@ -174,17 +175,19 @@ export function Topbar(props: TopbarProps) {
               )}
             </DropdownMenuTrigger>
             <DropdownMenuContent portal className="min-w-48">
-              {props.onFetch ? (
+              {props.compact && props.onFetch ? (
                 <DropdownMenuItem disabled={props.busy} onSelect={props.onFetch}>
                   Fetch from remotes
                 </DropdownMenuItem>
               ) : null}
-              {props.onPull ? (
+              {props.compact && props.onPull ? (
                 <DropdownMenuItem disabled={props.busy || props.pulling} onSelect={props.onPull}>
                   Pull from upstream
                 </DropdownMenuItem>
               ) : null}
-              {hasRemoteActions && props.onResetLayout ? <DropdownMenuSeparator /> : null}
+              {props.compact && hasRemoteActions && props.onResetLayout ? (
+                <DropdownMenuSeparator />
+              ) : null}
               {props.onResetLayout ? (
                 <DropdownMenuItem onSelect={props.onResetLayout}>Reset layout</DropdownMenuItem>
               ) : null}

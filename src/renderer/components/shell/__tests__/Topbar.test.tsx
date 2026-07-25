@@ -114,9 +114,10 @@ describe('Topbar', () => {
     const onFetch = vi.fn()
     const onPull = vi.fn()
     const onResetLayout = vi.fn()
-    renderTopbar({ onFetch, onPull, onResetLayout })
+    renderTopbar({ compact: true, onFetch, onPull, onResetLayout })
 
     fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    expect(document.querySelectorAll('[data-slot="dropdown-menu-separator"]')).toHaveLength(1)
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Fetch from remotes' }))
     expect(onFetch).toHaveBeenCalledOnce()
 
@@ -127,6 +128,19 @@ describe('Topbar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset layout' }))
     expect(onResetLayout).toHaveBeenCalledOnce()
+  })
+
+  it('keeps remote actions inline and out of the repository menu when wide', async () => {
+    renderTopbar({ onFetch: vi.fn(), onPull: vi.fn(), onResetLayout: vi.fn() })
+
+    expect(screen.getByRole('button', { name: 'Fetch' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pull' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Reset layout' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Fetch from remotes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Pull from upstream' })).not.toBeInTheDocument()
+    expect(document.querySelectorAll('[data-slot="dropdown-menu-separator"]')).toHaveLength(0)
   })
 
   it('hides the repository actions menu when no repository action is available', () => {

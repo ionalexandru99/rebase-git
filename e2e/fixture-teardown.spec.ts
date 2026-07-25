@@ -2,11 +2,38 @@ import fs from 'node:fs'
 import {
   createFixtureRepo,
   expect,
+  findUnexplainedFailureToasts,
   runWithFailureSafeCleanup,
   runWithFailureSafeFixtureTeardown,
   test,
+  type RecordedToast,
   verifyReposClosed
 } from './fixtures'
+
+test('toast matching resets stateful regular expressions', () => {
+  const title = /permission denied/g
+  title.test('permission denied')
+  const recorded: RecordedToast[] = [
+    { type: 'error', title: 'permission denied', description: '' }
+  ]
+
+  expect(findUnexplainedFailureToasts(recorded, [{ type: 'error', title }])).toEqual([])
+})
+
+test('one expected toast does not suppress a duplicate failure', () => {
+  const duplicate: RecordedToast = {
+    type: 'warning',
+    title: 'remote changed',
+    description: 'fetch and retry'
+  }
+
+  expect(
+    findUnexplainedFailureToasts(
+      [duplicate, duplicate],
+      [{ type: 'warning', title: 'remote changed', description: 'fetch and retry' }]
+    )
+  ).toEqual([duplicate])
+})
 
 test('failure-safe teardown attempts every step and preserves the original failure', async ({
   harness

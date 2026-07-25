@@ -174,8 +174,13 @@ export interface AppHarness {
   expectToast(expected: ExpectedToast): Promise<RecordedToast>
 }
 
-const matchesText = (value: string, matcher: string | RegExp): boolean =>
-  typeof matcher === 'string' ? value === matcher : matcher.test(value)
+const matchesText = (value: string, matcher: string | RegExp): boolean => {
+  if (typeof matcher === 'string') {
+    return value === matcher
+  }
+  matcher.lastIndex = 0
+  return matcher.test(value)
+}
 
 const matchesToast = (toast: RecordedToast, expected: ExpectedToast): boolean => {
   if (toast.type !== expected.type || !matchesText(toast.title, expected.title)) {
@@ -184,6 +189,24 @@ const matchesToast = (toast: RecordedToast, expected: ExpectedToast): boolean =>
   return expected.description === undefined
     ? true
     : matchesText(toast.description, expected.description)
+}
+
+export function findUnexplainedFailureToasts(
+  recorded: RecordedToast[],
+  expectedToasts: ExpectedToast[]
+): RecordedToast[] {
+  const remainingExpected = [...expectedToasts]
+  return recorded.filter((toast) => {
+    if (toast.type !== 'error' && toast.type !== 'warning') {
+      return false
+    }
+    const expectedIndex = remainingExpected.findIndex((expected) => matchesToast(toast, expected))
+    if (expectedIndex < 0) {
+      return true
+    }
+    remainingExpected.splice(expectedIndex, 1)
+    return false
+  })
 }
 
 const describeToast = (toast: RecordedToast): string =>
@@ -761,11 +784,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
             // Must run before the teardown reload, which resets the per-document toast recording.
             async () => {
               const recorded = await readRecordedToasts(sharedApp.page)
-              const unexplained = recorded.filter(
-                (toast) =>
-                  (toast.type === 'error' || toast.type === 'warning') &&
-                  !expectedToasts.some((expected) => matchesToast(toast, expected))
-              )
+              const unexplained = findUnexplainedFailureToasts(recorded, expectedToasts)
               if (unexplained.length > 0) {
                 const appStderr = sharedApp.readStderr().slice(stderrOffset).join('').trim()
                 throw new Error(
