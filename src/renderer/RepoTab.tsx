@@ -29,7 +29,7 @@ function RepoTabContent(props: RepoTabProps) {
   const lastRepoPathRequested = useRef<string | null>(null)
 
   useEffect(() => {
-    const requestKey = `${props.repoPath}\0${props.openRevision ?? 0}`
+    const requestKey = `${props.repoPath}\0${props.openRevision ?? 0}\0${session.resetEpoch}`
     if (requestKey !== lastRepoPathRequested.current) {
       const requestedPath = props.repoPath
       lastRepoPathRequested.current = requestKey
@@ -39,7 +39,7 @@ function RepoTabContent(props: RepoTabProps) {
           if (retained === false) {
             session.disownRepo()
           } else {
-            lastRepoPathRequested.current = `${openedPath}\0${props.openRevision ?? 0}`
+            lastRepoPathRequested.current = `${openedPath}\0${props.openRevision ?? 0}\0${session.resetEpoch}`
           }
           return
         }
@@ -51,6 +51,7 @@ function RepoTabContent(props: RepoTabProps) {
   }, [
     session.openRepo,
     session.disownRepo,
+    session.resetEpoch,
     props.repoPath,
     props.openRevision,
     props.onRepoOpened,

@@ -238,6 +238,39 @@ describe('App — repo picker (no repo open)', () => {
     })
   })
 
+  it('opens a picked repo under StrictMode effect replay', async () => {
+    mockBaseAPI({
+      workingDirectory: '/home/user/repos',
+      scanRepos: ['/home/user/repos/my-app']
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/home/user/repos/my-app', remotes: {}, defaultBranch: 'main' }
+    })
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+
+    renderApp({ strictMode: true })
+
+    fireEvent.click(await screen.findByText('/home/user/repos/my-app'))
+
+    expect(await screen.findByRole('tab', { name: /my-app/i })).toBeInTheDocument()
+    expect(screen.queryByText('Opening repository...')).not.toBeInTheDocument()
+  })
+
   it('filters both workspace and recent rows as the user types in the search box', async () => {
     mockBaseAPI({
       workingDirectory: '/home/user/repos',
@@ -381,6 +414,39 @@ describe('App — persisted tabs', () => {
         expect.any(Number)
       )
     })
+  })
+
+  it('reopens persisted repos on boot under StrictMode effect replay', async () => {
+    mockBaseAPI({ workingDirectory: '/home/user/projects' })
+    vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({
+      tabs: ['/home/user/projects/restored'],
+      activeIndex: 0
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/home/user/projects/restored', remotes: {}, defaultBranch: 'main' }
+    })
+    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: []
+      }
+    })
+    mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
+    setupLogStream()
+
+    renderApp({ strictMode: true })
+
+    expect(await screen.findByRole('tab', { name: /restored/i })).toBeInTheDocument()
+    expect(screen.queryByText('Opening repository...')).not.toBeInTheDocument()
   })
 
   it('defers inactive restored repos until the user selects them', async () => {

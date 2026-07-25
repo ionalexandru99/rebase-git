@@ -27,6 +27,7 @@ function fixtureProviders(fixture: TimelineFixture, children: ReactNode): ReactN
     repoPath: fixture.repoPath,
     opening: false,
     openGeneration: 0,
+    resetEpoch: 0,
     error: null,
     openRepo: async () => null,
     closeRepo: asyncNoop,
