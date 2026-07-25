@@ -155,6 +155,11 @@ export interface ExpectedToast {
   description?: string | RegExp
 }
 
+export interface ExpectedToastMatch {
+  expected: ExpectedToast
+  recordedIndex: number
+}
+
 export interface AppHarness {
   readonly page: Page
   app(): ElectronApplication
@@ -171,7 +176,10 @@ export interface AppHarness {
   toasts(): Promise<RecordedToast[]>
   // Asserts a toast was raised AND marks it expected, so the end-of-test guard stops treating it as
   // an unexplained failure. Every error/warning toast a test provokes must go through here.
-  expectToast(expected: ExpectedToast): Promise<RecordedToast>
+  expectToast(
+    expected: ExpectedToast,
+    trigger: () => Promise<unknown> | unknown
+  ): Promise<RecordedToast>
 }
 
 const matchesText = (value: string, matcher: string | RegExp): boolean => {
@@ -191,21 +199,33 @@ const matchesToast = (toast: RecordedToast, expected: ExpectedToast): boolean =>
     : matchesText(toast.description, expected.description)
 }
 
+export function findToastMatch(
+  recorded: RecordedToast[],
+  expected: ExpectedToast,
+  startIndex: number
+): { toast: RecordedToast; recordedIndex: number } | undefined {
+  for (let recordedIndex = startIndex; recordedIndex < recorded.length; recordedIndex++) {
+    const toast = recorded[recordedIndex]
+    if (toast && matchesToast(toast, expected)) {
+      return { toast, recordedIndex }
+    }
+  }
+  return undefined
+}
+
 export function findUnexplainedFailureToasts(
   recorded: RecordedToast[],
-  expectedToasts: ExpectedToast[]
+  expectedToasts: ExpectedToastMatch[]
 ): RecordedToast[] {
-  const remainingExpected = [...expectedToasts]
-  return recorded.filter((toast) => {
+  const expectedByIndex = new Map(
+    expectedToasts.map((match) => [match.recordedIndex, match.expected] as const)
+  )
+  return recorded.filter((toast, recordedIndex) => {
     if (toast.type !== 'error' && toast.type !== 'warning') {
       return false
     }
-    const expectedIndex = remainingExpected.findIndex((expected) => matchesToast(toast, expected))
-    if (expectedIndex < 0) {
-      return true
-    }
-    remainingExpected.splice(expectedIndex, 1)
-    return false
+    const expected = expectedByIndex.get(recordedIndex)
+    return !expected || !matchesToast(toast, expected)
   })
 }
 
@@ -688,19 +708,20 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
   ],
   harness: async ({ sharedApp }, use, testInfo) => {
     const trackedRepos: string[] = []
-    const expectedToasts: ExpectedToast[] = []
+    const expectedToasts: ExpectedToastMatch[] = []
     const stderrOffset = sharedApp.readStderr().length
 
     const harness: AppHarness = {
       toasts: () => readRecordedToasts(sharedApp.page),
-      expectToast: async (expected: ExpectedToast) => {
-        expectedToasts.push(expected)
-        let matched: RecordedToast | undefined
+      expectToast: async (expected, trigger) => {
+        const startIndex = (await readRecordedToasts(sharedApp.page)).length
+        await trigger()
+        let matched: ReturnType<typeof findToastMatch>
         await expect
           .poll(
             async () => {
               const recorded = await readRecordedToasts(sharedApp.page)
-              matched = recorded.find((toast) => matchesToast(toast, expected))
+              matched = findToastMatch(recorded, expected, startIndex)
               if (matched) {
                 return 'matched'
               }
@@ -711,7 +732,9 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
             { timeout: 10_000 }
           )
           .toBe('matched')
-        return matched as RecordedToast
+        const match = matched as NonNullable<typeof matched>
+        expectedToasts.push({ expected, recordedIndex: match.recordedIndex })
+        return match.toast
       },
       get page() {
         return sharedApp.page

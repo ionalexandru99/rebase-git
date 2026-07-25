@@ -12,9 +12,10 @@ test('a Push on a repo with no remote surfaces an error toast', async ({ harness
 
   const pushButton = page.getByRole('button', { name: 'Push', exact: true })
   await expect(pushButton).toBeVisible({ timeout: 10_000 })
-  await pushButton.click()
-
-  const toast = await harness.expectToast({ type: 'error', title: 'Pushed failed' })
+  const toast = await harness.expectToast(
+    { type: 'error', title: 'Pushed failed' },
+    () => pushButton.click()
+  )
   expect(toast.description).not.toBe('')
 
   expect(revParse(repo, 'HEAD')).toBe(headBefore)

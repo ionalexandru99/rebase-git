@@ -3,6 +3,7 @@ import {
   createFixtureRepo,
   expect,
   findUnexplainedFailureToasts,
+  findToastMatch,
   runWithFailureSafeCleanup,
   runWithFailureSafeFixtureTeardown,
   test,
@@ -17,7 +18,11 @@ test('toast matching resets stateful regular expressions', () => {
     { type: 'error', title: 'permission denied', description: '' }
   ]
 
-  expect(findUnexplainedFailureToasts(recorded, [{ type: 'error', title }])).toEqual([])
+  expect(
+    findUnexplainedFailureToasts(recorded, [
+      { expected: { type: 'error', title }, recordedIndex: 0 }
+    ])
+  ).toEqual([])
 })
 
 test('one expected toast does not suppress a duplicate failure', () => {
@@ -30,9 +35,34 @@ test('one expected toast does not suppress a duplicate failure', () => {
   expect(
     findUnexplainedFailureToasts(
       [duplicate, duplicate],
-      [{ type: 'warning', title: 'remote changed', description: 'fetch and retry' }]
+      [
+        {
+          expected: {
+            type: 'warning',
+            title: 'remote changed',
+            description: 'fetch and retry'
+          },
+          recordedIndex: 0
+        }
+      ]
     )
   ).toEqual([duplicate])
+})
+
+test('a prior matching toast cannot satisfy or be consumed by a later expectation', () => {
+  const expected = { type: 'error', title: 'push failed' } as const
+  const prior: RecordedToast = { type: 'error', title: 'push failed', description: 'first' }
+
+  expect(findToastMatch([prior], expected, 1)).toBeUndefined()
+
+  const later: RecordedToast = { type: 'error', title: 'push failed', description: 'second' }
+  const match = findToastMatch([prior, later], expected, 1)
+  expect(match).toEqual({ toast: later, recordedIndex: 1 })
+  expect(
+    findUnexplainedFailureToasts([prior, later], [
+      { expected, recordedIndex: match?.recordedIndex ?? -1 }
+    ])
+  ).toEqual([prior])
 })
 
 test('failure-safe teardown attempts every step and preserves the original failure', async ({

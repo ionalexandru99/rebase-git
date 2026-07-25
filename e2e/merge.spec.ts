@@ -69,13 +69,15 @@ test('merging a conflicting branch surfaces the conflict warning and leaves the 
   await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({ timeout: 10_000 })
 
   await refTree(page).getByTitle('feature', { exact: true }).click({ button: 'right' })
-  await page.getByRole('menuitem', { name: /Merge into main/ }).click()
 
-  await harness.expectToast({
-    type: 'warning',
-    title: 'Merged feature hit conflicts',
-    description: 'Resolve the conflicted files, then commit or abort.'
-  })
+  await harness.expectToast(
+    {
+      type: 'warning',
+      title: 'Merged feature hit conflicts',
+      description: 'Resolve the conflicted files, then commit or abort.'
+    },
+    () => page.getByRole('menuitem', { name: /Merge into main/ }).click()
+  )
 
   await openLocalChanges(page)
 
