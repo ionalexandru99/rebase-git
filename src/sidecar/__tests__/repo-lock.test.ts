@@ -2,7 +2,7 @@ import { Effect, Fiber } from 'effect'
 import { describe, expect, it } from 'vitest'
 import { repoLockCount, withRepoLock } from '../repo-lock'
 import { runWithRequestChildren, spawnGit, startGit } from '../spawn'
-import { createHangingGit, killIfAlive, processAlive } from './hanging-git'
+import { createHangingGit, killIfAlive, processAlive, waitUntil } from './hanging-git'
 
 describe('repo lock', () => {
   it('serializes work for the same repo', async () => {
@@ -202,14 +202,3 @@ describe('repo lock', () => {
     expect(repoLockCount()).toBe(0)
   })
 })
-
-async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5))
-  }
-  throw new Error('condition timed out')
-}
