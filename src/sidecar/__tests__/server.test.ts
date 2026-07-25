@@ -168,6 +168,15 @@ async function rpcOpenRepo(repoPath: string): Promise<void> {
   }
 }
 
+async function rpcCloseRepo(repoPath: string): Promise<void> {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      yield* client.closeRepo({ repoPath })
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
 beforeAll(async () => {
   repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sidecar-'))
   git(repoPath, ['init', '-b', 'main'])
@@ -265,6 +274,7 @@ describe('sidecar server', () => {
       await waitUntil(() => !processAlive(filterPid), 10_000, 'clean filter exit')
     } finally {
       killIfAlive(hangingRepo.filterPid())
+      await rpcCloseRepo(hangingRepo.repoPath)
       hangingRepo.cleanup()
     }
   }, 30_000)
@@ -496,6 +506,6 @@ function createHangingStatusRepo(): HangingStatusRepo {
       const raw = fs.readFileSync(pidPath, 'utf8').trim()
       return /^\d+$/.test(raw) ? Number(raw) : undefined
     },
-    cleanup: () => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    cleanup: () => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 })
   }
 }
