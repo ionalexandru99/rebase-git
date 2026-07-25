@@ -284,6 +284,26 @@ describe('CommitGraphCanvas', () => {
     expect(getComputedStyleSpy.mock.calls.length).toBeGreaterThan(afterSetup)
   })
 
+  it('never draws past the commits it was handed, even with a stale row count', async () => {
+    const container = scroller()
+    const graph = graphOf(chain(20))
+
+    // A layout that still counts 20 rows paired with the 3 commits a filter just left behind.
+    expect(() =>
+      render(
+        renderCanvas({
+          graph: { ...graph, commits: graph.commits.slice(0, 3) },
+          scrollContainer: container
+        })
+      )
+    ).not.toThrow()
+
+    await vi.waitFor(() => {
+      expect(dotCount).toBeGreaterThan(0)
+    })
+    expect(dotCount).toBe(3)
+  })
+
   it('never draws past the rows that have a valid layout', async () => {
     const container = scroller()
     const graph = graphOf(chain(10))

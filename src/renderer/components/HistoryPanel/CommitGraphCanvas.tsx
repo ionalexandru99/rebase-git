@@ -67,7 +67,13 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       const scrollTop = scroller.scrollTop
       const rowHeight = metrics.rowHeight
       const firstRow = Math.max(0, Math.floor(scrollTop / rowHeight))
-      const lastRow = Math.min(rowCount, Math.ceil((scrollTop + viewportHeight) / rowHeight))
+      // Bounded by the commits too: a filter can shrink the list a render before the layout catches
+      // up, and the rows in between have no commit to draw.
+      const lastRow = Math.min(
+        rowCount,
+        commits.length,
+        Math.ceil((scrollTop + viewportHeight) / rowHeight)
+      )
 
       // Only the rows on screen decide how wide the rail has to be, so a deep fan-out further down
       // the log never inflates the bitmap here.

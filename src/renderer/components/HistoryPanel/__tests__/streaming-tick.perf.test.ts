@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { layoutGraph } from '@/lib/git-graph/layout'
-import { buildGraphTopology, sharedTopologyRows } from '@/lib/git-graph/topology'
+import { alignRowsToCheckpoint, type GraphLayout, layoutGraph } from '@/lib/git-graph/layout'
+import {
+  buildGraphTopology,
+  type GraphTopology,
+  sharedTopologyRows,
+  sliceTopology
+} from '@/lib/git-graph/topology'
 import type { GitLogEntry } from '@/types'
 import {
   collectTimelineTips,
@@ -34,7 +39,16 @@ function buildHistory(commitCount: number): GitLogEntry[] {
   }))
 }
 
-function runTick(commits: GitLogEntry[], previousTopology?: ReturnType<typeof buildGraphTopology>) {
+interface Tick {
+  topology: GraphTopology
+  layout: GraphLayout
+  filtered: GitLogEntry[]
+  mergeSideRanges: ReturnType<typeof computeMergeSideRangeIndex>
+  onBranch: Set<string> | null
+  carried: number
+}
+
+function runTick(commits: GitLogEntry[], previous?: Tick): Tick {
   const tips = collectTimelineTips(commits, VISIBLE_REFS, [], REMOTE_NAMES, 'main')
   const displayed = computeCollapsedView(commits, tips, NO_MERGES)
   const filtered = commits.filter((commit) => displayed.has(commit.hash))
@@ -46,12 +60,15 @@ function runTick(commits: GitLogEntry[], previousTopology?: ReturnType<typeof bu
     rowOf: (hash) => positions.get(hash),
     isHiddenParent: (hash) => loaded.has(hash) && !displayed.has(hash)
   })
-  const carried = previousTopology ? sharedTopologyRows(previousTopology, topology) : 0
-  const layout = layoutGraph(topology, carried > 0 ? { layout: EMPTY, rows: 0 } : undefined)
+  const carried = previous
+    ? alignRowsToCheckpoint(sharedTopologyRows(previous.topology, topology))
+    : 0
+  const layout =
+    carried > 0 && previous
+      ? layoutGraph(sliceTopology(topology, carried), { layout: previous.layout, rows: carried })
+      : layoutGraph(topology)
   return { topology, layout, filtered, mergeSideRanges, onBranch, carried }
 }
-
-const EMPTY = layoutGraph(buildGraphTopology([]))
 
 function measure(run: () => void): number {
   const started = performance.now()
@@ -87,8 +104,13 @@ describe('history streaming tick', () => {
       }))
     ]
 
-    const second = runTick(page2, first.topology)
+    const second = runTick(page2, first)
 
-    expect(second.carried).toBeGreaterThan(49_000)
+    expect(second.carried).toBe(alignRowsToCheckpoint(49_999))
+    expect(second.layout.commitCount).toBe(52_000)
+    // The carried rows have to be indistinguishable from a full relayout, or reuse is just a lie
+    // that happens to be fast.
+    expect([...second.layout.commitLane]).toEqual([...runTick(page2).layout.commitLane])
+    expect([...second.layout.railLanes]).toEqual([...runTick(page2).layout.railLanes])
   })
 })
