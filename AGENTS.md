@@ -72,9 +72,8 @@ Biome enforces the mechanics — run `pnpm check:fix` before committing. Beyond 
 
 ## Pull requests
 
-One commit per PR, merged with rebase + fast-forward, so it lands on `main` verbatim as a single
-revertable unit. Fold follow-ups in with `git commit --amend` rather than stacking fixup commits.
-Messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+PRs are squash-merged into `main`, so the PR title becomes the commit message — it follows
+[Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Commit freely on the branch.
 
 Issues and external PRs live in this repo's GitHub Issues (`gh` CLI). Triage labels: `needs-triage`,
 `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. Domain notes go in `CONTEXT.md`.
