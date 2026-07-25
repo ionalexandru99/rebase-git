@@ -1,33 +1,13 @@
 import { spawn } from 'node:child_process'
-import { accessSync, constants } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { findElectron } from './smoke-test-runtime.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const rootDir = resolve(__dirname, '..')
 
-async function findElectron() {
-  const candidates = [
-    resolve(rootDir, 'node_modules/.bin/electron'),
-    resolve(rootDir, 'node_modules/.bin/electron.cmd'),
-    resolve(rootDir, 'node_modules/electron/dist/electron'),
-    resolve(rootDir, 'node_modules/electron/dist/electron.exe'),
-  ]
-
-  for (const candidate of candidates) {
-    try {
-      accessSync(candidate, constants.X_OK)
-      return candidate
-    } catch {
-      continue
-    }
-  }
-
-  return 'npx'
-}
-
 async function runSmokeTest() {
-  const electronBin = await findElectron()
+  const electronBin = findElectron(rootDir)
   const mainJs = resolve(rootDir, 'out/main/index.js')
 
   console.log('\nLaunching Electron smoke test...')
@@ -35,9 +15,8 @@ async function runSmokeTest() {
   console.log(`Main: ${mainJs}`)
 
   const electronArgs = [mainJs, '--no-sandbox']
-  const args = electronBin === 'npx' ? ['electron', ...electronArgs] : electronArgs
 
-  const child = spawn(electronBin, args, {
+  const child = spawn(electronBin, electronArgs, {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: rootDir,
     env: {

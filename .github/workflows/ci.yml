@@ -10,26 +10,26 @@ permissions:
 
 jobs:
   quality:
-    name: Type check & lint (Node ${{ matrix.node-version }})
+    name: Type check & lint
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [22, 24, 26]
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version-file: package.json
 
       - name: Enable pnpm
         run: npm install --global pnpm@11.2.2
 
+      - name: Resolve pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/cache@v5
         with:
-          path: ~/.local/share/pnpm/store
+          path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
 
@@ -43,26 +43,31 @@ jobs:
         run: pnpm check
 
   test-unit:
-    name: Unit tests (Node ${{ matrix.node-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        node-version: [22, 24, 26]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version-file: package.json
 
       - name: Enable pnpm
         run: npm install --global pnpm@11.2.2
 
+      - name: Resolve pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
       - uses: actions/cache@v5
         with:
-          path: ~/.local/share/pnpm/store
+          path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-
 
@@ -75,27 +80,41 @@ jobs:
       - name: Main-process tests
         run: pnpm test:main
 
+      - name: Main-process integration tests
+        run: pnpm test:main:integration
+
       - name: Sidecar and integration tests
         run: pnpm test:sidecar
 
   test-e2e:
-    name: Build & integration (Node ${{ matrix.node-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    name: Build & integration (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        node-version: [22, 24, 26]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version-file: package.json
           package-manager-cache: false
 
       - name: Enable pnpm
         run: npm install --global pnpm@11.2.2
+
+      - name: Resolve pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -107,17 +126,39 @@ jobs:
         run: pnpm build
 
       - name: Verify build output
+        shell: bash
         run: |
           test -f out/main/index.js
-          preload=$(ls out/preload/index.{js,mjs,cjs} 2>/dev/null | head -1)
+          preload=""
+          for candidate in out/preload/index.js out/preload/index.mjs out/preload/index.cjs; do
+            if [ -f "$candidate" ]; then
+              preload="$candidate"
+              break
+            fi
+          done
           test -n "$preload" || { echo "Preload bundle not found"; exit 1; }
           grep -q "electronAPI" "$preload" || { echo "electronAPI missing from preload"; exit 1; }
 
-      - name: Install Playwright browser
+      - name: Install Playwright browser (Linux)
+        if: runner.os == 'Linux'
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: End-to-end tests
+      - name: Install Playwright browser
+        if: runner.os != 'Linux'
+        run: pnpm exec playwright install chromium
+
+      - name: End-to-end tests (Linux)
+        if: runner.os == 'Linux'
         run: xvfb-run -a pnpm exec playwright test
 
-      - name: Smoke test
+      - name: End-to-end tests
+        if: runner.os != 'Linux'
+        run: pnpm exec playwright test
+
+      - name: Smoke test (Linux)
+        if: runner.os == 'Linux'
         run: xvfb-run -a node scripts/smoke-test.mjs
+
+      - name: Smoke test
+        if: runner.os != 'Linux'
+        run: node scripts/smoke-test.mjs

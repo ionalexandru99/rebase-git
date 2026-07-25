@@ -13,7 +13,9 @@ describe('tabResourceKey', () => {
   })
 
   it('normalizes the repo path so a `..` segment collapses into the key', () => {
-    expect(tabResourceKey(1, '/repo/nested/../worktree')).toBe('1:/repo/worktree')
+    expect(tabResourceKey(1, '/repo/nested/../worktree')).toBe(
+      `1:${path.resolve('/repo/worktree')}`
+    )
   })
 
   it('keys the same filesystem location identically however the path is written', () => {

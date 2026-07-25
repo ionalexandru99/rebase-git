@@ -9,7 +9,7 @@
   "type": "module",
   "packageManager": "pnpm@11.2.2",
   "engines": {
-    "node": "^22.12.0 || ^24.0.0 || ^26.0.0"
+    "node": "^24.15.0"
   },
   "scripts": {
     "dev": "electron-vite dev",
@@ -29,12 +29,13 @@
     "test": "vitest run",
     "test:renderer": "vitest run --config vitest.config.ts",
     "test:main": "vitest run --config vitest.main.config.ts",
+    "test:main:integration": "vitest run --config vitest.main-integration.config.ts",
     "test:sidecar": "vitest run --config vitest.sidecar.config.ts",
     "test:watch": "vitest",
     "test:e2e": "pnpm build && playwright test",
     "test:e2e:ui": "pnpm build && playwright test --ui",
     "test:smoke": "pnpm build && node scripts/smoke-test.mjs",
-    "test:ci": "pnpm test:renderer && pnpm test:main && pnpm test:sidecar && pnpm test:e2e",
+    "test:ci": "pnpm test:renderer && pnpm test:main && pnpm test:main:integration && pnpm test:sidecar && pnpm test:e2e",
     "test:coverage": "vitest run --coverage --config vitest.config.ts && vitest run --coverage --config vitest.main.config.ts && vitest run --coverage --config vitest.sidecar.config.ts",
     "audit": "pnpm audit --audit-level moderate",
     "audit:fix": "pnpm audit fix",
@@ -73,7 +74,7 @@
     "@tailwindcss/vite": "4.1.11",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
-    "@types/node": "22.20.1",
+    "@types/node": "24.13.3",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.1.1",

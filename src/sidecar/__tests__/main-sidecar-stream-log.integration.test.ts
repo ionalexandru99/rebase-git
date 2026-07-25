@@ -3,35 +3,60 @@ import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import type { LogChunk } from '@shared/schemas/git'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { callRpcByTag, runStreamLog } from '../../main/sidecar-rpc'
 import { createSidecarServer } from '../server'
+import type { RunningGitProcess, SpawnGitOptions } from '../spawn'
+import { processAlive, waitUntil } from './hanging-git'
 import { makeBigRepo, makeRepo } from './repo-fixtures'
+
+const startedGitProcesses: RunningGitProcess[] = []
+
+// The sidecar keeps the log process behind the RPC boundary, so recording what production spawned
+// is the only way to name the pid that has to be dead once the transport aborts.
+vi.mock('../spawn', async (importOriginal) => {
+  const spawn = await importOriginal<typeof import('../spawn')>()
+  return {
+    ...spawn,
+    startGit: (args: string[], options?: SpawnGitOptions) => {
+      const running = spawn.startGit(args, options)
+      startedGitProcesses.push(running)
+      return running
+    }
+  }
+})
 
 const TOKEN = 'main-stream-test-token'
 let baseUrl: string
 let repoPath: string
 let bigRepoPath: string
+let abortRepoPath: string
 let server: ReturnType<typeof createSidecarServer>
 
 beforeAll(async () => {
   repoPath = makeRepo(['init', 'second', 'third'])
   bigRepoPath = makeBigRepo(4000)
+  // Cancellation needs a history long enough that git is still walking it when the abort lands:
+  // git logs 4000 commits faster than the first chunk reaches the main side.
+  abortRepoPath = makeBigRepo(50_000)
   server = createSidecarServer(TOKEN)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address() as AddressInfo
   baseUrl = `http://127.0.0.1:${port}`
   await callRpcByTag('openRepo', baseUrl, TOKEN, { repoPath })
   await callRpcByTag('openRepo', baseUrl, TOKEN, { repoPath: bigRepoPath })
-})
+  await callRpcByTag('openRepo', baseUrl, TOKEN, { repoPath: abortRepoPath })
+}, 120_000)
 
 afterAll(async () => {
   await callRpcByTag('closeRepo', baseUrl, TOKEN, { repoPath })
   await callRpcByTag('closeRepo', baseUrl, TOKEN, { repoPath: bigRepoPath })
+  await callRpcByTag('closeRepo', baseUrl, TOKEN, { repoPath: abortRepoPath })
   await new Promise<void>((resolve) => server.close(() => resolve()))
   fs.rmSync(repoPath, { recursive: true, force: true })
   fs.rmSync(bigRepoPath, { recursive: true, force: true })
-})
+  fs.rmSync(abortRepoPath, { recursive: true, force: true })
+}, 60_000)
 
 describe('main → sidecar RPC adapter', () => {
   it('resolves concurrent repository data requests', async () => {
@@ -100,38 +125,31 @@ describe('runStreamLog (main → sidecar streaming RPC adapter)', () => {
   })
 
   it('kills the sidecar git child when the main transport is aborted', async () => {
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-fake-git-'))
-    const statePath = path.join(fakeBin, 'state')
-    const gitPath = path.join(fakeBin, 'git')
-    const originalPath = process.env.PATH
-    fs.writeFileSync(
-      gitPath,
-      `#!/bin/sh\nprintf '%s' "$$" > "$FAKE_GIT_STATE"\ntrap 'printf exited > "$FAKE_GIT_STATE"; exit 0' TERM INT\nwhile true; do /bin/sleep 0.05; done\n`
-    )
-    fs.chmodSync(gitPath, 0o755)
-    process.env.PATH = `${fakeBin}:${originalPath ?? ''}`
-    process.env.FAKE_GIT_STATE = statePath
+    const alreadyStarted = startedGitProcesses.length
     const controller = new AbortController()
+    const chunks: LogChunk[] = []
 
-    try {
-      const stream = runStreamLog(baseUrl, TOKEN, { repoPath }, controller.signal, () => {})
-      await waitUntil(() => fs.existsSync(statePath))
-      controller.abort()
-      await stream
-      await waitUntil(() => fs.readFileSync(statePath, 'utf8') === 'exited')
-      expect(fs.readFileSync(statePath, 'utf8')).toBe('exited')
-    } finally {
-      process.env.PATH = originalPath
-      delete process.env.FAKE_GIT_STATE
-      if (fs.existsSync(statePath)) {
-        const state = fs.readFileSync(statePath, 'utf8')
-        if (/^\d+$/.test(state)) {
-          process.kill(Number(state), 'SIGTERM')
+    await expect(
+      runStreamLog(baseUrl, TOKEN, { repoPath: abortRepoPath }, controller.signal, (chunk) => {
+        chunks.push(chunk)
+        if (chunks.length === 1) {
+          controller.abort()
         }
-      }
-      fs.rmSync(fakeBin, { recursive: true, force: true })
-    }
-  })
+      })
+    ).resolves.toBeUndefined()
+
+    const streamed = startedGitProcesses.slice(alreadyStarted)
+    expect(streamed).toHaveLength(1)
+    const gitPid = streamed[0].child.pid
+    expect(gitPid).toBeGreaterThan(0)
+    await waitUntil(() => !processAlive(gitPid), 10_000, 'sidecar git log process exit')
+
+    expect(processAlive(gitPid)).toBe(false)
+    // A zero exit would mean git walked the whole history instead of being torn down mid-stream.
+    const { code } = await streamed[0].result
+    expect(code).not.toBe(0)
+    expect(chunks.some((chunk) => chunk.done)).toBe(false)
+  }, 30_000)
 
   it('rejects with an Error when the repo path is not a repository', async () => {
     const notARepo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-main-stream-notrepo-'))
@@ -144,14 +162,3 @@ describe('runStreamLog (main → sidecar streaming RPC adapter)', () => {
     }
   })
 })
-
-async function waitUntil(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10))
-  }
-  throw new Error('condition timed out')
-}

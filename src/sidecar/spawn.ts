@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { type ChildProcess, execFile, spawn } from 'node:child_process'
+import { type ChildProcess, execFile, spawn, spawnSync } from 'node:child_process'
 import { Context, Effect, Layer, ManagedRuntime } from 'effect'
 
 export const MAX_STDERR_BYTES = 4096
@@ -86,6 +86,10 @@ function terminateWindowsTree(pid: number): Promise<void> {
   return new Promise((resolve) => {
     execFile('taskkill', ['/pid', String(pid), '/t', '/f'], () => resolve())
   })
+}
+
+function terminateWindowsTreeSync(pid: number): void {
+  spawnSync('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' })
 }
 
 function signalProcesses(pids: number[], signal: NodeJS.Signals): void {
@@ -309,7 +313,11 @@ function makeTrackedChildren(): ManagedTrackedChildren {
     kill: () => {
       processRegistry.cancelling = true
       for (const tracked of processRegistry.children) {
-        signalProcessGroup(tracked.child, 'SIGKILL')
+        if (process.platform === 'win32' && tracked.child.pid !== undefined) {
+          terminateWindowsTreeSync(tracked.child.pid)
+        } else {
+          signalProcessGroup(tracked.child, 'SIGKILL')
+        }
       }
     },
     close: () => cancelChildren(processRegistry)

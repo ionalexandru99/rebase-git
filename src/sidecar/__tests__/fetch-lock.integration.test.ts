@@ -5,6 +5,13 @@ import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, commit, fetchRepo, openRepo, stageFile } from '../operations'
 import { repoLockCount } from '../repo-lock'
+import {
+  createHangingGit,
+  type HangingGit,
+  killIfAlive,
+  processAlive,
+  waitUntil
+} from './hanging-git'
 import { runOp } from './run-op'
 
 let baseDir: string
@@ -64,74 +71,40 @@ describe('fetch does not serialize behind the repo lock', () => {
 })
 
 describe('closing a repo terminates an in-flight fetch', () => {
-  let hangBaseDir: string
-  let hangRepoDir: string
+  let hangingFetch: HangingGit
 
-  beforeAll(async () => {
-    hangBaseDir = fs.realpathSync.native(
-      fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-fetch-hang-'))
-    )
-    hangRepoDir = path.join(hangBaseDir, 'repo')
-    fs.mkdirSync(hangRepoDir)
-    execFileSync('git', ['-C', hangRepoDir, 'init', '-b', 'main'])
-    gitIn(hangRepoDir, 'config', 'user.email', 'test@example.com')
-    gitIn(hangRepoDir, 'config', 'user.name', 'Test')
-    fs.writeFileSync(path.join(hangRepoDir, 'tracked.txt'), 'base\n')
-    gitIn(hangRepoDir, 'add', '.')
-    gitIn(hangRepoDir, 'commit', '-m', 'base')
-    // `ext::sleep 30` makes `git fetch` block on a transport child that never speaks the protocol,
-    // and `protocol.ext.allow=always` lets the sidecar's plain `git fetch` use it.
-    gitIn(hangRepoDir, 'remote', 'add', 'origin', 'ext::sleep 30')
-    gitIn(hangRepoDir, 'config', 'protocol.ext.allow', 'always')
+  beforeAll(() => {
+    hangingFetch = createHangingGit('rebase-fetch-hang-')
+    gitIn(hangingFetch.repoDir, 'remote', 'add', 'origin', hangingFetch.remoteDir)
+    gitIn(hangingFetch.repoDir, 'config', 'remote.origin.uploadpack', hangingFetch.uploadPack)
   })
 
   afterAll(() => {
-    fs.rmSync(hangBaseDir, { recursive: true, force: true })
+    killIfAlive(hangingFetch.childPid())
+    hangingFetch.cleanup()
   })
 
-  function transportChildCount(): number {
-    const listing = execFileSync('ps', ['-A', '-o', 'command='], { encoding: 'utf8' })
-    return listing
-      .split('\n')
-      .filter(
-        (line) =>
-          (line.includes('git remote-ext origin sleep 30') || line.includes('/bin/sleep 30')) &&
-          !line.includes('node') &&
-          !line.includes('vitest')
-      ).length
-  }
-
   it('settles the fetch promptly and leaves no transport child when the repo is closed mid-fetch', async () => {
-    await runOp(openRepo(hangRepoDir))
+    await runOp(openRepo(hangingFetch.repoDir))
 
-    const fetching = runOp(fetchRepo(hangRepoDir)).then(
+    const fetching = runOp(fetchRepo(hangingFetch.repoDir)).then(
       () => 'resolved',
       () => 'rejected'
     )
 
-    await waitUntil(() => transportChildCount() > 0)
-    expect(transportChildCount()).toBeGreaterThan(0)
+    await waitUntil(() => hangingFetch.childPid() !== undefined, 10_000, 'transport child start')
+    const transportChild = hangingFetch.childPid()
+    expect(processAlive(transportChild)).toBe(true)
 
     const startedAt = Date.now()
-    await runOp(closeRepo(hangRepoDir))
+    await runOp(closeRepo(hangingFetch.repoDir))
     const settled = await fetching
     const elapsedMs = Date.now() - startedAt
 
     expect(settled).toBe('rejected')
     expect(elapsedMs).toBeLessThan(5000)
 
-    await waitUntil(() => transportChildCount() === 0)
-    expect(transportChildCount()).toBe(0)
-  })
+    await waitUntil(() => !processAlive(transportChild), 10_000, 'transport child exit')
+    expect(processAlive(transportChild)).toBe(false)
+  }, 30_000)
 })
-
-async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 25))
-  }
-  throw new Error('condition timed out')
-}

@@ -155,8 +155,10 @@ describe('stash', () => {
   })
 
   it('stashes and restores both paths of a selected staged rename', async () => {
+    // Glob metacharacters on both paths keep this covering literal pathspecs; `[`/`]` are the
+    // only ones Win32 permits in a filename.
     const source = 'stash old [source].txt'
-    const destination = 'stash new *.txt'
+    const destination = 'stash new [dest].txt'
     const unselected = 'stash new decoy.txt'
     write(unselected, 'decoy base\n')
     write(source, 'rename contents\n')

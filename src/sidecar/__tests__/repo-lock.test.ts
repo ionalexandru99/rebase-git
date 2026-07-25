@@ -1,10 +1,8 @@
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { Effect, Fiber } from 'effect'
 import { describe, expect, it } from 'vitest'
 import { repoLockCount, withRepoLock } from '../repo-lock'
 import { runWithRequestChildren, spawnGit, startGit } from '../spawn'
+import { createHangingGit, killIfAlive, processAlive, waitUntil } from './hanging-git'
 
 describe('repo lock', () => {
   it('serializes work for the same repo', async () => {
@@ -68,82 +66,46 @@ describe('repo lock', () => {
   })
 
   it('kills spawned git children and retains the permit until they exit on timeout', async () => {
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-lock-git-'))
-    const statePath = path.join(fakeBin, 'state')
-    const gitPath = path.join(fakeBin, 'git')
-    fs.writeFileSync(
-      gitPath,
-      `#!/bin/sh\n(\n  trap '/bin/sleep 0.1; printf exited > "$FAKE_GIT_STATE"; exit 0' TERM INT\n  while true; do /bin/sleep 0.05; done\n) </dev/null >/dev/null 2>&1 &\nprintf '%s' "$!" > "$FAKE_GIT_STATE"\ntrap 'exit 0' TERM INT\nwhile true; do /bin/sleep 0.05; done\n`
-    )
-    fs.chmodSync(gitPath, 0o755)
-    const env = {
-      ...process.env,
-      PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
-      FAKE_GIT_STATE: statePath
-    }
-    let stateWhenNextOwnerStarted = 'missing'
+    const fake = createHangingGit('rebase-lock-git-')
+    let descendantAliveWhenNextOwnerStarted = true
 
     try {
       const timedOutPromise = Effect.runPromise(
         Effect.either(
           withRepoLock(
-            '/timeout-repo',
-            Effect.promise(() =>
-              spawnGit(['-C', '/timeout-repo', 'status'], {
-                env,
-                collectStdout: false
-              })
-            ),
+            fake.repoDir,
+            Effect.promise(() => spawnGit(fake.args, { env: fake.env, collectStdout: false })),
             { timeoutMs: 500 }
           )
         )
       )
-      await waitUntil(() => fs.existsSync(statePath))
+      await waitUntil(() => fake.childPid() !== undefined)
+      const descendantPid = fake.childPid()
       const nextOwnerPromise = Effect.runPromise(
         withRepoLock(
-          '/timeout-repo',
+          fake.repoDir,
           Effect.sync(() => {
-            stateWhenNextOwnerStarted = fs.existsSync(statePath)
-              ? fs.readFileSync(statePath, 'utf8')
-              : 'missing'
+            descendantAliveWhenNextOwnerStarted = processAlive(descendantPid)
           })
         )
       )
       const [timedOut] = await Promise.all([timedOutPromise, nextOwnerPromise])
 
       expect(timedOut._tag).toBe('Left')
-      expect(stateWhenNextOwnerStarted).toBe('exited')
+      expect(descendantAliveWhenNextOwnerStarted).toBe(false)
       expect(repoLockCount()).toBe(0)
     } finally {
-      if (fs.existsSync(statePath)) {
-        const state = fs.readFileSync(statePath, 'utf8')
-        if (/^\d+$/.test(state)) {
-          try {
-            process.kill(Number(state), 'SIGTERM')
-          } catch {}
-        }
-      }
-      fs.rmSync(fakeBin, { recursive: true, force: true })
+      killIfAlive(fake.childPid())
+      fake.cleanup()
     }
-  })
+  }, 30_000)
 
   it('keeps concurrent request children outside a timed-out repo operation', async () => {
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-lock-ownership-'))
-    const mutationStatePath = path.join(fakeBin, 'mutation-state')
-    const backgroundStatePath = path.join(fakeBin, 'background-state')
-    const gitPath = path.join(fakeBin, 'git')
-    fs.writeFileSync(
-      gitPath,
-      `#!/bin/sh\nprintf '%s' "$$" > "$FAKE_GIT_STATE"\ntrap 'printf exited > "$FAKE_GIT_STATE"; exit 0' TERM INT\nwhile true; do /bin/sleep 0.05; done\n`
-    )
-    fs.chmodSync(gitPath, 0o755)
+    const mutationGit = createHangingGit('rebase-lock-mutation-')
+    const backgroundGit = createHangingGit('rebase-lock-background-')
+    const lockKey = mutationGit.repoDir
     const mutationController = new AbortController()
     const backgroundController = new AbortController()
-    const envFor = (statePath: string) => ({
-      ...process.env,
-      PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
-      FAKE_GIT_STATE: statePath
-    })
     let backgroundRequest: Promise<void> | undefined
 
     try {
@@ -151,38 +113,35 @@ describe('repo lock', () => {
         Effect.runPromise(
           Effect.either(
             withRepoLock(
-              '/ownership-repo',
+              lockKey,
               Effect.promise(() =>
-                spawnGit(['-C', '/ownership-repo', 'status'], {
-                  env: envFor(mutationStatePath),
-                  collectStdout: false
-                })
+                spawnGit(mutationGit.args, { env: mutationGit.env, collectStdout: false })
               ),
               { timeoutMs: 500 }
             )
           )
         )
       )
-      await waitUntil(() => fs.existsSync(mutationStatePath))
+      await waitUntil(() => mutationGit.childPid() !== undefined)
+      const mutationDescendant = mutationGit.childPid()
 
       backgroundRequest = runWithRequestChildren(backgroundController.signal, async () => {
-        await startGit(['-C', '/ownership-repo', 'log'], {
-          env: envFor(backgroundStatePath),
+        await startGit(backgroundGit.args, {
+          env: backgroundGit.env,
           collectStdout: false
         }).result
       })
-      await waitUntil(() => fs.existsSync(backgroundStatePath))
+      await waitUntil(() => backgroundGit.childPid() !== undefined)
+      const backgroundDescendant = backgroundGit.childPid()
 
       let backgroundRunningWhenNextOwnerStarted = false
+      let mutationDescendantAliveWhenNextOwnerStarted = true
       const nextOwner = Effect.runPromise(
         withRepoLock(
-          '/ownership-repo',
+          lockKey,
           Effect.sync(() => {
-            const backgroundPid = Number(fs.readFileSync(backgroundStatePath, 'utf8'))
-            try {
-              process.kill(backgroundPid, 0)
-              backgroundRunningWhenNextOwnerStarted = true
-            } catch {}
+            backgroundRunningWhenNextOwnerStarted = processAlive(backgroundDescendant)
+            mutationDescendantAliveWhenNextOwnerStarted = processAlive(mutationDescendant)
           })
         )
       )
@@ -190,30 +149,22 @@ describe('repo lock', () => {
       await nextOwner
 
       expect(mutationResult._tag).toBe('Left')
-      expect(fs.readFileSync(mutationStatePath, 'utf8')).toBe('exited')
+      expect(mutationDescendantAliveWhenNextOwnerStarted).toBe(false)
       expect(backgroundRunningWhenNextOwnerStarted).toBe(true)
 
       backgroundController.abort()
       await backgroundRequest
-      expect(fs.readFileSync(backgroundStatePath, 'utf8')).toBe('exited')
+      await waitUntil(() => !processAlive(backgroundDescendant))
     } finally {
       mutationController.abort()
       backgroundController.abort()
       await backgroundRequest?.catch(() => {})
-      for (const statePath of [mutationStatePath, backgroundStatePath]) {
-        if (!fs.existsSync(statePath)) {
-          continue
-        }
-        const pid = Number(fs.readFileSync(statePath, 'utf8'))
-        if (Number.isInteger(pid)) {
-          try {
-            process.kill(pid, 'SIGKILL')
-          } catch {}
-        }
-      }
-      fs.rmSync(fakeBin, { recursive: true, force: true })
+      killIfAlive(mutationGit.childPid())
+      killIfAlive(backgroundGit.childPid())
+      mutationGit.cleanup()
+      backgroundGit.cleanup()
     }
-  }, 10_000)
+  }, 30_000)
 
   it('retains the permit through cancellation finalizers before the next owner starts', async () => {
     let cancelledWorkExited = false
@@ -251,14 +202,3 @@ describe('repo lock', () => {
     expect(repoLockCount()).toBe(0)
   })
 })
-
-async function waitUntil(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (predicate()) {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5))
-  }
-  throw new Error('condition timed out')
-}
