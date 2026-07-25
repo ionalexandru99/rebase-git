@@ -1,5 +1,5 @@
 import type { CommitDetail, CommitIdentity } from '@shared/schemas/git'
-import { initials } from '@/lib/format'
+import type { ReactNode } from 'react'
 
 const TIMESTAMP_FORMATTER = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -16,62 +16,70 @@ const sameIdentity = (left: CommitIdentity, right: CommitIdentity): boolean =>
 
 interface CommitMetaProps {
   detail: CommitDetail
-  fileCount: number
-  additions: number
-  deletions: number
 }
 
 export function CommitMeta(props: CommitMetaProps) {
   const detail = props.detail
   // A committer that differs from the author is the tell for a rebased, amended or applied patch,
-  // so it only earns a line when it actually differs.
+  // so it only earns a row when it actually differs.
   const showCommitter = !sameIdentity(detail.author, detail.committer)
 
   return (
-    <div className="shrink-0 border-b px-3 py-2" data-testid="commit-meta">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted-foreground">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground/80">
-            {initials(detail.author.name)}
-          </span>
-          <span className="truncate text-foreground">{detail.author.name}</span>
-          <span className="truncate">{`<${detail.author.email}>`}</span>
-        </span>
-        <span>authored {formatTimestamp(detail.authorDate)}</span>
-        {showCommitter ? (
-          <span className="truncate">
-            <span className="text-foreground">{detail.committer.name}</span>
-            {` <${detail.committer.email}> committed ${formatTimestamp(detail.commitDate)}`}
-          </span>
-        ) : null}
-        <span className="flex items-center gap-1.5 tabular-nums">
-          <span>
-            {props.fileCount} file{props.fileCount === 1 ? '' : 's'}
-          </span>
-          <span className="text-add">+{props.additions}</span>
-          <span className="text-del">−{props.deletions}</span>
-        </span>
-        {detail.parents.length > 0 ? (
-          <span className="flex items-center gap-1.5">
-            <span>{detail.parents.length === 1 ? 'Parent' : 'Parents'}</span>
-            {detail.parents.map((parent) => (
-              <span key={parent} className="font-mono text-xs text-foreground/80" title={parent}>
-                {parent.slice(0, 7)}
-              </span>
-            ))}
-          </span>
-        ) : (
-          <span>Root commit</span>
-        )}
-        {detail.parents.length > 1 ? (
-          <span className="text-orange">merge · changes shown against the first parent</span>
-        ) : null}
-      </div>
+    <div className="shrink-0 space-y-2 border-b px-3 py-2" data-testid="commit-meta">
       {detail.body ? (
-        <p className="mt-1.5 max-h-24 overflow-auto whitespace-pre-wrap break-words text-[13px] leading-relaxed text-muted-foreground">
+        <p className="max-h-24 max-w-[80ch] overflow-auto whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground/90">
           {detail.body}
         </p>
       ) : null}
+
+      <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-[13px]">
+        <MetaRow label="Author" timestamp={formatTimestamp(detail.authorDate)}>
+          <Identity identity={detail.author} />
+        </MetaRow>
+        {showCommitter ? (
+          <MetaRow label="Committer" timestamp={formatTimestamp(detail.commitDate)}>
+            <Identity identity={detail.committer} />
+          </MetaRow>
+        ) : null}
+        <MetaRow label={detail.parents.length === 1 ? 'Parent' : 'Parents'}>
+          {detail.parents.length === 0 ? (
+            <span className="text-muted-foreground">none — root commit</span>
+          ) : (
+            detail.parents.map((parent) => (
+              <span key={parent} className="font-mono text-xs text-foreground/80" title={parent}>
+                {parent.slice(0, 7)}
+              </span>
+            ))
+          )}
+        </MetaRow>
+      </dl>
     </div>
+  )
+}
+
+function MetaRow(props: { label: string; timestamp?: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="shrink-0 text-muted-foreground">{props.label}</dt>
+      <dd className="m-0 flex min-w-0 items-baseline gap-2">
+        {props.children}
+        {props.timestamp ? (
+          <time className="ml-auto shrink-0 pl-3 tabular-nums text-muted-foreground">
+            {props.timestamp}
+          </time>
+        ) : null}
+      </dd>
+    </>
+  )
+}
+
+function Identity(props: { identity: CommitIdentity }) {
+  return (
+    <>
+      <span className="shrink-0 font-medium text-foreground">{props.identity.name}</span>
+      <span className="min-w-0 truncate text-muted-foreground" title={props.identity.email}>
+        {props.identity.email}
+      </span>
+    </>
   )
 }

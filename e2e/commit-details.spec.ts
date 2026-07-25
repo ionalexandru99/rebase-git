@@ -53,11 +53,13 @@ test('shows a commit’s message, identity, files and diff in the details panel'
   const panel = detailsPanel(page)
   await expect(panel).toBeVisible({ timeout: 10_000 })
   await expect(panel.getByText('The body explains the rationale.')).toBeVisible()
-  await expect(panel.getByTestId('commit-meta')).toContainText('Ada Author')
-  await expect(panel.getByTestId('commit-meta')).toContainText('ada@example.com')
+  const meta = panel.getByTestId('commit-meta')
+  await expect(meta.getByText('Author', { exact: true })).toBeVisible()
+  await expect(meta.getByText('Ada Author')).toBeVisible()
+  await expect(meta.getByText('ada@example.com')).toBeVisible()
+  await expect(meta.getByText('Parent')).toBeVisible()
+  await expect(panel.getByTestId('commit-stats')).toContainText('4 files')
   await expect(panel.getByRole('button', { name: `Copy full SHA ${sha}` })).toBeVisible()
-
-  await expect(panel.getByTestId('commit-meta')).not.toContainText('merge')
 
   // The changed files read as a tree: the directory first, then the root-level files.
   const directories = panel.getByTestId('commit-directory-row')
@@ -174,7 +176,7 @@ test('follows a plain click while open, and closes from the panel button', async
 
   // The panel follows a plain click once it is open, auto-selecting that commit's first file.
   await commitRow(page, 'add files').click()
-  await expect(panel.getByTestId('commit-meta')).toContainText('3 files', { timeout: 10_000 })
+  await expect(panel.getByTestId('commit-stats')).toContainText('3 files', { timeout: 10_000 })
   await expect(panel.getByTestId('commit-file-row').first()).toContainText('nested.txt')
   await expect(panel.getByTestId('diff-body')).toContainText('nested one')
 

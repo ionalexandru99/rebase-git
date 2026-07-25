@@ -168,6 +168,18 @@ function SingleCommitDetails(props: {
             />
           ))}
         </span>
+        {detail ? (
+          <span
+            className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-muted-foreground"
+            data-testid="commit-stats"
+          >
+            <span>
+              {files.length} file{files.length === 1 ? '' : 's'}
+            </span>
+            <span className="text-add">+{totals.additions}</span>
+            <span className="text-del">−{totals.deletions}</span>
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={() => props.onCommitAction?.('copy-sha', props.sha, subject)}
@@ -188,12 +200,7 @@ function SingleCommitDetails(props: {
         </div>
       ) : detail ? (
         <>
-          <CommitMeta
-            detail={detail}
-            fileCount={files.length}
-            additions={totals.additions}
-            deletions={totals.deletions}
-          />
+          <CommitMeta detail={detail} />
           {files.length === 0 ? (
             <EmptyState
               size="sm"

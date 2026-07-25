@@ -291,25 +291,63 @@ describe('commit details panel contents', () => {
     )
   })
 
-  it('reports the author, dates, parents and per-file stats', async () => {
+  it('labels the author, the date and the parent so each is findable at a glance', async () => {
     await renderHistory()
 
     fireEvent.doubleClick(rowFor('newest change'))
 
     const meta = await within(panel()).findByTestId('commit-meta')
-    expect(meta).toHaveTextContent('Ada Author')
-    expect(meta).toHaveTextContent('<ada@example.com>')
-    expect(meta).toHaveTextContent('3 files')
-    expect(meta).toHaveTextContent('+9')
-    expect(meta).toHaveTextContent('−1')
-    expect(meta).toHaveTextContent('bbbbbbb')
+    expect(within(meta).getByText('Author')).toBeInTheDocument()
+    expect(within(meta).getByText('Ada Author')).toBeInTheDocument()
+    expect(within(meta).getByText('ada@example.com')).toBeInTheDocument()
+    expect(within(meta).getByText('Parent')).toBeInTheDocument()
+    expect(within(meta).getByText('bbbbbbb')).toBeInTheDocument()
+    // The author line owns the date; the run-on single line it replaced did not.
+    expect(within(meta).getByText('Author').nextElementSibling).toHaveTextContent(/2026/)
+  })
+
+  it('omits the committer row when it matches the author', async () => {
+    await renderHistory()
+
+    fireEvent.doubleClick(rowFor('newest change'))
+
+    const meta = await within(panel()).findByTestId('commit-meta')
+    expect(within(meta).queryByText('Committer')).not.toBeInTheDocument()
+  })
+
+  it('adds a committer row with its own date when it differs from the author', async () => {
+    sidecarMock.getCommitDetail.mockResolvedValue({
+      _tag: 'Ok',
+      detail: detailFor('aaaaaaa1', {
+        committer: { name: 'Cass Committer', email: 'cass@example.com' },
+        commitDate: '2026-07-22T11:00:00.000Z'
+      })
+    })
+    await renderHistory()
+
+    fireEvent.doubleClick(rowFor('newest change'))
+
+    const meta = await within(panel()).findByTestId('commit-meta')
+    expect(within(meta).getByText('Committer')).toBeInTheDocument()
+    expect(within(meta).getByText('Cass Committer')).toBeInTheDocument()
+    expect(within(meta).getByText('cass@example.com')).toBeInTheDocument()
+  })
+
+  it('summarises the commit totals in the panel header, next to its sha', async () => {
+    await renderHistory()
+
+    fireEvent.doubleClick(rowFor('newest change'))
+
+    const stats = await within(panel()).findByTestId('commit-stats')
+    expect(stats).toHaveTextContent('3 files')
+    expect(stats).toHaveTextContent('+9')
+    expect(stats).toHaveTextContent('−1')
     const fileList = within(panel()).getByTestId('commit-file-scroll')
     expect(within(fileList).getByTitle('alpha.ts')).toBeInTheDocument()
     expect(within(fileList).getByText('+3')).toBeInTheDocument()
-    expect(within(fileList).getAllByText('−1')).not.toHaveLength(0)
   })
 
-  it('says a merge commit is shown against its first parent', async () => {
+  it('lists both parents of a merge commit', async () => {
     sidecarMock.getCommitDetail.mockResolvedValue({
       _tag: 'Ok',
       detail: detailFor('aaaaaaa1', { parents: ['bbbbbbb2', 'ddddddd4'] })
@@ -319,8 +357,9 @@ describe('commit details panel contents', () => {
     fireEvent.doubleClick(rowFor('newest change'))
 
     const meta = await within(panel()).findByTestId('commit-meta')
-    expect(meta).toHaveTextContent('Parents')
-    expect(meta).toHaveTextContent('changes shown against the first parent')
+    expect(within(meta).getByText('Parents')).toBeInTheDocument()
+    expect(within(meta).getByText('bbbbbbb')).toBeInTheDocument()
+    expect(within(meta).getByText('ddddddd')).toBeInTheDocument()
   })
 
   it('labels a root commit as such rather than showing an empty parent list', async () => {
@@ -332,7 +371,7 @@ describe('commit details panel contents', () => {
 
     fireEvent.doubleClick(rowFor('oldest change'))
 
-    expect(await within(panel()).findByText(/Root commit/)).toBeInTheDocument()
+    expect(await within(panel()).findByText(/root commit/)).toBeInTheDocument()
   })
 
   it('offers the full SHA for copying through the existing commit action', async () => {
