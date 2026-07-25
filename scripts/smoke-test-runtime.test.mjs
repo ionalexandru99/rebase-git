@@ -21,6 +21,18 @@ describe('smoke-test Electron runtime discovery', () => {
     expect(canExecute).toHaveBeenCalledTimes(2)
   })
 
+  it('falls back to the packaged macOS Electron executable', () => {
+    const rootDir = resolve('fixture-root')
+    const expected = resolve(
+      rootDir,
+      'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
+    )
+    const canExecute = vi.fn((candidate) => candidate === expected)
+
+    expect(findElectron(rootDir, { platform: 'darwin', canExecute })).toBe(expected)
+    expect(canExecute).toHaveBeenCalledTimes(2)
+  })
+
   it('fails explicitly when the locked Electron runtime is absent', () => {
     const rootDir = resolve('missing-root')
 

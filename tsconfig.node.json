@@ -17,6 +17,7 @@
     "playwright.config.ts",
     "vitest.config.ts",
     "vitest.main.config.ts",
+    "vitest.main-integration.config.ts",
     "electron-builder.config.js",
     "src/main/**/*",
     "src/sidecar/**/*",

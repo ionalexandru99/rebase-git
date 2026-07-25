@@ -2,9 +2,9 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { expect, test } from '@playwright/test'
 import type { WebContents } from 'electron'
-import { startWatching, stopWatching } from '../src/main/repoWatcher'
+import { describe, expect, it } from 'vitest'
+import { startWatching, stopWatching } from '../repoWatcher'
 
 interface RepoChange {
   repoPath: string
@@ -74,8 +74,8 @@ function resolveGitDirsViaCli(repoPath: string): { gitDir: string; commonDir: st
   }
 }
 
-test.describe('repo watcher integration', () => {
-  test('emits working-tree changes for nested edits and newly created directories', async () => {
+describe('repo watcher integration', () => {
+  it('emits working-tree changes for nested edits and newly created directories', async () => {
     const events: RepoChange[] = []
     const fakeWebContents = makeFakeWebContents(1, events)
     const repoDir = fs.realpathSync.native(
@@ -105,7 +105,7 @@ test.describe('repo watcher integration', () => {
     }
   })
 
-  test('emits an index change when a file is staged via Git', async () => {
+  it('emits an index change when a file is staged via Git', async () => {
     const events: RepoChange[] = []
     const fakeWebContents = makeFakeWebContents(2, events)
     const repoDir = fs.realpathSync.native(
@@ -127,7 +127,7 @@ test.describe('repo watcher integration', () => {
     }
   })
 
-  test('emits a refs change when a linked-worktree HEAD moves', async () => {
+  it('emits a refs change when a linked-worktree HEAD moves', async () => {
     const events: RepoChange[] = []
     const fakeWebContents = makeFakeWebContents(3, events)
     const repoDir = fs.realpathSync.native(

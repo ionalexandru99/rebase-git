@@ -80,6 +80,9 @@ jobs:
       - name: Main-process tests
         run: pnpm test:main
 
+      - name: Main-process integration tests
+        run: pnpm test:main:integration
+
       - name: Sidecar and integration tests
         run: pnpm test:sidecar
 
