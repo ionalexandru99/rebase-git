@@ -13,7 +13,7 @@ fast: Git runs in a forked sidecar process and the main thread never blocks on i
 ```bash
 pnpm dev                  # electron-vite dev (hot reload)
 pnpm build                # → out/
-pnpm package[:mac|:win|:linux]
+pnpm package              # electron-builder; :mac / :win / :linux for one target
 
 pnpm typecheck
 pnpm check:fix            # biome format + lint, autofix
