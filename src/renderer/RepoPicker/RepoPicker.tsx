@@ -1,4 +1,4 @@
-import { FolderPlusIcon, SearchIcon } from 'lucide-react'
+import { FolderPlusIcon, SearchIcon, XIcon } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
 import { useMemo, useState } from 'react'
 import { fuzzyFilter } from '@/lib/fuzzy'
@@ -72,7 +72,18 @@ export function RepoPicker(props: RepoPickerProps) {
             // biome-ignore lint/a11y/noAutofocus: the picker is a search-first screen; focusing the query field is the expected entry point
             autoFocus
           />
-          <kbd className="rounded-[var(--r-xs)] border px-1.5 py-0.5 text-xs">↵</kbd>
+          {hasQuery ? (
+            <button
+              type="button"
+              aria-label="Clear repository search"
+              onClick={() => setQuery('')}
+              className="inline-flex size-7 items-center justify-center rounded-[var(--r-sm)] transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <XIcon className="size-4" />
+            </button>
+          ) : (
+            <kbd className="rounded-[var(--r-xs)] border px-1.5 py-0.5 text-xs">↵</kbd>
+          )}
         </div>
 
         <div className="flex flex-col gap-6">

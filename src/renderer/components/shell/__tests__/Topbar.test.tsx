@@ -20,6 +20,10 @@ function renderTopbar(overrides: Partial<Parameters<typeof Topbar>[0]> = {}) {
       pulling={overrides.pulling}
       pushing={overrides.pushing}
       busy={overrides.busy}
+      compact={overrides.compact}
+      sidebarOpen={overrides.sidebarOpen}
+      onToggleSidebar={overrides.onToggleSidebar}
+      onResetLayout={overrides.onResetLayout}
     />
   )
 }
@@ -95,6 +99,76 @@ describe('Topbar', () => {
     renderTopbar({ onPull })
     fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
     expect(onPull).toHaveBeenCalledOnce()
+  })
+
+  it('toggles the branch sidebar from the toolbar', () => {
+    const onToggleSidebar = vi.fn()
+    renderTopbar({ sidebarOpen: false, onToggleSidebar })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show branches' }))
+
+    expect(onToggleSidebar).toHaveBeenCalledOnce()
+  })
+
+  it('offers remote actions and layout reset from the repository actions menu', async () => {
+    const onFetch = vi.fn()
+    const onPull = vi.fn()
+    const onResetLayout = vi.fn()
+    renderTopbar({ compact: true, onFetch, onPull, onResetLayout })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    expect(document.querySelectorAll('[data-slot="dropdown-menu-separator"]')).toHaveLength(1)
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Fetch from remotes' }))
+    expect(onFetch).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Pull from upstream' }))
+    expect(onPull).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset layout' }))
+    expect(onResetLayout).toHaveBeenCalledOnce()
+  })
+
+  it('keeps remote actions inline and out of the repository menu when wide', async () => {
+    renderTopbar({ onFetch: vi.fn(), onPull: vi.fn(), onResetLayout: vi.fn() })
+
+    expect(screen.getByRole('button', { name: 'Fetch' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pull' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Reset layout' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Fetch from remotes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Pull from upstream' })).not.toBeInTheDocument()
+    expect(document.querySelectorAll('[data-slot="dropdown-menu-separator"]')).toHaveLength(0)
+  })
+
+  it('hides the repository actions menu when no repository action is available', () => {
+    renderTopbar()
+    expect(screen.queryByRole('button', { name: 'Repository actions' })).not.toBeInTheDocument()
+  })
+
+  it('lists only the repository actions whose handler was provided', async () => {
+    renderTopbar({ onResetLayout: vi.fn() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+
+    expect(await screen.findByRole('menuitem', { name: 'Reset layout' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Fetch from remotes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Pull from upstream' })).not.toBeInTheDocument()
+  })
+
+  it('moves the remote actions into the menu when compact', async () => {
+    const onFetch = vi.fn()
+    renderTopbar({ compact: true, onFetch, onPull: vi.fn() })
+
+    expect(screen.queryByRole('button', { name: 'Fetch' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pull' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Fetch from remotes' }))
+
+    expect(onFetch).toHaveBeenCalledOnce()
   })
 
   it('pushes through the PushControl when Push is clicked on a fast-forwardable branch', () => {

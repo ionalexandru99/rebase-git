@@ -4,7 +4,7 @@ import type { FileRowSource, UnifiedFileRow } from '@/lib/status-file-rows'
 import { useWorkingTreeStatus } from '@/stores/git'
 import { LoadingBadge } from '../ui/loading-badge'
 import { StatusPanelSkeleton } from './Skeleton'
-import { type SelectedFile, VirtualFileList } from './VirtualFileList'
+import { type FileListInput, type SelectedFile, VirtualFileList } from './VirtualFileList'
 
 export type { SelectedFile } from './VirtualFileList'
 
@@ -41,9 +41,18 @@ export function StatusPanel(props: StatusPanelProps) {
     unstageAll
   } = useWorkingTreeStatus()
   const loading = props.loading || statusLoading
-  const rows = useMemo(() => {
-    return [...worktreeRows, ...(props.amendRows ?? [])].sort(bySourceWithinFile)
-  }, [worktreeRows, props.amendRows])
+  const sortedWorktreeRows = useMemo(
+    () => [...worktreeRows].sort(bySourceWithinFile),
+    [worktreeRows]
+  )
+  const sortedAmendRows = useMemo(
+    () => [...(props.amendRows ?? [])].sort(bySourceWithinFile),
+    [props.amendRows]
+  )
+  const rows = useMemo(
+    () => [...sortedWorktreeRows, ...sortedAmendRows],
+    [sortedWorktreeRows, sortedAmendRows]
+  )
   const stageable = useMemo(
     () => rows.filter((row) => row.source === 'worktree' && !row.isConflicted),
     [rows]
@@ -51,6 +60,18 @@ export function StatusPanel(props: StatusPanelProps) {
   const stagedCount = stageable.filter((row) => row.stageState !== 'unstaged').length
   const allStaged = stageable.length > 0 && stageable.every((row) => row.stageState === 'staged')
   const subtitle = `${rows.length} files · ${stagedCount} staged`
+  const listInput = useMemo<FileListInput>(() => {
+    if (sortedAmendRows.length === 0) {
+      return { kind: 'flat', rows: sortedWorktreeRows }
+    }
+    return {
+      kind: 'sections',
+      sections: [
+        { label: 'Working tree', rows: sortedWorktreeRows },
+        { label: 'Last commit', rows: sortedAmendRows }
+      ].filter((section) => section.rows.length > 0)
+    }
+  }, [sortedAmendRows, sortedWorktreeRows])
 
   const toggleAll = () => {
     if (allStaged) {
@@ -75,27 +96,33 @@ export function StatusPanel(props: StatusPanelProps) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-3">
-        <div className="min-w-0">
-          <div className="text-[15px] font-semibold">Changes</div>
-          <div className="truncate text-[13px] text-muted-foreground">{subtitle}</div>
+      <div className="shrink-0 border-b">
+        <div className="flex min-h-[46px] items-center gap-2.5 py-1.5 pl-3.5 pr-3">
+          <div className="min-w-0">
+            <div className="text-[15px] font-semibold">Changes</div>
+            <div className="truncate text-[13px] text-muted-foreground">{subtitle}</div>
+          </div>
+          <div className="flex-1" />
+          {loading ? <LoadingBadge /> : null}
         </div>
-        <div className="flex-1" />
-        {loading ? <LoadingBadge /> : null}
-        {props.headerActions}
-        {stageable.length > 0 ? (
-          <button
-            type="button"
-            onClick={toggleAll}
-            className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
-          >
-            {allStaged ? 'Unstage all' : 'Stage all'}
-          </button>
+        {props.headerActions || stageable.length > 0 ? (
+          <div className="scroll-host flex items-center justify-end gap-2 overflow-x-auto px-3 pb-2">
+            {props.headerActions}
+            {stageable.length > 0 ? (
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
+              >
+                {allStaged ? 'Unstage all' : 'Stage all'}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
       <VirtualFileList
-        rows={rows}
+        input={listInput}
         selected={props.selected}
         onSelect={props.onSelect}
         onStage={stageFile}

@@ -152,6 +152,18 @@ describe('StatusPanel', () => {
     expect(screen.getByLabelText('deleted')).toBeInTheDocument()
   })
 
+  it('leaves conflict guidance to the banner rendered outside the files pane', () => {
+    renderPanel({
+      status: emptyStatus({
+        conflicted: ['src/conflict.ts'],
+        files: [code('src/conflict.ts', 'U', 'U')]
+      })
+    })
+
+    expect(screen.getByText('src/conflict.ts')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
   it('renders renamed files as "from → to"', () => {
     renderPanel({
       status: emptyStatus({
@@ -231,12 +243,32 @@ describe('StatusPanel', () => {
     })
 
     expect(screen.getByText('2 files · 0 staged')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Working tree' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Last commit' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Stage work.ts' })).toBeInTheDocument()
 
     const dropBox = screen.getByRole('checkbox', { name: /drop committed\.ts from last commit/i })
     expect(dropBox).toBeChecked()
     fireEvent.click(dropBox)
     expect(onToggleDrop).toHaveBeenCalledWith('committed.ts')
+  })
+
+  it('labels grouped rows only through their section heading', () => {
+    renderPanel({
+      status: emptyStatus({ files: [code('work.ts', ' ', 'M')] }),
+      amendRows: [amendRow('committed.ts')]
+    })
+
+    expect(screen.getAllByText('Last commit')).toHaveLength(1)
+    expect(screen.getAllByText('Working tree')).toHaveLength(1)
+  })
+
+  it('omits the working tree section when only the last commit has rows', () => {
+    renderPanel({ status: emptyStatus(), amendRows: [amendRow('committed.ts')] })
+
+    expect(screen.getByRole('heading', { name: 'Last commit' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Working tree' })).not.toBeInTheDocument()
+    expect(screen.getByText('committed.ts')).toBeInTheDocument()
   })
 
   it('highlights the selected file row', () => {

@@ -2,7 +2,7 @@ import { GitCommitHorizontalIcon } from 'lucide-react'
 import type { UIEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CommitAction } from '@/lib/git-actions'
-import { computeGraphRailWidth, OVERSCAN, ROW_H } from '@/lib/git-graph/canvas'
+import { computeGraphRailWidth, laneColor, OVERSCAN, ROW_H } from '@/lib/git-graph/canvas'
 import {
   getLayoutBoundary,
   getLayoutRow,
@@ -27,7 +27,11 @@ import {
   computeMergeSideRangeIndex,
   computeOnBranchSet,
   countVisibleBranchRefs,
-  type MergeSideRange
+  findRefTip,
+  getCommitIndex,
+  type MergeSideRange,
+  parseFilterRefKey,
+  refFilterKey
 } from './selectors'
 
 interface HistoryPanelProps {
@@ -52,9 +56,6 @@ interface HistoryPanelProps {
   repoPath?: string | null
 }
 
-const COL_AUTHOR_REM = 12
-const COL_SHA_REM = 4.5
-const COL_DATE_REM = 7.5
 const HISTORY_SCROLL_CACHE_LIMIT = 32
 const historyScrollPositions = new Map<string, number>()
 
@@ -145,14 +146,39 @@ export function HistoryPanel(props: HistoryPanelProps) {
 
   const themeNonce = useThemeNonce()
 
-  const gridTail = `${COL_AUTHOR_REM}rem ${COL_SHA_REM}rem ${COL_DATE_REM}rem`
+  const gridTail = 'var(--history-grid-tail)'
+  const colorByRefKey = useMemo(() => {
+    const colors = new Map<string, string>()
+    const { positionByHash } = getCommitIndex(commits)
+    for (const key of visibleBranchRefs) {
+      const ref = parseFilterRefKey(key)
+      if (!ref) {
+        continue
+      }
+      const tip = findRefTip(commits, ref.kind, ref.fullPath, remoteNames)
+      const commitIndex = tip === undefined ? -1 : (positionByHash.get(tip) ?? -1)
+      const row =
+        commitIndex >= 0 && layout && commitIndex < laidOutThroughIndex
+          ? getLayoutRow(layout, commitIndex)
+          : undefined
+      if (!row) {
+        continue
+      }
+      colors.set(refFilterKey(ref.kind, ref.fullPath), laneColor(row.commitLane))
+    }
+    return colors
+  }, [commits, laidOutThroughIndex, layout, remoteNames, visibleBranchRefs])
 
   const hasCommits = allCommits.length > 0
   const showSkeleton = props.loading && !hasCommits
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <FocusRail visibleRefs={visibleBranchRefs} onToggleRef={props.onToggleTimelineVisibility} />
+    <div className="flex h-full min-h-0 flex-col" data-history-panel="">
+      <FocusRail
+        visibleRefs={visibleBranchRefs}
+        colorByRefKey={colorByRefKey}
+        onToggleRef={props.onToggleTimelineVisibility}
+      />
       <HistoryHeader
         loadedCount={allCommits.length}
         visibleTotal={commits.length}
@@ -170,8 +196,10 @@ export function HistoryPanel(props: HistoryPanelProps) {
         <div className="flex h-[30px] shrink-0 items-center justify-end border-b bg-history-head px-0 text-xs font-semibold uppercase tracking-[0.04em] text-muted-foreground">
           <div className="grid items-center gap-2" style={{ gridTemplateColumns: gridTail }}>
             <span>Author</span>
-            <span>SHA</span>
-            <span className="pr-3 text-right">Date</span>
+            <span data-history-column="sha">SHA</span>
+            <span data-history-column="date" className="pr-3 text-right">
+              Date
+            </span>
           </div>
         </div>
       ) : null}

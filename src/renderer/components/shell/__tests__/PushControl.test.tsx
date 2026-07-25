@@ -42,7 +42,9 @@ describe('PushControl', () => {
 
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveTextContent('feature/x')
-    expect(dialog).toHaveTextContent(/3 behind|behind.*3/)
+    expect(dialog).toHaveTextContent('2 ahead and 3 behind')
+    expect(dialog).toHaveTextContent(/leased force republishes your rewritten history/i)
+    expect(dialog).toHaveTextContent(/without destroying remote work you haven't seen/i)
     expect(screen.getByRole('button', { name: /force push \(with lease\)/i })).toBeInTheDocument()
     expect(push).not.toHaveBeenCalled()
   })
@@ -167,6 +169,45 @@ describe('PushControl', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /force push \(with lease\)/i })).toBeInTheDocument()
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('does not call an ahead-only branch diverged in a manual force confirmation', async () => {
+    renderControl({ branchName: 'feature/x', ahead: 1, behind: 0 })
+
+    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('feature/x')
+    expect(dialog).not.toHaveTextContent('has diverged')
+    expect(dialog).toHaveTextContent('1 ahead and 0 behind')
+    expect(dialog).toHaveTextContent(/leased force republishes your rewritten history/i)
+    expect(dialog).toHaveTextContent(/without destroying remote work you haven't seen/i)
+  })
+
+  it('does not claim a behind-only branch has remote work to preserve', async () => {
+    renderControl({ branchName: 'feature/x', ahead: 0, behind: 2 })
+
+    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('feature/x is 2 behind its upstream')
+    expect(dialog).toHaveTextContent(/rewind the remote to your older tip/i)
+    expect(dialog).not.toHaveTextContent(/without destroying remote work/i)
+    expect(dialog).not.toHaveTextContent('0 ahead')
+  })
+
+  it('does not report zero counts for a branch level with its upstream', async () => {
+    renderControl({ branchName: 'feature/x', ahead: 0, behind: 0 })
+
+    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('feature/x already matches its upstream')
+    expect(dialog).not.toHaveTextContent('0 ahead')
+    expect(dialog).not.toHaveTextContent('0 behind')
   })
 
   it('disables the force option in detached HEAD', () => {

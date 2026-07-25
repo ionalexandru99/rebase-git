@@ -1,5 +1,17 @@
 import { expect, test } from './fixtures'
 
+test('packaged theme bootstrap applies the stored theme before interaction', async ({ harness }) => {
+  await harness.seed({ onboardingComplete: true, tabs: [null], activeIndex: 0 })
+  await harness.page.evaluate(() => localStorage.setItem('theme', 'light'))
+
+  const page = await harness.reload()
+
+  await expect(page.locator('html')).not.toHaveClass(/dark/)
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.style.backgroundColor))
+    .toBe('rgb(237, 237, 237)')
+})
+
 test('theme toggle flips the html dark class and the button label', async ({ harness }) => {
   await harness.seed({ onboardingComplete: true, tabs: [null], activeIndex: 0 })
   await harness.page.evaluate(() => {

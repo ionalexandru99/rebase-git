@@ -1,6 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createFixtureRepo, expect, fileRowCheckbox, openLocalChanges, test } from './fixtures'
+import {
+  createFixtureRepo,
+  expect,
+  fileRowCheckbox,
+  openLocalChanges,
+  porcelainStatus,
+  stashEntries,
+  test
+} from './fixtures'
 
 test('stashes staged files through the StashControl and lists the stash in the sidebar', async ({
   harness
@@ -31,4 +39,8 @@ test('stashes staged files through the StashControl and lists the stash in the s
   const stashRow = page.getByTestId('ref-tree-stash-row')
   await expect(stashRow).toBeVisible({ timeout: 10_000 })
   await expect(stashRow).toContainText('wip-stash', { timeout: 10_000 })
+
+  expect(stashEntries(repo)).toHaveLength(1)
+  expect(stashEntries(repo)[0]).toContain('wip-stash')
+  expect(porcelainStatus(repo)).toEqual([])
 })

@@ -5,9 +5,11 @@ import { CommitPanel } from './components/CommitPanel'
 import { DiffPanel } from './components/DiffPanel'
 import { HistoryPanel } from './components/HistoryPanel'
 import { type SelectedFile, StatusPanel } from './components/StatusPanel'
+import { ConflictBanner } from './components/StatusPanel/ConflictBanner'
 import { StashControl } from './components/StatusPanel/StashControl'
 import type { WorkspaceView } from './components/shell/Topbar'
 import { useDraggableWidth } from './hooks/useDraggableWidth'
+import { useMediaQuery } from './hooks/useMediaQuery'
 import {
   assembleDrops,
   dropStateOf,
@@ -16,10 +18,12 @@ import {
   toggleFileDrop,
   toggleHunkDrop
 } from './lib/amend-drops'
+import { COMPACT_MEDIA_QUERY } from './lib/breakpoints'
 import type { CommitAction, FileAction } from './lib/git-actions'
 import { buildHeadCommitRange } from './lib/head-commit-range'
 import type { RefKind } from './lib/ref-tree'
 import { buildHeadCommitRows, buildStagedFilePaths } from './lib/status-file-rows'
+import { cn } from './lib/utils'
 import {
   useActionRunner,
   useCommitHistory,
@@ -76,6 +80,8 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const { actions, prompt, confirm } = useWorkspaceContext()
   const [selected, setSelected] = useState<SelectedFile | null>(null)
   const [amendActive, setAmendActive] = useState(false)
+  const [compactPane, setCompactPane] = useState<'files' | 'diff'>('files')
+  const compact = useMediaQuery(COMPACT_MEDIA_QUERY)
   const [drops, setDrops] = useState<FileDrops>(() => new Map())
   const headCommit = useHeadCommit(amendActive)
   const headFiles = headCommit.data?.files ?? []
@@ -183,6 +189,12 @@ function LocalChangesView(props: WorkspaceViewProps) {
     }
   }, [fileEntries, selected])
 
+  useEffect(() => {
+    if (!compact) {
+      setCompactPane('files')
+    }
+  }, [compact])
+
   const handleAmendChange = (active: boolean) => {
     setAmendActive(active)
     if (!active) {
@@ -212,6 +224,16 @@ function LocalChangesView(props: WorkspaceViewProps) {
       source: 'head-commit',
       range: buildHeadCommitRange(headParentCount, headSha)
     })
+    if (compact) {
+      setCompactPane('diff')
+    }
+  }
+
+  const selectWorktreeFile = (file: string, renameSource?: string) => {
+    setSelected({ file, renameSource })
+    if (compact) {
+      setCompactPane('diff')
+    }
   }
 
   const amendDrop =
@@ -235,62 +257,110 @@ function LocalChangesView(props: WorkspaceViewProps) {
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-      {totalChanges > 0 || amendActive ? (
-        <div
-          className="grid min-h-0 overflow-hidden"
-          style={{ gridTemplateColumns: `${filesWidth}px minmax(0, 1fr)` }}
-        >
-          <div className="relative flex min-h-0 min-w-0 flex-col border-r">
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <StatusPanel
-                selected={selected}
-                onSelect={(file, source, renameSource) =>
-                  source === 'head-commit'
-                    ? selectHeadFile(file, renameSource)
-                    : setSelected({ file, renameSource })
-                }
-                onToggleDrop={toggleHeadFileDrop}
-                amendRows={amendRows}
-                onFileAction={handleFileAction}
-                headerActions={
-                  totalChanges > 0 ? (
-                    <>
-                      <StashControl
-                        stagedFiles={stagedFiles}
-                        stagedCount={stagedCount}
-                        hasChanges={totalChanges > 0}
-                        busy={busy}
-                        onStashSelected={stashSelected}
-                        onStashAll={stashAll}
-                      />
-                      <button
-                        type="button"
-                        onClick={discardAll}
-                        className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
-                      >
-                        Discard all
-                      </button>
-                    </>
-                  ) : undefined
-                }
-                loading={loading}
-              />
-            </div>
-            <span
-              onMouseDown={(event) => onResizeStart(event.nativeEvent)}
-              aria-hidden="true"
-              className="group/files-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+      <div className="flex min-h-0 flex-col overflow-hidden">
+        <ConflictBanner />
+        {totalChanges > 0 || amendActive ? (
+          <div
+            className={cn(
+              'grid min-h-0 flex-1 overflow-hidden',
+              compact && 'grid-rows-[38px_minmax(0,1fr)]'
+            )}
+            style={
+              compact
+                ? undefined
+                : {
+                    gridTemplateColumns: `min(${filesWidth}px, calc(100% - 300px)) minmax(300px, 1fr)`
+                  }
+            }
+          >
+            {compact ? (
+              <div className="flex items-center gap-1 border-b bg-card-2 px-2">
+                {(['files', 'diff'] as const).map((pane) => (
+                  <button
+                    key={pane}
+                    type="button"
+                    aria-pressed={compactPane === pane}
+                    onClick={() => setCompactPane(pane)}
+                    className={cn(
+                      'h-7 rounded-[var(--r-sm)] px-3 text-xs font-medium transition-colors',
+                      compactPane === pane
+                        ? 'bg-muted text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {pane === 'files' ? 'Files' : 'Diff'}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div
+              className={cn(
+                'relative min-h-0 min-w-0 flex-col border-r',
+                compact && compactPane !== 'files' ? 'hidden' : 'flex'
+              )}
             >
-              <span className="w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/60" />
-            </span>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <StatusPanel
+                  selected={selected}
+                  onSelect={(file, source, renameSource) =>
+                    source === 'head-commit'
+                      ? selectHeadFile(file, renameSource)
+                      : selectWorktreeFile(file, renameSource)
+                  }
+                  onToggleDrop={toggleHeadFileDrop}
+                  amendRows={amendRows}
+                  onFileAction={handleFileAction}
+                  headerActions={
+                    totalChanges > 0 ? (
+                      <>
+                        <StashControl
+                          stagedFiles={stagedFiles}
+                          stagedCount={stagedCount}
+                          hasChanges={totalChanges > 0}
+                          busy={busy}
+                          onStashSelected={stashSelected}
+                          onStashAll={stashAll}
+                        />
+                        <button
+                          type="button"
+                          onClick={discardAll}
+                          className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
+                        >
+                          Discard all
+                        </button>
+                      </>
+                    ) : undefined
+                  }
+                  loading={loading}
+                />
+              </div>
+              {!compact ? (
+                <span
+                  onMouseDown={(event) => onResizeStart(event.nativeEvent)}
+                  aria-hidden="true"
+                  className="group/files-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+                >
+                  <span className="w-px bg-border-strong/50 transition-colors group-hover/files-resize:bg-primary/70" />
+                </span>
+              ) : null}
+            </div>
+            <div
+              className={cn(
+                'min-h-0 min-w-0 overflow-hidden',
+                compact && compactPane !== 'diff' ? 'hidden' : 'block'
+              )}
+            >
+              <DiffPanel selected={selected} amendDrop={amendDrop} />
+            </div>
           </div>
-          <DiffPanel selected={selected} amendDrop={amendDrop} />
-        </div>
-      ) : headAvailabilityLoading ? (
-        <StatusPanel selected={null} onSelect={() => {}} loading={true} />
-      ) : (
-        <CleanWorkingTree />
-      )}
+        ) : headAvailabilityLoading ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <StatusPanel selected={null} onSelect={() => {}} loading={true} />
+          </div>
+        ) : (
+          <CleanWorkingTree />
+        )}
+      </div>
       <CommitPanel
         onCommit={commit}
         onAmend={amend}

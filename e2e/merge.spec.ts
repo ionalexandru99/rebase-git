@@ -1,6 +1,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createFixtureRepo, expect, gitIn, openLocalChanges, refTree, test } from './fixtures'
+import {
+  commitParents,
+  commitSubjects,
+  createFixtureRepo,
+  expect,
+  gitIn,
+  openLocalChanges,
+  porcelainStatus,
+  refTree,
+  test
+} from './fixtures'
 
 test('merging a non-conflicting branch from the ref tree adds a merge commit to history', async ({
   harness
@@ -34,6 +44,11 @@ test('merging a non-conflicting branch from the ref tree adds a merge commit to 
   await page.getByRole('button', { name: 'Expand merge side branch' }).click()
   await expect(page.getByText('feature work').first()).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText(/4 commits/)).toBeVisible({ timeout: 10_000 })
+
+  expect(commitParents(repo)).toHaveLength(2)
+  expect(commitSubjects(repo)).toContain('feature work')
+  expect(commitSubjects(repo)).toContain('main work')
+  expect(porcelainStatus(repo)).toEqual([])
 })
 
 test('merging a conflicting branch surfaces the conflict warning and leaves the tree dirty', async ({
@@ -54,9 +69,15 @@ test('merging a conflicting branch surfaces the conflict warning and leaves the 
   await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({ timeout: 10_000 })
 
   await refTree(page).getByTitle('feature', { exact: true }).click({ button: 'right' })
-  await page.getByRole('menuitem', { name: /Merge into main/ }).click()
 
-  await expect(page.getByText(/Merged feature hit conflicts/)).toBeVisible({ timeout: 10_000 })
+  await harness.expectToast(
+    {
+      type: 'warning',
+      title: 'Merged feature hit conflicts',
+      description: 'Resolve the conflicted files, then commit or abort.'
+    },
+    () => page.getByRole('menuitem', { name: /Merge into main/ }).click()
+  )
 
   await openLocalChanges(page)
 
@@ -64,4 +85,7 @@ test('merging a conflicting branch surfaces the conflict warning and leaves the 
   await expect(conflictRow.getByRole('img', { name: 'conflicted' })).toBeVisible({
     timeout: 10_000
   })
+
+  expect(porcelainStatus(repo)).toContain('AA conflict.txt')
+  expect(commitSubjects(repo)[0]).toBe('main side')
 })

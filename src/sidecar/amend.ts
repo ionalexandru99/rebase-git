@@ -273,25 +273,30 @@ async function diffSummary(
   newSha: string,
   firstParent: string | undefined
 ): Promise<CommitSummary['summary']> {
+  // --no-commit-id matters for the rootless form: given a single commit, diff-tree leads with a
+  // bare SHA line that would otherwise parse as a numstat row and poison the totals with NaN.
   const args = firstParent
-    ? ['diff-tree', '--numstat', '-r', firstParent, newSha]
-    : ['diff-tree', '--numstat', '-r', '--root', newSha]
+    ? ['diff-tree', '--numstat', '--no-commit-id', '-r', firstParent, newSha]
+    : ['diff-tree', '--numstat', '--no-commit-id', '-r', '--root', newSha]
   const output = await runGitOk(key, args)
   let changes = 0
   let insertions = 0
   let deletions = 0
+  const countOf = (field: string | undefined): number => {
+    if (field === undefined || field === '-') {
+      return 0
+    }
+    const parsed = Number(field)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
   for (const line of output.split('\n')) {
     if (line.trim().length === 0) {
       continue
     }
     changes += 1
     const [added, deleted] = line.split('\t')
-    if (added !== '-') {
-      insertions += Number(added)
-    }
-    if (deleted !== '-') {
-      deletions += Number(deleted)
-    }
+    insertions += countOf(added)
+    deletions += countOf(deleted)
   }
   return { changes, insertions, deletions }
 }

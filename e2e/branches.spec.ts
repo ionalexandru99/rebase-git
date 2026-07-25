@@ -1,6 +1,15 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createFixtureRepo, expect, gitIn, refTree, test } from './fixtures'
+import {
+  createFixtureRepo,
+  currentBranch,
+  expect,
+  gitIn,
+  localBranches,
+  refTree,
+  revParse,
+  test
+} from './fixtures'
 
 test('double-clicking a branch leaf checks it out and moves the current pill', async ({
   harness
@@ -26,6 +35,8 @@ test('double-clicking a branch leaf checks it out and moves the current pill', a
   })
   await expect(page.getByRole('button', { name: 'main current' })).toBeHidden()
   await expect(tree.getByTitle('feature', { exact: true }).getByTestId('current-ref-check')).toBeVisible()
+
+  expect(currentBranch(repo)).toBe('feature')
 })
 
 test('creating a branch from a leaf context menu checks it out', async ({ harness }) => {
@@ -49,6 +60,10 @@ test('creating a branch from a leaf context menu checks it out', async ({ harnes
   await expect(tree.getByRole('button', { name: 'Local branches 2' })).toBeVisible({
     timeout: 10_000
   })
+
+  expect(currentBranch(repo)).toBe('wip')
+  expect(localBranches(repo).sort()).toEqual(['main', 'wip'])
+  expect(revParse(repo, 'wip')).toBe(revParse(repo, 'main'))
 })
 
 test('renames a non-current branch through the ref-tree context menu', async ({ harness }) => {
@@ -69,6 +84,8 @@ test('renames a non-current branch through the ref-tree context menu', async ({ 
 
   await expect(tree.getByTitle('feature2', { exact: true })).toBeVisible({ timeout: 10_000 })
   await expect(tree.getByTitle('feature', { exact: true })).toBeHidden({ timeout: 10_000 })
+
+  expect(localBranches(repo).sort()).toEqual(['feature2', 'main'])
 })
 
 test('deletes a non-current branch through the context menu and confirm dialog', async ({
@@ -95,4 +112,6 @@ test('deletes a non-current branch through the context menu and confirm dialog',
 
   await expect(featureBranch).toBeHidden({ timeout: 10_000 })
   await expect(localBranchesSection).toContainText('1', { timeout: 10_000 })
+
+  expect(localBranches(repo)).toEqual(['main'])
 })

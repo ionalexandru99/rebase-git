@@ -84,6 +84,15 @@ describe('amendCommit — reword', () => {
     expect(git('rev-parse', 'HEAD~1').trim()).toBe(baseSha)
     expect(show('%cn')).toBe('Committer')
   })
+
+  it('reports a finite diff summary when amending a parentless root commit', async () => {
+    commitFile('file.txt', 'one\ntwo\n', 'root subject')
+
+    const result = await runOp(amendCurrent('reworded root'))
+
+    expect(show('%s')).toBe('reworded root')
+    expect(result.result.summary).toEqual({ changes: 1, insertions: 2, deletions: 0 })
+  })
 })
 
 describe('amendCommit — fold in staged changes', () => {

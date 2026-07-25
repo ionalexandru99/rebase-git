@@ -124,11 +124,17 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
             <span className="min-w-0 truncate">{commit.author_name}</span>
           </span>
 
-          <span className="truncate text-xs tabular-nums text-muted-foreground">
+          <span
+            data-history-column="sha"
+            className="truncate text-xs tabular-nums text-muted-foreground"
+          >
             {commit.hash.slice(0, 7)}
           </span>
 
-          <time className="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground">
+          <time
+            data-history-column="date"
+            className="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground"
+          >
             {formatCommitDate(commit.date)}
           </time>
         </span>

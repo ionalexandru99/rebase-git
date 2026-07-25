@@ -1,4 +1,4 @@
-import { createFixtureRepo, expect, refTree, test } from './fixtures'
+import { createFixtureRepo, expect, refTree, revParse, tags, test } from './fixtures'
 
 test('creates a tag at a branch then deletes it through the Tags section', async ({ harness }) => {
   const repo = createFixtureRepo()
@@ -17,10 +17,15 @@ test('creates a tag at a branch then deletes it through the Tags section', async
   await tree.getByRole('button', { name: /Tags/ }).click()
   await expect(tree.getByTitle('v1.0', { exact: true })).toBeVisible({ timeout: 10_000 })
 
+  expect(tags(repo)).toEqual(['v1.0'])
+  expect(revParse(repo, 'v1.0^{commit}')).toBe(revParse(repo, 'main'))
+
   await tree.getByTitle('v1.0', { exact: true }).click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Delete tag' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
 
   await expect(tree.getByTitle('v1.0', { exact: true })).toBeHidden({ timeout: 10_000 })
   await expect(tree.getByRole('button', { name: 'Tags 0' })).toBeVisible({ timeout: 10_000 })
+
+  expect(tags(repo)).toEqual([])
 })

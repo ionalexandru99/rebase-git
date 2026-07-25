@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { accessSync, constants, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { findElectron } from './smoke-test-runtime.mjs'
@@ -9,22 +10,31 @@ const rootDir = resolve(__dirname, '..')
 async function runSmokeTest() {
   const electronBin = findElectron(rootDir)
   const mainJs = resolve(rootDir, 'out/main/index.js')
+  const rendererHtml = resolve(rootDir, 'out/renderer/index.html')
+  const themeBootstrap = resolve(rootDir, 'out/renderer/theme-init.js')
+  const html = readFileSync(rendererHtml, 'utf8')
+  if (!html.includes('<script src="./theme-init.js"></script>')) {
+    throw new Error('Packaged theme bootstrap must be a relative parser-blocking script')
+  }
+  accessSync(themeBootstrap, constants.R_OK)
 
   console.log('\nLaunching Electron smoke test...')
   console.log(`Binary: ${electronBin}`)
   console.log(`Main: ${mainJs}`)
 
   const electronArgs = [mainJs, '--no-sandbox']
+  const electronEnv = {
+    ...process.env,
+    VITE_DEV_SERVER_URL: '',
+    ELECTRON_ENABLE_LOGGING: '1',
+    NODE_ENV: 'test',
+  }
+  delete electronEnv.ELECTRON_RUN_AS_NODE
 
   const child = spawn(electronBin, electronArgs, {
     stdio: ['pipe', 'pipe', 'pipe'],
     cwd: rootDir,
-    env: {
-      ...process.env,
-      VITE_DEV_SERVER_URL: '',
-      ELECTRON_ENABLE_LOGGING: '1',
-      NODE_ENV: 'test',
-    },
+    env: electronEnv,
   })
 
   let output = ''

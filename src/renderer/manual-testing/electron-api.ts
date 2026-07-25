@@ -12,8 +12,10 @@ import type { IElectronAPI } from '../../preload'
 export const PLAYWRIGHT_MCP_WORKSPACE_PATH = '/Users/playwright/Projects'
 export const PLAYWRIGHT_MCP_REPO_PATH = `${PLAYWRIGHT_MCP_WORKSPACE_PATH}/rebase-demo`
 
-interface PlaywrightMcpElectronApiOptions {
+export interface PlaywrightMcpElectronApiOptions {
   onboardingComplete?: boolean
+  historyCount?: number
+  conflicted?: boolean
 }
 
 type MutableGitStatus = {
@@ -106,6 +108,27 @@ const initialStatus: GitStatus = {
   ]
 }
 
+function createManualCommits(historyCount: number): GitLogEntry[] {
+  const commits = initialCommits.map((commit) => ({ ...commit, parents: [...commit.parents] }))
+  const count = Math.max(commits.length, historyCount)
+  if (count === commits.length) {
+    return commits
+  }
+  const hashAt = (index: number) => index.toString(16).padStart(7, '0').padEnd(40, '0')
+  commits[commits.length - 1].parents = [hashAt(commits.length)]
+  for (let index = commits.length; index < count; index++) {
+    commits.push({
+      hash: hashAt(index),
+      message: `Manual history commit ${index + 1}`,
+      author_name: 'Pagination Fixture',
+      date: new Date(Date.UTC(2026, 6, 18) - index * 60_000).toISOString(),
+      parents: index + 1 < count ? [hashAt(index + 1)] : [],
+      refs: ''
+    })
+  }
+  return commits
+}
+
 function cloneStatus(status: GitStatus): MutableGitStatus {
   return {
     ...status,
@@ -122,10 +145,15 @@ function cloneStatus(status: GitStatus): MutableGitStatus {
 
 function createState(options: PlaywrightMcpElectronApiOptions): ManualState {
   const onboardingComplete = options.onboardingComplete ?? true
+  const status = cloneStatus(initialStatus)
+  if (options.conflicted) {
+    status.conflicted.push('src/conflict.ts')
+    status.files.push({ path: 'src/conflict.ts', index: 'U', working_dir: 'U' })
+  }
   return {
     activeWorkspace: onboardingComplete ? PLAYWRIGHT_MCP_WORKSPACE_PATH : null,
     branches: ['main', 'feature/streaming', 'fix/window-state'],
-    commits: initialCommits.map((commit) => ({ ...commit, parents: [...commit.parents] })),
+    commits: createManualCommits(options.historyCount ?? initialCommits.length),
     onboardingComplete,
     nextObjectId: 1,
     persistedTabs: {
@@ -155,7 +183,7 @@ function createState(options: PlaywrightMcpElectronApiOptions): ManualState {
         ]
       }
     ],
-    status: cloneStatus(initialStatus),
+    status,
     tags: ['v1.0.0'],
     workspaces: onboardingComplete ? [PLAYWRIGHT_MCP_WORKSPACE_PATH] : []
   }

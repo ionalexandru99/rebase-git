@@ -1,19 +1,13 @@
-import { laneColor } from '@/lib/git-graph/canvas'
 import type { RefKind } from '@/lib/ref-tree'
 import { cn } from '@/lib/utils'
 import { parseFilterRefKey } from './selectors'
 
+const UNRESOLVED_REF_COLOR = 'var(--muted-foreground)'
+
 interface FocusRailProps {
   visibleRefs: ReadonlySet<string>
+  colorByRefKey?: ReadonlyMap<string, string>
   onToggleRef?: (refKind: RefKind, fullPath: string) => void
-}
-
-function refColor(fullPath: string): string {
-  let hash = 0
-  for (let i = 0; i < fullPath.length; i++) {
-    hash = (hash * 31 + fullPath.charCodeAt(i)) | 0
-  }
-  return laneColor(Math.abs(hash))
 }
 
 export function FocusRail(props: FocusRailProps) {
@@ -27,12 +21,13 @@ export function FocusRail(props: FocusRailProps) {
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-1 overflow-hidden border-b px-3 py-2.5">
+    <div className="scroll-host flex shrink-0 items-center gap-1 overflow-x-auto border-b px-3 py-2.5">
       {refs.map((ref, index) => {
-        const color = refColor(ref.fullPath)
+        const key = `${ref.kind}:${ref.fullPath}`
+        const color = props.colorByRefKey?.get(key) ?? UNRESOLVED_REF_COLOR
         return (
           <button
-            key={`${ref.kind}:${ref.fullPath}`}
+            key={key}
             type="button"
             title={props.onToggleRef ? `Hide ${ref.fullPath} from timeline` : undefined}
             onClick={() => props.onToggleRef?.(ref.kind, ref.fullPath)}

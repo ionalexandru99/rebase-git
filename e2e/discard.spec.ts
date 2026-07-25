@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { createFixtureRepo, expect, openLocalChanges, test } from './fixtures'
+import { createFixtureRepo, expect, openLocalChanges, porcelainStatus, test } from './fixtures'
 
 test('discards a single tracked file through the row context menu and confirm dialog', async ({
   harness
@@ -30,6 +30,8 @@ test('discards a single tracked file through the row context menu and confirm di
   await expect
     .poll(() => fs.readFileSync(path.join(repo, 'README.md'), 'utf8'), { timeout: 10_000 })
     .not.toContain('modified')
+
+  expect(porcelainStatus(repo)).toEqual(['?? note.txt'])
 })
 
 test('discard all empties the working tree to the clean state', async ({ harness }) => {
@@ -55,4 +57,9 @@ test('discard all empties the working tree to the clean state', async ({ harness
   await expect(page.getByTestId('status-file-row')).toHaveCount(0)
   // The commit panel persists on a clean tree so the last commit stays amendable (reword).
   await expect(page.getByRole('checkbox', { name: /amend last commit/i })).toBeVisible()
+
+  expect(porcelainStatus(repo)).toEqual([])
+  expect(fs.existsSync(path.join(repo, 'untracked-one.txt'))).toBe(false)
+  expect(fs.existsSync(path.join(repo, 'untracked-two.txt'))).toBe(false)
+  expect(fs.readFileSync(path.join(repo, 'README.md'), 'utf8')).not.toContain('modified')
 })
