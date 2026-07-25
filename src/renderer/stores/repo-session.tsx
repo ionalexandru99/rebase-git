@@ -24,6 +24,7 @@ interface RepoSessionState {
   opening: boolean
   errors: RepoSessionErrors
   openGeneration: number
+  resetEpoch: number
 }
 
 export type RepoSessionErrorSource =
@@ -45,6 +46,10 @@ export interface RepoSession {
   repoPath: string | null
   opening: boolean
   openGeneration: number
+  // Bumped whenever the provider tears its session down and re-arms it, which React does on every
+  // mount in dev. Callers key their open request on it: an in-flight open is invalidated by the
+  // teardown, so without a fresh request the session would sit in `opening` forever.
+  resetEpoch: number
   error: string | null
   openRepo: (requestedPath: string) => Promise<string | null>
   closeRepo: () => Promise<void>
@@ -77,7 +82,8 @@ const initialSessionState: RepoSessionState = {
   defaultBranch: undefined,
   opening: false,
   errors: {},
-  openGeneration: 0
+  openGeneration: 0,
+  resetEpoch: 0
 }
 
 const errorSourcesByPriority: readonly RepoSessionErrorSource[] = [
@@ -188,7 +194,11 @@ export function useRepoSessionController(
     (openGeneration: number) => {
       liveRepoPath.current = null
       liveRepoOwner.current = null
-      setSessionState({ ...initialSessionState, openGeneration })
+      setSessionState((previous) => ({
+        ...initialSessionState,
+        openGeneration,
+        resetEpoch: previous.resetEpoch
+      }))
       lifecycle.current.onSessionReset()
     },
     [lifecycle]
@@ -250,14 +260,15 @@ export function useRepoSessionController(
         }
         liveRepoPath.current = opened.path
         liveRepoOwner.current = owner
-        setSessionState({
+        setSessionState((previous) => ({
+          ...previous,
           repoPath: opened.path,
           remotes: opened.remotes,
           defaultBranch: opened.defaultBranch,
           opening: false,
           errors: {},
           openGeneration: generation
-        })
+        }))
         lifecycle.current.onRepoOpened(opened, generation)
         return opened.path
       } catch (error) {
@@ -297,7 +308,11 @@ export function useRepoSessionController(
     const owner = liveRepoOwner.current
     liveRepoPath.current = null
     liveRepoOwner.current = null
-    setSessionState({ ...initialSessionState, openGeneration: generation })
+    setSessionState((previous) => ({
+      ...initialSessionState,
+      openGeneration: generation,
+      resetEpoch: previous.resetEpoch
+    }))
     if (repoPath) {
       Promise.resolve(lifecycle.current.onBeforeRepoClosed(repoPath)).catch(() => {})
       if (owner !== null) {
@@ -321,6 +336,11 @@ export function useRepoSessionController(
       lifecycle.current.onSessionReset()
       liveRepoPath.current = null
       liveRepoOwner.current = null
+      setSessionState((previous) => ({
+        ...initialSessionState,
+        openGeneration,
+        resetEpoch: previous.resetEpoch + 1
+      }))
       if (!closingRepoPath || closingRepoOwner === null) {
         return
       }
@@ -348,6 +368,7 @@ export function useRepoSessionController(
       repoPath: sessionState.repoPath,
       opening: sessionState.opening,
       openGeneration: sessionState.openGeneration,
+      resetEpoch: sessionState.resetEpoch,
       error: displayedError(sessionState.errors),
       openRepo,
       closeRepo,
@@ -357,6 +378,7 @@ export function useRepoSessionController(
       sessionState.repoPath,
       sessionState.opening,
       sessionState.openGeneration,
+      sessionState.resetEpoch,
       sessionState.errors,
       openRepo,
       closeRepo,
