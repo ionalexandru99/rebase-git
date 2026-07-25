@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { accessSync, constants, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { findElectron } from './smoke-test-runtime.mjs'
+import { findElectron, findWindowIcon } from './smoke-test-runtime.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const rootDir = resolve(__dirname, '..')
@@ -17,6 +17,7 @@ async function runSmokeTest() {
     throw new Error('Packaged theme bootstrap must be a relative parser-blocking script')
   }
   accessSync(themeBootstrap, constants.R_OK)
+  accessSync(findWindowIcon(resolve(rootDir, 'out/main')), constants.R_OK)
 
   console.log('\nLaunching Electron smoke test...')
   console.log(`Binary: ${electronBin}`)

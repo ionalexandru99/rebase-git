@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, session } from 'electron'
 import windowStateKeeper from 'electron-window-state'
+import appIcon from '../../build/icon.png?asset'
 import { buildContentSecurityPolicy } from './csp'
 import { installE2eControl } from './e2e-control'
 import * as logStreamIpc from './ipc/log-stream'
@@ -105,6 +106,7 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     show: false,
+    icon: appIcon,
     backgroundColor: resolveBackgroundColor(getTheme()),
     titleBarStyle: 'hiddenInset',
     webPreferences: {

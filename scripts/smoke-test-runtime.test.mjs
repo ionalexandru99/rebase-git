@@ -1,6 +1,6 @@
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { electronCandidates, findElectron } from './smoke-test-runtime.mjs'
+import { electronCandidates, findElectron, findWindowIcon } from './smoke-test-runtime.mjs'
 
 describe('smoke-test Electron runtime discovery', () => {
   it('selects the locked Windows Electron executable directly', () => {
@@ -39,5 +39,36 @@ describe('smoke-test Electron runtime discovery', () => {
     expect(() => findElectron(rootDir, { platform: 'win32', canExecute: () => false })).toThrow(
       'Locked Electron runtime not found'
     )
+  })
+})
+
+describe('smoke-test window icon discovery', () => {
+  const outMainDir = resolve('fixture-root/out/main')
+
+  it('resolves the icon asset the built main bundle points at', () => {
+    const icon = findWindowIcon(outMainDir, {
+      listImages: () => [join('chunks', 'icon-Bc80r2AL.png'), join('chunks', 'other-DEADBEEF.png')],
+      readMainBundle: () => 'const appIcon = join(__dirname, "./chunks/icon-Bc80r2AL.png");'
+    })
+
+    expect(icon).toBe(resolve(outMainDir, 'chunks/icon-Bc80r2AL.png'))
+  })
+
+  it('fails when the build ships no icon asset', () => {
+    expect(() =>
+      findWindowIcon(outMainDir, {
+        listImages: () => [],
+        readMainBundle: () => 'const win = new BrowserWindow({});'
+      })
+    ).toThrow('references no window icon asset')
+  })
+
+  it('fails when a shipped icon asset is unreferenced by the main bundle', () => {
+    expect(() =>
+      findWindowIcon(outMainDir, {
+        listImages: () => [join('chunks', 'icon-Bc80r2AL.png')],
+        readMainBundle: () => 'const win = new BrowserWindow({});'
+      })
+    ).toThrow('references no window icon asset')
   })
 })
