@@ -81,26 +81,35 @@ describe('pushRepo against a real repository', () => {
   })
 
   it('classifies the non-fast-forward porcelain wording', { timeout: 15000 }, async () => {
-    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
-    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-push-git-'))
-    const gitWrapper = path.join(fakeBin, 'git')
-    fs.writeFileSync(
-      gitWrapper,
-      `#!/bin/sh\ncase " $* " in *" push "*) printf '%s\\n' '! [rejected] main -> main (non-fast-forward)' >&2; exit 1;; esac\nexec "${realGit}" "$@"\n`
-    )
-    fs.chmodSync(gitWrapper, 0o755)
-    const previousPath = process.env.PATH
-    process.env.PATH = `${fakeBin}:${previousPath ?? ''}`
+    git('checkout', '-b', 'diverging', 'main')
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'shared base\n')
+    git('commit', '-am', 'shared base')
+    git('push', '--set-upstream', 'origin', 'diverging')
 
-    try {
-      const outcome = await runOp(Effect.either(pushRepo(repoDir)))
-      expect(Either.isLeft(outcome)).toBe(true)
-      if (Either.isLeft(outcome)) {
-        expect(outcome.left._tag).toBe('PushRejected')
+    const teammateDir = path.join(path.dirname(repoDir), 'teammate')
+    execFileSync('git', ['clone', '--branch', 'diverging', remoteDir, teammateDir])
+    execFileSync('git', ['-C', teammateDir, 'config', 'user.email', 'other@example.com'])
+    execFileSync('git', ['-C', teammateDir, 'config', 'user.name', 'Other'])
+    fs.writeFileSync(path.join(teammateDir, 'file.txt'), 'teammate change\n')
+    execFileSync('git', ['-C', teammateDir, 'commit', '-am', 'teammate change'])
+    execFileSync('git', ['-C', teammateDir, 'push', 'origin', 'diverging'])
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'local change\n')
+    git('commit', '-am', 'local change')
+
+    const outcome = await runOp(Effect.either(pushRepo(repoDir)))
+
+    expect(Either.isLeft(outcome)).toBe(true)
+    if (Either.isLeft(outcome)) {
+      expect(outcome.left._tag).toBe('PushRejected')
+      if (outcome.left._tag === 'PushRejected') {
+        expect(outcome.left.reason).toBe('non-fast-forward')
+        expect(outcome.left.lostCommits).toEqual([])
+        expect(outcome.left.remoteSha).toBeUndefined()
       }
-    } finally {
-      process.env.PATH = previousPath
-      fs.rmSync(fakeBin, { recursive: true, force: true })
     }
+    expect(git('rev-parse', 'diverging').trim()).not.toBe(
+      execFileSync('git', ['-C', teammateDir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+    )
   })
 })

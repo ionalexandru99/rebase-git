@@ -2,56 +2,77 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeRepo, isCommitGraphTracked, openRepo } from '../operations'
 import { requireOpen } from '../repo-sessions'
+import type { RunningGitProcess, SpawnGitOptions } from '../spawn'
+import { processAlive, waitUntil } from './hanging-git'
+import { makeCommitHeavyRepo } from './repo-fixtures'
 import { runOp } from './run-op'
+
+interface RecordedWrite {
+  args: string[]
+  running: RunningGitProcess
+}
+
+const commitGraphWrites: RecordedWrite[] = []
+
+// A session keeps its commit-graph process private, so the only way to name the pid the test has to
+// watch is to record what the production code spawned.
+vi.mock('../spawn', async (importOriginal) => {
+  const spawn = await importOriginal<typeof import('../spawn')>()
+  return {
+    ...spawn,
+    startBackgroundGit: (args: string[], options?: SpawnGitOptions) => {
+      const running = spawn.startBackgroundGit(args, options)
+      if (args.includes('commit-graph')) {
+        commitGraphWrites.push({ args, running })
+      }
+      return running
+    }
+  }
+})
+
+// The product picks the command, so history size is the only lever that keeps its commit-graph write
+// observably in flight: half a million commits takes git well over a second to walk.
+const IN_FLIGHT_WRITE_COMMITS = 500_000
 
 let baseDir: string
 let repoDir: string
+let commitHeavyDir: string
 
 function git(dir: string, ...args: string[]): void {
   execFileSync('git', ['-C', dir, ...args])
 }
 
-function commitGraphWriteProcesses(dir: string): number {
-  let output = ''
-  try {
-    output = execFileSync('ps', ['-ax', '-o', 'command'], { encoding: 'utf8' })
-  } catch {
-    return 0
-  }
-  return output
-    .split('\n')
-    .filter((line) => line.includes('commit-graph') && line.includes('write') && line.includes(dir))
-    .length
+function commitGraphChain(dir: string): string {
+  return path.join(dir, '.git', 'objects', 'info', 'commit-graphs', 'commit-graph-chain')
 }
 
-// A `git` shim that hangs on `commit-graph` and forwards everything else to the real binary, so the
-// write child is reliably in flight (not racing a sub-100ms real write) when close kills it.
-function installSlowGitShim(delaySeconds = 30): string {
-  const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
-  const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-git-shim-'))
-  const shimPath = path.join(shimDir, 'git')
-  fs.writeFileSync(
-    shimPath,
-    `#!/bin/sh
-for arg in "$@"; do
-  if [ "$arg" = "commit-graph" ]; then
-    sleep ${delaySeconds}
-    break
-  fi
-done
-exec ${realGit} "$@"
-`
-  )
-  fs.chmodSync(shimPath, 0o755)
-  return shimDir
+function discardCommitGraph(dir: string): void {
+  fs.rmSync(path.join(dir, '.git', 'objects', 'info', 'commit-graphs'), {
+    recursive: true,
+    force: true
+  })
+  fs.rmSync(path.join(dir, '.git', 'objects', 'info', 'commit-graph'), { force: true })
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+async function commitGraphWriteFor(dir: string): Promise<RunningGitProcess> {
+  const recorded = () => commitGraphWrites.find((write) => write.args.includes(dir))
+  await waitUntil(() => recorded() !== undefined, 10_000, 'commit-graph write spawn')
+  return (recorded() as RecordedWrite).running
+}
+
+beforeAll(() => {
+  commitHeavyDir = makeCommitHeavyRepo(IN_FLIGHT_WRITE_COMMITS)
+}, 300_000)
+
+afterAll(() => {
+  fs.rmSync(commitHeavyDir, { recursive: true, force: true })
+})
 
 beforeEach(() => {
+  commitGraphWrites.length = 0
   baseDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-open-test-')))
   repoDir = path.join(baseDir, 'repo')
   fs.mkdirSync(repoDir)
@@ -107,55 +128,39 @@ describe('openRepo gitdir resolution', () => {
   })
 
   it('terminates an in-flight commit-graph write when the repo closes', async () => {
-    const shimDir = installSlowGitShim()
-    const originalPath = process.env.PATH
-    process.env.PATH = `${shimDir}${path.delimiter}${originalPath}`
+    discardCommitGraph(commitHeavyDir)
     try {
-      await runOp(openRepo(repoDir))
-      let inFlight = 0
-      for (let attempt = 0; attempt < 40 && inFlight === 0; attempt++) {
-        await sleep(25)
-        inFlight = commitGraphWriteProcesses(repoDir)
-      }
-      expect(inFlight).toBeGreaterThan(0)
+      await runOp(openRepo(commitHeavyDir))
+      const write = await commitGraphWriteFor(commitHeavyDir)
+      const writePid = write.child.pid
+      expect(processAlive(writePid)).toBe(true)
 
-      await runOp(closeRepo(repoDir))
-      let survivors = commitGraphWriteProcesses(repoDir)
-      for (let attempt = 0; attempt < 40 && survivors > 0; attempt++) {
-        await sleep(25)
-        survivors = commitGraphWriteProcesses(repoDir)
-      }
-      expect(survivors).toBe(0)
+      await runOp(closeRepo(commitHeavyDir))
+
+      await waitUntil(() => !processAlive(writePid), 10_000, 'commit-graph write exit')
+      const { code } = await write.result
+      expect(code).not.toBe(0)
+      expect(fs.existsSync(commitGraphChain(commitHeavyDir))).toBe(false)
     } finally {
-      process.env.PATH = originalPath
-      fs.rmSync(shimDir, { recursive: true, force: true })
+      await runOp(closeRepo(commitHeavyDir))
     }
-  }, 15000)
+  }, 120_000)
 
   it('waits for the background commit-graph write before admitting repo operations', async () => {
-    const shimDir = installSlowGitShim(0.5)
-    const originalPath = process.env.PATH
-    process.env.PATH = `${shimDir}${path.delimiter}${originalPath}`
+    discardCommitGraph(commitHeavyDir)
     try {
-      await runOp(openRepo(repoDir))
-      let inFlight = 0
-      for (let attempt = 0; attempt < 40 && inFlight === 0; attempt++) {
-        await sleep(25)
-        inFlight = commitGraphWriteProcesses(repoDir)
-      }
-      expect(inFlight).toBeGreaterThan(0)
+      await runOp(openRepo(commitHeavyDir))
+      const write = await commitGraphWriteFor(commitHeavyDir)
+      const writePid = write.child.pid
+      expect(processAlive(writePid)).toBe(true)
 
-      let admitted = false
-      const admission = runOp(requireOpen(repoDir)).then(() => {
-        admitted = true
-      })
-      await sleep(50)
-      expect(admitted).toBe(false)
-      await admission
-      expect(admitted).toBe(true)
+      await runOp(requireOpen(commitHeavyDir))
+
+      expect(processAlive(writePid)).toBe(false)
+      expect((await write.result).code).toBe(0)
+      expect(fs.existsSync(commitGraphChain(commitHeavyDir))).toBe(true)
     } finally {
-      process.env.PATH = originalPath
-      fs.rmSync(shimDir, { recursive: true, force: true })
+      await runOp(closeRepo(commitHeavyDir))
     }
-  })
+  }, 120_000)
 })

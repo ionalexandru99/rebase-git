@@ -448,12 +448,12 @@ describe('amend drops use literal pathspecs', () => {
 
   beforeAll(async () => {
     repo = createRepo('rebase-literal-amend-')
-    repo.write('*.txt', 'star base\n')
-    repo.write('other.txt', 'other base\n')
+    repo.write('[abc].txt', 'bracket base\n')
+    repo.write('a.txt', 'decoy base\n')
     repo.git('add', '.')
     repo.git('commit', '-m', 'base')
-    repo.write('*.txt', 'star changed\n')
-    repo.write('other.txt', 'other changed\n')
+    repo.write('[abc].txt', 'bracket changed\n')
+    repo.write('a.txt', 'decoy changed\n')
     repo.git('add', '.')
     repo.git('commit', '-m', 'change both')
     await runOp(openRepo(repo.dir))
@@ -464,14 +464,14 @@ describe('amend drops use literal pathspecs', () => {
     destroyRepo(repo)
   })
 
-  it('dropping the file literally named *.txt keeps sibling .txt changes committed', async () => {
+  it('dropping the file literally named [abc].txt keeps its glob decoy committed', async () => {
     await runOp(
-      amendCommit(repo.dir, 'change both', ['*.txt'], [], repo.git('rev-parse', 'HEAD').trim())
+      amendCommit(repo.dir, 'change both', ['[abc].txt'], [], repo.git('rev-parse', 'HEAD').trim())
     )
-    expect(repo.git('show', 'HEAD:other.txt')).toBe('other changed\n')
-    expect(repo.git('show', 'HEAD:*.txt')).toBe('star base\n')
-    expect(repo.read('*.txt')).toBe('star changed\n')
-    expect(unstagedNames(repo)).toEqual(['*.txt'])
+    expect(repo.git('show', 'HEAD:a.txt')).toBe('decoy changed\n')
+    expect(repo.git('show', 'HEAD:[abc].txt')).toBe('bracket base\n')
+    expect(repo.read('[abc].txt')).toBe('bracket changed\n')
+    expect(unstagedNames(repo)).toEqual(['[abc].txt'])
   })
 })
 

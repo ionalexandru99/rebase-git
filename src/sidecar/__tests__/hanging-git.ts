@@ -3,37 +3,41 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-export interface HangingGit {
+export interface HangingRemote {
   dir: string
-  repoDir: string
-  args: string[]
-  env: NodeJS.ProcessEnv
+  remoteDir: string
+  uploadPack: string
   childPid: () => number | undefined
   cleanup: () => void
 }
 
-// Blocks a real `git` invocation indefinitely and gives it a real child process, so process-tree
-// teardown stays observable without a PATH shim — Win32 cannot execute an extensionless script by
-// bare name, and Node refuses to spawn .cmd/.bat without a shell. `git fetch --upload-pack` runs
-// the given command through a shell on every platform and then waits on it, and node is the one
-// interpreter guaranteed present and hanging identically everywhere. The fake upload-pack records
-// its own pid so tests can assert the descendant died with its parent. A pager would not work:
-// --paginate only engages when stdout is a terminal, which it never is under the spawn helpers.
-export function createHangingGit(prefix: string): HangingGit {
+export interface HangingGit extends HangingRemote {
+  repoDir: string
+  args: string[]
+  env: NodeJS.ProcessEnv
+}
+
+function initRepo(target: string): void {
+  fs.mkdirSync(target)
+  execFileSync('git', ['-C', target, 'init', '-b', 'main'], { stdio: 'ignore' })
+  execFileSync('git', ['-C', target, 'config', 'user.email', 'test@example.com'], {
+    stdio: 'ignore'
+  })
+  execFileSync('git', ['-C', target, 'config', 'user.name', 'Test'], { stdio: 'ignore' })
+  execFileSync('git', ['-C', target, 'commit', '--allow-empty', '-m', 'base'], { stdio: 'ignore' })
+}
+
+// A real remote whose upload-pack blocks forever, so process-tree teardown stays observable without
+// a PATH shim — Win32 cannot execute an extensionless script by bare name, and Node refuses to spawn
+// .cmd/.bat without a shell. git runs the upload-pack command through a shell on every platform and
+// then waits on it, and node is the one interpreter guaranteed present and hanging identically
+// everywhere. The fake upload-pack records its own pid so tests can assert the descendant died with
+// its parent. A pager would not work: --paginate only engages when stdout is a terminal, which it
+// never is under the spawn helpers.
+export function createHangingRemote(prefix: string): HangingRemote {
   const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)))
-  const repoDir = path.join(dir, 'repo')
   const remoteDir = path.join(dir, 'remote')
-  for (const target of [repoDir, remoteDir]) {
-    fs.mkdirSync(target)
-    execFileSync('git', ['-C', target, 'init', '-b', 'main'], { stdio: 'ignore' })
-    execFileSync('git', ['-C', target, 'config', 'user.email', 'test@example.com'], {
-      stdio: 'ignore'
-    })
-    execFileSync('git', ['-C', target, 'config', 'user.name', 'Test'], { stdio: 'ignore' })
-    execFileSync('git', ['-C', target, 'commit', '--allow-empty', '-m', 'base'], {
-      stdio: 'ignore'
-    })
-  }
+  initRepo(remoteDir)
 
   const statePath = path.join(dir, 'child-state')
   const childScript = path.join(dir, 'upload-pack.mjs')
@@ -41,7 +45,7 @@ export function createHangingGit(prefix: string): HangingGit {
     childScript,
     [
       "import fs from 'node:fs'",
-      'fs.writeFileSync(process.env.REBASE_CHILD_STATE, String(process.pid))',
+      `fs.writeFileSync(${JSON.stringify(statePath)}, String(process.pid))`,
       'process.stdin.resume()',
       'setInterval(() => {}, 1 << 30)',
       ''
@@ -49,13 +53,11 @@ export function createHangingGit(prefix: string): HangingGit {
   )
 
   const toShellPath = (value: string) => `"${value.replace(/\\/g, '/')}"`
-  const uploadPack = `${toShellPath(process.execPath)} ${toShellPath(childScript)}`
 
   return {
     dir,
-    repoDir,
-    args: ['-C', repoDir, 'fetch', '--upload-pack', uploadPack, remoteDir],
-    env: { ...process.env, REBASE_CHILD_STATE: statePath },
+    remoteDir,
+    uploadPack: `${toShellPath(process.execPath)} ${toShellPath(childScript)}`,
     childPid: () => {
       if (!fs.existsSync(statePath)) {
         return undefined
@@ -63,7 +65,21 @@ export function createHangingGit(prefix: string): HangingGit {
       const raw = fs.readFileSync(statePath, 'utf8').trim()
       return /^\d+$/.test(raw) ? Number(raw) : undefined
     },
-    cleanup: () => fs.rmSync(dir, { recursive: true, force: true })
+    cleanup: () => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+  }
+}
+
+// Blocks a real `git` invocation indefinitely against a hanging remote.
+export function createHangingGit(prefix: string): HangingGit {
+  const remote = createHangingRemote(prefix)
+  const repoDir = path.join(remote.dir, 'repo')
+  initRepo(repoDir)
+
+  return {
+    ...remote,
+    repoDir,
+    args: ['-C', repoDir, 'fetch', '--upload-pack', remote.uploadPack, remote.remoteDir],
+    env: { ...process.env }
   }
 }
 
