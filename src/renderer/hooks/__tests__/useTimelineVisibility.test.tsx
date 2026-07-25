@@ -1,9 +1,10 @@
+import { GRAPH_LAYOUT_DEBOUNCE_MS, GRAPH_LAYOUT_MAX_DEBOUNCE_MS } from '@shared/graph-config'
 import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
 import { act, render } from '@testing-library/react'
 import { type ReactNode, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { refFilterKey } from '@/components/HistoryPanel/selectors'
-import { useTimelineVisibility } from '@/hooks/useTimelineVisibility'
+import { coalesceDelayFor, useTimelineVisibility } from '@/hooks/useTimelineVisibility'
 import { type CommitHistory, CommitHistoryProvider } from '@/stores/commit-history'
 import { type Refs, RefsProvider } from '@/stores/refs'
 import { type RepoSession, RepoSessionProvider } from '@/stores/repo-session'
@@ -302,6 +303,13 @@ describe('useTimelineVisibility', () => {
       await vi.advanceTimersByTimeAsync(250)
     })
     expect(harness.filteredHashes).toEqual(['new-main', 'm2', 'm1'])
+  })
+
+  it('widens the coalescing window as the loaded log grows', () => {
+    expect(coalesceDelayFor(0)).toBe(GRAPH_LAYOUT_DEBOUNCE_MS)
+    expect(coalesceDelayFor(2_000)).toBe(GRAPH_LAYOUT_DEBOUNCE_MS)
+    expect(coalesceDelayFor(20_000)).toBeGreaterThan(GRAPH_LAYOUT_DEBOUNCE_MS)
+    expect(coalesceDelayFor(500_000)).toBe(GRAPH_LAYOUT_MAX_DEBOUNCE_MS)
   })
 
   it('collapses a merge side branch by default and expands it from the merge', () => {

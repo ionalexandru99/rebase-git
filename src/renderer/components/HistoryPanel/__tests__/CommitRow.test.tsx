@@ -1,37 +1,42 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { RowLayout } from '@/lib/git-graph/layout'
+import { graphMetricsFor } from '@/lib/git-graph/metrics'
 import type { GitLogEntry } from '@/types'
 import { CommitRow, commitTopologyLabel } from '../CommitRow'
 
-function row(overrides: Partial<GitLogEntry> = {}): RowLayout {
+const METRICS = graphMetricsFor(16)
+const REMOTE_NAMES = new Set<string>()
+const REMOTES: Record<string, string> = {}
+
+function commit(overrides: Partial<GitLogEntry> = {}): GitLogEntry {
   return {
-    commit: {
-      hash: 'abcdef1234567890',
-      message: 'do the thing',
-      author_name: 'Ann Dev',
-      date: '2024-01-02T03:04:05Z',
-      parents: [],
-      refs: '',
-      ...overrides
-    },
-    commitLane: 0
+    hash: 'abcdef1234567890',
+    message: 'do the thing',
+    author_name: 'Ann Dev',
+    date: '2024-01-02T03:04:05Z',
+    parents: [],
+    refs: '',
+    ...overrides
+  }
+}
+
+function rowProps(overrides: Partial<GitLogEntry> = {}) {
+  return {
+    commit: commit(overrides),
+    lane: 0,
+    railLanes: 1,
+    metrics: METRICS,
+    top: 0,
+    dim: false,
+    offBranch: false,
+    gridTail: '1fr',
+    remotes: REMOTES,
+    remoteNames: REMOTE_NAMES
   }
 }
 
 function renderRow(onCommitAction = vi.fn()) {
-  render(
-    <CommitRow
-      row={row()}
-      top={0}
-      dim={false}
-      offBranch={false}
-      gridTail="1fr"
-      remotes={{}}
-      remoteNames={new Set()}
-      onCommitAction={onCommitAction}
-    />
-  )
+  render(<CommitRow {...rowProps()} onCommitAction={onCommitAction} />)
   return onCommitAction
 }
 
@@ -55,18 +60,7 @@ describe('CommitRow context menu', () => {
     ]
     for (const [label, action] of cases) {
       const onCommitAction = vi.fn()
-      const { unmount } = render(
-        <CommitRow
-          row={row()}
-          top={0}
-          dim={false}
-          offBranch={false}
-          gridTail="1fr"
-          remotes={{}}
-          remoteNames={new Set()}
-          onCommitAction={onCommitAction}
-        />
-      )
+      const { unmount } = render(<CommitRow {...rowProps()} onCommitAction={onCommitAction} />)
       fireEvent.contextMenu(screen.getByText('do the thing'))
       fireEvent.click(await screen.findByRole('menuitem', { name: label }))
       expect(onCommitAction).toHaveBeenCalledWith(action, 'abcdef1234567890', 'do the thing')
@@ -89,17 +83,7 @@ describe('commitTopologyLabel', () => {
 
 describe('CommitRow accessibility', () => {
   it('exposes a screen-reader topology hint for a merge commit', () => {
-    render(
-      <CommitRow
-        row={row({ parents: ['p1', 'p2'] })}
-        top={0}
-        dim={false}
-        offBranch={false}
-        gridTail="1fr"
-        remotes={{}}
-        remoteNames={new Set()}
-      />
-    )
+    render(<CommitRow {...rowProps({ parents: ['p1', 'p2'] })} />)
     expect(screen.getByText('Merge commit with 2 parents')).toBeInTheDocument()
   })
 })
@@ -108,13 +92,7 @@ describe('CommitRow merge expansion control', () => {
   function renderMerge(mergeGlyph: 'collapsed' | 'expanded', onToggleExpand = vi.fn()) {
     render(
       <CommitRow
-        row={row({ parents: ['p1', 'p2'] })}
-        top={0}
-        dim={false}
-        offBranch={false}
-        gridTail="1fr"
-        remotes={{}}
-        remoteNames={new Set()}
+        {...rowProps({ parents: ['p1', 'p2'] })}
         mergeGlyph={mergeGlyph}
         onToggleExpand={onToggleExpand}
       />
@@ -123,17 +101,7 @@ describe('CommitRow merge expansion control', () => {
   }
 
   it('renders no expansion control for a plain commit', () => {
-    render(
-      <CommitRow
-        row={row()}
-        top={0}
-        dim={false}
-        offBranch={false}
-        gridTail="1fr"
-        remotes={{}}
-        remoteNames={new Set()}
-      />
-    )
+    render(<CommitRow {...rowProps()} />)
     expect(screen.queryByRole('button', { name: /side branch/i })).not.toBeInTheDocument()
   })
 

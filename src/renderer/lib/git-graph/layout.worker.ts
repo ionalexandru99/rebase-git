@@ -1,18 +1,36 @@
-import { layoutCommits } from './layout'
-import type { GraphLayoutWorkerRequest, GraphLayoutWorkerResponse } from './layout-worker-protocol'
+import { type GraphLayout, layoutGraph } from './layout'
+import {
+  detachLayout,
+  type GraphLayoutRequest,
+  type GraphLayoutResponse,
+  layoutTransferables
+} from './layout-worker-protocol'
 
 const worker = self as unknown as {
-  onmessage: ((event: MessageEvent<GraphLayoutWorkerRequest>) => void) | null
-  postMessage: (response: GraphLayoutWorkerResponse) => void
+  onmessage: ((event: MessageEvent<GraphLayoutRequest>) => void) | null
+  postMessage: (response: GraphLayoutResponse, transfer?: Transferable[]) => void
 }
 
-worker.onmessage = (event: MessageEvent<GraphLayoutWorkerRequest>) => {
-  const hiddenParents = new Set(event.data.hiddenParents)
-  const response: GraphLayoutWorkerResponse = {
-    generation: event.data.generation,
-    layout: layoutCommits(event.data.commits, undefined, {
-      isHiddenParent: (hash) => hiddenParents.has(hash)
-    })
+let held: GraphLayout | null = null
+
+worker.onmessage = (event: MessageEvent<GraphLayoutRequest>) => {
+  const { generation, topology } = event.data
+  const firstRow = topology.firstRow
+
+  if (firstRow > 0 && (!held || held.commitCount < firstRow)) {
+    worker.postMessage({ status: 'needs-full-topology', generation })
+    return
   }
-  worker.postMessage(response)
+
+  const layout = layoutGraph(
+    topology,
+    held && firstRow > 0 ? { layout: held, rows: firstRow } : undefined
+  )
+  held = layout
+
+  const detached = detachLayout(layout)
+  worker.postMessage(
+    { status: 'ready', generation, layout: detached },
+    layoutTransferables(detached)
+  )
 }

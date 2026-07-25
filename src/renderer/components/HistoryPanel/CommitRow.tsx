@@ -2,10 +2,11 @@ import { GitMergeIcon } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { formatCommitDate, initials } from '@/lib/format'
 import type { CommitAction } from '@/lib/git-actions'
-import { computeRowRailWidth, laneColor, laneX, ROW_H } from '@/lib/git-graph/canvas'
-import type { LaneBoundary, RowLayout } from '@/lib/git-graph/layout'
+import { computeGraphRailWidth, laneColor, laneX } from '@/lib/git-graph/canvas'
+import type { GraphMetrics } from '@/lib/git-graph/metrics'
 import { parseRefs } from '@/lib/git-graph/refs'
 import { cn } from '@/lib/utils'
+import type { GitLogEntry } from '@/types'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -17,9 +18,11 @@ import { RefBadge } from './RefBadge'
 import type { MergeGlyph } from './selectors'
 
 interface CommitRowProps {
-  row: RowLayout
-  incoming?: LaneBoundary
-  outgoing?: LaneBoundary
+  commit: GitLogEntry
+  lane: number
+  // Lanes this row spans, straight from the layout — the row's text starts after them.
+  railLanes: number
+  metrics: GraphMetrics
   top: number
   dim: boolean
   offBranch: boolean
@@ -45,16 +48,16 @@ export function commitTopologyLabel(parentCount: number, offBranch: boolean): st
 }
 
 export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
-  const commit = props.row.commit
+  const commit = props.commit
   const isMerge = commit.parents.length >= 2
   const refs = useMemo(
     () => parseRefs(commit.refs, props.remoteNames),
     [commit.refs, props.remoteNames]
   )
-  const laneHex = laneColor(props.row.commitLane)
+  const laneHex = laneColor(props.lane)
   const rowOpacity = props.dim ? 0.35 : props.offBranch ? 0.6 : 1
   const subjectClass = props.offBranch ? 'text-muted-foreground' : 'text-foreground'
-  const railWidth = computeRowRailWidth(props.row, props.incoming ?? [], props.outgoing ?? [])
+  const railWidth = computeGraphRailWidth(props.railLanes, props.metrics)
   const glyph = props.mergeGlyph
   const expandable = glyph === 'collapsed' || glyph === 'expanded'
   const act = (action: CommitAction) => props.onCommitAction?.(action, commit.hash, commit.message)
@@ -66,7 +69,7 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
         className="group/row absolute inset-x-0 z-10 border-b"
         style={{
           top: `${props.top}px`,
-          height: `${ROW_H}px`,
+          height: `${props.metrics.rowHeight}px`,
           opacity: String(rowOpacity),
           contain: 'layout style'
         }}
@@ -84,7 +87,7 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
             }}
             className="absolute z-20 -translate-y-1/2 rounded-full bg-transparent"
             style={{
-              left: `${laneX(props.row.commitLane) - MERGE_TOGGLE_HIT / 2}px`,
+              left: `${laneX(props.lane, props.metrics) - MERGE_TOGGLE_HIT / 2}px`,
               top: '50%',
               width: `${MERGE_TOGGLE_HIT}px`,
               height: `${MERGE_TOGGLE_HIT}px`

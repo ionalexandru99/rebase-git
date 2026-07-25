@@ -1,244 +1,255 @@
 import { describe, expect, it } from 'vitest'
-import { getLayoutBoundary, getLayoutRow, layoutCommits, layoutRows } from '@/lib/git-graph/layout'
+import { createLaneWalker, seekLanes } from '@/lib/git-graph/lane-walker'
+import { alignRowsToCheckpoint, type GraphLayout, layoutGraph } from '@/lib/git-graph/layout'
+import {
+  buildGraphTopology,
+  type GraphTopology,
+  sharedTopologyRows,
+  sliceTopology
+} from '@/lib/git-graph/topology'
 import type { GitLogEntry } from '@/types'
 
-function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {
+function entry(hash: string, parents: string[] = []): GitLogEntry {
   return {
+    hash,
     message: 'msg',
     author_name: 'Jane Doe',
-    date: new Date().toISOString(),
-    parents: [],
-    refs: '',
-    ...overrides
+    date: '2024-01-01T00:00:00.000Z',
+    parents,
+    refs: ''
   }
 }
 
-describe('layoutCommits', () => {
+function topologyOf(
+  commits: GitLogEntry[],
+  isHiddenParent?: (hash: string) => boolean
+): GraphTopology {
+  return buildGraphTopology(commits, { isHiddenParent })
+}
+
+interface Graph {
+  layout: GraphLayout
+  topology: GraphTopology
+}
+
+function graphOf(commits: GitLogEntry[], isHiddenParent?: (hash: string) => boolean): Graph {
+  const topology = topologyOf(commits, isHiddenParent)
+  return { layout: layoutGraph(topology), topology }
+}
+
+function lanes(graph: Graph | GraphLayout): number[] {
+  return [...('layout' in graph ? graph.layout : graph).commitLane]
+}
+
+function boundaries(graph: Graph): number[][] {
+  return Array.from({ length: graph.layout.commitCount + 1 }, (_unused, boundary) =>
+    ownersAt(graph, boundary)
+  )
+}
+
+function ownersAt(graph: Graph, boundary: number): number[] {
+  const walker = createLaneWalker()
+  seekLanes(walker, graph.layout, graph.topology, boundary)
+  return [...walker.lanes.subarray(0, walker.laneCount)]
+}
+
+describe('layoutGraph', () => {
   it('places a single linear chain in lane 0', () => {
-    const commits: GitLogEntry[] = [
-      entry({ hash: 'c1', parents: ['c2'] }),
-      entry({ hash: 'c2', parents: ['c3'] }),
-      entry({ hash: 'c3', parents: [] })
-    ]
+    const graph = graphOf([entry('c1', ['c2']), entry('c2', ['c3']), entry('c3')])
 
-    const layout = layoutCommits(commits)
-    const rows = layoutRows(layout)
-
-    expect(layout.maxLanes).toBe(1)
-    expect(layout.laidOutThroughIndex).toBe(3)
-    expect(rows.map((row) => row.commitLane)).toEqual([0, 0, 0])
-    expect(getLayoutBoundary(layout, 3)).toEqual([])
+    expect(graph.layout.maxLanes).toBe(1)
+    expect(graph.layout.commitCount).toBe(3)
+    expect(lanes(graph)).toEqual([0, 0, 0])
+    expect(ownersAt(graph, 3)).toEqual([])
   })
 
-  it('stores each lane boundary once across adjacent rows', () => {
-    const commits = [
-      entry({ hash: 'c1', parents: ['c2'] }),
-      entry({ hash: 'c2', parents: ['c3'] }),
-      entry({ hash: 'c3', parents: [] })
-    ]
+  it('hands each row the lane its parent will occupy next', () => {
+    const graph = graphOf([entry('c1', ['c2']), entry('c2', ['c3']), entry('c3')])
 
-    const layout = layoutCommits(commits)
-
-    expect(layout.boundaryCount).toBe(layout.rowCount + 1)
-    expect(getLayoutBoundary(layout, 1)).toEqual(['c2'])
-    expect(getLayoutBoundary(layout, 2)).toEqual(['c3'])
+    expect(ownersAt(graph, 1)).toEqual([1])
+    expect(ownersAt(graph, 2)).toEqual([2])
   })
 
   it('opens a second lane when a sibling branch tip appears', () => {
-    const commits: GitLogEntry[] = [
-      entry({ hash: 'c1', parents: ['c3'] }),
-      entry({ hash: 'c2', parents: ['c3'] }),
-      entry({ hash: 'c3', parents: [] })
-    ]
+    const graph = graphOf([entry('c1', ['c3']), entry('c2', ['c3']), entry('c3')])
 
-    const layout = layoutCommits(commits)
-    const rows = layoutRows(layout)
-
-    expect(layout.maxLanes).toBe(2)
-    expect(rows[0].commitLane).toBe(0)
-    expect(rows[1].commitLane).toBe(1)
-    expect(rows[2].commitLane).toBe(0)
-    expect(getLayoutBoundary(layout, 3)).toEqual([])
+    expect(graph.layout.maxLanes).toBe(2)
+    expect(lanes(graph)).toEqual([0, 1, 0])
+    expect(ownersAt(graph, 3)).toEqual([])
   })
 
-  it('handles a merge commit by expanding into two outgoing lanes', () => {
-    const commits: GitLogEntry[] = [
-      entry({ hash: 'c1', parents: ['c2', 'c3'] }),
-      entry({ hash: 'c2', parents: ['c4'] }),
-      entry({ hash: 'c3', parents: ['c4'] }),
-      entry({ hash: 'c4', parents: [] })
-    ]
+  it('expands a merge into one lane per parent', () => {
+    const graph = graphOf([
+      entry('c1', ['c2', 'c3']),
+      entry('c2', ['c4']),
+      entry('c3', ['c4']),
+      entry('c4')
+    ])
 
-    const layout = layoutCommits(commits)
-    const rows = layoutRows(layout)
-
-    expect(layout.maxLanes).toBe(2)
-    expect(rows[0].commitLane).toBe(0)
-    expect(getLayoutBoundary(layout, 1)).toHaveLength(2)
-    expect(getLayoutBoundary(layout, 1)).toContain('c2')
-    expect(getLayoutBoundary(layout, 1)).toContain('c3')
-    expect(getLayoutBoundary(layout, 4)).toEqual([])
+    expect(graph.layout.maxLanes).toBe(2)
+    expect(graph.layout.commitLane[0]).toBe(0)
+    expect(ownersAt(graph, 1).sort()).toEqual([1, 2])
+    expect(ownersAt(graph, 4)).toEqual([])
   })
 
   it('keeps a merge near-linear when its side parent is hidden by collapse', () => {
-    const commits: GitLogEntry[] = [
-      entry({ hash: 'M', parents: ['m2', 'f1'] }),
-      entry({ hash: 'm2', parents: ['m1'] }),
-      entry({ hash: 'm1', parents: [] })
-    ]
+    const graph = graphOf(
+      [entry('M', ['m2', 'f1']), entry('m2', ['m1']), entry('m1')],
+      (hash) => hash === 'f1'
+    )
 
-    const layout = layoutCommits(commits, undefined, {
-      isHiddenParent: (hash) => hash === 'f1'
-    })
-    const rows = layoutRows(layout)
-
-    expect(layout.maxLanes).toBe(1)
-    expect(getLayoutBoundary(layout, 1)).not.toContain('f1')
-    expect(rows.map((row) => row.commitLane)).toEqual([0, 0, 0])
+    expect(graph.layout.maxLanes).toBe(1)
+    expect(lanes(graph)).toEqual([0, 0, 0])
   })
 
   it('still opens a lane for a not-yet-streamed parent', () => {
-    const commits: GitLogEntry[] = [entry({ hash: 'M', parents: ['m2', 'pending'] })]
+    const graph = graphOf([entry('M', ['m2', 'pending'])])
 
-    const layout = layoutCommits(commits, undefined, {
-      isHiddenParent: (hash) => hash === 'f1'
-    })
-
-    expect(getLayoutBoundary(layout, 1)).toContain('pending')
+    expect(ownersAt(graph, 1)).toHaveLength(2)
+    expect(graph.layout.maxLanes).toBe(2)
   })
 
   it('gives every parent of an octopus merge a distinct lane', () => {
-    const commits: GitLogEntry[] = [
-      entry({ hash: 'm', parents: ['p1', 'p2', 'p3'] }),
-      entry({ hash: 'p1', parents: [] }),
-      entry({ hash: 'p2', parents: [] }),
-      entry({ hash: 'p3', parents: [] })
-    ]
+    const graph = graphOf([entry('m', ['p1', 'p2', 'p3']), entry('p1'), entry('p2'), entry('p3')])
 
-    const layout = layoutCommits(commits)
-
-    const outgoing = getLayoutBoundary(layout, 1)
-    const parentLanes = ['p1', 'p2', 'p3'].map((parent) => outgoing.indexOf(parent))
-    expect(parentLanes).not.toContain(-1)
-    expect(new Set(parentLanes).size).toBe(3)
-    expect(layout.maxLanes).toBeGreaterThanOrEqual(3)
+    const outgoing = ownersAt(graph, 1)
+    expect(new Set(outgoing).size).toBe(3)
+    expect(outgoing).not.toContain(-1)
+    expect(graph.layout.maxLanes).toBeGreaterThanOrEqual(3)
   })
 
-  it('does not mutate the previous snapshot when appending incrementally', () => {
-    const prefix = [entry({ hash: 'c1', parents: ['c2'] }), entry({ hash: 'c2', parents: [] })]
-    const step1 = layoutCommits(prefix)
-    const step2 = layoutCommits([...prefix, entry({ hash: 'c3', parents: ['c2'] })], step1)
+  it('reuses a lane freed by an earlier branch tip', () => {
+    const graph = graphOf([entry('a', ['c']), entry('b', ['d']), entry('c', []), entry('d', [])])
 
-    expect(step2.rowChunks[0]).toBe(step1.rowChunks[0])
-    expect(step2.boundaryChunks[0]).toBe(step1.boundaryChunks[0])
-    expect(step1.rowCount).toBe(2)
-    expect(step2.rowCount).toBe(3)
-    expect(
-      layoutRows(step2)
-        .slice(0, 2)
-        .map((row) => row.commit.hash)
-    ).toEqual(['c1', 'c2'])
+    // 'a' ends in lane 0, so 'd' — opened in lane 1 — keeps its lane rather than shifting left.
+    expect(lanes(graph)).toEqual([0, 1, 0, 1])
   })
 
-  it('produces the same layout incrementally as in one pass', () => {
-    const all: GitLogEntry[] = [
-      entry({ hash: 'a', parents: ['b', 'c'] }),
-      entry({ hash: 'b', parents: ['d'] }),
-      entry({ hash: 'c', parents: ['d'] }),
-      entry({ hash: 'd', parents: ['e'] }),
-      entry({ hash: 'e', parents: [] })
-    ]
-
-    const full = layoutCommits(all)
-
-    const prefix = all.slice(0, 2)
-    const step1 = layoutCommits(prefix)
-    const step2 = layoutCommits(all, step1)
-
-    expect(step2.maxLanes).toBe(full.maxLanes)
-    expect(layoutRows(step2).map((row) => row.commitLane)).toEqual(
-      layoutRows(full).map((row) => row.commitLane)
-    )
-    expect(
-      Array.from({ length: step2.boundaryCount }, (_unused, index) =>
-        getLayoutBoundary(step2, index)
-      )
-    ).toEqual(
-      Array.from({ length: full.boundaryCount }, (_unused, index) => getLayoutBoundary(full, index))
-    )
-  })
-
-  it('does not let later mutations of the source array corrupt incremental layout', () => {
-    const commits = [entry({ hash: 'a', parents: ['b'] })]
-    const step1 = layoutCommits(commits)
-
-    commits.push(entry({ hash: 'b', parents: ['c'] }), entry({ hash: 'c', parents: [] }))
-    const step2 = layoutCommits(commits, step1)
-
-    expect(step2.rowCount).toBe(3)
-    expect(layoutRows(step2).map((row) => row.commit.hash)).toEqual(['a', 'b', 'c'])
-  })
-
-  it('rebuilds from scratch when the cached prefix no longer matches', () => {
-    const cached = layoutCommits([entry({ hash: 'x', parents: [] })])
-    const fresh = layoutCommits([entry({ hash: 'y', parents: [] })], cached)
-
-    expect(fresh.rowCount).toBe(1)
-    expect(getLayoutRow(fresh, 0)?.commit.hash).toBe('y')
-  })
-
-  it('rebuilds from scratch when a commit inside the cached prefix changes', () => {
-    const cached = layoutCommits([
-      entry({ hash: 'a', parents: ['b'] }),
-      entry({ hash: 'b', parents: ['c'] }),
-      entry({ hash: 'c', parents: [] })
+  it('records the lanes each row needs so a row can size its own rail', () => {
+    const graph = graphOf([
+      entry('m', ['a', 'b']),
+      entry('a', ['c']),
+      entry('b', ['c']),
+      entry('c')
     ])
-    const fresh = layoutCommits(
-      [
-        entry({ hash: 'a', parents: ['x'] }),
-        entry({ hash: 'x', parents: ['c'] }),
-        entry({ hash: 'c', parents: [] }),
-        entry({ hash: 'd', parents: [] })
-      ],
-      cached
-    )
 
-    expect(layoutRows(fresh).map((row) => row.commit.hash)).toEqual(['a', 'x', 'c', 'd'])
-    expect(fresh.rowChunks[0]).not.toBe(cached.rowChunks[0])
+    expect([...graph.layout.railLanes]).toEqual([2, 2, 2, 1])
   })
 
-  it('respects maxCommits cap', () => {
-    const commits = Array.from({ length: 20 }, (_unused, index) =>
-      entry({ hash: `c${index}`, parents: index < 19 ? [`c${index + 1}`] : [] })
-    )
-    const result = layoutCommits(commits, undefined, { maxCommits: 5 })
+  // The canvas leans on this: a row's incoming edge is always a straight drop down its own lane,
+  // because no other lane can be holding that commit.
+  it('never reserves two lanes for the same commit', () => {
+    const graph = graphOf([
+      entry('m', ['a', 'b']),
+      entry('x', ['a']),
+      entry('a', ['base']),
+      entry('b', ['base']),
+      entry('base')
+    ])
 
-    expect(result.rowCount).toBe(5)
-    expect(result.laidOutThroughIndex).toBe(5)
-    expect(result.commits).toHaveLength(5)
+    for (let boundary = 0; boundary <= graph.layout.commitCount; boundary++) {
+      const owners = ownersAt(graph, boundary).filter((owner) => owner !== -1)
+      expect(new Set(owners).size).toBe(owners.length)
+    }
   })
 
-  it('extends a window from a previous layout snapshot', () => {
-    const commits = Array.from({ length: 6 }, (_unused, index) =>
-      entry({ hash: `c${index}`, parents: index < 5 ? [`c${index + 1}`] : [] })
-    )
-    const first = layoutCommits(commits, undefined, { endIndex: 3 })
-    const extended = layoutCommits(commits, first, {
-      startIndex: first.laidOutThroughIndex,
-      endIndex: 6
-    })
+  it('reports the widest row as maxLanes', () => {
+    const graph = graphOf([
+      entry('m', ['a', 'b']),
+      entry('a', ['c']),
+      entry('b', ['c']),
+      entry('c')
+    ])
 
-    expect(extended.rowCount).toBe(6)
-    expect(extended.laidOutThroughIndex).toBe(6)
-    expect(layoutRows(extended).map((row) => row.commitLane)).toEqual(
-      layoutRows(layoutCommits(commits)).map((row) => row.commitLane)
+    expect(graph.layout.maxLanes).toBe(Math.max(...graph.layout.railLanes))
+  })
+})
+
+// Mirrors what the hook and the worker do together: diff the topologies, round the shared prefix
+// down to a checkpoint, and lay out only the slice from there.
+function relayout(previous: Graph, commits: GitLogEntry[]): Graph {
+  const topology = topologyOf(commits)
+  const carried = alignRowsToCheckpoint(sharedTopologyRows(previous.topology, topology))
+  const layout = layoutGraph(sliceTopology(topology, carried), {
+    layout: previous.layout,
+    rows: carried
+  })
+  return { layout, topology }
+}
+
+function longChain(total: number, from = 0): GitLogEntry[] {
+  return Array.from({ length: total }, (_unused, index) =>
+    entry(
+      `c${from + index}`,
+      // A side branch every 30 commits keeps several lanes alive across checkpoints.
+      index % 30 === 0 && index + 3 < total
+        ? [`c${from + index + 1}`, `c${from + index + 3}`]
+        : index < total - 1
+          ? [`c${from + index + 1}`]
+          : []
+    )
+  )
+}
+
+describe('layoutGraph reuse', () => {
+  it('produces the same layout resuming from a checkpoint as in one pass', () => {
+    const page1 = longChain(300)
+    const page2 = [...page1.slice(0, 299), entry('c299', ['c300']), ...longChain(200, 300)]
+    const first = graphOf(page1)
+
+    const extended = relayout(first, page2)
+
+    expect(extended.layout.commitCount).toBe(500)
+    expect(lanes(extended)).toEqual(lanes(graphOf(page2)))
+    expect(boundaries(extended)).toEqual(boundaries(graphOf(page2)))
+    expect([...extended.layout.railLanes]).toEqual([...graphOf(page2).layout.railLanes])
+    expect(extended.layout.maxLanes).toBe(graphOf(page2).layout.maxLanes)
+  })
+
+  it('leaves the reused layout untouched', () => {
+    const page1 = longChain(300)
+    const first = graphOf(page1)
+    const before = lanes(first)
+
+    relayout(first, [...page1.slice(0, 299), entry('c299', ['c300']), ...longChain(200, 300)])
+
+    expect(lanes(first)).toEqual(before)
+    expect(first.layout.commitCount).toBe(300)
+  })
+
+  it('rebuilds from scratch when no rows carry over', () => {
+    const first = graphOf(longChain(300))
+    const replaced = [entry('m', ['a', 'b']), entry('a'), entry('b')]
+
+    const rebuilt = relayout(first, replaced)
+
+    expect(lanes(rebuilt)).toEqual(lanes(graphOf(replaced)))
+  })
+
+  it('rebuilds from scratch when the shared prefix is shorter than one checkpoint', () => {
+    const page1 = [entry('a', ['b']), entry('b')]
+    const first = graphOf(page1)
+
+    const extended = relayout(first, [...page1.slice(0, 1), entry('b', ['z']), entry('z')])
+
+    expect(lanes(extended)).toEqual(
+      lanes(graphOf([entry('a', ['b']), entry('b', ['z']), entry('z')]))
     )
   })
 
-  it('defaults maxCommits to full commit list length', () => {
-    const commits = [entry({ hash: 'a', parents: [] })]
-    const result = layoutCommits(commits)
-    expect(result.laidOutThroughIndex).toBe(1)
-    expect(result.rowCount).toBe(1)
+  it('refuses to resume from a row that is not a checkpoint', () => {
+    const first = graphOf(longChain(300))
+
+    expect(() =>
+      layoutGraph(sliceTopology(first.topology, 5), { layout: first.layout, rows: 5 })
+    ).toThrow()
+  })
+
+  it('handles an empty log', () => {
+    const graph = graphOf([])
+
+    expect(graph.layout.commitCount).toBe(0)
+    expect(graph.layout.maxLanes).toBe(0)
+    expect(ownersAt(graph, 0)).toEqual([])
   })
 })

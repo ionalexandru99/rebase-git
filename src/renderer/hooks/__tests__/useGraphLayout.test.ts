@@ -1,9 +1,10 @@
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useGraphLayout } from '@/hooks/useGraphLayout'
-import type { LayoutResult } from '@/lib/git-graph/layout'
-import { getLayoutBoundary, getLayoutRow, layoutCommits } from '@/lib/git-graph/layout'
+import { CHECKPOINT_ROWS, layoutGraph } from '@/lib/git-graph/layout'
+import { detachLayout, type GraphLayoutRequest } from '@/lib/git-graph/layout-worker-protocol'
+import { buildGraphTopology } from '@/lib/git-graph/topology'
 import type { GitLogEntry } from '@/types'
 
 function entry(hash: string, parents: string[] = []): GitLogEntry {
@@ -11,284 +12,302 @@ function entry(hash: string, parents: string[] = []): GitLogEntry {
     hash,
     message: hash,
     author_name: 'Author',
-    date: new Date().toISOString(),
+    date: '2024-01-01T00:00:00.000Z',
     parents,
     refs: ''
   }
 }
 
-describe('useGraphLayout', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
+function chain(length: number): GitLogEntry[] {
+  return Array.from({ length }, (_unused, index) =>
+    entry(`c${index}`, index < length - 1 ? [`c${index + 1}`] : [])
+  )
+}
 
-  it('lays out commits synchronously', async () => {
+function layoutFor(commits: GitLogEntry[]) {
+  return detachLayout(layoutGraph(buildGraphTopology(commits)))
+}
+
+class FakeWorker {
+  static instances: FakeWorker[] = []
+  onmessage: ((event: MessageEvent) => void) | null = null
+  onerror: ((event: ErrorEvent) => void) | null = null
+  postMessage = vi.fn()
+  terminate = vi.fn()
+
+  constructor() {
+    FakeWorker.instances.push(this)
+  }
+
+  get requests(): GraphLayoutRequest[] {
+    return this.postMessage.mock.calls.map((call) => call[0] as GraphLayoutRequest)
+  }
+
+  reply(data: unknown) {
+    act(() => {
+      this.onmessage?.({ data } as MessageEvent)
+    })
+  }
+
+  fail() {
+    act(() => {
+      this.onerror?.({ preventDefault: vi.fn() } as unknown as ErrorEvent)
+    })
+  }
+}
+
+function useWorkers(): typeof FakeWorker.instances {
+  FakeWorker.instances = []
+  vi.stubGlobal('Worker', FakeWorker)
+  return FakeWorker.instances
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('useGraphLayout without a worker', () => {
+  it('lays out commits on the spot', () => {
     const { result } = renderHook(() =>
-      useGraphLayout({
-        commits: [entry('a', ['b']), entry('b')],
-        loading: false,
-        enabled: true,
-        debounceMs: 0
-      })
+      useGraphLayout({ commits: [entry('a', ['b']), entry('b')], enabled: true })
     )
 
-    await waitFor(() => {
-      expect(result.current.layout?.rowCount).toBe(2)
-    })
-    expect(result.current.laidOutThroughIndex).toBe(2)
-    expect(result.current.layout?.maxLanes).toBeGreaterThan(0)
+    expect(result.current.layout.commitCount).toBe(2)
+    expect(result.current.validRows).toBe(2)
+    expect(result.current.pending).toBe(false)
   })
 
-  it('lays out the first batch immediately while history is still loading', async () => {
-    const { result } = renderHook(() =>
-      useGraphLayout({
-        commits: [entry('a')],
-        loading: true,
-        enabled: true,
-        debounceMs: 250
-      })
-    )
-
-    await waitFor(() => {
-      expect(result.current.layout?.rowCount).toBe(1)
-    })
-  })
-
-  it('recomputes layout when the filtered commit list shrinks', async () => {
+  it('recomputes when the filtered commit list shrinks', () => {
     const { result } = renderHook(() => {
       const [commits, setCommits] = useState([entry('a', ['b']), entry('b', ['c']), entry('c')])
-      return {
-        graphLayout: useGraphLayout({
-          commits,
-          loading: false,
-          enabled: true,
-          debounceMs: 0
-        }),
-        setCommits
-      }
+      return { graph: useGraphLayout({ commits, enabled: true }), setCommits }
     })
 
-    await waitFor(() => {
-      expect(result.current.graphLayout.layout?.rowCount).toBe(3)
-    })
+    expect(result.current.graph.layout.commitCount).toBe(3)
 
     act(() => {
       result.current.setCommits([entry('a', ['b']), entry('b')])
     })
 
-    await waitFor(() => {
-      expect(result.current.graphLayout.layout?.rowCount).toBe(2)
-    })
-    expect(result.current.graphLayout.layout?.commits.map((commit) => commit.hash)).toEqual([
-      'a',
-      'b'
-    ])
-  })
-
-  it('relayouts immediately on a non-append change even while history is loading', () => {
-    const { result } = renderHook(() => {
-      const [commits, setCommits] = useState([entry('a', ['b']), entry('b', ['c']), entry('c')])
-      return {
-        graphLayout: useGraphLayout({ commits, loading: true, enabled: true, debounceMs: 250 }),
-        setCommits
-      }
-    })
-
-    expect(result.current.graphLayout.layout?.rowCount).toBe(3)
-
-    act(() => {
-      result.current.setCommits([entry('a', ['b']), entry('b')])
-    })
-
-    // No debounce timer is advanced: a collapse must take effect on the same commit, not 250ms later.
-    expect(result.current.graphLayout.layout?.rowCount).toBe(2)
+    expect(result.current.graph.layout.commitCount).toBe(2)
+    expect(result.current.graph.validRows).toBe(2)
   })
 
   it('relayouts an unchanged sequence when a carried parent becomes hidden', () => {
-    const initialCommits = [entry('merge', ['main-parent', 'side-parent']), entry('main-parent')]
+    const commits = [entry('merge', ['main-parent', 'side-parent']), entry('main-parent')]
     const { result } = renderHook(() => {
-      const [commits, setCommits] = useState(initialCommits)
-      const [hiddenParents, setHiddenParents] = useState<ReadonlySet<string>>(new Set())
+      const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
       return {
-        graphLayout: useGraphLayout({
+        graph: useGraphLayout({
           commits,
-          loading: false,
           enabled: true,
-          debounceMs: 0,
-          isHiddenParent: (hash) => hiddenParents.has(hash)
+          isHiddenParent: (hash) => hidden.has(hash)
         }),
-        hideSideParent: () => {
-          setHiddenParents(new Set(['side-parent']))
-          setCommits([...initialCommits])
-        }
+        hideSideParent: () => setHidden(new Set(['side-parent']))
       }
     })
 
-    expect(getLayoutBoundary(result.current.graphLayout.layout as LayoutResult, 1)).toContain(
-      'side-parent'
-    )
+    expect(result.current.graph.layout.maxLanes).toBe(2)
 
     act(() => {
       result.current.hideSideParent()
     })
 
-    expect(getLayoutBoundary(result.current.graphLayout.layout as LayoutResult, 1)).not.toContain(
-      'side-parent'
-    )
-    expect(result.current.graphLayout.layout?.maxLanes).toBe(1)
+    expect(result.current.graph.layout.maxLanes).toBe(1)
   })
 
-  it('clears stale layout when graph rendering is disabled', () => {
+  it('clears the layout when graph rendering is disabled', () => {
     const commits = [entry('a')]
-    const { result, rerender } = renderHook(
-      ({ enabled }) =>
-        useGraphLayout({ commits: enabled ? commits : [], loading: false, enabled, debounceMs: 0 }),
-      { initialProps: { enabled: true } }
-    )
+    const { result, rerender } = renderHook(({ enabled }) => useGraphLayout({ commits, enabled }), {
+      initialProps: { enabled: true }
+    })
 
-    expect(result.current.layout?.rowCount).toBe(1)
+    expect(result.current.layout.commitCount).toBe(1)
+
     rerender({ enabled: false })
 
-    expect(result.current.layout).toBeNull()
-    expect(result.current.laidOutThroughIndex).toBe(0)
+    expect(result.current.layout.commitCount).toBe(0)
+    expect(result.current.validRows).toBe(0)
   })
 
-  it('rejects a stale worker relayout by generation', () => {
-    const workers: FakeWorker[] = []
-    class FakeWorker {
-      onmessage: ((event: MessageEvent) => void) | null = null
-      postMessage = vi.fn()
-      terminate = vi.fn()
-
-      constructor() {
-        workers.push(this)
-      }
-
-      emit(data: unknown) {
-        this.onmessage?.({ data } as MessageEvent)
-      }
-    }
-    vi.stubGlobal('Worker', FakeWorker)
-    const initial = [entry('a')]
-    const replacement = [entry('b')]
+  it('keeps the same layout object when nothing about the graph changed', () => {
+    const first = [entry('a', ['b']), entry('b')]
     const { result, rerender } = renderHook(
-      ({ commits }) => useGraphLayout({ commits, loading: false, enabled: true, debounceMs: 0 }),
-      { initialProps: { commits: initial } }
+      ({ commits }) => useGraphLayout({ commits, enabled: true }),
+      {
+        initialProps: { commits: first }
+      }
     )
+    const before = result.current.layout
 
-    rerender({ commits: replacement })
+    rerender({ commits: [...first] })
+
+    expect(result.current.layout).toBe(before)
+  })
+})
+
+describe('useGraphLayout with a worker', () => {
+  it('sends the whole log first, then only the tail past the last checkpoint', () => {
+    const workers = useWorkers()
+    const page1 = chain(300)
+    const { rerender } = renderHook(({ commits }) => useGraphLayout({ commits, enabled: true }), {
+      initialProps: { commits: page1 }
+    })
+
     const worker = workers[0]
-    const firstGeneration = worker.postMessage.mock.calls[0][0].generation
-    const secondGeneration = worker.postMessage.mock.calls[1][0].generation
-    expect(result.current.laidOutThroughIndex).toBe(0)
-    act(() => {
-      worker.emit({ generation: firstGeneration, layout: layoutCommits(initial) })
+    expect(worker.requests[0].topology.firstRow).toBe(0)
+    worker.reply({
+      status: 'ready',
+      generation: worker.requests[0].generation,
+      layout: layoutFor(page1)
     })
-    expect(result.current.layout).toBeNull()
 
-    act(() => {
-      worker.emit({ generation: secondGeneration, layout: layoutCommits(replacement) })
-    })
-    expect(getLayoutRow(result.current.layout as LayoutResult, 0)?.commit.hash).toBe('b')
+    rerender({ commits: [...page1.slice(0, 299), entry('c299', ['z']), entry('z')] })
+
+    // The 299 shared rows round down to the checkpoint at 256, so only the rest crosses the wire.
+    expect(worker.requests[1].topology.firstRow).toBe(CHECKPOINT_ROWS * 2)
+    expect(worker.requests[1].topology.commitCount).toBe(301)
   })
 
-  it('rejects a pending worker relayout after reusing the rendered sequence', () => {
-    const workers: FakeWorker[] = []
-    class FakeWorker {
-      onmessage: ((event: MessageEvent) => void) | null = null
-      postMessage = vi.fn()
-      terminate = vi.fn()
-
-      constructor() {
-        workers.push(this)
-      }
-
-      emit(data: unknown) {
-        this.onmessage?.({ data } as MessageEvent)
-      }
-    }
-    vi.stubGlobal('Worker', FakeWorker)
-    const initial = [entry('a')]
-    const replacement = [entry('b')]
+  it('keeps showing the rows that survived while a relayout is in flight', () => {
+    const workers = useWorkers()
+    const page1 = [entry('a', ['b']), entry('b')]
     const { result, rerender } = renderHook(
-      ({ commits }) => useGraphLayout({ commits, loading: false, enabled: true, debounceMs: 0 }),
-      { initialProps: { commits: initial } }
+      ({ commits }) => useGraphLayout({ commits, enabled: true }),
+      { initialProps: { commits: page1 } }
     )
     const worker = workers[0]
-    const initialGeneration = worker.postMessage.mock.calls[0][0].generation
-    act(() => {
-      worker.emit({ generation: initialGeneration, layout: layoutCommits(initial) })
+    worker.reply({
+      status: 'ready',
+      generation: worker.requests[0].generation,
+      layout: layoutFor(page1)
     })
 
-    rerender({ commits: replacement })
-    const replacementGeneration = worker.postMessage.mock.calls[1][0].generation
-    rerender({ commits: initial })
+    rerender({ commits: [...page1, entry('z')] })
 
-    expect(result.current.layoutPending).toBe(false)
-    expect(getLayoutRow(result.current.layout as LayoutResult, 0)?.commit.hash).toBe('a')
-
-    act(() => {
-      worker.emit({ generation: replacementGeneration, layout: layoutCommits(replacement) })
-    })
-
-    expect(result.current.layoutPending).toBe(false)
-    expect(getLayoutRow(result.current.layout as LayoutResult, 0)?.commit.hash).toBe('a')
+    expect(result.current.pending).toBe(true)
+    expect(result.current.validRows).toBe(2)
+    expect(result.current.layout.commitCount).toBe(2)
   })
 
-  it('falls back from a failed worker and recreates it for the next layout', () => {
-    const workers: FakeWorker[] = []
-    class FakeWorker {
-      onmessage: ((event: MessageEvent) => void) | null = null
-      onerror: ((event: ErrorEvent) => void) | null = null
-      postMessage = vi.fn()
-      terminate = vi.fn()
-
-      constructor() {
-        workers.push(this)
-      }
-
-      fail() {
-        this.onerror?.({ preventDefault: vi.fn() } as unknown as ErrorEvent)
-      }
-    }
-    vi.stubGlobal('Worker', FakeWorker)
-    const initial = [entry('a')]
-    const replacement = [entry('b')]
+  it('drops rows that a reshaped log invalidated instead of drawing stale lanes', () => {
+    const workers = useWorkers()
     const { result, rerender } = renderHook(
-      ({ commits }) => useGraphLayout({ commits, loading: false, enabled: true, debounceMs: 0 }),
-      { initialProps: { commits: initial } }
+      ({ commits }) => useGraphLayout({ commits, enabled: true }),
+      { initialProps: { commits: [entry('a', ['b']), entry('b')] } }
     )
-
-    expect(result.current.layoutPending).toBe(true)
-    act(() => {
-      workers[0].fail()
+    const worker = workers[0]
+    worker.reply({
+      status: 'ready',
+      generation: worker.requests[0].generation,
+      layout: layoutFor([entry('a', ['b']), entry('b')])
     })
 
-    expect(result.current.layoutPending).toBe(false)
-    expect(getLayoutRow(result.current.layout as LayoutResult, 0)?.commit.hash).toBe('a')
+    rerender({ commits: [entry('x'), entry('y')] })
+
+    expect(result.current.validRows).toBe(0)
+  })
+
+  it('ignores a reply that a newer request has superseded', () => {
+    const workers = useWorkers()
+    const { result, rerender } = renderHook(
+      ({ commits }) => useGraphLayout({ commits, enabled: true }),
+      { initialProps: { commits: [entry('a')] } }
+    )
+    const worker = workers[0]
+    const stale = worker.requests[0].generation
+
+    rerender({ commits: [entry('b', ['c']), entry('c')] })
+    worker.reply({ status: 'ready', generation: stale, layout: layoutFor([entry('a')]) })
+
+    expect(result.current.pending).toBe(true)
+    expect(result.current.layout.commitCount).toBe(0)
+
+    worker.reply({
+      status: 'ready',
+      generation: worker.requests[1].generation,
+      layout: layoutFor([entry('b', ['c']), entry('c')])
+    })
+
+    expect(result.current.layout.commitCount).toBe(2)
+    expect(result.current.pending).toBe(false)
+  })
+
+  it('resends the whole log when the worker cannot extend what it holds', () => {
+    const workers = useWorkers()
+    const page1 = [entry('a', ['b']), entry('b')]
+    const { rerender } = renderHook(({ commits }) => useGraphLayout({ commits, enabled: true }), {
+      initialProps: { commits: page1 }
+    })
+    const worker = workers[0]
+    worker.reply({
+      status: 'ready',
+      generation: worker.requests[0].generation,
+      layout: layoutFor(page1)
+    })
+    rerender({ commits: [...page1, entry('z')] })
+
+    worker.reply({ status: 'needs-full-topology', generation: worker.requests[1].generation })
+
+    expect(worker.requests[2].topology.firstRow).toBe(0)
+    expect(worker.requests[2].topology.commitCount).toBe(3)
+  })
+
+  it('falls back to laying out inline when the worker fails, and replaces it', () => {
+    const workers = useWorkers()
+    const { result, rerender } = renderHook(
+      ({ commits }) => useGraphLayout({ commits, enabled: true }),
+      { initialProps: { commits: [entry('a', ['b']), entry('b')] } }
+    )
+
+    expect(result.current.pending).toBe(true)
+    workers[0].fail()
+
+    expect(result.current.pending).toBe(false)
+    expect(result.current.layout.commitCount).toBe(2)
     expect(workers[0].terminate).toHaveBeenCalledOnce()
+
+    rerender({ commits: [entry('a', ['b']), entry('b'), entry('z')] })
+
     expect(workers).toHaveLength(2)
-
-    rerender({ commits: replacement })
-
-    expect(workers[1].postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ commits: replacement })
-    )
+    expect(workers[1].requests[0].topology.firstRow).toBe(0)
   })
 
-  it('lays out synchronously when worker construction fails', () => {
-    class BrokenWorker {
-      constructor() {
-        throw new Error('worker unavailable')
+  it('lays out inline when the worker cannot even be constructed', () => {
+    vi.stubGlobal(
+      'Worker',
+      class {
+        constructor() {
+          throw new Error('worker unavailable')
+        }
       }
-    }
-    vi.stubGlobal('Worker', BrokenWorker)
-
-    const { result } = renderHook(() =>
-      useGraphLayout({ commits: [entry('a')], loading: false, enabled: true, debounceMs: 0 })
     )
 
-    expect(result.current.layoutPending).toBe(false)
-    expect(getLayoutRow(result.current.layout as LayoutResult, 0)?.commit.hash).toBe('a')
+    const { result } = renderHook(() => useGraphLayout({ commits: [entry('a')], enabled: true }))
+
+    expect(result.current.pending).toBe(false)
+    expect(result.current.layout.commitCount).toBe(1)
+  })
+
+  it('does not re-request when a fresh commits array describes the same graph', () => {
+    const workers = useWorkers()
+    const commits = [entry('a', ['b']), entry('b')]
+    const { rerender } = renderHook(({ log }) => useGraphLayout({ commits: log, enabled: true }), {
+      initialProps: { log: commits }
+    })
+
+    rerender({ log: [...commits] })
+    rerender({ log: commits.map((commit) => ({ ...commit })) })
+
+    expect(workers[0].requests).toHaveLength(1)
+  })
+
+  it('terminates its worker on unmount', () => {
+    const workers = useWorkers()
+    const { unmount } = renderHook(() => useGraphLayout({ commits: [entry('a')], enabled: true }))
+
+    unmount()
+
+    expect(workers[0].terminate).toHaveBeenCalledOnce()
   })
 })

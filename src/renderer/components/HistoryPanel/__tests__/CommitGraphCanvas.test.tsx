@@ -2,58 +2,87 @@ import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CommitGraphCanvas } from '@/components/HistoryPanel/CommitGraphCanvas'
 import { LANE_PALETTE } from '@/lib/git-graph/canvas'
-import type { LaneBoundary, LayoutResult, RowLayout } from '@/lib/git-graph/layout'
+import { layoutGraph } from '@/lib/git-graph/layout'
+import { graphMetricsFor } from '@/lib/git-graph/metrics'
+import { buildGraphTopology } from '@/lib/git-graph/topology'
 import type { GitLogEntry } from '@/types'
 
-function entry(hash: string): GitLogEntry {
+const METRICS = graphMetricsFor(16)
+
+function entry(hash: string, parents: string[] = []): GitLogEntry {
   return {
     hash,
     message: hash,
     author_name: 'Author',
-    date: new Date().toISOString(),
-    parents: [],
+    date: '2024-01-01T00:00:00.000Z',
+    parents,
     refs: ''
   }
 }
 
-function row(hash: string, lane = 0): RowLayout {
-  return {
-    commit: entry(hash),
-    commitLane: lane
-  }
+function chain(length: number): GitLogEntry[] {
+  return Array.from({ length }, (_unused, index) =>
+    entry(`c${index}`, index < length - 1 ? [`c${index + 1}`] : [])
+  )
 }
 
-function wideRow(hash: string): RowLayout {
-  return {
-    commit: entry(hash),
-    commitLane: 0
-  }
+function graphOf(commits: GitLogEntry[]) {
+  const topology = buildGraphTopology(commits)
+  return { commits, topology, layout: layoutGraph(topology) }
 }
 
-function canvasLayout(rows: RowLayout[], boundaries?: LaneBoundary[]): LayoutResult {
-  const laneBoundaries =
-    boundaries ?? Array.from({ length: rows.length + 1 }, () => [] as LaneBoundary)
-  return {
-    rowChunks: [{ startIndex: 0, rows }],
-    boundaryChunks: [{ startIndex: 0, boundaries: laneBoundaries }],
-    rowCount: rows.length,
-    boundaryCount: rows.length + 1,
-    maxLanes: 1,
-    lanesAfter: laneBoundaries.at(-1) ?? [],
-    commits: rows.map((row) => row.commit),
-    laidOutThroughIndex: rows.length
-  }
+function scroller(overrides: { clientWidth?: number; scrollTop?: number } = {}) {
+  const element = document.createElement('div')
+  Object.defineProperty(element, 'scrollTop', { value: overrides.scrollTop ?? 0, writable: true })
+  Object.defineProperty(element, 'clientWidth', {
+    value: overrides.clientWidth ?? 400,
+    writable: true
+  })
+  return element
+}
+
+function nextFrames(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
+}
+
+interface CanvasProps {
+  graph: ReturnType<typeof graphOf>
+  scrollContainer: HTMLDivElement
+  viewportHeight?: number
+  visibleSet?: Set<string> | null
+  themeNonce?: number
+  rowCount?: number
+}
+
+function renderCanvas(props: CanvasProps) {
+  return (
+    <CommitGraphCanvas
+      layout={props.graph.layout}
+      topology={props.graph.topology}
+      commits={props.graph.commits}
+      metrics={METRICS}
+      scrollContainer={props.scrollContainer}
+      viewportHeight={props.viewportHeight ?? 400}
+      visibleSet={props.visibleSet ?? null}
+      themeNonce={props.themeNonce ?? 0}
+      rowCount={props.rowCount ?? props.graph.layout.commitCount}
+    />
+  )
 }
 
 describe('CommitGraphCanvas', () => {
   let strokeCount = 0
-  let fillCount = 0
+  let dotCount = 0
   let arcRadii: number[] = []
+  let arcCenters: Array<{ x: number; y: number }> = []
 
   beforeEach(() => {
     strokeCount = 0
-    fillCount = 0
+    dotCount = 0
     arcRadii = []
+    arcCenters = []
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       setTransform: vi.fn(),
       clearRect: vi.fn(),
@@ -64,11 +93,12 @@ describe('CommitGraphCanvas', () => {
       stroke: vi.fn(() => {
         strokeCount++
       }),
-      arc: vi.fn((_x: number, _y: number, radius: number) => {
+      arc: vi.fn((x: number, y: number, radius: number) => {
         arcRadii.push(radius)
+        arcCenters.push({ x, y })
       }),
       fill: vi.fn(() => {
-        fillCount++
+        dotCount++
       })
     } as unknown as CanvasRenderingContext2D)
   })
@@ -76,283 +106,193 @@ describe('CommitGraphCanvas', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
-    document.documentElement.style.fontSize = ''
+  })
+
+  it('draws a dot for every row on screen', async () => {
+    const viewportHeight = METRICS.rowHeight * 5
+    render(renderCanvas({ graph: graphOf(chain(50)), scrollContainer: scroller(), viewportHeight }))
+
+    await vi.waitFor(() => {
+      expect(dotCount).toBeGreaterThan(0)
+    })
+    expect(dotCount).toBeLessThanOrEqual(7)
+  })
+
+  it('draws the rows a live scroll reveals, without waiting for a re-render', async () => {
+    const container = scroller()
+    const graph = graphOf(chain(200))
+    render(
+      renderCanvas({ graph, scrollContainer: container, viewportHeight: METRICS.rowHeight * 4 })
+    )
+    await vi.waitFor(() => {
+      expect(arcCenters.length).toBeGreaterThan(0)
+    })
+
+    arcCenters = []
+    container.scrollTop = METRICS.rowHeight * 100
+    container.dispatchEvent(new Event('scroll'))
+    await nextFrames()
+
+    // Row 100 now sits at the top of the viewport; nothing about the React props changed.
+    expect(arcCenters.length).toBeGreaterThan(0)
+    expect(Math.min(...arcCenters.map((center) => center.y))).toBeCloseTo(METRICS.rowHeight / 2, 5)
+  })
+
+  it('does not rebind scroll listeners when unrelated props change', async () => {
+    const container = scroller()
+    const graph = graphOf(chain(20))
+    const addEventListener = vi.spyOn(container, 'addEventListener')
+    const { rerender } = render(renderCanvas({ graph, scrollContainer: container }))
+    await vi.waitFor(() => {
+      expect(dotCount).toBeGreaterThan(0)
+    })
+    const boundOnMount = addEventListener.mock.calls.length
+
+    rerender(renderCanvas({ graph, scrollContainer: container, visibleSet: new Set(['c1']) }))
+    rerender(renderCanvas({ graph, scrollContainer: container, viewportHeight: 500 }))
+
+    expect(addEventListener.mock.calls.length).toBe(boundOnMount)
+  })
+
+  it('coalesces a burst of scroll events into a single frame', async () => {
+    const container = scroller()
+    const graph = graphOf(chain(200))
+    render(renderCanvas({ graph, scrollContainer: container }))
+    await vi.waitFor(() => {
+      expect(dotCount).toBeGreaterThan(0)
+    })
+
+    dotCount = 0
+    for (let scrolls = 0; scrolls < 5; scrolls++) {
+      container.scrollTop = METRICS.rowHeight * scrolls
+      container.dispatchEvent(new Event('scroll'))
+    }
+    await nextFrames()
+    const afterBurst = dotCount
+
+    container.dispatchEvent(new Event('scroll'))
+    await nextFrames()
+
+    expect(afterBurst).toBeGreaterThan(0)
+    expect(dotCount).toBe(afterBurst * 2)
   })
 
   it('redraws when the visible filter set changes', async () => {
-    const scrollContainer = document.createElement('div')
-    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-
-    const { rerender, unmount } = render(
-      <CommitGraphCanvas
-        layout={canvasLayout([row('a'), row('b')])}
-        scrollContainer={scrollContainer}
-        viewportHeight={400}
-        visibleSet={new Set(['a'])}
-        railWidth={40}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={2}
-        graphLayoutEndIndex={2}
-      />
+    const container = scroller()
+    const graph = graphOf(chain(4))
+    const { rerender } = render(
+      renderCanvas({ graph, scrollContainer: container, visibleSet: new Set(['c0']) })
     )
-
     await vi.waitFor(() => {
-      expect(strokeCount + fillCount).toBeGreaterThan(0)
+      expect(dotCount).toBeGreaterThan(0)
     })
-    const before = strokeCount + fillCount
+    const before = dotCount
 
-    rerender(
-      <CommitGraphCanvas
-        layout={canvasLayout([row('a'), row('b')])}
-        scrollContainer={scrollContainer}
-        viewportHeight={400}
-        visibleSet={new Set(['b'])}
-        railWidth={40}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={2}
-        graphLayoutEndIndex={2}
-      />
-    )
+    rerender(renderCanvas({ graph, scrollContainer: container, visibleSet: new Set(['c1']) }))
+    await nextFrames()
 
-    await vi.waitFor(() => {
-      expect(strokeCount + fillCount).toBeGreaterThan(before)
-    })
-
-    unmount()
+    expect(dotCount).toBeGreaterThan(before)
   })
 
-  it('batches edges per frame so stroke count stays within the palette across many rows', async () => {
-    const scrollContainer = document.createElement('div')
-    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    const rows = Array.from({ length: 20 }, (_, index) => wideRow(`c${index}`))
-    const boundaries = Array.from({ length: rows.length + 1 }, (_unused, index) =>
-      Array.from({ length: 8 }, (_unusedLane, lane) => `c${index}-out-${lane}`)
-    )
-
-    render(
-      <CommitGraphCanvas
-        layout={canvasLayout(rows, boundaries)}
-        scrollContainer={scrollContainer}
-        viewportHeight={2000}
-        visibleSet={null}
-        railWidth={200}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={rows.length}
-        graphLayoutEndIndex={rows.length}
-      />
-    )
+  it('batches edges per frame so stroke count stays within the palette', async () => {
+    const container = scroller()
+    const wide = graphOf([
+      entry(
+        'm',
+        Array.from({ length: 12 }, (_unused, lane) => `p${lane}`)
+      ),
+      ...Array.from({ length: 12 }, (_unused, lane) => entry(`p${lane}`, []))
+    ])
+    render(renderCanvas({ graph: wide, scrollContainer: container }))
 
     await vi.waitFor(() => {
-      expect(fillCount).toBeGreaterThan(0)
+      expect(dotCount).toBeGreaterThan(0)
     })
 
-    expect(strokeCount).toBeLessThanOrEqual(LANE_PALETTE.length)
+    // One stroke per lane colour for all edges, plus at most one merge ring per drawn row.
+    expect(strokeCount).toBeLessThanOrEqual(LANE_PALETTE.length + 13)
+  })
+
+  it('sizes the rail to the lanes the visible rows actually use', async () => {
+    const container = scroller()
+    const wide = graphOf([
+      entry('m', ['p0', 'p1', 'p2', 'p3']),
+      ...Array.from({ length: 4 }, (_unused, lane) => entry(`p${lane}`, []))
+    ])
+    render(renderCanvas({ graph: wide, scrollContainer: container, viewportHeight: 400 }))
+    await vi.waitFor(() => {
+      expect(dotCount).toBeGreaterThan(0)
+    })
+    const wideRail = screen.getByTestId('commit-graph-canvas').style.width
+
+    render(renderCanvas({ graph: graphOf(chain(3)), scrollContainer: scroller() }))
+    await vi.waitFor(() => {
+      expect(dotCount).toBeGreaterThan(0)
+    })
+    const narrowRail = screen.getAllByTestId('commit-graph-canvas')[1].style.width
+
+    expect(parseFloat(wideRail)).toBeGreaterThan(parseFloat(narrowRail))
   })
 
   it('caps the bitmap width to the visible scroll container', () => {
-    const scrollContainer = document.createElement('div')
-    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    Object.defineProperty(scrollContainer, 'clientWidth', { value: 300 })
     vi.stubGlobal('devicePixelRatio', 2)
+    const narrow = scroller({ clientWidth: 12 })
+    render(renderCanvas({ graph: graphOf(chain(3)), scrollContainer: narrow }))
 
-    render(
-      <CommitGraphCanvas
-        layout={canvasLayout([row('a')])}
-        scrollContainer={scrollContainer}
-        viewportHeight={400}
-        visibleSet={null}
-        railWidth={2000}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={1}
-        graphLayoutEndIndex={1}
-      />
-    )
-
-    expect(screen.getByTestId('commit-graph-canvas')).toHaveAttribute('width', '600')
+    expect(screen.getByTestId('commit-graph-canvas')).toHaveAttribute('width', '24')
   })
 
-  it('refreshes the bitmap scale proactively when devicePixelRatio changes', async () => {
-    const scrollContainer = document.createElement('div')
-    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    Object.defineProperty(scrollContainer, 'clientWidth', { value: 100 })
+  it('refreshes the bitmap scale when devicePixelRatio changes', async () => {
     vi.stubGlobal('devicePixelRatio', 1)
-
     render(
-      <CommitGraphCanvas
-        layout={canvasLayout([row('a')])}
-        scrollContainer={scrollContainer}
-        viewportHeight={100}
-        visibleSet={null}
-        railWidth={100}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={1}
-        graphLayoutEndIndex={1}
-      />
+      renderCanvas({
+        graph: graphOf(chain(1)),
+        scrollContainer: scroller({ clientWidth: 10 }),
+        viewportHeight: 100
+      })
     )
     const canvas = screen.getByTestId('commit-graph-canvas')
-    expect(canvas).toHaveAttribute('width', '100')
+    expect(canvas).toHaveAttribute('width', '10')
 
     vi.stubGlobal('devicePixelRatio', 2)
     window.dispatchEvent(new Event('resize'))
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    })
+    await nextFrames()
 
-    expect(canvas).toHaveAttribute('width', '200')
+    expect(canvas).toHaveAttribute('width', '20')
   })
 
-  it('redraws with live root metrics when the root font size changes', async () => {
-    document.documentElement.style.fontSize = '16px'
-    const scrollContainer = document.createElement('div')
-    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    const mergeRow = { ...row('merge'), commit: { ...entry('merge'), parents: ['a', 'b'] } }
-
-    render(
-      <CommitGraphCanvas
-        layout={canvasLayout([mergeRow])}
-        scrollContainer={scrollContainer}
-        viewportHeight={100}
-        visibleSet={null}
-        railWidth={100}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={1}
-        graphLayoutEndIndex={1}
-      />
-    )
-    const initialRadius = arcRadii.at(-1) ?? 0
-
-    document.documentElement.style.fontSize = '20px'
-    window.dispatchEvent(new Event('resize'))
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    })
-
-    expect(arcRadii.at(-1)).toBeGreaterThan(initialRadius)
-  })
-
-  it('does not resolve CSS variables on every scroll frame, but refreshes them on theme change', async () => {
-    const scrollContainer = document.createElement('div')
-    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
+  it('resolves CSS variables only when the theme changes, never per scroll frame', async () => {
+    const container = scroller()
+    const graph = graphOf(chain(20))
     const getComputedStyleSpy = vi.spyOn(window, 'getComputedStyle')
-
-    const { rerender } = render(
-      <CommitGraphCanvas
-        layout={canvasLayout([row('a'), row('b')])}
-        scrollContainer={scrollContainer}
-        viewportHeight={400}
-        visibleSet={null}
-        railWidth={40}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={2}
-        graphLayoutEndIndex={2}
-      />
-    )
-
+    const { rerender } = render(renderCanvas({ graph, scrollContainer: container }))
     await vi.waitFor(() => {
-      expect(fillCount).toBeGreaterThan(0)
+      expect(dotCount).toBeGreaterThan(0)
     })
-
     const afterSetup = getComputedStyleSpy.mock.calls.length
 
     for (let scrolls = 0; scrolls < 5; scrolls++) {
-      scrollContainer.dispatchEvent(new Event('scroll'))
+      container.dispatchEvent(new Event('scroll'))
     }
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-    })
+    await nextFrames()
 
     expect(getComputedStyleSpy.mock.calls.length).toBe(afterSetup)
 
-    rerender(
-      <CommitGraphCanvas
-        layout={canvasLayout([row('a'), row('b')])}
-        scrollContainer={scrollContainer}
-        viewportHeight={400}
-        visibleSet={null}
-        railWidth={40}
-        themeNonce={1}
-        startIndex={0}
-        endIndex={2}
-        graphLayoutEndIndex={2}
-      />
-    )
+    rerender(renderCanvas({ graph, scrollContainer: container, themeNonce: 1 }))
+    await nextFrames()
 
-    await vi.waitFor(() => {
-      expect(getComputedStyleSpy.mock.calls.length).toBeGreaterThan(afterSetup)
-    })
+    expect(getComputedStyleSpy.mock.calls.length).toBeGreaterThan(afterSetup)
   })
 
-  it('skips rows beyond graphLayoutEndIndex', async () => {
-    const scrollContainer = document.createElement('div')
-    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-
-    render(
-      <CommitGraphCanvas
-        layout={canvasLayout([row('a'), row('b')])}
-        scrollContainer={scrollContainer}
-        viewportHeight={400}
-        visibleSet={null}
-        railWidth={40}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={2}
-        graphLayoutEndIndex={1}
-      />
-    )
+  it('never draws past the rows that have a valid layout', async () => {
+    const container = scroller()
+    const graph = graphOf(chain(10))
+    render(renderCanvas({ graph, scrollContainer: container, rowCount: 2 }))
 
     await vi.waitFor(() => {
-      expect(fillCount).toBeGreaterThan(0)
+      expect(dotCount).toBeGreaterThan(0)
     })
-    expect(strokeCount).toBeLessThan(4)
-  })
 
-  it('redraws when visible row graph geometry changes without changing row count', async () => {
-    const scrollContainer = document.createElement('div')
-    Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true })
-    const initialRows: RowLayout[] = [row('a'), row('b')]
-
-    const { rerender } = render(
-      <CommitGraphCanvas
-        layout={canvasLayout(initialRows)}
-        scrollContainer={scrollContainer}
-        viewportHeight={400}
-        visibleSet={null}
-        railWidth={40}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={2}
-        graphLayoutEndIndex={2}
-      />
-    )
-
-    await vi.waitFor(() => {
-      expect(fillCount).toBeGreaterThan(0)
-    })
-    const before = strokeCount + fillCount
-
-    rerender(
-      <CommitGraphCanvas
-        layout={canvasLayout([row('a'), row('b')], [[], ['b'], []])}
-        scrollContainer={scrollContainer}
-        viewportHeight={400}
-        visibleSet={null}
-        railWidth={40}
-        themeNonce={0}
-        startIndex={0}
-        endIndex={2}
-        graphLayoutEndIndex={2}
-      />
-    )
-
-    await vi.waitFor(() => {
-      expect(strokeCount + fillCount).toBeGreaterThan(before)
-    })
+    expect(dotCount).toBe(2)
   })
 })
