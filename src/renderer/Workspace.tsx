@@ -1,6 +1,7 @@
 import { type ReactNode, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useDialogs } from '@/components/ui/prompt-dialog'
+import { useStableCallback } from '@/hooks/useStableCallback'
 import { useTimelineVisibility } from '@/hooks/useTimelineVisibility'
 import {
   type BranchAction,
@@ -145,51 +146,53 @@ export function Workspace(props: WorkspaceProps) {
     }
   }
 
-  const handleCommitAction = (action: CommitAction, sha: string, message: string) => {
-    switch (action) {
-      case 'branch-here':
-        prompt({
-          title: `New branch at ${sha.slice(0, 7)}`,
-          label: 'Branch name',
-          confirmText: 'Create',
-          onConfirm: (name) => void actions.createBranch(name, sha, true)
-        })
-        return
-      case 'tag-here':
-        prompt({
-          title: `Create tag at ${sha.slice(0, 7)}`,
-          label: 'Tag name',
-          confirmText: 'Create',
-          onConfirm: (name) => void actions.createTag(name, sha)
-        })
-        return
-      case 'reset-soft':
-      case 'reset-mixed':
-        void actions.resetToCommit(sha, RESET_MODE_BY_ACTION[action])
-        return
-      case 'reset-hard':
-        confirm({
-          title: `Reset ${refs.currentBranch || 'branch'} to ${sha.slice(0, 7)}?`,
-          message: 'A hard reset discards all uncommitted changes in the working tree.',
-          confirmText: 'Reset --hard',
-          destructive: true,
-          onConfirm: () => void actions.resetToCommit(sha, 'hard')
-        })
-        return
-      case 'revert':
-        void actions.revertCommit(sha)
-        return
-      case 'cherry-pick':
-        void actions.cherryPick(sha)
-        return
-      case 'copy-sha':
-        void copyToClipboard(sha, 'Copied commit SHA')
-        return
-      case 'copy-message':
-        void copyToClipboard(message, 'Copied commit message')
-        return
+  const handleCommitAction = useStableCallback(
+    (action: CommitAction, sha: string, message: string) => {
+      switch (action) {
+        case 'branch-here':
+          prompt({
+            title: `New branch at ${sha.slice(0, 7)}`,
+            label: 'Branch name',
+            confirmText: 'Create',
+            onConfirm: (name) => void actions.createBranch(name, sha, true)
+          })
+          return
+        case 'tag-here':
+          prompt({
+            title: `Create tag at ${sha.slice(0, 7)}`,
+            label: 'Tag name',
+            confirmText: 'Create',
+            onConfirm: (name) => void actions.createTag(name, sha)
+          })
+          return
+        case 'reset-soft':
+        case 'reset-mixed':
+          void actions.resetToCommit(sha, RESET_MODE_BY_ACTION[action])
+          return
+        case 'reset-hard':
+          confirm({
+            title: `Reset ${refs.currentBranch || 'branch'} to ${sha.slice(0, 7)}?`,
+            message: 'A hard reset discards all uncommitted changes in the working tree.',
+            confirmText: 'Reset --hard',
+            destructive: true,
+            onConfirm: () => void actions.resetToCommit(sha, 'hard')
+          })
+          return
+        case 'revert':
+          void actions.revertCommit(sha)
+          return
+        case 'cherry-pick':
+          void actions.cherryPick(sha)
+          return
+        case 'copy-sha':
+          void copyToClipboard(sha, 'Copied commit SHA')
+          return
+        case 'copy-message':
+          void copyToClipboard(message, 'Copied commit message')
+          return
+      }
     }
-  }
+  )
 
   return (
     <Shell
@@ -238,6 +241,8 @@ export function Workspace(props: WorkspaceProps) {
             currentBranch={refs.currentBranch}
             remoteBranches={remoteBranches}
             visibleBranchRefs={timeline.visibleRefs}
+            graphCommits={timeline.graphCommits}
+            timelineTips={timeline.timelineTips}
             filteredCommits={timeline.filteredCommits}
             displayedCommitSet={timeline.displayedCommitSet}
             expandedMerges={timeline.expandedMerges}

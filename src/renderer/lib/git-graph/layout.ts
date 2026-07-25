@@ -1,224 +1,167 @@
-import type { GitLogEntry } from '@/types'
-import { matchesCommitPrefix } from './commit-sequence'
+import { advanceLanes, createLaneState, ensureLaneCapacity, type LaneState } from './lanes'
+import type { GraphTopology } from './topology'
 
-export type LaneBoundary = readonly (string | null)[]
-
-export interface RowLayout {
-  commit: GitLogEntry
-  commitLane: number
-}
-
-export interface LayoutRowChunk {
-  startIndex: number
-  rows: RowLayout[]
-}
-
-export interface LayoutBoundaryChunk {
-  startIndex: number
-  boundaries: LaneBoundary[]
-}
-
-export interface LayoutResult {
-  rowChunks: LayoutRowChunk[]
-  boundaryChunks: LayoutBoundaryChunk[]
-  rowCount: number
-  boundaryCount: number
+// Where every row's dot sits (`commitLane`) and how many lanes it spans (`railLanes`), plus a
+// snapshot of the lane state every CHECKPOINT_ROWS rows. The boundaries in between are replayed on
+// demand rather than stored: keeping them all would cost rows x lanes ints, which for a wide
+// 200k-commit log is tens of megabytes to hold and to copy again on every appended page.
+export interface GraphLayout {
+  commitCount: number
+  commitLane: Int32Array
+  railLanes: Int32Array
   maxLanes: number
-  lanesAfter: LaneBoundary
-  commits: GitLogEntry[]
-  laidOutThroughIndex: number
+  checkpointOffsets: Int32Array
+  checkpointLanes: Int32Array
 }
 
-export interface LayoutCommitsOptions {
-  maxCommits?: number
-  startIndex?: number
-  endIndex?: number
-  isHiddenParent?: (hash: string) => boolean
+export const CHECKPOINT_ROWS = 128
+
+export interface GraphLayoutReuse {
+  layout: GraphLayout
+  rows: number
 }
 
-function laneIndexOf(lanes: LaneBoundary, hash: string): number {
-  for (let index = 0; index < lanes.length; index++) {
-    if (lanes[index] === hash) {
-      return index
-    }
-  }
-  return -1
+// Layouts can only ever resume from a checkpoint, so every carry-over point is rounded down to one.
+export function alignRowsToCheckpoint(rows: number): number {
+  return Math.max(0, Math.floor(rows / CHECKPOINT_ROWS) * CHECKPOINT_ROWS)
 }
 
-function firstNullLane(lanes: LaneBoundary): number {
-  for (let index = 0; index < lanes.length; index++) {
-    if (lanes[index] === null) {
-      return index
-    }
-  }
-  return -1
+export function checkpointCount(commitCount: number): number {
+  return Math.floor(commitCount / CHECKPOINT_ROWS) + 1
 }
 
-function trimTrailingNullLanes(lanes: (string | null)[]): void {
-  while (lanes.length > 0 && lanes[lanes.length - 1] === null) {
-    lanes.pop()
-  }
-}
-
-function layoutRow(
-  commit: GitLogEntry,
-  incoming: LaneBoundary,
-  isHiddenParent?: (hash: string) => boolean
-): { row: RowLayout; outgoing: LaneBoundary; maxLanes: number } {
-  const lanes = [...incoming]
-  let commitLane = laneIndexOf(lanes, commit.hash)
-  if (commitLane === -1) {
-    commitLane = firstNullLane(lanes)
-    if (commitLane === -1) {
-      commitLane = lanes.length
-      lanes.push(null)
-    }
-  }
-
-  for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
-    if (lanes[laneIndex] === commit.hash) {
-      lanes[laneIndex] = null
-    }
-  }
-
-  for (let parentIndex = 0; parentIndex < commit.parents.length; parentIndex++) {
-    const parent = commit.parents[parentIndex]
-    if (isHiddenParent?.(parent) || laneIndexOf(lanes, parent) !== -1) {
-      continue
-    }
-    if (parentIndex === 0 && (lanes[commitLane] === null || lanes[commitLane] === undefined)) {
-      lanes[commitLane] = parent
-      continue
-    }
-    const slot = firstNullLane(lanes)
-    if (slot !== -1) {
-      lanes[slot] = parent
-    } else {
-      lanes.push(parent)
-    }
-  }
-
-  trimTrailingNullLanes(lanes)
-
+export function emptyGraphLayout(): GraphLayout {
   return {
-    row: { commit, commitLane },
-    outgoing: lanes,
-    maxLanes: Math.max(incoming.length, lanes.length, commitLane + 1)
+    commitCount: 0,
+    commitLane: new Int32Array(0),
+    railLanes: new Int32Array(0),
+    maxLanes: 0,
+    // One empty checkpoint so seeking row 0 of an empty log reads a real, zero-length range.
+    checkpointOffsets: new Int32Array(checkpointCount(0) + 1),
+    checkpointLanes: new Int32Array(0)
   }
 }
 
-function chunkAt<T extends { startIndex: number }>(
-  chunks: readonly T[],
-  index: number
-): T | undefined {
-  let low = 0
-  let high = chunks.length - 1
-  while (low <= high) {
-    const middle = (low + high) >> 1
-    const chunk = chunks[middle]
-    const nextStart = chunks[middle + 1]?.startIndex ?? Number.POSITIVE_INFINITY
-    if (index < chunk.startIndex) {
-      high = middle - 1
-    } else if (index >= nextStart) {
-      low = middle + 1
-    } else {
-      return chunk
+// Lays out rows [carried, commitCount), where `carried` is `topology.firstRow` for a topology slice
+// and otherwise as much of `reuse` as lines up with a checkpoint. A slice must therefore start on a
+// checkpoint and come with the layout holding everything before it — use `alignRowsToCheckpoint`.
+export function layoutGraph(topology: GraphTopology, reuse?: GraphLayoutReuse): GraphLayout {
+  const commitCount = topology.commitCount
+  if (commitCount === 0) {
+    return emptyGraphLayout()
+  }
+
+  const carriedRows =
+    topology.firstRow > 0
+      ? topology.firstRow
+      : alignRowsToCheckpoint(
+          reuse ? Math.min(reuse.rows, reuse.layout.commitCount, commitCount) : 0
+        )
+  if (carriedRows > 0 && (carriedRows % CHECKPOINT_ROWS !== 0 || !reuse)) {
+    throw new Error(`graph layout cannot resume at row ${carriedRows}`)
+  }
+
+  const builder = createLayoutBuilder(commitCount, carriedRows > 0 ? reuse?.layout : undefined)
+  if (carriedRows > 0 && reuse) {
+    carryPrefix(builder, reuse.layout, carriedRows)
+  }
+
+  for (let row = carriedRows; row < commitCount; row++) {
+    if (row % CHECKPOINT_ROWS === 0) {
+      writeCheckpoint(builder, row)
     }
-  }
-  return undefined
-}
+    const incomingLanes = builder.state.laneCount
+    advanceLanes(builder.state, topology, row)
 
-export function getLayoutRow(layout: LayoutResult, index: number): RowLayout | undefined {
-  if (index < 0 || index >= layout.rowCount) {
-    return undefined
-  }
-  const chunk = chunkAt(layout.rowChunks, index)
-  return chunk?.rows[index - chunk.startIndex]
-}
-
-export function getLayoutBoundary(layout: LayoutResult, index: number): LaneBoundary {
-  if (index < 0 || index >= layout.boundaryCount) {
-    return []
-  }
-  const chunk = chunkAt(layout.boundaryChunks, index)
-  return chunk?.boundaries[index - chunk.startIndex] ?? []
-}
-
-export function layoutRows(layout: LayoutResult): RowLayout[] {
-  const rows = new Array<RowLayout>(layout.rowCount)
-  for (const chunk of layout.rowChunks) {
-    for (let offset = 0; offset < chunk.rows.length; offset++) {
-      rows[chunk.startIndex + offset] = chunk.rows[offset]
-    }
-  }
-  return rows
-}
-
-export function layoutCommits(
-  commits: GitLogEntry[],
-  prev?: LayoutResult,
-  options?: LayoutCommitsOptions
-): LayoutResult {
-  const maxCommits = Math.min(options?.maxCommits ?? commits.length, commits.length)
-  const cappedCommits = commits.slice(0, maxCommits)
-  const endIndex = Math.min(options?.endIndex ?? cappedCommits.length, cappedCommits.length)
-  let startIndex = options?.startIndex ?? 0
-  let rowChunks: LayoutRowChunk[] = []
-  let boundaryChunks: LayoutBoundaryChunk[] = []
-  let maxLanes = 0
-
-  const extendsPrefix =
-    prev !== undefined &&
-    startIndex === 0 &&
-    prev.rowCount > 0 &&
-    matchesCommitPrefix(prev.commits, cappedCommits, prev.rowCount)
-  const extendsWindow =
-    prev !== undefined && startIndex > 0 && startIndex === prev.laidOutThroughIndex
-
-  if (extendsPrefix || extendsWindow) {
-    startIndex = extendsPrefix ? prev.rowCount : startIndex
-    rowChunks = prev.rowChunks
-    boundaryChunks = prev.boundaryChunks
-    maxLanes = prev.maxLanes
-  } else {
-    startIndex = 0
-  }
-
-  let incoming =
-    startIndex === 0 || !prev ? ([] as LaneBoundary) : getLayoutBoundary(prev, startIndex)
-  const nextRows: RowLayout[] = []
-  const nextBoundaries: LaneBoundary[] = startIndex === 0 ? [incoming] : []
-
-  for (let index = startIndex; index < endIndex; index++) {
-    const {
-      row,
-      outgoing,
-      maxLanes: rowMaxLanes
-    } = layoutRow(cappedCommits[index], incoming, options?.isHiddenParent)
-    maxLanes = Math.max(maxLanes, rowMaxLanes)
-    nextRows.push(row)
-    nextBoundaries.push(outgoing)
-    incoming = outgoing
-  }
-
-  if (nextRows.length > 0) {
-    rowChunks = [...rowChunks, { startIndex, rows: nextRows }]
-  }
-  if (nextBoundaries.length > 0) {
-    boundaryChunks = [
-      ...boundaryChunks,
-      { startIndex: startIndex === 0 ? 0 : startIndex + 1, boundaries: nextBoundaries }
-    ]
+    builder.commitLane[row] = builder.state.commitLane
+    const railLanes = Math.max(builder.state.commitLane + 1, incomingLanes, builder.state.laneCount)
+    builder.railLanes[row] = railLanes
+    builder.maxLanes = Math.max(builder.maxLanes, railLanes)
   }
 
   return {
-    rowChunks,
-    boundaryChunks,
-    rowCount: endIndex,
-    boundaryCount: endIndex + 1,
-    maxLanes,
-    lanesAfter: incoming,
-    commits: cappedCommits,
-    laidOutThroughIndex: endIndex
+    commitCount,
+    commitLane: builder.commitLane,
+    railLanes: builder.railLanes,
+    maxLanes: builder.maxLanes,
+    checkpointOffsets: builder.checkpointOffsets.subarray(0, checkpointCount(commitCount) + 1),
+    checkpointLanes: builder.checkpointLanes.subarray(0, builder.checkpointLaneCount)
   }
+}
+
+interface LayoutBuilder {
+  commitLane: Int32Array
+  railLanes: Int32Array
+  checkpointOffsets: Int32Array
+  checkpointLanes: Int32Array
+  checkpointLaneCount: number
+  state: LaneState
+  maxLanes: number
+}
+
+function createLayoutBuilder(
+  commitCount: number,
+  previous: GraphLayout | undefined
+): LayoutBuilder {
+  const checkpoints = checkpointCount(commitCount)
+  return {
+    commitLane: new Int32Array(commitCount),
+    railLanes: new Int32Array(commitCount),
+    checkpointOffsets: new Int32Array(checkpoints + 1),
+    checkpointLanes: new Int32Array(
+      Math.max(checkpoints * INITIAL_LANES_PER_CHECKPOINT, previous?.checkpointLanes.length ?? 0)
+    ),
+    checkpointLaneCount: 0,
+    state: createLaneState(),
+    maxLanes: 0
+  }
+}
+
+const INITIAL_LANES_PER_CHECKPOINT = 8
+
+// Rows before a checkpoint are identical in the previous layout, so they transfer as three memcpys;
+// the lane state entering the resume row is the checkpoint that was captured there.
+function carryPrefix(builder: LayoutBuilder, previous: GraphLayout, carriedRows: number): void {
+  const checkpoints = carriedRows / CHECKPOINT_ROWS
+  const carriedLanes = previous.checkpointOffsets[checkpoints]
+
+  builder.commitLane.set(previous.commitLane.subarray(0, carriedRows))
+  builder.railLanes.set(previous.railLanes.subarray(0, carriedRows))
+  builder.checkpointOffsets.set(previous.checkpointOffsets.subarray(0, checkpoints + 1))
+  growCheckpointLanes(builder, carriedLanes)
+  builder.checkpointLanes.set(previous.checkpointLanes.subarray(0, carriedLanes))
+  builder.checkpointLaneCount = carriedLanes
+
+  loadCheckpoint(builder.state, previous, checkpoints)
+  for (let row = 0; row < carriedRows; row++) {
+    builder.maxLanes = Math.max(builder.maxLanes, builder.railLanes[row])
+  }
+}
+
+function writeCheckpoint(builder: LayoutBuilder, row: number): void {
+  const checkpoint = row / CHECKPOINT_ROWS
+  const start = builder.checkpointLaneCount
+  builder.checkpointOffsets[checkpoint] = start
+  growCheckpointLanes(builder, start + builder.state.laneCount)
+  builder.checkpointLanes.set(builder.state.lanes.subarray(0, builder.state.laneCount), start)
+  builder.checkpointLaneCount = start + builder.state.laneCount
+  builder.checkpointOffsets[checkpoint + 1] = builder.checkpointLaneCount
+}
+
+function growCheckpointLanes(builder: LayoutBuilder, required: number): void {
+  if (required <= builder.checkpointLanes.length) {
+    return
+  }
+  const grown = new Int32Array(Math.max(required, builder.checkpointLanes.length * 2))
+  grown.set(builder.checkpointLanes.subarray(0, builder.checkpointLaneCount))
+  builder.checkpointLanes = grown
+}
+
+// Loads the lane state a checkpoint captured into `state`, ready to replay forward from it.
+export function loadCheckpoint(state: LaneState, layout: GraphLayout, checkpoint: number): void {
+  const start = layout.checkpointOffsets[checkpoint]
+  const laneCount = Math.max(0, layout.checkpointOffsets[checkpoint + 1] - start)
+  ensureLaneCapacity(state, laneCount)
+  state.lanes.set(layout.checkpointLanes.subarray(start, start + laneCount))
+  state.laneCount = laneCount
 }

@@ -1,64 +1,90 @@
 import { useLayoutEffect, useRef } from 'react'
+import { useLatestRef } from '@/hooks/useLatestRef'
 import {
   collectRowEdges,
+  computeGraphRailWidth,
   createEdgeBatch,
   drawCommitDot,
   drawMergeGlyph,
   laneColor,
   laneX,
   readCssVar,
-  readGraphMetrics,
   resetEdgeBatch,
   strokeEdgeBatch
 } from '@/lib/git-graph/canvas'
-import { getLayoutBoundary, getLayoutRow, type LayoutResult } from '@/lib/git-graph/layout'
+import { createLaneWalker, seekLanes, stepLanes } from '@/lib/git-graph/lane-walker'
+import type { GraphLayout } from '@/lib/git-graph/layout'
+import type { GraphMetrics } from '@/lib/git-graph/metrics'
+import type { GraphTopology } from '@/lib/git-graph/topology'
+import type { GitLogEntry } from '@/types'
 import type { MergeSideRange } from './selectors'
 
 interface CommitGraphCanvasProps {
-  layout: LayoutResult
+  layout: GraphLayout
+  topology: GraphTopology
+  commits: GitLogEntry[]
+  metrics: GraphMetrics
   scrollContainer: HTMLDivElement | undefined
   viewportHeight: number
   visibleSet: Set<string> | null
-  railWidth: number
   themeNonce: number
-  startIndex: number
-  endIndex: number
-  graphLayoutEndIndex: number
+  // Rows with a layout that matches `commits`; rows past it are left blank until the relayout lands.
+  rowCount: number
   mergeSideRanges?: ReadonlyMap<string, MergeSideRange>
 }
 
 export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const drawFrameRef = useRef<number | null>(null)
+  const latest = useLatestRef(props)
+  const scheduleDraw = useRef<() => void>(noop)
+  const scroller = props.scrollContainer
 
+  // Mounted once per scroll container: the draw reads live props and the live scroll offset, so a
+  // scroll never costs a listener rebind, a style read, or a React render.
   useLayoutEffect(() => {
-    const scroller = props.scrollContainer
-    void props.themeNonce
     if (!scroller) {
       return
     }
-    let metrics = readGraphMetrics()
-    const initialRootPx = metrics.rootPx
-    const bgColor = readCssVar('--color-background', '#ffffff')
-    const edgeBatch = createEdgeBatch()
+    const edges = createEdgeBatch()
+    const walker = createLaneWalker()
+    let frame: number | null = null
+    let drawnThemeNonce = -1
+    let backgroundColor = '#ffffff'
 
-    const drawCanvas = () => {
+    const draw = () => {
       const canvas = canvasRef.current
-      if (!canvas) {
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx) {
         return
       }
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        return
+      const { layout, topology, commits, metrics, viewportHeight, visibleSet, rowCount } =
+        latest.current
+      if (latest.current.themeNonce !== drawnThemeNonce) {
+        drawnThemeNonce = latest.current.themeNonce
+        backgroundColor = readCssVar('--color-background', '#ffffff')
       }
 
-      const viewportHeight = props.viewportHeight
-      const visible = props.visibleSet
-      const scaledRailWidth = props.railWidth * (metrics.rootPx / initialRootPx)
-      const canvasWidth = Math.min(scaledRailWidth, scroller.clientWidth || scaledRailWidth)
+      const scrollTop = scroller.scrollTop
+      const rowHeight = metrics.rowHeight
+      const firstRow = Math.max(0, Math.floor(scrollTop / rowHeight))
+      // Bounded by the commits too: a filter can shrink the list a render before the layout catches
+      // up, and the rows in between have no commit to draw.
+      const lastRow = Math.min(
+        rowCount,
+        commits.length,
+        Math.ceil((scrollTop + viewportHeight) / rowHeight)
+      )
+
+      // Only the rows on screen decide how wide the rail has to be, so a deep fan-out further down
+      // the log never inflates the bitmap here.
+      let laneSpan = 1
+      for (let row = firstRow; row < lastRow; row++) {
+        laneSpan = Math.max(laneSpan, layout.railLanes[row])
+      }
+      const railWidth = computeGraphRailWidth(laneSpan, metrics)
+      const width = Math.min(railWidth, scroller.clientWidth || railWidth)
       const dpr = window.devicePixelRatio || 1
-      const liveScrollTop = scroller.scrollTop
-      const bitmapWidth = Math.max(1, Math.round(canvasWidth * dpr))
+      const bitmapWidth = Math.max(1, Math.round(width * dpr))
       const bitmapHeight = Math.max(1, Math.round(viewportHeight * dpr))
       if (canvas.width !== bitmapWidth) {
         canvas.width = bitmapWidth
@@ -66,120 +92,79 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       if (canvas.height !== bitmapHeight) {
         canvas.height = bitmapHeight
       }
-      canvas.style.width = `${scaledRailWidth}px`
+
+      const cssWidth = `${railWidth}px`
+      if (canvas.style.width !== cssWidth) {
+        canvas.style.width = cssWidth
+      }
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.clearRect(0, 0, canvasWidth, viewportHeight)
+      ctx.clearRect(0, 0, width, viewportHeight)
       ctx.lineCap = 'round'
 
-      const start = props.startIndex
-      const end = Math.min(props.endIndex, props.graphLayoutEndIndex)
-      resetEdgeBatch(edgeBatch)
-      for (let index = start; index < end; index++) {
-        const row = getLayoutRow(props.layout, index)
-        if (!row) {
-          continue
-        }
-        const yTop = index * metrics.rowHeight - liveScrollTop
-        if (yTop + metrics.rowHeight < 0 || yTop > viewportHeight) {
-          continue
-        }
-        const dim = !!(visible && !visible.has(row.commit.hash))
-        collectRowEdges(
-          edgeBatch,
-          row,
-          getLayoutBoundary(props.layout, index),
-          getLayoutBoundary(props.layout, index + 1),
-          yTop,
-          index === 0,
-          dim,
-          metrics
-        )
+      resetEdgeBatch(edges)
+      seekLanes(walker, layout, topology, firstRow)
+      for (let row = firstRow; row < lastRow; row++) {
+        stepLanes(walker, topology)
+        const dim = !!visibleSet && !visibleSet.has(commits[row].hash)
+        collectRowEdges(edges, walker, topology, row, row * rowHeight - scrollTop, dim, metrics)
       }
-      strokeEdgeBatch(ctx, edgeBatch)
+      strokeEdgeBatch(ctx, edges)
 
-      for (let index = start; index < end; index++) {
-        const row = getLayoutRow(props.layout, index)
-        if (!row) {
-          continue
+      const mergeSideRanges = latest.current.mergeSideRanges
+      for (let row = firstRow; row < lastRow; row++) {
+        const commit = commits[row]
+        const lane = layout.commitLane[row]
+        const yTop = row * rowHeight - scrollTop
+        const dim = !!visibleSet && !visibleSet.has(commit.hash)
+        drawCommitDot(ctx, lane, commit.parents.length >= 2, yTop, dim, backgroundColor, metrics)
+        const glyph = mergeSideRanges?.get(commit.hash)?.glyph
+        if (glyph) {
+          drawMergeGlyph(
+            ctx,
+            laneX(lane, metrics),
+            yTop + rowHeight / 2,
+            glyph,
+            laneColor(lane),
+            metrics
+          )
         }
-        const yTop = index * metrics.rowHeight - liveScrollTop
-        if (yTop + metrics.rowHeight < 0 || yTop > viewportHeight) {
-          continue
-        }
-        const dim = !!(visible && !visible.has(row.commit.hash))
-        drawCommitDot(ctx, row, yTop, dim, bgColor, metrics)
-        const glyph = props.mergeSideRanges?.get(row.commit.hash)?.glyph
-        if (!glyph) {
-          continue
-        }
-        drawMergeGlyph(
-          ctx,
-          laneX(row.commitLane, metrics),
-          yTop + metrics.rowHeight / 2,
-          glyph,
-          laneColor(row.commitLane),
-          metrics
-        )
       }
     }
 
-    const scheduleDraw = () => {
-      if (drawFrameRef.current !== null) {
+    const schedule = () => {
+      if (frame !== null) {
         return
       }
-      drawFrameRef.current = requestAnimationFrame(() => {
-        drawFrameRef.current = null
-        drawCanvas()
+      frame = requestAnimationFrame(() => {
+        frame = null
+        draw()
       })
     }
+    scheduleDraw.current = schedule
 
-    const refreshMetrics = () => {
-      metrics = readGraphMetrics()
-      scheduleDraw()
-    }
-
-    let resolutionQuery: MediaQueryList | null = null
-    const bindResolutionQuery = () => {
-      resolutionQuery?.removeEventListener('change', refreshResolution)
-      resolutionQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`)
-      resolutionQuery.addEventListener('change', refreshResolution)
-    }
-    const refreshResolution = () => {
-      bindResolutionQuery()
-      scheduleDraw()
-    }
-
-    const resizeObserver = new ResizeObserver(refreshMetrics)
-    resizeObserver.observe(document.documentElement)
+    const resizeObserver = new ResizeObserver(schedule)
     resizeObserver.observe(scroller)
-    bindResolutionQuery()
-    window.addEventListener('resize', refreshMetrics)
-    scroller.addEventListener('scroll', scheduleDraw, { passive: true })
-    drawCanvas()
+    scroller.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    draw()
 
     return () => {
+      scheduleDraw.current = noop
       resizeObserver.disconnect()
-      resolutionQuery?.removeEventListener('change', refreshResolution)
-      window.removeEventListener('resize', refreshMetrics)
-      scroller.removeEventListener('scroll', scheduleDraw)
-      if (drawFrameRef.current !== null) {
-        cancelAnimationFrame(drawFrameRef.current)
-        drawFrameRef.current = null
+      scroller.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      if (frame !== null) {
+        cancelAnimationFrame(frame)
       }
     }
-  }, [
-    props.layout,
-    props.scrollContainer,
-    props.viewportHeight,
-    props.visibleSet,
-    props.railWidth,
-    props.startIndex,
-    props.endIndex,
-    props.graphLayoutEndIndex,
-    props.themeNonce,
-    props.mergeSideRanges
-  ])
+  }, [scroller])
+
+  // The canvas mirrors whatever the props currently say, so any render queues a frame; the request
+  // animation frame guard collapses that with the scroll handler into one draw per frame.
+  useLayoutEffect(() => {
+    scheduleDraw.current()
+  })
 
   return (
     <div
@@ -191,12 +176,10 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
         ref={canvasRef}
         data-testid="commit-graph-canvas"
         className="absolute left-0 top-0"
-        style={{
-          width: `${props.railWidth}px`,
-          maxWidth: '100%',
-          height: `${props.viewportHeight}px`
-        }}
+        style={{ maxWidth: '100%', height: `${props.viewportHeight}px` }}
       />
     </div>
   )
 }
+
+function noop() {}

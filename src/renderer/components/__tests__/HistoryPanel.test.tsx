@@ -629,7 +629,10 @@ function CollapsibleHistory({ log }: { log: GitLog }) {
       loading={false}
       remoteBranches={[]}
       visibleBranchRefs={visibleBranchRefs}
+      graphCommits={allCommits}
+      timelineTips={tips}
       filteredCommits={filteredCommits}
+      displayedCommitSet={displayed}
       expandedMerges={expandedMerges}
       onToggleMergeExpansion={(mergeHash) =>
         setExpandedMerges((previous) => {

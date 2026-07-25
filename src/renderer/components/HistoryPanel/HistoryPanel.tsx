@@ -2,20 +2,17 @@ import { GitCommitHorizontalIcon } from 'lucide-react'
 import type { UIEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CommitAction } from '@/lib/git-actions'
-import { computeGraphRailWidth, laneColor, OVERSCAN, ROW_H } from '@/lib/git-graph/canvas'
-import {
-  getLayoutBoundary,
-  getLayoutRow,
-  type LayoutResult,
-  type RowLayout
-} from '@/lib/git-graph/layout'
+import { computeGraphRailWidth, laneColor } from '@/lib/git-graph/canvas'
+import type { GraphLayout } from '@/lib/git-graph/layout'
+import type { GraphMetrics } from '@/lib/git-graph/metrics'
+import type { GraphTopology } from '@/lib/git-graph/topology'
 import type { RefKind } from '@/lib/ref-tree'
-import { HISTORY_LOAD_MORE_THRESHOLD_ROWS } from '@/lib/virtual-config'
+import { HISTORY_LOAD_MORE_THRESHOLD_ROWS, HISTORY_OVERSCAN } from '@/lib/virtual-config'
 import type { GitLog, GitLogEntry } from '@/types'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
 import { useGraphLayout } from '../../hooks/useGraphLayout'
+import { useGraphMetrics } from '../../hooks/useGraphMetrics'
 import { useThemeNonce } from '../../hooks/useThemeNonce'
-import { useCoalescedCommitSnapshot } from '../../hooks/useTimelineVisibility'
 import { EmptyState } from '../ui/empty-state'
 import { CommitGraphCanvas } from './CommitGraphCanvas'
 import { CommitRow } from './CommitRow'
@@ -23,7 +20,6 @@ import { FocusRail } from './FocusRail'
 import { HistoryHeader } from './HistoryHeader'
 import { SkeletonRows } from './SkeletonRows'
 import {
-  collectTimelineTips,
   computeMergeSideRangeIndex,
   computeOnBranchSet,
   countVisibleBranchRefs,
@@ -44,8 +40,11 @@ interface HistoryPanelProps {
   currentBranch?: string
   remoteBranches?: string[]
   visibleBranchRefs?: ReadonlySet<string>
+  // The whole loaded log, coalesced while streaming; `filteredCommits` is the subset on screen.
+  graphCommits?: GitLogEntry[]
   filteredCommits?: GitLogEntry[]
   displayedCommitSet?: ReadonlySet<string>
+  timelineTips?: readonly string[]
   expandedMerges?: ReadonlySet<string>
   filter?: string
   onFilterChange?: (value: string) => void
@@ -62,6 +61,7 @@ const historyScrollPositions = new Map<string, number>()
 const EMPTY_COMMITS: GitLogEntry[] = []
 const EMPTY_REMOTES: Record<string, string> = {}
 const EMPTY_REF_SET: ReadonlySet<string> = new Set()
+const EMPTY_TIPS: readonly string[] = []
 const noop = () => {}
 
 function rememberHistoryScroll(repoPath: string, scrollTop: number) {
@@ -77,50 +77,39 @@ function rememberHistoryScroll(repoPath: string, scrollTop: number) {
 }
 
 export function HistoryPanel(props: HistoryPanelProps) {
+  const metrics = useGraphMetrics()
   const filter = props.filter ?? ''
   const visibleSet = props.visibleSet ?? null
   const remotes = props.remotes ?? EMPTY_REMOTES
   const remoteNames = useMemo(() => new Set(Object.keys(remotes)), [remotes])
 
   const allCommits = props.log?.all ?? EMPTY_COMMITS
-  const graphCommits = useCoalescedCommitSnapshot(
-    allCommits,
-    props.loading || !!props.loadingMore,
-    true
-  )
+  const graphCommits = props.graphCommits ?? allCommits
   const visibleBranchRefs = props.visibleBranchRefs ?? EMPTY_REF_SET
   const expandedMerges = props.expandedMerges ?? EMPTY_REF_SET
   const remoteBranches = props.remoteBranches
   const commits = props.filteredCommits ?? EMPTY_COMMITS
+  const timelineTips = props.timelineTips ?? EMPTY_TIPS
 
   const displayedSet = useMemo(
     () => props.displayedCommitSet ?? new Set(commits.map((commit) => commit.hash)),
     [props.displayedCommitSet, commits]
-  )
-  const timelineTips = useMemo(
-    () =>
-      collectTimelineTips(
-        graphCommits,
-        visibleBranchRefs,
-        remoteBranches ?? [],
-        remoteNames,
-        props.currentBranch
-      ),
-    [graphCommits, visibleBranchRefs, remoteBranches, remoteNames, props.currentBranch]
   )
   const mergeSideRanges = useMemo(
     () =>
       computeMergeSideRangeIndex(graphCommits, commits, displayedSet, expandedMerges, timelineTips),
     [graphCommits, commits, displayedSet, expandedMerges, timelineTips]
   )
-  const loadedSet = useMemo(
-    () => new Set(graphCommits.map((commit) => commit.hash)),
-    [graphCommits]
-  )
+
+  // A parent that is loaded but filtered out gets no lane; one that has not streamed in yet still
+  // opens one. Reuses the commit index the panel already keeps rather than a second hash set.
+  const loadedCommits = useMemo(() => getCommitIndex(graphCommits).byHash, [graphCommits])
   const isHiddenParent = useCallback(
-    (hash: string) => loadedSet.has(hash) && !displayedSet.has(hash),
-    [loadedSet, displayedSet]
+    (hash: string) => loadedCommits.has(hash) && !displayedSet.has(hash),
+    [loadedCommits, displayedSet]
   )
+  const displayedPositions = useMemo(() => getCommitIndex(commits).positionByHash, [commits])
+  const rowOf = useCallback((hash: string) => displayedPositions.get(hash), [displayedPositions])
 
   const visibleBranchCount = useMemo(
     () => countVisibleBranchRefs(visibleBranchRefs, remoteBranches, remoteNames),
@@ -133,41 +122,32 @@ export function HistoryPanel(props: HistoryPanelProps) {
     [graphCommits, remoteNames, currentBranch]
   )
 
-  const graphLayout = useGraphLayout({
+  const graph = useGraphLayout({
     commits,
-    loading: props.loading || !!props.loadingMore,
     enabled: commits.length > 0,
+    rowOf,
     isHiddenParent
   })
-  const layout = graphLayout.layout
-  const laidOutThroughIndex = graphLayout.laidOutThroughIndex
-
-  const graphRailWidth = computeGraphRailWidth(layout ? layout.maxLanes : 1)
 
   const themeNonce = useThemeNonce()
-
   const gridTail = 'var(--history-grid-tail)'
+
   const colorByRefKey = useMemo(() => {
     const colors = new Map<string, string>()
-    const { positionByHash } = getCommitIndex(commits)
     for (const key of visibleBranchRefs) {
       const ref = parseFilterRefKey(key)
       if (!ref) {
         continue
       }
       const tip = findRefTip(commits, ref.kind, ref.fullPath, remoteNames)
-      const commitIndex = tip === undefined ? -1 : (positionByHash.get(tip) ?? -1)
-      const row =
-        commitIndex >= 0 && layout && commitIndex < laidOutThroughIndex
-          ? getLayoutRow(layout, commitIndex)
-          : undefined
-      if (!row) {
+      const row = tip === undefined ? undefined : displayedPositions.get(tip)
+      if (row === undefined || row >= graph.validRows) {
         continue
       }
-      colors.set(refFilterKey(ref.kind, ref.fullPath), laneColor(row.commitLane))
+      colors.set(refFilterKey(ref.kind, ref.fullPath), laneColor(graph.layout.commitLane[row]))
     }
     return colors
-  }, [commits, laidOutThroughIndex, layout, remoteNames, visibleBranchRefs])
+  }, [commits, displayedPositions, graph.layout, graph.validRows, remoteNames, visibleBranchRefs])
 
   const hasCommits = allCommits.length > 0
   const showSkeleton = props.loading && !hasCommits
@@ -182,7 +162,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
       <HistoryHeader
         loadedCount={allCommits.length}
         visibleTotal={commits.length}
-        loading={props.loading || graphLayout.layoutPending}
+        loading={props.loading || graph.pending}
         loadingMore={props.loadingMore}
         hasMore={props.hasMore}
         onLoadMore={props.onLoadMore}
@@ -206,8 +186,10 @@ export function HistoryPanel(props: HistoryPanelProps) {
 
       <HistoryViewport
         commits={commits}
-        layout={layout}
-        laidOutThroughIndex={laidOutThroughIndex}
+        layout={graph.layout}
+        topology={graph.topology}
+        validRows={graph.validRows}
+        metrics={metrics}
         loadedCount={allCommits.length}
         hasLog={props.log !== null}
         loading={props.loading}
@@ -216,7 +198,6 @@ export function HistoryPanel(props: HistoryPanelProps) {
         onLoadMore={props.onLoadMore}
         repoPath={props.repoPath}
         visibleSet={visibleSet}
-        graphRailWidth={graphRailWidth}
         themeNonce={themeNonce}
         mergeSideRanges={mergeSideRanges}
         onCurrentBranchSet={onCurrentBranchSet}
@@ -234,8 +215,10 @@ export function HistoryPanel(props: HistoryPanelProps) {
 
 interface HistoryViewportProps {
   commits: GitLogEntry[]
-  layout: LayoutResult | null
-  laidOutThroughIndex: number
+  layout: GraphLayout
+  topology: GraphTopology
+  validRows: number
+  metrics: GraphMetrics
   loadedCount: number
   hasLog: boolean
   loading: boolean
@@ -244,7 +227,6 @@ interface HistoryViewportProps {
   onLoadMore?: () => void
   repoPath?: string | null
   visibleSet: Set<string> | null
-  graphRailWidth: number
   themeNonce: number
   mergeSideRanges: ReadonlyMap<string, MergeSideRange>
   onCurrentBranchSet: Set<string> | null
@@ -259,19 +241,12 @@ interface HistoryViewportProps {
 
 function HistoryViewport(props: HistoryViewportProps) {
   const [scrollElement, setScrollElement] = useState<HTMLDivElement>()
-  const {
-    setScrollRef,
-    onScroll,
-    viewportHeight,
-    virtualItems,
-    startIndex,
-    endIndex,
-    totalHeight
-  } = useFixedVirtualizer({
-    count: props.commits.length,
-    rowHeight: ROW_H,
-    overscan: OVERSCAN
-  })
+  const { setScrollRef, onScroll, viewportHeight, virtualItems, endIndex, totalHeight } =
+    useFixedVirtualizer({
+      count: props.commits.length,
+      rowHeight: props.metrics.rowHeight,
+      overscan: HISTORY_OVERSCAN
+    })
   const attachScroll = useCallback(
     (element: HTMLDivElement | null) => {
       if (!element) {
@@ -341,57 +316,40 @@ function HistoryViewport(props: HistoryViewportProps) {
           className="relative"
           style={{ height: `${totalHeight}px`, '--row-grid-tail': props.gridTail }}
         >
-          {props.layout ? (
-            <CommitGraphCanvas
-              layout={props.layout}
-              scrollContainer={scrollElement}
-              viewportHeight={viewportHeight}
-              visibleSet={props.visibleSet}
-              railWidth={props.graphRailWidth}
-              themeNonce={props.themeNonce}
-              startIndex={startIndex}
-              endIndex={endIndex}
-              graphLayoutEndIndex={props.laidOutThroughIndex}
-              mergeSideRanges={props.mergeSideRanges}
-            />
-          ) : null}
+          <CommitGraphCanvas
+            layout={props.layout}
+            topology={props.topology}
+            commits={props.commits}
+            metrics={props.metrics}
+            scrollContainer={scrollElement}
+            viewportHeight={viewportHeight}
+            visibleSet={props.visibleSet}
+            themeNonce={props.themeNonce}
+            rowCount={props.validRows}
+            mergeSideRanges={props.mergeSideRanges}
+          />
 
           {virtualItems.map((virtualItem) => {
             const commit = props.commits[virtualItem.index]
             if (!commit) {
               return null
             }
-            const laidOutRow =
-              virtualItem.index < props.laidOutThroughIndex && props.layout
-                ? getLayoutRow(props.layout, virtualItem.index)
-                : undefined
-            const hasMatchingLayout = laidOutRow?.commit.hash === commit.hash
-            const row: RowLayout = hasMatchingLayout
-              ? { commit, commitLane: laidOutRow.commitLane }
-              : { commit, commitLane: 0 }
-            const incoming =
-              hasMatchingLayout && props.layout
-                ? getLayoutBoundary(props.layout, virtualItem.index)
-                : []
-            const outgoing =
-              hasMatchingLayout && props.layout
-                ? getLayoutBoundary(props.layout, virtualItem.index + 1)
-                : []
-            const mergeSideRange = props.mergeSideRanges.get(commit.hash)
+            const laidOut = virtualItem.index < props.validRows
             return (
               <CommitRow
                 key={commit.hash}
-                row={row}
-                incoming={incoming}
-                outgoing={outgoing}
+                commit={commit}
+                lane={laidOut ? props.layout.commitLane[virtualItem.index] : 0}
+                railLanes={laidOut ? props.layout.railLanes[virtualItem.index] : 1}
+                metrics={props.metrics}
                 top={virtualItem.start}
                 dim={!!(props.visibleSet && !props.visibleSet.has(commit.hash))}
                 offBranch={!!props.onCurrentBranchSet && !props.onCurrentBranchSet.has(commit.hash)}
                 gridTail={props.gridTail}
                 remotes={props.remotes}
                 remoteNames={props.remoteNames}
-                mergeGlyph={mergeSideRange?.glyph}
-                onToggleExpand={mergeSideRange ? props.onToggleMergeExpansion : undefined}
+                mergeGlyph={props.mergeSideRanges.get(commit.hash)?.glyph}
+                onToggleExpand={props.onToggleMergeExpansion}
                 onCommitAction={props.onCommitAction}
               />
             )
@@ -399,8 +357,9 @@ function HistoryViewport(props: HistoryViewportProps) {
         </div>
       ) : props.showSkeleton ? (
         <SkeletonRows
-          graphRailWidth={props.graphRailWidth}
+          graphRailWidth={computeGraphRailWidth(1, props.metrics)}
           gridTail={props.gridTail}
+          rowHeight={props.metrics.rowHeight}
           viewportHeight={viewportHeight}
         />
       ) : props.hasCommits ? (

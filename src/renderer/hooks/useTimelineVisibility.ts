@@ -1,5 +1,9 @@
-import { GRAPH_LAYOUT_DEBOUNCE_MS } from '@shared/graph-config'
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  GRAPH_LAYOUT_COMMITS_PER_MS,
+  GRAPH_LAYOUT_DEBOUNCE_MS,
+  GRAPH_LAYOUT_MAX_DEBOUNCE_MS
+} from '@shared/graph-config'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import {
   collectTimelineTips,
   computeCollapsedView,
@@ -16,6 +20,10 @@ import type { GitLogEntry } from '@/types'
 
 export interface TimelineVisibility {
   visibleRefs: ReadonlySet<string>
+  // The loaded log as the graph sees it: one coalesced snapshot shared by every derived view, so
+  // nothing downstream can drift a tick behind the commits being laid out.
+  graphCommits: GitLogEntry[]
+  timelineTips: readonly string[]
   filteredCommits: GitLogEntry[]
   displayedCommitSet: ReadonlySet<string>
   expandedMerges: ReadonlySet<string>
@@ -31,6 +39,13 @@ const EMPTY_BRANCH_NAMES: string[] = []
 const EMPTY_COMMITS: GitLogEntry[] = []
 const EMPTY_TIPS: string[] = []
 const EMPTY_COMMIT_SET: ReadonlySet<string> = new Set()
+
+export function coalesceDelayFor(commitCount: number): number {
+  return Math.min(
+    GRAPH_LAYOUT_MAX_DEBOUNCE_MS,
+    Math.max(GRAPH_LAYOUT_DEBOUNCE_MS, Math.round(commitCount / GRAPH_LAYOUT_COMMITS_PER_MS))
+  )
+}
 
 export function useCoalescedCommitSnapshot(
   commits: GitLogEntry[],
@@ -56,7 +71,7 @@ export function useCoalescedCommitSnapshot(
       timer.current = setTimeout(() => {
         timer.current = null
         setSnapshot(pending.current)
-      }, GRAPH_LAYOUT_DEBOUNCE_MS)
+      }, coalesceDelayFor(source.length))
     }
   }, [source, streaming])
 
@@ -148,32 +163,35 @@ export function useTimelineVisibility(enabled = true): TimelineVisibility {
     return { commits: commits.filter((commit) => displayed.has(commit.hash)), displayed }
   }, [enabled, commits, tips, effectiveExpandedMerges])
 
-  const toggle = (refKind: RefKind, fullPath: string) => {
-    if (refKind === 'tag') {
-      return
-    }
-    const key = refFilterKey(refKind, fullPath)
-    setSelectedRefs((previous) =>
-      toggleVisibleTimelineRef(
-        effectiveVisibleTimelineRefs(
-          previous,
+  const toggle = useCallback(
+    (refKind: RefKind, fullPath: string) => {
+      if (refKind === 'tag') {
+        return
+      }
+      const key = refFilterKey(refKind, fullPath)
+      setSelectedRefs((previous) =>
+        toggleVisibleTimelineRef(
+          effectiveVisibleTimelineRefs(
+            previous,
+            localBranches,
+            remoteBranches,
+            defaultBranch,
+            currentBranch,
+            remoteNames
+          ),
+          key,
           localBranches,
           remoteBranches,
           defaultBranch,
           currentBranch,
           remoteNames
-        ),
-        key,
-        localBranches,
-        remoteBranches,
-        defaultBranch,
-        currentBranch,
-        remoteNames
+        )
       )
-    )
-  }
+    },
+    [localBranches, remoteBranches, defaultBranch, currentBranch, remoteNames]
+  )
 
-  const toggleMergeExpansion = (mergeHash: string) => {
+  const toggleMergeExpansion = useCallback((mergeHash: string) => {
     setExpandedMerges((previous) => {
       const next = new Set(previous)
       if (next.has(mergeHash)) {
@@ -183,21 +201,42 @@ export function useTimelineVisibility(enabled = true): TimelineVisibility {
       }
       return next
     })
-  }
+  }, [])
 
-  const isVisible = (refKind: RefKind, fullPath: string): boolean =>
-    visibleRefs.has(refFilterKey(refKind, fullPath))
+  const isVisible = useCallback(
+    (refKind: RefKind, fullPath: string): boolean =>
+      visibleRefs.has(refFilterKey(refKind, fullPath)),
+    [visibleRefs]
+  )
 
-  return {
-    visibleRefs,
-    filteredCommits: collapsedView.commits,
-    displayedCommitSet: collapsedView.displayed,
-    expandedMerges: effectiveExpandedMerges,
-    filter,
-    setFilter,
-    visibleSet,
-    toggle,
-    toggleMergeExpansion,
-    isVisible
-  }
+  // Memoised as a whole: these values feed memoised rows, so a fresh object every render would cost
+  // the history panel its render skipping.
+  return useMemo(
+    () => ({
+      visibleRefs,
+      graphCommits: commits,
+      timelineTips: tips,
+      filteredCommits: collapsedView.commits,
+      displayedCommitSet: collapsedView.displayed,
+      expandedMerges: effectiveExpandedMerges,
+      filter,
+      setFilter,
+      visibleSet,
+      toggle,
+      toggleMergeExpansion,
+      isVisible
+    }),
+    [
+      visibleRefs,
+      commits,
+      tips,
+      collapsedView,
+      effectiveExpandedMerges,
+      filter,
+      visibleSet,
+      toggle,
+      toggleMergeExpansion,
+      isVisible
+    ]
+  )
 }

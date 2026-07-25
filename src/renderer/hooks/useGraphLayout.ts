@@ -1,329 +1,194 @@
-import { GRAPH_LAYOUT_DEBOUNCE_MS } from '@shared/graph-config'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { matchesCommitPrefix } from '@/lib/git-graph/commit-sequence'
-import { getLayoutRow, type LayoutResult, layoutCommits } from '@/lib/git-graph/layout'
-import type {
-  GraphLayoutWorkerRequest,
-  GraphLayoutWorkerResponse
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import {
+  alignRowsToCheckpoint,
+  emptyGraphLayout,
+  type GraphLayout,
+  layoutGraph
+} from '@/lib/git-graph/layout'
+import {
+  type GraphLayoutRequest,
+  type GraphLayoutResponse,
+  topologyTransferables
 } from '@/lib/git-graph/layout-worker-protocol'
+import {
+  buildGraphTopology,
+  type GraphTopology,
+  sharedTopologyRows,
+  sliceTopology
+} from '@/lib/git-graph/topology'
 import type { GitLogEntry } from '@/types'
 
-function isTailAppend(previous: GitLogEntry[] | undefined, next: GitLogEntry[]): boolean {
-  if (!previous || previous.length === 0 || next.length < previous.length) {
-    return false
-  }
-  return (
-    previous[0]?.hash === next[0]?.hash &&
-    previous[previous.length - 1]?.hash === next[previous.length - 1]?.hash
-  )
-}
-
-interface UseGraphLayoutOptions {
+export interface UseGraphLayoutOptions {
   commits: GitLogEntry[]
-  loading: boolean
   enabled: boolean
-  debounceMs?: number
+  rowOf?: (hash: string) => number | undefined
   isHiddenParent?: (hash: string) => boolean
 }
 
-interface GraphLayoutState {
-  layout: LayoutResult | null
-  layoutPending: boolean
-  laidOutThroughIndex: number
+export interface GraphLayoutHandle {
+  layout: GraphLayout
+  topology: GraphTopology
+  // Rows whose lanes are known to match the current commit list. While a relayout is in flight this
+  // is the surviving prefix, so appending never blanks the graph and a reshape never draws stale lanes.
+  validRows: number
+  pending: boolean
 }
 
-function createEmptyState(): GraphLayoutState {
-  return {
-    layout: null,
-    layoutPending: false,
-    laidOutThroughIndex: 0
-  }
+const EMPTY_TOPOLOGY: GraphTopology = {
+  firstRow: 0,
+  commitCount: 0,
+  parentOffsets: new Int32Array(1),
+  parentIds: new Int32Array(0)
 }
 
-function sameLayoutPrefix(commits: GitLogEntry[], layout: LayoutResult | null): boolean {
-  return (
-    !!layout && layout.rowCount > 0 && commits[0]?.hash === getLayoutRow(layout, 0)?.commit.hash
-  )
+function emptyHandle(): GraphLayoutHandle {
+  return { layout: emptyGraphLayout(), topology: EMPTY_TOPOLOGY, validRows: 0, pending: false }
 }
 
-function hiddenParentSet(
-  commits: GitLogEntry[],
-  isHiddenParent: ((hash: string) => boolean) | undefined
-): Set<string> {
-  const hidden = new Set<string>()
-  if (!isHiddenParent) {
-    return hidden
-  }
-  for (const commit of commits) {
-    for (const parent of commit.parents) {
-      if (isHiddenParent(parent)) {
-        hidden.add(parent)
-      }
-    }
-  }
-  return hidden
-}
+export function useGraphLayout(options: UseGraphLayoutOptions): GraphLayoutHandle {
+  const [handle, setHandle] = useState<GraphLayoutHandle>(emptyHandle)
+  const handleRef = useRef(handle)
+  handleRef.current = handle
 
-function sameSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
-  if (left.size !== right.size) {
-    return false
-  }
-  for (const value of left) {
-    if (!right.has(value)) {
-      return false
-    }
-  }
-  return true
-}
-
-function createLayoutWorker(): Worker | null {
-  if (typeof Worker === 'undefined') {
-    return null
-  }
-  try {
-    return new Worker(new URL('../lib/git-graph/layout.worker.ts', import.meta.url), {
-      type: 'module'
-    })
-  } catch {
-    return null
-  }
-}
-
-export function useGraphLayout(options: UseGraphLayoutOptions) {
-  const debounceMs = options.debounceMs ?? GRAPH_LAYOUT_DEBOUNCE_MS
-  const [state, setReactState] = useState<GraphLayoutState>(createEmptyState)
-  const stateRef = useRef(state)
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const layoutedCommits = useRef<GitLogEntry[] | null>(null)
-  const layoutedHiddenParents = useRef<ReadonlySet<string>>(new Set())
-  const layoutedHiddenPredicate = useRef(options.isHiddenParent)
-  const isHiddenParentRef = useRef(options.isHiddenParent)
-  const layoutGeneration = useRef(0)
   const workerRef = useRef<Worker | null>(null)
-  const pendingWorkerLayout = useRef<GraphLayoutWorkerRequest | null>(null)
-  const mounted = useRef(false)
-  const installWorkerRef = useRef<() => Worker | null>(() => null)
-  isHiddenParentRef.current = options.isHiddenParent
-  stateRef.current = state
+  const workerRows = useRef(0)
+  const generation = useRef(0)
+  const requestedTopology = useRef<GraphTopology>(EMPTY_TOPOLOGY)
 
-  const setState = useCallback(
-    (update: GraphLayoutState | ((current: GraphLayoutState) => GraphLayoutState)) => {
-      const next = typeof update === 'function' ? update(stateRef.current) : update
-      if (next === stateRef.current) {
-        return
-      }
-      stateRef.current = next
-      setReactState(next)
+  const applyLayout = useCallback((layout: GraphLayout, topology: GraphTopology) => {
+    setHandle({ layout, topology, validRows: layout.commitCount, pending: false })
+  }, [])
+
+  const layoutInline = useCallback(
+    (topology: GraphTopology, carriedRows: number) => {
+      const previous = handleRef.current
+      applyLayout(
+        layoutGraph(topology, {
+          layout: previous.layout,
+          rows: alignRowsToCheckpoint(carriedRows)
+        }),
+        topology
+      )
     },
-    []
+    [applyLayout]
   )
 
-  const handleWorkerFailure = useCallback(
-    (failedWorker: Worker) => {
-      if (workerRef.current !== failedWorker) {
-        return
-      }
-      failedWorker.onmessage = null
-      failedWorker.onerror = null
-      failedWorker.terminate()
-      workerRef.current = null
+  const dropWorker = useCallback(() => {
+    const worker = workerRef.current
+    if (!worker) {
+      return
+    }
+    worker.onmessage = null
+    worker.onerror = null
+    worker.terminate()
+    workerRef.current = null
+    workerRows.current = 0
+  }, [])
 
-      const pending = pendingWorkerLayout.current
-      pendingWorkerLayout.current = null
-      if (pending && pending.generation === layoutGeneration.current) {
-        const hiddenParents = new Set(pending.hiddenParents)
-        const result = layoutCommits(pending.commits, undefined, {
-          isHiddenParent: (hash) => hiddenParents.has(hash)
-        })
-        setState({
-          layout: result,
-          layoutPending: false,
-          laidOutThroughIndex: result.laidOutThroughIndex
-        })
-      } else if (stateRef.current.layoutPending) {
-        setState((current) => ({ ...current, layoutPending: false }))
-      }
+  const postRequest = useCallback((worker: Worker, topology: GraphTopology, firstRow: number) => {
+    const request: GraphLayoutRequest = {
+      generation: ++generation.current,
+      topology: sliceTopology(topology, alignRowsToCheckpoint(firstRow))
+    }
+    workerRows.current = topology.commitCount
+    worker.postMessage(request, topologyTransferables(request.topology))
+  }, [])
 
-      if (mounted.current) {
-        installWorkerRef.current()
-      }
-    },
-    [setState]
-  )
-
-  const installWorker = useCallback(() => {
+  const ensureWorker = useCallback((): Worker | null => {
     if (workerRef.current) {
       return workerRef.current
     }
-    const worker = createLayoutWorker()
-    if (!worker) {
+    if (typeof Worker === 'undefined') {
+      return null
+    }
+    let worker: Worker
+    try {
+      worker = new Worker(new URL('../lib/git-graph/layout.worker.ts', import.meta.url), {
+        type: 'module'
+      })
+    } catch {
       return null
     }
     workerRef.current = worker
-    worker.onmessage = (event: MessageEvent<GraphLayoutWorkerResponse>) => {
-      if (event.data.generation !== layoutGeneration.current) {
+    workerRows.current = 0
+
+    worker.onmessage = (event: MessageEvent<GraphLayoutResponse>) => {
+      const response = event.data
+      if (response.generation !== generation.current) {
         return
       }
-      pendingWorkerLayout.current = null
-      const result = event.data.layout
-      setState({
-        layout: result,
-        layoutPending: false,
-        laidOutThroughIndex: result.laidOutThroughIndex
-      })
+      if (response.status === 'needs-full-topology') {
+        postRequest(worker, requestedTopology.current, 0)
+        return
+      }
+      applyLayout(response.layout, requestedTopology.current)
     }
+
     worker.onerror = (event) => {
       event.preventDefault()
-      handleWorkerFailure(worker)
+      if (workerRef.current !== worker) {
+        return
+      }
+      dropWorker()
+      generation.current += 1
+      const topology = requestedTopology.current
+      layoutInline(topology, sharedTopologyRows(handleRef.current.topology, topology))
     }
+
     return worker
-  }, [handleWorkerFailure, setState])
-  installWorkerRef.current = installWorker
+  }, [applyLayout, dropWorker, layoutInline, postRequest])
 
   useLayoutEffect(() => {
-    mounted.current = true
-    installWorker()
     return () => {
-      mounted.current = false
-      pendingWorkerLayout.current = null
-      const worker = workerRef.current
-      if (worker) {
-        worker.onmessage = null
-        worker.onerror = null
-        worker.terminate()
-        workerRef.current = null
-      }
-      layoutedCommits.current = null
+      generation.current += 1
+      dropWorker()
     }
-  }, [installWorker])
+  }, [dropWorker])
 
-  const runLayout = useCallback(
-    (commits: GitLogEntry[]) => {
-      const snapshot = stateRef.current
-      const previousCommits = snapshot.layout?.commits ?? []
-      const sameSequence =
-        previousCommits.length === commits.length && matchesCommitPrefix(previousCommits, commits)
-      const hiddenParents = hiddenParentSet(commits, isHiddenParentRef.current)
-      const hiddenParentsChanged = !sameSet(hiddenParents, layoutedHiddenParents.current)
-
-      layoutedCommits.current = commits
-      layoutedHiddenParents.current = hiddenParents
-      layoutedHiddenPredicate.current = isHiddenParentRef.current
-      if (sameSequence && !hiddenParentsChanged && snapshot.layout) {
-        layoutGeneration.current += 1
-        pendingWorkerLayout.current = null
-        if (snapshot.layoutPending) {
-          setState((current) => ({ ...current, layoutPending: false }))
-        }
-        return
-      }
-
-      const extendable =
-        !snapshot.layoutPending &&
-        !hiddenParentsChanged &&
-        sameLayoutPrefix(commits, snapshot.layout) &&
-        commits.length > previousCommits.length &&
-        matchesCommitPrefix(previousCommits, commits)
-      const generation = ++layoutGeneration.current
-      const worker = workerRef.current ?? installWorker()
-
-      if (extendable || !worker) {
-        pendingWorkerLayout.current = null
-        const result = layoutCommits(
-          commits,
-          extendable ? (snapshot.layout ?? undefined) : undefined,
-          { isHiddenParent: (hash) => hiddenParents.has(hash) }
-        )
-        setState({
-          layout: result,
-          layoutPending: false,
-          laidOutThroughIndex: result.laidOutThroughIndex
-        })
-        return
-      }
-
-      const request: GraphLayoutWorkerRequest = {
-        generation,
-        commits,
-        hiddenParents: [...hiddenParents]
-      }
-      setState((current) => ({ ...current, layoutPending: true, laidOutThroughIndex: 0 }))
-      pendingWorkerLayout.current = request
-      try {
-        worker.postMessage(request)
-      } catch {
-        handleWorkerFailure(worker)
-      }
-    },
-    [handleWorkerFailure, installWorker, setState]
-  )
-
-  const scheduleLayout = useCallback(
-    (commits: GitLogEntry[], immediate: boolean) => {
-      if (debounceTimer.current !== null) {
-        clearTimeout(debounceTimer.current)
-        debounceTimer.current = null
-      }
-
-      if (commits.length === 0) {
-        layoutGeneration.current += 1
-        pendingWorkerLayout.current = null
-        layoutedCommits.current = commits
-        layoutedHiddenParents.current = new Set()
-        layoutedHiddenPredicate.current = isHiddenParentRef.current
-        const current = stateRef.current
-        if (current.layout !== null || current.layoutPending || current.laidOutThroughIndex !== 0) {
-          setState(createEmptyState())
-        }
-        return
-      }
-
-      if (immediate) {
-        runLayout(commits)
-        return
-      }
-
-      setState((current) => (current.layoutPending ? current : { ...current, layoutPending: true }))
-      debounceTimer.current = setTimeout(() => {
-        debounceTimer.current = null
-        runLayout(commits)
-      }, debounceMs)
-    },
-    [debounceMs, runLayout, setState]
-  )
+  const { commits, enabled, rowOf, isHiddenParent } = options
 
   useLayoutEffect(() => {
-    if (!options.enabled) {
-      scheduleLayout([], true)
+    const previous = handleRef.current
+    if (!enabled || commits.length === 0) {
+      requestedTopology.current = EMPTY_TOPOLOGY
+      if (previous.layout.commitCount > 0 || previous.pending) {
+        generation.current += 1
+        setHandle(emptyHandle())
+      }
       return
     }
-    const commits = options.commits
+
+    const topology = buildGraphTopology(commits, { rowOf, isHiddenParent })
+
+    // Measured against the topology already in flight (or applied, when nothing is pending): a new
+    // commits array that describes the same graph needs no work at all.
+    const inFlight = requestedTopology.current
+    const sharedWithInFlight = sharedTopologyRows(inFlight, topology)
     if (
-      layoutedCommits.current === commits &&
-      layoutedHiddenPredicate.current === options.isHiddenParent &&
-      debounceTimer.current === null
+      sharedWithInFlight === topology.commitCount &&
+      sharedWithInFlight === inFlight.commitCount
     ) {
       return
     }
-    const layout = stateRef.current.layout
-    const needsInitialLayout = commits.length > 0 && layout === null
-    const immediate =
-      !options.loading || needsInitialLayout || !isTailAppend(layout?.commits, commits)
-    scheduleLayout(commits, immediate)
-  }, [options.commits, options.enabled, options.loading, options.isHiddenParent, scheduleLayout])
 
-  useEffect(() => {
-    return () => {
-      layoutGeneration.current += 1
-      if (debounceTimer.current !== null) {
-        clearTimeout(debounceTimer.current)
-      }
+    const carriedRows = sharedTopologyRows(previous.topology, topology)
+    requestedTopology.current = topology
+
+    const worker = ensureWorker()
+    if (!worker) {
+      generation.current += 1
+      layoutInline(topology, carriedRows)
+      return
     }
-  }, [])
 
-  return {
-    layout: state.layout,
-    layoutPending: state.layoutPending,
-    laidOutThroughIndex: state.laidOutThroughIndex
-  }
+    setHandle({
+      layout: previous.layout,
+      topology,
+      validRows: Math.min(carriedRows, previous.layout.commitCount),
+      pending: true
+    })
+    postRequest(worker, topology, Math.min(sharedWithInFlight, workerRows.current))
+  }, [commits, enabled, rowOf, isHiddenParent, ensureWorker, layoutInline, postRequest])
+
+  return handle
 }

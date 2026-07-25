@@ -1,50 +1,7 @@
-import { HISTORY_OVERSCAN } from '@/lib/virtual-config'
-import type { LaneBoundary, RowLayout } from './layout'
-
-export interface GraphMetrics {
-  rootPx: number
-  rowHeight: number
-  columnWidth: number
-  railPadding: number
-  dotRadius: number
-  mergeDotRadius: number
-  mergeStroke: number
-  mergeGlyphArm: number
-  mergeGlyphStroke: number
-}
-
-export function readGraphMetrics(): GraphMetrics {
-  let rootPx = 16
-  if (typeof document !== 'undefined') {
-    const measured = parseFloat(getComputedStyle(document.documentElement).fontSize)
-    if (Number.isFinite(measured) && measured > 0) {
-      rootPx = measured
-    }
-  }
-  return {
-    rootPx,
-    rowHeight: Math.round(rootPx * 2.5),
-    columnWidth: Math.round(rootPx),
-    railPadding: Math.round(rootPx * 0.875),
-    dotRadius: rootPx * 0.3125,
-    mergeDotRadius: rootPx * 0.25,
-    mergeStroke: Math.max(1, rootPx * 0.1),
-    mergeGlyphArm: rootPx * 0.2,
-    mergeGlyphStroke: Math.max(1, rootPx * 0.09)
-  }
-}
-
-const DEFAULT_METRICS = readGraphMetrics()
-
-export const ROW_H = DEFAULT_METRICS.rowHeight
-export const COL_W = DEFAULT_METRICS.columnWidth
-export const RAIL_PAD = DEFAULT_METRICS.railPadding
-export const DOT_R = DEFAULT_METRICS.dotRadius
-export const MERGE_DOT_R = DEFAULT_METRICS.mergeDotRadius
-export const MERGE_STROKE = DEFAULT_METRICS.mergeStroke
-export const MERGE_GLYPH_ARM = DEFAULT_METRICS.mergeGlyphArm
-export const MERGE_GLYPH_STROKE = DEFAULT_METRICS.mergeGlyphStroke
-export const OVERSCAN = HISTORY_OVERSCAN
+import type { LaneWalker } from './lane-walker'
+import { indexOfOwner } from './lanes'
+import type { GraphMetrics } from './metrics'
+import { EMPTY_LANE, type GraphTopology } from './topology'
 
 export const LANE_PALETTE = [
   '#7c8cff',
@@ -61,33 +18,12 @@ export function laneColor(lane: number): string {
   return LANE_PALETTE[lane % LANE_PALETTE.length]
 }
 
-export function laneX(lane: number, metrics = DEFAULT_METRICS): number {
+export function laneX(lane: number, metrics: GraphMetrics): number {
   return metrics.railPadding + lane * metrics.columnWidth
 }
 
-export function computeGraphRailWidth(maxLanes: number, metrics = DEFAULT_METRICS): number {
-  return Math.max(28, metrics.railPadding * 2 + Math.max(maxLanes - 1, 0) * metrics.columnWidth)
-}
-
-export function computeRowRailWidth(
-  row: RowLayout,
-  incoming: LaneBoundary,
-  outgoing: LaneBoundary
-): number {
-  let maxLane = row.commitLane
-  for (let lane = incoming.length - 1; lane > maxLane; lane--) {
-    if (incoming[lane] !== null) {
-      maxLane = lane
-      break
-    }
-  }
-  for (let lane = outgoing.length - 1; lane > maxLane; lane--) {
-    if (outgoing[lane] !== null) {
-      maxLane = lane
-      break
-    }
-  }
-  return computeGraphRailWidth(maxLane + 1)
+export function computeGraphRailWidth(maxLanes: number, metrics: GraphMetrics): number {
+  return metrics.railPadding * 2 + Math.max(maxLanes - 1, 0) * metrics.columnWidth
 }
 
 export function readCssVar(name: string, fallback: string): string {
@@ -185,75 +121,76 @@ function addEdge(
   }
 }
 
+// Draws the row the walker has just stepped over: `walker.incoming` is the lane state entering it,
+// `walker.lanes` the state leaving it, and the parents that rejoined a lane already in flight need
+// an edge of their own.
 export function collectRowEdges(
   batch: EdgeBatch,
-  row: RowLayout,
-  incoming: LaneBoundary,
-  outgoing: LaneBoundary,
+  walker: LaneWalker,
+  topology: GraphTopology,
+  row: number,
   yTop: number,
-  isFirst: boolean,
   dim: boolean,
-  metrics = DEFAULT_METRICS
+  metrics: GraphMetrics
 ): void {
+  const incoming = walker.incoming
+  const incomingLanes = walker.incomingCount
+  const outgoing = walker.lanes
+  const outgoingLanes = walker.laneCount
+
+  const commitLane = walker.commitLane
   const rowMid = yTop + metrics.rowHeight / 2
   const rowBottom = yTop + metrics.rowHeight
-  const dotX = laneX(row.commitLane, metrics)
+  const dotX = laneX(commitLane, metrics)
+  const curveOffset = metrics.rowHeight / 4
 
-  if (!isFirst) {
-    for (let lane = 0; lane < incoming.length; lane++) {
-      const hash = incoming[lane]
-      if (hash === null) {
+  // Every lane entering the row drops straight to the row's middle — including the lane holding this
+  // commit, which the layout guarantees is the commit's own lane and no other.
+  if (row > 0) {
+    for (let lane = 0; lane < incomingLanes; lane++) {
+      if (incoming[lane] === EMPTY_LANE) {
         continue
       }
       const startX = laneX(lane, metrics)
-      if (hash === row.commit.hash && lane !== row.commitLane) {
-        addEdge(
-          batch,
-          lane,
-          dim,
-          startX,
-          yTop,
-          dotX,
-          rowMid,
-          startX,
-          rowMid - metrics.rowHeight / 4,
-          dotX,
-          rowMid - metrics.rowHeight / 4
-        )
-      } else {
-        addEdge(batch, lane, dim, startX, yTop, hash === row.commit.hash ? dotX : startX, rowMid)
-      }
+      addEdge(batch, lane, dim, startX, yTop, startX, rowMid)
     }
   }
 
-  for (let lane = 0; lane < outgoing.length; lane++) {
-    const hash = outgoing[lane]
-    if (hash === null) {
+  for (let lane = 0; lane < outgoingLanes; lane++) {
+    const owner = outgoing[lane]
+    if (owner === EMPTY_LANE) {
       continue
     }
     const endX = laneX(lane, metrics)
-    if (incoming[lane] === hash || dotX === endX) {
-      addEdge(batch, lane, dim, incoming[lane] === hash ? endX : dotX, rowMid, endX, rowBottom)
-    } else {
-      addEdge(
-        batch,
-        lane,
-        dim,
-        dotX,
-        rowMid,
-        endX,
-        rowBottom,
-        dotX,
-        rowMid + metrics.rowHeight / 4,
-        endX,
-        rowMid + metrics.rowHeight / 4
-      )
+    const passesThrough = lane < incomingLanes && incoming[lane] === owner
+    if (passesThrough || dotX === endX) {
+      addEdge(batch, lane, dim, passesThrough ? endX : dotX, rowMid, endX, rowBottom)
+      continue
     }
+    addEdge(
+      batch,
+      lane,
+      dim,
+      dotX,
+      rowMid,
+      endX,
+      rowBottom,
+      dotX,
+      rowMid + curveOffset,
+      endX,
+      rowMid + curveOffset
+    )
   }
 
-  for (const parent of row.commit.parents) {
-    const lane = outgoing.indexOf(parent)
-    if (lane === -1 || lane === row.commitLane || incoming[lane] !== parent) {
+  const parentStart = topology.parentOffsets[row - topology.firstRow]
+  const parentEnd = topology.parentOffsets[row - topology.firstRow + 1]
+  for (let offset = parentStart; offset < parentEnd; offset++) {
+    const parent = topology.parentIds[offset]
+    const lane = indexOfOwner(outgoing, outgoingLanes, parent)
+    if (lane === -1 || lane === commitLane || lane >= incomingLanes) {
+      continue
+    }
+    if (incoming[lane] !== parent) {
       continue
     }
     const endX = laneX(lane, metrics)
@@ -266,9 +203,9 @@ export function collectRowEdges(
       endX,
       rowBottom,
       dotX,
-      rowMid + metrics.rowHeight / 4,
+      rowMid + curveOffset,
       endX,
-      rowMid + metrics.rowHeight / 4
+      rowMid + curveOffset
     )
   }
 }
@@ -304,28 +241,29 @@ export function strokeEdgeBatch(ctx: CanvasRenderingContext2D, batch: EdgeBatch)
 
 export function drawCommitDot(
   ctx: CanvasRenderingContext2D,
-  row: RowLayout,
+  lane: number,
+  isMerge: boolean,
   yTop: number,
   dim: boolean,
   bgColor: string,
-  metrics = DEFAULT_METRICS
+  metrics: GraphMetrics
 ): void {
   const rowMid = yTop + metrics.rowHeight / 2
-  const dotX = laneX(row.commitLane, metrics)
-  if (row.commit.parents.length >= 2) {
+  const dotX = laneX(lane, metrics)
+  if (isMerge) {
     ctx.globalAlpha = dim ? 0.25 : 0.95
     ctx.beginPath()
     ctx.arc(dotX, rowMid, metrics.mergeDotRadius, 0, Math.PI * 2)
     ctx.fillStyle = bgColor
     ctx.fill()
-    ctx.strokeStyle = laneColor(row.commitLane)
+    ctx.strokeStyle = laneColor(lane)
     ctx.lineWidth = metrics.mergeStroke
     ctx.stroke()
   } else {
     ctx.globalAlpha = dim ? 0.25 : 1
     ctx.beginPath()
     ctx.arc(dotX, rowMid, metrics.dotRadius, 0, Math.PI * 2)
-    ctx.fillStyle = laneColor(row.commitLane)
+    ctx.fillStyle = laneColor(lane)
     ctx.fill()
   }
 }
@@ -336,7 +274,7 @@ export function drawMergeGlyph(
   rowMid: number,
   glyph: 'collapsed' | 'expanded',
   color: string,
-  metrics = DEFAULT_METRICS
+  metrics: GraphMetrics
 ): void {
   ctx.globalAlpha = 1
   ctx.strokeStyle = color
@@ -349,20 +287,4 @@ export function drawMergeGlyph(
     ctx.lineTo(dotX, rowMid + metrics.mergeGlyphArm)
   }
   ctx.stroke()
-}
-
-export function drawGraphRow(
-  ctx: CanvasRenderingContext2D,
-  row: RowLayout,
-  incoming: LaneBoundary,
-  outgoing: LaneBoundary,
-  yTop: number,
-  isFirst: boolean,
-  dim: boolean,
-  bgColor: string
-): void {
-  const batch = createEdgeBatch()
-  collectRowEdges(batch, row, incoming, outgoing, yTop, isFirst, dim)
-  strokeEdgeBatch(ctx, batch)
-  drawCommitDot(ctx, row, yTop, dim, bgColor)
 }

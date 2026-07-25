@@ -1,14 +1,14 @@
-import { ROW_H } from '@/lib/git-graph/canvas'
 import { Skeleton } from '../ui/skeleton'
 
 interface SkeletonRowsProps {
   graphRailWidth: number
   gridTail: string
+  rowHeight: number
   viewportHeight: number
 }
 
 export function SkeletonRows(props: SkeletonRowsProps) {
-  const count = Math.max(12, Math.ceil(props.viewportHeight / ROW_H) + 2)
+  const count = Math.max(12, Math.ceil(props.viewportHeight / props.rowHeight) + 2)
   const gridTemplate = `${props.graphRailWidth}px minmax(0,1fr) ${props.gridTail}`
   const rows = Array.from({ length: count }, (_, position) => ({
     key: `skeleton-row-${position}`,
@@ -21,7 +21,7 @@ export function SkeletonRows(props: SkeletonRowsProps) {
         <li
           key={row.key}
           className="grid items-center gap-1 px-0"
-          style={{ height: `${ROW_H}px`, gridTemplateColumns: gridTemplate }}
+          style={{ height: `${props.rowHeight}px`, gridTemplateColumns: gridTemplate }}
         >
           <span aria-hidden="true" className="flex h-full items-center justify-end pr-1">
             <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/30" />
