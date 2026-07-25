@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { accessSync, constants } from 'node:fs'
+import { accessSync, constants, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -29,6 +29,13 @@ async function findElectron() {
 async function runSmokeTest() {
   const electronBin = await findElectron()
   const mainJs = resolve(rootDir, 'out/main/index.js')
+  const rendererHtml = resolve(rootDir, 'out/renderer/index.html')
+  const themeBootstrap = resolve(rootDir, 'out/renderer/theme-init.js')
+  const html = readFileSync(rendererHtml, 'utf8')
+  if (!html.includes('<script src="./theme-init.js"></script>')) {
+    throw new Error('Packaged theme bootstrap must be a relative parser-blocking script')
+  }
+  accessSync(themeBootstrap, constants.R_OK)
 
   console.log('\nLaunching Electron smoke test...')
   console.log(`Binary: ${electronBin}`)

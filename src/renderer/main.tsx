@@ -12,12 +12,10 @@ if (!rootElement) {
 async function start(container: HTMLElement): Promise<void> {
   const playwrightMcpMode = import.meta.env.DEV && import.meta.env.MODE === 'playwright-mcp'
   if (playwrightMcpMode) {
-    const { installPlaywrightMcpElectronApi } = await import('./manual-testing/electron-api')
-    const searchParams = new URLSearchParams(window.location.search)
-    const onboardingComplete = searchParams.get('onboarding') !== '1'
-    const historyCount = searchParams.get('pagination') === '1' ? 2_005 : undefined
-    const conflicted = searchParams.get('conflict') === '1'
-    installPlaywrightMcpElectronApi({ onboardingComplete, historyCount, conflicted })
+    const { installPlaywrightMcpElectronApiFromSearch } = await import(
+      './manual-testing/install-from-url'
+    )
+    installPlaywrightMcpElectronApiFromSearch(window.location.search)
   }
 
   const app = (

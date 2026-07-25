@@ -12,7 +12,7 @@ import type { IElectronAPI } from '../../preload'
 export const PLAYWRIGHT_MCP_WORKSPACE_PATH = '/Users/playwright/Projects'
 export const PLAYWRIGHT_MCP_REPO_PATH = `${PLAYWRIGHT_MCP_WORKSPACE_PATH}/rebase-demo`
 
-interface PlaywrightMcpElectronApiOptions {
+export interface PlaywrightMcpElectronApiOptions {
   onboardingComplete?: boolean
   historyCount?: number
   conflicted?: boolean

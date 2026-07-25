@@ -25,6 +25,7 @@ describe('ThemeToggle', () => {
     fireEvent.click(toggle)
 
     expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(document.documentElement.style.backgroundColor).toBe('#ededed')
     expect(localStorage.getItem('theme')).toBe('light')
     expect(screen.getByRole('button', { name: /Switch to dark theme/i })).toBeInTheDocument()
 

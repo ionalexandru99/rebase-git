@@ -209,12 +209,22 @@ describe('HistoryPanel', () => {
 
   it('marks responsive metadata columns so compact history can hide them', () => {
     renderPanel({
-      all: [entry({ hash: 'aaa', message: 'tip commit', refs: 'main' })],
+      all: [
+        entry({
+          hash: 'abcdef1234567890',
+          date: '2026-07-21T09:42:00.000Z',
+          message: 'tip commit',
+          refs: 'main'
+        })
+      ],
       loadedCount: 1
     })
 
     expect(screen.getByText('SHA')).toHaveAttribute('data-history-column', 'sha')
     expect(screen.getByText('Date')).toHaveAttribute('data-history-column', 'date')
+    const commitRow = screen.getByTestId('commit-row')
+    expect(commitRow.querySelector('[data-history-column="sha"]')).toHaveTextContent('abcdef1')
+    expect(commitRow.querySelector('[data-history-column="date"]')).not.toBeEmptyDOMElement()
   })
 
   it('renders complete branch and tag badges when their names contain commas', () => {

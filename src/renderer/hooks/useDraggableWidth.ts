@@ -1,5 +1,5 @@
 import { SIDEBAR_RESIZE_END_EVENT } from '@shared/sidebar-resize'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { LAYOUT_RESET_EVENT } from '@/lib/layout'
 
 interface PaneState {
@@ -70,12 +70,15 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     return () => dragTeardown.current?.()
   }, [])
 
-  const persist = (nextOpen: boolean, nextWidth: number) => {
-    const result = save?.({ open: nextOpen, width: nextWidth })
-    if (result && typeof (result as Promise<void>).catch === 'function') {
-      ;(result as Promise<void>).catch(onSaveError)
-    }
-  }
+  const persist = useCallback(
+    (nextOpen: boolean, nextWidth: number) => {
+      const result = save?.({ open: nextOpen, width: nextWidth })
+      if (result && typeof (result as Promise<void>).catch === 'function') {
+        ;(result as Promise<void>).catch(onSaveError)
+      }
+    },
+    [onSaveError, save]
+  )
 
   const setOpen = (next: boolean) => {
     setIsOpen(next)
@@ -91,7 +94,7 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     }
     window.addEventListener(LAYOUT_RESET_EVENT, reset)
     return () => window.removeEventListener(LAYOUT_RESET_EVENT, reset)
-  })
+  }, [defaultWidth, persist])
 
   const onResizeStart = (event: MouseEvent) => {
     event.preventDefault()

@@ -55,4 +55,24 @@ test('keeps history and diffs usable at the minimum window size', async ({ harne
   await setWindowSize(harness, 1280, 800)
   await page.getByRole('button', { name: 'Repository actions' }).click()
   await page.getByRole('menuitem', { name: 'Reset layout' }).click()
+
+  await expect(page.getByRole('searchbox', { name: 'Filter refs' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Show branches' })).toBeHidden()
+  await expect
+    .poll(() =>
+      page.evaluate(async () => ({
+        filesWidth: localStorage.getItem('rebase:local-files-width'),
+        sidebar: await (
+          window as unknown as {
+            electronAPI: {
+              getSidebarPrefs: () => Promise<{ open: boolean; width: number }>
+            }
+          }
+        ).electronAPI.getSidebarPrefs()
+      }))
+    )
+    .toEqual({
+      filesWidth: '320',
+      sidebar: { open: true, width: 256 }
+    })
 })

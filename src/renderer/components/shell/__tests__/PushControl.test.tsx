@@ -42,7 +42,9 @@ describe('PushControl', () => {
 
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveTextContent('feature/x')
-    expect(dialog).toHaveTextContent(/3 behind|behind.*3/)
+    expect(dialog).toHaveTextContent('2 ahead and 3 behind')
+    expect(dialog).toHaveTextContent(/leased force republishes your rewritten history/i)
+    expect(dialog).toHaveTextContent(/without destroying remote work you haven't seen/i)
     expect(screen.getByRole('button', { name: /force push \(with lease\)/i })).toBeInTheDocument()
     expect(push).not.toHaveBeenCalled()
   })
@@ -175,8 +177,12 @@ describe('PushControl', () => {
     fireEvent.click(screen.getByRole('button', { name: /push options/i }))
     fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
 
-    expect(screen.getByRole('dialog')).not.toHaveTextContent('has diverged')
-    expect(screen.getByRole('dialog')).toHaveTextContent('1 ahead and 0 behind')
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('feature/x')
+    expect(dialog).not.toHaveTextContent('has diverged')
+    expect(dialog).toHaveTextContent('1 ahead and 0 behind')
+    expect(dialog).toHaveTextContent(/leased force republishes your rewritten history/i)
+    expect(dialog).toHaveTextContent(/without destroying remote work you haven't seen/i)
   })
 
   it('disables the force option in detached HEAD', () => {
