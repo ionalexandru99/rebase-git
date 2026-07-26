@@ -8,6 +8,7 @@ import { RpcClient, RpcSerialization } from '@effect/rpc'
 import { RepoNotOpen, SidecarRpcs } from '@shared/rpc'
 import { Effect, Either, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { removeRepoDir } from '../../test-support/repo-fixtures'
 import { createSidecarServer } from '../http'
 
 const TOKEN = 'rpc-test-token'
@@ -56,6 +57,15 @@ async function openRepo(repoPath: string): Promise<void> {
   }
 }
 
+async function closeRepo(repoPath: string): Promise<void> {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* client.closeRepo({ repoPath })
+    }).pipe(Effect.scoped, Effect.provide(protocolLayer()))
+  )
+}
+
 async function stageFile(repoPath: string, file: string): Promise<void> {
   const result = await Effect.runPromise(
     Effect.gen(function* () {
@@ -78,8 +88,9 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await closeRepo(repoPath)
   await new Promise<void>((resolve) => server.close(() => resolve()))
-  fs.rmSync(repoPath, { recursive: true, force: true })
+  removeRepoDir(repoPath)
 })
 
 describe('sidecar RPC read ops', () => {
@@ -110,7 +121,7 @@ describe('sidecar RPC read ops', () => {
         expect(result.left).toBeInstanceOf(RepoNotOpen)
       }
     } finally {
-      fs.rmSync(unopened, { recursive: true, force: true })
+      removeRepoDir(unopened)
     }
   })
 })
@@ -145,7 +156,7 @@ describe('sidecar RPC write ops', () => {
         expect(result.left).toBeInstanceOf(RepoNotOpen)
       }
     } finally {
-      fs.rmSync(unopened, { recursive: true, force: true })
+      removeRepoDir(unopened)
     }
   })
 })

@@ -1,9 +1,8 @@
-import fs from 'node:fs'
 import { ManagedRuntime } from 'effect'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { RunningGitProcess, SpawnGitOptions } from '../../git/spawn'
 import { processAlive, waitUntil } from '../../test-support/hanging-git'
-import { makeBigRepo } from '../../test-support/repo-fixtures'
+import { makeBigRepo, removeRepoDir } from '../../test-support/repo-fixtures'
 import { LogContinuations, LogContinuationsLive } from '../log-stream'
 
 const startedGitProcesses: RunningGitProcess[] = []
@@ -29,7 +28,7 @@ beforeAll(() => {
 }, 60_000)
 
 afterAll(() => {
-  fs.rmSync(repoPath, { recursive: true, force: true })
+  removeRepoDir(repoPath)
 })
 
 describe('log continuation scope', () => {
