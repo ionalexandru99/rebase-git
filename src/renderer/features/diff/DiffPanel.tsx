@@ -261,7 +261,14 @@ export function DiffPanel(props: DiffPanelProps) {
   return (
     <section className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
       {props.selected ? (
-        <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
+        <div
+          className={cn(
+            'flex shrink-0 items-center gap-2.5 border-b pl-3.5 pr-2',
+            // The staging modes need room for a checkbox; a commit's header is one line of text, and
+            // in the details panel it sits above a diff that has little height to spare.
+            isCommit ? 'min-h-8 py-1' : 'min-h-[46px] py-1.5'
+          )}
+        >
           {hasAnyHunks && !isBinary && isWorktree ? (
             <Checkbox
               checked={fileStageState === 'staged'}

@@ -62,10 +62,15 @@ export function getCommitDetail(
         runGit(fileListArgs(key, meta, '--numstat'))
       ])
     )
-    const { parents: _parents, ...detail } = meta
+    // The response is enumerated rather than spread: `parents` is read to pick the diff base above
+    // and stays internal, so a future field cannot leak into the contract by accident.
     return {
       detail: {
-        ...detail,
+        sha: meta.sha,
+        author: meta.author,
+        authorDate: meta.authorDate,
+        subject: meta.subject,
+        body: meta.body,
         files: buildCommitFiles(parseCommitNameStatus(nameStatus), parseCommitNumstat(numstat))
       }
     }
