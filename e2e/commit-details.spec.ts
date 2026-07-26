@@ -218,62 +218,71 @@ const PANEL_LAYOUT_CASES = [
   { width: 800, height: 560, storedHeight: 900 }
 ]
 
+// The Electron window is shared across the whole run, and these cases leave it below the width at
+// which the timeline hides its Date column. Restore it so later specs are not measuring a narrow
+// window, even when an assertion here fails.
+const LAUNCH_WINDOW = { width: 1200, height: 800 }
+
 test('keeps every region of the details panel usable at any window size', async ({ harness }) => {
   const repo = createWordyRepo()
   const page = await harness.openRepo(repo)
 
-  for (const size of PANEL_LAYOUT_CASES) {
-    await page.evaluate(
-      (value) => localStorage.setItem('rebase:commit-details-height', String(value)),
-      size.storedHeight
-    )
-    await setWindowSize(harness.app(), size.width, size.height)
-    await page.reload()
+  try {
+    for (const size of PANEL_LAYOUT_CASES) {
+      await page.evaluate(
+        (value) => localStorage.setItem('rebase:commit-details-height', String(value)),
+        size.storedHeight
+      )
+      await setWindowSize(harness.app(), size.width, size.height)
+      await page.reload()
 
-    await expect(page.getByText('feat: a wordy commit')).toBeVisible({ timeout: 15_000 })
-    await commitRow(page, 'a wordy commit').dblclick()
-    const panel = detailsPanel(page)
-    await expect(panel.getByTestId('diff-hunk').first()).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByText('feat: a wordy commit')).toBeVisible({ timeout: 15_000 })
+      await commitRow(page, 'a wordy commit').dblclick()
+      const panel = detailsPanel(page)
+      await expect(panel.getByTestId('diff-hunk').first()).toBeVisible({ timeout: 10_000 })
 
-    const layout = await page.evaluate(() => {
-      const find = (selector: string) => document.querySelector(selector) as HTMLElement | null
-      const panelElement = find('[data-testid="commit-details-panel"]')
-      const meta = find('[data-testid="commit-meta"]')
-      const body = find('[data-testid="commit-body"]')
-      const rows = meta?.querySelector('dl') as HTMLElement | null
-      const files = find('[data-testid="commit-file-scroll"]')
-      const diff = find('[data-testid="commit-details-panel"] [data-testid="diff-body"]')
-      const graph = find('[data-testid="history-scroll"]')
-      if (!panelElement || !meta || !body || !rows || !files || !diff || !graph) {
-        throw new Error('details panel regions missing')
-      }
-      const panelBox = panelElement.getBoundingClientRect()
-      const rowsBox = rows.getBoundingClientRect()
-      return {
-        rowsFullyInsidePanel:
-          rowsBox.top >= panelBox.top - 1 && rowsBox.bottom <= panelBox.bottom + 1,
-        metaShareOfPanel: meta.clientHeight / panelElement.clientHeight,
-        bodyHeight: body.clientHeight,
-        bodyScrolls: body.scrollHeight > body.clientHeight,
-        filesHeight: files.clientHeight,
-        diffHeight: diff.clientHeight,
-        diffScrolls: diff.scrollHeight > diff.clientHeight,
-        graphHeight: graph.clientHeight
-      }
-    })
+      const layout = await page.evaluate(() => {
+        const find = (selector: string) => document.querySelector(selector) as HTMLElement | null
+        const panelElement = find('[data-testid="commit-details-panel"]')
+        const meta = find('[data-testid="commit-meta"]')
+        const body = find('[data-testid="commit-body"]')
+        const rows = meta?.querySelector('dl') as HTMLElement | null
+        const files = find('[data-testid="commit-file-scroll"]')
+        const diff = find('[data-testid="commit-details-panel"] [data-testid="diff-body"]')
+        const graph = find('[data-testid="history-scroll"]')
+        if (!panelElement || !meta || !body || !rows || !files || !diff || !graph) {
+          throw new Error('details panel regions missing')
+        }
+        const panelBox = panelElement.getBoundingClientRect()
+        const rowsBox = rows.getBoundingClientRect()
+        return {
+          rowsFullyInsidePanel:
+            rowsBox.top >= panelBox.top - 1 && rowsBox.bottom <= panelBox.bottom + 1,
+          metaShareOfPanel: meta.clientHeight / panelElement.clientHeight,
+          bodyHeight: body.clientHeight,
+          bodyScrolls: body.scrollHeight > body.clientHeight,
+          filesHeight: files.clientHeight,
+          diffHeight: diff.clientHeight,
+          diffScrolls: diff.scrollHeight > diff.clientHeight,
+          graphHeight: graph.clientHeight
+        }
+      })
 
-    const at = `${size.width}x${size.height} @ ${size.storedHeight}px`
-    // The labelled rows are the first thing to protect: they never scroll out or get clipped.
-    expect(layout.rowsFullyInsidePanel, `rows inside panel at ${at}`).toBe(true)
-    // The body gives up space instead, and stays reachable by scrolling.
-    expect(layout.bodyHeight, `body visible at ${at}`).toBeGreaterThan(16)
-    expect(layout.bodyScrolls, `body scrolls at ${at}`).toBe(true)
-    expect(layout.metaShareOfPanel, `metadata share at ${at}`).toBeLessThanOrEqual(0.46)
-    // The files and the diff keep the majority, and a long diff scrolls rather than clipping.
-    expect(layout.filesHeight, `file tree at ${at}`).toBeGreaterThan(48)
-    expect(layout.diffHeight, `diff at ${at}`).toBeGreaterThan(24)
-    expect(layout.diffScrolls, `diff scrolls at ${at}`).toBe(true)
-    // And the panel never swallows the timeline it belongs to.
-    expect(layout.graphHeight, `graph at ${at}`).toBeGreaterThan(64)
+      const at = `${size.width}x${size.height} @ ${size.storedHeight}px`
+      // The labelled rows are the first thing to protect: they never scroll out or get clipped.
+      expect(layout.rowsFullyInsidePanel, `rows inside panel at ${at}`).toBe(true)
+      // The body gives up space instead, and stays reachable by scrolling.
+      expect(layout.bodyHeight, `body visible at ${at}`).toBeGreaterThan(16)
+      expect(layout.bodyScrolls, `body scrolls at ${at}`).toBe(true)
+      expect(layout.metaShareOfPanel, `metadata share at ${at}`).toBeLessThanOrEqual(0.46)
+      // The files and the diff keep the majority, and a long diff scrolls rather than clipping.
+      expect(layout.filesHeight, `file tree at ${at}`).toBeGreaterThan(48)
+      expect(layout.diffHeight, `diff at ${at}`).toBeGreaterThan(24)
+      expect(layout.diffScrolls, `diff scrolls at ${at}`).toBe(true)
+      // And the panel never swallows the timeline it belongs to.
+      expect(layout.graphHeight, `graph at ${at}`).toBeGreaterThan(64)
+    }
+  } finally {
+    await setWindowSize(harness.app(), LAUNCH_WINDOW.width, LAUNCH_WINDOW.height)
   }
 })
