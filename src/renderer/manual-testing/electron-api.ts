@@ -440,6 +440,7 @@ export function createPlaywrightMcpElectronApi(
   const ok = { _tag: 'Ok' as const }
 
   return {
+    platform: 'darwin',
     selectFolder: async () => PLAYWRIGHT_MCP_WORKSPACE_PATH,
     openRepo: async (repoPath) => {
       if (repoPath !== PLAYWRIGHT_MCP_REPO_PATH) {

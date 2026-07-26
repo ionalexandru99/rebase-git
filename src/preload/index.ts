@@ -22,6 +22,7 @@ type ScanForReposResponse = RpcEncodedResult<
 >
 
 export interface IElectronAPI {
+  platform: NodeJS.Platform
   selectFolder: () => Promise<string | null>
   openRepo: (path: string, owner: number) => Promise<OpenRepoResponse>
   closeRepo: (path: string, owner: number) => Promise<void>
@@ -50,6 +51,7 @@ export interface IElectronAPI {
 }
 
 const api: IElectronAPI = {
+  platform: process.platform,
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   openRepo: (path: string, owner: number) => ipcRenderer.invoke(Channel.openRepo, path, owner),
   closeRepo: (path: string, owner: number) => ipcRenderer.invoke(Channel.closeRepo, path, owner),

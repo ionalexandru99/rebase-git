@@ -77,7 +77,9 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  fs.rmSync(baseDir, { recursive: true, force: true })
+  // Closing kills the session's commit-graph write mid-flight, and Windows keeps a killed process's
+  // files undeletable for a moment after it exits — long enough to fail this rm with EPERM.
+  fs.rmSync(baseDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 })
 })
 
 describe('closing a repo session spares an in-flight mutation (ADR-0002)', () => {

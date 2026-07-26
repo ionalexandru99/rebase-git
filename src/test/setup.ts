@@ -142,6 +142,7 @@ Object.defineProperty(window, 'ResizeObserver', {
 })
 
 const mockElectronAPI = {
+  platform: 'darwin' as NodeJS.Platform,
   selectFolder: vi.fn(),
   openRepo: vi.fn(),
   closeRepo: vi.fn(),
