@@ -65,6 +65,14 @@ describe('parseCommitNumstat', () => {
     ])
   })
 
+  it('keeps a tab inside a filename, which -z leaves unquoted after the second tab', () => {
+    const output = record('3\t1\tweird\tname.txt')
+
+    expect(parseCommitNumstat(output)).toEqual([
+      { path: 'weird\tname.txt', additions: 3, deletions: 1, binary: false }
+    ])
+  })
+
   it('takes the destination path of a rename, whose counts precede two path fields', () => {
     const output = record('-\t-\t', 'blob.bin', 'renamed.bin', '1\t1\tafter.txt')
 
@@ -99,6 +107,15 @@ describe('buildCommitFiles', () => {
         binary: true,
         oldPath: 'blob.bin'
       }
+    ])
+  })
+
+  it('matches a tab-containing path against its numstat row', () => {
+    const nameStatus = parseCommitNameStatus(record('M', 'weird\tname.txt'))
+    const numstat = parseCommitNumstat(record('3\t1\tweird\tname.txt'))
+
+    expect(buildCommitFiles(nameStatus, numstat)).toEqual([
+      { path: 'weird\tname.txt', status: 'M', additions: 3, deletions: 1, binary: false }
     ])
   })
 

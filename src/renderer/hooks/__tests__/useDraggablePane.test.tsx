@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { LAYOUT_RESET_EVENT } from '@/lib/layout'
 import { useDraggablePane } from '../useDraggablePane'
@@ -16,6 +16,61 @@ function drag(
     window.dispatchEvent(new MouseEvent('mouseup'))
   })
 }
+
+describe('useDraggablePane persistence', () => {
+  it('applies a persisted size and open state', async () => {
+    const load = async () => ({ open: false, size: 300 })
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load })
+    )
+
+    await waitFor(() => expect(result.current.size).toBe(300))
+    expect(result.current.isOpen).toBe(false)
+  })
+
+  it('clamps a persisted size into the configured bounds', async () => {
+    const tooBig = async () => ({ open: true, size: 9000 })
+    const oversized = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load: tooBig })
+    )
+    await waitFor(() => expect(oversized.result.current.size).toBe(520))
+
+    const tooSmall = async () => ({ open: true, size: 10 })
+    const undersized = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load: tooSmall })
+    )
+    await waitFor(() => expect(undersized.result.current.size).toBe(200))
+  })
+
+  it('reports a failed load and keeps the default size', async () => {
+    const failure = new Error('prefs unavailable')
+    const load = async () => {
+      throw failure
+    }
+    const onLoadError = vi.fn()
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load, onLoadError })
+    )
+
+    await waitFor(() => expect(onLoadError).toHaveBeenCalledWith(failure))
+    expect(result.current.size).toBe(256)
+  })
+
+  it('routes a rejected save through onSaveError', async () => {
+    const failure = new Error('disk full')
+    const save = () => Promise.reject(failure)
+    const onSaveError = vi.fn()
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, save, onSaveError })
+    )
+
+    await act(async () => {
+      result.current.setOpen(false)
+    })
+
+    expect(onSaveError).toHaveBeenCalledWith(failure)
+  })
+})
 
 describe('useDraggablePane', () => {
   it('restores the default open layout when a reset is requested', () => {

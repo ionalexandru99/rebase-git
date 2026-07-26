@@ -53,13 +53,14 @@ function countOf(field: string): number {
 }
 
 // numstat rows are `adds TAB dels TAB path`, except for a rename where the path field is empty and
-// the source and destination follow as two separate NUL-terminated fields.
+// the source and destination follow as two separate NUL-terminated fields. `-z` leaves paths
+// unquoted, so everything past the second tab is the path — a filename may contain tabs of its own.
 export function parseCommitNumstat(output: string): CommitNumstatEntry[] {
   const fields = output.split(NUL)
   const entries: CommitNumstatEntry[] = []
   for (let index = 0; index < fields.length - 1; ) {
-    const [added, deleted, inlinePath] = fields[index++].split('\t')
-    let path = inlinePath ?? ''
+    const [added, deleted, ...pathFields] = fields[index++].split('\t')
+    let path = pathFields.join('\t')
     if (path === '') {
       index++
       path = fields[index++]
