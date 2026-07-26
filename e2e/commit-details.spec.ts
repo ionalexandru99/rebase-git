@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
-import { createFixtureRepo, expect, gitIn, revParse, test } from './fixtures'
+import { createFixtureRepo, expect, gitIn, revParse, setWindowSize, test } from './fixtures'
 
 function createDetailRepo(): string {
   const repo = createFixtureRepo()
@@ -186,4 +186,94 @@ test('follows a plain click while open, and closes from the panel button', async
   await panel.getByRole('button', { name: 'Close commit details' }).click()
   await expect(panel).toBeHidden()
   await expect(commitRow(page, 'add files')).toHaveAttribute('data-selected', 'true')
+})
+
+const LONG_BODY = Array.from(
+  { length: 30 },
+  (_unused, index) => `Body paragraph line ${index} explaining the change in some detail.`
+).join('\n')
+
+function createWordyRepo(): string {
+  const repo = createFixtureRepo()
+  const git = gitIn(repo)
+  fs.mkdirSync(path.join(repo, 'src', 'deep'), { recursive: true })
+  fs.writeFileSync(path.join(repo, 'src', 'deep', 'long.txt'), 'seed\n')
+  git(['add', '.'])
+  git(['commit', '-m', 'seed'])
+
+  const lines = Array.from({ length: 80 }, (_unused, index) => `line ${index}`).join('\n')
+  fs.writeFileSync(path.join(repo, 'src', 'deep', 'long.txt'), `${lines}\n`)
+  git(['add', '-A'])
+  git(['commit', '-m', `feat: a wordy commit\n\n${LONG_BODY}`])
+  return repo
+}
+
+// A long message must never cost the reader the identity rows, the file tree or the diff — at any
+// window size, and at any remembered panel height. 800x560 is the app's smallest window.
+const PANEL_LAYOUT_CASES = [
+  { width: 1600, height: 1000, storedHeight: 900 },
+  { width: 1200, height: 800, storedHeight: 360 },
+  { width: 1000, height: 700, storedHeight: 360 },
+  { width: 800, height: 560, storedHeight: 260 },
+  { width: 800, height: 560, storedHeight: 900 }
+]
+
+test('keeps every region of the details panel usable at any window size', async ({ harness }) => {
+  const repo = createWordyRepo()
+  const page = await harness.openRepo(repo)
+
+  for (const size of PANEL_LAYOUT_CASES) {
+    await page.evaluate(
+      (value) => localStorage.setItem('rebase:commit-details-height', String(value)),
+      size.storedHeight
+    )
+    await setWindowSize(harness.app(), size.width, size.height)
+    await page.reload()
+
+    await expect(page.getByText('feat: a wordy commit')).toBeVisible({ timeout: 15_000 })
+    await commitRow(page, 'a wordy commit').dblclick()
+    const panel = detailsPanel(page)
+    await expect(panel.getByTestId('diff-hunk').first()).toBeVisible({ timeout: 10_000 })
+
+    const layout = await page.evaluate(() => {
+      const find = (selector: string) => document.querySelector(selector) as HTMLElement | null
+      const panelElement = find('[data-testid="commit-details-panel"]')
+      const meta = find('[data-testid="commit-meta"]')
+      const body = find('[data-testid="commit-body"]')
+      const rows = meta?.querySelector('dl') as HTMLElement | null
+      const files = find('[data-testid="commit-file-scroll"]')
+      const diff = find('[data-testid="commit-details-panel"] [data-testid="diff-body"]')
+      const graph = find('[data-testid="history-scroll"]')
+      if (!panelElement || !meta || !body || !rows || !files || !diff || !graph) {
+        throw new Error('details panel regions missing')
+      }
+      const panelBox = panelElement.getBoundingClientRect()
+      const rowsBox = rows.getBoundingClientRect()
+      return {
+        rowsFullyInsidePanel:
+          rowsBox.top >= panelBox.top - 1 && rowsBox.bottom <= panelBox.bottom + 1,
+        metaShareOfPanel: meta.clientHeight / panelElement.clientHeight,
+        bodyHeight: body.clientHeight,
+        bodyScrolls: body.scrollHeight > body.clientHeight,
+        filesHeight: files.clientHeight,
+        diffHeight: diff.clientHeight,
+        diffScrolls: diff.scrollHeight > diff.clientHeight,
+        graphHeight: graph.clientHeight
+      }
+    })
+
+    const at = `${size.width}x${size.height} @ ${size.storedHeight}px`
+    // The labelled rows are the first thing to protect: they never scroll out or get clipped.
+    expect(layout.rowsFullyInsidePanel, `rows inside panel at ${at}`).toBe(true)
+    // The body gives up space instead, and stays reachable by scrolling.
+    expect(layout.bodyHeight, `body visible at ${at}`).toBeGreaterThan(16)
+    expect(layout.bodyScrolls, `body scrolls at ${at}`).toBe(true)
+    expect(layout.metaShareOfPanel, `metadata share at ${at}`).toBeLessThanOrEqual(0.46)
+    // The files and the diff keep the majority, and a long diff scrolls rather than clipping.
+    expect(layout.filesHeight, `file tree at ${at}`).toBeGreaterThan(48)
+    expect(layout.diffHeight, `diff at ${at}`).toBeGreaterThan(24)
+    expect(layout.diffScrolls, `diff scrolls at ${at}`).toBe(true)
+    // And the panel never swallows the timeline it belongs to.
+    expect(layout.graphHeight, `graph at ${at}`).toBeGreaterThan(64)
+  }
 })

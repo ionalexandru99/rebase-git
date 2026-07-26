@@ -62,9 +62,11 @@ interface HistoryPanelProps {
 const HISTORY_SCROLL_CACHE_LIMIT = 32
 const historyScrollPositions = new Map<string, number>()
 
-const DETAILS_HEIGHT_MIN = 180
+// Floor and default are chosen so the metadata, the file tree and the diff all keep usable room at
+// every window size; the panel is additionally capped against the history height in the markup.
+const DETAILS_HEIGHT_MIN = 260
 const DETAILS_HEIGHT_MAX = 900
-const DETAILS_HEIGHT_DEFAULT = 320
+const DETAILS_HEIGHT_DEFAULT = 360
 const DETAILS_HEIGHT_KEY = 'rebase:commit-details-height'
 
 const loadDetailsHeight = async () => {
@@ -229,48 +231,52 @@ export function HistoryPanel(props: HistoryPanelProps) {
         </div>
       ) : null}
 
-      <HistoryViewport
-        commits={commits}
-        layout={graph.layout}
-        topology={graph.topology}
-        validRows={graph.validRows}
-        metrics={metrics}
-        loadedCount={allCommits.length}
-        hasLog={props.log !== null}
-        loading={props.loading}
-        loadingMore={props.loadingMore}
-        hasMore={props.hasMore}
-        onLoadMore={props.onLoadMore}
-        repoPath={props.repoPath}
-        visibleSet={visibleSet}
-        themeNonce={themeNonce}
-        mergeSideRanges={mergeSideRanges}
-        onCurrentBranchSet={onCurrentBranchSet}
-        gridTail={gridTail}
-        remotes={remotes}
-        remoteNames={remoteNames}
-        onToggleMergeExpansion={props.onToggleMergeExpansion}
-        onCommitAction={props.onCommitAction}
-        showSkeleton={showSkeleton}
-        hasCommits={hasCommits}
-        selectedShas={details.selectedShas}
-        onSelectCommit={details.selectCommit}
-        onOpenCommitDetails={details.openDetails}
-      />
-
-      {details.detailsOpen ? (
-        <CommitDetailsPanel
-          selection={details.selection}
-          commitsByHash={loadedCommits}
+      {/* Viewport and details share this region, so the panel's percentage cap is measured against
+          the space they actually split rather than against the header chrome as well. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <HistoryViewport
+          commits={commits}
+          layout={graph.layout}
+          topology={graph.topology}
+          validRows={graph.validRows}
+          metrics={metrics}
+          loadedCount={allCommits.length}
+          hasLog={props.log !== null}
+          loading={props.loading}
+          loadingMore={props.loadingMore}
+          hasMore={props.hasMore}
+          onLoadMore={props.onLoadMore}
+          repoPath={props.repoPath}
+          visibleSet={visibleSet}
+          themeNonce={themeNonce}
+          mergeSideRanges={mergeSideRanges}
+          onCurrentBranchSet={onCurrentBranchSet}
+          gridTail={gridTail}
           remotes={remotes}
           remoteNames={remoteNames}
-          laneHex={selectedLaneHex}
-          height={detailsHeight}
-          onResizeStart={onDetailsResizeStart}
-          onClose={details.closeDetails}
+          onToggleMergeExpansion={props.onToggleMergeExpansion}
           onCommitAction={props.onCommitAction}
+          showSkeleton={showSkeleton}
+          hasCommits={hasCommits}
+          selectedShas={details.selectedShas}
+          onSelectCommit={details.selectCommit}
+          onOpenCommitDetails={details.openDetails}
         />
-      ) : null}
+
+        {details.detailsOpen ? (
+          <CommitDetailsPanel
+            selection={details.selection}
+            commitsByHash={loadedCommits}
+            remotes={remotes}
+            remoteNames={remoteNames}
+            laneHex={selectedLaneHex}
+            height={detailsHeight}
+            onResizeStart={onDetailsResizeStart}
+            onClose={details.closeDetails}
+            onCommitAction={props.onCommitAction}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }
