@@ -62,9 +62,10 @@ export function getCommitDetail(
         runGit(fileListArgs(key, meta, '--numstat'))
       ])
     )
+    const { parents: _parents, ...detail } = meta
     return {
       detail: {
-        ...meta,
+        ...detail,
         files: buildCommitFiles(parseCommitNameStatus(nameStatus), parseCommitNumstat(numstat))
       }
     }

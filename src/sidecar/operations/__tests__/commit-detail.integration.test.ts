@@ -78,7 +78,6 @@ describe('getCommitDetail', () => {
     const { detail } = await runOp(getCommitDetail(repoDir, sha.second))
 
     expect(detail.sha).toBe(sha.second)
-    expect(detail.parents).toEqual([sha.root])
     expect(detail.author).toEqual({ name: 'Ada Author', email: 'author@example.com' })
     expect(detail.subject).toBe('second commit')
     expect(detail.body).toBe('A body paragraph.\nAnd a second line.')
@@ -108,7 +107,6 @@ describe('getCommitDetail', () => {
   it('lists every file as an addition for the root commit', async () => {
     const { detail } = await runOp(getCommitDetail(repoDir, sha.root))
 
-    expect(detail.parents).toEqual([])
     expect(detail.files.map((file) => [file.path, file.status])).toEqual([
       ['doomed.txt', 'A'],
       ['logo.png', 'A'],
@@ -116,10 +114,9 @@ describe('getCommitDetail', () => {
     ])
   })
 
-  it('reports a merge commit against its first parent and keeps both parents', async () => {
+  it('reports a merge commit against its first parent', async () => {
     const { detail } = await runOp(getCommitDetail(repoDir, sha.merge))
 
-    expect(detail.parents).toEqual([sha.second, sha.side])
     expect(detail.files).toEqual([
       { path: 'side.txt', status: 'A', additions: 1, deletions: 0, binary: false }
     ])

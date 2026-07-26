@@ -176,8 +176,12 @@ function SingleCommitDetails(props: {
             <span>
               {files.length} file{files.length === 1 ? '' : 's'}
             </span>
-            <span className="text-add">+{totals.additions}</span>
-            <span className="text-del">−{totals.deletions}</span>
+            {totals.additions > 0 || totals.deletions > 0 ? (
+              <>
+                <span className="text-add">+{totals.additions}</span>
+                <span className="text-del">−{totals.deletions}</span>
+              </>
+            ) : null}
           </span>
         ) : null}
         <button

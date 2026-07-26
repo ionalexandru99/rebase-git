@@ -156,7 +156,6 @@ export type CommitDetailFile = typeof CommitDetailFileSchema.Type
 
 export const CommitDetailSchema = Schema.Struct({
   sha: Schema.String,
-  parents: mutableArray(Schema.String),
   author: CommitIdentitySchema,
   authorDate: Schema.String,
   subject: Schema.String,

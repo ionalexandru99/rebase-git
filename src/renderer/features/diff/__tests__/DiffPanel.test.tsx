@@ -514,6 +514,18 @@ describe('DiffPanel', () => {
     expect(await screen.findByText(/Binary file/)).toBeInTheDocument()
   })
 
+  it('omits the +/- totals for a binary file, which has no lines to count', async () => {
+    sidecarMock.getDiff.mockResolvedValue({
+      _tag: 'Ok',
+      diff: { filePath: 'logo.png', binary: true, hunks: [] }
+    })
+    await renderDiffPanel({ file: 'logo.png' })
+
+    await screen.findByText(/Binary file/)
+    expect(screen.queryByText('+0')).not.toBeInTheDocument()
+    expect(screen.queryByText('−0')).not.toBeInTheDocument()
+  })
+
   it('hides hunk actions for untracked files', async () => {
     sidecarMock.getStatus.mockResolvedValue({
       _tag: 'Ok',

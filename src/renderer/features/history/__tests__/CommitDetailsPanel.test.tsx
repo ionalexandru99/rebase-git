@@ -38,7 +38,6 @@ const log: GitLog = {
 function detailFor(sha: string, overrides: Partial<CommitDetail> = {}): CommitDetail {
   return {
     sha,
-    parents: ['bbbbbbb2'],
     author: { name: 'Ada Author', email: 'ada@example.com' },
     authorDate: '2026-07-21T09:42:00.000Z',
     subject: 'newest change',
@@ -277,6 +276,59 @@ describe('commit details panel contents', () => {
     expect(within(fileList).getByTitle('alpha.ts')).toBeInTheDocument()
   })
 
+  it('leaves the line counts off files that changed without changing a line', async () => {
+    sidecarMock.getCommitDetail.mockResolvedValue({
+      _tag: 'Ok',
+      detail: detailFor('aaaaaaa1', {
+        files: [
+          { path: 'logo.png', status: 'M', additions: 0, deletions: 0, binary: true },
+          {
+            path: 'renamed.ts',
+            status: 'R',
+            additions: 0,
+            deletions: 0,
+            binary: false,
+            oldPath: 'moved.ts'
+          },
+          { path: 'edited.ts', status: 'M', additions: 4, deletions: 2, binary: false }
+        ]
+      })
+    })
+    await renderHistory()
+
+    fireEvent.doubleClick(rowFor('newest change'))
+
+    const fileList = await within(panel()).findByTestId('commit-file-scroll')
+    const rowText = (name: string) =>
+      within(fileList)
+        .getAllByTestId('commit-file-row')
+        .find((row) => row.textContent?.includes(name))?.textContent ?? ''
+    expect(rowText('logo.png')).toContain('binary')
+    expect(rowText('logo.png')).not.toContain('+0')
+    expect(rowText('moved.ts → renamed.ts')).not.toContain('+0')
+    expect(rowText('moved.ts → renamed.ts')).not.toContain('−0')
+    // A file that did change lines still reports them.
+    expect(rowText('edited.ts')).toContain('+4')
+    expect(rowText('edited.ts')).toContain('−2')
+  })
+
+  it('drops the commit totals when nothing in the commit changed a line', async () => {
+    sidecarMock.getCommitDetail.mockResolvedValue({
+      _tag: 'Ok',
+      detail: detailFor('aaaaaaa1', {
+        files: [{ path: 'logo.png', status: 'M', additions: 0, deletions: 0, binary: true }]
+      })
+    })
+    await renderHistory()
+
+    fireEvent.doubleClick(rowFor('newest change'))
+
+    const stats = await within(panel()).findByTestId('commit-stats')
+    expect(stats).toHaveTextContent('1 file')
+    expect(stats.textContent).not.toContain('+0')
+    expect(stats.textContent).not.toContain('−0')
+  })
+
   it('shows the clicked file’s diff for that commit', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
@@ -298,10 +350,21 @@ describe('commit details panel contents', () => {
     expect(within(meta).getByText('Author')).toBeInTheDocument()
     expect(within(meta).getByText('Ada Author')).toBeInTheDocument()
     expect(within(meta).getByText('ada@example.com')).toBeInTheDocument()
-    expect(within(meta).getByText('Parent')).toBeInTheDocument()
-    expect(within(meta).getByText('bbbbbbb')).toBeInTheDocument()
     // The author line owns the date; the run-on single line it replaced did not.
     expect(within(meta).getByText('Author').nextElementSibling).toHaveTextContent(/2026/)
+  })
+
+  it('leaves the parent out and lets the header carry the commit sha', async () => {
+    await renderHistory()
+
+    fireEvent.doubleClick(rowFor('newest change'))
+
+    const meta = await within(panel()).findByTestId('commit-meta')
+    expect(within(meta).queryByText('Parent')).not.toBeInTheDocument()
+    expect(within(meta).queryByText('Parents')).not.toBeInTheDocument()
+    expect(
+      within(panel()).getByRole('button', { name: 'Copy full SHA aaaaaaa1' })
+    ).toBeInTheDocument()
   })
 
   it('summarises the commit totals in the panel header, next to its sha', async () => {
@@ -316,33 +379,6 @@ describe('commit details panel contents', () => {
     const fileList = within(panel()).getByTestId('commit-file-scroll')
     expect(within(fileList).getByTitle('alpha.ts')).toBeInTheDocument()
     expect(within(fileList).getByText('+3')).toBeInTheDocument()
-  })
-
-  it('lists both parents of a merge commit', async () => {
-    sidecarMock.getCommitDetail.mockResolvedValue({
-      _tag: 'Ok',
-      detail: detailFor('aaaaaaa1', { parents: ['bbbbbbb2', 'ddddddd4'] })
-    })
-    await renderHistory()
-
-    fireEvent.doubleClick(rowFor('newest change'))
-
-    const meta = await within(panel()).findByTestId('commit-meta')
-    expect(within(meta).getByText('Parents')).toBeInTheDocument()
-    expect(within(meta).getByText('bbbbbbb')).toBeInTheDocument()
-    expect(within(meta).getByText('ddddddd')).toBeInTheDocument()
-  })
-
-  it('labels a root commit as such rather than showing an empty parent list', async () => {
-    sidecarMock.getCommitDetail.mockResolvedValue({
-      _tag: 'Ok',
-      detail: detailFor('ccccccc3', { parents: [] })
-    })
-    await renderHistory()
-
-    fireEvent.doubleClick(rowFor('oldest change'))
-
-    expect(await within(panel()).findByText(/root commit/)).toBeInTheDocument()
   })
 
   it('offers the full SHA for copying through the existing commit action', async () => {

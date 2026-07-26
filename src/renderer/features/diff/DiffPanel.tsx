@@ -289,10 +289,14 @@ export function DiffPanel(props: DiffPanelProps) {
           <span className="min-w-0 truncate text-sm font-semibold" title={props.selected.file}>
             {props.selected.file}
           </span>
-          <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
-            <span className="text-add">+{totals.adds}</span>
-            <span className="text-del">−{totals.dels}</span>
-          </span>
+          {/* Binary files, pure renames and mode changes have no lines to count; the body below
+              says what they are instead of claiming nothing changed. */}
+          {totals.adds > 0 || totals.dels > 0 ? (
+            <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
+              <span className="text-add">+{totals.adds}</span>
+              <span className="text-del">−{totals.dels}</span>
+            </span>
+          ) : null}
           <div className="flex-1" />
         </div>
       ) : (

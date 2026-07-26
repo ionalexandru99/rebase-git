@@ -55,9 +55,9 @@ test('shows a commit’s message, identity, files and diff in the details panel'
   await expect(panel.getByText('The body explains the rationale.')).toBeVisible()
   const meta = panel.getByTestId('commit-meta')
   await expect(meta.getByText('Author', { exact: true })).toBeVisible()
+  await expect(meta.getByText('Parent')).toHaveCount(0)
   await expect(meta.getByText('Ada Author')).toBeVisible()
   await expect(meta.getByText('ada@example.com')).toBeVisible()
-  await expect(meta.getByText('Parent')).toBeVisible()
   await expect(panel.getByTestId('commit-stats')).toContainText('4 files')
   await expect(panel.getByRole('button', { name: `Copy full SHA ${sha}` })).toBeVisible()
 
