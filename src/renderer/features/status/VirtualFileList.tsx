@@ -8,8 +8,10 @@ import { FileRow } from './FileRow'
 export interface SelectedFile {
   file: string
   renameSource?: string
-  source?: 'worktree' | 'head-commit'
+  source?: 'worktree' | 'head-commit' | 'commit'
   range?: string
+  /** Set with `source: 'commit'` — the sha whose first-parent diff this file is read from. */
+  commit?: string
 }
 
 export interface FileListSection {

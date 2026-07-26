@@ -27,6 +27,9 @@ function Overlay(props: { onDismiss: () => void; children: ReactNode }) {
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // Consume the key so other Escape listeners below the overlay stay put — dismissing a dialog
+        // must not also dismiss whatever it was covering.
+        event.preventDefault()
         props.onDismiss()
       }
     }

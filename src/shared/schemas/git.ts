@@ -133,6 +133,37 @@ export const HeadCommitSchema = Schema.Struct({
 })
 export type HeadCommit = typeof HeadCommitSchema.Type
 
+export const CommitIdentitySchema = Schema.Struct({
+  name: Schema.String,
+  email: Schema.String
+})
+export type CommitIdentity = typeof CommitIdentitySchema.Type
+
+// Copies collapse into 'R' and type changes into 'M': a reader cares that a file arrived from
+// somewhere else, or changed, not which of git's two flavours of it git reported.
+export const CommitFileStatusSchema = Schema.Literal('A', 'M', 'D', 'R')
+export type CommitFileStatus = typeof CommitFileStatusSchema.Type
+
+export const CommitDetailFileSchema = Schema.Struct({
+  path: Schema.String,
+  status: CommitFileStatusSchema,
+  additions: NonNaNNumber,
+  deletions: NonNaNNumber,
+  binary: Schema.Boolean,
+  oldPath: Schema.optional(Schema.String)
+})
+export type CommitDetailFile = typeof CommitDetailFileSchema.Type
+
+export const CommitDetailSchema = Schema.Struct({
+  sha: Schema.String,
+  author: CommitIdentitySchema,
+  authorDate: Schema.String,
+  subject: Schema.String,
+  body: Schema.String,
+  files: mutableArray(CommitDetailFileSchema)
+})
+export type CommitDetail = typeof CommitDetailSchema.Type
+
 export const LogChunkSchema = Schema.Struct({
   repoPath: Schema.String,
   commits: mutableArray(GitLogEntrySchema),

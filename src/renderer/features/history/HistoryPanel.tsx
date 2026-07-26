@@ -10,12 +10,16 @@ import type { CommitAction } from '@/lib/git-actions'
 import { HISTORY_LOAD_MORE_THRESHOLD_ROWS, HISTORY_OVERSCAN } from '@/lib/virtual-config'
 import type { GitLog, GitLogEntry } from '@/types'
 import { EmptyState } from '../../components/ui/empty-state'
+import { useDraggablePane } from '../../hooks/useDraggablePane'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
 import { useThemeNonce } from '../../hooks/useThemeNonce'
+import { CommitDetailsPanel } from './CommitDetailsPanel'
 import { CommitGraphCanvas } from './CommitGraphCanvas'
 import { CommitRow } from './CommitRow'
+import type { SelectionModifiers } from './commit-selection'
 import { FocusRail } from './FocusRail'
 import { HistoryHeader } from './HistoryHeader'
+import { useCommitDetailsView } from './hooks/useCommitDetailsView'
 import { useGraphLayout } from './hooks/useGraphLayout'
 import { useGraphMetrics } from './hooks/useGraphMetrics'
 import { SkeletonRows } from './SkeletonRows'
@@ -57,6 +61,27 @@ interface HistoryPanelProps {
 
 const HISTORY_SCROLL_CACHE_LIMIT = 32
 const historyScrollPositions = new Map<string, number>()
+
+// Floor and default are chosen so the metadata, the file tree and the diff all keep usable room at
+// every window size; the panel is additionally capped against the history height in the markup.
+const DETAILS_HEIGHT_MIN = 260
+const DETAILS_HEIGHT_MAX = 900
+const DETAILS_HEIGHT_DEFAULT = 360
+const DETAILS_HEIGHT_KEY = 'rebase:commit-details-height'
+
+const loadDetailsHeight = async () => {
+  const stored = Number(localStorage.getItem(DETAILS_HEIGHT_KEY))
+  return {
+    open: true,
+    size: Number.isFinite(stored) && stored > 0 ? stored : DETAILS_HEIGHT_DEFAULT
+  }
+}
+
+const saveDetailsHeight = (state: { size: number }) => {
+  try {
+    localStorage.setItem(DETAILS_HEIGHT_KEY, String(state.size))
+  } catch {}
+}
 
 const EMPTY_COMMITS: GitLogEntry[] = []
 const EMPTY_REMOTES: Record<string, string> = {}
@@ -152,6 +177,28 @@ export function HistoryPanel(props: HistoryPanelProps) {
   const hasCommits = allCommits.length > 0
   const showSkeleton = props.loading && !hasCommits
 
+  const orderedShas = useMemo(() => commits.map((commit) => commit.hash), [commits])
+  const details = useCommitDetailsView(props.repoPath, orderedShas)
+
+  const { size: detailsHeight, onResizeStart: onDetailsResizeStart } = useDraggablePane({
+    min: DETAILS_HEIGHT_MIN,
+    max: DETAILS_HEIGHT_MAX,
+    defaultSize: DETAILS_HEIGHT_DEFAULT,
+    axis: 'vertical',
+    handle: 'start',
+    load: loadDetailsHeight,
+    save: saveDetailsHeight
+  })
+
+  const selectionShas = details.selection.shas
+  const selectedLaneHex = useMemo(() => {
+    const only = selectionShas.length === 1 ? selectionShas[0] : undefined
+    const row = only === undefined ? undefined : displayedPositions.get(only)
+    return row === undefined || row >= graph.validRows
+      ? laneColor(0)
+      : laneColor(graph.layout.commitLane[row])
+  }, [selectionShas, displayedPositions, graph.layout, graph.validRows])
+
   return (
     <div className="flex h-full min-h-0 flex-col" data-history-panel="">
       <FocusRail
@@ -184,31 +231,52 @@ export function HistoryPanel(props: HistoryPanelProps) {
         </div>
       ) : null}
 
-      <HistoryViewport
-        commits={commits}
-        layout={graph.layout}
-        topology={graph.topology}
-        validRows={graph.validRows}
-        metrics={metrics}
-        loadedCount={allCommits.length}
-        hasLog={props.log !== null}
-        loading={props.loading}
-        loadingMore={props.loadingMore}
-        hasMore={props.hasMore}
-        onLoadMore={props.onLoadMore}
-        repoPath={props.repoPath}
-        visibleSet={visibleSet}
-        themeNonce={themeNonce}
-        mergeSideRanges={mergeSideRanges}
-        onCurrentBranchSet={onCurrentBranchSet}
-        gridTail={gridTail}
-        remotes={remotes}
-        remoteNames={remoteNames}
-        onToggleMergeExpansion={props.onToggleMergeExpansion}
-        onCommitAction={props.onCommitAction}
-        showSkeleton={showSkeleton}
-        hasCommits={hasCommits}
-      />
+      {/* Viewport and details share this region, so the panel's percentage cap is measured against
+          the space they actually split rather than against the header chrome as well. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <HistoryViewport
+          commits={commits}
+          layout={graph.layout}
+          topology={graph.topology}
+          validRows={graph.validRows}
+          metrics={metrics}
+          loadedCount={allCommits.length}
+          hasLog={props.log !== null}
+          loading={props.loading}
+          loadingMore={props.loadingMore}
+          hasMore={props.hasMore}
+          onLoadMore={props.onLoadMore}
+          repoPath={props.repoPath}
+          visibleSet={visibleSet}
+          themeNonce={themeNonce}
+          mergeSideRanges={mergeSideRanges}
+          onCurrentBranchSet={onCurrentBranchSet}
+          gridTail={gridTail}
+          remotes={remotes}
+          remoteNames={remoteNames}
+          onToggleMergeExpansion={props.onToggleMergeExpansion}
+          onCommitAction={props.onCommitAction}
+          showSkeleton={showSkeleton}
+          hasCommits={hasCommits}
+          selectedShas={details.selectedShas}
+          onSelectCommit={details.selectCommit}
+          onOpenCommitDetails={details.openDetails}
+        />
+
+        {details.detailsOpen ? (
+          <CommitDetailsPanel
+            selection={details.selection}
+            commitsByHash={loadedCommits}
+            remotes={remotes}
+            remoteNames={remoteNames}
+            laneHex={selectedLaneHex}
+            height={detailsHeight}
+            onResizeStart={onDetailsResizeStart}
+            onClose={details.closeDetails}
+            onCommitAction={props.onCommitAction}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -237,6 +305,9 @@ interface HistoryViewportProps {
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
   showSkeleton: boolean
   hasCommits: boolean
+  selectedShas: ReadonlySet<string>
+  onSelectCommit: (sha: string, modifiers: SelectionModifiers) => void
+  onOpenCommitDetails: (sha: string) => void
 }
 
 function HistoryViewport(props: HistoryViewportProps) {
@@ -349,7 +420,10 @@ function HistoryViewport(props: HistoryViewportProps) {
                 remotes={props.remotes}
                 remoteNames={props.remoteNames}
                 mergeGlyph={props.mergeSideRanges.get(commit.hash)?.glyph}
+                selected={props.selectedShas.has(commit.hash)}
                 onToggleExpand={props.onToggleMergeExpansion}
+                onSelect={props.onSelectCommit}
+                onOpenDetails={props.onOpenCommitDetails}
                 onCommitAction={props.onCommitAction}
               />
             )

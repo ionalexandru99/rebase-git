@@ -14,6 +14,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTriggerArea
 } from '../../components/ui/context-menu'
+import type { SelectionModifiers } from './commit-selection'
 import { RefBadge } from './RefBadge'
 import type { MergeGlyph } from './selectors'
 
@@ -30,7 +31,10 @@ interface CommitRowProps {
   remotes: Record<string, string>
   remoteNames: Set<string>
   mergeGlyph?: MergeGlyph
+  selected: boolean
   onToggleExpand?: (mergeHash: string) => void
+  onSelect?: (sha: string, modifiers: SelectionModifiers) => void
+  onOpenDetails?: (sha: string) => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
 }
 
@@ -61,12 +65,22 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
   const glyph = props.mergeGlyph
   const expandable = glyph === 'collapsed' || glyph === 'expanded'
   const act = (action: CommitAction) => props.onCommitAction?.(action, commit.hash, commit.message)
+  const rowSurface = props.selected ? 'bg-[var(--brand-soft)]' : 'bg-card group-hover/row:bg-muted'
 
   return (
     <ContextMenu>
       <ContextMenuTriggerArea
         data-testid="commit-row"
-        className="group/row absolute inset-x-0 z-10 border-b"
+        data-selected={props.selected ? 'true' : undefined}
+        onClick={(event) =>
+          props.onSelect?.(commit.hash, {
+            toggle: event.metaKey || event.ctrlKey,
+            range: event.shiftKey
+          })
+        }
+        onDoubleClick={() => props.onOpenDetails?.(commit.hash)}
+        // Rows are selectable with Shift-click, so they must not also start a native text selection.
+        className="group/row absolute inset-x-0 z-10 select-none border-b"
         style={{
           top: `${props.top}px`,
           height: `${props.metrics.rowHeight}px`,
@@ -96,11 +110,15 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
         ) : null}
 
         <span
-          className="absolute inset-y-0 right-0 flex items-center gap-1 overflow-hidden bg-card pr-2 text-sm group-hover/row:bg-muted"
+          className={cn(
+            'absolute inset-y-0 right-0 flex items-center gap-1 overflow-hidden pr-2 text-sm',
+            rowSurface
+          )}
           style={{ left: `${railWidth}px` }}
         >
           <span className="sr-only">
             {commitTopologyLabel(commit.parents.length, props.offBranch)}
+            {props.selected ? ', selected' : ''}
           </span>
           {isMerge ? (
             <GitMergeIcon aria-hidden="true" className="size-3 shrink-0 text-green" />
@@ -117,7 +135,10 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
         </span>
 
         <span
-          className="pointer-events-none absolute inset-y-0 right-0 grid items-center gap-2 bg-card group-hover/row:bg-muted"
+          className={cn(
+            'pointer-events-none absolute inset-y-0 right-0 grid items-center gap-2',
+            rowSurface
+          )}
           style={{ gridTemplateColumns: props.gridTail }}
         >
           <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">

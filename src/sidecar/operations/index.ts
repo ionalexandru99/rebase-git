@@ -23,6 +23,7 @@ export {
   getRemoteRefs,
   renameBranch
 } from './branches'
+export { getCommitDetail } from './commit-detail'
 export { stashApply, stashDrop, stashList, stashPop, stashPush } from './stash'
 export { fetchRepo, pullRepo, pushRepo } from './sync'
 export {

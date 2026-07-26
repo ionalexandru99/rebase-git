@@ -12,6 +12,13 @@ export function git(cwd: string, args: string[]): void {
   })
 }
 
+// Windows refuses to delete a file another handle still holds, and a git child released moments ago
+// (a paging process, or the background commit-graph write a session owns) can still be exiting. Close
+// any open session first, then let the retries cover that window. On Linux the unlink just succeeds.
+export function removeRepoDir(repo: string): void {
+  fs.rmSync(repo, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+}
+
 export function makeRepo(messages: string[]): string {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-stream-'))
   git(repo, ['init', '-b', 'main'])

@@ -9,7 +9,7 @@ import { RepoNotOpen, SidecarRpcs } from '@shared/rpc'
 import { GIT_LOG_REF_SEPARATOR, type LogChunk } from '@shared/schemas/git'
 import { Chunk, Effect, Either, Fiber, Layer, Stream } from 'effect'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { git, makeBigRepo, makeRepo } from '../../test-support/repo-fixtures'
+import { git, makeBigRepo, makeRepo, removeRepoDir } from '../../test-support/repo-fixtures'
 import { createSidecarServer } from '../http'
 
 const TOKEN = 'rpc-stream-test-token'
@@ -39,6 +39,23 @@ async function openRepo(target: string): Promise<void> {
   }
 }
 
+async function closeRepo(target: string): Promise<void> {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* client.closeRepo({ repoPath: target })
+    }).pipe(Effect.scoped, Effect.provide(protocolLayer()))
+  )
+}
+
+// An open session owns the repo — including the background commit-graph write it started — so the
+// directory cannot be deleted until the session is closed. On Linux the unlink succeeds anyway; on
+// Windows it fails with EPERM.
+async function closeAndRemoveRepo(target: string): Promise<void> {
+  await closeRepo(target)
+  removeRepoDir(target)
+}
+
 function collectStreamLog(
   target: string,
   options?: { skip?: number; maxCount?: number }
@@ -66,9 +83,11 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await closeRepo(repoPath)
+  await closeRepo(bigRepoPath)
   await new Promise<void>((resolve) => server.close(() => resolve()))
-  fs.rmSync(repoPath, { recursive: true, force: true })
-  fs.rmSync(bigRepoPath, { recursive: true, force: true })
+  removeRepoDir(repoPath)
+  removeRepoDir(bigRepoPath)
 })
 
 function waitUntil(predicate: () => boolean): Effect.Effect<void> {
@@ -112,7 +131,7 @@ describe('streamLog RPC over the /rpc transport', () => {
       expect(decorations).toContain('HEAD -> release,2026')
       expect(decorations).toContain('tag: v1,stable')
     } finally {
-      fs.rmSync(decoratedRepo, { recursive: true, force: true })
+      await closeAndRemoveRepo(decoratedRepo)
     }
   })
 
@@ -127,7 +146,7 @@ describe('streamLog RPC over the /rpc transport', () => {
       expect(terminal?.done).toBe(true)
       expect(terminal?.hasMore).toBe(true)
     } finally {
-      fs.rmSync(pagedRepo, { recursive: true, force: true })
+      await closeAndRemoveRepo(pagedRepo)
     }
   })
 
@@ -142,7 +161,7 @@ describe('streamLog RPC over the /rpc transport', () => {
       expect(terminal?.done).toBe(true)
       expect(terminal?.hasMore).toBe(false)
     } finally {
-      fs.rmSync(pagedRepo, { recursive: true, force: true })
+      await closeAndRemoveRepo(pagedRepo)
     }
   })
 
@@ -157,7 +176,7 @@ describe('streamLog RPC over the /rpc transport', () => {
       expect(terminal?.done).toBe(true)
       expect(terminal?.hasMore).toBe(false)
     } finally {
-      fs.rmSync(pagedRepo, { recursive: true, force: true })
+      await closeAndRemoveRepo(pagedRepo)
     }
   })
 
@@ -194,7 +213,7 @@ describe('streamLog RPC over the /rpc transport', () => {
       ])
       expect(second.at(-1)?.hasMore).toBe(false)
     } finally {
-      fs.rmSync(pagedRepo, { recursive: true, force: true })
+      await closeAndRemoveRepo(pagedRepo)
     }
   })
 
@@ -245,7 +264,7 @@ describe('streamLog RPC over the /rpc transport', () => {
       expect(fourth.at(-1)?.hasMore).toBe(false)
     } finally {
       vi.useRealTimers()
-      fs.rmSync(pagedRepo, { recursive: true, force: true })
+      await closeAndRemoveRepo(pagedRepo)
     }
   })
 
@@ -304,7 +323,7 @@ describe('streamLog RPC over the /rpc transport', () => {
         expect(result.left).toBeInstanceOf(RepoNotOpen)
       }
     } finally {
-      fs.rmSync(notARepo, { recursive: true, force: true })
+      removeRepoDir(notARepo)
     }
   })
 
@@ -324,7 +343,7 @@ describe('streamLog RPC over the /rpc transport', () => {
         expect(result.left).toBeInstanceOf(RepoNotOpen)
       }
     } finally {
-      fs.rmSync(unopenedRepo, { recursive: true, force: true })
+      removeRepoDir(unopenedRepo)
     }
   })
 
@@ -347,7 +366,7 @@ describe('streamLog RPC over the /rpc transport', () => {
         taggedSha
       )
     } finally {
-      fs.rmSync(taggedRepo, { recursive: true, force: true })
+      await closeAndRemoveRepo(taggedRepo)
     }
   })
 })

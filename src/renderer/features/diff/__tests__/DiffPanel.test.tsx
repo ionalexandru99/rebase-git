@@ -174,7 +174,11 @@ describe('DiffPanel', () => {
     await renderDiffPanel({ file: 'src/app.ts' })
 
     await waitFor(() => {
-      expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/app.ts', false)
+      expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/app.ts', false, {
+        range: undefined,
+        commit: undefined,
+        renameSource: undefined
+      })
       expect(screen.getByText('@@ -1,3 +1,4 @@')).toBeInTheDocument()
     })
     expect(getRenderedDiffLine('line two added')).toBeInTheDocument()
@@ -510,6 +514,18 @@ describe('DiffPanel', () => {
     expect(await screen.findByText(/Binary file/)).toBeInTheDocument()
   })
 
+  it('omits the +/- totals for a binary file, which has no lines to count', async () => {
+    sidecarMock.getDiff.mockResolvedValue({
+      _tag: 'Ok',
+      diff: { filePath: 'logo.png', binary: true, hunks: [] }
+    })
+    await renderDiffPanel({ file: 'logo.png' })
+
+    await screen.findByText(/Binary file/)
+    expect(screen.queryByText('+0')).not.toBeInTheDocument()
+    expect(screen.queryByText('−0')).not.toBeInTheDocument()
+  })
+
   it('hides hunk actions for untracked files', async () => {
     sidecarMock.getStatus.mockResolvedValue({
       _tag: 'Ok',
@@ -546,6 +562,35 @@ describe('DiffPanel', () => {
 
     fireEvent.click(checkbox)
     expect(onToggleHunk).toHaveBeenCalledWith('@@ -1,3 +1,4 @@', ['@@ -1,3 +1,4 @@'])
+  })
+
+  it('renders a commit file read-only, with no staging or drop controls at all', async () => {
+    await renderDiffPanel({ file: 'src/app.ts', source: 'commit', commit: 'feedface' })
+
+    await screen.findByText('@@ -1,3 +1,4 @@')
+    expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/app.ts', false, {
+      range: undefined,
+      commit: 'feedface',
+      renameSource: undefined
+    })
+    expect(screen.queryAllByRole('checkbox')).toEqual([])
+  })
+
+  it('passes the rename source so a renamed file in a commit reads as a rename', async () => {
+    await renderDiffPanel({
+      file: 'new.ts',
+      renameSource: 'old.ts',
+      source: 'commit',
+      commit: 'feedface'
+    })
+
+    await waitFor(() => {
+      expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'new.ts', false, {
+        range: undefined,
+        commit: 'feedface',
+        renameSource: 'old.ts'
+      })
+    })
   })
 
   it('renders a tri-state file drop checkbox for a head-commit file', async () => {

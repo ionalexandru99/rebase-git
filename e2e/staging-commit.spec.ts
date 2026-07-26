@@ -132,3 +132,24 @@ test('selecting a modified file renders diff hunks and staging a hunk flips its 
   })
   await expect(fileRowCheckbox(page, 'README.md')).toBeChecked({ timeout: 10_000 })
 })
+
+test('scrolls a long working-tree diff instead of clipping it', async ({ harness }) => {
+  const repo = createFixtureRepo()
+  const lines = Array.from({ length: 400 }, (_unused, index) => `line ${index}`).join('\n')
+  fs.writeFileSync(path.join(repo, 'README.md'), `${lines}\n`)
+  const page = await harness.openRepo(repo)
+
+  await openLocalChanges(page)
+  const diffBody = page.getByTestId('diff-body')
+  await expect(diffBody.getByTestId('diff-hunk').first()).toBeVisible({ timeout: 10_000 })
+
+  const overflows = await diffBody.evaluate(
+    (element) => element.scrollHeight > element.clientHeight + 1
+  )
+  expect(overflows).toBe(true)
+
+  await diffBody.evaluate((element) => {
+    element.scrollTop = 400
+  })
+  expect(await diffBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+})

@@ -268,12 +268,18 @@ export const handlersLayer = SidecarRpcs.toLayer({
     withResolvedRepo(repoPath, (repo) => operations.getLocalBranches(repo)),
   getRemoteRefs: ({ repoPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.getRemoteRefs(repo)),
-  getDiff: ({ repoPath, file, staged, range }) =>
+  getDiff: ({ repoPath, file, staged, range, commit, renameSource }) =>
     withResolvedRepo(repoPath, (repo) =>
-      withResolvedFile(repo, file, (relative) =>
-        operations.getDiff(repo, relative, staged === true, range)
+      withResolvedFiles(repo, renameSource ? [renameSource, file] : [file], (relatives) =>
+        operations.getDiff(repo, relatives[relatives.length - 1], staged === true, {
+          range,
+          commit,
+          renameSource: relatives.length === 2 ? relatives[0] : undefined
+        })
       )
     ),
+  getCommitDetail: ({ repoPath, sha }) =>
+    withResolvedRepo(repoPath, (repo) => operations.getCommitDetail(repo, sha)),
   stashList: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.stashList(repo)),
   streamLog: ({ repoPath, skip, maxCount, streamId }) =>
     Stream.unwrap(

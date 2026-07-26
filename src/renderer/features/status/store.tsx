@@ -385,7 +385,25 @@ export function useFileDiff(file: string | null, staged: boolean, range?: string
       if (!repoPath || !file) {
         throw new Error('No file selected')
       }
-      return unwrapOk(await rpcGetDiff(repoPath, file, staged, range)).diff
+      return unwrapOk(await rpcGetDiff(repoPath, file, staged, { range })).diff
+    }
+  })
+}
+
+// A commit's diff can never change, so it is cached for the life of the tab and never refetched.
+export function useCommitFileDiff(sha: string | null, file: string | null, renameSource?: string) {
+  const { repoPath } = useRepoSession()
+  const queryKeys = repoQueryKeys(repoPath, { idle: 'commit-diff' })
+  return useQuery({
+    queryKey: queryKeys.commitDiff(sha ?? 'none', file ?? 'none'),
+    enabled: Boolean(repoPath && sha && file),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: WARM_REOPEN_GC_TIME_MS,
+    queryFn: async (): Promise<FileDiff> => {
+      if (!repoPath || !sha || !file) {
+        throw new Error('No commit file selected')
+      }
+      return unwrapOk(await rpcGetDiff(repoPath, file, false, { commit: sha, renameSource })).diff
     }
   })
 }

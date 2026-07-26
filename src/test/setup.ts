@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import type {
   Commit,
   Fetch,
+  GetCommitDetail,
   GetDiff,
   GetLocalBranches,
   GetRemoteRefs,
@@ -28,6 +29,10 @@ type RemoteRefsResponse = RpcEncodedResult<
 type StageResponse = RpcEncodedResult<typeof StageFile.successSchema, typeof StageFile.errorSchema>
 type CommitResponse = RpcEncodedResult<typeof Commit.successSchema, typeof Commit.errorSchema>
 type GetDiffResponse = RpcEncodedResult<typeof GetDiff.successSchema, typeof GetDiff.errorSchema>
+type CommitDetailResponse = RpcEncodedResult<
+  typeof GetCommitDetail.successSchema,
+  typeof GetCommitDetail.errorSchema
+>
 type StageHunkResponse = RpcEncodedResult<
   typeof StageHunk.successSchema,
   typeof StageHunk.errorSchema
@@ -55,7 +60,16 @@ export const sidecarMock = {
   fetchRepo: vi.fn<(repoPath: string) => Promise<FetchWire>>(),
   pushRepo: vi.fn<(repoPath: string) => Promise<VoidWriteWire>>(),
   pullRepo: vi.fn<(repoPath: string) => Promise<VoidWriteWire>>(),
-  getDiff: vi.fn<(repoPath: string, file: string, staged: boolean) => Promise<GetDiffResponse>>(),
+  getDiff:
+    vi.fn<
+      (
+        repoPath: string,
+        file: string,
+        staged: boolean,
+        scope?: { range?: string; commit?: string; renameSource?: string }
+      ) => Promise<GetDiffResponse>
+    >(),
+  getCommitDetail: vi.fn<(repoPath: string, sha: string) => Promise<CommitDetailResponse>>(),
   stageHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
   unstageHunk:
@@ -278,7 +292,13 @@ beforeEach(() => {
       case 'getRemoteRefs':
         return sidecarMock.getRemoteRefs(repoPath)
       case 'getDiff':
-        return sidecarMock.getDiff(repoPath, body.file as string, body.staged === true)
+        return sidecarMock.getDiff(repoPath, body.file as string, body.staged === true, {
+          range: body.range as string | undefined,
+          commit: body.commit as string | undefined,
+          renameSource: body.renameSource as string | undefined
+        })
+      case 'getCommitDetail':
+        return sidecarMock.getCommitDetail(repoPath, body.sha as string)
       case 'stashList':
         return sidecarMock.stashList(repoPath)
       case 'stageFile':

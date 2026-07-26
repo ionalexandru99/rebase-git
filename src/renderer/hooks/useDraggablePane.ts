@@ -5,39 +5,51 @@ import { LAYOUT_RESET_EVENT } from '@/lib/layout'
 
 interface PaneState {
   open: boolean
-  width: number
+  size: number
 }
 
-interface UseDraggableWidthOptions {
+type PaneAxis = 'horizontal' | 'vertical'
+
+/**
+ * Which edge of the pane the drag handle sits on. A pane handled on its `end` edge (a left sidebar's
+ * right edge, a top row's bottom edge) grows as the pointer moves away from the origin; one handled
+ * on its `start` edge (a bottom panel's top edge) grows as the pointer moves back towards it.
+ */
+type PaneHandle = 'start' | 'end'
+
+interface UseDraggablePaneOptions {
   min: number
   max: number
-  defaultWidth: number
+  defaultSize: number
+  axis?: PaneAxis
+  handle?: PaneHandle
   load?: () => Promise<PaneState>
   save?: (state: PaneState) => void | Promise<void>
-  decode?: (raw: PaneState) => PaneState
   onLoadError?: (error: unknown) => void
   onSaveError?: (error: unknown) => void
 }
 
-interface UseDraggableWidthResult {
-  width: number
+interface UseDraggablePaneResult {
+  size: number
   isOpen: boolean
   setOpen: (next: boolean) => void
   onResizeStart: (event: MouseEvent) => void
 }
 
 function defaultSaveError(error: unknown) {
-  console.warn('[useDraggableWidth] save failed', error)
+  console.warn('[useDraggablePane] save failed', error)
 }
 
-export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggableWidthResult {
-  const { min, max, defaultWidth, load, save, decode } = options
+export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggablePaneResult {
+  const { min, max, defaultSize, load, save } = options
+  const axis = options.axis ?? 'horizontal'
+  const handle = options.handle ?? 'end'
   const onLoadError = options.onLoadError
   const onSaveError = options.onSaveError ?? defaultSaveError
 
   const [isOpen, setIsOpen] = useState(true)
-  const [width, setWidth] = useState(defaultWidth)
-  const dragWidth = useRef(defaultWidth)
+  const [size, setSize] = useState(defaultSize)
+  const dragSize = useRef(defaultSize)
   const dragTeardown = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -46,15 +58,14 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     }
     let cancelled = false
     load()
-      .then((raw) => {
+      .then((loaded) => {
         if (cancelled) {
           return
         }
-        const decoded = decode ? decode(raw) : raw
-        const clamped = Math.max(min, Math.min(max, decoded.width))
-        setIsOpen(decoded.open)
-        setWidth(clamped)
-        dragWidth.current = clamped
+        const clamped = Math.max(min, Math.min(max, loaded.size))
+        setIsOpen(loaded.open)
+        setSize(clamped)
+        dragSize.current = clamped
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -65,7 +76,7 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     return () => {
       cancelled = true
     }
-  }, [decode, load, max, min, onLoadError])
+  }, [load, max, min, onLoadError])
 
   useEffect(() => {
     return () => dragTeardown.current?.()
@@ -73,9 +84,9 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
 
   const latestPersistHandlers = useLatestRef({ save, onSaveError })
 
-  const persist = useCallback((nextOpen: boolean, nextWidth: number) => {
+  const persist = useCallback((nextOpen: boolean, nextSize: number) => {
     const { save: saveState, onSaveError: reportSaveError } = latestPersistHandlers.current
-    const result = saveState?.({ open: nextOpen, width: nextWidth })
+    const result = saveState?.({ open: nextOpen, size: nextSize })
     if (result && typeof (result as Promise<void>).catch === 'function') {
       ;(result as Promise<void>).catch(reportSaveError)
     }
@@ -83,39 +94,45 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
 
   const setOpen = (next: boolean) => {
     setIsOpen(next)
-    persist(next, dragWidth.current)
+    persist(next, dragSize.current)
   }
 
   useEffect(() => {
     const reset = () => {
-      dragWidth.current = defaultWidth
-      setWidth(defaultWidth)
+      dragSize.current = defaultSize
+      setSize(defaultSize)
       setIsOpen(true)
-      persist(true, defaultWidth)
+      persist(true, defaultSize)
     }
     window.addEventListener(LAYOUT_RESET_EVENT, reset)
     return () => window.removeEventListener(LAYOUT_RESET_EVENT, reset)
-  }, [defaultWidth, persist])
+  }, [defaultSize, persist])
 
   const onResizeStart = (event: MouseEvent) => {
     event.preventDefault()
-    const startX = event.clientX
-    const startWidth = width
-    dragWidth.current = startWidth
-    document.body.style.cursor = 'col-resize'
+    const vertical = axis === 'vertical'
+    const startPosition = vertical ? event.clientY : event.clientX
+    const startSize = size
+    const direction = handle === 'start' ? -1 : 1
+    dragSize.current = startSize
+    document.body.style.cursor = vertical ? 'row-resize' : 'col-resize'
     document.body.style.userSelect = 'none'
     document.body.dataset.sidebarResizing = 'true'
 
     let pendingFrame: number | null = null
 
     const onMove = (moveEvent: MouseEvent) => {
-      dragWidth.current = Math.max(min, Math.min(max, startWidth + (moveEvent.clientX - startX)))
+      const position = vertical ? moveEvent.clientY : moveEvent.clientX
+      dragSize.current = Math.max(
+        min,
+        Math.min(max, startSize + direction * (position - startPosition))
+      )
       if (pendingFrame !== null) {
         return
       }
       pendingFrame = requestAnimationFrame(() => {
         pendingFrame = null
-        setWidth(dragWidth.current)
+        setSize(dragSize.current)
       })
     }
 
@@ -133,8 +150,8 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
       document.body.style.userSelect = ''
       delete document.body.dataset.sidebarResizing
       dragTeardown.current = null
-      setWidth(dragWidth.current)
-      persist(isOpen, dragWidth.current)
+      setSize(dragSize.current)
+      persist(isOpen, dragSize.current)
       window.dispatchEvent(new Event(SIDEBAR_RESIZE_END_EVENT))
     }
 
@@ -143,5 +160,5 @@ export function useDraggableWidth(options: UseDraggableWidthOptions): UseDraggab
     window.addEventListener('mouseup', finalize)
   }
 
-  return { width, isOpen, setOpen, onResizeStart }
+  return { size, isOpen, setOpen, onResizeStart }
 }

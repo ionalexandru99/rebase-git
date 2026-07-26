@@ -12,7 +12,7 @@ import {
 import { type HunkEntry, type PendingHunk, remapHunk } from '@/features/diff/diff-merge'
 import { type RepoQueryKeys, repoQueryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
-import { useFileDiff, useRepoSession, useWorkingTreeStatus } from '@/stores/git'
+import { useCommitFileDiff, useFileDiff, useRepoSession, useWorkingTreeStatus } from '@/stores/git'
 import { Checkbox } from '../../components/ui/checkbox'
 import { EmptyState } from '../../components/ui/empty-state'
 import type { SelectedFile } from '../status/StatusPanel'
@@ -40,37 +40,57 @@ export function DiffPanel(props: DiffPanelProps) {
   } = useWorkingTreeStatus()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
 
-  const isHeadCommit = props.selected?.source === 'head-commit'
-  const worktreeFile = isHeadCommit ? null : (props.selected?.file ?? null)
+  const source = props.selected?.source ?? 'worktree'
+  const isHeadCommit = source === 'head-commit'
+  // An existing commit is a read: there is nothing to stage or drop, so every control goes away.
+  const isCommit = source === 'commit'
+  const isWorktree = source === 'worktree'
+  const worktreeFile = isWorktree ? (props.selected?.file ?? null) : null
   const headFile = isHeadCommit ? (props.selected?.file ?? null) : null
+  const commitFile = isCommit ? (props.selected?.file ?? null) : null
 
   const isUntracked =
     props.selected !== null &&
-    !isHeadCommit &&
+    isWorktree &&
     (status?.not_added.includes(props.selected.file) ?? false)
 
   const unstagedQuery = useFileDiff(worktreeFile, false)
   const stagedQuery = useFileDiff(worktreeFile, true)
   const rangeQuery = useFileDiff(headFile, false, props.selected?.range)
+  const commitQuery = useCommitFileDiff(
+    isCommit ? (props.selected?.commit ?? null) : null,
+    commitFile,
+    props.selected?.renameSource
+  )
   const [pendingHunk, setPendingHunk] = useState<PendingHunk | null>(null)
 
-  const unstagedDiff = props.selected && !isHeadCommit ? (unstagedQuery.data ?? null) : null
-  const stagedDiff = props.selected && !isHeadCommit ? (stagedQuery.data ?? null) : null
+  const unstagedDiff = props.selected && isWorktree ? (unstagedQuery.data ?? null) : null
+  const stagedDiff = props.selected && isWorktree ? (stagedQuery.data ?? null) : null
   const rangeDiff = props.selected && isHeadCommit ? (rangeQuery.data ?? null) : null
+  const commitDiff = props.selected && isCommit ? (commitQuery.data ?? null) : null
 
-  const isBinary = Boolean(unstagedDiff?.binary || stagedDiff?.binary || rangeDiff?.binary)
-  const hasError = isHeadCommit ? rangeQuery.isError : unstagedQuery.isError || stagedQuery.isError
-  const errorMessage = isHeadCommit
-    ? rangeQuery.error?.message
-    : (unstagedQuery.error?.message ?? stagedQuery.error?.message)
+  const isBinary = Boolean(
+    unstagedDiff?.binary || stagedDiff?.binary || rangeDiff?.binary || commitDiff?.binary
+  )
+  const singleSidedQuery = isCommit ? commitQuery : rangeQuery
+  const hasError = isWorktree
+    ? unstagedQuery.isError || stagedQuery.isError
+    : singleSidedQuery.isError
+  const errorMessage = isWorktree
+    ? (unstagedQuery.error?.message ?? stagedQuery.error?.message)
+    : singleSidedQuery.error?.message
+  const isLoading = isWorktree
+    ? unstagedQuery.isPending || stagedQuery.isPending
+    : singleSidedQuery.isPending
 
   const activePending =
     pendingHunk && pendingHunk.file === props.selected?.file ? pendingHunk : null
 
   const actualMergedHunks = useMemo<HunkEntry[]>(() => {
     const selected = props.selected
-    if (selected && isHeadCommit) {
-      return (rangeQuery.data?.hunks ?? []).map((hunk) => ({
+    if (selected && !isWorktree) {
+      const hunks = (isCommit ? commitQuery.data?.hunks : rangeQuery.data?.hunks) ?? []
+      return hunks.map((hunk) => ({
         hunk,
         display: hunk,
         staged: false,
@@ -106,7 +126,15 @@ export function DiffPanel(props: DiffPanelProps) {
       }))
     ]
     return entries.sort((left, right) => left.indexStart - right.indexStart)
-  }, [props.selected, isHeadCommit, rangeQuery.data, stagedQuery.data, unstagedQuery.data])
+  }, [
+    props.selected,
+    isWorktree,
+    isCommit,
+    commitQuery.data,
+    rangeQuery.data,
+    stagedQuery.data,
+    unstagedQuery.data
+  ])
 
   const mergedHunks = useMemo<HunkEntry[]>(() => {
     if (!activePending) {
@@ -231,10 +259,17 @@ export function DiffPanel(props: DiffPanelProps) {
   }
 
   return (
-    <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+    <section className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
       {props.selected ? (
-        <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
-          {hasAnyHunks && !isBinary && !isHeadCommit ? (
+        <div
+          className={cn(
+            'flex shrink-0 items-center gap-2.5 border-b pl-3.5 pr-2',
+            // The staging modes need room for a checkbox; a commit's header is one line of text, and
+            // in the details panel it sits above a diff that has little height to spare.
+            isCommit ? 'min-h-8 py-1' : 'min-h-[46px] py-1.5'
+          )}
+        >
+          {hasAnyHunks && !isBinary && isWorktree ? (
             <Checkbox
               checked={fileStageState === 'staged'}
               indeterminate={fileStageState === 'partial'}
@@ -261,10 +296,14 @@ export function DiffPanel(props: DiffPanelProps) {
           <span className="min-w-0 truncate text-sm font-semibold" title={props.selected.file}>
             {props.selected.file}
           </span>
-          <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
-            <span className="text-add">+{totals.adds}</span>
-            <span className="text-del">−{totals.dels}</span>
-          </span>
+          {/* Binary files, pure renames and mode changes have no lines to count; the body below
+              says what they are instead of claiming nothing changed. */}
+          {totals.adds > 0 || totals.dels > 0 ? (
+            <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
+              <span className="text-add">+{totals.adds}</span>
+              <span className="text-del">−{totals.dels}</span>
+            </span>
+          ) : null}
           <div className="flex-1" />
         </div>
       ) : (
@@ -285,6 +324,8 @@ export function DiffPanel(props: DiffPanelProps) {
           <div className="px-2 py-4 text-sm text-muted-foreground">
             Binary file — no preview available.
           </div>
+        ) : isLoading ? (
+          <div className="px-2 py-4 text-sm text-muted-foreground">Loading diff…</div>
         ) : hasAnyHunks ? (
           mergedHunks.map((entry) => (
             <HunkCard
@@ -294,7 +335,7 @@ export function DiffPanel(props: DiffPanelProps) {
               queryKeys={queryKeys}
               staged={entry.staged}
               pending={isPendingEntry(entry)}
-              hunkActionsEnabled={!isHeadCommit && (entry.staged || !isUntracked)}
+              hunkActionsEnabled={isWorktree && (entry.staged || !isUntracked)}
               amend={
                 isHeadCommit && props.amendDrop
                   ? {

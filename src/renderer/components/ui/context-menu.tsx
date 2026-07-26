@@ -134,6 +134,9 @@ function ContextMenuContent(props: HTMLAttributes<HTMLDivElement>) {
     }
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // Mark the key consumed so other Escape listeners (the commit-details panel) leave it alone:
+        // one press dismisses the topmost thing, not everything at once.
+        event.preventDefault()
         close()
       }
     }
