@@ -89,6 +89,27 @@ describe('classifyGitFailure', () => {
     expect(failure.description).toContain('stash')
   })
 
+  // git reports both lists in one refusal, each under its own header — the tracked files must not be
+  // read out under the untracked heading.
+  it('keeps the tracked and untracked lists apart when a checkout hits both', () => {
+    const failure = classifyGitFailure(
+      [
+        'error: Your local changes to the following files would be overwritten by checkout:',
+        '\tREADME.md',
+        'Please commit your changes or stash them before you switch branches.',
+        'error: The following untracked working tree files would be overwritten by checkout:',
+        '\tnotes.md',
+        'Please move or remove them before you switch branches.',
+        'Aborting'
+      ].join('\n')
+    )
+
+    expect(failure.kind).toBe('dirty-tree')
+    expect(failure.description).toBe(
+      'Uncommitted changes to README.md and untracked notes.md would be overwritten. Commit or stash the changes and move the untracked files, then try again.'
+    )
+  })
+
   it('caps a long blocking-file list', () => {
     const failure = classifyGitFailure(
       [
@@ -116,6 +137,33 @@ describe('classifyGitFailure', () => {
 
     expect(failure.kind).toBe('hook-rejected')
     expect(failure.description).toContain('Protected branch update failed')
+  })
+
+  // git tails almost every transport failure with "Could not read from remote repository… correct
+  // access rights", so a missing remote must not be read as rejected credentials.
+  it('reads a push with no remote configured as a missing remote, not an auth problem', () => {
+    const failure = classifyGitFailure(
+      [
+        "fatal: 'origin' does not appear to be a git repository",
+        'fatal: Could not read from remote repository.',
+        '',
+        'Please make sure you have the correct access rights',
+        'and the repository exists.'
+      ].join('\n')
+    )
+
+    expect(failure.kind).toBe('no-remote')
+    expect(failure.description).toContain('no remote named origin')
+    expect(failure.helpTopic).toBeUndefined()
+  })
+
+  it('reads a remote URL that is not a repository as a bad URL', () => {
+    const failure = classifyGitFailure(
+      "fatal: '/tmp/gone.git' does not appear to be a git repository"
+    )
+
+    expect(failure.kind).toBe('remote-missing')
+    expect(failure.description).toContain('/tmp/gone.git')
   })
 
   it('recognises the local failures that are not about the remote', () => {

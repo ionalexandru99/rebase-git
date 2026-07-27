@@ -1,14 +1,12 @@
 import type { Server } from 'node:http'
+import { applyNonInteractiveGitEnv } from './git/environment'
 import { finalizeTrackedChildren, installTrackedChildShutdownHooks } from './git/spawn'
 import { finalizeLogContinuations } from './operations/log-stream'
 import { createSidecarServer } from './server/http'
 import type { SidecarCommand, SidecarMessage, SidecarStartMessage } from './server/protocol'
 import { finalizeFetchSemaphores } from './session/fetch-semaphore'
 
-process.env.GIT_TERMINAL_PROMPT = '0'
-// Auth is system-only and never prompts, so the renderer has to explain failures from stderr alone —
-// which it can only do if git reports them in one language.
-process.env.LC_ALL = 'C'
+applyNonInteractiveGitEnv(process.env)
 const removeTrackedChildShutdownHooks = installTrackedChildShutdownHooks()
 
 const parentPort = process.parentPort

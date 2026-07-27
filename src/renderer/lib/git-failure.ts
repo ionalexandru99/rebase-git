@@ -83,16 +83,16 @@ function formatPaths(paths: readonly string[]): string {
   return `${paths.slice(0, 3).join(', ')} and ${paths.length - 3} more`
 }
 
-// git lists the blocking files on their own indented lines between the "would be overwritten" header
-// and the "Please commit…" advice.
-function overwrittenPaths(raw: string): string[] {
+// git lists the blocking files on their own indented lines under each header, and a single refusal
+// can carry both lists — tracked edits first, then untracked files — so each is read from its own.
+function pathsUnder(raw: string, header: RegExp): string[] {
   const lines = raw.split('\n')
-  const header = lines.findIndex((line) => /would be overwritten/i.test(line))
-  if (header === -1) {
+  const headerIndex = lines.findIndex((line) => header.test(line))
+  if (headerIndex === -1) {
     return []
   }
   const paths: string[] = []
-  for (const line of lines.slice(header + 1)) {
+  for (const line of lines.slice(headerIndex + 1)) {
     if (!/^\s+\S/.test(line)) {
       break
     }
@@ -100,6 +100,12 @@ function overwrittenPaths(raw: string): string[] {
   }
   return paths
 }
+
+const trackedOverwritePaths = (raw: string): string[] =>
+  pathsUnder(raw, /local changes to the following files would be overwritten/i)
+
+const untrackedOverwritePaths = (raw: string): string[] =>
+  pathsUnder(raw, /untracked (?:working tree )?files would be overwritten/i)
 
 function remoteSaid(raw: string): string | null {
   const lines = raw
@@ -165,22 +171,26 @@ function networkFailure(raw: string, lowered: string): GitFailure {
   }
 }
 
-function dirtyTree(raw: string): GitFailure {
-  const paths = overwrittenPaths(raw)
+function blockedByWorkingTree(raw: string): GitFailure {
+  const tracked = trackedOverwritePaths(raw)
+  const untracked = untrackedOverwritePaths(raw)
+  if (tracked.length > 0 && untracked.length > 0) {
+    return {
+      kind: 'dirty-tree',
+      description: `Uncommitted changes to ${formatPaths(tracked)} and untracked ${formatPaths(untracked)} would be overwritten. Commit or stash the changes and move the untracked files, then try again.`
+    }
+  }
+  if (untracked.length > 0) {
+    return {
+      kind: 'untracked-overwrite',
+      description: `Untracked files (${formatPaths(untracked)}) would be overwritten. Move, delete or commit them first, then try again.`
+    }
+  }
   const subject =
-    paths.length > 0 ? `Uncommitted changes to ${formatPaths(paths)}` : 'Uncommitted changes'
+    tracked.length > 0 ? `Uncommitted changes to ${formatPaths(tracked)}` : 'Uncommitted changes'
   return {
     kind: 'dirty-tree',
     description: `${subject} would be overwritten. Commit or stash them first, then try again.`
-  }
-}
-
-function untrackedOverwrite(raw: string): GitFailure {
-  const paths = overwrittenPaths(raw)
-  const subject = paths.length > 0 ? `Untracked files (${formatPaths(paths)})` : 'Untracked files'
-  return {
-    kind: 'untracked-overwrite',
-    description: `${subject} would be overwritten. Move, delete or commit them first, then try again.`
   }
 }
 
@@ -237,6 +247,21 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
       helpTopic: 'ssh-known-hosts'
     }
   }
+  // git appends "Could not read from remote repository… correct access rights" to every transport
+  // failure, missing remotes included, so it only means auth when the message is otherwise about SSH.
+  const missingTarget = raw.match(/'([^']+)' does not appear to be a git repository/)
+  if (missingTarget) {
+    const target = missingTarget[1]
+    return /[/\\:]/.test(target)
+      ? {
+          kind: 'remote-missing',
+          description: `${target} is not a Git repository. Check the remote's URL.`
+        }
+      : {
+          kind: 'no-remote',
+          description: `This repository has no remote named ${target}, so there is nothing to sync with. Add one, then try again.`
+        }
+  }
   if (
     lowered.includes('permission denied (publickey') ||
     lowered.includes('authentication failed') ||
@@ -245,7 +270,8 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
     lowered.includes('returned error: 403') ||
     lowered.includes('access denied') ||
     /permission to .+ denied/.test(lowered) ||
-    (lowered.includes('could not read from remote repository') &&
+    (transport === 'ssh' &&
+      lowered.includes('could not read from remote repository') &&
       lowered.includes('correct access rights'))
   ) {
     return authRejected(raw, transport)
@@ -264,11 +290,7 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return networkFailure(raw, lowered)
   }
-  if (
-    lowered.includes('repository not found') ||
-    lowered.includes('does not appear to be a git repository') ||
-    lowered.includes('returned error: 404')
-  ) {
+  if (lowered.includes('repository not found') || lowered.includes('returned error: 404')) {
     return {
       kind: 'remote-missing',
       description: `${hostPhrase(raw)} has no repository at that URL, or your account can't see it. Check the remote URL and that your account has access.`
@@ -326,16 +348,13 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
       description: 'HEAD is detached, so there is no branch to publish. Check out a branch first.'
     }
   }
-  if (lowered.includes('untracked working tree files would be overwritten')) {
-    return untrackedOverwrite(raw)
-  }
   if (
     lowered.includes('would be overwritten') ||
     lowered.includes('you have unstaged changes') ||
     lowered.includes('cannot pull with rebase') ||
     lowered.includes('please commit your changes or stash them')
   ) {
-    return dirtyTree(raw)
+    return blockedByWorkingTree(raw)
   }
   if (
     lowered.includes('automatic merge failed') ||
