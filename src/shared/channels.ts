@@ -21,6 +21,7 @@ export const Channel = {
   getPersistedTabs: 'get-persisted-tabs',
   setPersistedTabs: 'set-persisted-tabs',
   sidecarRequest: 'sidecar-request',
+  openHelpLink: 'open-help-link',
   logChunk: 'log-chunk',
   repoChanged: 'repo-changed',
   sidecarRestarted: 'sidecar-restarted'

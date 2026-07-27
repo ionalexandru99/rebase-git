@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
+import { gitFailureBannerText } from '@/lib/git-failure'
 import { cachesForRepoChange, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { CommitHistoryProvider, useCommitHistoryController } from '../features/history/store'
@@ -100,7 +101,10 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   useEffect(() => {
     const error = workingTreeStatus.statusError
     if (error) {
-      session.setError('status', formatCause(error))
+      session.setError(
+        'status',
+        gitFailureBannerText('Could not read the working tree', formatCause(error))
+      )
       return
     }
     session.clearError('status')
@@ -109,7 +113,7 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   useEffect(() => {
     const error = refs.localBranchesError ?? refs.remoteRefsError
     if (error) {
-      session.setError('refs', formatCause(error))
+      session.setError('refs', gitFailureBannerText('Could not read branches', formatCause(error)))
       return
     }
     session.clearError('refs')

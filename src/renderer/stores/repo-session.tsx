@@ -1,3 +1,4 @@
+import type { HelpTopic } from '@shared/help-links'
 import {
   createContext,
   type RefObject,
@@ -9,6 +10,7 @@ import {
   useState
 } from 'react'
 import { formatCause } from '@/lib/format-cause'
+import { gitFailureBannerText } from '@/lib/git-failure'
 import { rpcCloseRepo, rpcDisownRepo, rpcOpenRepo } from '@/lib/rpc-client'
 
 export interface OpenedRepo {
@@ -37,6 +39,7 @@ export type RepoSessionErrorSource =
 
 interface RepoSessionError {
   message: string
+  helpTopic?: HelpTopic
   sequence: number
 }
 
@@ -51,6 +54,8 @@ export interface RepoSession {
   // teardown, so without a fresh request the session would sit in `opening` forever.
   resetEpoch: number
   error: string | null
+  // Set when the displayed error has a documented fix (auth, host keys) the banner can link to.
+  errorHelpTopic: HelpTopic | null
   openRepo: (requestedPath: string) => Promise<string | null>
   closeRepo: () => Promise<void>
   disownRepo: () => void
@@ -67,7 +72,7 @@ export interface RepoSessionController extends RepoSession {
   defaultBranch: string | undefined
   liveRepoPath: RefObject<string | null>
   openGenerationRef: RefObject<number>
-  setError: (source: RepoSessionErrorSource, error: string) => void
+  setError: (source: RepoSessionErrorSource, error: string, helpTopic?: HelpTopic) => void
   clearError: (source: RepoSessionErrorSource) => void
   publicValue: RepoSession
 }
@@ -95,7 +100,7 @@ const errorSourcesByPriority: readonly RepoSessionErrorSource[] = [
   'refs'
 ]
 
-const displayedError = (errors: RepoSessionErrors): string | null => {
+const displayedError = (errors: RepoSessionErrors): RepoSessionError | null => {
   let selected: RepoSessionError | undefined
   for (const source of errorSourcesByPriority) {
     const candidate = errors[source]
@@ -103,7 +108,7 @@ const displayedError = (errors: RepoSessionErrors): string | null => {
       selected = candidate
     }
   }
-  return selected?.message ?? null
+  return selected ?? null
 }
 
 const pendingUnmountCloses = new Map<string, ReturnType<typeof setTimeout>>()
@@ -162,15 +167,18 @@ export function useRepoSessionController(
 
   liveRepoPath.current = sessionState.repoPath
 
-  const setError = useCallback((source: RepoSessionErrorSource, error: string) => {
-    const sequence = ++errorSequenceRef.current
-    setSessionState((previous) => {
-      return {
-        ...previous,
-        errors: { ...previous.errors, [source]: { message: error, sequence } }
-      }
-    })
-  }, [])
+  const setError = useCallback(
+    (source: RepoSessionErrorSource, error: string, helpTopic?: HelpTopic) => {
+      const sequence = ++errorSequenceRef.current
+      setSessionState((previous) => {
+        return {
+          ...previous,
+          errors: { ...previous.errors, [source]: { message: error, helpTopic, sequence } }
+        }
+      })
+    },
+    []
+  )
 
   const clearError = useCallback((source: RepoSessionErrorSource) => {
     setSessionState((previous) => {
@@ -229,7 +237,9 @@ export function useRepoSessionController(
 
         if (openResponse._tag !== 'Ok') {
           const errorMessage =
-            openResponse._tag === 'NotARepo' ? 'Not a git repository' : openResponse.message
+            openResponse._tag === 'NotARepo'
+              ? 'Not a git repository'
+              : gitFailureBannerText('Could not open this repository', openResponse.message)
           const sequence = ++errorSequenceRef.current
           setSessionState((previous) => ({
             ...previous,
@@ -363,28 +373,29 @@ export function useRepoSessionController(
     }
   }, [lifecycle])
 
-  const publicValue = useMemo<RepoSession>(
-    () => ({
+  const publicValue = useMemo<RepoSession>(() => {
+    const error = displayedError(sessionState.errors)
+    return {
       repoPath: sessionState.repoPath,
       opening: sessionState.opening,
       openGeneration: sessionState.openGeneration,
       resetEpoch: sessionState.resetEpoch,
-      error: displayedError(sessionState.errors),
+      error: error?.message ?? null,
+      errorHelpTopic: error?.helpTopic ?? null,
       openRepo,
       closeRepo,
       disownRepo
-    }),
-    [
-      sessionState.repoPath,
-      sessionState.opening,
-      sessionState.openGeneration,
-      sessionState.resetEpoch,
-      sessionState.errors,
-      openRepo,
-      closeRepo,
-      disownRepo
-    ]
-  )
+    }
+  }, [
+    sessionState.repoPath,
+    sessionState.opening,
+    sessionState.openGeneration,
+    sessionState.resetEpoch,
+    sessionState.errors,
+    openRepo,
+    closeRepo,
+    disownRepo
+  ])
 
   return {
     ...publicValue,

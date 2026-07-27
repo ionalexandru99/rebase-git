@@ -534,6 +534,7 @@ export function createPlaywrightMcpElectronApi(
       state.onboardingComplete = complete
     },
     scanForRepos: async () => ({ _tag: 'Ok', repos: [PLAYWRIGHT_MCP_REPO_PATH] }),
+    openHelpLink: async () => {},
     sidecarRequest: async (operation, body) => {
       const repoPath = bodyString(body, 'repoPath')
       if (repoPath && repoPath !== PLAYWRIGHT_MCP_REPO_PATH) {

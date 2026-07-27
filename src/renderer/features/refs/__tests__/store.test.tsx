@@ -450,6 +450,103 @@ describe('useRefs — auto-fetch', () => {
 
     expect(screen.getByTestId('error')).toHaveTextContent('network down')
   })
+
+  it('keeps a background fetch failure out of the toasts', async () => {
+    vi.useFakeTimers()
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    function Probe() {
+      const session = useRepoSession()
+      openRepo = session.openRepo
+      return <div data-testid="error">{session.error ?? ''}</div>
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Probe />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+    toast.error.mockClear()
+
+    sidecarMock.fetchRepo.mockResolvedValue({
+      _tag: 'GitError',
+      message: 'ssh: connect to host example.com port 22: Connection refused'
+    })
+    await advanceTimers(5 * 60 * 1000)
+
+    expect(screen.getByTestId('error')).toHaveTextContent("Couldn't reach example.com")
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('tells a manual fetch that system auth is unconfigured and links to the fix', async () => {
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    let fetchNow: (() => Promise<void>) | undefined
+    function Probe() {
+      const session = useRepoSession()
+      openRepo = session.openRepo
+      fetchNow = useRefs().fetchNow
+      return <div data-testid="error">{session.error ?? ''}</div>
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Probe />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+
+    sidecarMock.fetchRepo.mockResolvedValueOnce({
+      _tag: 'GitError',
+      message: "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
+    })
+    await act(async () => {
+      await fetchNow?.()
+    })
+
+    expect(screen.getByTestId('error')).toHaveTextContent('credential helper')
+    expect(toast.error).toHaveBeenCalledWith(
+      'Fetch failed',
+      expect.objectContaining({
+        description: expect.stringContaining('credential helper')
+      })
+    )
+
+    const options = toast.error.mock.calls.at(-1)?.[1] as {
+      action: { label: string; onClick: () => void }
+    }
+    options.action.onClick()
+    expect(window.electronAPI.openHelpLink).toHaveBeenCalledWith('git-credentials')
+  })
+
+  it('reports a manual fetch that succeeded', async () => {
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    let fetchNow: (() => Promise<void>) | undefined
+    function Controller() {
+      openRepo = useRepoSession().openRepo
+      fetchNow = useRefs().fetchNow
+      return null
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Controller />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+    toast.success.mockClear()
+
+    await act(async () => {
+      await fetchNow?.()
+    })
+
+    expect(toast.success).toHaveBeenCalledWith('Fetched from remote')
+  })
 })
 
 describe('useRefs — per-repo fetch timestamp', () => {

@@ -14,6 +14,7 @@ import {
 } from 'react'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
+import { gitFailureBannerText } from '@/lib/git-failure'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import type { GitLog, GitLogEntry } from '@/types'
@@ -206,7 +207,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
       }
       if (response._tag === 'GitError') {
         historyErrorRef.current = { message: response.message, streamId }
-        setError('history', response.message)
+        setError('history', gitFailureBannerText('Could not read history', response.message))
         setLogUi({ logLoading: false, logLoadingMore: false })
       } else {
         const previousError = historyErrorRef.current
@@ -221,7 +222,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
       }
       const message = formatCause(error)
       historyErrorRef.current = { message, streamId }
-      setError('history', message)
+      setError('history', gitFailureBannerText('Could not read history', message))
       setLogUi({ logLoading: false, logLoadingMore: false })
     }
   }
@@ -251,7 +252,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         return
       }
       console.error(`[git] ${label} failed for ${repoPath}:`, formatCause(error))
-      setError('history', formatCause(error))
+      setError('history', gitFailureBannerText('Could not read history', formatCause(error)))
     })
   }
 
@@ -342,7 +343,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
           message: chunk.error,
           streamId: chunk.streamId ?? logStreamSeq.current
         }
-        setError('history', chunk.error)
+        setError('history', gitFailureBannerText('Could not read history', chunk.error))
       }
       if (chunk.done) {
         if (chunk.hasMore !== undefined) {

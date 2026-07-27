@@ -1037,7 +1037,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
     await git.stageFile('a.ts')
 
     await waitFor(() => {
-      expect(git.state.error).toBe('cannot stage')
+      expect(git.state.error).toBe('Git rejected the change: cannot stage')
     })
     expect(git.state.status?.staged).toEqual([])
     expect(git.state.status?.modified).toEqual(['a.ts'])
@@ -1065,7 +1065,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
 
     await git.stageFile('a.ts')
     await waitFor(() => {
-      expect(git.state.error).toBe('cannot stage')
+      expect(git.state.error).toBe('Git rejected the change: cannot stage')
     })
 
     await git.stageFile('a.ts')
@@ -1082,7 +1082,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
 
     await git.openRepo(repoPath)
     await waitFor(() => {
-      expect(git.state.error).toBe('index.lock exists')
+      expect(git.state.error).toContain('Another Git process holds this repository')
     })
 
     sidecarMock.getStatus.mockResolvedValue(statusOk)
@@ -1110,7 +1110,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
     await waitFor(() => {
       expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
     })
-    expect(git.state.error).toBe('hunk gone')
+    expect(git.state.error).toBe('Git rejected the change: hunk gone')
   })
 
   it('reads server state from the query cache (cache is the source of truth)', async () => {
@@ -1314,7 +1314,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
 
     await waitFor(() => {
-      expect(git.state.error).toBe('network down')
+      expect(git.state.error).toBe('Git rejected the change: network down')
     })
     expect(git.state.status?.staged).toEqual([])
     expect(git.state.status?.modified).toEqual(['a.ts'])
@@ -1508,6 +1508,67 @@ describe('GitStoreProvider — push and pull', () => {
     expect(toast.error).toHaveBeenCalledWith('Pushed failed', { description: 'no upstream' })
     expect(git.state.error).toBeNull()
     expect(git.state.pushing).toBe(false)
+  })
+
+  it('pushNow explains a push blocked by unconfigured auth and offers the setup link', async () => {
+    sidecarMock.pushRepo.mockResolvedValue({
+      _tag: 'GitError',
+      message: 'git@github.com: Permission denied (publickey).'
+    })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    await git.pushNow()
+
+    expect(toast.error).toHaveBeenCalledWith(
+      'Pushed failed',
+      expect.objectContaining({
+        description: expect.stringContaining('github.com refused your SSH key'),
+        action: expect.objectContaining({ label: 'Set up SSH keys' })
+      })
+    )
+
+    const options = toast.error.mock.calls.at(-1)?.[1] as {
+      action: { onClick: () => void }
+    }
+    options.action.onClick()
+    expect(window.electronAPI.openHelpLink).toHaveBeenCalledWith('ssh-keys')
+  })
+
+  it('says so instead of dropping a push that lands while another action runs', async () => {
+    let resolveCommit: () => void = () => {}
+    sidecarMock.commit.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCommit = () =>
+            resolve({
+              _tag: 'Ok',
+              result: {
+                commit: 'abc1234',
+                branch: 'main',
+                summary: { changes: 1, insertions: 1, deletions: 0 }
+              }
+            })
+        })
+    )
+    const { git, startGitCall } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    const commitPromise = startGitCall((current) => current.commit('slow commit'))
+    const pushed = await git.pushNow()
+
+    expect(pushed).toBe(false)
+    expect(sidecarMock.pushRepo).not.toHaveBeenCalled()
+    expect(toast.info).toHaveBeenCalledWith(
+      'Another Git action is still running',
+      expect.objectContaining({ description: expect.any(String) })
+    )
+    await act(async () => {
+      resolveCommit()
+      await commitPromise
+    })
   })
 
   it('ignores a stale push error after switching repos', async () => {

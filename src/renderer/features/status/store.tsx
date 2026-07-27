@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/features/status/status-file-rows'
 import { formatCause } from '@/lib/format-cause'
+import { gitFailureBannerText } from '@/lib/git-failure'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
@@ -195,8 +196,7 @@ export function useWorkingTreeStatusController(
         queryClient.setQueryData<GitStatus>(context.key, context.previous)
       }
       if (context && isCurrentRepo(context.generation, context.path)) {
-        const message = formatCause(error)
-        setError('mutation', message)
+        setError('mutation', gitFailureBannerText('Git rejected the change', formatCause(error)))
       }
       if (context) {
         return resyncStatusAndDiffs(context)
@@ -221,7 +221,7 @@ export function useWorkingTreeStatusController(
         queryClient.setQueryData<GitStatus>(context.key, context.previous)
       }
       if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
-        setError('mutation', response.message)
+        setError('mutation', gitFailureBannerText('Git rejected the change', response.message))
       }
       return resyncStatusAndDiffs(context)
     }

@@ -1,3 +1,4 @@
+import type { HelpTopic } from '@shared/help-links'
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -10,8 +11,11 @@ import {
   useRef,
   useState
 } from 'react'
+import { toast } from 'sonner'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
+import { classifyGitFailure } from '@/lib/git-failure'
+import { toastGitFailure } from '@/lib/git-toast'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcFetch, rpcGetLocalBranches, rpcGetRemoteRefs } from '@/lib/rpc-client'
@@ -55,7 +59,7 @@ export interface RefsDeps {
   liveRepoPath: RefObject<string | null>
   openGenerationRef: RefObject<number>
   isCurrentRepo: (generation: number, repoPath: string) => boolean
-  setError: (source: RepoSessionErrorSource, error: string) => void
+  setError: (source: RepoSessionErrorSource, error: string, helpTopic?: HelpTopic) => void
   clearError: (source: RepoSessionErrorSource) => void
   mutationCoordinator: RepoMutationCoordinator
   refreshAfterFetch: (repoPath: string) => Promise<unknown>
@@ -131,35 +135,62 @@ export function useRefsController(deps: RefsDeps): RefsController {
   const currentBranch = localBranchesQuery.data?.current || statusCurrent || ''
   const branchesLoading = localBranchesQuery.isFetching && !localBranchesQuery.data
 
-  const runFetchAndRefresh = (path: string) =>
-    mutationCoordinator.run('fetch', undefined, async () => {
-      const generation = openGenerationRef.current
-      if (!isCurrentRepo(generation, path)) {
-        return
-      }
-      try {
-        const response = await rpcFetch(path)
+  const notifyFetchBusy = () => {
+    toast.info('Another Git action is still running', {
+      description: 'Wait for it to finish, then fetch again.'
+    })
+  }
+
+  // A background fetch reports through the tab banner only — toasting every five minutes would be
+  // noise. A fetch the user asked for always answers, success or failure.
+  const reportFetchFailure = (rawMessage: string, manual: boolean) => {
+    const failure = classifyGitFailure(rawMessage)
+    setError('fetch', `Fetch failed: ${failure.description}`, failure.helpTopic)
+    if (manual) {
+      toastGitFailure('Fetch failed', rawMessage)
+    }
+  }
+
+  const runFetchAndRefresh = (path: string, manual = false) =>
+    mutationCoordinator.run(
+      'fetch',
+      undefined,
+      async () => {
+        const generation = openGenerationRef.current
         if (!isCurrentRepo(generation, path)) {
           return
         }
-        if (response._tag === 'Ok') {
-          clearError('fetch')
-          setLastFetch({ repoPath: path, fetchedAt: Date.now() })
-          if (tabActiveRef.current) {
-            await refreshAfterFetch(path)
-          } else {
-            pendingRefresh.current = path
+        try {
+          const response = await rpcFetch(path)
+          if (!isCurrentRepo(generation, path)) {
+            return
           }
-        } else if (response._tag === 'GitError') {
-          setError('fetch', response.message)
+          if (response._tag === 'Ok') {
+            clearError('fetch')
+            setLastFetch({ repoPath: path, fetchedAt: Date.now() })
+            if (manual) {
+              toast.success('Fetched from remote')
+            }
+            if (tabActiveRef.current) {
+              await refreshAfterFetch(path)
+            } else {
+              pendingRefresh.current = path
+            }
+          } else if (response._tag === 'FetchSkipped') {
+            if (manual) {
+              toast.info('A fetch is already running')
+            }
+          } else if (response._tag === 'GitError') {
+            reportFetchFailure(response.message, manual)
+          }
+        } catch (error) {
+          if (isCurrentRepo(generation, path)) {
+            reportFetchFailure(formatCause(error), manual)
+          }
         }
-      } catch (error) {
-        if (isCurrentRepo(generation, path)) {
-          const message = formatCause(error)
-          setError('fetch', message)
-        }
-      }
-    })
+      },
+      manual ? notifyFetchBusy : undefined
+    )
 
   const fetchNowImpl = async () => {
     const path = liveRepoPath.current
@@ -167,7 +198,7 @@ export function useRefsController(deps: RefsDeps): RefsController {
       return
     }
     setFetchTick((tick) => tick + 1)
-    await runFetchAndRefresh(path)
+    await runFetchAndRefresh(path, true)
   }
 
   const latest = useLatestRef({

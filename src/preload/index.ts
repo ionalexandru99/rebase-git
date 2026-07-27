@@ -1,4 +1,5 @@
 import { Channel } from '@shared/channels'
+import type { HelpTopic } from '@shared/help-links'
 import type { OpenRepo, ScanForRepos } from '@shared/rpc'
 import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
@@ -48,6 +49,7 @@ export interface IElectronAPI {
   setOnboardingComplete: (complete: boolean) => Promise<void>
   scanForRepos: (dirPath: string) => Promise<ScanForReposResponse>
   sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
+  openHelpLink: (topic: HelpTopic) => Promise<void>
 }
 
 const api: IElectronAPI = {
@@ -93,7 +95,8 @@ const api: IElectronAPI = {
     ipcRenderer.invoke('set-onboarding-complete', complete),
   scanForRepos: (dirPath: string) => ipcRenderer.invoke(Channel.scanForRepos, dirPath),
   sidecarRequest: (op: string, body: Record<string, unknown>) =>
-    ipcRenderer.invoke(Channel.sidecarRequest, op, body)
+    ipcRenderer.invoke(Channel.sidecarRequest, op, body),
+  openHelpLink: (topic: HelpTopic) => ipcRenderer.invoke(Channel.openHelpLink, topic)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

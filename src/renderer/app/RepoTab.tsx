@@ -1,3 +1,4 @@
+import { HELP_TOPIC_LABELS } from '@shared/help-links'
 import { AlertCircleIcon } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { Alert, AlertDescription } from '../components/ui/alert'
@@ -58,11 +59,23 @@ function RepoTabContent(props: RepoTabProps) {
     props.onRepoOpenFailed
   ])
 
+  const helpTopic = session.errorHelpTopic
   const errorBanner = session.error ? (
     <div className="shrink-0 border-b px-4 py-2">
       <Alert variant="destructive" className="border-destructive/30">
         <AlertCircleIcon />
-        <AlertDescription>{session.error}</AlertDescription>
+        <AlertDescription>
+          {session.error}
+          {helpTopic ? (
+            <button
+              type="button"
+              onClick={() => void window.electronAPI.openHelpLink(helpTopic)}
+              className="ml-2 underline underline-offset-2"
+            >
+              {HELP_TOPIC_LABELS[helpTopic]}
+            </button>
+          ) : null}
+        </AlertDescription>
       </Alert>
     </div>
   ) : null
