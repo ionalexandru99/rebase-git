@@ -1,4 +1,5 @@
 import { Effect } from 'effect'
+import { promptlessEnv } from '../git/env'
 import { FetchSkipped, GitError, PushRejected, type RepoNotOpen } from '../git/errors'
 import { normalizeRepoPath } from '../git/instances'
 import { runGit, spawnGit, startGit } from '../git/spawn'
@@ -8,12 +9,6 @@ import { type RepoSessions, RepoSessionsLive, withSessionScope } from '../sessio
 import { requireOpen } from './helpers'
 
 type GitCmdResult = { ok: true } | { ok: false; message: string }
-
-const promptlessEnv = (): NodeJS.ProcessEnv => ({
-  ...process.env,
-  GIT_TERMINAL_PROMPT: '0',
-  LC_ALL: 'C'
-})
 
 function runFetch(key: string): Effect.Effect<GitCmdResult, never, RepoSessions> {
   return withSessionScope(

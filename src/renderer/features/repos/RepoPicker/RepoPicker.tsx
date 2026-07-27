@@ -1,4 +1,4 @@
-import { FolderPlusIcon, SearchIcon, XIcon } from 'lucide-react'
+import { CloudDownloadIcon, FolderPlusIcon, SearchIcon, XIcon } from 'lucide-react'
 import type { KeyboardEvent } from 'react'
 import { useMemo, useState } from 'react'
 import { fuzzyFilter } from '@/lib/fuzzy'
@@ -13,6 +13,10 @@ import {
   RepoGroupList
 } from './RepoGroup'
 
+// The recent list is a shortcut, not an archive: past a handful of cards it stops being scannable
+// and pushes the workspace listing below the fold.
+export const MAX_RECENT_REPOS = 4
+
 interface RepoPickerProps {
   recentRepos: string[]
   discoveredRepos: string[]
@@ -22,6 +26,7 @@ interface RepoPickerProps {
   onAddWorkspace: () => Promise<unknown>
   onRemoveWorkspace: (path: string) => Promise<void>
   onOpenRepo: (path: string) => void
+  onCloneRepo: () => void
 }
 
 export function RepoPicker(props: RepoPickerProps) {
@@ -33,7 +38,7 @@ export function RepoPicker(props: RepoPickerProps) {
     [query, props.discoveredRepos]
   )
   const filteredRecent = useMemo(
-    () => fuzzyFilter(query, props.recentRepos),
+    () => fuzzyFilter(query, props.recentRepos).slice(0, MAX_RECENT_REPOS),
     [query, props.recentRepos]
   )
   const enterTarget = filteredRecent[0] ?? filteredDiscovered[0] ?? null
@@ -52,11 +57,17 @@ export function RepoPicker(props: RepoPickerProps) {
   return hasAnyWorkspace ? (
     <div className="scroll-host m-1.5 min-h-0 flex-1 overflow-auto rounded-[var(--r-sm)] border bg-card shadow-[var(--shadow)]">
       <div className="mx-auto w-full max-w-3xl px-8 pb-10 pt-14">
-        <div className="mb-6">
-          <h2 className="mb-1 text-[22px] font-bold tracking-[-0.01em]">Open a repository</h2>
-          <p className="text-sm text-muted-foreground">
-            Pick a recent repository or browse your workspace.
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="mb-1 text-[22px] font-bold tracking-[-0.01em]">Open a repository</h2>
+            <p className="text-sm text-muted-foreground">
+              Pick a recent repository, browse your workspace, or clone from a URL.
+            </p>
+          </div>
+          <Button variant="outline" onClick={props.onCloneRepo}>
+            <CloudDownloadIcon />
+            Clone…
+          </Button>
         </div>
 
         <div className="mb-7 flex h-11 items-center gap-2.5 rounded-[var(--r-md)] border bg-background px-3.5 text-muted-foreground transition-shadow focus-within:border-[var(--brand-line)] focus-within:shadow-[0_0_0_3px_var(--brand-soft)]">
@@ -142,10 +153,16 @@ export function RepoPicker(props: RepoPickerProps) {
         title="Add a workspace"
         description="Repositories open from a workspace folder. Pick a folder that contains your Git repositories to get started."
         action={
-          <Button onClick={() => props.onAddWorkspace()}>
-            <FolderPlusIcon />
-            Add workspace…
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => props.onAddWorkspace()}>
+              <FolderPlusIcon />
+              Add workspace…
+            </Button>
+            <Button variant="outline" onClick={props.onCloneRepo}>
+              <CloudDownloadIcon />
+              Clone…
+            </Button>
+          </div>
         }
       />
     </div>

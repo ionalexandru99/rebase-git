@@ -1,6 +1,7 @@
 import { FetchHttpClient, HttpClient, HttpClientRequest } from '@effect/platform'
 import { RpcClient, RpcSerialization } from '@effect/rpc'
 import {
+  CloneRepo,
   CloseRepo,
   OpenRepo,
   ScanForRepos,
@@ -9,7 +10,7 @@ import {
   SidecarRpcs,
   StreamLog
 } from '@shared/rpc'
-import type { LogChunk } from '@shared/schemas/git'
+import type { CloneProgress, LogChunk } from '@shared/schemas/git'
 import { Cause, Effect, Either, Exit, Layer, ManagedRuntime, Option, Schema, Stream } from 'effect'
 
 const rpcTags = new Set(SidecarRpcs.requests.keys())
@@ -17,6 +18,7 @@ const ownedRpcTags: ReadonlySet<string> = new Set([
   OpenRepo._tag,
   CloseRepo._tag,
   ScanForRepos._tag,
+  CloneRepo._tag,
   StreamLog._tag
 ])
 const RPC_TIMEOUT_MS = 120_000
@@ -135,6 +137,67 @@ export async function callRpcByTag(
   return runRpcTag(tag, baseUrl, token, payload, options)
 }
 
+function streamFailureMessage(
+  cause: Cause.Cause<unknown>,
+  token: string,
+  fallback: string
+): string {
+  const failure = Cause.failureOption(cause)
+  const message =
+    Option.isSome(failure) && typeof (failure.value as { message?: unknown }).message === 'string'
+      ? (failure.value as { message: string }).message
+      : fallback
+  return scrubToken(message, token)
+}
+
+export interface ClonePayload {
+  url: string
+  parentDir: string
+  folderName: string
+}
+
+// Resolves with the canonical path of the finished clone; the stream's last chunk carries it.
+export async function runCloneStream(
+  baseUrl: string,
+  token: string,
+  payload: ClonePayload,
+  signal: AbortSignal,
+  onProgress: (progress: CloneProgress) => void
+): Promise<string> {
+  const runtime = makeRuntime(baseUrl, token)
+  let clonedPath: string | undefined
+  try {
+    const exit = await runtime.runPromiseExit(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* RpcClient.make(SidecarRpcs)
+          yield* Stream.runForEach(client.cloneRepo(payload), (progress) =>
+            Effect.sync(() => {
+              if (progress.done && progress.path) {
+                clonedPath = progress.path
+              }
+              onProgress(progress)
+            })
+          )
+        })
+      ),
+      { signal }
+    )
+    if (Exit.isInterrupted(exit)) {
+      throw new Error('clone cancelled')
+    }
+    if (Exit.isSuccess(exit)) {
+      if (!clonedPath) {
+        throw new Error('the clone finished without reporting a location')
+      }
+      return clonedPath
+    }
+    throw new Error(streamFailureMessage(exit.cause, token, 'clone failed'))
+  } finally {
+    await runtime.dispose()
+  }
+}
+
 export interface StreamLogPayload {
   repoPath: string
   skip?: number
@@ -165,12 +228,7 @@ export async function runStreamLog(
     if (Exit.isSuccess(exit) || Exit.isInterrupted(exit)) {
       return
     }
-    const failure = Cause.failureOption(exit.cause)
-    const message =
-      Option.isSome(failure) && typeof (failure.value as { message?: unknown }).message === 'string'
-        ? (failure.value as { message: string }).message
-        : 'sidecar log stream failed'
-    throw new Error(scrubToken(message, token))
+    throw new Error(streamFailureMessage(exit.cause, token, 'sidecar log stream failed'))
   } finally {
     await runtime.dispose()
   }
