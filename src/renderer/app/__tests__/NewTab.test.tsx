@@ -53,8 +53,11 @@ describe('NewTab clone flow', () => {
       emitProgress = callback
       return () => {}
     })
+    let progressWhileCloning = ''
     vi.mocked(window.electronAPI.cloneRepo).mockImplementation(async (request) => {
       emitProgress?.({ cloneId: request.cloneId, phase: 'Receiving objects', percent: 64 })
+      await Promise.resolve()
+      progressWhileCloning = screen.getByTestId('clone-progress').textContent ?? ''
       return { _tag: 'Ok', path: '/home/user/code/repo' }
     })
 
@@ -64,13 +67,17 @@ describe('NewTab clone flow', () => {
     fireEvent.change(screen.getByLabelText('Repository URL'), {
       target: { value: 'https://github.com/owner/repo.git' }
     })
-    expect(screen.getByText('/home/user/code/repo')).toBeTruthy()
+    // The folder git is about to create stays readable on its own; only the parent path truncates.
+    const folderSegment = screen.getByText('/repo')
+    expect(folderSegment.parentElement?.textContent).toBe('/home/user/code/repo')
 
     fireEvent.click(screen.getByRole('button', { name: 'Clone' }))
 
     await waitFor(() => {
       expect(onOpenRepo).toHaveBeenCalledWith('/home/user/code/repo')
     })
+    expect(progressWhileCloning).toContain('Receiving objects')
+    expect(progressWhileCloning).toContain('64%')
     expect(window.electronAPI.cloneRepo).toHaveBeenCalledWith({
       cloneId: expect.any(Number),
       url: 'https://github.com/owner/repo.git',

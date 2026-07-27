@@ -12,9 +12,8 @@ interface CloneRepoDialogProps {
   onClose: () => void
 }
 
-function joinDestination(parentDir: string, folderName: string): string {
-  const separator = parentDir.includes('\\') && !parentDir.includes('/') ? '\\' : '/'
-  return `${parentDir.replace(/[/\\]+$/, '')}${separator}${folderName}`
+function destinationSeparator(parentDir: string): string {
+  return parentDir.includes('\\') && !parentDir.includes('/') ? '\\' : '/'
 }
 
 export function CloneRepoDialog(props: CloneRepoDialogProps) {
@@ -88,11 +87,18 @@ export function CloneRepoDialog(props: CloneRepoDialogProps) {
 
         <div className="mt-3 text-xs text-muted-foreground">Destination</div>
         <div className="mt-1 flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate rounded-[var(--r-sm)] border bg-background px-2.5 py-2 text-sm">
-            {parentDir && folderName ? (
-              joinDestination(parentDir, folderName)
-            ) : parentDir ? (
-              parentDir
+          {/* The folder about to be created is the part worth reading, so the parent path is the
+              side that gets truncated. */}
+          <span className="flex min-w-0 flex-1 rounded-[var(--r-sm)] border bg-background px-2.5 py-2 text-sm">
+            {parentDir ? (
+              <>
+                <span className="truncate text-muted-foreground">
+                  {parentDir.replace(/[/\\]+$/, '')}
+                </span>
+                {folderName && (
+                  <span className="shrink-0 font-medium">{`${destinationSeparator(parentDir)}${folderName}`}</span>
+                )}
+              </>
             ) : (
               <span className="text-muted-foreground">Choose a folder to clone into</span>
             )}
@@ -141,7 +147,7 @@ export function CloneRepoDialog(props: CloneRepoDialogProps) {
 
 function CloneProgressBar(props: { phase: string; percent?: number }) {
   return (
-    <div aria-live="polite">
+    <div aria-live="polite" data-testid="clone-progress">
       <div className="flex items-baseline justify-between text-muted-foreground">
         <span>{props.phase}</span>
         {props.percent !== undefined && <span>{props.percent}%</span>}
