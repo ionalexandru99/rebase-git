@@ -24,6 +24,8 @@ export interface UnifiedFileRow {
   isUntracked: boolean
   source: FileRowSource
   dropState?: HeadDropState
+  /** Porcelain XY code of a conflicted file, e.g. `UU` or `DU`. Drives the per-file keep actions. */
+  conflictCode?: string
 }
 
 const isUntrackedCode = (index: string, workingDir: string): boolean =>
@@ -77,7 +79,8 @@ function buildFromCodes(status: GitStatus): UnifiedFileRow[] {
       stageState,
       isConflicted: conflicted,
       isUntracked: untracked,
-      source: 'worktree'
+      source: 'worktree',
+      conflictCode: conflicted ? `${entry.index}${entry.working_dir}` : undefined
     })
   }
   return rows

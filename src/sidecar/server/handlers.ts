@@ -263,6 +263,14 @@ export const handlersLayer = SidecarRpcs.toLayer({
   push: ({ repoPath, force, expectedRemoteSha }) =>
     withResolvedRepo(repoPath, (repo) => operations.pushRepo(repo, force, expectedRemoteSha)),
   pull: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.pullRepo(repo)),
+  abortOperation: ({ repoPath }) =>
+    withResolvedRepo(repoPath, (repo) => operations.abortOperation(repo)),
+  continueOperation: ({ repoPath }) =>
+    withResolvedRepo(repoPath, (repo) => operations.continueOperation(repo)),
+  resolveConflict: ({ repoPath, file, side }) =>
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFile(repo, file, (relative) => operations.resolveConflict(repo, relative, side))
+    ),
   getStatus: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.getStatus(repo)),
   getLocalBranches: ({ repoPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.getLocalBranches(repo)),

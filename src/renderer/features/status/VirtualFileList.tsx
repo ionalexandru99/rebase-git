@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import type { ConflictLabels, ConflictSide } from '@/features/status/conflict-resolution'
 import type { FileRowSource, UnifiedFileRow } from '@/features/status/status-file-rows'
 import type { FileAction } from '@/lib/git-actions'
 import { STATUS_FILE_OVERSCAN, STATUS_FILE_ROW_HEIGHT } from '@/lib/virtual-config'
@@ -31,6 +32,8 @@ interface VirtualFileListProps {
   onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
+  conflictLabels?: ConflictLabels
+  onResolveConflict?: (file: string, side: ConflictSide) => void
 }
 
 type StatusListItem =
@@ -46,6 +49,8 @@ function StatusVirtualRow(props: {
   onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
+  conflictLabels?: ConflictLabels
+  onResolveConflict?: (file: string, side: ConflictSide) => void
   showSource: boolean
 }) {
   const rowStyle = {
@@ -78,6 +83,9 @@ function StatusVirtualRow(props: {
         onUnstage={props.onUnstage}
         onToggleDrop={props.onToggleDrop}
         onFileAction={props.onFileAction}
+        conflictCode={props.row.conflictCode}
+        conflictLabels={props.conflictLabels}
+        onResolveConflict={props.onResolveConflict}
         showSource={props.showSource}
       />
     </li>
@@ -154,6 +162,8 @@ export function VirtualFileList(props: VirtualFileListProps) {
               onUnstage={props.onUnstage}
               onToggleDrop={props.onToggleDrop}
               onFileAction={props.onFileAction}
+              conflictLabels={props.conflictLabels}
+              onResolveConflict={props.onResolveConflict}
               showSource={input.kind === 'flat' && item.row.source === 'head-commit'}
             />
           )

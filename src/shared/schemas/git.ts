@@ -16,6 +16,31 @@ export const StatusFileCodeSchema = Schema.Struct({
 })
 export type StatusFileCode = typeof StatusFileCodeSchema.Type
 
+// `rebase-merge` and `rebase-apply` are git's two rebase backends; `am` shares the rebase-apply
+// directory but is a different operation with different semantics, so it gets its own kind.
+export const ConflictOperationKindSchema = Schema.Literal(
+  'merge',
+  'rebase-merge',
+  'rebase-apply',
+  'am',
+  'cherry-pick',
+  'revert'
+)
+export type ConflictOperationKind = typeof ConflictOperationKindSchema.Type
+
+// oursLabel/theirsLabel are the real ref names behind index stages :2 and :3. During a rebase
+// stage 2 is the branch rebased ONTO and stage 3 is the branch being rebased — the UI must render
+// these labels, never the words "ours"/"theirs".
+export const OperationStateSchema = Schema.Struct({
+  kind: ConflictOperationKindSchema,
+  oursLabel: Schema.String,
+  theirsLabel: Schema.String,
+  done: Schema.optional(NonNaNNumber),
+  total: Schema.optional(NonNaNNumber),
+  mergeMessage: Schema.optional(Schema.String)
+})
+export type OperationState = typeof OperationStateSchema.Type
+
 export const GitStatusSchema = Schema.Struct({
   current: Schema.String,
   modified: mutableArray(Schema.String),
@@ -25,7 +50,8 @@ export const GitStatusSchema = Schema.Struct({
   deleted: mutableArray(Schema.String),
   created: mutableArray(Schema.String),
   renamed: mutableArray(RenamedFileSchema),
-  files: Schema.optionalWith(mutableArray(StatusFileCodeSchema), { default: () => [] })
+  files: Schema.optionalWith(mutableArray(StatusFileCodeSchema), { default: () => [] }),
+  operation: Schema.optional(OperationStateSchema)
 })
 export type GitStatus = typeof GitStatusSchema.Type
 

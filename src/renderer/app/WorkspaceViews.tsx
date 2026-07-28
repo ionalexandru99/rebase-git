@@ -1,4 +1,3 @@
-import { CheckIcon } from 'lucide-react'
 import { type ComponentType, type ReactElement, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
@@ -14,7 +13,10 @@ import { DiffPanel } from '../features/diff/DiffPanel'
 import { HistoryPanel } from '../features/history'
 import { buildHeadCommitRange } from '../features/history/head-commit-range'
 import type { RefKind } from '../features/refs/ref-tree'
+import { CleanWorkingTree } from '../features/status/CleanWorkingTree'
 import { ConflictBanner } from '../features/status/ConflictBanner'
+import type { ConflictSide } from '../features/status/conflict-resolution'
+import { type OperationSummary, summarizeOperation } from '../features/status/operation-summary'
 import { StashControl } from '../features/status/StashControl'
 import { type SelectedFile, StatusPanel } from '../features/status/StatusPanel'
 import { buildHeadCommitRows, buildStagedFilePaths } from '../features/status/status-file-rows'
@@ -149,6 +151,20 @@ function LocalChangesView(props: WorkspaceViewProps) {
     }
   }
 
+  const resolveConflict = (file: string, side: ConflictSide) => {
+    void actions.resolveConflict(file, side)
+  }
+
+  const requestAbortOperation = (summary: OperationSummary) => {
+    confirm({
+      title: summary.confirmTitle,
+      message: summary.confirmMessage,
+      confirmText: summary.abortText,
+      destructive: true,
+      onConfirm: () => void actions.abortOperation(summary.noun)
+    })
+  }
+
   const discardAll = () => {
     confirm({
       title: 'Discard all changes?',
@@ -171,7 +187,11 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const hasHeadCommit = (history.log?.all.length ?? 0) > 0
   const headAvailabilityLoading = history.logLoading && !hasHeadCommit
   const amendAvailable = hasHeadCommit || headAvailabilityLoading
-  const amendDisabled = headAvailabilityLoading || (status?.conflicted.length ?? 0) > 0
+  const conflictCount = status?.conflicted.length ?? 0
+  const amendDisabled = headAvailabilityLoading || conflictCount > 0
+  const operation = status?.operation
+  const operationSummary = operation ? summarizeOperation(operation) : null
+  const commitBlockedReason = conflictBlockedReason(conflictCount, operationSummary)
 
   const fileEntries = useMemo<SelectedFile[]>(
     () => rows.map((row) => ({ file: row.file, renameSource: row.renameSource })),
@@ -254,13 +274,17 @@ function LocalChangesView(props: WorkspaceViewProps) {
   }
 
   if (totalChanges === 0 && !amendAvailable) {
-    return <CleanWorkingTree />
+    return <CleanWorkingTree operation={operation} />
   }
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
       <div className="flex min-h-0 flex-col overflow-hidden">
-        <ConflictBanner />
+        <ConflictBanner
+          busy={busy}
+          onContinue={(noun) => void actions.continueOperation(noun)}
+          onAbort={requestAbortOperation}
+        />
         {totalChanges > 0 || amendActive ? (
           <div
             className={cn(
@@ -312,6 +336,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
                   onToggleDrop={toggleHeadFileDrop}
                   amendRows={amendRows}
                   onFileAction={handleFileAction}
+                  onResolveConflict={resolveConflict}
                   headerActions={
                     totalChanges > 0 ? (
                       <>
@@ -360,7 +385,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
             <StatusPanel selected={null} onSelect={() => {}} loading={true} />
           </div>
         ) : (
-          <CleanWorkingTree />
+          <CleanWorkingTree operation={operation} />
         )}
       </div>
       <CommitPanel
@@ -376,21 +401,27 @@ function LocalChangesView(props: WorkspaceViewProps) {
         loading={loading}
         branch={props.currentBranch || 'no-branch'}
         stagedCount={stagedCount}
+        prefillMessage={operation?.kind === 'merge' ? operation.mergeMessage : undefined}
+        concludesMerge={operation?.kind === 'merge'}
+        commitBlockedReason={commitBlockedReason}
       />
     </div>
   )
 }
 
-function CleanWorkingTree() {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2.5 text-center text-muted-foreground">
-      <span className="flex size-[52px] items-center justify-center rounded-full bg-green/15 text-green">
-        <CheckIcon className="size-6" strokeWidth={2.4} />
-      </span>
-      <div className="text-[15px] font-semibold text-foreground">Working tree clean</div>
-      <div className="text-sm">Nothing to commit — every change is on a branch.</div>
-    </div>
-  )
+// Committing never finishes a sequencer operation — those end with Continue — and a merge commit
+// is refused by git while any file is still conflicted.
+function conflictBlockedReason(
+  conflictCount: number,
+  summary: OperationSummary | null
+): string | undefined {
+  if (conflictCount > 0) {
+    return 'Resolve and stage every conflicted file before committing.'
+  }
+  if (summary?.canContinue) {
+    return `Finish this ${summary.noun} with Continue above, not a commit.`
+  }
+  return undefined
 }
 
 function HistoryView(props: WorkspaceViewProps) {

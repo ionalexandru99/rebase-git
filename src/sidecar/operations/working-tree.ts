@@ -9,14 +9,18 @@ import { runGit } from '../git/spawn'
 import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
 import { requireGit, requireOpen, tryGit } from './helpers'
+import { detectOperationState } from './operation-state'
 
+// The in-progress merge/rebase/sequence rides along with the status so the renderer learns about a
+// conflicted operation in the same round trip that tells it which files are conflicted.
 export function getStatus(
   repoPath: string
 ): Effect.Effect<{ status: GitStatus }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const status = yield* tryGit(() => git.status())
-    return { status: serializeStatus(status) }
+    const operation = yield* tryGit(() => detectOperationState(repoPath))
+    return { status: { ...serializeStatus(status), operation } }
   })
 }
 

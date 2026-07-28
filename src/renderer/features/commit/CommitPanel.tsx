@@ -1,6 +1,6 @@
 import { Loader2Icon } from 'lucide-react'
 import type { ChangeEvent, ReactNode } from 'react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 interface CommitPanelProps {
@@ -22,6 +22,16 @@ interface CommitPanelProps {
   onAmendChange?: (amend: boolean) => void
   droppedHeadPaths?: string[]
   droppedHeadHunks?: { file: string; hunks: string[] }[]
+  /** Message git prepared for an in-progress merge. Only fills a box the user has not typed in. */
+  prefillMessage?: string
+  /**
+   * A merge is concluded by committing the index, and resolving every conflict toward our side
+   * leaves an index identical to HEAD — so the merge commit has to stay reachable with nothing
+   * staged, or the merge is a dead end with Abort as the only way out.
+   */
+  concludesMerge?: boolean
+  /** Set when committing cannot finish the in-progress operation; disables and explains. */
+  commitBlockedReason?: string
 }
 
 const MAX_SUBJECT_LENGTH = 72
@@ -35,6 +45,22 @@ export function CommitPanel(props: CommitPanelProps) {
   const amendRef = useRef(amend)
   const amendLoadGeneration = useRef(0)
   const submittingRef = useRef(false)
+  const appliedPrefill = useRef<string | undefined>(undefined)
+
+  useEffect(() => {
+    const prefill = props.prefillMessage
+    if (prefill === appliedPrefill.current) {
+      return
+    }
+    const userTyped =
+      messageRef.current.trim().length > 0 && messageRef.current !== appliedPrefill.current
+    appliedPrefill.current = prefill
+    if (userTyped || amendRef.current) {
+      return
+    }
+    messageRef.current = prefill ?? ''
+    setMessage(prefill ?? '')
+  }, [props.prefillMessage])
 
   const handleAmendToggle = async (event: ChangeEvent<HTMLInputElement>) => {
     if (event.currentTarget.checked) {
@@ -106,17 +132,22 @@ export function CommitPanel(props: CommitPanelProps) {
 
   const subjectLength = (message.split('\n')[0] ?? '').length
   const subjectWarn = subjectLength > MAX_SUBJECT_LENGTH
+  const concludesMerge = Boolean(props.concludesMerge) && !amend
   const commitLabel = amend
     ? 'Amend'
-    : props.stagedCount > 0
-      ? `Commit ${props.stagedCount} file${props.stagedCount === 1 ? '' : 's'}`
-      : 'Commit'
+    : concludesMerge
+      ? 'Commit merge'
+      : props.stagedCount > 0
+        ? `Commit ${props.stagedCount} file${props.stagedCount === 1 ? '' : 's'}`
+        : 'Commit'
   const loading = props.loading || submitting
   const hasDroppedFiles = amend && (props.droppedHeadPaths?.length ?? 0) > 0
+  const commitBlocked = Boolean(props.commitBlockedReason) && !amend
   const commitDisabled =
     !message.trim() ||
     loading ||
-    (!amend && props.stagedCount === 0) ||
+    commitBlocked ||
+    (!amend && !concludesMerge && props.stagedCount === 0) ||
     (amend && !props.expectedHead)
 
   return (
@@ -135,6 +166,9 @@ export function CommitPanel(props: CommitPanelProps) {
           rows={2}
           className="max-h-36 min-h-[50px] w-full resize-none border-0 bg-transparent px-1.5 py-1 text-sm text-foreground outline-none"
         />
+        {commitBlocked ? (
+          <p className="px-1.5 pb-1 text-xs text-amber-foreground">{props.commitBlockedReason}</p>
+        ) : null}
         {hasDroppedFiles ? (
           <p className="px-1.5 pb-1 text-xs text-amber-foreground">
             Amend restores dropped files from the parent commit. Staged changes in dropped files

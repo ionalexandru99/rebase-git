@@ -24,6 +24,13 @@ export {
   renameBranch
 } from './branches'
 export { getCommitDetail } from './commit-detail'
+export {
+  abortOperation,
+  type ConflictSide,
+  continueOperation,
+  resolveConflict
+} from './conflict-resolution'
+export { detectOperationState } from './operation-state'
 export { stashApply, stashDrop, stashList, stashPop, stashPush } from './stash'
 export { fetchRepo, pullRepo, pushRepo } from './sync'
 export {
@@ -137,9 +144,40 @@ export function mergeBranch(
     if (!isSafeRefArg(fullPath)) {
       return yield* Effect.fail(new GitError({ message: 'invalid ref name' }))
     }
-    const qualifiedRef = qualifyRef(refKind, fullPath)
-    yield* runWithConflictDetection(repoPath, git, ['merge', '--no-edit', qualifiedRef, '--'])
+    const mergeRef = yield* tryGit(() => mergeRefSpelling(git, refKind, fullPath))
+    yield* runWithConflictDetection(repoPath, git, ['merge', '--no-edit', mergeRef, '--'])
   })
+}
+
+async function peel(git: SimpleGit, ref: string): Promise<string | undefined> {
+  try {
+    return (
+      (await git.raw(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])).trim() || undefined
+    )
+  } catch {
+    return undefined
+  }
+}
+
+// git names the merge commit, MERGE_MSG and the conflict markers after the ref exactly as spelled on
+// the command line, so the qualified form needed to disambiguate a branch from a same-named tag
+// would otherwise leak everywhere as `Merge branch 'refs/heads/x'` and `>>>>>>> refs/heads/x`. The
+// short name is what the user typed nowhere but recognises everywhere, so prefer it whenever it
+// reaches the same commit; a genuine collision still falls back to the unambiguous spelling.
+async function mergeRefSpelling(
+  git: SimpleGit,
+  refKind: RefKind,
+  fullPath: string
+): Promise<string> {
+  const qualifiedRef = qualifyRef(refKind, fullPath)
+  if (fullPath === qualifiedRef) {
+    return qualifiedRef
+  }
+  const [shortTarget, qualifiedTarget] = await Promise.all([
+    peel(git, fullPath),
+    peel(git, qualifiedRef)
+  ])
+  return shortTarget !== undefined && shortTarget === qualifiedTarget ? fullPath : qualifiedRef
 }
 
 export function resetToCommit(

@@ -1,9 +1,11 @@
 import { parseOrThrow } from '@shared/codec'
 import {
+  AbortOperation,
   AmendCommit,
   Checkout,
   CherryPick,
   Commit,
+  ContinueOperation,
   CreateBranch,
   CreateTag,
   DeleteBranch,
@@ -23,6 +25,7 @@ import {
   Push,
   RenameBranch,
   Reset,
+  ResolveConflict,
   RevertCommit,
   ScanForRepos,
   StageAll,
@@ -87,6 +90,7 @@ export type RefWriteResult = RpcResult<
 >
 export type PushResult = RpcResult<typeof Push.successSchema.Type, typeof Push.errorSchema.Type>
 export type PushForce = NonNullable<typeof Push.payloadSchema.Type.force>
+export type ConflictSide = typeof ResolveConflict.payloadSchema.Type.side
 export type CheckoutResult = RpcResult<
   typeof Checkout.successSchema.Type,
   typeof Checkout.errorSchema.Type
@@ -391,6 +395,22 @@ export async function rpcGetDiff(
     commit: scope?.commit,
     renameSource: scope?.renameSource
   })
+}
+
+export async function rpcAbortOperation(repoPath: string): Promise<RefWriteResult> {
+  return callSidecarRpc(AbortOperation, { repoPath })
+}
+
+export async function rpcContinueOperation(repoPath: string): Promise<ConflictableResult> {
+  return callSidecarRpc(ContinueOperation, { repoPath })
+}
+
+export async function rpcResolveConflict(
+  repoPath: string,
+  file: string,
+  side: ConflictSide
+): Promise<StageResult> {
+  return callSidecarRpc(ResolveConflict, { repoPath, file, side })
 }
 
 export async function rpcGetCommitDetail(

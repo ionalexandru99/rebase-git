@@ -506,6 +506,19 @@ export function spawnGit(args: string[], options?: SpawnGitOptions): Promise<Spa
   return startGit(args, options).result
 }
 
+// `rebase --continue` and `revert --continue` launch $GIT_EDITOR for the commit message and would
+// block forever in a process with no tty; `rebase -i` reaches for $GIT_SEQUENCE_EDITOR the same way.
+// LC_ALL pins the messages we classify, GIT_TERMINAL_PROMPT stops credential prompts.
+export function nonInteractiveEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GIT_EDITOR: 'true',
+    GIT_SEQUENCE_EDITOR: 'true',
+    GIT_TERMINAL_PROMPT: '0',
+    LC_ALL: 'C'
+  }
+}
+
 export interface RunGitOptions extends SpawnGitOptions {
   okExitCodes?: number[]
 }

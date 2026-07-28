@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ignoreWorkingTree, shouldEmitWorkingTreeChange, startDebouncedDrain } from '../watcher'
+import {
+  ignoreWorkingTree,
+  isOperationStateEntry,
+  shouldEmitWorkingTreeChange,
+  startDebouncedDrain
+} from '../watcher'
 
 describe('ignoreWorkingTree', () => {
   it('ignores the .git directory', () => {
@@ -54,6 +59,25 @@ describe('shouldEmitWorkingTreeChange', () => {
 
   it('emits source file changes', () => {
     expect(shouldEmitWorkingTreeChange('src/main.ts')).toBe(true)
+  })
+})
+
+describe('isOperationStateEntry', () => {
+  it('recognises every marker an in-progress operation leaves in the git dir', () => {
+    expect(isOperationStateEntry('MERGE_HEAD')).toBe(true)
+    expect(isOperationStateEntry('CHERRY_PICK_HEAD')).toBe(true)
+    expect(isOperationStateEntry('REVERT_HEAD')).toBe(true)
+    expect(isOperationStateEntry('rebase-merge')).toBe(true)
+    expect(isOperationStateEntry('rebase-apply')).toBe(true)
+    expect(isOperationStateEntry('sequencer')).toBe(true)
+  })
+
+  it('ignores the rest of the git dir churn', () => {
+    expect(isOperationStateEntry('index')).toBe(false)
+    expect(isOperationStateEntry('COMMIT_EDITMSG')).toBe(false)
+    expect(isOperationStateEntry('ORIG_HEAD')).toBe(false)
+    expect(isOperationStateEntry('config')).toBe(false)
+    expect(isOperationStateEntry(null)).toBe(false)
   })
 })
 

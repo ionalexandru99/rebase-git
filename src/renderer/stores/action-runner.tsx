@@ -34,10 +34,16 @@ export type PushOutcome =
     }
   | { kind: 'error'; message: string }
 
+export interface RunActionOptions {
+  /** For actions whose own row or panel already shows the result — failures still toast. */
+  silentSuccess?: boolean
+}
+
 export type RunAction = (
   operation: MappedOperation,
   call: (repoPath: string) => Promise<{ _tag: string; message?: string }>,
-  label: string
+  label: string,
+  options?: RunActionOptions
 ) => Promise<boolean>
 
 export interface ActionRunner {
@@ -115,7 +121,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
   const depsRef = useRef(deps)
   depsRef.current = deps
 
-  const runActionAttempt = useCallback<RunAction>(async (operation, call, label) => {
+  const runActionAttempt = useCallback<RunAction>(async (operation, call, label, options) => {
     const { liveRepoPath, openGenerationRef, isCurrentRepo, refreshCaches } = depsRef.current
     const repoPath = liveRepoPath.current
     if (!repoPath) {
@@ -132,7 +138,9 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         await refreshCaches(repoPath, cachesForOperation(operation))
       }
       if (response._tag === 'Ok') {
-        toast.success(label)
+        if (!options?.silentSuccess) {
+          toast.success(label)
+        }
         return true
       }
       if (response._tag === 'Conflict') {
@@ -161,8 +169,10 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
   }, [])
 
   const runAction = useCallback<RunAction>(
-    (operation, call, label) =>
-      mutationCoordinator.run(operation, false, () => runActionAttempt(operation, call, label)),
+    (operation, call, label, options) =>
+      mutationCoordinator.run(operation, false, () =>
+        runActionAttempt(operation, call, label, options)
+      ),
     [mutationCoordinator.run, runActionAttempt]
   )
 

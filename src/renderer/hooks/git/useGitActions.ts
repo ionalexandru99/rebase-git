@@ -1,5 +1,7 @@
 import {
+  AbortOperation,
   CherryPick,
+  ContinueOperation,
   CreateBranch,
   CreateTag,
   DeleteBranch,
@@ -9,6 +11,7 @@ import {
   MergeBranch,
   RenameBranch,
   Reset,
+  ResolveConflict,
   RevertCommit,
   StashApply,
   StashDrop,
@@ -18,7 +21,10 @@ import {
 import type { RefKind, ResetMode } from '@shared/schemas/ipc'
 import { useMemo } from 'react'
 import {
+  type ConflictSide,
+  rpcAbortOperation,
   rpcCherryPick,
+  rpcContinueOperation,
   rpcCreateBranch,
   rpcCreateTag,
   rpcDeleteBranch,
@@ -28,6 +34,7 @@ import {
   rpcMergeBranch,
   rpcRenameBranch,
   rpcReset,
+  rpcResolveConflict,
   rpcRevertCommit,
   rpcStashApply,
   rpcStashDrop,
@@ -117,6 +124,27 @@ export function useGitActions(runner: ActionRunner) {
           StashPop._tag,
           (path) => rpcStashPop(path, index, expectedOid),
           'Popped stash'
+        ),
+      abortOperation: (operationNoun: string) =>
+        runner.runAction(
+          AbortOperation._tag,
+          (path) => rpcAbortOperation(path),
+          `Aborted ${operationNoun}`
+        ),
+      continueOperation: (operationNoun: string) =>
+        runner.runAction(
+          ContinueOperation._tag,
+          (path) => rpcContinueOperation(path),
+          `Continued ${operationNoun}`
+        ),
+      // No success toast: the row leaves the conflicted state on its own, and a toast for every file
+      // covers the commit box for seconds at exactly the moment the user is reaching for it.
+      resolveConflict: (file: string, side: ConflictSide) =>
+        runner.runAction(
+          ResolveConflict._tag,
+          (path) => rpcResolveConflict(path, file, side),
+          `Resolve ${file}`,
+          { silentSuccess: true }
         ),
       stashDrop: (index: number, expectedOid: string) =>
         runner.runAction(

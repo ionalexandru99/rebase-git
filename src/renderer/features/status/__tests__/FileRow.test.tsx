@@ -25,6 +25,114 @@ describe('FileRow — worktree', () => {
   })
 })
 
+describe('FileRow — conflicted', () => {
+  const labels = { oursLabel: 'main', theirsLabel: 'feature/login' }
+
+  function renderConflict(conflictCode: string | undefined) {
+    const onResolveConflict = vi.fn()
+    render(
+      <FileRow
+        file="src/app.ts"
+        kind="conflicted"
+        stageState="unstaged"
+        source="worktree"
+        conflictCode={conflictCode}
+        conflictLabels={labels}
+        isSelected={false}
+        onSelect={vi.fn()}
+        onStage={vi.fn()}
+        onUnstage={vi.fn()}
+        onResolveConflict={onResolveConflict}
+      />
+    )
+    fireEvent.contextMenu(screen.getByText('src/app.ts'))
+    return { onResolveConflict }
+  }
+
+  it('resolves a both-modified conflict with the named refs', () => {
+    const { onResolveConflict } = renderConflict('UU')
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keep main' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/app.ts', 'ours')
+  })
+
+  it('resolves a both-modified conflict toward the incoming ref', () => {
+    const { onResolveConflict } = renderConflict('UU')
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keep feature/login' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/app.ts', 'theirs')
+  })
+
+  it('keeps the surviving blob when this side deleted the file (DU)', () => {
+    const { onResolveConflict } = renderConflict('DU')
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keep the file' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/app.ts', 'theirs')
+  })
+
+  it('deletes the file from the side that still has it (DU)', () => {
+    const { onResolveConflict } = renderConflict('DU')
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete the file' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/app.ts', 'ours')
+  })
+
+  it('keeps the surviving blob when the other side deleted the file (UD)', () => {
+    const { onResolveConflict } = renderConflict('UD')
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keep the file' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/app.ts', 'ours')
+  })
+
+  it('deletes the file on the side that still has it (UD)', () => {
+    const { onResolveConflict } = renderConflict('UD')
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete the file' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/app.ts', 'theirs')
+  })
+
+  it('offers no keep choices when both sides deleted the file (DD)', () => {
+    renderConflict('DD')
+
+    expect(screen.queryByRole('menuitem', { name: /^Keep/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Delete the file' })).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Both sides deleted this file. Stage it to mark it resolved.')
+    ).toBeInTheDocument()
+  })
+
+  it('marks a conflict resolved through the menu', () => {
+    const onStage = vi.fn()
+    render(
+      <FileRow
+        file="src/app.ts"
+        kind="conflicted"
+        stageState="unstaged"
+        source="worktree"
+        conflictCode="UU"
+        conflictLabels={labels}
+        isSelected={false}
+        onSelect={vi.fn()}
+        onStage={onStage}
+        onUnstage={vi.fn()}
+        onResolveConflict={vi.fn()}
+      />
+    )
+
+    fireEvent.contextMenu(screen.getByText('src/app.ts'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mark as resolved' }))
+    expect(onStage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('never writes the words ours or theirs into the menu', () => {
+    renderConflict('UU')
+
+    const menu = screen.getByRole('menu')
+    expect(menu.textContent?.toLowerCase()).not.toContain('ours')
+    expect(menu.textContent?.toLowerCase()).not.toContain('theirs')
+  })
+})
+
 describe('FileRow — head-commit (amend)', () => {
   it('renders a kept (checked) drop checkbox and drops on toggle', () => {
     const onToggleDrop = vi.fn()

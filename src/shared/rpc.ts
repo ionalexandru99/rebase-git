@@ -275,6 +275,30 @@ export const Pull = Rpc.make('pull', {
   error: RefWriteError
 })
 
+export const AbortOperation = Rpc.make('abortOperation', {
+  payload: { repoPath: OpaqueString },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+// Continuing a multi-commit cherry-pick/revert/rebase can immediately conflict again on the next
+// commit, so this is conflictable like the operations that start a sequence.
+export const ContinueOperation = Rpc.make('continueOperation', {
+  payload: { repoPath: OpaqueString },
+  success: Schema.Void,
+  error: ConflictableError
+})
+
+export const ResolveConflict = Rpc.make('resolveConflict', {
+  payload: {
+    repoPath: OpaqueString,
+    file: OpaqueString,
+    side: Schema.Literal('ours', 'theirs')
+  },
+  success: Schema.Void,
+  error: StageError
+})
+
 export const GetStatus = Rpc.make('getStatus', {
   payload: { repoPath: OpaqueString },
   success: Schema.Struct({ status: GitStatusSchema }),
@@ -362,6 +386,9 @@ export const SidecarRpcs = RpcGroup.make(
   Fetch,
   Push,
   Pull,
+  AbortOperation,
+  ContinueOperation,
+  ResolveConflict,
   GetStatus,
   GetLocalBranches,
   GetRemoteRefs,

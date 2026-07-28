@@ -16,6 +16,7 @@ interface CloseableWatch {
 interface Watcher {
   refs: FSWatcher
   index: FSWatcher
+  operationState: CloseableWatch
   workingTree: CloseableWatch
   ready: Promise<void>
   refsDrain: DebouncedDrain
@@ -97,6 +98,43 @@ export function shouldEmitWorkingTreeChange(filename: string | Buffer | null): b
   return filename !== null && !ignoreWorkingTree(filename.toString())
 }
 
+// The per-worktree markers that say an operation is in progress. They are what the conflict banner
+// is drawn from, and they live beside the index rather than inside it.
+const OPERATION_STATE_ENTRIES = new Set([
+  'MERGE_HEAD',
+  'CHERRY_PICK_HEAD',
+  'REVERT_HEAD',
+  'rebase-merge',
+  'rebase-apply',
+  'sequencer'
+])
+
+export function isOperationStateEntry(filename: string | Buffer | null): boolean {
+  if (filename === null) {
+    return false
+  }
+  return OPERATION_STATE_ENTRIES.has(path.basename(filename.toString()))
+}
+
+// `git cherry-pick --quit` and `git rebase --quit` in a terminal delete these markers without
+// touching the index, so a watch on the index alone leaves a live conflict banner on screen for an
+// operation that already ended. One non-recursive watch on the git dir covers the whole set.
+function startOperationStateWatch(gitDir: string, onChange: () => void): CloseableWatch {
+  try {
+    const watcher = fs.watch(gitDir, { persistent: true }, (_event, filename) => {
+      if (!isOperationStateEntry(filename)) {
+        return
+      }
+      onChange()
+    })
+    watcher.on('error', (err) => console.warn('[repoWatcher] operationState error', err))
+    return { close: () => watcher.close(), ready: Promise.resolve() }
+  } catch (err) {
+    console.warn('[repoWatcher] operationState watch unavailable', err)
+    return { close: () => {}, ready: Promise.resolve() }
+  }
+}
+
 export { startDebouncedDrain } from './debounced-drain'
 
 export interface GitDirs {
@@ -157,6 +195,10 @@ export function startWatching(
   index.on('all', () => indexDrain.push())
   index.on('error', (err) => console.warn('[repoWatcher] index error', err))
 
+  // An operation appearing or vanishing changes the same thing the index does — what getStatus
+  // reports — so it drains through the same debounce and emits the same kind.
+  const operationState = startOperationStateWatch(gitDir, () => indexDrain.push())
+
   // Watch the whole working tree. `ignoreWorkingTree` prunes .git and heavy build dirs so edits to
   // nested source files are detected without drowning in node_modules churn or git-internal events.
   const workingTree = startWorkingTreeWatch(repoPath, () => workingTreeDrain.push())
@@ -165,11 +207,14 @@ export function startWatching(
     void stopWatching(repoPath, webContents.id)
   }
   webContents.once('destroyed', onDestroyed)
-  const ready = Promise.all([refsReady, indexReady, workingTree.ready]).then(() => undefined)
+  const ready = Promise.all([refsReady, indexReady, operationState.ready, workingTree.ready]).then(
+    () => undefined
+  )
 
   watchers.set(key, {
     refs,
     index,
+    operationState,
     workingTree,
     ready,
     refsDrain,
@@ -194,7 +239,12 @@ export async function stopWatching(repoPath: string, webContentsId: number): Pro
   watcher.indexDrain.stop()
   watcher.workingTreeDrain.stop()
   try {
-    await Promise.all([watcher.refs.close(), watcher.index.close(), watcher.workingTree.close()])
+    await Promise.all([
+      watcher.refs.close(),
+      watcher.index.close(),
+      watcher.operationState.close(),
+      watcher.workingTree.close()
+    ])
   } catch (err) {
     console.warn('[repoWatcher] close error', err)
   }

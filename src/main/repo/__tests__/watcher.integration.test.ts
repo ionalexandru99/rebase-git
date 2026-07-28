@@ -20,6 +20,22 @@ function initRepo(dir: string): void {
   execFileSync('git', ['-C', dir, 'commit', '-m', 'initial'])
 }
 
+function startConflictedCherryPick(dir: string): void {
+  const run = (...args: string[]) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' })
+  fs.writeFileSync(path.join(dir, 'f.txt'), 'base\n')
+  run('add', 'f.txt')
+  run('commit', '-m', 'base')
+  run('checkout', '-b', 'feature')
+  fs.writeFileSync(path.join(dir, 'f.txt'), 'feature\n')
+  run('commit', '-am', 'feature work')
+  run('checkout', 'main')
+  fs.writeFileSync(path.join(dir, 'f.txt'), 'main\n')
+  run('commit', '-am', 'main work')
+  try {
+    run('cherry-pick', 'feature')
+  } catch {}
+}
+
 function makeFakeWebContents(id: number, events: RepoChange[]): WebContents {
   return {
     id,
@@ -121,6 +137,34 @@ describe('repo watcher integration', () => {
         execFileSync('git', ['-C', repoDir, 'add', name])
       })
       expect(seen).toBe(true)
+    } finally {
+      await stopWatching(repoDir, fakeWebContents.id)
+      fs.rmSync(repoDir, { recursive: true, force: true })
+    }
+  })
+
+  // `--quit` drops CHERRY_PICK_HEAD and sequencer/ and never rewrites the index, so a watch on the
+  // index alone would leave the renderer showing a banner for an operation that no longer exists.
+  it('emits an index change when a cherry-pick is quit from outside the app', async () => {
+    const events: RepoChange[] = []
+    const fakeWebContents = makeFakeWebContents(4, events)
+    const repoDir = fs.realpathSync.native(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-op-state-test-'))
+    )
+    initRepo(repoDir)
+    startConflictedCherryPick(repoDir)
+    expect(fs.existsSync(path.join(repoDir, '.git', 'CHERRY_PICK_HEAD'))).toBe(true)
+    const indexModifiedBefore = fs.statSync(path.join(repoDir, '.git', 'index')).mtimeMs
+
+    try {
+      await startWatching(repoDir, fakeWebContents)
+      events.length = 0
+      execFileSync('git', ['-C', repoDir, 'cherry-pick', '--quit'])
+
+      const seen = await waitFor(() => events.some((event) => event.kind === 'index'), 3000)
+      expect(seen).toBe(true)
+      expect(fs.existsSync(path.join(repoDir, '.git', 'CHERRY_PICK_HEAD'))).toBe(false)
+      expect(fs.statSync(path.join(repoDir, '.git', 'index')).mtimeMs).toBe(indexModifiedBefore)
     } finally {
       await stopWatching(repoDir, fakeWebContents.id)
       fs.rmSync(repoDir, { recursive: true, force: true })

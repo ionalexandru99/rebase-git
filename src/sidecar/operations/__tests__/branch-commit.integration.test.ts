@@ -13,6 +13,7 @@ import {
   createTag,
   deleteBranch,
   deleteTag,
+  detectOperationState,
   getLocalBranches,
   getRemoteRefs,
   mergeBranch,
@@ -169,6 +170,36 @@ describe('merge', () => {
     git('checkout', 'main')
     await runOp(mergeBranch(repoDir, 'local', 'merge/clean'))
     expect(fs.existsSync(path.join(repoDir, 'clean.txt'))).toBe(true)
+  })
+
+  // git names the commit after the ref as spelled, so merging the qualified form would stamp
+  // `Merge branch 'refs/heads/x'` onto every merge the app makes.
+  it('names a merge commit after the short ref, not the qualified one', async () => {
+    git('checkout', 'main')
+    await runOp(createBranch(repoDir, 'merge/named', undefined, true))
+    commitFile('named.txt', 'named\n', 'named work')
+    git('checkout', 'main')
+    commitFile('named-main.txt', 'main\n', 'main work beside the merge')
+
+    await runOp(mergeBranch(repoDir, 'local', 'merge/named'))
+
+    expect(git('log', '-1', '--format=%s').trim()).toMatch(/^Merge branch 'merge\/named'/)
+  })
+
+  it('prefills the conflicted merge message and marks conflicts with the short ref', async () => {
+    git('checkout', 'main')
+    commitFile('prefill.txt', 'main-side\n', 'main side of prefill')
+    await runOp(createBranch(repoDir, 'merge/prefill', 'HEAD~1', true))
+    commitFile('prefill.txt', 'branch-side\n', 'branch side of prefill')
+    git('checkout', 'main')
+
+    await runOp(Effect.either(mergeBranch(repoDir, 'local', 'merge/prefill')))
+    const operation = await detectOperationState(repoDir)
+
+    expect(operation?.mergeMessage).toMatch(/^Merge branch 'merge\/prefill'/)
+    expect(readFile('prefill.txt')).toContain('>>>>>>> merge/prefill')
+    expect(readFile('prefill.txt')).not.toContain('refs/heads/')
+    git('merge', '--abort')
   })
 
   it('reports a conflict without throwing', async () => {

@@ -1,4 +1,9 @@
 import type { HeadDropState } from '@/features/commit/amend-drops'
+import {
+  type ConflictLabels,
+  type ConflictSide,
+  conflictRowActions
+} from '@/features/status/conflict-resolution'
 import type { FileRowSource, FileStageState } from '@/features/status/status-file-rows'
 import type { FileAction } from '@/lib/git-actions'
 import { cn } from '@/lib/utils'
@@ -7,6 +12,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuTriggerArea
 } from '../../components/ui/context-menu'
@@ -26,6 +32,9 @@ interface FileRowProps {
   onUnstage?: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
+  conflictCode?: string
+  conflictLabels?: ConflictLabels
+  onResolveConflict?: (file: string, side: ConflictSide) => void
   showSource?: boolean
 }
 
@@ -105,6 +114,10 @@ export function FileRow(props: FileRowProps) {
   }
 
   const isStaged = props.stageState === 'staged'
+  const isConflicted = props.kind === 'conflicted' && Boolean(props.onResolveConflict)
+  const conflict = isConflicted
+    ? conflictRowActions(props.conflictCode, props.conflictLabels ?? null)
+    : null
 
   const toggleStaged = () => {
     if (isStaged) {
@@ -127,10 +140,26 @@ export function FileRow(props: FileRowProps) {
         {nameButton}
       </ContextMenuTriggerArea>
       <ContextMenuContent>
+        {conflict ? (
+          <>
+            {conflict.choices.map((choice) => (
+              <ContextMenuItem
+                key={choice.side}
+                onSelect={() => props.onResolveConflict?.(props.file, choice.side)}
+              >
+                {choice.label}
+              </ContextMenuItem>
+            ))}
+            {conflict.note ? <ContextMenuLabel>{conflict.note}</ContextMenuLabel> : null}
+            <ContextMenuSeparator />
+          </>
+        ) : null}
         {isStaged ? (
           <ContextMenuItem onSelect={unstage}>Unstage</ContextMenuItem>
         ) : (
-          <ContextMenuItem onSelect={() => props.onStage?.(props.file)}>Stage</ContextMenuItem>
+          <ContextMenuItem onSelect={() => props.onStage?.(props.file)}>
+            {isConflicted ? 'Mark as resolved' : 'Stage'}
+          </ContextMenuItem>
         )}
         <ContextMenuItem variant="destructive" onSelect={() => fileAction('discard')}>
           Discard changes

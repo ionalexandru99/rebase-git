@@ -1755,6 +1755,37 @@ describe('GitStoreProvider — runAction', () => {
     expect(sidecarMock.getStatus).not.toHaveBeenCalled()
   })
 
+  // The conflicted row changing state is the feedback; a toast per resolved file would sit on top of
+  // the commit button for seconds. Failures still have to speak up.
+  it('stays silent on success for a silentSuccess action but still refreshes and still reports errors', async () => {
+    const git = await openedStore()
+
+    const ok = await git.runAction(
+      'resolveConflict',
+      vi.fn().mockResolvedValue({ _tag: 'Ok' }),
+      'Resolve src/a.ts',
+      { silentSuccess: true }
+    )
+
+    expect(ok).toBe(true)
+    expect(toast.success).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    })
+
+    const failed = await git.runAction(
+      'resolveConflict',
+      vi.fn().mockResolvedValue({ _tag: 'GitError', message: 'no conflict to resolve' }),
+      'Resolve src/a.ts',
+      { silentSuccess: true }
+    )
+
+    expect(failed).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith('Resolve src/a.ts failed', {
+      description: 'no conflict to resolve'
+    })
+  })
+
   it('toasts the failure and invalidates nothing on a Git error', async () => {
     const git = await openedStore()
 
