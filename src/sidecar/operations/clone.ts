@@ -58,9 +58,11 @@ interface CloneTarget {
 const TERMINATE_TIMEOUT_MS = 5_000
 
 // How long the destination sweep keeps trying, and how often. Long enough to outlast a git that is
-// slow to let go on Windows, short enough that it cannot outlive the tab that started the clone.
-const CLEANUP_TIMEOUT_MS = 30_000
-const CLEANUP_RETRY_MS = 250
+// slow to let go on Windows, short enough that it is not still churning the filesystem long after
+// the clone it belongs to is forgotten — a destination it fails to clear is left empty, which the
+// next attempt is free to clone into anyway.
+const CLEANUP_TIMEOUT_MS = 5_000
+const CLEANUP_RETRY_MS = 500
 
 // Every tab shares this sidecar, so two of them can aim at one destination before either git child
 // creates it — `existsSync` cannot see a clone that has not written anything yet. Holding the path

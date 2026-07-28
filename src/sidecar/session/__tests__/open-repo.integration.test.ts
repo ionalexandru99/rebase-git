@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { RunningGitProcess, SpawnGitOptions } from '../../git/spawn'
 import { closeRepo, isCommitGraphTracked, openRepo } from '../../operations/index'
 import { processAlive, waitUntil } from '../../test-support/hanging-git'
-import { makeCommitHeavyRepo } from '../../test-support/repo-fixtures'
+import { makeCommitHeavyRepo, removeRepoDir } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import { requireOpen } from '../sessions'
 
@@ -68,7 +68,7 @@ beforeAll(() => {
 }, 300_000)
 
 afterAll(() => {
-  fs.rmSync(commitHeavyDir, { recursive: true, force: true })
+  removeRepoDir(commitHeavyDir)
 })
 
 beforeEach(() => {
@@ -86,7 +86,9 @@ beforeEach(() => {
 
 afterEach(async () => {
   await runOp(closeRepo(repoDir))
-  fs.rmSync(baseDir, { recursive: true, force: true })
+  // A commit-graph write that has only just been let go still holds its files on Windows, and a
+  // bare unlink loses that race: use the retrying removal the other fixtures share.
+  removeRepoDir(baseDir)
 })
 
 describe('openRepo gitdir resolution', () => {

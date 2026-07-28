@@ -182,9 +182,10 @@ test('a reload tears down the clone the previous document started', async ({ har
         { cause: error }
       )
     }
-    expect(fs.readFileSync(path.join(destination, 'stalled', 'README.md'), 'utf8')).toBe(
-      '# stalled\n'
-    )
+    // Windows checks out with CRLF by default, and the point here is that the working tree arrived,
+    // not which line ending git chose for it.
+    const readme = fs.readFileSync(path.join(destination, 'stalled', 'README.md'), 'utf8')
+    expect(readme.replace(/\r\n/g, '\n')).toBe('# stalled\n')
     harness.track(path.join(destination, 'stalled'))
   } finally {
     await stalled.close()
