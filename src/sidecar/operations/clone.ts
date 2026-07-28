@@ -126,11 +126,8 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
       return Effect.fail(new GitError({ message: `${folderName} already exists in that folder` }))
     }
     claimedDestinations.add(claimKey)
-    sweepOrphanedStaging(parentDir, folderName)
-    const stagingPath = nodePath.join(
-      parentDir,
-      `${stagingPrefix(folderName)}${crypto.randomBytes(4).toString('hex')}`
-    )
+    const stagingName = `${stagingPrefix(folderName)}${crypto.randomBytes(4).toString('hex')}`
+    const stagingPath = nodePath.join(parentDir, stagingName)
     try {
       fs.mkdirSync(stagingPath)
     } catch (error) {
@@ -139,6 +136,7 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
         new GitError({ message: `cannot write to that folder: ${(error as Error).message}` })
       )
     }
+    sweepOrphanedStaging(parentDir, folderName, stagingName)
     return Effect.succeed({ url, path: target, stagingPath, claimKey })
   })
 }
@@ -147,23 +145,28 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
 // remember the staging directory it was writing. The full name pattern is ours alone — folder names
 // starting with a dot are rejected up front — so whatever wears it, prefix and exact hex suffix
 // both, is a dead clone's leavings. A near miss like `.repo.rebase-clone-backup` is somebody's own
-// file and is left alone. Best effort: an orphaned git may still be holding files, and the clone
-// about to start does not depend on this succeeding.
-function sweepOrphanedStaging(parentDir: string, folderName: string): void {
-  let entries: string[]
-  try {
-    entries = fs.readdirSync(parentDir)
-  } catch {
-    return
-  }
+// file and is left alone. Detached and best effort, twice over: what it clears may be a nearly
+// finished clone gigabytes deep, and the sidecar serves every open repository from one event loop
+// that must not stall on housekeeping — and an orphaned git may still be holding files anyway. The
+// clone about to start excludes its own staging directory by name and depends on none of this.
+function sweepOrphanedStaging(parentDir: string, folderName: string, ownStagingName: string): void {
   const prefix = stagingPrefix(folderName)
-  for (const entry of entries) {
-    if (entry.startsWith(prefix) && STAGING_SUFFIX.test(entry.slice(prefix.length))) {
-      try {
-        forceRemove(nodePath.join(parentDir, entry))
-      } catch {}
-    }
-  }
+  void fs.promises
+    .readdir(parentDir)
+    .then(async (entries) => {
+      for (const entry of entries) {
+        if (
+          entry !== ownStagingName &&
+          entry.startsWith(prefix) &&
+          STAGING_SUFFIX.test(entry.slice(prefix.length))
+        ) {
+          try {
+            await forceRemove(nodePath.join(parentDir, entry))
+          } catch {}
+        }
+      }
+    })
+    .catch(() => {})
 }
 
 // `git clone` is happy to write into a directory that already exists as long as it is empty, and
@@ -181,10 +184,10 @@ export function isAvailableDestination(target: string): boolean {
 // git writes its object and pack files read-only, and Windows refuses to unlink a read-only file.
 // `force` only forgives a missing path, so the permission error survives every retry — the write bit
 // has to come off first. On POSIX this is a no-op the directory already permits.
-function clearReadOnly(entry: string): void {
+async function clearReadOnly(entry: string): Promise<void> {
   let stats: fs.Stats
   try {
-    stats = fs.lstatSync(entry)
+    stats = await fs.promises.lstat(entry)
   } catch {
     return
   }
@@ -194,22 +197,30 @@ function clearReadOnly(entry: string): void {
     return
   }
   try {
-    fs.chmodSync(entry, stats.isDirectory() ? 0o700 : 0o600)
+    await fs.promises.chmod(entry, stats.isDirectory() ? 0o700 : 0o600)
   } catch {}
   if (!stats.isDirectory()) {
     return
   }
-  for (const child of fs.readdirSync(entry)) {
-    clearReadOnly(nodePath.join(entry, child))
+  let children: string[]
+  try {
+    children = await fs.promises.readdir(entry)
+  } catch {
+    return
+  }
+  for (const child of children) {
+    await clearReadOnly(nodePath.join(entry, child))
   }
 }
 
-export function forceRemove(target: string): void {
+// Asynchronous end to end: what it removes may be a whole working tree, and the sidecar serves
+// every open repository from one event loop that must not stall on a traversal.
+export async function forceRemove(target: string): Promise<void> {
   try {
-    fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    await fs.promises.rm(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   } catch {
-    clearReadOnly(target)
-    fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    await clearReadOnly(target)
+    await fs.promises.rm(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 }
 
@@ -219,16 +230,16 @@ export function forceRemove(target: string): void {
 // clear blocks nothing: no retry aims at its name, and the next attempt sweeps it again.
 function sweepStagingDir(stagingPath: string): void {
   const deadline = Date.now() + CLEANUP_TIMEOUT_MS
-  const attempt = () => {
+  const attempt = async () => {
     try {
-      forceRemove(stagingPath)
+      await forceRemove(stagingPath)
     } catch {}
     if (!fs.existsSync(stagingPath) || Date.now() >= deadline) {
       return
     }
     setTimeout(attempt, CLEANUP_RETRY_MS).unref?.()
   }
-  attempt()
+  void attempt()
 }
 
 // git has finished and exited by the time this runs, but Windows may still be touching the freshly
@@ -238,16 +249,25 @@ function sweepStagingDir(stagingPath: string): void {
 const PROMOTE_RETRIES = 10
 const PROMOTE_RETRY_MS = 100
 
-async function promoteClone(target: CloneTarget): Promise<void> {
+export async function promoteClone(stagingPath: string, destination: string): Promise<void> {
+  let removedBorrowedDirectory = false
   for (let attempt = 1; ; attempt++) {
     try {
-      fs.rmdirSync(target.path)
+      fs.rmdirSync(destination)
+      removedBorrowedDirectory = true
     } catch {}
     try {
-      fs.renameSync(target.stagingPath, target.path)
+      fs.renameSync(stagingPath, destination)
       return
     } catch (error) {
       if (attempt >= PROMOTE_RETRIES) {
+        // The empty directory the user had here was only removed to make room for a rename that
+        // never landed; failing without giving it back would turn our failure into their loss.
+        if (removedBorrowedDirectory) {
+          try {
+            fs.mkdirSync(destination)
+          } catch {}
+        }
         throw error
       }
       await new Promise((resolve) => setTimeout(resolve, PROMOTE_RETRY_MS))
@@ -324,7 +344,7 @@ function progressStream(
         async ({ code, stderr: collected }) => {
           if (code === 0) {
             try {
-              await promoteClone(target)
+              await promoteClone(target.stagingPath, target.path)
             } catch (error) {
               emit.fail(
                 new GitError({

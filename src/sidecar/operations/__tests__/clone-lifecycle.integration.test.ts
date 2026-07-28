@@ -6,7 +6,7 @@ import path from 'node:path'
 import { Effect, Exit, Fiber, Stream } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { GitError } from '../../git/errors'
-import { cloneRepo, destinationClaimKey, forceRemove } from '../clone'
+import { cloneRepo, destinationClaimKey, forceRemove, promoteClone } from '../clone'
 
 let homeRoot: string
 let sourceRepo: string
@@ -226,14 +226,14 @@ describe('clearing what a dead clone left in staging', () => {
 
   // git writes its objects and packs read-only, which Windows will not unlink: the staging directory
   // stayed behind, and no amount of retrying a permission error was going to change that.
-  it('removes the read-only files git leaves in a pack directory', () => {
+  it('removes the read-only files git leaves in a pack directory', async () => {
     const packDirectory = path.join(partial('read-only'), '.git', 'objects', 'pack')
     fs.mkdirSync(packDirectory, { recursive: true })
     const pack = path.join(packDirectory, 'pack-abc.pack')
     fs.writeFileSync(pack, 'pack\n')
     fs.chmodSync(pack, 0o444)
 
-    forceRemove(partial('read-only'))
+    await forceRemove(partial('read-only'))
 
     expect(fs.existsSync(partial('read-only'))).toBe(false)
   })
@@ -244,12 +244,12 @@ describe('clearing what a dead clone left in staging', () => {
   // the runner does not hold.
   it.skipIf(process.platform === 'win32')(
     'does not follow a symlink out of the clone while clearing read-only bits',
-    () => {
+    async () => {
       const outside = path.join(destination, 'outside-target.txt')
       fs.writeFileSync(outside, 'precious\n')
       fs.chmodSync(outside, 0o444)
 
-      // A read-only subdirectory forces the plain rmSync to fail everywhere, so the clearing pass
+      // A read-only subdirectory forces the plain rm to fail everywhere, so the clearing pass
       // actually walks the tree and meets the link.
       const lockedDirectory = path.join(partial('linked'), 'locked')
       fs.mkdirSync(lockedDirectory, { recursive: true })
@@ -257,7 +257,7 @@ describe('clearing what a dead clone left in staging', () => {
       fs.chmodSync(lockedDirectory, 0o500)
 
       try {
-        forceRemove(partial('linked'))
+        await forceRemove(partial('linked'))
       } finally {
         fs.chmodSync(outside, 0o600)
       }
@@ -292,9 +292,26 @@ describe('what a crashed sidecar left behind', () => {
 
     expect(Exit.isSuccess(exit)).toBe(true)
     expect(fs.existsSync(path.join(destination, 'crashy', '.git'))).toBe(true)
-    expect(fs.existsSync(orphan)).toBe(false)
+    // The sweep runs detached so it cannot stall the sidecar; give it a moment to land.
+    await expect.poll(() => fs.existsSync(orphan), { timeout: 10_000, interval: 250 }).toBe(false)
     expect(fs.readFileSync(path.join(nearMiss, 'notes.txt'), 'utf8')).toBe('mine\n')
     fs.rmSync(nearMiss, { recursive: true, force: true })
+  })
+})
+
+// The empty directory the user pre-created is removed to make room for the rename; a promotion
+// that never lands — Windows can hold a freshly written staging tree — has to give it back.
+describe('a promotion that cannot land', () => {
+  it('gives a borrowed empty destination back', async () => {
+    const borrowed = path.join(destination, 'borrowed-back')
+    fs.mkdirSync(borrowed)
+
+    await expect(
+      promoteClone(path.join(destination, '.borrowed-back.rebase-clone-00000000'), borrowed)
+    ).rejects.toThrow()
+
+    expect(fs.existsSync(borrowed)).toBe(true)
+    expect(fs.readdirSync(borrowed)).toEqual([])
   })
 })
 
