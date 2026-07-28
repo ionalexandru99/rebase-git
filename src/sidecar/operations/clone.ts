@@ -117,7 +117,10 @@ export function removePartialClone(target: string): void {
     if (!looksLikeGitsOwnWork) {
       return
     }
-    fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    // Windows holds the files a killed git had open for a moment after it dies, and this is the only
+    // attempt anyone makes: give up too early and the destination stays blocked for good, with the
+    // retry reporting a folder the user cannot see the point of.
+    fs.rmSync(target, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
   } catch {}
 }
 

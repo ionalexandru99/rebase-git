@@ -121,7 +121,12 @@ export function CloneRepoDialog(props: CloneRepoDialogProps) {
               Enter an HTTPS or SSH repository URL, for example https://github.com/owner/repo.git
             </p>
           ) : clone.error ? (
-            <p className="whitespace-pre-wrap break-words text-destructive">{clone.error}</p>
+            <p
+              data-testid="clone-error"
+              className="whitespace-pre-wrap break-words text-destructive"
+            >
+              {clone.error}
+            </p>
           ) : clone.progress ? (
             <CloneProgressBar phase={clone.progress.phase} percent={clone.progress.percent} />
           ) : null}

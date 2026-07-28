@@ -157,12 +157,24 @@ test('a reload tears down the clone the previous document started', async ({ har
     await page.getByLabel('Repository URL').fill(fileUrl(source))
 
     // The contract is that the destination comes back, not that it comes back instantly: killing the
-    // process tree and clearing the half-written folder takes measurably longer on Windows. Retrying
-    // the clone still fails the test if the teardown never happens.
-    await expect(async () => {
-      await page.getByRole('button', { name: 'Clone', exact: true }).click()
-      await expect(page.getByRole('tab', { name: 'stalled' })).toBeVisible({ timeout: 5_000 })
-    }).toPass({ timeout: 60_000, intervals: [1_000] })
+    // process tree and clearing what git left takes measurably longer on Windows. Retrying still
+    // fails the test if the teardown never happens — and reports what the dialog said when it does,
+    // because "already being cloned" and "already exists" point at different halves of the teardown.
+    try {
+      await expect(async () => {
+        await page.getByRole('button', { name: 'Clone', exact: true }).click()
+        await expect(page.getByRole('tab', { name: 'stalled' })).toBeVisible({ timeout: 5_000 })
+      }).toPass({ timeout: 60_000, intervals: [1_000] })
+    } catch (error) {
+      const reported = await page
+        .getByTestId('clone-error')
+        .textContent()
+        .catch(() => null)
+      throw new Error(
+        `the destination never came back after the reload; the dialog reported: ${reported ?? '(nothing)'}`,
+        { cause: error }
+      )
+    }
     expect(fs.readFileSync(path.join(destination, 'stalled', 'README.md'), 'utf8')).toBe(
       '# stalled\n'
     )
