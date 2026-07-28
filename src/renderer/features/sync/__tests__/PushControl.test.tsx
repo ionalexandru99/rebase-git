@@ -1,10 +1,15 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PushForce } from '@/lib/rpc-client'
 import type { PushOutcome } from '@/stores/action-runner'
 import { PushControl } from '../PushControl'
 
 const ok: PushOutcome = { kind: 'ok' }
+
+vi.mock('sonner', () => ({
+  toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() }
+}))
 
 function renderControl(overrides: Partial<Parameters<typeof PushControl>[0]> = {}) {
   const push = overrides.push ?? vi.fn(async () => ok)
@@ -257,6 +262,26 @@ describe('PushControl', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.queryByText('late result')).not.toBeInTheDocument()
+  })
+
+  it('says why the flow ended when a forced push is refused for a reason it cannot escalate', async () => {
+    const push = vi.fn(
+      async (): Promise<PushOutcome> => ({
+        kind: 'rejected',
+        reason: 'non-fast-forward',
+        lostCommits: []
+      })
+    )
+    renderControl({ ahead: 2, behind: 3, push })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(toast.error).toHaveBeenCalledWith(
+      'Force push rejected',
+      expect.objectContaining({ description: expect.stringContaining('refused the update') })
+    )
   })
 
   it('shows a pending force confirmation and submits it only once', async () => {

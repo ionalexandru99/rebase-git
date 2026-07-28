@@ -9,6 +9,7 @@ import {
   useState
 } from 'react'
 import { formatCause } from '@/lib/format-cause'
+import { gitFailureBannerText } from '@/lib/git-report'
 import { rpcCloseRepo, rpcDisownRepo, rpcOpenRepo } from '@/lib/rpc-client'
 
 export interface OpenedRepo {
@@ -27,13 +28,7 @@ interface RepoSessionState {
   resetEpoch: number
 }
 
-export type RepoSessionErrorSource =
-  | 'session'
-  | 'status'
-  | 'mutation'
-  | 'refs'
-  | 'fetch'
-  | 'history'
+export type RepoSessionErrorSource = 'session' | 'status' | 'mutation' | 'refs' | 'history'
 
 interface RepoSessionError {
   message: string
@@ -89,13 +84,12 @@ const initialSessionState: RepoSessionState = {
 const errorSourcesByPriority: readonly RepoSessionErrorSource[] = [
   'session',
   'mutation',
-  'fetch',
   'history',
   'status',
   'refs'
 ]
 
-const displayedError = (errors: RepoSessionErrors): string | null => {
+const displayedError = (errors: RepoSessionErrors): RepoSessionError | null => {
   let selected: RepoSessionError | undefined
   for (const source of errorSourcesByPriority) {
     const candidate = errors[source]
@@ -103,7 +97,7 @@ const displayedError = (errors: RepoSessionErrors): string | null => {
       selected = candidate
     }
   }
-  return selected?.message ?? null
+  return selected ?? null
 }
 
 const pendingUnmountCloses = new Map<string, ReturnType<typeof setTimeout>>()
@@ -229,7 +223,9 @@ export function useRepoSessionController(
 
         if (openResponse._tag !== 'Ok') {
           const errorMessage =
-            openResponse._tag === 'NotARepo' ? 'Not a git repository' : openResponse.message
+            openResponse._tag === 'NotARepo'
+              ? 'Not a git repository'
+              : gitFailureBannerText('Could not open this repository', openResponse.message)
           const sequence = ++errorSequenceRef.current
           setSessionState((previous) => ({
             ...previous,
@@ -363,28 +359,28 @@ export function useRepoSessionController(
     }
   }, [lifecycle])
 
-  const publicValue = useMemo<RepoSession>(
-    () => ({
+  const publicValue = useMemo<RepoSession>(() => {
+    const error = displayedError(sessionState.errors)
+    return {
       repoPath: sessionState.repoPath,
       opening: sessionState.opening,
       openGeneration: sessionState.openGeneration,
       resetEpoch: sessionState.resetEpoch,
-      error: displayedError(sessionState.errors),
+      error: error?.message ?? null,
       openRepo,
       closeRepo,
       disownRepo
-    }),
-    [
-      sessionState.repoPath,
-      sessionState.opening,
-      sessionState.openGeneration,
-      sessionState.resetEpoch,
-      sessionState.errors,
-      openRepo,
-      closeRepo,
-      disownRepo
-    ]
-  )
+    }
+  }, [
+    sessionState.repoPath,
+    sessionState.opening,
+    sessionState.openGeneration,
+    sessionState.resetEpoch,
+    sessionState.errors,
+    openRepo,
+    closeRepo,
+    disownRepo
+  ])
 
   return {
     ...publicValue,

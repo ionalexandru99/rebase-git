@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { formatCause } from '@/lib/format-cause'
+import { toastEngineFailure, toastGitFailure } from '@/lib/git-report'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
 import {
   type PushForce,
@@ -60,6 +61,14 @@ export interface ActionRunner {
   busy: boolean
 }
 
+// The write buttons disable themselves while an action runs, but a keyboard shortcut or a second
+// window can still land one mid-flight — say so instead of dropping it.
+const notifyBusy = (): void => {
+  toast.info('Another Git action is still running', {
+    description: 'Wait for it to finish, then try again.'
+  })
+}
+
 const pushLabel = (force?: PushForce): string => {
   if (force === 'overwrite') {
     return 'Overwrote remote'
@@ -83,7 +92,8 @@ export interface RepoMutationCoordinator {
   run: <Result>(
     operation: string,
     rejectedResult: Result,
-    task: () => Promise<Result>
+    task: () => Promise<Result>,
+    onRejected?: () => void
   ) => Promise<Result>
 }
 
@@ -91,8 +101,14 @@ export function useRepoMutationCoordinator(): RepoMutationCoordinator {
   const activeRef = useRef<string | null>(null)
   const [activeOperation, setActiveOperation] = useState<string | null>(null)
   const run = useCallback(
-    async <Result,>(operation: string, rejectedResult: Result, task: () => Promise<Result>) => {
+    async <Result,>(
+      operation: string,
+      rejectedResult: Result,
+      task: () => Promise<Result>,
+      onRejected?: () => void
+    ) => {
       if (activeRef.current) {
+        onRejected?.()
         return rejectedResult
       }
       activeRef.current = operation
@@ -142,7 +158,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         return false
       }
       if (response._tag === 'GitError') {
-        toast.error(`${label} failed`, { description: response.message })
+        toastGitFailure(`${label} failed`, response.message ?? '')
         return false
       }
       if (response._tag === 'RepoNotOpen') {
@@ -155,14 +171,19 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       if (!isCurrentRepo(generation, repoPath)) {
         return false
       }
-      toast.error(`${label} failed`, { description: formatCause(error) })
+      toastEngineFailure(`${label} failed`, formatCause(error))
       return false
     }
   }, [])
 
   const runAction = useCallback<RunAction>(
     (operation, call, label) =>
-      mutationCoordinator.run(operation, false, () => runActionAttempt(operation, call, label)),
+      mutationCoordinator.run(
+        operation,
+        false,
+        () => runActionAttempt(operation, call, label),
+        notifyBusy
+      ),
     [mutationCoordinator.run, runActionAttempt]
   )
 
@@ -196,14 +217,14 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         toast.error('Repository is not open')
         return { kind: 'error', message: 'Repository is not open' }
       }
-      toast.error(`${label} failed`, { description: response.message })
+      toastGitFailure(`${label} failed`, response.message)
       return { kind: 'error', message: response.message }
     } catch (error) {
       const message = formatCause(error)
       if (!isCurrentRepo(generation, repoPath)) {
         return { kind: 'error', message }
       }
-      toast.error(`${label} failed`, { description: message })
+      toastEngineFailure(`${label} failed`, message)
       return { kind: 'error', message }
     }
   }
@@ -265,13 +286,13 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         toast.error('Repository is not open')
         return false
       }
-      toast.error('Amend failed', { description: response.message })
+      toastGitFailure('Amend failed', response.message)
       return false
     } catch (error) {
       if (!isCurrentRepo(generation, repoPath)) {
         return false
       }
-      toast.error('Amend failed', { description: formatCause(error) })
+      toastEngineFailure('Amend failed', formatCause(error))
       return false
     }
   }
@@ -319,26 +340,37 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
     mutationCoordinator.run<PushOutcome>(
       Push._tag,
       { kind: 'error', message: 'Another repository action is in progress' },
-      () => pushMutation.mutateAsync({ force, expectedRemoteSha })
+      () => pushMutation.mutateAsync({ force, expectedRemoteSha }),
+      notifyBusy
     )
 
   return {
     runAction,
     commit: (message: string) =>
-      mutationCoordinator.run(Commit._tag, false, () => commitMutation.mutateAsync(message)),
+      mutationCoordinator.run(
+        Commit._tag,
+        false,
+        () => commitMutation.mutateAsync(message),
+        notifyBusy
+      ),
     amend: (
       message: string,
       droppedHeadPaths: string[],
       droppedHeadHunks: { file: string; hunks: string[] }[],
       expectedHead: string
     ) =>
-      mutationCoordinator.run(AmendCommit._tag, false, () =>
-        amendMutation.mutateAsync({ message, droppedHeadPaths, droppedHeadHunks, expectedHead })
+      mutationCoordinator.run(
+        AmendCommit._tag,
+        false,
+        () =>
+          amendMutation.mutateAsync({ message, droppedHeadPaths, droppedHeadHunks, expectedHead }),
+        notifyBusy
       ),
     loadHeadMessage,
     push,
     pushNow: () => push().then((outcome) => outcome.kind === 'ok'),
-    pullNow: () => mutationCoordinator.run(Pull._tag, false, () => pullMutation.mutateAsync()),
+    pullNow: () =>
+      mutationCoordinator.run(Pull._tag, false, () => pullMutation.mutateAsync(), notifyBusy),
     committing: mutationCoordinator.activeOperation === Commit._tag,
     amending: mutationCoordinator.activeOperation === AmendCommit._tag,
     pushing: mutationCoordinator.activeOperation === Push._tag,

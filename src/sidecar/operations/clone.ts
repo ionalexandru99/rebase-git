@@ -3,7 +3,7 @@ import nodePath from 'node:path'
 import { isSafeCloneFolderName, isSupportedCloneUrl } from '@shared/clone-url'
 import type { CloneProgress } from '@shared/schemas/git'
 import { Effect, Stream } from 'effect'
-import { promptlessEnv } from '../git/env'
+import { applyNonInteractiveGitEnv } from '../git/environment'
 import { GitError } from '../git/errors'
 import { resolveDirectoryWithinHome } from '../git/path-guards'
 import { type RunningGitProcess, startGit } from '../git/spawn'
@@ -298,7 +298,7 @@ export function cloneRepo(request: CloneRequest): Stream.Stream<CloneProgress, G
         Effect.sync(() =>
           startGit(['clone', '--progress', '--', target.url, target.path], {
             collectStdout: false,
-            env: promptlessEnv()
+            env: applyNonInteractiveGitEnv({ ...process.env })
           })
         ),
         (process) =>
