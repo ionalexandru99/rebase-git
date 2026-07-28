@@ -21,6 +21,7 @@ function catalog(overrides: Partial<WorkspaceCatalog> = {}): WorkspaceCatalog {
     switchWorkspace: vi.fn(async () => {}),
     addWorkspace: vi.fn(async () => null),
     removeWorkspace: vi.fn(async () => {}),
+    refresh: vi.fn(async () => {}),
     ...overrides
   }
 }
@@ -84,6 +85,43 @@ describe('NewTab clone flow', () => {
       parentDir: '/home/user/code',
       folderName: 'repo'
     })
+  })
+
+  // Without this the clone is missing from every later new tab until a restart: recents and the
+  // workspace listing are both read once at startup.
+  it('puts the clone into the live catalog, and does not on failure', async () => {
+    const cloned = catalog()
+    vi.mocked(window.electronAPI.cloneRepo).mockResolvedValue({
+      _tag: 'Ok',
+      path: '/home/user/code/repo'
+    })
+
+    const { unmount } = render(<NewTab catalog={cloned} onOpenRepo={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Clone…/ }))
+    fireEvent.change(screen.getByLabelText('Repository URL'), {
+      target: { value: 'https://github.com/owner/repo.git' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Clone' }))
+
+    await waitFor(() => {
+      expect(cloned.refresh).toHaveBeenCalled()
+    })
+    unmount()
+
+    const failed = catalog()
+    vi.mocked(window.electronAPI.cloneRepo).mockResolvedValue({
+      _tag: 'GitError',
+      message: 'fatal: repository not found'
+    })
+    render(<NewTab catalog={failed} onOpenRepo={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Clone…/ }))
+    fireEvent.change(screen.getByLabelText('Repository URL'), {
+      target: { value: 'https://github.com/owner/missing.git' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Clone' }))
+
+    expect(await screen.findByText('fatal: repository not found')).toBeTruthy()
+    expect(failed.refresh).not.toHaveBeenCalled()
   })
 
   it('keeps the dialog open and shows the git message when the clone fails', async () => {

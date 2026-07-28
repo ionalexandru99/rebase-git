@@ -9,6 +9,9 @@ describe('isSupportedCloneUrl', () => {
     expect(isSupportedCloneUrl('git://example.com/repo.git')).toBe(true)
     expect(isSupportedCloneUrl('git@github.com:owner/repo.git')).toBe(true)
     expect(isSupportedCloneUrl('  https://github.com/owner/repo  ')).toBe(true)
+    // A local repository reached as a URL, which is also how the clone tests talk to their fixtures.
+    expect(isSupportedCloneUrl('file:///tmp/repo.git')).toBe(true)
+    expect(isSupportedCloneUrl('file:///home/user/code/repo')).toBe(true)
   })
 
   it('rejects anything git could read as a flag, a local path, or two arguments', () => {
@@ -30,6 +33,8 @@ describe('deriveCloneFolderName', () => {
     expect(deriveCloneFolderName('git@github.com:owner/my-repo.git')).toBe('my-repo')
     expect(deriveCloneFolderName('ssh://git@host:2222/owner/repo.git')).toBe('repo')
     expect(deriveCloneFolderName('https://example.com/repo.git?ref=main')).toBe('repo')
+    expect(deriveCloneFolderName('file:///tmp/repo.git')).toBe('repo')
+    expect(deriveCloneFolderName('file:///home/user/code/repo')).toBe('repo')
   })
 
   it('returns null when no usable folder name can be read from the URL', () => {

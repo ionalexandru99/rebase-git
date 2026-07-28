@@ -7,6 +7,7 @@ import {
 } from '@shared/schemas/ipc'
 import { ipcMain, webContents as webContentsApi } from 'electron'
 import { sidecarClone } from '../sidecar/process'
+import { addRecentRepo } from '../store/index'
 import { type CloneRegistry, createCloneRegistry } from './clone-registry'
 
 const registry: CloneRegistry = createCloneRegistry()
@@ -60,6 +61,9 @@ export function register(): void {
           })
         }
       )
+      // Cloning a repository is as much an act of choosing it as opening one is, and recording it
+      // here means it survives the tab being closed before the open ever lands.
+      addRecentRepo(path)
       return parseOrThrow(CloneRepoResponseSchema, { _tag: 'Ok', path })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

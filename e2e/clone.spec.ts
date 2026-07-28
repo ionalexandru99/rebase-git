@@ -74,6 +74,17 @@ test('clones a repository from the new tab and lands in it', async ({ harness })
   await expect(clonedTab).toHaveAttribute('aria-selected', 'true')
   expect(fs.existsSync(path.join(destination, clonedName, '.git'))).toBe(true)
 
+  // The catalogs are read once at startup, so a clone the app did not know about a moment ago has to
+  // be registered live — otherwise closing the tab loses the only route back to it.
+  await page.getByRole('button', { name: `Close tab ${clonedName}`, exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Open a repository' })).toBeVisible({
+    timeout: 15_000
+  })
+  const recentCard = page.getByTestId('repo-picker-recent').filter({ hasText: clonedName })
+  await expect(recentCard.first()).toBeVisible({ timeout: 15_000 })
+  await recentCard.first().click()
+  await expect(page.getByRole('tab', { name: clonedName })).toBeVisible({ timeout: 30_000 })
+
   // Hand the clone to the harness so its tab is closed and the repo released before the sweep.
   harness.track(path.join(destination, clonedName))
 })
