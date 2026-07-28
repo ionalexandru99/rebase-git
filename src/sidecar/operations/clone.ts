@@ -49,13 +49,31 @@ export function cloneFailureMessage(stderr: string, code: number | null): string
 interface CloneTarget {
   url: string
   path: string
+  claimKey: string
 }
+
+// A clone that is torn down while git is still connecting can take a moment to bring the process
+// group down, and the failure it is holding up is on its way to the UI. The force-kill inside
+// terminate lands well before this, so reaching the bound means something is stuck, not slow.
+const TERMINATE_TIMEOUT_MS = 5_000
 
 // Every tab shares this sidecar, so two of them can aim at one destination before either git child
 // creates it — `existsSync` cannot see a clone that has not written anything yet. Holding the path
 // for the length of the operation makes the loser fail before it spawns git, which is also what
 // makes the cleanup below safe: a running clone owns its directory outright.
 const claimedDestinations = new Set<string>()
+
+// Windows and macOS default to case-insensitive filesystems, where `Repo` and `repo` name one
+// directory but two different strings. Folding them together keeps two tabs from both believing
+// they own the destination — and so from one of them deleting the other's clone on the way out.
+const CASE_INSENSITIVE_FILESYSTEM = process.platform === 'win32' || process.platform === 'darwin'
+
+export function destinationClaimKey(
+  target: string,
+  caseInsensitive: boolean = CASE_INSENSITIVE_FILESYSTEM
+): string {
+  return caseInsensitive ? target.toLowerCase() : target
+}
 
 function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitError> {
   return Effect.suspend(() => {
@@ -72,17 +90,18 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
       return Effect.fail(new GitError({ message: INVALID_DESTINATION }))
     }
     const target = nodePath.join(parentDir, folderName)
+    const claimKey = destinationClaimKey(target)
     // A clone in flight is reported as such rather than as a folder that already exists: by the time
     // git has created the directory, "already exists" would be true but misleading. These three
     // steps run without interleaving, so the claim can never outlive a rejected request.
-    if (claimedDestinations.has(target)) {
+    if (claimedDestinations.has(claimKey)) {
       return Effect.fail(new GitError({ message: `${folderName} is already being cloned` }))
     }
     if (fs.existsSync(target)) {
       return Effect.fail(new GitError({ message: `${folderName} already exists in that folder` }))
     }
-    claimedDestinations.add(target)
-    return Effect.succeed({ url, path: target })
+    claimedDestinations.add(claimKey)
+    return Effect.succeed({ url, path: target, claimKey })
   })
 }
 
@@ -96,6 +115,23 @@ function removePartialClone(target: string): void {
     }
     fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
   } catch {}
+}
+
+// Taking the process group down is best effort: a member that will not die must not hold the clone's
+// own failure back from the UI, and the kill escalation inside terminate keeps running regardless.
+async function terminateWithin(process: RunningGitProcess, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const bound = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs)
+    timer.unref?.()
+  })
+  try {
+    await Promise.race([process.terminate(), bound])
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+    }
+  }
 }
 
 function canonicalize(target: string): string {
@@ -166,7 +202,7 @@ export function cloneRepo(request: CloneRequest): Stream.Stream<CloneProgress, G
   return Stream.unwrapScoped(
     Effect.gen(function* () {
       const target = yield* Effect.acquireRelease(prepareTarget(request), (claimed) =>
-        Effect.sync(() => claimedDestinations.delete(claimed.path))
+        Effect.sync(() => claimedDestinations.delete(claimed.claimKey))
       )
       const state: CloneState = { succeeded: false }
       const running = yield* Effect.acquireRelease(
@@ -178,7 +214,7 @@ export function cloneRepo(request: CloneRequest): Stream.Stream<CloneProgress, G
         ),
         (process) =>
           Effect.promise(async () => {
-            await process.terminate()
+            await terminateWithin(process, TERMINATE_TIMEOUT_MS)
             if (!state.succeeded) {
               removePartialClone(target.path)
             }

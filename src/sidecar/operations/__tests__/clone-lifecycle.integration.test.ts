@@ -6,7 +6,7 @@ import path from 'node:path'
 import { Effect, Exit, Fiber, Stream } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { GitError } from '../../git/errors'
-import { cloneRepo } from '../clone'
+import { cloneRepo, destinationClaimKey } from '../clone'
 
 let homeRoot: string
 let sourceRepo: string
@@ -98,6 +98,35 @@ describe('two clones aimed at one destination', () => {
     await Effect.runPromise(Fiber.interrupt(first))
   })
 
+  // On a case-insensitive filesystem this is the same contest as above wearing a different hat; on
+  // Linux the two really are different directories and both are allowed to proceed.
+  it('treats a differently-cased destination the way the filesystem does', async () => {
+    const first = await startCloneInBackground({
+      url: `git://127.0.0.1:${stalledPort}/stalled.git`,
+      parentDir: destination,
+      folderName: 'CasedRepo'
+    })
+
+    const second = await Effect.runPromiseExit(
+      Stream.runDrain(
+        cloneRepo({
+          url: fileUrl(sourceRepo),
+          parentDir: destination,
+          folderName: 'casedrepo'
+        })
+      )
+    )
+
+    if (destinationClaimKey('a') === destinationClaimKey('A')) {
+      expect(failureOf(second).message).toBe('casedrepo is already being cloned')
+    } else {
+      expect(Exit.isSuccess(second)).toBe(true)
+    }
+
+    await Effect.runPromise(Fiber.interrupt(first))
+    fs.rmSync(path.join(destination, 'casedrepo'), { recursive: true, force: true })
+  })
+
   it('frees the destination again once the first clone is over', async () => {
     const request = {
       url: fileUrl(sourceRepo),
@@ -110,6 +139,26 @@ describe('two clones aimed at one destination', () => {
     const second = await Effect.runPromiseExit(Stream.runDrain(cloneRepo(request)))
     expect(Exit.isSuccess(second)).toBe(true)
     expect(fs.existsSync(path.join(destination, 'released', '.git'))).toBe(true)
+  })
+})
+
+// Two tabs asking for `Repo` and `repo` name one directory on Windows and macOS and two on Linux,
+// so the key the claim is stored under has to follow the filesystem rather than the string.
+describe('destination claim keys', () => {
+  it('folds case where the filesystem does, and keeps it where it does not', () => {
+    const target = path.join('/home/user/code', 'Repo')
+
+    expect(destinationClaimKey(target, true)).toBe(destinationClaimKey(target.toLowerCase(), true))
+    expect(destinationClaimKey(target, false)).not.toBe(
+      destinationClaimKey(target.toLowerCase(), false)
+    )
+    expect(destinationClaimKey(target, false)).toBe(target)
+  })
+
+  it('defaults to the running platform’s filesystem convention', () => {
+    const caseInsensitive = process.platform === 'win32' || process.platform === 'darwin'
+    const key = destinationClaimKey('/home/user/code/Repo')
+    expect(key).toBe(caseInsensitive ? '/home/user/code/repo' : '/home/user/code/Repo')
   })
 })
 
