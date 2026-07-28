@@ -36,15 +36,26 @@ const fileUrl = (repo: string): string => `file://${repo.split(path.sep).join('/
 // killed. Killing git resets the connection rather than closing it on Windows, and an unhandled
 // ECONNRESET would fail the run even with every assertion green.
 async function listenStalled(): Promise<{ port: number; close: () => Promise<void> }> {
+  const sockets = new Set<net.Socket>()
   const server = net.createServer((socket) => {
+    sockets.add(socket)
     socket.on('data', () => {})
     socket.on('error', () => {})
+    socket.on('close', () => sockets.delete(socket))
   })
   server.on('error', () => {})
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   return {
     port: (server.address() as net.AddressInfo).port,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve()))
+    // `close` waits for open connections, and the whole point of this server is that they never
+    // finish — a clone still hanging on one would turn cleanup into a hung test file.
+    close: () =>
+      new Promise<void>((resolve) => {
+        for (const socket of sockets) {
+          socket.destroy()
+        }
+        server.close(() => resolve())
+      })
   }
 }
 

@@ -46,6 +46,31 @@ describe('NewTab recent repositories', () => {
   })
 })
 
+// Cloning is offered with no workspace configured, so this screen has to be able to show the result:
+// otherwise closing the cloned tab leaves the repository unreachable.
+describe('NewTab with no workspace', () => {
+  const noWorkspace = () => catalog({ workspaces: [], activeWorkspace: null, discoveredRepos: [] })
+
+  it('still offers the clone and lists what has been cloned already', () => {
+    const onOpenRepo = vi.fn()
+    render(<NewTab catalog={noWorkspace()} onOpenRepo={onOpenRepo} />)
+
+    expect(screen.getByRole('button', { name: /Clone…/ })).toBeTruthy()
+    const cards = screen.getAllByTestId('repo-picker-recent')
+    expect(cards).toHaveLength(4)
+
+    fireEvent.click(cards[0])
+    expect(onOpenRepo).toHaveBeenCalledWith('/home/user/code/alpha')
+  })
+
+  it('shows only the add-workspace prompt when nothing has been cloned yet', () => {
+    render(<NewTab catalog={catalog({ ...noWorkspace(), recentRepos: [] })} onOpenRepo={vi.fn()} />)
+
+    expect(screen.queryAllByTestId('repo-picker-recent')).toHaveLength(0)
+    expect(screen.getByText('Add a workspace')).toBeTruthy()
+  })
+})
+
 describe('NewTab clone flow', () => {
   it('clones into the active workspace and opens the result in the tab', async () => {
     const onOpenRepo = vi.fn()

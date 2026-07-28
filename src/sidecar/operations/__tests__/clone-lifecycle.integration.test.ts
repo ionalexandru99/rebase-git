@@ -98,9 +98,10 @@ describe('two clones aimed at one destination', () => {
     await Effect.runPromise(Fiber.interrupt(first))
   })
 
-  // On a case-insensitive filesystem this is the same contest as above wearing a different hat; on
-  // Linux the two really are different directories and both are allowed to proceed.
-  it('treats a differently-cased destination the way the filesystem does', async () => {
+  // The same contest wearing a different spelling. Whether this disk folds case is not knowable
+  // without writing to it, so the claim folds it everywhere: better a needless wait on a
+  // case-sensitive disk than one clone deleting the other's work on a folding one.
+  it('turns away a destination that differs only in case', async () => {
     const first = await startCloneInBackground({
       url: `git://127.0.0.1:${stalledPort}/stalled.git`,
       parentDir: destination,
@@ -117,14 +118,9 @@ describe('two clones aimed at one destination', () => {
       )
     )
 
-    if (destinationClaimKey('a') === destinationClaimKey('A')) {
-      expect(failureOf(second).message).toBe('casedrepo is already being cloned')
-    } else {
-      expect(Exit.isSuccess(second)).toBe(true)
-    }
+    expect(failureOf(second).message).toBe('casedrepo is already being cloned')
 
     await Effect.runPromise(Fiber.interrupt(first))
-    fs.rmSync(path.join(destination, 'casedrepo'), { recursive: true, force: true })
   })
 
   it('frees the destination again once the first clone is over', async () => {
@@ -142,23 +138,24 @@ describe('two clones aimed at one destination', () => {
   })
 })
 
-// Two tabs asking for `Repo` and `repo` name one directory on Windows and macOS and two on Linux,
-// so the key the claim is stored under has to follow the filesystem rather than the string.
+// One directory answers to several spellings: `Repo` and `repo` wherever the filesystem folds case,
+// and NFC/NFD spellings of the same accented name on macOS. Which aliases a disk honours cannot be
+// known without writing to it, so the key folds them everywhere rather than guessing by platform.
 describe('destination claim keys', () => {
-  it('folds case where the filesystem does, and keeps it where it does not', () => {
+  it('gives one key to every spelling of the same directory', () => {
     const target = path.join('/home/user/code', 'Repo')
+    expect(destinationClaimKey(target)).toBe(destinationClaimKey(target.toLowerCase()))
 
-    expect(destinationClaimKey(target, true)).toBe(destinationClaimKey(target.toLowerCase(), true))
-    expect(destinationClaimKey(target, false)).not.toBe(
-      destinationClaimKey(target.toLowerCase(), false)
-    )
-    expect(destinationClaimKey(target, false)).toBe(target)
+    const composed = '/home/user/code/caf\u00e9'
+    const decomposed = '/home/user/code/cafe\u0301'
+    expect(composed).not.toBe(decomposed)
+    expect(destinationClaimKey(composed)).toBe(destinationClaimKey(decomposed))
   })
 
-  it('defaults to the running platform’s filesystem convention', () => {
-    const caseInsensitive = process.platform === 'win32' || process.platform === 'darwin'
-    const key = destinationClaimKey('/home/user/code/Repo')
-    expect(key).toBe(caseInsensitive ? '/home/user/code/repo' : '/home/user/code/Repo')
+  it('still tells genuinely different destinations apart', () => {
+    expect(destinationClaimKey('/home/user/code/one')).not.toBe(
+      destinationClaimKey('/home/user/code/two')
+    )
   })
 })
 
@@ -177,6 +174,28 @@ describe('an empty directory left on the destination', () => {
 
     expect(Exit.isSuccess(exit)).toBe(true)
     expect(fs.existsSync(path.join(destination, folderName, '.git'))).toBe(true)
+  })
+
+  // Borrowing somebody's empty directory does not make it ours to delete: a clone that fails in one
+  // gives it back the way it found it.
+  it('is given back rather than deleted when the clone fails', async () => {
+    const folderName = 'borrowed'
+    const borrowed = path.join(destination, folderName)
+    fs.mkdirSync(borrowed)
+
+    const exit = await Effect.runPromiseExit(
+      Stream.runDrain(
+        cloneRepo({
+          url: fileUrl(path.join(homeRoot, 'not-a-repo')),
+          parentDir: destination,
+          folderName
+        })
+      )
+    )
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(fs.existsSync(borrowed)).toBe(true)
+    expect(fs.readdirSync(borrowed)).toEqual([])
   })
 
   it('is still refused once it holds anything at all', async () => {

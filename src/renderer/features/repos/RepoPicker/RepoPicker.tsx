@@ -44,6 +44,7 @@ export function RepoPicker(props: RepoPickerProps) {
   const enterTarget = filteredRecent[0] ?? filteredDiscovered[0] ?? null
 
   const hasAnyWorkspace = props.workspaces.length > 0 || !!props.activeWorkspace
+  const recentWithoutWorkspace = props.recentRepos.slice(0, MAX_RECENT_REPOS)
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') {
@@ -146,7 +147,7 @@ export function RepoPicker(props: RepoPickerProps) {
       </div>
     </div>
   ) : (
-    <div className="flex min-h-0 flex-1 items-center justify-center bg-card p-6">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 bg-card p-6">
       <EmptyState
         size="lg"
         icon={FolderPlusIcon}
@@ -165,6 +166,20 @@ export function RepoPicker(props: RepoPickerProps) {
           </div>
         }
       />
+      {/* Cloning works without a workspace, so this screen has to be able to show what came of it —
+          otherwise closing the cloned tab leaves no way back to the repository. */}
+      {recentWithoutWorkspace.length > 0 && (
+        <div className="w-full max-w-xl">
+          <RepoGroup>
+            <RepoGroupHeader label="Recent" />
+            <RepoCardGrid
+              repos={recentWithoutWorkspace}
+              enterTarget={null}
+              onSelect={props.onOpenRepo}
+            />
+          </RepoGroup>
+        </div>
+      )}
     </div>
   )
 }

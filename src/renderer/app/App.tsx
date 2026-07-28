@@ -107,7 +107,9 @@ function TabsShell(props: TabsShellProps) {
         console.error('[app] failed to refresh recent repos', error)
         return null
       }),
-      rescanWorkspace()
+      rescanWorkspace().catch((error: unknown) => {
+        console.error('[app] failed to rescan the workspace', error)
+      })
     ])
     if (recent) {
       setRecentRepos(recent)
