@@ -62,7 +62,13 @@ beforeAll(async () => {
   git('config', 'user.name', 'Test')
   git('commit', '--allow-empty', '-m', 'initial')
 
-  stalledServer = net.createServer((socket) => socket.on('data', () => {}))
+  stalledServer = net.createServer((socket) => {
+    socket.on('data', () => {})
+    // Killing git resets the connection rather than closing it on Windows, and an unhandled
+    // ECONNRESET here would fail the run even though every assertion passed.
+    socket.on('error', () => {})
+  })
+  stalledServer.on('error', () => {})
   await new Promise<void>((resolve) => stalledServer.listen(0, '127.0.0.1', resolve))
   stalledPort = (stalledServer.address() as net.AddressInfo).port
 })
