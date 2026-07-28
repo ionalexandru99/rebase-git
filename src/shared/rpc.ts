@@ -14,6 +14,7 @@ import {
 } from './git-rpc-errors'
 import type { RpcResult } from './rpc-result'
 import {
+  CloneProgressSchema,
   CommitDetailSchema,
   CommitSummarySchema,
   FileDiffSchema,
@@ -66,6 +67,19 @@ export const ScanForRepos = Rpc.make('scanForRepos', {
   payload: { dirPath: OpaqueString },
   success: Schema.Struct({ repos: Schema.Array(OpaqueString) }),
   error: ScanError
+})
+
+// Streamed rather than a plain call: a clone can run for minutes, so it needs progress on the way
+// and must not sit under the request timeout every other op shares.
+export const CloneRepo = Rpc.make('cloneRepo', {
+  payload: {
+    url: RequiredString,
+    parentDir: OpaqueString,
+    folderName: RequiredString
+  },
+  success: CloneProgressSchema,
+  error: ScanError,
+  stream: true
 })
 
 export const Commit = Rpc.make('commit', {
@@ -334,6 +348,7 @@ export const SidecarRpcs = RpcGroup.make(
   OpenRepo,
   CloseRepo,
   ScanForRepos,
+  CloneRepo,
   Commit,
   GetHeadCommit,
   AmendCommit,

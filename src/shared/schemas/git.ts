@@ -174,6 +174,15 @@ export const LogChunkSchema = Schema.Struct({
 })
 export type LogChunk = typeof LogChunkSchema.Type
 
+// `path` only arrives on the final chunk — it is the canonical location of the finished clone.
+export const CloneProgressSchema = Schema.Struct({
+  phase: Schema.String,
+  percent: Schema.optional(NonNaNNumber),
+  done: Schema.Boolean,
+  path: Schema.optional(Schema.String)
+})
+export type CloneProgress = typeof CloneProgressSchema.Type
+
 export const RepoChangeKindSchema = Schema.Literal('refs', 'workingTree', 'index')
 export type RepoChangeKind = typeof RepoChangeKindSchema.Type
 

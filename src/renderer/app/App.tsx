@@ -1,5 +1,5 @@
 import type { PersistedTabs } from '@shared/schemas/ipc'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { PortalContainerProvider } from '../components/ui/portal-container'
 import { Toaster } from '../components/ui/sonner'
 import { OnboardingScreen } from '../features/onboarding/OnboardingScreen'
@@ -98,6 +98,24 @@ function TabsShell(props: TabsShellProps) {
       })
   }, [])
 
+  // Both catalogs are read once at startup, so a repository that arrives while the app is running —
+  // a clone — would otherwise be invisible to every later new tab until a restart.
+  const rescanWorkspace = props.onboarding.rescanWorkingDirectory
+  const refreshCatalog = useCallback(async () => {
+    const [recent] = await Promise.all([
+      window.electronAPI.getRecentRepos().catch((error: unknown) => {
+        console.error('[app] failed to refresh recent repos', error)
+        return null
+      }),
+      rescanWorkspace().catch((error: unknown) => {
+        console.error('[app] failed to rescan the workspace', error)
+      })
+    ])
+    if (recent) {
+      setRecentRepos(recent)
+    }
+  }, [rescanWorkspace])
+
   useEffect(() => {
     window.electronAPI.setPersistedTabs(persistedSnapshot).catch((error: unknown) => {
       console.warn('[app] failed to persist tab state', error)
@@ -131,9 +149,11 @@ function TabsShell(props: TabsShellProps) {
       activeWorkspace: props.onboarding.activeWorkspace,
       switchWorkspace: props.onboarding.switchWorkspace,
       addWorkspace: props.onboarding.addWorkspace,
-      removeWorkspace: props.onboarding.removeWorkspace
+      removeWorkspace: props.onboarding.removeWorkspace,
+      refresh: refreshCatalog
     }),
     [
+      refreshCatalog,
       recentRepos,
       props.onboarding.discoveredRepos,
       props.onboarding.workspaces,

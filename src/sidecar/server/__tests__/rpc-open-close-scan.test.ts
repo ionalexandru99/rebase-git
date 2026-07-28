@@ -134,6 +134,22 @@ describe('scanForRepos RPC handler', () => {
     }
   })
 
+  // A clone in flight keeps a real working tree in its staging directory next to the destination;
+  // the scan must not offer a repository that is still being written.
+  it('leaves a clone staging directory out of the listing', async () => {
+    const staging = path.join(homeScanDir, '.stalled.rebase-clone-ab12cd34')
+    fs.mkdirSync(staging)
+    git(staging, 'init', '-b', 'main')
+
+    const result = await scanThroughGroup({ dirPath: homeScanDir })
+
+    expect(Either.isRight(result)).toBe(true)
+    if (Either.isRight(result)) {
+      expect([...result.right.repos]).toEqual([repoDir])
+    }
+    fs.rmSync(staging, { recursive: true, force: true })
+  })
+
   it('fails with a typed GitError for a non-absolute directory path', async () => {
     const result = await scanThroughGroup({ dirPath: 'relative/dir' })
     expect(Either.isLeft(result)).toBe(true)

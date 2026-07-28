@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { LogChunk } from '@shared/schemas/git'
+import type { CloneProgress, LogChunk } from '@shared/schemas/git'
 import { Context, Effect, ManagedRuntime } from 'effect'
 import { utilityProcess } from 'electron'
 import type { SidecarMessage } from '../../sidecar/server/protocol'
@@ -11,7 +11,7 @@ import {
   type SidecarLifecycle,
   type SidecarResource
 } from './lifecycle'
-import { callRpcByTag, runStreamLog } from './rpc'
+import { type ClonePayload, callRpcByTag, runCloneStream, runStreamLog } from './rpc'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const START_TIMEOUT_MS = 30_000
@@ -211,6 +211,15 @@ export async function sidecarLogStream(
       onChunk(chunk)
     }
   )
+}
+
+export async function sidecarClone(
+  payload: ClonePayload,
+  signal: AbortSignal,
+  onProgress: (progress: CloneProgress) => void
+): Promise<string> {
+  const { baseUrl, token } = await ensureSidecar()
+  return runCloneStream(baseUrl, token, payload, signal, onProgress)
 }
 
 export async function killSidecar(): Promise<void> {

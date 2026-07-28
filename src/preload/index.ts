@@ -4,6 +4,9 @@ import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import type {
   CancelLogStreamResponse,
+  CloneProgressEvent,
+  CloneRepoResponse,
+  CloneRequest,
   PersistedTabs,
   RefTreeToggles,
   SidebarPrefs,
@@ -47,6 +50,9 @@ export interface IElectronAPI {
   getOnboardingComplete: () => Promise<boolean>
   setOnboardingComplete: (complete: boolean) => Promise<void>
   scanForRepos: (dirPath: string) => Promise<ScanForReposResponse>
+  cloneRepo: (request: CloneRequest) => Promise<CloneRepoResponse>
+  cancelClone: (cloneId: number) => Promise<void>
+  onCloneProgress: (cb: (event: CloneProgressEvent) => void) => () => void
   sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
 }
 
@@ -92,6 +98,13 @@ const api: IElectronAPI = {
   setOnboardingComplete: (complete: boolean) =>
     ipcRenderer.invoke('set-onboarding-complete', complete),
   scanForRepos: (dirPath: string) => ipcRenderer.invoke(Channel.scanForRepos, dirPath),
+  cloneRepo: (request: CloneRequest) => ipcRenderer.invoke(Channel.cloneRepo, request),
+  cancelClone: (cloneId: number) => ipcRenderer.invoke(Channel.cancelClone, cloneId),
+  onCloneProgress: (cb: (event: CloneProgressEvent) => void) => {
+    const handler = (_event: unknown, progress: CloneProgressEvent) => cb(progress)
+    ipcRenderer.on(Channel.cloneProgress, handler)
+    return () => ipcRenderer.off(Channel.cloneProgress, handler)
+  },
   sidecarRequest: (op: string, body: Record<string, unknown>) =>
     ipcRenderer.invoke(Channel.sidecarRequest, op, body)
 }

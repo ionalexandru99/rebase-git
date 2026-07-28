@@ -22,7 +22,11 @@ export interface ConfirmRequest {
   onConfirm: () => void
 }
 
-function Overlay(props: { onDismiss: () => void; children: ReactNode }) {
+export function DialogOverlay(props: {
+  onDismiss: () => void
+  panelClassName?: string
+  children: ReactNode
+}) {
   const portalContainer = usePortalContainer()
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -49,7 +53,10 @@ function Overlay(props: { onDismiss: () => void; children: ReactNode }) {
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-sm rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg"
+        className={cn(
+          'w-full max-w-sm rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg',
+          props.panelClassName
+        )}
       >
         {props.children}
       </div>
@@ -90,7 +97,7 @@ export function PromptDialog(props: { request: PromptRequest | null; onClose: ()
   }
 
   return (
-    <Overlay onDismiss={props.onClose}>
+    <DialogOverlay onDismiss={props.onClose}>
       <form
         onSubmit={(event) => {
           event.preventDefault()
@@ -127,7 +134,7 @@ export function PromptDialog(props: { request: PromptRequest | null; onClose: ()
           </button>
         </div>
       </form>
-    </Overlay>
+    </DialogOverlay>
   )
 }
 
@@ -141,7 +148,7 @@ export function ConfirmDialog(props: { request: ConfirmRequest | null; onClose: 
     props.onClose()
   }
   return (
-    <Overlay onDismiss={props.onClose}>
+    <DialogOverlay onDismiss={props.onClose}>
       <h2 className="text-sm font-semibold">{request.title}</h2>
       <p className="mt-2 text-sm text-muted-foreground">{request.message}</p>
       <div className="mt-4 flex justify-end gap-2">
@@ -163,7 +170,7 @@ export function ConfirmDialog(props: { request: ConfirmRequest | null; onClose: 
           {request.confirmText ?? 'Confirm'}
         </button>
       </div>
-    </Overlay>
+    </DialogOverlay>
   )
 }
 

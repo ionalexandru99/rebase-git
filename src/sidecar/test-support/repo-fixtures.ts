@@ -15,8 +15,12 @@ export function git(cwd: string, args: string[]): void {
 // Windows refuses to delete a file another handle still holds, and a git child released moments ago
 // (a paging process, or the background commit-graph write a session owns) can still be exiting. Close
 // any open session first, then let the retries cover that window. On Linux the unlink just succeeds.
+// Housekeeping, not an assertion: a git that was just killed can outhold every retry on Windows,
+// and a temp directory the runner is about to throw away must not turn a passing test red.
 export function removeRepoDir(repo: string): void {
-  fs.rmSync(repo, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+  try {
+    fs.rmSync(repo, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
+  } catch {}
 }
 
 export function makeRepo(messages: string[]): string {

@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 function hasParentSegment(inputPath: string): boolean {
@@ -40,6 +41,26 @@ export function resolveExistingDirectory(inputPath: string): string | null {
   } catch {
     return null
   }
+}
+
+// Directories the renderer may point a whole-tree operation (scan, clone) at: they must exist, must
+// not reach outside the user's home, and must not canonicalise somewhere else — a symlinked
+// directory would otherwise let a request act on a tree it never named.
+export function resolveDirectoryWithinHome(inputPath: string): string | null {
+  const canonical = resolveExistingDirectory(inputPath)
+  if (!canonical) {
+    return null
+  }
+  if (!assertPathWithinDirectory(canonical, path.resolve(inputPath))) {
+    return null
+  }
+  let home: string
+  try {
+    home = fs.realpathSync.native(os.homedir())
+  } catch {
+    return null
+  }
+  return assertPathWithinDirectory(home, canonical) ? canonical : null
 }
 
 export function resolveExistingRepoRoot(inputPath: string): string | null {
