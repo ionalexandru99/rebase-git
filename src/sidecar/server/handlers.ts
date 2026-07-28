@@ -10,6 +10,7 @@ import {
   resolveExistingRepoRoot,
   resolveRepoRelativeFile
 } from '../git/path-guards'
+import { isCloneStagingName } from '../operations/clone'
 import { requireOpen } from '../operations/helpers'
 import * as operations from '../operations/index'
 import { clearLogContinuation, logChunkStream } from '../operations/log-stream'
@@ -102,6 +103,11 @@ const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], 
         }
         const childName = nodePath.basename(entry.name)
         if (childName !== entry.name) {
+          continue
+        }
+        // A clone in flight keeps a real working tree in its staging directory; offering it here
+        // would let the user open a repository that is still being written.
+        if (isCloneStagingName(childName)) {
           continue
         }
         const childPath = nodePath.join(scanRoot, childName)

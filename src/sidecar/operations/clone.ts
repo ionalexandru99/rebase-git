@@ -61,6 +61,13 @@ interface CloneTarget {
 
 const stagingPrefix = (folderName: string): string => `.${folderName}.rebase-clone-`
 
+// A staging directory holds a real working tree while git writes it, so anything that lists
+// repositories has to know to look away — the workspace scan would otherwise offer a half-written
+// clone as something to open.
+export function isCloneStagingName(name: string): boolean {
+  return /^\..+\.rebase-clone-[0-9a-f]+$/.test(name)
+}
+
 // A clone that is torn down while git is still connecting can take a moment to bring the process
 // group down, and the failure it is holding up is on its way to the UI. The force-kill inside
 // terminate lands well before this, so reaching the bound means something is stuck, not slow.
