@@ -57,6 +57,11 @@ interface CloneTarget {
 // terminate lands well before this, so reaching the bound means something is stuck, not slow.
 const TERMINATE_TIMEOUT_MS = 5_000
 
+// How long the destination sweep keeps trying, and how often. Long enough to outlast a git that is
+// slow to let go on Windows, short enough that it cannot outlive the tab that started the clone.
+const CLEANUP_TIMEOUT_MS = 30_000
+const CLEANUP_RETRY_MS = 250
+
 // Every tab shares this sidecar, so two of them can aim at one destination before either git child
 // creates it — `existsSync` cannot see a clone that has not written anything yet. Holding the path
 // for the length of the operation makes the loser fail before it spawns git, which is also what
@@ -97,12 +102,24 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
     if (claimedDestinations.has(claimKey)) {
       return Effect.fail(new GitError({ message: `${folderName} is already being cloned` }))
     }
-    if (fs.existsSync(target)) {
+    if (!isAvailableDestination(target)) {
       return Effect.fail(new GitError({ message: `${folderName} already exists in that folder` }))
     }
     claimedDestinations.add(claimKey)
     return Effect.succeed({ url, path: target, claimKey })
   })
+}
+
+// `git clone` is happy to write into a directory that already exists as long as it is empty, and
+// holding a stricter line than git costs real users: a clone killed part-way can leave its empty
+// destination behind — Windows will not release a directory a dying git still has open — and
+// refusing it would block every retry on a folder with nothing in it.
+export function isAvailableDestination(target: string): boolean {
+  try {
+    return fs.readdirSync(target).length === 0
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT'
+  }
 }
 
 // git writes its object and pack files read-only, and Windows refuses to unlink a read-only file.
@@ -145,6 +162,22 @@ export function removePartialClone(target: string): void {
       fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
     }
   } catch {}
+}
+
+// Windows will not let go of a directory a dying git still has open, so the sweep can lose that race
+// however patiently it retries. It runs detached for that reason: the clone's own failure is already
+// on its way to the UI and must not wait on housekeeping, and a destination that outlives the sweep
+// is left empty — which the next attempt is free to clone into.
+function sweepPartialClone(target: string): void {
+  const deadline = Date.now() + CLEANUP_TIMEOUT_MS
+  const attempt = () => {
+    removePartialClone(target)
+    if (!fs.existsSync(target) || Date.now() >= deadline) {
+      return
+    }
+    setTimeout(attempt, CLEANUP_RETRY_MS).unref?.()
+  }
+  attempt()
 }
 
 // Taking the process group down is best effort: a member that will not die must not hold the clone's
@@ -246,7 +279,7 @@ export function cloneRepo(request: CloneRequest): Stream.Stream<CloneProgress, G
           Effect.promise(async () => {
             await terminateWithin(process, TERMINATE_TIMEOUT_MS)
             if (!state.succeeded) {
-              removePartialClone(target.path)
+              sweepPartialClone(target.path)
             }
           }).pipe(Effect.orDie)
       )

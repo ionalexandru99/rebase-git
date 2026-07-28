@@ -162,6 +162,37 @@ describe('destination claim keys', () => {
   })
 })
 
+// Windows will not release a directory a dying git still has open, so a cancelled clone can leave an
+// empty destination behind however patiently the sweep retries. Matching git — which clones happily
+// into an empty directory — is what makes that survivable rather than a folder the user has to go
+// and delete by hand before the retry will work.
+describe('an empty directory left on the destination', () => {
+  it('is cloned into rather than refused', async () => {
+    const folderName = 'left-empty'
+    fs.mkdirSync(path.join(destination, folderName))
+
+    const exit = await Effect.runPromiseExit(
+      Stream.runDrain(cloneRepo({ url: fileUrl(sourceRepo), parentDir: destination, folderName }))
+    )
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+    expect(fs.existsSync(path.join(destination, folderName, '.git'))).toBe(true)
+  })
+
+  it('is still refused once it holds anything at all', async () => {
+    const folderName = 'not-empty'
+    fs.mkdirSync(path.join(destination, folderName))
+    fs.writeFileSync(path.join(destination, folderName, 'notes.txt'), 'mine\n')
+
+    const exit = await Effect.runPromiseExit(
+      Stream.runDrain(cloneRepo({ url: fileUrl(sourceRepo), parentDir: destination, folderName }))
+    )
+
+    expect(failureOf(exit).message).toBe('not-empty already exists in that folder')
+    expect(fs.readFileSync(path.join(destination, folderName, 'notes.txt'), 'utf8')).toBe('mine\n')
+  })
+})
+
 describe('clearing what a dead clone left behind', () => {
   const partial = (name: string): string => path.join(destination, name)
 
