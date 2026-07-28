@@ -119,7 +119,7 @@ test('reports the git failure and stays in the dialog when the source does not e
 // writing into the destination and the sidecar keeps the destination claimed — so the retry below,
 // which aims at exactly the same folder, is what proves the teardown happened.
 test('a reload tears down the clone the previous document started', async ({ harness }) => {
-  test.setTimeout(90_000)
+  test.setTimeout(150_000)
   const destination = createDestinationInHome()
   const sourceParent = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-stalled-'))
   const source = path.join(sourceParent, 'stalled')
@@ -155,9 +155,14 @@ test('a reload tears down the clone the previous document started', async ({ har
     })
     await page.getByRole('button', { name: 'Clone…' }).first().click()
     await page.getByLabel('Repository URL').fill(fileUrl(source))
-    await page.getByRole('button', { name: 'Clone', exact: true }).click()
 
-    await expect(page.getByRole('tab', { name: 'stalled' })).toBeVisible({ timeout: 30_000 })
+    // The contract is that the destination comes back, not that it comes back instantly: killing the
+    // process tree and clearing the half-written folder takes measurably longer on Windows. Retrying
+    // the clone still fails the test if the teardown never happens.
+    await expect(async () => {
+      await page.getByRole('button', { name: 'Clone', exact: true }).click()
+      await expect(page.getByRole('tab', { name: 'stalled' })).toBeVisible({ timeout: 5_000 })
+    }).toPass({ timeout: 60_000, intervals: [1_000] })
     expect(fs.readFileSync(path.join(destination, 'stalled', 'README.md'), 'utf8')).toBe(
       '# stalled\n'
     )
