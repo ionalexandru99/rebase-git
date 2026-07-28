@@ -13,7 +13,7 @@ import {
 import { toast } from 'sonner'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
-import { toastGitFailure } from '@/lib/git-report'
+import { toastEngineFailure, toastGitFailure } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcFetch, rpcGetLocalBranches, rpcGetRemoteRefs } from '@/lib/rpc-client'
@@ -180,7 +180,7 @@ export function useRefsController(deps: RefsDeps): RefsController {
           }
         } catch (error) {
           if (isCurrentRepo(generation, path)) {
-            reportFetchFailure(formatCause(error), manual)
+            toastEngineFailure('Fetch failed', formatCause(error))
           }
         }
       },

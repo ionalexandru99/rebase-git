@@ -1322,8 +1322,9 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
 
     await waitFor(() => {
+      // The RPC itself rejected, so git never ran — the banner must not blame it.
       expect(git.state.error).toBe(
-        `Git rejected the change: Git rejected the operation. The full output is in the developer console.`
+        'The change did not run: Rebase could not reach the Git engine — it may have restarted. Try again; the error is in the developer console.'
       )
     })
     expect(git.state.status?.staged).toEqual([])

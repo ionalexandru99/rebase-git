@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { formatCause } from '@/lib/format-cause'
-import { toastGitFailure } from '@/lib/git-report'
+import { toastEngineFailure, toastGitFailure } from '@/lib/git-report'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
 import {
   type PushForce,
@@ -171,7 +171,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       if (!isCurrentRepo(generation, repoPath)) {
         return false
       }
-      toastGitFailure(`${label} failed`, formatCause(error))
+      toastEngineFailure(`${label} failed`, formatCause(error))
       return false
     }
   }, [])
@@ -224,7 +224,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       if (!isCurrentRepo(generation, repoPath)) {
         return { kind: 'error', message }
       }
-      toastGitFailure(`${label} failed`, message)
+      toastEngineFailure(`${label} failed`, message)
       return { kind: 'error', message }
     }
   }
@@ -292,7 +292,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       if (!isCurrentRepo(generation, repoPath)) {
         return false
       }
-      toastGitFailure('Amend failed', formatCause(error))
+      toastEngineFailure('Amend failed', formatCause(error))
       return false
     }
   }

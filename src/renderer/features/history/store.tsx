@@ -14,7 +14,7 @@ import {
 } from 'react'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
-import { gitFailureBannerText } from '@/lib/git-report'
+import { engineFailureBannerText, gitFailureBannerText } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import type { GitLog, GitLogEntry } from '@/types'
@@ -222,7 +222,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
       }
       const message = formatCause(error)
       historyErrorRef.current = { message, streamId }
-      setError('history', gitFailureBannerText('Could not read history', message))
+      setError('history', engineFailureBannerText('Could not read history', message))
       setLogUi({ logLoading: false, logLoadingMore: false })
     }
   }
@@ -252,7 +252,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         return
       }
       console.error(`[git] ${label} failed for ${repoPath}:`, formatCause(error))
-      setError('history', gitFailureBannerText('Could not read history', formatCause(error)))
+      setError('history', engineFailureBannerText('Could not read history', formatCause(error)))
     })
   }
 

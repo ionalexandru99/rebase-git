@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { gitFailureBannerText, gitFailureMessage, toastGitFailure } from '@/lib/git-report'
+import {
+  engineFailureMessage,
+  gitFailureBannerText,
+  gitFailureMessage,
+  toastEngineFailure,
+  toastGitFailure
+} from '@/lib/git-report'
 
 const toast = vi.hoisted(() => ({ error: vi.fn() }))
 vi.mock('sonner', () => ({ toast }))
@@ -38,6 +44,31 @@ describe('git failure reporting', () => {
     expect(toast.error).toHaveBeenCalledWith('Checkout failed', {
       description:
         'Untracked files would be overwritten — 3 files. Move, delete or commit them first, then try again.'
+    })
+  })
+
+  // A sidecar restart or a decode failure means git never ran; blaming git for it misleads, and the
+  // classifier would bucket every one of them as unrecognised anyway.
+  it('keeps a failed engine call out of the git classifier', () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const message = engineFailureMessage('Pushed failed', "sidecar RPC 'Push' failed")
+
+    expect(logged).toHaveBeenCalledWith(
+      '[git] Pushed failed — the engine call itself failed:',
+      "sidecar RPC 'Push' failed"
+    )
+    expect(message).toContain('could not reach the Git engine')
+    expect(message).not.toContain('Git rejected the operation')
+  })
+
+  it('toasts an engine failure as its own thing', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    toastEngineFailure('Pulled failed', 'sidecar exited')
+
+    expect(toast.error).toHaveBeenCalledWith('Pulled failed', {
+      description: expect.stringContaining('could not reach the Git engine')
     })
   })
 
