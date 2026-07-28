@@ -185,6 +185,21 @@ describe('clearing what a dead clone left behind', () => {
     expect(fs.existsSync(partial('not-started'))).toBe(false)
   })
 
+  // git writes its objects and packs read-only, which Windows will not unlink: the destination stayed
+  // behind and blocked every retry with "already exists", and no amount of retrying a permission
+  // error was going to change that.
+  it('removes the read-only files git leaves in a pack directory', () => {
+    const packDirectory = path.join(partial('read-only'), '.git', 'objects', 'pack')
+    fs.mkdirSync(packDirectory, { recursive: true })
+    const pack = path.join(packDirectory, 'pack-abc.pack')
+    fs.writeFileSync(pack, 'pack\n')
+    fs.chmodSync(pack, 0o444)
+
+    removePartialClone(partial('read-only'))
+
+    expect(fs.existsSync(partial('read-only'))).toBe(false)
+  })
+
   it('leaves a directory that holds something other than git’s work', () => {
     fs.mkdirSync(partial('someone-elses'))
     fs.writeFileSync(path.join(partial('someone-elses'), 'notes.txt'), 'mine\n')

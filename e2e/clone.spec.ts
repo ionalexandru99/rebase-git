@@ -21,7 +21,11 @@ function createDestinationInHome(): string {
 // destinations are swept once, after the file is finished with them.
 test.afterAll(() => {
   for (const destination of destinations) {
-    fs.rmSync(destination, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    // Sweeping is housekeeping, not an assertion: a temp directory Windows will not unlink yet must
+    // not turn a passing run red, and the runner is thrown away regardless.
+    try {
+      fs.rmSync(destination, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    } catch {}
   }
   destinations.length = 0
 })
@@ -170,8 +174,11 @@ test('a reload tears down the clone the previous document started', async ({ har
         .getByTestId('clone-error')
         .textContent()
         .catch(() => null)
+      const leftBehind = fs.existsSync(path.join(destination, 'stalled'))
+        ? JSON.stringify(fs.readdirSync(path.join(destination, 'stalled')))
+        : '(gone)'
       throw new Error(
-        `the destination never came back after the reload; the dialog reported: ${reported ?? '(nothing)'}`,
+        `the destination never came back after the reload; the dialog reported: ${reported ?? '(nothing)'}; the destination holds: ${leftBehind}`,
         { cause: error }
       )
     }

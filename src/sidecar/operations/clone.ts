@@ -105,6 +105,27 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
   })
 }
 
+// git writes its object and pack files read-only, and Windows refuses to unlink a read-only file.
+// `force` only forgives a missing path, so the permission error survives every retry — the write bit
+// has to come off first. On POSIX this is a no-op the directory already permits.
+function clearReadOnly(entry: string): void {
+  let stats: fs.Stats
+  try {
+    stats = fs.lstatSync(entry)
+  } catch {
+    return
+  }
+  try {
+    fs.chmodSync(entry, stats.isDirectory() ? 0o700 : 0o600)
+  } catch {}
+  if (!stats.isDirectory()) {
+    return
+  }
+  for (const child of fs.readdirSync(entry)) {
+    clearReadOnly(nodePath.join(entry, child))
+  }
+}
+
 // A clone that dies part-way leaves a half-written tree behind. We only ever remove a path we
 // checked was absent before starting and have held the claim on since — and even then only if it
 // still looks like git's own work: the repository it was writing, or the bare directory it creates
@@ -117,10 +138,12 @@ export function removePartialClone(target: string): void {
     if (!looksLikeGitsOwnWork) {
       return
     }
-    // Windows holds the files a killed git had open for a moment after it dies, and this is the only
-    // attempt anyone makes: give up too early and the destination stays blocked for good, with the
-    // retry reporting a folder the user cannot see the point of.
-    fs.rmSync(target, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
+    try {
+      fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    } catch {
+      clearReadOnly(target)
+      fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+    }
   } catch {}
 }
 
