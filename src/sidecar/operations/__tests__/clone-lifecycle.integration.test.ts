@@ -6,7 +6,7 @@ import path from 'node:path'
 import { Effect, Exit, Fiber, Stream } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { GitError } from '../../git/errors'
-import { cloneRepo, destinationClaimKey, removePartialClone } from '../clone'
+import { cloneRepo, destinationClaimKey, forceRemove } from '../clone'
 
 let homeRoot: string
 let sourceRepo: string
@@ -159,11 +159,9 @@ describe('destination claim keys', () => {
   })
 })
 
-// Windows will not release a directory a dying git still has open, so a cancelled clone can leave an
-// empty destination behind however patiently the sweep retries. Matching git — which clones happily
-// into an empty directory — is what makes that survivable rather than a folder the user has to go
-// and delete by hand before the retry will work.
-describe('an empty directory left on the destination', () => {
+// People pre-create the folder they mean to clone into, and git itself is happy to clone into an
+// empty directory — refusing one would block the clone on a folder with nothing in it.
+describe('an empty directory on the destination', () => {
   it('is cloned into rather than refused', async () => {
     const folderName = 'left-empty'
     fs.mkdirSync(path.join(destination, folderName))
@@ -176,8 +174,8 @@ describe('an empty directory left on the destination', () => {
     expect(fs.existsSync(path.join(destination, folderName, '.git'))).toBe(true)
   })
 
-  // Borrowing somebody's empty directory does not make it ours to delete: a clone that fails in one
-  // gives it back the way it found it.
+  // git writes into staging, not into the borrowed directory, so a failed clone leaves it exactly
+  // as it found it.
   it('is given back rather than deleted when the clone fails', async () => {
     const folderName = 'borrowed'
     const borrowed = path.join(destination, folderName)
@@ -212,32 +210,11 @@ describe('an empty directory left on the destination', () => {
   })
 })
 
-describe('clearing what a dead clone left behind', () => {
+describe('clearing what a dead clone left in staging', () => {
   const partial = (name: string): string => path.join(destination, name)
 
-  it('removes the repository git was writing', () => {
-    fs.mkdirSync(partial('half-written'))
-    fs.mkdirSync(path.join(partial('half-written'), '.git'))
-    fs.writeFileSync(path.join(partial('half-written'), 'README.md'), 'partial\n')
-
-    removePartialClone(partial('half-written'))
-
-    expect(fs.existsSync(partial('half-written'))).toBe(false)
-  })
-
-  // git creates the destination before it writes anything into it. An interrupt landing in that
-  // moment used to leave the folder behind, and every retry then failed with "already exists".
-  it('removes the bare directory git creates before writing anything', () => {
-    fs.mkdirSync(partial('not-started'))
-
-    removePartialClone(partial('not-started'))
-
-    expect(fs.existsSync(partial('not-started'))).toBe(false)
-  })
-
-  // git writes its objects and packs read-only, which Windows will not unlink: the destination stayed
-  // behind and blocked every retry with "already exists", and no amount of retrying a permission
-  // error was going to change that.
+  // git writes its objects and packs read-only, which Windows will not unlink: the staging directory
+  // stayed behind, and no amount of retrying a permission error was going to change that.
   it('removes the read-only files git leaves in a pack directory', () => {
     const packDirectory = path.join(partial('read-only'), '.git', 'objects', 'pack')
     fs.mkdirSync(packDirectory, { recursive: true })
@@ -245,19 +222,61 @@ describe('clearing what a dead clone left behind', () => {
     fs.writeFileSync(pack, 'pack\n')
     fs.chmodSync(pack, 0o444)
 
-    removePartialClone(partial('read-only'))
+    forceRemove(partial('read-only'))
 
     expect(fs.existsSync(partial('read-only'))).toBe(false)
   })
 
-  it('leaves a directory that holds something other than git’s work', () => {
-    fs.mkdirSync(partial('someone-elses'))
-    fs.writeFileSync(path.join(partial('someone-elses'), 'notes.txt'), 'mine\n')
+  // chmod follows symlinks, and a hostile repository can check one out pointing anywhere on the
+  // machine: clearing the read-only bits must not reach through the link and change the mode of
+  // whatever it points at. Windows is skipped because creating symlinks there needs a privilege
+  // the runner does not hold.
+  it.skipIf(process.platform === 'win32')(
+    'does not follow a symlink out of the clone while clearing read-only bits',
+    () => {
+      const outside = path.join(destination, 'outside-target.txt')
+      fs.writeFileSync(outside, 'precious\n')
+      fs.chmodSync(outside, 0o444)
 
-    removePartialClone(partial('someone-elses'))
+      // A read-only subdirectory forces the plain rmSync to fail everywhere, so the clearing pass
+      // actually walks the tree and meets the link.
+      const lockedDirectory = path.join(partial('linked'), 'locked')
+      fs.mkdirSync(lockedDirectory, { recursive: true })
+      fs.symlinkSync(outside, path.join(lockedDirectory, 'escape'))
+      fs.chmodSync(lockedDirectory, 0o500)
 
-    expect(fs.existsSync(path.join(partial('someone-elses'), 'notes.txt'))).toBe(true)
-    fs.rmSync(partial('someone-elses'), { recursive: true, force: true })
+      try {
+        forceRemove(partial('linked'))
+      } finally {
+        fs.chmodSync(outside, 0o600)
+      }
+
+      expect(fs.existsSync(partial('linked'))).toBe(false)
+      expect(fs.existsSync(outside)).toBe(true)
+      fs.rmSync(outside, { force: true })
+    }
+  )
+})
+
+// A sidecar crash mid-clone takes the sweep down with it: nothing in-process survives to remember
+// the staging directory git was writing. The next attempt at the same folder has to clear it, or
+// the crash leaves litter behind forever — and the destination itself must never be poisoned by a
+// crash, which is the point of staging.
+describe('what a crashed sidecar left behind', () => {
+  it('is swept by the next clone of the same folder', async () => {
+    const orphan = path.join(destination, '.crashy.rebase-clone-dead00')
+    fs.mkdirSync(path.join(orphan, '.git'), { recursive: true })
+    fs.writeFileSync(path.join(orphan, 'README.md'), 'half-written\n')
+
+    const exit = await Effect.runPromiseExit(
+      Stream.runDrain(
+        cloneRepo({ url: fileUrl(sourceRepo), parentDir: destination, folderName: 'crashy' })
+      )
+    )
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+    expect(fs.existsSync(path.join(destination, 'crashy', '.git'))).toBe(true)
+    expect(fs.existsSync(orphan)).toBe(false)
   })
 })
 
@@ -272,7 +291,16 @@ describe('interrupting a clone in flight', () => {
     const fiber = await startCloneInBackground(request)
     await Effect.runPromise(Fiber.interrupt(fiber))
 
+    // The destination was never written to — git works in staging — and the detached sweep clears
+    // the staging directory once the killed git lets go of it.
     expect(fs.existsSync(path.join(destination, 'interrupted'))).toBe(false)
+    await expect
+      .poll(
+        () =>
+          fs.readdirSync(destination).filter((entry) => entry.startsWith('.interrupted.')).length,
+        { timeout: 10_000, interval: 250 }
+      )
+      .toBe(0)
 
     // The destination is claimed for the length of the operation; an interrupt has to release it,
     // or the tab that retries after a reload would be told it is already being cloned.

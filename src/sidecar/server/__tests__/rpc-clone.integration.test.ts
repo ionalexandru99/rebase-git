@@ -139,7 +139,7 @@ describe('cancelling a cloneRepo stream over the transport', () => {
     await cancelled
 
     // Freeing the claim is the observable proof that the server-side scope closed: it is released by
-    // the same finalizer that kills git and removes the half-written folder.
+    // the same teardown that kills git and sweeps its staging directory.
     await expect
       .poll(
         async () => {

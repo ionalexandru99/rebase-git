@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import nodePath from 'node:path'
 import { isSafeCloneFolderName, isSupportedCloneUrl } from '@shared/clone-url'
@@ -46,29 +47,35 @@ export function cloneFailureMessage(stderr: string, code: number | null): string
   return tail.join('\n') || `git clone exited with code ${code}`
 }
 
+// git writes into a staging directory next to the destination, and the result is renamed into place
+// only once the whole clone has finished. The destination is therefore never half-written: a clone
+// that fails, is cancelled, or takes the sidecar down with it leaves at most a staging directory
+// behind — and staging directories carry a name only we create, so the next attempt at the same
+// folder can sweep them without ever having to judge whether a repository is somebody's real work.
 interface CloneTarget {
   url: string
   path: string
+  stagingPath: string
   claimKey: string
-  existedBefore: boolean
 }
+
+const stagingPrefix = (folderName: string): string => `.${folderName}.rebase-clone-`
 
 // A clone that is torn down while git is still connecting can take a moment to bring the process
 // group down, and the failure it is holding up is on its way to the UI. The force-kill inside
 // terminate lands well before this, so reaching the bound means something is stuck, not slow.
 const TERMINATE_TIMEOUT_MS = 5_000
 
-// How long the destination sweep keeps trying, and how often. Long enough to outlast a git that is
+// How long the staging sweep keeps trying, and how often. Long enough to outlast a git that is
 // slow to let go on Windows, short enough that it is not still churning the filesystem long after
-// the clone it belongs to is forgotten — a destination it fails to clear is left empty, which the
-// next attempt is free to clone into anyway.
+// the clone it belongs to is forgotten — a staging directory it fails to clear is litter no retry
+// will ever aim at, and the next attempt at the same folder sweeps it again.
 const CLEANUP_TIMEOUT_MS = 5_000
 const CLEANUP_RETRY_MS = 500
 
-// Every tab shares this sidecar, so two of them can aim at one destination before either git child
-// creates it — `existsSync` cannot see a clone that has not written anything yet. Holding the path
-// for the length of the operation makes the loser fail before it spawns git, which is also what
-// makes the cleanup below safe: a running clone owns its directory outright.
+// Every tab shares this sidecar, so two of them can aim at one destination before either clone has
+// renamed anything into it — `existsSync` cannot see a clone that has not finished yet. Holding the
+// path for the length of the operation makes the loser fail before it spawns git.
 const claimedDestinations = new Set<string>()
 
 // One directory can answer to several spellings: `Repo` and `repo` on Windows and macOS, and on a
@@ -96,9 +103,9 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
     }
     const target = nodePath.join(parentDir, folderName)
     const claimKey = destinationClaimKey(target)
-    // A clone in flight is reported as such rather than as a folder that already exists: by the time
-    // git has created the directory, "already exists" would be true but misleading. These three
-    // steps run without interleaving, so the claim can never outlive a rejected request.
+    // A clone in flight is reported as such rather than as a folder that already exists: "already
+    // exists" would be misleading about a directory this operation is about to rename into place.
+    // These steps run without interleaving, so the claim can never outlive a rejected request.
     if (claimedDestinations.has(claimKey)) {
       return Effect.fail(new GitError({ message: `${folderName} is already being cloned` }))
     }
@@ -106,14 +113,48 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
       return Effect.fail(new GitError({ message: `${folderName} already exists in that folder` }))
     }
     claimedDestinations.add(claimKey)
-    return Effect.succeed({ url, path: target, claimKey, existedBefore: fs.existsSync(target) })
+    sweepOrphanedStaging(parentDir, folderName)
+    const stagingPath = nodePath.join(
+      parentDir,
+      `${stagingPrefix(folderName)}${crypto.randomBytes(4).toString('hex')}`
+    )
+    try {
+      fs.mkdirSync(stagingPath)
+    } catch (error) {
+      claimedDestinations.delete(claimKey)
+      return Effect.fail(
+        new GitError({ message: `cannot write to that folder: ${(error as Error).message}` })
+      )
+    }
+    return Effect.succeed({ url, path: target, stagingPath, claimKey })
   })
 }
 
+// A sidecar that crashes mid-clone takes its sweep down with it, and nothing in-process survives to
+// remember the staging directory it was writing. The name pattern is ours alone — folder names
+// starting with a dot are rejected up front — so whatever wears it here is a dead clone's leavings.
+// Best effort: an orphaned git may still be holding files, and the clone about to start does not
+// depend on this succeeding.
+function sweepOrphanedStaging(parentDir: string, folderName: string): void {
+  let entries: string[]
+  try {
+    entries = fs.readdirSync(parentDir)
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    if (entry.startsWith(stagingPrefix(folderName))) {
+      try {
+        forceRemove(nodePath.join(parentDir, entry))
+      } catch {}
+    }
+  }
+}
+
 // `git clone` is happy to write into a directory that already exists as long as it is empty, and
-// holding a stricter line than git costs real users: a clone killed part-way can leave its empty
-// destination behind — Windows will not release a directory a dying git still has open — and
-// refusing it would block every retry on a folder with nothing in it.
+// holding a stricter line than git costs real users: people pre-create the folder they mean to
+// clone into, and refusing it would block them on a directory with nothing in it. An empty
+// destination is reclaimed at rename time rather than cloned into directly.
 export function isAvailableDestination(target: string): boolean {
   try {
     return fs.readdirSync(target).length === 0
@@ -132,6 +173,11 @@ function clearReadOnly(entry: string): void {
   } catch {
     return
   }
+  // chmod follows symlinks, and a hostile repository can check one out pointing anywhere on the
+  // machine. The link itself carries no permission that blocks its removal.
+  if (stats.isSymbolicLink()) {
+    return
+  }
   try {
     fs.chmodSync(entry, stats.isDirectory() ? 0o700 : 0o600)
   } catch {}
@@ -143,7 +189,7 @@ function clearReadOnly(entry: string): void {
   }
 }
 
-function forceRemove(target: string): void {
+export function forceRemove(target: string): void {
   try {
     fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   } catch {
@@ -152,51 +198,46 @@ function forceRemove(target: string): void {
   }
 }
 
-// A clone that dies part-way leaves a half-written tree behind. We only ever remove a path we
-// checked was absent or empty before starting and have held the claim on since — and even then only
-// if it still looks like git's own work: the repository it was writing, or the bare directory it
-// creates before writing anything. An interrupt that lands in that opening moment would otherwise
-// leave an empty folder sitting on the destination.
-//
-// A destination that was already there when the clone started is emptied rather than removed: it is
-// somebody else's directory that we borrowed, and giving it back the way we found it is the most we
-// are entitled to do with it.
-export function removePartialClone(target: string, keepDirectory = false): void {
-  try {
-    const looksLikeGitsOwnWork =
-      fs.existsSync(nodePath.join(target, '.git')) || fs.readdirSync(target).length === 0
-    if (!looksLikeGitsOwnWork) {
-      return
-    }
-    if (!keepDirectory) {
-      forceRemove(target)
-      return
-    }
-    for (const entry of fs.readdirSync(target)) {
-      forceRemove(nodePath.join(target, entry))
-    }
-  } catch {}
-}
-
 // Windows will not let go of a directory a dying git still has open, so the sweep can lose that race
 // however patiently it retries. It runs detached for that reason — the clone's own failure is
-// already on its way to the UI and must not wait on housekeeping — and reports back when it is done
-// so the destination stays claimed until then. Releasing the claim first would let a retry start
-// cloning into the path this sweep is still deleting.
-function sweepPartialClone(target: CloneTarget, onSettled: () => void): void {
+// already on its way to the UI and must not wait on housekeeping. A staging directory it fails to
+// clear blocks nothing: no retry aims at its name, and the next attempt sweeps it again.
+function sweepStagingDir(stagingPath: string): void {
   const deadline = Date.now() + CLEANUP_TIMEOUT_MS
   const attempt = () => {
-    removePartialClone(target.path, target.existedBefore)
-    const cleared = target.existedBefore
-      ? isAvailableDestination(target.path)
-      : !fs.existsSync(target.path)
-    if (cleared || Date.now() >= deadline) {
-      onSettled()
+    try {
+      forceRemove(stagingPath)
+    } catch {}
+    if (!fs.existsSync(stagingPath) || Date.now() >= deadline) {
       return
     }
     setTimeout(attempt, CLEANUP_RETRY_MS).unref?.()
   }
   attempt()
+}
+
+// git has finished and exited by the time this runs, but Windows may still be touching the freshly
+// written tree — an antivirus pass over new pack files is enough to make a directory rename fail
+// once. The empty destination reclaimed here is the one `isAvailableDestination` accepted at the
+// start; rmdir refuses anything that has since gained content, and the rename then reports it.
+const PROMOTE_RETRIES = 10
+const PROMOTE_RETRY_MS = 100
+
+async function promoteClone(target: CloneTarget): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      fs.rmdirSync(target.path)
+    } catch {}
+    try {
+      fs.renameSync(target.stagingPath, target.path)
+      return
+    } catch (error) {
+      if (attempt >= PROMOTE_RETRIES) {
+        throw error
+      }
+      await new Promise((resolve) => setTimeout(resolve, PROMOTE_RETRY_MS))
+    }
+  }
 }
 
 // Taking the process group down is best effort: a member that will not die must not hold the clone's
@@ -226,12 +267,11 @@ function canonicalize(target: string): string {
 
 interface CloneState {
   succeeded: boolean
-  sweeping: boolean
 }
 
 function progressStream(
   running: RunningGitProcess,
-  target: string,
+  target: CloneTarget,
   state: CloneState
 ): Stream.Stream<CloneProgress, GitError> {
   return Stream.asyncPush<CloneProgress, GitError>((emit) =>
@@ -266,10 +306,25 @@ function progressStream(
       })
 
       running.result.then(
-        ({ code, stderr: collected }) => {
+        async ({ code, stderr: collected }) => {
           if (code === 0) {
+            try {
+              await promoteClone(target)
+            } catch (error) {
+              emit.fail(
+                new GitError({
+                  message: `the clone finished, but its folder could not be moved into place: ${(error as Error).message}`
+                })
+              )
+              return
+            }
             state.succeeded = true
-            emit.single({ phase: 'Done', percent: 100, done: true, path: canonicalize(target) })
+            emit.single({
+              phase: 'Done',
+              percent: 100,
+              done: true,
+              path: canonicalize(target.path)
+            })
             emit.end()
             return
           }
@@ -284,19 +339,15 @@ function progressStream(
 export function cloneRepo(request: CloneRequest): Stream.Stream<CloneProgress, GitError> {
   return Stream.unwrapScoped(
     Effect.gen(function* () {
-      const state: CloneState = { succeeded: false, sweeping: false }
+      const state: CloneState = { succeeded: false }
       const target = yield* Effect.acquireRelease(prepareTarget(request), (claimed) =>
-        Effect.sync(() => {
-          // The sweep releases the claim itself when it finishes; letting go here would open the
-          // destination to a retry the sweep is still deleting under.
-          if (!state.sweeping) {
-            claimedDestinations.delete(claimed.claimKey)
-          }
-        })
+        // A failed clone leaves nothing at the destination — only staging, which no retry aims at —
+        // so the claim can be let go the moment the operation is over, sweep still running or not.
+        Effect.sync(() => claimedDestinations.delete(claimed.claimKey))
       )
       const running = yield* Effect.acquireRelease(
         Effect.sync(() =>
-          startGit(['clone', '--progress', '--', target.url, target.path], {
+          startGit(['clone', '--progress', '--', target.url, target.stagingPath], {
             collectStdout: false,
             env: applyNonInteractiveGitEnv({ ...process.env })
           })
@@ -305,14 +356,13 @@ export function cloneRepo(request: CloneRequest): Stream.Stream<CloneProgress, G
           Effect.promise(async () => {
             await terminateWithin(process, TERMINATE_TIMEOUT_MS)
             if (!state.succeeded) {
-              state.sweeping = true
-              sweepPartialClone(target, () => claimedDestinations.delete(target.claimKey))
+              sweepStagingDir(target.stagingPath)
             }
           }).pipe(Effect.orDie)
       )
       return Stream.concat(
         Stream.succeed<CloneProgress>({ phase: 'Connecting', done: false }),
-        progressStream(running, target.path, state)
+        progressStream(running, target, state)
       )
     })
   )
