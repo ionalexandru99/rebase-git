@@ -6,7 +6,7 @@ import path from 'node:path'
 import { Effect, Exit, Fiber, Stream } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { GitError } from '../../git/errors'
-import { cloneRepo, destinationClaimKey } from '../clone'
+import { cloneRepo, destinationClaimKey, removePartialClone } from '../clone'
 
 let homeRoot: string
 let sourceRepo: string
@@ -159,6 +159,40 @@ describe('destination claim keys', () => {
     const caseInsensitive = process.platform === 'win32' || process.platform === 'darwin'
     const key = destinationClaimKey('/home/user/code/Repo')
     expect(key).toBe(caseInsensitive ? '/home/user/code/repo' : '/home/user/code/Repo')
+  })
+})
+
+describe('clearing what a dead clone left behind', () => {
+  const partial = (name: string): string => path.join(destination, name)
+
+  it('removes the repository git was writing', () => {
+    fs.mkdirSync(partial('half-written'))
+    fs.mkdirSync(path.join(partial('half-written'), '.git'))
+    fs.writeFileSync(path.join(partial('half-written'), 'README.md'), 'partial\n')
+
+    removePartialClone(partial('half-written'))
+
+    expect(fs.existsSync(partial('half-written'))).toBe(false)
+  })
+
+  // git creates the destination before it writes anything into it. An interrupt landing in that
+  // moment used to leave the folder behind, and every retry then failed with "already exists".
+  it('removes the bare directory git creates before writing anything', () => {
+    fs.mkdirSync(partial('not-started'))
+
+    removePartialClone(partial('not-started'))
+
+    expect(fs.existsSync(partial('not-started'))).toBe(false)
+  })
+
+  it('leaves a directory that holds something other than git’s work', () => {
+    fs.mkdirSync(partial('someone-elses'))
+    fs.writeFileSync(path.join(partial('someone-elses'), 'notes.txt'), 'mine\n')
+
+    removePartialClone(partial('someone-elses'))
+
+    expect(fs.existsSync(path.join(partial('someone-elses'), 'notes.txt'))).toBe(true)
+    fs.rmSync(partial('someone-elses'), { recursive: true, force: true })
   })
 })
 

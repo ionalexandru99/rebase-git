@@ -106,11 +106,15 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
 }
 
 // A clone that dies part-way leaves a half-written tree behind. We only ever remove a path we
-// checked was absent before starting and have held the claim on since, and only while it still
-// looks like the clone git created.
-function removePartialClone(target: string): void {
+// checked was absent before starting and have held the claim on since — and even then only if it
+// still looks like git's own work: the repository it was writing, or the bare directory it creates
+// before writing anything. An interrupt that lands in that opening moment would otherwise leave an
+// empty folder sitting on the destination, blocking every retry with "already exists".
+export function removePartialClone(target: string): void {
   try {
-    if (!fs.existsSync(nodePath.join(target, '.git'))) {
+    const looksLikeGitsOwnWork =
+      fs.existsSync(nodePath.join(target, '.git')) || fs.readdirSync(target).length === 0
+    if (!looksLikeGitsOwnWork) {
       return
     }
     fs.rmSync(target, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
