@@ -64,8 +64,16 @@ beforeAll(async () => {
     socket.on('data', () => {})
     socket.on('error', () => {})
   })
-  stalledServer.on('error', () => {})
-  await new Promise<void>((resolve) => stalledServer.listen(0, '127.0.0.1', resolve))
+  // Reject a bind failure instead of hanging on a listen callback that will never fire; once
+  // bound, later resets from killed clones are the point of this server.
+  await new Promise<void>((resolve, reject) => {
+    stalledServer.once('error', reject)
+    stalledServer.listen(0, '127.0.0.1', () => {
+      stalledServer.off('error', reject)
+      stalledServer.on('error', () => {})
+      resolve()
+    })
+  })
   stalledPort = (stalledServer.address() as AddressInfo).port
 
   server = createSidecarServer(TOKEN)

@@ -43,8 +43,17 @@ async function listenStalled(): Promise<{ port: number; close: () => Promise<voi
     socket.on('error', () => {})
     socket.on('close', () => sockets.delete(socket))
   })
-  server.on('error', () => {})
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  // A bind failure has to reject — the listen callback only ever fires on success, and swallowing
+  // the error would leave the test hanging on this promise until its timeout. Once bound, the
+  // handler goes back to a shrug: resets from killed clones are the point of this server.
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject)
+      server.on('error', () => {})
+      resolve()
+    })
+  })
   return {
     port: (server.address() as net.AddressInfo).port,
     // `close` waits for open connections, and the whole point of this server is that they never

@@ -244,10 +244,12 @@ function sweepStagingDir(stagingPath: string): void {
 
 // git has finished and exited by the time this runs, but Windows may still be touching the freshly
 // written tree — an antivirus pass over new pack files is enough to make a directory rename fail
-// once. The empty destination reclaimed here is the one `isAvailableDestination` accepted at the
-// start; rmdir refuses anything that has since gained content, and the rename then reports it.
-const PROMOTE_RETRIES = 10
-const PROMOTE_RETRY_MS = 100
+// once, and over a large clone it can take seconds, so the budget matches the sweep's rather than
+// giving the success path less patience than the cleanup. The empty destination reclaimed here is
+// the one `isAvailableDestination` accepted at the start; rmdir refuses anything that has since
+// gained content, and the rename then reports it.
+const PROMOTE_RETRIES = 25
+const PROMOTE_RETRY_MS = 200
 
 export async function promoteClone(stagingPath: string, destination: string): Promise<void> {
   let removedBorrowedDirectory = false

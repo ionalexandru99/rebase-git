@@ -68,8 +68,16 @@ beforeAll(async () => {
     // ECONNRESET here would fail the run even though every assertion passed.
     socket.on('error', () => {})
   })
-  stalledServer.on('error', () => {})
-  await new Promise<void>((resolve) => stalledServer.listen(0, '127.0.0.1', resolve))
+  // Reject a bind failure instead of hanging on a listen callback that will never fire; once
+  // bound, later resets from killed clones are the point of this server.
+  await new Promise<void>((resolve, reject) => {
+    stalledServer.once('error', reject)
+    stalledServer.listen(0, '127.0.0.1', () => {
+      stalledServer.off('error', reject)
+      stalledServer.on('error', () => {})
+      resolve()
+    })
+  })
   stalledPort = (stalledServer.address() as net.AddressInfo).port
 })
 
@@ -302,7 +310,8 @@ describe('what a crashed sidecar left behind', () => {
 // The empty directory the user pre-created is removed to make room for the rename; a promotion
 // that never lands — Windows can hold a freshly written staging tree — has to give it back.
 describe('a promotion that cannot land', () => {
-  it('gives a borrowed empty destination back', async () => {
+  // The full retry budget is spent before the throw, so this test runs for the whole of it.
+  it('gives a borrowed empty destination back', { timeout: 15_000 }, async () => {
     const borrowed = path.join(destination, 'borrowed-back')
     fs.mkdirSync(borrowed)
 
