@@ -19,33 +19,22 @@ describe('applyNonInteractiveGitEnv', () => {
     expect(env.SSH_ASKPASS).toBeUndefined()
   })
 
-  it('empties core.askpass so a configured helper cannot take over either', () => {
-    const env = applyNonInteractiveGitEnv({})
-
-    expect(env.GIT_CONFIG_COUNT).toBe('1')
-    expect(env.GIT_CONFIG_KEY_0).toBe('core.askpass')
-    expect(env.GIT_CONFIG_VALUE_0).toBe('')
-  })
-
-  it('keeps config entries the caller already declared', () => {
-    const env = applyNonInteractiveGitEnv({
-      GIT_CONFIG_COUNT: '1',
-      GIT_CONFIG_KEY_0: 'protocol.version',
-      GIT_CONFIG_VALUE_0: '2'
-    })
-
-    expect(env.GIT_CONFIG_KEY_0).toBe('protocol.version')
-    expect(env.GIT_CONFIG_VALUE_0).toBe('2')
-    expect(env.GIT_CONFIG_COUNT).toBe('2')
-    expect(env.GIT_CONFIG_KEY_1).toBe('core.askpass')
-    expect(env.GIT_CONFIG_VALUE_1).toBe('')
-  })
-
   it('puts ssh in batch mode, keeping a custom ssh command', () => {
     expect(applyNonInteractiveGitEnv({}).GIT_SSH_COMMAND).toBe('ssh -o BatchMode=yes')
     expect(
       applyNonInteractiveGitEnv({ GIT_SSH_COMMAND: 'ssh -i ~/.ssh/work' }).GIT_SSH_COMMAND
     ).toBe('ssh -i ~/.ssh/work -o BatchMode=yes')
+  })
+
+  // Windows drops empty-valued environment variables, so an empty value must never be load-bearing:
+  // git aborts with "missing config value" when its config protocol declares a key without one.
+  it('leaves no empty-valued variable behind', () => {
+    const env = applyNonInteractiveGitEnv({ GIT_ASKPASS: '/usr/bin/ksshaskpass' })
+
+    for (const [name, value] of Object.entries(env)) {
+      expect(value, name).not.toBe('')
+    }
+    expect(env.GIT_CONFIG_COUNT).toBeUndefined()
   })
 
   it('is idempotent, so a per-call copy of an already-prepared environment stays clean', () => {
