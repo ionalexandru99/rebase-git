@@ -51,13 +51,15 @@ describe('NewTab recent repositories', () => {
 describe('NewTab with no workspace', () => {
   const noWorkspace = () => catalog({ workspaces: [], activeWorkspace: null, discoveredRepos: [] })
 
-  it('still offers the clone and lists what has been cloned already', () => {
+  // Every recent, not the four the full picker caps at: this screen has no search and no workspace
+  // listing, so a card that falls off this list is a repository with no way back to it.
+  it('still offers the clone and lists everything that has been cloned already', () => {
     const onOpenRepo = vi.fn()
     render(<NewTab catalog={noWorkspace()} onOpenRepo={onOpenRepo} />)
 
     expect(screen.getByRole('button', { name: /Clone…/ })).toBeTruthy()
     const cards = screen.getAllByTestId('repo-picker-recent')
-    expect(cards).toHaveLength(4)
+    expect(cards).toHaveLength(RECENTS.length)
 
     fireEvent.click(cards[0])
     expect(onOpenRepo).toHaveBeenCalledWith('/home/user/code/alpha')

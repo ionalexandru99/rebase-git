@@ -60,12 +60,13 @@ interface CloneTarget {
 }
 
 const stagingPrefix = (folderName: string): string => `.${folderName}.rebase-clone-`
+const STAGING_SUFFIX = /^[0-9a-f]{8}$/
 
 // A staging directory holds a real working tree while git writes it, so anything that lists
 // repositories has to know to look away — the workspace scan would otherwise offer a half-written
 // clone as something to open.
 export function isCloneStagingName(name: string): boolean {
-  return /^\..+\.rebase-clone-[0-9a-f]+$/.test(name)
+  return /^\..+\.rebase-clone-[0-9a-f]{8}$/.test(name)
 }
 
 // A clone that is torn down while git is still connecting can take a moment to bring the process
@@ -86,12 +87,17 @@ const CLEANUP_RETRY_MS = 500
 const claimedDestinations = new Set<string>()
 
 // One directory can answer to several spellings: `Repo` and `repo` on Windows and macOS, and on a
-// casefolded ext4 or a mounted NTFS share on Linux too; `café` written NFC and NFD on macOS. Which
-// aliases a given filesystem honours cannot be known without writing to it, so the key folds all of
-// them on every platform. The cost is that two clones of genuinely distinct names differing only in
-// case are serialised on a case-sensitive disk; the alternative is one of them deleting the other.
+// casefolded ext4 or a mounted NTFS share on Linux too; `café` written NFC and NFD on macOS; and
+// `repo.` or `repo ` on Windows, where Win32 ignores what trails the final component. Which aliases
+// a given filesystem honours cannot be known without writing to it, so the key folds all of them on
+// every platform. The cost is that two clones of genuinely distinct names differing only in an
+// alias are serialised on a disk that would have kept them apart; the alternative is two clones
+// renaming into the same directory without ever having contested the claim.
 export function destinationClaimKey(target: string): string {
-  return target.normalize('NFC').toLowerCase()
+  return target
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[. ]+$/, '')
 }
 
 function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitError> {
@@ -138,10 +144,11 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
 }
 
 // A sidecar that crashes mid-clone takes its sweep down with it, and nothing in-process survives to
-// remember the staging directory it was writing. The name pattern is ours alone — folder names
-// starting with a dot are rejected up front — so whatever wears it here is a dead clone's leavings.
-// Best effort: an orphaned git may still be holding files, and the clone about to start does not
-// depend on this succeeding.
+// remember the staging directory it was writing. The full name pattern is ours alone — folder names
+// starting with a dot are rejected up front — so whatever wears it, prefix and exact hex suffix
+// both, is a dead clone's leavings. A near miss like `.repo.rebase-clone-backup` is somebody's own
+// file and is left alone. Best effort: an orphaned git may still be holding files, and the clone
+// about to start does not depend on this succeeding.
 function sweepOrphanedStaging(parentDir: string, folderName: string): void {
   let entries: string[]
   try {
@@ -149,8 +156,9 @@ function sweepOrphanedStaging(parentDir: string, folderName: string): void {
   } catch {
     return
   }
+  const prefix = stagingPrefix(folderName)
   for (const entry of entries) {
-    if (entry.startsWith(stagingPrefix(folderName))) {
+    if (entry.startsWith(prefix) && STAGING_SUFFIX.test(entry.slice(prefix.length))) {
       try {
         forceRemove(nodePath.join(parentDir, entry))
       } catch {}

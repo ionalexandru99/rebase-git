@@ -152,6 +152,17 @@ describe('destination claim keys', () => {
     expect(destinationClaimKey(composed)).toBe(destinationClaimKey(decomposed))
   })
 
+  // Win32 ignores dots and spaces trailing a final path component: `repo` and `repo.` name the same
+  // directory there, and two clones holding separate claims on them would rename into one place.
+  it('folds the trailing dots and spaces Win32 ignores', () => {
+    expect(destinationClaimKey('/home/user/code/repo.')).toBe(
+      destinationClaimKey('/home/user/code/repo')
+    )
+    expect(destinationClaimKey('/home/user/code/repo .')).toBe(
+      destinationClaimKey('/home/user/code/repo')
+    )
+  })
+
   it('still tells genuinely different destinations apart', () => {
     expect(destinationClaimKey('/home/user/code/one')).not.toBe(
       destinationClaimKey('/home/user/code/two')
@@ -264,9 +275,14 @@ describe('clearing what a dead clone left in staging', () => {
 // crash, which is the point of staging.
 describe('what a crashed sidecar left behind', () => {
   it('is swept by the next clone of the same folder', async () => {
-    const orphan = path.join(destination, '.crashy.rebase-clone-dead00')
+    const orphan = path.join(destination, '.crashy.rebase-clone-dead00ab')
     fs.mkdirSync(path.join(orphan, '.git'), { recursive: true })
     fs.writeFileSync(path.join(orphan, 'README.md'), 'half-written\n')
+    // A near miss wears the prefix but not the exact hex suffix the sidecar generates: it is
+    // somebody's own file, and the sweep has no business touching it.
+    const nearMiss = path.join(destination, '.crashy.rebase-clone-backup')
+    fs.mkdirSync(nearMiss)
+    fs.writeFileSync(path.join(nearMiss, 'notes.txt'), 'mine\n')
 
     const exit = await Effect.runPromiseExit(
       Stream.runDrain(
@@ -277,6 +293,8 @@ describe('what a crashed sidecar left behind', () => {
     expect(Exit.isSuccess(exit)).toBe(true)
     expect(fs.existsSync(path.join(destination, 'crashy', '.git'))).toBe(true)
     expect(fs.existsSync(orphan)).toBe(false)
+    expect(fs.readFileSync(path.join(nearMiss, 'notes.txt'), 'utf8')).toBe('mine\n')
+    fs.rmSync(nearMiss, { recursive: true, force: true })
   })
 })
 

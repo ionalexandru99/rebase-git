@@ -44,7 +44,6 @@ export function RepoPicker(props: RepoPickerProps) {
   const enterTarget = filteredRecent[0] ?? filteredDiscovered[0] ?? null
 
   const hasAnyWorkspace = props.workspaces.length > 0 || !!props.activeWorkspace
-  const recentWithoutWorkspace = props.recentRepos.slice(0, MAX_RECENT_REPOS)
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') {
@@ -167,13 +166,15 @@ export function RepoPicker(props: RepoPickerProps) {
         }
       />
       {/* Cloning works without a workspace, so this screen has to be able to show what came of it —
-          otherwise closing the cloned tab leaves no way back to the repository. */}
-      {recentWithoutWorkspace.length > 0 && (
-        <div className="w-full max-w-xl">
+          otherwise closing the cloned tab leaves no way back to the repository. It shows every
+          recent, not the four the full picker caps at: with no search and no workspace listing,
+          this list is the only route back, and a card that falls off it is a repository lost. */}
+      {props.recentRepos.length > 0 && (
+        <div className="scroll-host max-h-[40vh] w-full max-w-xl overflow-auto">
           <RepoGroup>
             <RepoGroupHeader label="Recent" />
             <RepoCardGrid
-              repos={recentWithoutWorkspace}
+              repos={props.recentRepos}
               enterTarget={null}
               onSelect={props.onOpenRepo}
             />

@@ -62,8 +62,12 @@ export function register(): void {
         }
       )
       // Cloning a repository is as much an act of choosing it as opening one is, and recording it
-      // here means it survives the tab being closed before the open ever lands.
-      addRecentRepo(path)
+      // here means it survives the tab being closed before the open ever lands. Best effort: the
+      // repository is already on disk, and a recents write that cannot land — a full disk, an
+      // unwritable profile — must not dress a finished clone up as a Git failure.
+      try {
+        addRecentRepo(path)
+      } catch {}
       return parseOrThrow(CloneRepoResponseSchema, { _tag: 'Ok', path })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
