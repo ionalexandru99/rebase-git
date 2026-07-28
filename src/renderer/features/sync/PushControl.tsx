@@ -2,6 +2,7 @@ import type { LostCommit } from '@shared/git-rpc-errors'
 import { ChevronDownIcon, Loader2Icon } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { toast } from 'sonner'
 import type { PushForce } from '@/lib/rpc-client'
 import type { PushOutcome } from '@/stores/action-runner'
 import {
@@ -104,8 +105,8 @@ export function PushControl(props: PushControlProps) {
   }
 
   // A leased force refused for a lease reason means the remote genuinely moved: escalate to the pinned
-  // overwrite, showing exactly what the sidecar's fetch found would be lost. Any other outcome (ok, a
-  // generic error already toasted by the runner) just closes the flow.
+  // overwrite, showing exactly what the sidecar's fetch found would be lost. A generic error is already
+  // toasted by the runner; a refusal we cannot escalate would otherwise close the flow saying nothing.
   const handleForceOutcome = (outcome: PushOutcome) => {
     if (
       outcome.kind === 'rejected' &&
@@ -114,6 +115,11 @@ export function PushControl(props: PushControlProps) {
       setLoss({ lostCommits: outcome.lostCommits, remoteSha: outcome.remoteSha })
       setMode('tier2')
       return
+    }
+    if (outcome.kind === 'rejected') {
+      toast.error('Force push rejected', {
+        description: 'The remote refused the update. Fetch, review the remote branch and try again.'
+      })
     }
     setMode('idle')
   }

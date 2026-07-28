@@ -437,6 +437,12 @@ export interface RunningGitProcess {
   terminate: () => Promise<void>
 }
 
+// Emptying core.askpass is what stops a configured desktop helper from popping a dialog nobody can
+// answer. It rides on the command line rather than git's config-environment protocol because that
+// protocol needs an empty-valued variable, and Windows drops those — leaving git to abort with
+// "missing config value" on every call.
+const NON_INTERACTIVE_ARGS = ['-c', 'core.askpass=']
+
 function repoPathFromArgs(args: string[]): string | undefined {
   const workTreeFlag = args.indexOf('-C')
   return workTreeFlag === -1 ? undefined : args[workTreeFlag + 1]
@@ -449,7 +455,7 @@ function startGitProcess(
 ): RunningGitProcess {
   const collectStdout = options?.collectStdout ?? true
   const pipeStdout = options?.pipeStdout ?? collectStdout
-  const child = spawn('git', args, {
+  const child = spawn('git', [...NON_INTERACTIVE_ARGS, ...args], {
     stdio: [
       options?.stdin === undefined ? 'ignore' : 'pipe',
       pipeStdout ? 'pipe' : 'ignore',
