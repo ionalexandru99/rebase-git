@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyGitFailure, gitFailureBannerText } from '@/lib/git-failure'
+import { classifyGitFailure } from '@/lib/git-failure'
 
 describe('classifyGitFailure', () => {
   it('names the suppressed HTTPS prompt and points at credential setup', () => {
@@ -8,9 +8,8 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('auth-missing')
-    expect(failure.description).toContain('github.com')
-    expect(failure.description).toContain('credential helper')
-    expect(failure.helpTopic).toBe('git-credentials')
+    expect(failure.message).toContain('github.com')
+    expect(failure.message).toContain('credential helper')
   })
 
   it('points an SSH remote at the agent instead of a credential helper', () => {
@@ -19,8 +18,7 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('auth-missing')
-    expect(failure.helpTopic).toBe('ssh-keys')
-    expect(failure.description).toContain('SSH')
+    expect(failure.message).toContain('SSH')
   })
 
   it('reads a refused public key as a rejected SSH credential', () => {
@@ -29,8 +27,7 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('auth-rejected')
-    expect(failure.helpTopic).toBe('ssh-keys')
-    expect(failure.description).toContain('github.com')
+    expect(failure.message).toContain('github.com')
   })
 
   it('reads an HTTPS 403 as rejected credentials', () => {
@@ -39,7 +36,6 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('auth-rejected')
-    expect(failure.helpTopic).toBe('git-credentials')
   })
 
   it('separates an unknown host key from a changed one', () => {
@@ -54,8 +50,7 @@ describe('classifyGitFailure', () => {
       "fatal: unable to access 'https://github.com/acme/app.git/': Could not resolve host: github.com"
     )
     expect(dns.kind).toBe('network')
-    expect(dns.description).toContain('github.com')
-    expect(dns.helpTopic).toBeUndefined()
+    expect(dns.message).toContain('github.com')
 
     expect(
       classifyGitFailure('ssh: connect to host github.com port 22: Connection timed out').kind
@@ -73,7 +68,7 @@ describe('classifyGitFailure', () => {
     )
   })
 
-  it('lists the files a dirty working tree blocks the operation with', () => {
+  it('names the few files a dirty working tree blocks the operation with', () => {
     const failure = classifyGitFailure(
       [
         'error: Your local changes to the following files would be overwritten by checkout:',
@@ -85,8 +80,9 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('dirty-tree')
-    expect(failure.description).toContain('src/app.ts, src/index.ts')
-    expect(failure.description).toContain('stash')
+    expect(failure.message).toBe(
+      'Uncommitted changes would be overwritten — src/app.ts and src/index.ts. Commit or stash them first, then try again.'
+    )
   })
 
   // git reports both lists in one refusal, each under its own header — the tracked files must not be
@@ -105,12 +101,13 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('dirty-tree')
-    expect(failure.description).toBe(
-      'Uncommitted changes to README.md and untracked notes.md would be overwritten. Commit or stash the changes and move the untracked files, then try again.'
+    expect(failure.message).toBe(
+      'Uncommitted changes (README.md) and untracked files (notes.md) would be overwritten. Commit or stash the changes, move the untracked files, then try again.'
     )
   })
 
-  it('caps a long blocking-file list', () => {
+  // An unstaged tree can hold hundreds of files; a toast must not try to name them all.
+  it('counts a long blocking-file list instead of naming it', () => {
     const failure = classifyGitFailure(
       [
         'error: The following untracked working tree files would be overwritten by merge:',
@@ -124,10 +121,12 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('untracked-overwrite')
-    expect(failure.description).toContain('a.ts, b.ts, c.ts and 2 more')
+    expect(failure.message).toBe(
+      'Untracked files would be overwritten — 5 files. Move, delete or commit them first, then try again.'
+    )
   })
 
-  it('repeats what the remote hook said', () => {
+  it('reports a hook rejection without repeating what the remote printed', () => {
     const failure = classifyGitFailure(
       [
         'remote: error: GH006: Protected branch update failed for refs/heads/main.',
@@ -136,7 +135,8 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('hook-rejected')
-    expect(failure.description).toContain('Protected branch update failed')
+    expect(failure.message).toContain('branch protection')
+    expect(failure.message).not.toContain('GH006')
   })
 
   // git tails almost every transport failure with "Could not read from remote repository… correct
@@ -153,8 +153,7 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('no-remote')
-    expect(failure.description).toContain('no remote named origin')
-    expect(failure.helpTopic).toBeUndefined()
+    expect(failure.message).toContain('no remote named origin')
   })
 
   it('reads a remote URL that is not a repository as a bad URL', () => {
@@ -163,7 +162,7 @@ describe('classifyGitFailure', () => {
     )
 
     expect(failure.kind).toBe('remote-missing')
-    expect(failure.description).toContain('/tmp/gone.git')
+    expect(failure.message).toContain('/tmp/gone.git')
   })
 
   it('recognises the local failures that are not about the remote', () => {
@@ -186,25 +185,17 @@ describe('classifyGitFailure', () => {
     ).toBe('no-upstream')
   })
 
-  it('passes an unrecognised message through untouched', () => {
-    const failure = classifyGitFailure('fatal: something nobody has seen before')
+  // Raw stderr belongs in the developer console, not in a toast the user has to decipher.
+  it('keeps an unrecognised message out of the user-facing text', () => {
+    const failure = classifyGitFailure('fatal: something nobody has seen before\n  at line 2')
 
     expect(failure.kind).toBe('unknown')
-    expect(failure.description).toBe('fatal: something nobody has seen before')
+    expect(failure.message).toBe(
+      'Git rejected the operation. The full output is in the developer console.'
+    )
   })
 
   it('says so when git reported nothing at all', () => {
-    expect(classifyGitFailure('   ').description).toBe('Git failed without reporting a reason.')
-  })
-})
-
-describe('gitFailureBannerText', () => {
-  it('prefixes the explanation with what was being done', () => {
-    expect(
-      gitFailureBannerText(
-        'Fetch failed',
-        "fatal: could not read Username for 'https://github.com': terminal prompts disabled"
-      )
-    ).toMatch(/^Fetch failed: github\.com asked for credentials/)
+    expect(classifyGitFailure('   ').message).toBe('Git failed without reporting a reason.')
   })
 })

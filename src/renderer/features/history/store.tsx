@@ -14,7 +14,7 @@ import {
 } from 'react'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
-import { gitFailureBannerText } from '@/lib/git-failure'
+import { gitFailureBannerText } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import type { GitLog, GitLogEntry } from '@/types'

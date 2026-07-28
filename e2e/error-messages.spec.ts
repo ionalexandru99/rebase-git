@@ -28,21 +28,7 @@ function withRemote(repo: string, url: string): void {
   git(['config', 'credential.helper', ''])
 }
 
-async function captureOpenedHelpLinks(harness: {
-  app: () => { evaluate: (fn: (electron: typeof import('electron')) => unknown) => Promise<unknown> }
-}): Promise<void> {
-  await harness.app().evaluate(({ shell }) => {
-    const opened: string[] = []
-    ;(globalThis as Record<string, unknown>).__openedHelpLinks = opened
-    shell.openExternal = async (url: string) => {
-      opened.push(url)
-    }
-  })
-}
-
-test('a remote that asks for credentials names the missing helper and links to the fix', async ({
-  harness
-}) => {
+test('a remote that asks for credentials names what is missing', async ({ harness }) => {
   const remote = await startChallengingRemote()
   try {
     const repo = createFixtureRepo()
@@ -51,7 +37,6 @@ test('a remote that asks for credentials names the missing helper and links to t
     await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({
       timeout: 10_000
     })
-    await captureOpenedHelpLinks(harness)
 
     const pushButton = page.getByRole('button', { name: 'Push', exact: true })
     await expect(pushButton).toBeVisible({ timeout: 10_000 })
@@ -66,28 +51,13 @@ test('a remote that asks for credentials names the missing helper and links to t
 
     expect(toast.description).toContain('127.0.0.1')
     expect(toast.description).toContain('Rebase runs Git without prompts')
-
-    // Hovering holds the toast open the way reaching for its button does — without it the auto-dismiss
-    // races the click. Scoped to the toast: the same action also sits in the tab banner.
-    const toaster = page.locator('[data-sonner-toaster]')
-    await toaster.hover()
-    const helpButton = toaster.getByRole('button', { name: 'Set up a credential helper' })
-    await expect(helpButton).toBeVisible()
-    await helpButton.click()
-
-    await expect
-      .poll(() =>
-        harness.app().evaluate(() => (globalThis as Record<string, unknown>).__openedHelpLinks)
-      )
-      .toEqual(['https://git-scm.com/docs/gitcredentials'])
   } finally {
     await remote.close()
   }
 })
 
-test('a fetch that cannot authenticate explains itself in the tab banner', async ({
-  harness
-}) => {
+// One surface per failure: the fetch that fails must not also leave a banner behind the toast.
+test('a fetch that cannot authenticate reports through the toast alone', async ({ harness }) => {
   const remote = await startChallengingRemote()
   try {
     const repo = createFixtureRepo()
@@ -104,13 +74,7 @@ test('a fetch that cannot authenticate explains itself in the tab banner', async
       () => fetchButton.click()
     )
 
-    const banner = page.getByText(/^Fetch failed:/)
-    await expect(banner).toBeVisible({ timeout: 10_000 })
-    await expect(banner).toContainText('no credential helper answered')
-    // Scoped to the banner: the toast raised by the same fetch offers the identical action.
-    await expect(
-      page.getByRole('alert').getByRole('button', { name: 'Set up a credential helper' })
-    ).toBeVisible()
+    await expect(page.getByRole('alert')).toHaveCount(0)
   } finally {
     await remote.close()
   }
@@ -182,6 +146,6 @@ test('a checkout blocked by uncommitted work names the files in the way', async 
     () => featureLeaf.dblclick()
   )
 
-  expect(toast.description).toContain('Uncommitted changes to README.md')
-  expect(toast.description).toContain('untracked notes.md')
+  expect(toast.description).toContain('Uncommitted changes (README.md)')
+  expect(toast.description).toContain('untracked files (notes.md)')
 })

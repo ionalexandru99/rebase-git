@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/features/status/status-file-rows'
 import { formatCause } from '@/lib/format-cause'
-import { gitFailureBannerText } from '@/lib/git-failure'
+import { gitFailureBannerText } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {

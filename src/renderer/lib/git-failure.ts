@@ -1,5 +1,3 @@
-import type { HelpTopic } from '@shared/help-links'
-
 export type GitFailureKind =
   | 'auth-missing'
   | 'auth-rejected'
@@ -25,14 +23,21 @@ export type GitFailureKind =
 
 export interface GitFailure {
   kind: GitFailureKind
-  /** What went wrong and what the user can do about it. Safe to show on its own. */
-  description: string
-  helpTopic?: HelpTopic
+  /**
+   * One short sentence: what went wrong and what to do about it. Never carries git's own output —
+   * that goes to the developer console, where a stack of paths or a wall of stderr belongs.
+   */
+  message: string
 }
 
 type Transport = 'ssh' | 'https' | 'unknown'
 
 const UNREPORTED = 'Git failed without reporting a reason.'
+const UNRECOGNISED = 'Git rejected the operation. The full output is in the developer console.'
+
+// A refusal can name every file in the way, and an unstaged tree can hold hundreds. Past a couple of
+// names the count carries the same information in a fraction of the space.
+const NAMED_PATH_LIMIT = 2
 
 function remoteHost(raw: string): string | null {
   const httpsUrl = raw.match(/https?:\/\/(?:[^\s'"@/]+@)?([^\s'"/:]+)/i)
@@ -76,11 +81,11 @@ function hostPhrase(raw: string): string {
   return remoteHost(raw) ?? 'the remote'
 }
 
-function formatPaths(paths: readonly string[]): string {
-  if (paths.length <= 3) {
-    return paths.join(', ')
+function describePaths(paths: readonly string[], noun: string): string {
+  if (paths.length > NAMED_PATH_LIMIT) {
+    return `${paths.length} ${noun}`
   }
-  return `${paths.slice(0, 3).join(', ')} and ${paths.length - 3} more`
+  return paths.join(' and ')
 }
 
 // git lists the blocking files on their own indented lines under each header, and a single refusal
@@ -107,28 +112,17 @@ const trackedOverwritePaths = (raw: string): string[] =>
 const untrackedOverwritePaths = (raw: string): string[] =>
   pathsUnder(raw, /untracked (?:working tree )?files would be overwritten/i)
 
-function remoteSaid(raw: string): string | null {
-  const lines = raw
-    .split('\n')
-    .filter((line) => /^remote:/.test(line.trim()))
-    .map((line) => line.trim().replace(/^remote:\s*/, ''))
-    .filter((line) => line.length > 0 && !/^\s*$/.test(line))
-  return lines.length > 0 ? lines.join(' ') : null
-}
-
 function authMissing(raw: string, transport: Transport): GitFailure {
   const host = hostPhrase(raw)
   if (transport === 'ssh') {
     return {
       kind: 'auth-missing',
-      description: `Connecting to ${host} needs an SSH key, and Rebase never prompts. Start an SSH agent holding a key ${host} accepts, then try again.`,
-      helpTopic: 'ssh-keys'
+      message: `Connecting to ${host} needs an SSH key, and Rebase never prompts. Start an SSH agent holding a key ${host} accepts, then try again.`
     }
   }
   return {
     kind: 'auth-missing',
-    description: `${host} asked for credentials and no credential helper answered — Rebase runs Git without prompts. Configure a credential helper for ${host}, or switch the remote to SSH.`,
-    helpTopic: 'git-credentials'
+    message: `${host} asked for credentials and no credential helper answered — Rebase runs Git without prompts. Configure a credential helper for ${host}, or switch the remote to SSH.`
   }
 }
 
@@ -137,14 +131,12 @@ function authRejected(raw: string, transport: Transport): GitFailure {
   if (transport === 'ssh') {
     return {
       kind: 'auth-rejected',
-      description: `${host} refused your SSH key. Check that your agent holds a key that host accepts — \`ssh-add -l\` lists the loaded keys.`,
-      helpTopic: 'ssh-keys'
+      message: `${host} refused your SSH key. Check that your agent holds a key that host accepts — \`ssh-add -l\` lists the loaded keys.`
     }
   }
   return {
     kind: 'auth-rejected',
-    description: `${host} rejected your credentials. An expired token or a stale entry in your credential helper is the usual cause — update it and try again.`,
-    helpTopic: 'git-credentials'
+    message: `${host} rejected your credentials. An expired token or a stale entry in your credential helper is the usual cause — update it and try again.`
   }
 }
 
@@ -153,7 +145,7 @@ function networkFailure(raw: string, lowered: string): GitFailure {
   if (lowered.includes('could not resolve host')) {
     return {
       kind: 'network',
-      description: `Couldn't resolve ${host}. Check the remote URL and your network or DNS, then try again.`
+      message: `Couldn't resolve ${host}. Check the remote URL and your network or DNS, then try again.`
     }
   }
   if (
@@ -162,12 +154,12 @@ function networkFailure(raw: string, lowered: string): GitFailure {
   ) {
     return {
       kind: 'network',
-      description: `The TLS certificate for ${host} could not be verified. A proxy or a missing corporate root certificate is the usual cause.`
+      message: `The TLS certificate for ${host} could not be verified. A proxy or a missing corporate root certificate is the usual cause.`
     }
   }
   return {
     kind: 'network',
-    description: `Couldn't reach ${host}. Check your network, VPN or proxy, then try again.`
+    message: `Couldn't reach ${host}. Check your network, VPN or proxy, then try again.`
   }
 }
 
@@ -177,42 +169,41 @@ function blockedByWorkingTree(raw: string): GitFailure {
   if (tracked.length > 0 && untracked.length > 0) {
     return {
       kind: 'dirty-tree',
-      description: `Uncommitted changes to ${formatPaths(tracked)} and untracked ${formatPaths(untracked)} would be overwritten. Commit or stash the changes and move the untracked files, then try again.`
+      message: `Uncommitted changes (${describePaths(tracked, 'files')}) and untracked files (${describePaths(untracked, 'files')}) would be overwritten. Commit or stash the changes, move the untracked files, then try again.`
     }
   }
   if (untracked.length > 0) {
     return {
       kind: 'untracked-overwrite',
-      description: `Untracked files (${formatPaths(untracked)}) would be overwritten. Move, delete or commit them first, then try again.`
+      message: `Untracked files would be overwritten — ${describePaths(untracked, 'files')}. Move, delete or commit them first, then try again.`
     }
   }
   const subject =
-    tracked.length > 0 ? `Uncommitted changes to ${formatPaths(tracked)}` : 'Uncommitted changes'
+    tracked.length > 0
+      ? `Uncommitted changes would be overwritten — ${describePaths(tracked, 'files')}`
+      : 'Uncommitted changes would be overwritten'
   return {
     kind: 'dirty-tree',
-    description: `${subject} would be overwritten. Commit or stash them first, then try again.`
+    message: `${subject}. Commit or stash them first, then try again.`
   }
 }
 
 function hookRejected(raw: string): GitFailure {
-  const said = remoteSaid(raw)
   return {
     kind: 'hook-rejected',
-    description: said
-      ? `${hostPhrase(raw)} rejected the push: ${said}`
-      : `${hostPhrase(raw)} rejected the push — branch protection or a server-side hook blocked it.`
+    message: `${hostPhrase(raw)} rejected the push — branch protection or a server-side hook blocked it. The remote's own words are in the developer console.`
   }
 }
 
 /**
- * Turns raw git stderr into a message that names the failure and the fix. Anything we do not
- * recognise is passed through verbatim rather than softened — an honest raw message beats a vague
- * friendly one.
+ * Turns raw git stderr into a message that names the failure and the fix. An unrecognised failure is
+ * reported as such rather than paraphrased: the raw output goes to the developer console, so nothing
+ * is lost and the toast stays readable.
  */
 export function classifyGitFailure(rawMessage: string): GitFailure {
   const raw = rawMessage.trim()
   if (raw.length === 0) {
-    return { kind: 'unknown', description: UNREPORTED }
+    return { kind: 'unknown', message: UNREPORTED }
   }
   const lowered = raw.toLowerCase()
   const transport = transportOf(raw, lowered)
@@ -232,8 +223,7 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return {
       kind: 'host-key-changed',
-      description: `The SSH host key for ${hostPhrase(raw)} no longer matches the one in your known_hosts. Confirm the new fingerprint with your Git host before trusting it — a mismatch can also mean an intercepted connection.`,
-      helpTopic: 'ssh-known-hosts'
+      message: `The SSH host key for ${hostPhrase(raw)} no longer matches the one in your known_hosts. Confirm the new fingerprint with your Git host before trusting it — a mismatch can also mean an intercepted connection.`
     }
   }
   if (
@@ -243,8 +233,7 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return {
       kind: 'host-key-unknown',
-      description: `${hostPhrase(raw)} isn't a known SSH host on this machine, and Rebase can't answer the trust prompt. Verify the fingerprint your Git host publishes and add it to ~/.ssh/known_hosts.`,
-      helpTopic: 'ssh-known-hosts'
+      message: `${hostPhrase(raw)} isn't a known SSH host on this machine, and Rebase can't answer the trust prompt. Verify the fingerprint your Git host publishes and add it to ~/.ssh/known_hosts.`
     }
   }
   // git appends "Could not read from remote repository… correct access rights" to every transport
@@ -255,11 +244,11 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
     return /[/\\:]/.test(target)
       ? {
           kind: 'remote-missing',
-          description: `${target} is not a Git repository. Check the remote's URL.`
+          message: `${target} is not a Git repository. Check the remote's URL.`
         }
       : {
           kind: 'no-remote',
-          description: `This repository has no remote named ${target}, so there is nothing to sync with. Add one, then try again.`
+          message: `This repository has no remote named ${target}, so there is nothing to sync with. Add one, then try again.`
         }
   }
   if (
@@ -293,7 +282,7 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   if (lowered.includes('repository not found') || lowered.includes('returned error: 404')) {
     return {
       kind: 'remote-missing',
-      description: `${hostPhrase(raw)} has no repository at that URL, or your account can't see it. Check the remote URL and that your account has access.`
+      message: `${hostPhrase(raw)} has no repository at that URL, or your account can't see it. Check the remote URL and that your account has access.`
     }
   }
   if (
@@ -303,7 +292,7 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return {
       kind: 'no-remote',
-      description: 'This repository has no remote configured, so there is nothing to sync with.'
+      message: 'This repository has no remote configured, so there is nothing to sync with.'
     }
   }
   if (lowered.includes('pre-receive hook declined') || lowered.includes('[remote rejected]')) {
@@ -316,7 +305,7 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return {
       kind: 'non-fast-forward',
-      description:
+      message:
         'The remote branch has commits your branch does not. Pull them first, or force push if you meant to replace the remote history.'
     }
   }
@@ -327,7 +316,7 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return {
       kind: 'diverged',
-      description:
+      message:
         'Your branch and its upstream have both moved, so a fast-forward pull is not possible. Merge or rebase the upstream commits to continue.'
     }
   }
@@ -338,14 +327,14 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return {
       kind: 'no-upstream',
-      description:
+      message:
         'This branch is not tracking a remote branch yet. Push it once to publish it and set the upstream.'
     }
   }
   if (lowered.includes('detached head')) {
     return {
       kind: 'detached-head',
-      description: 'HEAD is detached, so there is no branch to publish. Check out a branch first.'
+      message: 'HEAD is detached, so there is no branch to publish. Check out a branch first.'
     }
   }
   if (
@@ -365,14 +354,14 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return {
       kind: 'conflict',
-      description:
+      message:
         'Conflicts stopped the operation. Resolve the conflicted files and commit, or abort to go back.'
     }
   }
   if (lowered.includes('refusing to merge unrelated histories')) {
     return {
       kind: 'unrelated-histories',
-      description:
+      message:
         'These branches share no history, so Git refuses to merge them. Check that you picked the right branch.'
     }
   }
@@ -382,30 +371,25 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
   ) {
     return {
       kind: 'index-lock',
-      description:
+      message:
         'Another Git process holds this repository. Wait for it to finish; if nothing is running, delete .git/index.lock.'
     }
   }
   if (lowered.includes('already exists')) {
     return {
       kind: 'ref-exists',
-      description: 'That name is already taken in this repository. Pick another one.'
+      message: 'That name is already taken in this repository. Pick another one.'
     }
   }
   if (lowered.includes('is not fully merged')) {
     return {
       kind: 'branch-not-merged',
-      description:
+      message:
         'The branch has commits that are not merged anywhere else. Delete it with force if you are sure you do not need them.'
     }
   }
   if (lowered.includes('nothing to commit') || lowered.includes('no changes added to commit')) {
-    return { kind: 'nothing-to-commit', description: 'There is nothing staged to commit.' }
+    return { kind: 'nothing-to-commit', message: 'There is nothing staged to commit.' }
   }
-  return { kind: 'unknown', description: raw }
-}
-
-/** Single-line form for the tab's error banner, which has no room for a title and a body. */
-export function gitFailureBannerText(label: string, rawMessage: string): string {
-  return `${label}: ${classifyGitFailure(rawMessage).description}`
+  return { kind: 'unknown', message: UNRECOGNISED }
 }

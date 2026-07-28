@@ -213,7 +213,7 @@ describe('useRefs — concern isolation', () => {
 })
 
 describe('useRefs — auto-fetch', () => {
-  it('retains a status error after a newer fetch error recovers', async () => {
+  it('leaves the banner to the read paths — a fetch failure only toasts', async () => {
     sidecarMock.getStatus.mockResolvedValueOnce({
       _tag: 'GitError',
       message: 'status unavailable'
@@ -237,26 +237,19 @@ describe('useRefs — auto-fetch', () => {
       await openRepo?.(repoPath)
     })
     await waitFor(() => {
-      expect(screen.getByTestId('error')).toHaveTextContent('status unavailable')
+      expect(screen.getByTestId('error')).toHaveTextContent('Could not read the working tree')
     })
 
     sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'GitError', message: 'network down' })
     await act(async () => {
       await fetchNow?.()
     })
-    expect(screen.getByTestId('error')).toHaveTextContent('network down')
 
-    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'Ok' })
-    await act(async () => {
-      await fetchNow?.()
-    })
-
-    await waitFor(() => {
-      expect(screen.getByTestId('error')).toHaveTextContent('status unavailable')
-    })
+    expect(toast.error).toHaveBeenCalledWith('Fetch failed', expect.anything())
+    expect(screen.getByTestId('error')).toHaveTextContent('Could not read the working tree')
   })
 
-  it('clears only its matching session error after a later successful fetch', async () => {
+  it('keeps a mutation error on the banner across later fetches', async () => {
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     let fetchNow: (() => Promise<void>) | undefined
     let stageFile: ((file: string) => Promise<unknown>) | undefined
@@ -277,33 +270,18 @@ describe('useRefs — auto-fetch', () => {
     await act(async () => {
       await openRepo?.(repoPath)
     })
-    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'GitError', message: 'network down' })
-    await act(async () => {
-      await fetchNow?.()
-    })
-    expect(screen.getByTestId('error')).toHaveTextContent('network down')
-
-    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'Ok' })
-    await act(async () => {
-      await fetchNow?.()
-    })
-
-    expect(screen.getByTestId('error')).toBeEmptyDOMElement()
-
-    sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'GitError', message: 'network down again' })
-    await act(async () => {
-      await fetchNow?.()
-    })
     sidecarMock.stageFile.mockResolvedValueOnce({ _tag: 'GitError', message: 'cannot stage' })
     await act(async () => {
       await stageFile?.('src/app.ts')
     })
+    expect(screen.getByTestId('error')).toHaveTextContent('Git rejected the change')
+
     sidecarMock.fetchRepo.mockResolvedValueOnce({ _tag: 'Ok' })
     await act(async () => {
       await fetchNow?.()
     })
 
-    expect(screen.getByTestId('error')).toHaveTextContent('cannot stage')
+    expect(screen.getByTestId('error')).toHaveTextContent('Git rejected the change')
   })
 
   it('refreshes the timeline after a successful fetch', async () => {
@@ -427,31 +405,7 @@ describe('useRefs — auto-fetch', () => {
     expect(sidecarMock.fetchRepo).toHaveBeenCalledTimes(1)
   })
 
-  it('surfaces a failed auto-fetch as an error rather than an unhandled rejection', async () => {
-    vi.useFakeTimers()
-    let openRepo: ((path: string) => Promise<string | null>) | undefined
-    function Probe() {
-      const session = useRepoSession()
-      openRepo = session.openRepo
-      return <div data-testid="error">{session.error ?? ''}</div>
-    }
-    renderWithQuery(() => (
-      <GitStoreProvider tabId="refs-tab" tabActive={true}>
-        <Probe />
-      </GitStoreProvider>
-    ))
-
-    await act(async () => {
-      await openRepo?.(repoPath)
-    })
-
-    sidecarMock.fetchRepo.mockRejectedValue(new Error('network down'))
-    await advanceTimers(5 * 60 * 1000)
-
-    expect(screen.getByTestId('error')).toHaveTextContent('network down')
-  })
-
-  it('keeps a background fetch failure out of the toasts', async () => {
+  it('surfaces a failed auto-fetch as a toast rather than an unhandled rejection', async () => {
     vi.useFakeTimers()
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function Probe() {
@@ -470,17 +424,48 @@ describe('useRefs — auto-fetch', () => {
     })
     toast.error.mockClear()
 
+    sidecarMock.fetchRepo.mockRejectedValue(new Error('network down'))
+    await advanceTimers(5 * 60 * 1000)
+
+    expect(toast.error).toHaveBeenCalledWith('Fetch failed', expect.anything())
+    expect(screen.getByTestId('error')).toBeEmptyDOMElement()
+  })
+
+  it('does not re-toast a background fetch that keeps failing the same way', async () => {
+    vi.useFakeTimers()
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    function Probe() {
+      openRepo = useRepoSession().openRepo
+      return null
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Probe />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+    toast.error.mockClear()
+
     sidecarMock.fetchRepo.mockResolvedValue({
       _tag: 'GitError',
       message: 'ssh: connect to host example.com port 22: Connection refused'
     })
     await advanceTimers(5 * 60 * 1000)
+    await advanceTimers(5 * 60 * 1000)
 
-    expect(screen.getByTestId('error')).toHaveTextContent("Couldn't reach example.com")
-    expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith(
+      'Fetch failed',
+      expect.objectContaining({
+        description: expect.stringContaining("Couldn't reach example.com")
+      })
+    )
   })
 
-  it('tells a manual fetch that system auth is unconfigured and links to the fix', async () => {
+  it('tells a manual fetch that system auth is unconfigured', async () => {
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     let fetchNow: (() => Promise<void>) | undefined
     function Probe() {
@@ -507,19 +492,13 @@ describe('useRefs — auto-fetch', () => {
       await fetchNow?.()
     })
 
-    expect(screen.getByTestId('error')).toHaveTextContent('credential helper')
     expect(toast.error).toHaveBeenCalledWith(
       'Fetch failed',
       expect.objectContaining({
         description: expect.stringContaining('credential helper')
       })
     )
-
-    const options = toast.error.mock.calls.at(-1)?.[1] as {
-      action: { label: string; onClick: () => void }
-    }
-    options.action.onClick()
-    expect(window.electronAPI.openHelpLink).toHaveBeenCalledWith('git-credentials')
+    expect(screen.getByTestId('error')).toBeEmptyDOMElement()
   })
 
   it('reports a manual fetch that succeeded', async () => {

@@ -3,7 +3,7 @@ import { type ReactNode, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
-import { gitFailureBannerText } from '@/lib/git-failure'
+import { gitFailureBannerText } from '@/lib/git-report'
 import { cachesForRepoChange, type RepoCache } from '@/lib/operation-caches'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { CommitHistoryProvider, useCommitHistoryController } from '../features/history/store'
@@ -92,8 +92,6 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     liveRepoPath,
     openGenerationRef: openGeneration,
     isCurrentRepo,
-    setError: session.setError,
-    clearError: session.clearError,
     mutationCoordinator,
     refreshAfterFetch
   })

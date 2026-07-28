@@ -1,4 +1,3 @@
-import type { HelpTopic } from '@shared/help-links'
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -14,15 +13,13 @@ import {
 import { toast } from 'sonner'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
-import { classifyGitFailure } from '@/lib/git-failure'
-import { toastGitFailure } from '@/lib/git-toast'
+import { toastGitFailure } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcFetch, rpcGetLocalBranches, rpcGetRemoteRefs } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import type { GitBranches } from '@/types'
 import type { RepoMutationCoordinator } from '../../stores/action-runner'
-import type { RepoSessionErrorSource } from '../../stores/repo-session'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 const combineBranches = (
@@ -59,8 +56,6 @@ export interface RefsDeps {
   liveRepoPath: RefObject<string | null>
   openGenerationRef: RefObject<number>
   isCurrentRepo: (generation: number, repoPath: string) => boolean
-  setError: (source: RepoSessionErrorSource, error: string, helpTopic?: HelpTopic) => void
-  clearError: (source: RepoSessionErrorSource) => void
   mutationCoordinator: RepoMutationCoordinator
   refreshAfterFetch: (repoPath: string) => Promise<unknown>
 }
@@ -97,8 +92,6 @@ export function useRefsController(deps: RefsDeps): RefsController {
     liveRepoPath,
     openGenerationRef,
     isCurrentRepo,
-    setError,
-    clearError,
     mutationCoordinator,
     refreshAfterFetch
   } = deps
@@ -110,6 +103,7 @@ export function useRefsController(deps: RefsDeps): RefsController {
 
   const [fetchTick, setFetchTick] = useState(0)
   const pendingRefresh = useRef<string | null>(null)
+  const lastFetchFailure = useRef<string | null>(null)
   const [lastFetch, setLastFetch] = useState<{ repoPath: string; fetchedAt: number } | null>(null)
   const lastFetchedAt = lastFetch?.repoPath === repoPath ? lastFetch.fetchedAt : null
 
@@ -141,12 +135,13 @@ export function useRefsController(deps: RefsDeps): RefsController {
     })
   }
 
-  // A background fetch reports through the tab banner only — toasting every five minutes would be
-  // noise. A fetch the user asked for always answers, success or failure.
+  // One surface per failure: the toast. A fetch the user asked for always answers; a background fetch
+  // only speaks up when it has something new to say, so a remote that stays broken does not toast
+  // every five minutes.
   const reportFetchFailure = (rawMessage: string, manual: boolean) => {
-    const failure = classifyGitFailure(rawMessage)
-    setError('fetch', `Fetch failed: ${failure.description}`, failure.helpTopic)
-    if (manual) {
+    const alreadyReported = lastFetchFailure.current === rawMessage
+    lastFetchFailure.current = rawMessage
+    if (manual || !alreadyReported) {
       toastGitFailure('Fetch failed', rawMessage)
     }
   }
@@ -166,7 +161,7 @@ export function useRefsController(deps: RefsDeps): RefsController {
             return
           }
           if (response._tag === 'Ok') {
-            clearError('fetch')
+            lastFetchFailure.current = null
             setLastFetch({ repoPath: path, fetchedAt: Date.now() })
             if (manual) {
               toast.success('Fetched from remote')

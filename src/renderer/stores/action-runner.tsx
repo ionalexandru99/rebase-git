@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { formatCause } from '@/lib/format-cause'
-import { toastGitFailure } from '@/lib/git-toast'
+import { toastGitFailure } from '@/lib/git-report'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
 import {
   type PushForce,

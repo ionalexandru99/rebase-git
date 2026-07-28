@@ -1,4 +1,3 @@
-import type { HelpTopic } from '@shared/help-links'
 import {
   createContext,
   type RefObject,
@@ -10,7 +9,7 @@ import {
   useState
 } from 'react'
 import { formatCause } from '@/lib/format-cause'
-import { gitFailureBannerText } from '@/lib/git-failure'
+import { gitFailureBannerText } from '@/lib/git-report'
 import { rpcCloseRepo, rpcDisownRepo, rpcOpenRepo } from '@/lib/rpc-client'
 
 export interface OpenedRepo {
@@ -29,17 +28,10 @@ interface RepoSessionState {
   resetEpoch: number
 }
 
-export type RepoSessionErrorSource =
-  | 'session'
-  | 'status'
-  | 'mutation'
-  | 'refs'
-  | 'fetch'
-  | 'history'
+export type RepoSessionErrorSource = 'session' | 'status' | 'mutation' | 'refs' | 'history'
 
 interface RepoSessionError {
   message: string
-  helpTopic?: HelpTopic
   sequence: number
 }
 
@@ -54,8 +46,6 @@ export interface RepoSession {
   // teardown, so without a fresh request the session would sit in `opening` forever.
   resetEpoch: number
   error: string | null
-  // Set when the displayed error has a documented fix (auth, host keys) the banner can link to.
-  errorHelpTopic: HelpTopic | null
   openRepo: (requestedPath: string) => Promise<string | null>
   closeRepo: () => Promise<void>
   disownRepo: () => void
@@ -72,7 +62,7 @@ export interface RepoSessionController extends RepoSession {
   defaultBranch: string | undefined
   liveRepoPath: RefObject<string | null>
   openGenerationRef: RefObject<number>
-  setError: (source: RepoSessionErrorSource, error: string, helpTopic?: HelpTopic) => void
+  setError: (source: RepoSessionErrorSource, error: string) => void
   clearError: (source: RepoSessionErrorSource) => void
   publicValue: RepoSession
 }
@@ -94,7 +84,6 @@ const initialSessionState: RepoSessionState = {
 const errorSourcesByPriority: readonly RepoSessionErrorSource[] = [
   'session',
   'mutation',
-  'fetch',
   'history',
   'status',
   'refs'
@@ -167,18 +156,15 @@ export function useRepoSessionController(
 
   liveRepoPath.current = sessionState.repoPath
 
-  const setError = useCallback(
-    (source: RepoSessionErrorSource, error: string, helpTopic?: HelpTopic) => {
-      const sequence = ++errorSequenceRef.current
-      setSessionState((previous) => {
-        return {
-          ...previous,
-          errors: { ...previous.errors, [source]: { message: error, helpTopic, sequence } }
-        }
-      })
-    },
-    []
-  )
+  const setError = useCallback((source: RepoSessionErrorSource, error: string) => {
+    const sequence = ++errorSequenceRef.current
+    setSessionState((previous) => {
+      return {
+        ...previous,
+        errors: { ...previous.errors, [source]: { message: error, sequence } }
+      }
+    })
+  }, [])
 
   const clearError = useCallback((source: RepoSessionErrorSource) => {
     setSessionState((previous) => {
@@ -381,7 +367,6 @@ export function useRepoSessionController(
       openGeneration: sessionState.openGeneration,
       resetEpoch: sessionState.resetEpoch,
       error: error?.message ?? null,
-      errorHelpTopic: error?.helpTopic ?? null,
       openRepo,
       closeRepo,
       disownRepo

@@ -12,7 +12,6 @@ import { createBeforeQuitHandler } from './app/shutdown'
 import { focusExistingWindow } from './app/single-instance'
 import { resolveBackgroundColor } from './app/theme'
 import { setupUpdater } from './app/updater'
-import * as helpIpc from './ipc/help'
 import * as logStreamIpc from './ipc/log-stream'
 import * as repoIpc from './ipc/repo'
 import * as settingsIpc from './ipc/settings'
@@ -150,7 +149,6 @@ function registerIpcHandlers(): void {
   logStreamIpc.register()
   workspaceIpc.register(() => mainWindow)
   settingsIpc.register()
-  helpIpc.register()
 }
 
 async function shutdownMainResources(): Promise<void> {

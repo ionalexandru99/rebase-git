@@ -167,8 +167,7 @@ const mockElectronAPI = {
   getOnboardingComplete: vi.fn(),
   setOnboardingComplete: vi.fn(),
   scanForRepos: vi.fn(),
-  sidecarRequest: vi.fn(),
-  openHelpLink: vi.fn()
+  sidecarRequest: vi.fn()
 }
 
 Object.defineProperty(window, 'electronAPI', {

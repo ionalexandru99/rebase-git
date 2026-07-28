@@ -32,7 +32,6 @@ function fixtureProviders(fixture: TimelineFixture, children: ReactNode): ReactN
     openGeneration: 0,
     resetEpoch: 0,
     error: null,
-    errorHelpTopic: null,
     openRepo: async () => null,
     closeRepo: asyncNoop,
     disownRepo: asyncNoop
