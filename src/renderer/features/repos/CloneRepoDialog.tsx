@@ -62,7 +62,7 @@ export function CloneRepoDialog(props: CloneRepoDialogProps) {
       >
         <h2 className="text-sm font-semibold">Clone a repository</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Rebase uses your system credential helper and SSH agent to authenticate.
+          HTTPS or SSH. Rebase authenticates with your system credential helper and SSH agent.
         </p>
 
         <label htmlFor={urlFieldId} className="mt-4 block text-xs text-muted-foreground">

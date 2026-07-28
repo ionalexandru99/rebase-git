@@ -7,47 +7,32 @@ import {
 } from '@shared/schemas/ipc'
 import { ipcMain, webContents as webContentsApi } from 'electron'
 import { sidecarClone } from '../sidecar/process'
+import { type CloneRegistry, createCloneRegistry } from './clone-registry'
 
-interface ActiveClone {
-  controller: AbortController
-  webContentsId: number
-}
+const registry: CloneRegistry = createCloneRegistry()
+const boundWebContents = new Set<number>()
 
-const activeClones = new Map<string, ActiveClone>()
-const webContentsCleanupBound = new Set<number>()
-
-const cloneKey = (webContentsId: number, cloneId: number): string => `${webContentsId}:${cloneId}`
-
-function abortClone(webContentsId: number, cloneId: number): void {
-  const key = cloneKey(webContentsId, cloneId)
-  const active = activeClones.get(key)
-  if (!active) {
-    return
-  }
-  activeClones.delete(key)
-  active.controller.abort()
-}
-
-// A reload or a closed window leaves nobody to receive the progress, and the clone would otherwise
-// keep writing into the destination folder unattended.
+// A clone outlives the document that asked for it: a reload (including the sidecar recovery path)
+// leaves nobody to receive the progress, and the replacement document starts numbering clones from
+// one again. Both a reload and a teardown therefore retire the document's clones.
 function bindWebContentsCleanup(webContentsId: number): void {
-  if (webContentsCleanupBound.has(webContentsId)) {
+  if (boundWebContents.has(webContentsId)) {
     return
   }
-  webContentsCleanupBound.add(webContentsId)
   const contents = webContentsApi.fromId(webContentsId)
   if (!contents) {
-    webContentsCleanupBound.delete(webContentsId)
     return
   }
-  contents.once('destroyed', () => {
-    for (const [key, clone] of activeClones) {
-      if (clone.webContentsId === webContentsId) {
-        activeClones.delete(key)
-        clone.controller.abort()
-      }
+  boundWebContents.add(webContentsId)
+
+  contents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) {
+      registry.retireDocument(webContentsId)
     }
-    webContentsCleanupBound.delete(webContentsId)
+  })
+  contents.once('destroyed', () => {
+    registry.retireDocument(webContentsId)
+    boundWebContents.delete(webContentsId)
   })
 }
 
@@ -56,11 +41,9 @@ export function register(): void {
     const request = parseOrThrow(CloneRequestSchema, payload)
     const webContents = event.sender
     const webContentsId = webContents.id
-    const key = cloneKey(webContentsId, request.cloneId)
 
     bindWebContentsCleanup(webContentsId)
-    const controller = new AbortController()
-    activeClones.set(key, { controller, webContentsId })
+    const controller = registry.start(webContentsId, request.cloneId)
 
     try {
       const path = await sidecarClone(
@@ -82,15 +65,13 @@ export function register(): void {
       const message = error instanceof Error ? error.message : String(error)
       return parseOrThrow(CloneRepoResponseSchema, { _tag: 'GitError', message })
     } finally {
-      if (activeClones.get(key)?.controller === controller) {
-        activeClones.delete(key)
-      }
+      registry.finish(webContentsId, request.cloneId, controller)
     }
   })
 
   ipcMain.handle(Channel.cancelClone, (event, cloneId: unknown) => {
     if (typeof cloneId === 'number' && Number.isInteger(cloneId)) {
-      abortClone(event.sender.id, cloneId)
+      registry.cancel(event.sender.id, cloneId)
     }
   })
 }

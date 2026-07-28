@@ -6,7 +6,7 @@ import { Effect, Stream } from 'effect'
 import { promptlessEnv } from '../git/env'
 import { GitError } from '../git/errors'
 import { resolveDirectoryWithinHome } from '../git/path-guards'
-import { capStderr, type RunningGitProcess, startGit } from '../git/spawn'
+import { type RunningGitProcess, startGit } from '../git/spawn'
 
 export interface CloneRequest {
   url: string
@@ -51,6 +51,12 @@ interface CloneTarget {
   path: string
 }
 
+// Every tab shares this sidecar, so two of them can aim at one destination before either git child
+// creates it — `existsSync` cannot see a clone that has not written anything yet. Holding the path
+// for the length of the operation makes the loser fail before it spawns git, which is also what
+// makes the cleanup below safe: a running clone owns its directory outright.
+const claimedDestinations = new Set<string>()
+
 function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitError> {
   return Effect.suspend(() => {
     const url = request.url.trim()
@@ -66,15 +72,23 @@ function prepareTarget(request: CloneRequest): Effect.Effect<CloneTarget, GitErr
       return Effect.fail(new GitError({ message: INVALID_DESTINATION }))
     }
     const target = nodePath.join(parentDir, folderName)
+    // A clone in flight is reported as such rather than as a folder that already exists: by the time
+    // git has created the directory, "already exists" would be true but misleading. These three
+    // steps run without interleaving, so the claim can never outlive a rejected request.
+    if (claimedDestinations.has(target)) {
+      return Effect.fail(new GitError({ message: `${folderName} is already being cloned` }))
+    }
     if (fs.existsSync(target)) {
       return Effect.fail(new GitError({ message: `${folderName} already exists in that folder` }))
     }
+    claimedDestinations.add(target)
     return Effect.succeed({ url, path: target })
   })
 }
 
 // A clone that dies part-way leaves a half-written tree behind. We only ever remove a path we
-// checked was absent before starting, and only while it still looks like the clone git created.
+// checked was absent before starting and have held the claim on since, and only while it still
+// looks like the clone git created.
 function removePartialClone(target: string): void {
   try {
     if (!fs.existsSync(nodePath.join(target, '.git'))) {
@@ -104,14 +118,15 @@ function progressStream(
   return Stream.asyncPush<CloneProgress, GitError>((emit) =>
     Effect.sync(() => {
       let buffer = ''
-      let stderrBuffer = ''
       let lastPhase = ''
       let lastPercent = -1
 
+      // Live progress only. A git that exits before this listener attaches loses nothing that
+      // matters: the outcome and the full stderr come from the promise below, which the spawn
+      // helper wires up at spawn time and cannot miss.
       const stderr = running.child.stderr
       stderr?.setEncoding('utf8')
       stderr?.on('data', (chunk: string) => {
-        stderrBuffer = capStderr(stderrBuffer + chunk)
         buffer += chunk
         // git overwrites the current progress line with \r and starts a new phase with \n.
         const lines = buffer.split(/[\r\n]/)
@@ -131,19 +146,18 @@ function progressStream(
         }
       })
 
-      running.child.once('error', (error: Error) => {
-        emit.fail(new GitError({ message: error.message }))
-      })
-
-      running.child.once('close', (code: number | null) => {
-        if (code === 0) {
-          state.succeeded = true
-          emit.single({ phase: 'Done', percent: 100, done: true, path: canonicalize(target) })
-          emit.end()
-          return
-        }
-        emit.fail(new GitError({ message: cloneFailureMessage(stderrBuffer, code) }))
-      })
+      running.result.then(
+        ({ code, stderr: collected }) => {
+          if (code === 0) {
+            state.succeeded = true
+            emit.single({ phase: 'Done', percent: 100, done: true, path: canonicalize(target) })
+            emit.end()
+            return
+          }
+          emit.fail(new GitError({ message: cloneFailureMessage(collected, code) }))
+        },
+        (error: Error) => emit.fail(new GitError({ message: error.message }))
+      )
     })
   )
 }
@@ -151,7 +165,9 @@ function progressStream(
 export function cloneRepo(request: CloneRequest): Stream.Stream<CloneProgress, GitError> {
   return Stream.unwrapScoped(
     Effect.gen(function* () {
-      const target = yield* prepareTarget(request)
+      const target = yield* Effect.acquireRelease(prepareTarget(request), (claimed) =>
+        Effect.sync(() => claimedDestinations.delete(claimed.path))
+      )
       const state: CloneState = { succeeded: false }
       const running = yield* Effect.acquireRelease(
         Effect.sync(() =>
