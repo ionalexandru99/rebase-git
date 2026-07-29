@@ -1,8 +1,11 @@
 import { type ReactNode, useMemo } from 'react'
 import type { ConflictSide } from '@/features/status/conflict-resolution'
-import type { FileRowGroup } from '@/features/status/FileRow'
 import type { UnifiedFileRow } from '@/features/status/status-file-rows'
-import { buildStatusGroups, type StatusGroup } from '@/features/status/status-groups'
+import {
+  buildStatusGroups,
+  type FileRowGroup,
+  type StatusGroup
+} from '@/features/status/status-groups'
 import type { FileAction } from '@/lib/git-actions'
 import { useWorkingTreeStatus } from '@/stores/git'
 import { LoadingBadge } from '../../components/ui/loading-badge'

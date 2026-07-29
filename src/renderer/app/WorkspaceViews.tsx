@@ -16,7 +16,6 @@ import type { RefKind } from '../features/refs/ref-tree'
 import { CleanWorkingTree } from '../features/status/CleanWorkingTree'
 import { ConflictBanner } from '../features/status/ConflictBanner'
 import type { ConflictSide } from '../features/status/conflict-resolution'
-import type { FileRowGroup } from '../features/status/FileRow'
 import { type OperationSummary, summarizeOperation } from '../features/status/operation-summary'
 import { StashControl } from '../features/status/StashControl'
 import { type SelectedFile, StatusPanel } from '../features/status/StatusPanel'
@@ -24,6 +23,7 @@ import { followSelection } from '../features/status/selection-follow'
 import { buildHeadCommitRows, buildStagedFilePaths } from '../features/status/status-file-rows'
 import {
   buildStatusGroups,
+  type FileRowGroup,
   flattenStatusGroups,
   type StatusGroupRow
 } from '../features/status/status-groups'

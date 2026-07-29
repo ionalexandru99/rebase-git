@@ -2,6 +2,9 @@ import type { UnifiedFileRow } from '@/features/status/status-file-rows'
 
 export type StatusGroupKind = 'conflicts' | 'staged' | 'unstaged'
 
+/** The amend list is not a staging side, so it sits alongside the three working-copy groups. */
+export type FileRowGroup = StatusGroupKind | 'head-commit'
+
 export interface StatusGroup {
   kind: StatusGroupKind
   label: string

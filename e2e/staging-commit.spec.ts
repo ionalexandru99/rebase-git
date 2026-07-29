@@ -5,6 +5,7 @@ import {
   createFixtureRepo,
   expect,
   fileRow,
+  gitIn,
   openHistory,
   openLocalChanges,
   porcelainStatus,
@@ -176,6 +177,49 @@ test('selecting a modified file renders diff hunks and staging its hunk carries 
   await expect(diffBody.getByRole('checkbox', { name: 'Unstage hunk' }).first()).toBeVisible({
     timeout: 10_000
   })
+})
+
+// Half-staging is the state the old merged diff pane could not express: the file belongs to both
+// lists, and each row diffs only its own side.
+test('lists a partially staged file in both groups, each row showing only its side', async ({
+  harness
+}) => {
+  const repo = createFixtureRepo()
+  const git = gitIn(repo)
+  const base = `${Array.from({ length: 40 }, (_unused, index) => `line ${index}`).join('\n')}\n`
+  fs.writeFileSync(path.join(repo, 'long.txt'), base)
+  git(['add', '.'])
+  git(['commit', '-m', 'add long file'])
+  // Two edits far enough apart that git reports them as separate hunks.
+  fs.writeFileSync(
+    path.join(repo, 'long.txt'),
+    base.replace('line 2\n', 'line 2 edited\n').replace('line 36\n', 'line 36 edited\n')
+  )
+  const page = await harness.openRepo(repo)
+
+  await openLocalChanges(page)
+  await unstagedFileRow(page, 'long.txt').getByRole('button', { name: 'long.txt', exact: true }).click()
+
+  const diffBody = page.getByTestId('diff-body')
+  await expect(diffBody.getByTestId('diff-hunk')).toHaveCount(2, { timeout: 10_000 })
+
+  await diffBody.getByRole('checkbox', { name: 'Stage hunk' }).first().click()
+
+  await expect(stagedFileRow(page, 'long.txt')).toBeVisible({ timeout: 10_000 })
+  await expect(unstagedFileRow(page, 'long.txt')).toBeVisible()
+  await expect.poll(() => porcelainStatus(repo), { timeout: 10_000 }).toEqual(['MM long.txt'])
+
+  // The selection stayed on the unstaged row, which now holds only the hunk that is still local.
+  await expect(diffBody.getByTestId('diff-hunk')).toHaveCount(1)
+  await expect(diffBody.getByText('line 36 edited')).toBeVisible()
+  await expect(diffBody.getByText('line 2 edited')).toHaveCount(0)
+
+  await stagedFileRow(page, 'long.txt').getByRole('button', { name: 'long.txt', exact: true }).click()
+
+  await expect(diffBody.getByTestId('diff-hunk')).toHaveCount(1, { timeout: 10_000 })
+  await expect(diffBody.getByText('line 2 edited')).toBeVisible()
+  await expect(diffBody.getByText('line 36 edited')).toHaveCount(0)
+  await expect(diffBody.getByRole('checkbox', { name: 'Unstage hunk' })).toBeVisible()
 })
 
 test('scrolls a long working-tree diff instead of clipping it', async ({ harness }) => {

@@ -5,7 +5,7 @@ import {
   type ConflictSide,
   conflictRowActions
 } from '@/features/status/conflict-resolution'
-import type { StatusGroupKind } from '@/features/status/status-groups'
+import type { FileRowGroup } from '@/features/status/status-groups'
 import type { FileAction } from '@/lib/git-actions'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '../../components/ui/checkbox'
@@ -18,9 +18,6 @@ import {
   ContextMenuTriggerArea
 } from '../../components/ui/context-menu'
 import { StatusBadge, type StatusKind } from './StatusBadge'
-
-/** The amend list is not a staging side, so it sits alongside the three working-copy groups. */
-export type FileRowGroup = StatusGroupKind | 'head-commit'
 
 interface FileRowProps {
   file: string
@@ -89,6 +86,7 @@ export function FileRow(props: FileRowProps) {
           className={rowClass}
           data-testid="status-file-row"
           data-group={props.group}
+          data-file={props.file}
         >
           <Checkbox
             checked={kept}
@@ -141,6 +139,7 @@ export function FileRow(props: FileRowProps) {
         className={rowClass}
         data-testid="status-file-row"
         data-group={props.group}
+        data-file={props.file}
         onDoubleClick={toggleStaged}
       >
         <StatusBadge kind={props.kind} />

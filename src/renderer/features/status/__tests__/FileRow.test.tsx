@@ -59,10 +59,12 @@ describe('FileRow — unstaged group', () => {
     expect(onStage).toHaveBeenCalledWith('src/app.ts')
   })
 
-  it('tags the row with its group so the lists can be told apart', () => {
+  it('tags the row with its group and path so the lists can be told apart', () => {
     renderRow()
 
-    expect(screen.getByTestId('status-file-row')).toHaveAttribute('data-group', 'unstaged')
+    const row = screen.getByTestId('status-file-row')
+    expect(row).toHaveAttribute('data-group', 'unstaged')
+    expect(row).toHaveAttribute('data-file', 'src/app.ts')
   })
 })
 

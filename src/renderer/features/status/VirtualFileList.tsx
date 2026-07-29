@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 import type { ConflictLabels, ConflictSide } from '@/features/status/conflict-resolution'
 import type { UnifiedFileRow } from '@/features/status/status-file-rows'
-import type { StatusGroupKind } from '@/features/status/status-groups'
+import type { FileRowGroup, StatusGroupKind } from '@/features/status/status-groups'
 import type { FileAction } from '@/lib/git-actions'
 import { STATUS_FILE_OVERSCAN, STATUS_FILE_ROW_HEIGHT } from '@/lib/virtual-config'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
-import { FileRow, type FileRowGroup } from './FileRow'
+import { FileRow } from './FileRow'
 
 export interface SelectedFile {
   file: string
