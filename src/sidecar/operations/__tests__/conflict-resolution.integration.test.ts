@@ -304,6 +304,23 @@ describe('continueOperation — a step that resolves to nothing', () => {
     })
   })
 
+  // The step is empty because nothing is *staged* for it, which an unstaged edit the user is carrying
+  // does not change. Reading the whole working tree instead of the index would call the step
+  // non-empty, refuse to skip, and strand the sequence: `--continue` keeps refusing for a change it
+  // is never going to commit, and the UI offers no third button.
+  it('skips an empty step while an unstaged edit sits in the working tree', async () => {
+    await withConflictedRepo('cherry-pick-sequence', async (fixture) => {
+      await runOp(resolveConflict(fixture.path, 'a.txt', 'ours'))
+      writeRepoFile(fixture.path, 'a.txt', 'main a\nstill editing\n')
+
+      expect(await failureTag(continueOperation(fixture.path))).toBe('Conflict')
+
+      expect(await currentOperationKind(fixture.path)).toBe('cherry-pick')
+      expect(conflictedPaths(fixture.path)).toContain('b.txt')
+      expect(readRepoFile(fixture.path, 'a.txt')).toBe('main a\nstill editing\n')
+    })
+  })
+
   it('skips the empty commit of a sequence and reports the conflict the next one hits', async () => {
     await withConflictedRepo('cherry-pick-sequence', async (fixture) => {
       await runOp(resolveConflict(fixture.path, 'a.txt', 'ours'))

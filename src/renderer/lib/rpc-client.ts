@@ -93,8 +93,8 @@ export type ConflictableResult = RpcResult<
   typeof MergeBranch.errorSchema.Type
 >
 export type RefWriteResult = RpcResult<
-  typeof CreateBranch.successSchema.Type,
-  typeof CreateBranch.errorSchema.Type
+  typeof DeleteBranch.successSchema.Type,
+  typeof DeleteBranch.errorSchema.Type
 >
 export type PushResult = RpcResult<typeof Push.successSchema.Type, typeof Push.errorSchema.Type>
 export type PushForce = NonNullable<typeof Push.payloadSchema.Type.force>
@@ -258,7 +258,7 @@ export async function rpcCreateBranch(
   startPoint?: string,
   checkout?: boolean,
   startPointKind?: RefKind
-): Promise<RefWriteResult> {
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(CreateBranch, {
     repoPath,
     name,

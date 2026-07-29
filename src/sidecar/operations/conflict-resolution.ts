@@ -86,13 +86,17 @@ async function conflictStages(repoPath: string, file: string): Promise<Set<numbe
 
 // Whether the step git just refused to finish has nothing left to record. The wording of that
 // refusal varies by operation and by rebase backend ("is now empty", "nothing to commit", "No
-// changes"), so the index and the working tree decide instead: no unmerged entry and nothing that
-// differs from HEAD means neither committing nor resolving can move this step forward.
+// changes"), so the index decides instead: no unmerged entry and nothing staged that differs from
+// HEAD means neither committing nor resolving can move this step forward.
+//
+// Staged, not the whole working tree: an unrelated unstaged edit the user happened to be carrying is
+// not part of the step, and counting it would suppress the skip and strand the operation with no way
+// forward — `--continue` would keep refusing for a change it is never going to commit.
 async function stepHasNothingToCommit(repoPath: string): Promise<boolean> {
   if ((await unmergedPaths(repoPath)).length > 0) {
     return false
   }
-  const { code } = await spawnGit(['-C', repoPath, 'diff', '--quiet', 'HEAD', '--'], {
+  const { code } = await spawnGit(['-C', repoPath, 'diff', '--cached', '--quiet', 'HEAD', '--'], {
     env: nonInteractiveEnv()
   })
   return code === 0

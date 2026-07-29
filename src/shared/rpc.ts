@@ -187,7 +187,7 @@ export const CherryPick = Rpc.make('cherryPick', {
 export const Checkout = Rpc.make('checkout', {
   payload: { repoPath: OpaqueString, refKind: RefKindSchema, fullPath: RequiredString },
   success: Schema.Struct({ checkedOut: RequiredString }),
-  error: RefWriteError
+  error: GuardedWriteError
 })
 
 export const CreateBranch = Rpc.make('createBranch', {
@@ -199,7 +199,7 @@ export const CreateBranch = Rpc.make('createBranch', {
     checkout: Schema.optional(Schema.Boolean)
   },
   success: Schema.Void,
-  error: RefWriteError
+  error: GuardedWriteError
 })
 
 export const DeleteBranch = Rpc.make('deleteBranch', {

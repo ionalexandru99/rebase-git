@@ -2,7 +2,7 @@ import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import type { RefKind } from '@shared/schemas/ipc'
 import { Effect } from 'effect'
 import { deriveLocalShortName } from '../git/checkout'
-import { GitError, type RepoNotOpen } from '../git/errors'
+import { GitError, type OperationInProgress, type RepoNotOpen } from '../git/errors'
 import { isSafeCheckoutRef, isSafeRefArg } from '../git/ref-args'
 import {
   LOCAL_BRANCH_FORMAT,
@@ -13,6 +13,7 @@ import {
 import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
 import { requireGit, tryGit } from './helpers'
+import { requireNoOperation } from './in-progress'
 
 export function getLocalBranches(
   repoPath: string
@@ -42,12 +43,19 @@ export function checkoutRef(
   repoPath: string,
   refKind: 'local' | 'remote' | 'tag',
   fullPath: string
-): Effect.Effect<{ checkedOut: string }, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<
+  { checkedOut: string },
+  RepoNotOpen | GitError | OperationInProgress,
+  RepoSessions
+> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeCheckoutRef(fullPath)) {
       return yield* Effect.fail(new GitError({ message: 'invalid ref name' }))
     }
+    // git cancels a parked cherry-pick or revert to move HEAD — it says so in a warning nobody sees
+    // and deletes CHERRY_PICK_HEAD, taking the resolution waiting on Continue with it.
+    yield* requireNoOperation(repoPath)
     return yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
@@ -101,11 +109,15 @@ export function createBranch(
   startPoint?: string,
   checkout?: boolean,
   startPointKind?: RefKind
-): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(name) || (startPoint !== undefined && !isSafeRefArg(startPoint))) {
       return yield* Effect.fail(new GitError({ message: 'invalid branch name' }))
+    }
+    // Creating a branch leaves HEAD alone; checking one out is the same HEAD move as any checkout.
+    if (checkout) {
+      yield* requireNoOperation(repoPath)
     }
     yield* withRepoLock(
       repoPath,

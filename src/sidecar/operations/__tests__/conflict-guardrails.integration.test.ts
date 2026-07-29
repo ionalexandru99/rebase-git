@@ -15,6 +15,7 @@ import {
   checkoutRef,
   cherryPick,
   closeRepo,
+  createBranch,
   discardAll,
   discardChanges,
   getStatus,
@@ -64,8 +65,7 @@ describe('operations attempted while a merge conflict is unresolved', () => {
 
       const error = await failure(checkoutRef(fixture.path, 'local', 'feature'))
 
-      expect(error._tag).toBe('GitError')
-      expect(error.message).toMatch(/resolve your current index|needs merge/i)
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
       expect(branchOf(fixture.path)).toBe('main')
       expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(headBefore)
       expect(conflictedPaths(fixture.path)).toEqual(['f.txt'])
@@ -236,6 +236,49 @@ describe('a merge parked with its conflict already resolved', () => {
 
       expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
       expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+})
+
+// Moving HEAD is the third way out. git does not refuse a checkout for a parked cherry-pick or
+// revert the way it does for a conflicted index — it cancels the operation to make room, says so in a
+// warning that never reaches a GUI, and the resolution waiting on Continue goes with it.
+describe('checking out while a cherry-pick is parked with its conflict resolved', () => {
+  async function withResolvedPick<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
+    const fixture = makeConflictedRepo('cherry-pick')
+    await runOp(openRepo(fixture.path))
+    try {
+      for (const file of conflictedPaths(fixture.path)) {
+        await runOp(resolveConflict(fixture.path, file, 'ours'))
+      }
+      return await use(fixture)
+    } finally {
+      await runOp(closeRepo(fixture.path))
+      removeRepoDir(fixture.path)
+    }
+  }
+
+  it('refuses the checkout and stays on the branch with the operation intact', async () => {
+    await withResolvedPick(async (fixture) => {
+      const error = await failure(checkoutRef(fixture.path, 'local', 'feature'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'cherry-pick' })
+      expect(branchOf(fixture.path)).toBe(fixture.branchBefore)
+      expect(await operationKind(fixture.path)).toBe('cherry-pick')
+    })
+  })
+
+  it('refuses a branch created with checkout but allows one created without', async () => {
+    await withResolvedPick(async (fixture) => {
+      const error = await failure(createBranch(fixture.path, 'switched', undefined, true))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'cherry-pick' })
+      expect(branchOf(fixture.path)).toBe(fixture.branchBefore)
+
+      await runOp(createBranch(fixture.path, 'parked', undefined, false))
+
+      expect(branchOf(fixture.path)).toBe(fixture.branchBefore)
+      expect(await operationKind(fixture.path)).toBe('cherry-pick')
     })
   })
 })
