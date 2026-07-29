@@ -158,6 +158,7 @@ beforeEach(() => {
   mockStatus()
   sidecarMock.getDiff.mockResolvedValue({
     _tag: 'Ok',
+    patch: '',
     diff: { filePath: 'a.ts', binary: false, hunks: [] }
   })
 })

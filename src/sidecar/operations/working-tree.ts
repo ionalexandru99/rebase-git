@@ -169,7 +169,7 @@ export function getDiff(
   file: string,
   staged: boolean,
   scope?: DiffScope
-): Effect.Effect<{ diff: FileDiff }, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<{ diff: FileDiff; patch: string }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     yield* requireOpen(repoPath)
     if (scope?.range !== undefined && !isSafeRefArg(scope.range)) {
@@ -191,7 +191,7 @@ export function getDiff(
       raw = yield* tryGit(() => readConflictDiff(repoPath, file))
       parsed = parseUnifiedDiff(raw)
     }
-    return { diff: toFileDiff(file, parsed) }
+    return { diff: toFileDiff(file, parsed), patch: raw }
   })
 }
 

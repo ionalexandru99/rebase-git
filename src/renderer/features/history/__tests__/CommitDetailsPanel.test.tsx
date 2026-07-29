@@ -53,6 +53,7 @@ function detailFor(sha: string, overrides: Partial<CommitDetail> = {}): CommitDe
 
 const diffFor = (file: string) => ({
   _tag: 'Ok' as const,
+  patch: '',
   diff: {
     filePath: file,
     binary: false,
