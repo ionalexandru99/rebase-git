@@ -1,4 +1,4 @@
-import { access, rename, rm } from 'node:fs/promises'
+import { rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { CommitSummary, HeadCommit as HeadCommitInfo } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
@@ -18,6 +18,7 @@ import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
 import { amendIndexPath, readIndexTree, synchronizeIndexToCommit } from './amend-index'
 import { requireOpen, tryGit } from './helpers'
+import { detectInProgressOperation } from './in-progress'
 
 const NUL = '\x00'
 const HEAD_FORMAT = `%H${'%x00'}%P${'%x00'}%an${'%x00'}%ae${'%x00'}%aI`
@@ -36,36 +37,6 @@ async function runGitOk(key: string, args: string[], stdin?: string): Promise<st
     throw new Error(stderr.trim() || `git ${args[0]} exited with code ${code}`)
   }
   return stdout
-}
-
-type InProgressOperation = OperationInProgress['operation']
-
-const IN_PROGRESS_MARKERS: readonly { gitPath: string; operation: InProgressOperation }[] = [
-  { gitPath: 'rebase-merge', operation: 'rebase' },
-  { gitPath: 'rebase-apply', operation: 'rebase' },
-  { gitPath: 'MERGE_HEAD', operation: 'merge' },
-  { gitPath: 'CHERRY_PICK_HEAD', operation: 'cherry-pick' },
-  { gitPath: 'REVERT_HEAD', operation: 'revert' }
-]
-
-const pathExists = (target: string): Promise<boolean> =>
-  access(target).then(
-    () => true,
-    () => false
-  )
-
-async function detectInProgressOperation(key: string): Promise<InProgressOperation | undefined> {
-  const args = [
-    'rev-parse',
-    ...IN_PROGRESS_MARKERS.flatMap((marker) => ['--git-path', marker.gitPath])
-  ]
-  const markerPaths = (await runGitOk(key, args)).trimEnd().split('\n')
-  for (const [index, marker] of IN_PROGRESS_MARKERS.entries()) {
-    if (await pathExists(path.resolve(key, markerPaths[index]))) {
-      return marker.operation
-    }
-  }
-  return undefined
 }
 
 async function readHeadCommit(key: string): Promise<HeadCommit> {

@@ -2,10 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { CommitPanel } from '../CommitPanel'
 
-function renderPanel(
-  overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}
-): ReturnType<typeof render> {
-  return render(
+function panelElement(overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}) {
+  return (
     <CommitPanel
       onCommit={overrides.onCommit ?? vi.fn().mockResolvedValue(true)}
       onAmend={overrides.onAmend ?? vi.fn().mockResolvedValue(true)}
@@ -20,8 +18,17 @@ function renderPanel(
       droppedHeadPaths={overrides.droppedHeadPaths}
       droppedHeadHunks={overrides.droppedHeadHunks}
       expectedHead={overrides.expectedHead}
+      prefillMessage={overrides.prefillMessage}
+      concludesMerge={overrides.concludesMerge}
+      commitBlockedReason={overrides.commitBlockedReason}
     />
   )
+}
+
+function renderPanel(
+  overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}
+): ReturnType<typeof render> {
+  return render(panelElement(overrides))
 }
 
 const amendToggle = () => screen.getByRole('checkbox', { name: /amend last commit/i })
@@ -330,6 +337,83 @@ describe('CommitPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Amend' }))
 
     await waitFor(() => expect(onAmendChange).toHaveBeenLastCalledWith(false))
+  })
+
+  it('prefills the merge message into an untouched box', () => {
+    renderPanel({ prefillMessage: "Merge branch 'feature/login'" })
+    expect(screen.getByRole('textbox')).toHaveValue("Merge branch 'feature/login'")
+  })
+
+  it('does not clobber a message the user already typed', () => {
+    const view = renderPanel()
+    const textarea = screen.getByRole('textbox')
+    fireEvent.input(textarea, { target: { value: 'my own message' } })
+
+    view.rerender(panelElement({ prefillMessage: "Merge branch 'feature/login'" }))
+
+    expect(textarea).toHaveValue('my own message')
+  })
+
+  it('drops the prefill again when the operation is aborted', () => {
+    const view = renderPanel({ prefillMessage: "Merge branch 'feature/login'" })
+    const textarea = screen.getByRole('textbox')
+    expect(textarea).toHaveValue("Merge branch 'feature/login'")
+
+    view.rerender(panelElement({ prefillMessage: undefined }))
+
+    expect(textarea).toHaveValue('')
+  })
+
+  // Resolving every conflict toward our side leaves an index identical to HEAD, so the merge commit
+  // has to stay reachable with nothing staged.
+  it('keeps commit enabled with nothing staged while a merge is waiting to be concluded', () => {
+    renderPanel({ stagedCount: 0, concludesMerge: true })
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: "Merge branch 'feature'" } })
+
+    expect(screen.getByRole('button', { name: 'Commit merge' })).toBeEnabled()
+  })
+
+  it('still refuses the merge commit while a conflict is unresolved', () => {
+    renderPanel({
+      stagedCount: 0,
+      concludesMerge: true,
+      commitBlockedReason: 'Resolve and stage every conflicted file before committing.'
+    })
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: "Merge branch 'feature'" } })
+
+    expect(screen.getByRole('button', { name: 'Commit merge' })).toBeDisabled()
+  })
+
+  it('disables committing with a visible explanation when the operation must be continued', () => {
+    renderPanel({
+      commitBlockedReason: 'Finish this cherry-pick with Continue above, not a commit.'
+    })
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
+
+    expect(screen.getByRole('button', { name: /Commit 2 files/i })).toBeDisabled()
+    expect(
+      screen.getByText('Finish this cherry-pick with Continue above, not a commit.')
+    ).toBeInTheDocument()
+  })
+
+  // Amending is not an escape hatch from the block: git refuses to amend during a sequencer
+  // operation outright, so letting the toggle re-enable the button only promises a failure.
+  it('keeps the block in force when the amend toggle is on', async () => {
+    renderPanel({
+      amendAvailable: true,
+      expectedHead: 'abc123',
+      commitBlockedReason: 'Finish this cherry-pick with Continue above, not a commit.'
+    })
+
+    await act(async () => {
+      fireEvent.click(amendToggle())
+    })
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
+
+    expect(screen.getByRole('button', { name: 'Amend' })).toBeDisabled()
+    expect(
+      screen.getByText('Finish this cherry-pick with Continue above, not a commit.')
+    ).toBeInTheDocument()
   })
 
   it('updates the subject-length counter as the user types', () => {

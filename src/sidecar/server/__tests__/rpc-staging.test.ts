@@ -123,7 +123,7 @@ describe('staging RPC handlers', () => {
   })
 
   it('fails every op with a typed RepoNotOpen when the repo resolves but was never opened', async () => {
-    const results = await Promise.all([
+    const results: Either.Either<void, { _tag: string; message?: string }>[] = await Promise.all([
       stageFile({ repoPath: existingDir, file: 'a.txt' }),
       unstageFile({ repoPath: existingDir, file: 'a.txt' }),
       stageAll({ repoPath: existingDir, files: ['a.txt'] }),
@@ -142,7 +142,7 @@ describe('staging RPC handlers', () => {
   })
 
   it('rejects a file path that escapes the repo root with a typed GitError', async () => {
-    const results = await Promise.all([
+    const results: Either.Either<void, { _tag: string; message?: string }>[] = await Promise.all([
       stageFile({ repoPath: existingDir, file: '../escape' }),
       stageAll({ repoPath: existingDir, files: ['../escape'] }),
       stageHunk({ repoPath: existingDir, file: '../escape', hunkHeader: '@@ -1 +1 @@' }),

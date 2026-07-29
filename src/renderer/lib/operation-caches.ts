@@ -50,6 +50,9 @@ const OPERATION_CACHES = {
   getCommitDetail: null,
   stashList: null,
   streamLog: null,
+  abortOperation: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  continueOperation: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  resolveConflict: ['status', 'diff'],
   createBranchCheckout: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit']
 } satisfies Record<SidecarRpcTag | 'createBranchCheckout', readonly RepoCache[] | null>
 

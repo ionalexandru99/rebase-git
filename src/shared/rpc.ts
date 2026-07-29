@@ -42,8 +42,12 @@ export {
 const ReadError = Schema.Union(RepoNotOpen, GitError)
 const CommitError = Schema.Union(RepoNotOpen, GitError)
 const StageError = Schema.Union(RepoNotOpen, GitError)
+// Unstaging or stashing while an operation is parked carries the resolution out of the index and
+// abandons the operation with it, so these refuse where their staging counterparts do not.
+const GuardedWriteError = Schema.Union(RepoNotOpen, GitError, OperationInProgress)
 const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)
-const ConflictableError = Schema.Union(RepoNotOpen, GitError, Conflict)
+const GuardedHunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound, OperationInProgress)
+const ConflictableError = Schema.Union(RepoNotOpen, GitError, Conflict, OperationInProgress)
 const RefWriteError = Schema.Union(RepoNotOpen, GitError)
 const FetchError = Schema.Union(RepoNotOpen, GitError, FetchSkipped)
 const OpenError = Schema.Union(NotARepo, GitError)
@@ -123,7 +127,7 @@ export const UnstageFile = Rpc.make('unstageFile', {
     renameSource: Schema.optional(OpaqueString)
   },
   success: Schema.Void,
-  error: StageError
+  error: GuardedWriteError
 })
 
 export const StageAll = Rpc.make('stageAll', {
@@ -135,7 +139,7 @@ export const StageAll = Rpc.make('stageAll', {
 export const UnstageAll = Rpc.make('unstageAll', {
   payload: { repoPath: OpaqueString, files: FileList },
   success: Schema.Void,
-  error: StageError
+  error: GuardedWriteError
 })
 
 export const StageHunk = Rpc.make('stageHunk', {
@@ -147,13 +151,13 @@ export const StageHunk = Rpc.make('stageHunk', {
 export const UnstageHunk = Rpc.make('unstageHunk', {
   payload: { repoPath: OpaqueString, file: OpaqueString, hunkHeader: OpaqueHunkHeaderString },
   success: Schema.Void,
-  error: HunkError
+  error: GuardedHunkError
 })
 
 export const DiscardChanges = Rpc.make('discardChanges', {
   payload: { repoPath: OpaqueString, files: FileList },
   success: Schema.Void,
-  error: StageError
+  error: GuardedWriteError
 })
 
 export const DiscardAll = Rpc.make('discardAll', {
@@ -183,7 +187,7 @@ export const CherryPick = Rpc.make('cherryPick', {
 export const Checkout = Rpc.make('checkout', {
   payload: { repoPath: OpaqueString, refKind: RefKindSchema, fullPath: RequiredString },
   success: Schema.Struct({ checkedOut: RequiredString }),
-  error: RefWriteError
+  error: GuardedWriteError
 })
 
 export const CreateBranch = Rpc.make('createBranch', {
@@ -195,7 +199,7 @@ export const CreateBranch = Rpc.make('createBranch', {
     checkout: Schema.optional(Schema.Boolean)
   },
   success: Schema.Void,
-  error: RefWriteError
+  error: GuardedWriteError
 })
 
 export const DeleteBranch = Rpc.make('deleteBranch', {
@@ -258,13 +262,13 @@ export const StashPush = Rpc.make('stashPush', {
     files: Schema.optional(FileList)
   },
   success: Schema.Void,
-  error: RefWriteError
+  error: GuardedWriteError
 })
 
 export const Reset = Rpc.make('reset', {
   payload: { repoPath: OpaqueString, sha: RequiredString, mode: ResetModeSchema },
   success: Schema.Void,
-  error: RefWriteError
+  error: GuardedWriteError
 })
 
 export const Fetch = Rpc.make('fetch', {
@@ -287,6 +291,30 @@ export const Pull = Rpc.make('pull', {
   payload: { repoPath: OpaqueString },
   success: Schema.Void,
   error: RefWriteError
+})
+
+export const AbortOperation = Rpc.make('abortOperation', {
+  payload: { repoPath: OpaqueString },
+  success: Schema.Void,
+  error: RefWriteError
+})
+
+// Continuing a multi-commit cherry-pick/revert/rebase can immediately conflict again on the next
+// commit, so this is conflictable like the operations that start a sequence.
+export const ContinueOperation = Rpc.make('continueOperation', {
+  payload: { repoPath: OpaqueString },
+  success: Schema.Void,
+  error: ConflictableError
+})
+
+export const ResolveConflict = Rpc.make('resolveConflict', {
+  payload: {
+    repoPath: OpaqueString,
+    file: OpaqueString,
+    side: Schema.Literal('ours', 'theirs')
+  },
+  success: Schema.Void,
+  error: StageError
 })
 
 export const GetStatus = Rpc.make('getStatus', {
@@ -377,6 +405,9 @@ export const SidecarRpcs = RpcGroup.make(
   Fetch,
   Push,
   Pull,
+  AbortOperation,
+  ContinueOperation,
+  ResolveConflict,
   GetStatus,
   GetLocalBranches,
   GetRemoteRefs,

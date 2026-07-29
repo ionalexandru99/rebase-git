@@ -13,6 +13,7 @@ import {
   createTag,
   deleteBranch,
   deleteTag,
+  detectOperationState,
   getLocalBranches,
   getRemoteRefs,
   mergeBranch,
@@ -171,6 +172,41 @@ describe('merge', () => {
     expect(fs.existsSync(path.join(repoDir, 'clean.txt'))).toBe(true)
   })
 
+  // git names the commit after the ref as spelled, so merging the qualified form would stamp
+  // `Merge branch 'refs/heads/x'` onto every merge the app makes.
+  it('names a merge commit after the short ref, not the qualified one', async () => {
+    git('checkout', 'main')
+    await runOp(createBranch(repoDir, 'merge/named', undefined, true))
+    commitFile('named.txt', 'named\n', 'named work')
+    git('checkout', 'main')
+    commitFile('named-main.txt', 'main\n', 'main work beside the merge')
+
+    await runOp(mergeBranch(repoDir, 'local', 'merge/named'))
+
+    expect(git('log', '-1', '--format=%s').trim()).toMatch(/^Merge branch 'merge\/named'/)
+  })
+
+  it('prefills the conflicted merge message and marks conflicts with the short ref', async () => {
+    git('checkout', 'main')
+    commitFile('prefill.txt', 'main-side\n', 'main side of prefill')
+    await runOp(createBranch(repoDir, 'merge/prefill', 'HEAD~1', true))
+    commitFile('prefill.txt', 'branch-side\n', 'branch side of prefill')
+    git('checkout', 'main')
+
+    await runOp(Effect.either(mergeBranch(repoDir, 'local', 'merge/prefill')))
+
+    // Every test in this file shares one repo, so the abort has to happen even when an assertion
+    // throws — otherwise a single failure here leaves a half-merged repo and fails everything after.
+    try {
+      const operation = await detectOperationState(repoDir)
+      expect(operation?.mergeMessage).toMatch(/^Merge branch 'merge\/prefill'/)
+      expect(readFile('prefill.txt')).toContain('>>>>>>> merge/prefill')
+      expect(readFile('prefill.txt')).not.toContain('refs/heads/')
+    } finally {
+      git('merge', '--abort')
+    }
+  })
+
   it('reports a conflict without throwing', async () => {
     git('checkout', 'main')
     commitFile('conflict.txt', 'main-side\n', 'main side of conflict')
@@ -178,11 +214,15 @@ describe('merge', () => {
     commitFile('conflict.txt', 'branch-side\n', 'branch side of conflict')
     git('checkout', 'main')
     const result = await runOp(Effect.either(mergeBranch(repoDir, 'local', 'merge/conflict')))
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left._tag).toBe('Conflict')
+
+    try {
+      expect(Either.isLeft(result)).toBe(true)
+      if (Either.isLeft(result)) {
+        expect(result.left._tag).toBe('Conflict')
+      }
+    } finally {
+      git('merge', '--abort')
     }
-    git('merge', '--abort')
   })
 
   it('merges the local branch when a tag has the same short name', async () => {

@@ -1,4 +1,3 @@
-import { CheckIcon } from 'lucide-react'
 import { type ComponentType, type ReactElement, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import {
@@ -14,7 +13,10 @@ import { DiffPanel } from '../features/diff/DiffPanel'
 import { HistoryPanel } from '../features/history'
 import { buildHeadCommitRange } from '../features/history/head-commit-range'
 import type { RefKind } from '../features/refs/ref-tree'
+import { CleanWorkingTree } from '../features/status/CleanWorkingTree'
 import { ConflictBanner } from '../features/status/ConflictBanner'
+import type { ConflictSide } from '../features/status/conflict-resolution'
+import { type OperationSummary, summarizeOperation } from '../features/status/operation-summary'
 import { StashControl } from '../features/status/StashControl'
 import { type SelectedFile, StatusPanel } from '../features/status/StatusPanel'
 import { buildHeadCommitRows, buildStagedFilePaths } from '../features/status/status-file-rows'
@@ -149,13 +151,43 @@ function LocalChangesView(props: WorkspaceViewProps) {
     }
   }
 
+  const resolveConflict = (file: string, side: ConflictSide) => {
+    void actions.resolveConflict(file, side)
+  }
+
+  const requestAbortOperation = (summary: OperationSummary) => {
+    confirm({
+      title: summary.confirmTitle,
+      message: summary.confirmMessage,
+      confirmText: summary.abortText,
+      destructive: true,
+      onConfirm: () => void actions.abortOperation(summary.noun)
+    })
+  }
+
+  // A bare reset --hard ends a merge but leaves a rebase or sequencer mid-flight, so discarding
+  // during an operation aborts it properly first — and the confirm says so instead of letting a
+  // merge die silently.
   const discardAll = () => {
+    const summary = status?.operation ? summarizeOperation(status.operation) : null
     confirm({
       title: 'Discard all changes?',
-      message: 'Every uncommitted change in the working tree is permanently lost.',
+      message: summary
+        ? `Every uncommitted change in the working tree is permanently lost, and the in-progress ${summary.noun} is aborted.`
+        : 'Every uncommitted change in the working tree is permanently lost.',
       confirmText: 'Discard all',
       destructive: true,
-      onConfirm: () => void actions.discardAll()
+      onConfirm: () => {
+        void (async () => {
+          if (summary) {
+            const aborted = await actions.abortOperation(summary.noun)
+            if (!aborted) {
+              return
+            }
+          }
+          await actions.discardAll()
+        })()
+      }
     })
   }
   const { size: filesWidth, onResizeStart } = useDraggablePane({
@@ -171,7 +203,13 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const hasHeadCommit = (history.log?.all.length ?? 0) > 0
   const headAvailabilityLoading = history.logLoading && !hasHeadCommit
   const amendAvailable = hasHeadCommit || headAvailabilityLoading
-  const amendDisabled = headAvailabilityLoading || (status?.conflicted.length ?? 0) > 0
+  const conflictCount = status?.conflicted.length ?? 0
+  const operation = status?.operation
+  // The conflict count falls to zero as soon as the last file is resolved, but the operation runs
+  // until Continue finishes it — and git refuses to amend for the whole of it.
+  const amendDisabled = headAvailabilityLoading || conflictCount > 0 || operation !== undefined
+  const operationSummary = operation ? summarizeOperation(operation) : null
+  const commitBlockedReason = conflictBlockedReason(conflictCount, operationSummary)
 
   const fileEntries = useMemo<SelectedFile[]>(
     () => rows.map((row) => ({ file: row.file, renameSource: row.renameSource })),
@@ -253,14 +291,31 @@ function LocalChangesView(props: WorkspaceViewProps) {
     return <StatusPanel selected={null} onSelect={() => {}} loading={loading} />
   }
 
+  // A repository with no commits still reaches this branch mid-operation: a `git am --3way` that
+  // fails to apply in an unborn repository leaves a patch series parked with an empty porcelain
+  // status. Without the banner there is nothing to abort it with, and CleanWorkingTree points at
+  // controls "above" that were never rendered.
   if (totalChanges === 0 && !amendAvailable) {
-    return <CleanWorkingTree />
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ConflictBanner
+          busy={busy}
+          onContinue={(noun) => void actions.continueOperation(noun)}
+          onAbort={requestAbortOperation}
+        />
+        <CleanWorkingTree operation={operation} />
+      </div>
+    )
   }
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
       <div className="flex min-h-0 flex-col overflow-hidden">
-        <ConflictBanner />
+        <ConflictBanner
+          busy={busy}
+          onContinue={(noun) => void actions.continueOperation(noun)}
+          onAbort={requestAbortOperation}
+        />
         {totalChanges > 0 || amendActive ? (
           <div
             className={cn(
@@ -312,6 +367,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
                   onToggleDrop={toggleHeadFileDrop}
                   amendRows={amendRows}
                   onFileAction={handleFileAction}
+                  onResolveConflict={resolveConflict}
                   headerActions={
                     totalChanges > 0 ? (
                       <>
@@ -320,6 +376,11 @@ function LocalChangesView(props: WorkspaceViewProps) {
                           stagedCount={stagedCount}
                           hasChanges={totalChanges > 0}
                           busy={busy}
+                          blockedReason={
+                            operationSummary
+                              ? `Finish or abort the ${operationSummary.noun} first.`
+                              : undefined
+                          }
                           onStashSelected={stashSelected}
                           onStashAll={stashAll}
                         />
@@ -360,7 +421,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
             <StatusPanel selected={null} onSelect={() => {}} loading={true} />
           </div>
         ) : (
-          <CleanWorkingTree />
+          <CleanWorkingTree operation={operation} />
         )}
       </div>
       <CommitPanel
@@ -376,21 +437,27 @@ function LocalChangesView(props: WorkspaceViewProps) {
         loading={loading}
         branch={props.currentBranch || 'no-branch'}
         stagedCount={stagedCount}
+        prefillMessage={operation?.kind === 'merge' ? operation.mergeMessage : undefined}
+        concludesMerge={operation?.kind === 'merge'}
+        commitBlockedReason={commitBlockedReason}
       />
     </div>
   )
 }
 
-function CleanWorkingTree() {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2.5 text-center text-muted-foreground">
-      <span className="flex size-[52px] items-center justify-center rounded-full bg-green/15 text-green">
-        <CheckIcon className="size-6" strokeWidth={2.4} />
-      </span>
-      <div className="text-[15px] font-semibold text-foreground">Working tree clean</div>
-      <div className="text-sm">Nothing to commit — every change is on a branch.</div>
-    </div>
-  )
+// Committing never finishes a sequencer operation — those end with Continue — and a merge commit
+// is refused by git while any file is still conflicted.
+function conflictBlockedReason(
+  conflictCount: number,
+  summary: OperationSummary | null
+): string | undefined {
+  if (conflictCount > 0) {
+    return 'Resolve and stage every conflicted file before committing.'
+  }
+  if (summary?.canContinue) {
+    return `Finish this ${summary.noun} with Continue above, not a commit.`
+  }
+  return undefined
 }
 
 function HistoryView(props: WorkspaceViewProps) {

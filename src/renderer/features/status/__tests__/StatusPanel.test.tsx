@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { HeadDropState } from '@/features/commit/amend-drops'
+import type { ConflictSide } from '@/features/status/conflict-resolution'
 import type { FileRowSource, UnifiedFileRow } from '@/features/status/status-file-rows'
 import { buildUnifiedFileRows } from '@/features/status/status-file-rows'
 import { type WorkingTreeStatus, WorkingTreeStatusProvider } from '@/features/status/store'
@@ -65,6 +66,7 @@ function renderPanel(props: {
   onToggleDrop?: (file: string) => void
   amendRows?: UnifiedFileRow[]
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
+  onResolveConflict?: (file: string, side: ConflictSide) => void
   loading?: boolean
 }) {
   const wrap = provideStatus(props.status, {
@@ -82,6 +84,7 @@ function renderPanel(props: {
         onToggleDrop={props.onToggleDrop}
         amendRows={props.amendRows}
         onFileAction={props.onFileAction}
+        onResolveConflict={props.onResolveConflict}
         loading={props.loading ?? false}
       />
     )
@@ -162,6 +165,65 @@ describe('StatusPanel', () => {
 
     expect(screen.getByText('src/conflict.ts')).toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  // The pairing intuition gets backwards, and StatusPanel is the only place the operation reaches
+  // the rows: mid-rebase, index stage :2 ("ours") holds the branch being rebased ONTO. So the menu
+  // item naming the onto-branch must dispatch side 'ours', end to end through the panel.
+  it('resolves a rebase conflict toward the onto-branch with the ours side', async () => {
+    const onResolveConflict = vi.fn()
+    renderPanel({
+      status: emptyStatus({
+        conflicted: ['src/conflict.ts'],
+        files: [code('src/conflict.ts', 'U', 'U')],
+        operation: { kind: 'rebase-merge', oursLabel: 'main', theirsLabel: 'feature' }
+      }),
+      onResolveConflict
+    })
+
+    fireEvent.contextMenu(screen.getByText('src/conflict.ts'))
+    expect(await screen.findByRole('menuitem', { name: 'Keep main' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Keep feature' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keep main' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/conflict.ts', 'ours')
+  })
+
+  it('resolves a rebase conflict toward the replayed branch with the theirs side', async () => {
+    const onResolveConflict = vi.fn()
+    renderPanel({
+      status: emptyStatus({
+        conflicted: ['src/conflict.ts'],
+        files: [code('src/conflict.ts', 'U', 'U')],
+        operation: { kind: 'rebase-merge', oursLabel: 'main', theirsLabel: 'feature' }
+      }),
+      onResolveConflict
+    })
+
+    fireEvent.contextMenu(screen.getByText('src/conflict.ts'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Keep feature' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/conflict.ts', 'theirs')
+  })
+
+  // A conflicted stash apply/pop is the one conflict git leaves with no operation behind it, so
+  // there are no branch names to put on the menu items — the rows still have to offer both sides.
+  it('names both sides generically when no operation supplies branch labels', async () => {
+    const onResolveConflict = vi.fn()
+    renderPanel({
+      status: emptyStatus({
+        conflicted: ['src/conflict.ts'],
+        files: [code('src/conflict.ts', 'U', 'U')]
+      }),
+      onResolveConflict
+    })
+
+    fireEvent.contextMenu(screen.getByText('src/conflict.ts'))
+    expect(
+      await screen.findByRole('menuitem', { name: 'Keep the current version' })
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keep the incoming version' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/conflict.ts', 'theirs')
   })
 
   it('renders renamed files as "from → to"', () => {

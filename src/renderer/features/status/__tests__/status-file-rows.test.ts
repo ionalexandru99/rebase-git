@@ -83,6 +83,20 @@ describe('buildUnifiedFileRows (porcelain codes)', () => {
     expect(rows[0].stageState).toBe('unstaged')
   })
 
+  it('carries the porcelain code of a conflicted file', () => {
+    const rows = buildUnifiedFileRows(
+      status({
+        conflicted: ['both.ts', 'gone.ts'],
+        files: [code('both.ts', 'U', 'U'), code('gone.ts', 'D', 'U'), code('plain.ts', 'M', ' ')]
+      })
+    )
+
+    const byFile = Object.fromEntries(rows.map((row) => [row.file, row]))
+    expect(byFile['both.ts'].conflictCode).toBe('UU')
+    expect(byFile['gone.ts'].conflictCode).toBe('DU')
+    expect(byFile['plain.ts'].conflictCode).toBeUndefined()
+  })
+
   it('keeps a stable alphabetical order regardless of stage state', () => {
     const rows = buildUnifiedFileRows(
       status({

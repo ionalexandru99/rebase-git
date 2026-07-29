@@ -1,4 +1,5 @@
 import { type ReactNode, useMemo } from 'react'
+import type { ConflictSide } from '@/features/status/conflict-resolution'
 import type { FileRowSource, UnifiedFileRow } from '@/features/status/status-file-rows'
 import type { FileAction } from '@/lib/git-actions'
 import { useWorkingTreeStatus } from '@/stores/git'
@@ -14,6 +15,7 @@ interface StatusPanelProps {
   onToggleDrop?: (file: string) => void
   amendRows?: UnifiedFileRow[]
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
+  onResolveConflict?: (file: string, side: ConflictSide) => void
   headerActions?: ReactNode
   loading: boolean
 }
@@ -129,6 +131,8 @@ export function StatusPanel(props: StatusPanelProps) {
         onUnstage={unstageFile}
         onToggleDrop={props.onToggleDrop}
         onFileAction={props.onFileAction}
+        conflictLabels={status.operation}
+        onResolveConflict={props.onResolveConflict}
       />
     </section>
   )

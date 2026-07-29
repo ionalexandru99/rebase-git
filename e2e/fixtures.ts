@@ -42,6 +42,26 @@ export function gitOut(repo: string, args: string[]): string {
   return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
 }
 
+export function unmergedPaths(repo: string): string[] {
+  const paths = gitOut(repo, ['diff', '--name-only', '--diff-filter=U'])
+  return paths === '' ? [] : paths.split('\n')
+}
+
+// `git rebase`/`cherry-pick` exit non-zero when they stop on a conflict, which is the whole point of
+// running one from a terminal while the app watches. A non-zero exit that left nothing unmerged is a
+// broken fixture, though, so it still has to blow up.
+export function gitStoppingOnConflict(repo: string): Git {
+  return (args) => {
+    try {
+      execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
+    } catch (error) {
+      if (unmergedPaths(repo).length === 0) {
+        throw error
+      }
+    }
+  }
+}
+
 export function revParse(repo: string, ref: string): string {
   return gitOut(repo, ['rev-parse', ref])
 }
@@ -56,9 +76,11 @@ export function commitParents(repo: string, ref = 'HEAD'): string[] {
   return parents.slice(1)
 }
 
+// Trimming the whole output would eat the leading space of an unstaged-only entry (` M file`) and
+// silently turn it into the staged-modification code, so only the line breaks go.
 export function porcelainStatus(repo: string): string[] {
-  const status = gitOut(repo, ['status', '--porcelain'])
-  return status === '' ? [] : status.split('\n')
+  const status = execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' })
+  return status.split('\n').filter((line) => line.length > 0)
 }
 
 export function currentBranch(repo: string): string {
@@ -80,6 +102,22 @@ export function stashEntries(repo: string): string[] {
   return list === '' ? [] : list.split('\n')
 }
 
+// Everything the machine running the suite could otherwise change or break, pinned the same way the
+// demo capture script pins it: a signing key or a hooks path would hang or divert the fixture's own
+// commits, a different conflict style would rewrite the markers the specs read, and Windows runners
+// default core.autocrlf to true — which rewrites LF to CRLF on every checkout, including the one
+// that resolving a conflict performs, so a spec comparing a file against the bytes it wrote fails on
+// that platform alone.
+function configureFixtureRepo(git: (args: string[]) => void): void {
+  git(['config', 'user.email', 'test@example.com'])
+  git(['config', 'user.name', 'Test'])
+  git(['config', 'commit.gpgsign', 'false'])
+  git(['config', 'core.hooksPath', ''])
+  git(['config', 'core.autocrlf', 'false'])
+  git(['config', 'merge.conflictstyle', 'merge'])
+  git(['config', 'pull.rebase', 'false'])
+}
+
 export interface FixtureRepoOptions {
   branches?: string[]
 }
@@ -88,8 +126,7 @@ export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
   const git = gitIn(repo)
   git(['init', '-b', 'main'])
-  git(['config', 'user.email', 'test@example.com'])
-  git(['config', 'user.name', 'Test'])
+  configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
   git(['commit', '-m', 'initial'])
@@ -108,8 +145,7 @@ export function createFixtureRepoWithRemote(): { repo: string; remote: string } 
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
   const git = gitIn(repo)
   git(['init', '-b', 'main'])
-  git(['config', 'user.email', 'test@example.com'])
-  git(['config', 'user.name', 'Test'])
+  configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
   git(['commit', '-m', 'initial'])

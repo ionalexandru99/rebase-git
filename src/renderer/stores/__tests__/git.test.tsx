@@ -1642,7 +1642,7 @@ describe('GitStoreProvider — push and pull', () => {
 
     await git.pullNow()
 
-    expect(toast.error).toHaveBeenCalledWith('Pulled failed', {
+    expect(toast.error).toHaveBeenCalledWith('Pull failed', {
       description: 'Git rejected the operation. The full output is in the developer console.'
     })
     expect(git.state.error).toBeNull()
@@ -1825,6 +1825,39 @@ describe('GitStoreProvider — runAction', () => {
     expect(sidecarMock.getStatus).not.toHaveBeenCalled()
   })
 
+  // The conflicted row changing state is the feedback; a toast per resolved file would sit on top of
+  // the commit button for seconds. Failures still have to speak up.
+  it('stays silent on success for a silentSuccess action but still refreshes and still reports errors', async () => {
+    const git = await openedStore()
+
+    const ok = await git.runAction(
+      'resolveConflict',
+      vi.fn().mockResolvedValue({ _tag: 'Ok' }),
+      'Resolve src/a.ts',
+      { silentSuccess: true }
+    )
+
+    expect(ok).toBe(true)
+    expect(toast.success).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    })
+
+    const failed = await git.runAction(
+      'resolveConflict',
+      vi.fn().mockResolvedValue({ _tag: 'GitError', message: 'no conflict to resolve' }),
+      'Resolve src/a.ts',
+      { silentSuccess: true }
+    )
+
+    expect(failed).toBe(false)
+    // The raw sidecar message has no actionable mapping, so toastGitFailure falls back to its
+    // generic description; the point pinned here is that errors still toast despite silentSuccess.
+    expect(toast.error).toHaveBeenCalledWith('Resolve src/a.ts failed', {
+      description: 'Git rejected the operation. The full output is in the developer console.'
+    })
+  })
+
   it('toasts the failure and invalidates nothing on a Git error', async () => {
     const git = await openedStore()
 
@@ -1872,7 +1905,9 @@ describe('GitStoreProvider — runAction', () => {
     const ok = await git.runAction('mergeBranch', call, 'Merged feature')
 
     expect(ok).toBe(false)
-    expect(toast.warning).toHaveBeenCalled()
+    expect(toast.warning).toHaveBeenCalledWith('Merged feature hit conflicts', {
+      description: 'Resolve the conflicted files, then commit or abort.'
+    })
     expect(toast.error).not.toHaveBeenCalled()
     await waitFor(() => {
       expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
@@ -1880,6 +1915,36 @@ describe('GitStoreProvider — runAction', () => {
       expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
     })
     expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+  })
+
+  it('names the operation standing in the way when one is already in progress', async () => {
+    const git = await openedStore()
+
+    const call = vi
+      .fn()
+      .mockResolvedValue({ _tag: 'OperationInProgress', operation: 'cherry-pick' })
+    const ok = await git.runAction('mergeBranch', call, 'Merged feature')
+
+    expect(ok).toBe(false)
+    expect(toast.warning).toHaveBeenCalledWith('Another Git operation is in progress', {
+      description: 'Finish or abort the in-progress cherry-pick first.'
+    })
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('prefers the caller conflict guidance over the commit-or-abort default', async () => {
+    const git = await openedStore()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Conflict', message: 'rebase stopped' })
+    const ok = await git.runAction('continueOperation', call, 'Continued rebase', {
+      conflictDescription:
+        'Resolve and stage the conflicted files, then finish from the conflict banner.'
+    })
+
+    expect(ok).toBe(false)
+    expect(toast.warning).toHaveBeenCalledWith('Continued rebase hit conflicts', {
+      description: 'Resolve and stage the conflicted files, then finish from the conflict banner.'
+    })
   })
 
   it('refreshes only branches for a plain create-branch — not the working tree or timeline', async () => {

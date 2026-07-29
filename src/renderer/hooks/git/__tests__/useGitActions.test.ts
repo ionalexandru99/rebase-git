@@ -5,6 +5,7 @@ import {
   type ConflictableResult,
   type RefWriteResult,
   rpcCherryPick,
+  rpcContinueOperation,
   rpcCreateBranch,
   rpcCreateTag,
   rpcDeleteBranch,
@@ -32,6 +33,7 @@ vi.mock('@/lib/rpc-client', () => ({
   rpcMergeBranch: vi.fn(),
   rpcRevertCommit: vi.fn(),
   rpcCherryPick: vi.fn(),
+  rpcContinueOperation: vi.fn(),
   rpcReset: vi.fn(),
   rpcDiscardChanges: vi.fn(),
   rpcDiscardAll: vi.fn(),
@@ -132,6 +134,26 @@ describe('useGitActions conflictable ops route through the runner', () => {
     const ok = await actionsFor().mergeBranch('local', 'feature')
 
     expect(runAction).toHaveBeenCalledWith('mergeBranch', expect.any(Function), 'Merged feature')
+    expect(ok).toBe(false)
+  })
+
+  // Continue lands on the next conflict of a sequence, and the commit box is disabled for the whole
+  // run — the generic "commit or abort" would point at the one control that cannot finish it.
+  it('routes continueOperation with guidance that names Continue, not a commit', async () => {
+    vi.mocked(rpcContinueOperation).mockResolvedValue(conflictable({ _tag: 'Conflict' }))
+
+    const ok = await actionsFor().continueOperation('rebase')
+
+    expect(runAction).toHaveBeenCalledWith(
+      'continueOperation',
+      expect.any(Function),
+      'Continued rebase',
+      {
+        conflictDescription:
+          'Resolve and stage the conflicted files, then finish from the conflict banner.'
+      }
+    )
+    expect(rpcContinueOperation).toHaveBeenCalledWith('/repo')
     expect(ok).toBe(false)
   })
 })

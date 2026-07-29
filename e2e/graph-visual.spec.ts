@@ -1,7 +1,37 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
 import { createFixtureRepo, expect, gitIn, test } from './fixtures'
+
+// A long mainline, built through fast-import rather than a commit loop: `git add` + `git commit` per
+// commit is two process spawns, and several hundred of those cost more than the whole test budget on
+// Windows, where spawning is the expensive part. One stream builds the same history.
+function appendLinearCommits(repo: string, count: number): void {
+  const stream: string[] = []
+  for (let commit = 0; commit < count; commit++) {
+    const content = `commit ${commit}\n`
+    const message = `commit ${commit}`
+    const mark = commit + 1
+    stream.push(`blob\nmark :${mark}\ndata ${Buffer.byteLength(content)}\n${content}\n`)
+    stream.push(
+      'commit refs/heads/main\n' +
+        'author Test <test@example.com> 1700000000 +0000\n' +
+        'committer Test <test@example.com> 1700000000 +0000\n' +
+        `data ${Buffer.byteLength(message)}\n${message}\n` +
+        // Only the first commit needs to name a parent; the rest follow the branch fast-import is
+        // already holding open.
+        (commit === 0 ? 'from refs/heads/main^0\n' : '') +
+        `M 100644 :${mark} file.txt\n\n`
+    )
+  }
+  execFileSync('git', ['fast-import', '--quiet'], {
+    cwd: repo,
+    input: stream.join(''),
+    stdio: ['pipe', 'ignore', 'ignore']
+  })
+  execFileSync('git', ['reset', '--hard', 'main'], { cwd: repo, stdio: 'ignore' })
+}
 
 // A branchy history: several side branches merged back at different points, so the rail has to hold
 // multiple lanes, curves in both directions, merge rings and collapsed-merge glyphs at once.
@@ -90,12 +120,7 @@ test('renders side-branch lanes when a merge is expanded', async ({ harness }) =
 
 test('keeps drawing the rail after a fast scroll to the middle of the log', async ({ harness }) => {
   const repo = createFixtureRepo()
-  const git = gitIn(repo)
-  for (let commit = 0; commit < 400; commit++) {
-    fs.writeFileSync(path.join(repo, 'file.txt'), `commit ${commit}\n`)
-    git(['add', '.'])
-    git(['commit', '-m', `commit ${commit}`])
-  }
+  appendLinearCommits(repo, 400)
   const page = await harness.openRepo(repo)
   await expect(page.getByTestId('commit-row').first()).toBeVisible()
 

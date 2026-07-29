@@ -35,10 +35,26 @@ export type PushOutcome =
     }
   | { kind: 'error'; message: string }
 
+export interface RunActionOptions {
+  /** For actions whose own row or panel already shows the result — failures still toast. */
+  silentSuccess?: boolean
+  /**
+   * Failure titles read `<label> failed`, which needs the plain verb where the success label is a
+   * past tense that does not compose — 'Pulled' would announce "Pulled failed".
+   */
+  failureLabel?: string
+  /**
+   * A sequencer stops on each conflict in turn and the commit box stays disabled for the whole run,
+   * so the default "commit or abort" would send the user at a button that cannot end it.
+   */
+  conflictDescription?: string
+}
+
 export type RunAction = (
   operation: MappedOperation,
-  call: (repoPath: string) => Promise<{ _tag: string; message?: string }>,
-  label: string
+  call: (repoPath: string) => Promise<{ _tag: string; message?: string; operation?: string }>,
+  label: string,
+  options?: RunActionOptions
 ) => Promise<boolean>
 
 export interface ActionRunner {
@@ -131,7 +147,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
   const depsRef = useRef(deps)
   depsRef.current = deps
 
-  const runActionAttempt = useCallback<RunAction>(async (operation, call, label) => {
+  const runActionAttempt = useCallback<RunAction>(async (operation, call, label, options) => {
     const { liveRepoPath, openGenerationRef, isCurrentRepo, refreshCaches } = depsRef.current
     const repoPath = liveRepoPath.current
     if (!repoPath) {
@@ -139,6 +155,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       return false
     }
     const generation = openGenerationRef.current
+    const failedTitle = `${options?.failureLabel ?? label} failed`
     try {
       const response = await call(repoPath)
       if (!isCurrentRepo(generation, repoPath)) {
@@ -148,40 +165,49 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         await refreshCaches(repoPath, cachesForOperation(operation))
       }
       if (response._tag === 'Ok') {
-        toast.success(label)
+        if (!options?.silentSuccess) {
+          toast.success(label)
+        }
         return true
       }
       if (response._tag === 'Conflict') {
         toast.warning(`${label} hit conflicts`, {
-          description: 'Resolve the conflicted files, then commit or abort.'
+          description:
+            options?.conflictDescription ?? 'Resolve the conflicted files, then commit or abort.'
+        })
+        return false
+      }
+      if (response._tag === 'OperationInProgress') {
+        toast.warning('Another Git operation is in progress', {
+          description: `Finish or abort the in-progress ${response.operation} first.`
         })
         return false
       }
       if (response._tag === 'GitError') {
-        toastGitFailure(`${label} failed`, response.message ?? '')
+        toastGitFailure(failedTitle, response.message ?? '')
         return false
       }
       if (response._tag === 'RepoNotOpen') {
         toast.error('Repository is not open')
         return false
       }
-      toast.error(`${label} failed`, { description: `Unexpected response: ${response._tag}` })
+      toast.error(failedTitle, { description: `Unexpected response: ${response._tag}` })
       return false
     } catch (error) {
       if (!isCurrentRepo(generation, repoPath)) {
         return false
       }
-      toastEngineFailure(`${label} failed`, formatCause(error))
+      toastEngineFailure(failedTitle, formatCause(error))
       return false
     }
   }, [])
 
   const runAction = useCallback<RunAction>(
-    (operation, call, label) =>
+    (operation, call, label, options) =>
       mutationCoordinator.run(
         operation,
         false,
-        () => runActionAttempt(operation, call, label),
+        () => runActionAttempt(operation, call, label, options),
         notifyBusy
       ),
     [mutationCoordinator.run, runActionAttempt]
@@ -333,7 +359,10 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       runPush(variables.force, variables.expectedRemoteSha)
   })
   const pullMutation = useMutation({
-    mutationFn: () => runActionAttempt(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled')
+    mutationFn: () =>
+      runActionAttempt(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled', {
+        failureLabel: 'Pull'
+      })
   })
 
   const push = (force?: PushForce, expectedRemoteSha?: string) =>

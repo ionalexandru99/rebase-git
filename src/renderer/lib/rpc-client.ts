@@ -1,9 +1,11 @@
 import { parseOrThrow } from '@shared/codec'
 import {
+  AbortOperation,
   AmendCommit,
   Checkout,
   CherryPick,
   Commit,
+  ContinueOperation,
   CreateBranch,
   CreateTag,
   DeleteBranch,
@@ -23,6 +25,7 @@ import {
   Push,
   RenameBranch,
   Reset,
+  ResolveConflict,
   RevertCommit,
   ScanForRepos,
   StageAll,
@@ -77,16 +80,25 @@ export type HunkResult = RpcResult<
   typeof StageHunk.successSchema.Type,
   typeof StageHunk.errorSchema.Type
 >
+export type GuardedWriteResult = RpcResult<
+  typeof UnstageFile.successSchema.Type,
+  typeof UnstageFile.errorSchema.Type
+>
+export type GuardedHunkResult = RpcResult<
+  typeof UnstageHunk.successSchema.Type,
+  typeof UnstageHunk.errorSchema.Type
+>
 export type ConflictableResult = RpcResult<
   typeof MergeBranch.successSchema.Type,
   typeof MergeBranch.errorSchema.Type
 >
 export type RefWriteResult = RpcResult<
-  typeof CreateBranch.successSchema.Type,
-  typeof CreateBranch.errorSchema.Type
+  typeof DeleteBranch.successSchema.Type,
+  typeof DeleteBranch.errorSchema.Type
 >
 export type PushResult = RpcResult<typeof Push.successSchema.Type, typeof Push.errorSchema.Type>
 export type PushForce = NonNullable<typeof Push.payloadSchema.Type.force>
+export type ConflictSide = typeof ResolveConflict.payloadSchema.Type.side
 export type CheckoutResult = RpcResult<
   typeof Checkout.successSchema.Type,
   typeof Checkout.errorSchema.Type
@@ -165,7 +177,7 @@ export async function rpcUnstageFile(
   repoPath: string,
   file: string,
   renameSource?: string
-): Promise<StageResult> {
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(UnstageFile, { repoPath, file, renameSource })
 }
 
@@ -173,7 +185,10 @@ export async function rpcStageAll(repoPath: string, files: string[]): Promise<St
   return callSidecarRpc(StageAll, { repoPath, files })
 }
 
-export async function rpcUnstageAll(repoPath: string, files: string[]): Promise<StageResult> {
+export async function rpcUnstageAll(
+  repoPath: string,
+  files: string[]
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(UnstageAll, { repoPath, files })
 }
 
@@ -193,7 +208,7 @@ export async function rpcUnstageHunk(
   repoPath: string,
   file: string,
   hunkHeader: string
-): Promise<HunkResult> {
+): Promise<GuardedHunkResult> {
   return callSidecarRpc(UnstageHunk, {
     repoPath,
     file,
@@ -201,7 +216,10 @@ export async function rpcUnstageHunk(
   })
 }
 
-export async function rpcDiscardChanges(repoPath: string, files: string[]): Promise<StageResult> {
+export async function rpcDiscardChanges(
+  repoPath: string,
+  files: string[]
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(DiscardChanges, { repoPath, files })
 }
 
@@ -243,7 +261,7 @@ export async function rpcCreateBranch(
   startPoint?: string,
   checkout?: boolean,
   startPointKind?: RefKind
-): Promise<RefWriteResult> {
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(CreateBranch, {
     repoPath,
     name,
@@ -326,7 +344,7 @@ export async function rpcStashPush(
   message?: string,
   includeUntracked?: boolean,
   files?: string[]
-): Promise<RefWriteResult> {
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(StashPush, {
     repoPath,
     message,
@@ -339,7 +357,7 @@ export async function rpcReset(
   repoPath: string,
   sha: string,
   mode: ResetMode
-): Promise<RefWriteResult> {
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(Reset, { repoPath, sha, mode })
 }
 
@@ -391,6 +409,22 @@ export async function rpcGetDiff(
     commit: scope?.commit,
     renameSource: scope?.renameSource
   })
+}
+
+export async function rpcAbortOperation(repoPath: string): Promise<RefWriteResult> {
+  return callSidecarRpc(AbortOperation, { repoPath })
+}
+
+export async function rpcContinueOperation(repoPath: string): Promise<ConflictableResult> {
+  return callSidecarRpc(ContinueOperation, { repoPath })
+}
+
+export async function rpcResolveConflict(
+  repoPath: string,
+  file: string,
+  side: ConflictSide
+): Promise<StageResult> {
+  return callSidecarRpc(ResolveConflict, { repoPath, file, side })
 }
 
 export async function rpcGetCommitDetail(

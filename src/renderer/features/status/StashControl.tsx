@@ -13,10 +13,16 @@ interface StashControlProps {
   busy: boolean
   onStashSelected: (files: string[]) => void
   onStashAll: () => void
+  /**
+   * Set while an operation is parked. Once its last conflict is resolved the index looks ordinary
+   * again, and a stash would carry the resolution off and drop MERGE_HEAD with it — ending the
+   * operation without ever saying so.
+   */
+  blockedReason?: string
 }
 
 export function StashControl(props: StashControlProps) {
-  const canStashSelected = props.stagedCount > 0 && !props.busy
+  const canStashSelected = props.stagedCount > 0 && !props.busy && !props.blockedReason
 
   const stashSelected = () => props.onStashSelected(props.stagedFiles)
 
@@ -27,9 +33,10 @@ export function StashControl(props: StashControlProps) {
         disabled={!canStashSelected}
         onClick={stashSelected}
         title={
-          canStashSelected
+          props.blockedReason ??
+          (canStashSelected
             ? 'Stash the staged files'
-            : 'Stage files to stash a selection, or use the menu to stash everything'
+            : 'Stage files to stash a selection, or use the menu to stash everything')
         }
         className="flex items-center gap-1 px-2.5 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -47,7 +54,10 @@ export function StashControl(props: StashControlProps) {
           <ChevronDown className="size-3.5" />
         </DropdownMenuTrigger>
         <DropdownMenuContent portal>
-          <DropdownMenuItem disabled={!props.hasChanges || props.busy} onSelect={props.onStashAll}>
+          <DropdownMenuItem
+            disabled={!props.hasChanges || props.busy || props.blockedReason !== undefined}
+            onSelect={props.onStashAll}
+          >
             Stash all changes
           </DropdownMenuItem>
         </DropdownMenuContent>
