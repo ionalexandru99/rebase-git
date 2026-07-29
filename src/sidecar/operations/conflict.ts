@@ -1,8 +1,8 @@
 import { Effect } from 'effect'
-import { Conflict, GitError, OperationInProgress } from '../git/errors'
+import { Conflict, GitError, type OperationInProgress } from '../git/errors'
 import { withRepoLock } from '../session/lock'
 import { errorMessage, tryGit } from './helpers'
-import { detectInProgressOperation } from './in-progress'
+import { requireNoOperation } from './in-progress'
 
 export type RawGit = { raw: (args: string[]) => Promise<string> }
 
@@ -27,10 +27,7 @@ export function runWithConflictDetection(
       // itself is still parked, and in that window git happily starts a second one: it commits, drops
       // CHERRY_PICK_HEAD and strands the sequencer's remaining todo, silently throwing away the
       // resolution the user just made. The marker files are the only thing that still says "parked".
-      const inProgress = yield* tryGit(() => detectInProgressOperation(repoPath))
-      if (inProgress) {
-        return yield* Effect.fail(new OperationInProgress({ operation: inProgress }))
-      }
+      yield* requireNoOperation(repoPath)
       // Refuse up front while unmerged paths exist: git would refuse anyway, but the leftover
       // conflicts would make the outcome classify as a fresh Conflict — telling the user a new
       // operation started when nothing ran at all.

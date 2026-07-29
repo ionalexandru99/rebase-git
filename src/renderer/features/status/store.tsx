@@ -32,6 +32,7 @@ type StatusMutationResult =
   | { _tag: 'RepoNotOpen' }
   | { _tag: 'GitError'; message: string }
   | { _tag: 'HunkNotFound' }
+  | { _tag: 'OperationInProgress'; operation: string }
 
 interface StatusMutationContext {
   path: string
@@ -222,6 +223,14 @@ export function useWorkingTreeStatusController(
       }
       if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
         setError('mutation', gitFailureBannerText('Git rejected the change', response.message))
+      }
+      // Unstaging would carry the resolution out of the index and leave the operation to be
+      // finished from HEAD's side instead of the user's, so it is refused rather than undone.
+      if (
+        response._tag === 'OperationInProgress' &&
+        isCurrentRepo(context.generation, context.path)
+      ) {
+        setError('mutation', `Finish or abort the in-progress ${response.operation} first.`)
       }
       return resyncStatusAndDiffs(context)
     }

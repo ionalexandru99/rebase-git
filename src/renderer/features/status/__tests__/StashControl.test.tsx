@@ -10,6 +10,7 @@ function renderControl(
     busy: boolean
     onStashSelected: (files: string[]) => void
     onStashAll: () => void
+    blockedReason: string
   }> = {}
 ) {
   const onStashSelected = overrides.onStashSelected ?? vi.fn()
@@ -20,6 +21,7 @@ function renderControl(
       stagedCount={overrides.stagedCount ?? overrides.stagedFiles?.length ?? 0}
       hasChanges={overrides.hasChanges ?? true}
       busy={overrides.busy ?? false}
+      blockedReason={overrides.blockedReason}
       onStashSelected={onStashSelected}
       onStashAll={onStashAll}
     />
@@ -28,6 +30,16 @@ function renderControl(
 }
 
 describe('StashControl', () => {
+  // Once the last conflict is resolved the index looks ordinary, and `git stash push` will happily
+  // bank the resolution and delete MERGE_HEAD — ending the merge without a word.
+  it('disables stashing and says why while an operation is parked', () => {
+    renderControl({ stagedFiles: ['a.ts'], blockedReason: 'Finish or abort the merge first.' })
+
+    const stash = screen.getByRole('button', { name: /^Stash/ })
+    expect(stash).toBeDisabled()
+    expect(stash).toHaveAttribute('title', 'Finish or abort the merge first.')
+  })
+
   it('disables the primary button when nothing is staged', () => {
     renderControl({ stagedFiles: [] })
     expect(screen.getByRole('button', { name: /^Stash/ })).toBeDisabled()

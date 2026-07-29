@@ -22,7 +22,9 @@ import {
   openRepo,
   resolveConflict,
   stashList,
-  stashPush
+  stashPush,
+  unstageAll,
+  unstageFile
 } from '../index'
 
 async function withMergeConflict<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
@@ -75,7 +77,7 @@ describe('operations attempted while a merge conflict is unresolved', () => {
     await withMergeConflict(async (fixture) => {
       const error = await failure(stashPush(fixture.path, 'wip'))
 
-      expect(error._tag).toBe('GitError')
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
       expect((await runOp(stashList(fixture.path))).stashes).toEqual([])
       expect(conflictedPaths(fixture.path)).toEqual(['f.txt'])
       expect(await operationKind(fixture.path)).toBe('merge')
@@ -180,6 +182,60 @@ describe('a sequence parked with every conflict already resolved', () => {
       expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'cherry-pick' })
       expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(headBefore)
       expect(await operationKind(fixture.path)).toBe('cherry-pick')
+    })
+  })
+})
+
+// Two more ways to walk off with the resolution once the index holds no unmerged entries. git accepts
+// both: `stash push` banks the resolution and deletes MERGE_HEAD, ending the merge silently, and
+// unstaging resets the index entry to HEAD so the merge commit records HEAD's side while the side the
+// user picked is left behind as an unstaged change.
+describe('a merge parked with its conflict already resolved', () => {
+  async function withResolvedMerge<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
+    const fixture = makeConflictedRepo('merge')
+    await runOp(openRepo(fixture.path))
+    try {
+      for (const file of conflictedPaths(fixture.path)) {
+        await runOp(resolveConflict(fixture.path, file, 'theirs'))
+      }
+      return await use(fixture)
+    } finally {
+      await runOp(closeRepo(fixture.path))
+      removeRepoDir(fixture.path)
+    }
+  }
+
+  it('refuses to stash the resolution out from under the merge', async () => {
+    await withResolvedMerge(async (fixture) => {
+      const resolved = readRepoFile(fixture.path, 'f.txt')
+
+      const error = await failure(stashPush(fixture.path, 'wip'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect((await runOp(stashList(fixture.path))).stashes).toEqual([])
+      expect(readRepoFile(fixture.path, 'f.txt')).toBe(resolved)
+      expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+
+  it('refuses to unstage a resolved file and keeps the resolution in the index', async () => {
+    await withResolvedMerge(async (fixture) => {
+      const stagedBefore = gitOutput(fixture.path, ['diff', '--cached', '--name-only'])
+
+      const error = await failure(unstageFile(fixture.path, 'f.txt'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(gitOutput(fixture.path, ['diff', '--cached', '--name-only'])).toBe(stagedBefore)
+      expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+
+  it('refuses to unstage every file at once', async () => {
+    await withResolvedMerge(async (fixture) => {
+      const error = await failure(unstageAll(fixture.path, ['f.txt']))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(await operationKind(fixture.path)).toBe('merge')
     })
   })
 })

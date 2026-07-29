@@ -1,7 +1,9 @@
 import { access } from 'node:fs/promises'
 import path from 'node:path'
-import type { OperationInProgress } from '../git/errors'
+import { Effect } from 'effect'
+import { type GitError, OperationInProgress } from '../git/errors'
 import { runGit } from '../git/spawn'
+import { tryGit } from './helpers'
 
 export type InProgressOperation = OperationInProgress['operation']
 
@@ -41,4 +43,21 @@ export async function detectInProgressOperation(
     }
   }
   return undefined
+}
+
+/**
+ * Refuses a mutation that would rewrite the index or the working tree while an operation is parked.
+ * Once the last conflict is resolved the index holds no unmerged entries, and git will happily let a
+ * stash or an unstage walk off with the resolution — dropping MERGE_HEAD, or leaving the merge to be
+ * committed from HEAD's side instead of the user's.
+ */
+export function requireNoOperation(
+  repoPath: string
+): Effect.Effect<void, GitError | OperationInProgress> {
+  return Effect.gen(function* () {
+    const inProgress = yield* tryGit(() => detectInProgressOperation(repoPath))
+    if (inProgress) {
+      return yield* Effect.fail(new OperationInProgress({ operation: inProgress }))
+    }
+  })
 }

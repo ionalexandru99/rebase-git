@@ -1,7 +1,7 @@
 import type { FileDiff, GitStatus } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
 import { buildHunkPatch, parseUnifiedDiff, toFileDiff } from '../git/diff'
-import { GitError, HunkNotFound, type RepoNotOpen } from '../git/errors'
+import { GitError, HunkNotFound, type OperationInProgress, type RepoNotOpen } from '../git/errors'
 import { isValidPathArg, literalPathspec, literalPathspecs } from '../git/pathspec'
 import { isSafeRefArg } from '../git/ref-args'
 import { serializeStatus } from '../git/serialize'
@@ -9,6 +9,7 @@ import { runGit } from '../git/spawn'
 import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
 import { requireGit, requireOpen, tryGit } from './helpers'
+import { requireNoOperation } from './in-progress'
 import { detectOperationState } from './operation-state'
 
 // The in-progress merge/rebase/sequence rides along with the status so the renderer learns about a
@@ -41,9 +42,10 @@ export function unstageFile(
   repoPath: string,
   file: string,
   renameSource?: string
-): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
+    yield* requireNoOperation(repoPath)
     const files = renameSource ? [renameSource, file] : [file]
     yield* withRepoLock(
       repoPath,
@@ -71,12 +73,13 @@ export function stageAll(
 export function unstageAll(
   repoPath: string,
   files: string[]
-): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (files.length === 0) {
       return
     }
+    yield* requireNoOperation(repoPath)
     yield* withRepoLock(
       repoPath,
       tryGit(() => git.reset(['HEAD', '--', ...literalPathspecs(files)]))
@@ -228,8 +231,12 @@ export function unstageHunk(
   repoPath: string,
   file: string,
   hunkHeader: string
-): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound, RepoSessions> {
-  return applyHunk(repoPath, file, hunkHeader, 'unstage')
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | OperationInProgress, RepoSessions> {
+  return Effect.gen(function* () {
+    yield* requireOpen(repoPath)
+    yield* requireNoOperation(repoPath)
+    yield* applyHunk(repoPath, file, hunkHeader, 'unstage')
+  })
 }
 
 export function discardChanges(

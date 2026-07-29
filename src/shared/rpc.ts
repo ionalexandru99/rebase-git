@@ -42,7 +42,11 @@ export {
 const ReadError = Schema.Union(RepoNotOpen, GitError)
 const CommitError = Schema.Union(RepoNotOpen, GitError)
 const StageError = Schema.Union(RepoNotOpen, GitError)
+// Unstaging or stashing while an operation is parked carries the resolution out of the index and
+// abandons the operation with it, so these refuse where their staging counterparts do not.
+const GuardedWriteError = Schema.Union(RepoNotOpen, GitError, OperationInProgress)
 const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)
+const GuardedHunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound, OperationInProgress)
 const ConflictableError = Schema.Union(RepoNotOpen, GitError, Conflict, OperationInProgress)
 const RefWriteError = Schema.Union(RepoNotOpen, GitError)
 const FetchError = Schema.Union(RepoNotOpen, GitError, FetchSkipped)
@@ -123,7 +127,7 @@ export const UnstageFile = Rpc.make('unstageFile', {
     renameSource: Schema.optional(OpaqueString)
   },
   success: Schema.Void,
-  error: StageError
+  error: GuardedWriteError
 })
 
 export const StageAll = Rpc.make('stageAll', {
@@ -135,7 +139,7 @@ export const StageAll = Rpc.make('stageAll', {
 export const UnstageAll = Rpc.make('unstageAll', {
   payload: { repoPath: OpaqueString, files: FileList },
   success: Schema.Void,
-  error: StageError
+  error: GuardedWriteError
 })
 
 export const StageHunk = Rpc.make('stageHunk', {
@@ -147,7 +151,7 @@ export const StageHunk = Rpc.make('stageHunk', {
 export const UnstageHunk = Rpc.make('unstageHunk', {
   payload: { repoPath: OpaqueString, file: OpaqueString, hunkHeader: OpaqueHunkHeaderString },
   success: Schema.Void,
-  error: HunkError
+  error: GuardedHunkError
 })
 
 export const DiscardChanges = Rpc.make('discardChanges', {
@@ -258,7 +262,7 @@ export const StashPush = Rpc.make('stashPush', {
     files: Schema.optional(FileList)
   },
   success: Schema.Void,
-  error: RefWriteError
+  error: GuardedWriteError
 })
 
 export const Reset = Rpc.make('reset', {

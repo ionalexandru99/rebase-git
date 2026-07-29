@@ -80,6 +80,14 @@ export type HunkResult = RpcResult<
   typeof StageHunk.successSchema.Type,
   typeof StageHunk.errorSchema.Type
 >
+export type GuardedWriteResult = RpcResult<
+  typeof UnstageFile.successSchema.Type,
+  typeof UnstageFile.errorSchema.Type
+>
+export type GuardedHunkResult = RpcResult<
+  typeof UnstageHunk.successSchema.Type,
+  typeof UnstageHunk.errorSchema.Type
+>
 export type ConflictableResult = RpcResult<
   typeof MergeBranch.successSchema.Type,
   typeof MergeBranch.errorSchema.Type
@@ -169,7 +177,7 @@ export async function rpcUnstageFile(
   repoPath: string,
   file: string,
   renameSource?: string
-): Promise<StageResult> {
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(UnstageFile, { repoPath, file, renameSource })
 }
 
@@ -177,7 +185,10 @@ export async function rpcStageAll(repoPath: string, files: string[]): Promise<St
   return callSidecarRpc(StageAll, { repoPath, files })
 }
 
-export async function rpcUnstageAll(repoPath: string, files: string[]): Promise<StageResult> {
+export async function rpcUnstageAll(
+  repoPath: string,
+  files: string[]
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(UnstageAll, { repoPath, files })
 }
 
@@ -197,7 +208,7 @@ export async function rpcUnstageHunk(
   repoPath: string,
   file: string,
   hunkHeader: string
-): Promise<HunkResult> {
+): Promise<GuardedHunkResult> {
   return callSidecarRpc(UnstageHunk, {
     repoPath,
     file,
@@ -330,7 +341,7 @@ export async function rpcStashPush(
   message?: string,
   includeUntracked?: boolean,
   files?: string[]
-): Promise<RefWriteResult> {
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(StashPush, {
     repoPath,
     message,

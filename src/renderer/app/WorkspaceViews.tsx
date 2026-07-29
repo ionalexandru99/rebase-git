@@ -376,6 +376,11 @@ function LocalChangesView(props: WorkspaceViewProps) {
                           stagedCount={stagedCount}
                           hasChanges={totalChanges > 0}
                           busy={busy}
+                          blockedReason={
+                            operationSummary
+                              ? `Finish or abort the ${operationSummary.noun} first.`
+                              : undefined
+                          }
                           onStashSelected={stashSelected}
                           onStashAll={stashAll}
                         />

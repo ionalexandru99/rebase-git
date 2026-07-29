@@ -9,6 +9,7 @@ import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
 import { runWithConflictDetection } from './conflict'
 import { requireGit, tryGit } from './helpers'
+import { requireNoOperation } from './in-progress'
 
 const STASH_FIELD_SEP = '\x1f'
 
@@ -60,12 +61,13 @@ export function stashPush(
   message?: string,
   includeUntracked?: boolean,
   files?: string[]
-): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (files?.some((file) => !isValidPathArg(file))) {
       return yield* Effect.fail(new GitError({ message: 'invalid file path' }))
     }
+    yield* requireNoOperation(repoPath)
     yield* withRepoLock(
       repoPath,
       tryGit(async () => {
