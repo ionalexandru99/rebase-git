@@ -135,7 +135,10 @@ export function useGitActions(runner: ActionRunner) {
         runner.runAction(
           ContinueOperation._tag,
           (path) => rpcContinueOperation(path),
-          `Continued ${operationNoun}`
+          `Continued ${operationNoun}`,
+          {
+            conflictDescription: `Resolve and stage the conflicted files, then continue the ${operationNoun} again.`
+          }
         ),
       // No success toast: the row leaves the conflicted state on its own, and a toast for every file
       // covers the commit box for seconds at exactly the moment the user is reaching for it.

@@ -106,7 +106,9 @@ function LocalChangesHarness(props: { onSession: (session: RepoSession) => void 
   )
 }
 
-async function renderLocalChanges() {
+async function renderLocalChanges(
+  settle: () => Promise<unknown> = () => screen.findByRole('button', { name: 'a.ts' })
+) {
   let session: RepoSession | undefined
   renderWithQuery(() => (
     <GitStoreProvider tabId="workspace-views-test" tabActive={true}>
@@ -124,7 +126,7 @@ async function renderLocalChanges() {
   await act(async () => {
     await repoSession.openRepo(repoPath)
   })
-  await screen.findByRole('button', { name: 'a.ts' })
+  await settle()
 }
 
 function elementAfter(element: Element): HTMLElement {
@@ -287,6 +289,29 @@ describe('amend during an in-progress operation', () => {
   it('enables the amend toggle once no operation is in progress', async () => {
     const toggle = await renderWithHead({})
     expect(toggle).toBeEnabled()
+  })
+})
+
+// A `git am --3way` that fails to apply in a repository with no commits parks a patch series behind
+// an empty porcelain status, and nothing there is amendable — the one path where the app has to
+// carry the abort control on its own or leave the operation unreachable.
+describe('an in-progress operation with no commits to amend', () => {
+  const patchSeries = {
+    kind: 'am' as const,
+    oursLabel: 'main',
+    theirsLabel: '0001-add-the-widget.patch'
+  }
+
+  it('keeps abort reachable when the working tree is clean and HEAD is unborn', async () => {
+    const logStream = setupLogStream()
+    installViewport(false)
+    mockStatus({ files: [], operation: patchSeries })
+
+    await renderLocalChanges(() => screen.findByText('Applying patches'))
+    logStream.fireDone(repoPath, false)
+
+    expect(await screen.findByText('No changes left to resolve')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Abort patch series' })).toBeEnabled()
   })
 })
 

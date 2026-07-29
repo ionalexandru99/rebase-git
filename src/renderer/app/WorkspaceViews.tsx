@@ -291,8 +291,21 @@ function LocalChangesView(props: WorkspaceViewProps) {
     return <StatusPanel selected={null} onSelect={() => {}} loading={loading} />
   }
 
+  // A repository with no commits still reaches this branch mid-operation: a `git am --3way` that
+  // fails to apply in an unborn repository leaves a patch series parked with an empty porcelain
+  // status. Without the banner there is nothing to abort it with, and CleanWorkingTree points at
+  // controls "above" that were never rendered.
   if (totalChanges === 0 && !amendAvailable) {
-    return <CleanWorkingTree operation={operation} />
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ConflictBanner
+          busy={busy}
+          onContinue={(noun) => void actions.continueOperation(noun)}
+          onAbort={requestAbortOperation}
+        />
+        <CleanWorkingTree operation={operation} />
+      </div>
+    )
   }
 
   return (

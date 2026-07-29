@@ -1905,7 +1905,9 @@ describe('GitStoreProvider — runAction', () => {
     const ok = await git.runAction('mergeBranch', call, 'Merged feature')
 
     expect(ok).toBe(false)
-    expect(toast.warning).toHaveBeenCalled()
+    expect(toast.warning).toHaveBeenCalledWith('Merged feature hit conflicts', {
+      description: 'Resolve the conflicted files, then commit or abort.'
+    })
     expect(toast.error).not.toHaveBeenCalled()
     await waitFor(() => {
       expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
@@ -1913,6 +1915,20 @@ describe('GitStoreProvider — runAction', () => {
       expect(sidecarMock.getRemoteRefs).toHaveBeenCalledWith(repoPath)
     })
     expect(window.electronAPI.startLogStream).toHaveBeenCalled()
+  })
+
+  it('prefers the caller conflict guidance over the commit-or-abort default', async () => {
+    const git = await openedStore()
+
+    const call = vi.fn().mockResolvedValue({ _tag: 'Conflict', message: 'rebase stopped' })
+    const ok = await git.runAction('continueOperation', call, 'Continued rebase', {
+      conflictDescription: 'Resolve and stage the conflicted files, then continue the rebase again.'
+    })
+
+    expect(ok).toBe(false)
+    expect(toast.warning).toHaveBeenCalledWith('Continued rebase hit conflicts', {
+      description: 'Resolve and stage the conflicted files, then continue the rebase again.'
+    })
   })
 
   it('refreshes only branches for a plain create-branch — not the working tree or timeline', async () => {

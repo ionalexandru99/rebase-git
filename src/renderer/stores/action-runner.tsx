@@ -43,6 +43,11 @@ export interface RunActionOptions {
    * past tense that does not compose — 'Pulled' would announce "Pulled failed".
    */
   failureLabel?: string
+  /**
+   * A sequencer stops on each conflict in turn and the commit box stays disabled for the whole run,
+   * so the default "commit or abort" would send the user at a button that cannot end it.
+   */
+  conflictDescription?: string
 }
 
 export type RunAction = (
@@ -167,7 +172,8 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       }
       if (response._tag === 'Conflict') {
         toast.warning(`${label} hit conflicts`, {
-          description: 'Resolve the conflicted files, then commit or abort.'
+          description:
+            options?.conflictDescription ?? 'Resolve the conflicted files, then commit or abort.'
         })
         return false
       }

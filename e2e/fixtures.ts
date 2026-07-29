@@ -102,6 +102,15 @@ export function stashEntries(repo: string): string[] {
   return list === '' ? [] : list.split('\n')
 }
 
+// Windows runners ship Git with core.autocrlf=true, so every checkout — including the one that
+// resolving a conflict performs — rewrites LF to CRLF and a test comparing the file against the
+// bytes it wrote fails on that platform alone.
+function configureFixtureRepo(git: (args: string[]) => void): void {
+  git(['config', 'user.email', 'test@example.com'])
+  git(['config', 'user.name', 'Test'])
+  git(['config', 'core.autocrlf', 'false'])
+}
+
 export interface FixtureRepoOptions {
   branches?: string[]
 }
@@ -110,8 +119,7 @@ export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
   const git = gitIn(repo)
   git(['init', '-b', 'main'])
-  git(['config', 'user.email', 'test@example.com'])
-  git(['config', 'user.name', 'Test'])
+  configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
   git(['commit', '-m', 'initial'])
@@ -130,8 +138,7 @@ export function createFixtureRepoWithRemote(): { repo: string; remote: string } 
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
   const git = gitIn(repo)
   git(['init', '-b', 'main'])
-  git(['config', 'user.email', 'test@example.com'])
-  git(['config', 'user.name', 'Test'])
+  configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
   git(['commit', '-m', 'initial'])
