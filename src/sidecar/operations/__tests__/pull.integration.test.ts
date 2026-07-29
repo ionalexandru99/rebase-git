@@ -150,9 +150,13 @@ describe('pullRepo with local changes in the way', () => {
       writeFile(fixture.path, 'b.txt', 'b main\n')
       run(fixture.path, ['commit', '-am', 'main edits b'])
       const headBefore = sha(fixture.path, 'HEAD')
+      // The merge is expected to fail, but swallowing its exit code would also swallow a merge that
+      // unexpectedly succeeded — and then the pull below would be refused for some other reason
+      // entirely while this test still passed.
       try {
         run(fixture.path, ['merge', '--no-edit', 'feature'])
       } catch {}
+      expect(run(fixture.path, ['diff', '--name-only', '--diff-filter=U']).trim()).toBe('b.txt')
       const conflictedContents = readFile(fixture.path, 'b.txt')
 
       const error = await pullFailure(fixture.path)

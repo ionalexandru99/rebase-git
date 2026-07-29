@@ -11,7 +11,7 @@ import { _electron as electron } from '@playwright/test'
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const mainEntry = path.join(currentDir, '..', 'out', 'main', 'index.js')
 
-const outputRoot = '/tmp/rebase-conflict-demo/scenarios'
+const outputRoot = path.join(os.tmpdir(), 'rebase-conflict-demo', 'scenarios')
 const windowWidth = 1280
 const windowHeight = 800
 
@@ -97,24 +97,38 @@ const beat = (page, ms = 1000) => page.waitForTimeout(ms)
 function gitRunner(repo, tolerateFailure = false) {
   return (args) => {
     try {
-      execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
+      execFileSync('git', args, { cwd: repo, stdio: ['ignore', 'ignore', 'pipe'] })
     } catch (error) {
       if (!tolerateFailure) {
         throw error
       }
+      // The tolerated failures are the ones the scenario is built around (a merge that conflicts),
+      // but an unrelated one would otherwise surface half a minute later as an opaque waitFor
+      // timeout on a step that never had a chance to happen.
+      const stderr = error.stderr?.toString().trim()
+      console.warn(`  git ${args.join(' ')} failed (tolerated)${stderr ? `: ${stderr}` : ''}`)
     }
   }
+}
+
+// Everything the recording machine's global git config could otherwise change or break: a signing
+// key the recorder cannot reach, a hooks path that rejects the commit, a diff3 conflict style that
+// puts a third section in every screenshot, or a pull.rebase that hides the app's own `--ff-only`.
+function pinDemoConfig(git) {
+  git(['config', 'user.email', 'demo@example.com'])
+  git(['config', 'user.name', 'Demo'])
+  git(['config', 'commit.gpgsign', 'false'])
+  git(['config', 'core.hooksPath', ''])
+  git(['config', 'core.autocrlf', 'false'])
+  git(['config', 'merge.conflictstyle', 'merge'])
+  git(['config', 'pull.rebase', 'false'])
 }
 
 function makeRepo(name) {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), `rebase-demo-${name}-`))
   const git = gitRunner(repo)
   git(['init', '-b', 'main'])
-  git(['config', 'user.email', 'demo@example.com'])
-  git(['config', 'user.name', 'Demo'])
-  // The demo has to show the app's own `--ff-only` pull, not whatever pull.rebase the machine
-  // recording it happens to carry in its global git config.
-  git(['config', 'pull.rebase', 'false'])
+  pinDemoConfig(git)
   fs.mkdirSync(path.join(repo, 'src'))
   return { repo, git }
 }
@@ -235,6 +249,7 @@ function pullRepo() {
   const teammate = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-demo-teammate-'))
   execFileSync('git', ['clone', remote, teammate], { stdio: 'ignore' })
   const teammateGit = gitRunner(teammate)
+  pinDemoConfig(teammateGit)
   teammateGit(['config', 'user.email', 'teammate@example.com'])
   teammateGit(['config', 'user.name', 'Teammate'])
   write(teammate, 'README.md', REMOTE_README)
@@ -547,63 +562,72 @@ async function runScenario(scenario) {
   }
 
   const startedAt = Date.now()
-  const app = await electron.launch({
-    args: [
-      mainEntry,
-      `--user-data-dir=${userDataDir}`,
-      '--e2e',
-      ...(process.platform === 'linux' ? ['--ozone-platform=x11'] : [])
-    ],
-    env,
-    recordVideo: { dir: scenarioDir, size: { width: windowWidth, height: windowHeight } }
-  })
-
-  const page = await app.firstWindow()
-  await app.evaluate(
-    ({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height)
-    },
-    { width: windowWidth, height: windowHeight }
-  )
-  await page.waitForLoadState('domcontentloaded')
-  await openRepoInApp(app, page, repo)
-
   const screenshotPath = path.join(scenarioDir, `${scenario.name}.png`)
-  let shotTaken = false
-  const context = {
-    app,
-    page,
-    repo,
-    git: gitRunner(repo, true),
-    shot: async () => {
-      await page.screenshot({ path: screenshotPath })
-      shotTaken = true
-    }
-  }
-
-  let failure
-  try {
-    await scenario.drive(context)
-  } catch (error) {
-    failure = error
-  }
-  if (!shotTaken && !page.isClosed()) {
-    await page.screenshot({ path: screenshotPath }).catch(() => {})
-  }
-
-  // The webm only finalizes once the window and the app are both down.
-  const video = page.video()
-  await page.close()
-  await app.close()
   const videoPath = path.join(scenarioDir, `${scenario.name}.webm`)
-  if (video) {
-    await video.saveAs(videoPath)
-    await video.delete().catch(() => {})
-  }
 
-  fs.rmSync(userDataDir, { recursive: true, force: true })
-  for (const fixturePath of paths) {
-    fs.rmSync(fixturePath, { recursive: true, force: true })
+  let app
+  let page
+  let failure
+  // A throw anywhere from here on — launching, opening the repo, or driving the scenario — must
+  // still bring the Electron process down and take the temp directories with it, or a failed run
+  // leaves an orphaned window holding a user-data dir and every fixture repo behind.
+  try {
+    app = await electron.launch({
+      args: [
+        mainEntry,
+        `--user-data-dir=${userDataDir}`,
+        '--e2e',
+        ...(process.platform === 'linux' ? ['--ozone-platform=x11'] : [])
+      ],
+      env,
+      recordVideo: { dir: scenarioDir, size: { width: windowWidth, height: windowHeight } }
+    })
+
+    page = await app.firstWindow()
+    await app.evaluate(
+      ({ BrowserWindow }, size) => {
+        BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height)
+      },
+      { width: windowWidth, height: windowHeight }
+    )
+    await page.waitForLoadState('domcontentloaded')
+    await openRepoInApp(app, page, repo)
+
+    let shotTaken = false
+    const context = {
+      app,
+      page,
+      repo,
+      git: gitRunner(repo, true),
+      shot: async () => {
+        await page.screenshot({ path: screenshotPath })
+        shotTaken = true
+      }
+    }
+
+    try {
+      await scenario.drive(context)
+    } catch (error) {
+      failure = error
+    }
+    if (!shotTaken && !page.isClosed()) {
+      await page.screenshot({ path: screenshotPath }).catch(() => {})
+    }
+  } catch (error) {
+    failure ??= error
+  } finally {
+    // The webm only finalizes once the window and the app are both down.
+    const video = page && !page.isClosed() ? page.video() : null
+    await page?.close().catch(() => {})
+    await app?.close().catch(() => {})
+    if (video) {
+      await video.saveAs(videoPath).catch(() => {})
+      await video.delete().catch(() => {})
+    }
+    fs.rmSync(userDataDir, { recursive: true, force: true })
+    for (const fixturePath of paths) {
+      fs.rmSync(fixturePath, { recursive: true, force: true })
+    }
   }
 
   if (failure) {

@@ -1642,7 +1642,7 @@ describe('GitStoreProvider — push and pull', () => {
 
     await git.pullNow()
 
-    expect(toast.error).toHaveBeenCalledWith('Pulled failed', {
+    expect(toast.error).toHaveBeenCalledWith('Pull failed', {
       description: 'Git rejected the operation. The full output is in the developer console.'
     })
     expect(git.state.error).toBeNull()

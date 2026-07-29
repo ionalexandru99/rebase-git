@@ -33,6 +33,17 @@ const CONTINUE_ARGS: Record<ConflictOperationKind, string[]> = {
   revert: ['revert', '--continue']
 }
 
+// Steps git can drop on request. A merge has no `--skip` and never needs one — its commit records a
+// second parent, so an unchanged tree still has something to write. `am` is left out on purpose: a
+// patch it failed to apply at all also leaves nothing staged, and there the empty index means "edit
+// these files yourself", so skipping would silently throw the patch away.
+const SKIP_ARGS: Partial<Record<ConflictOperationKind, string[]>> = {
+  'rebase-merge': ['rebase', '--skip'],
+  'rebase-apply': ['rebase', '--skip'],
+  'cherry-pick': ['cherry-pick', '--skip'],
+  revert: ['revert', '--skip']
+}
+
 async function runControlGit(repoPath: string, args: string[]): Promise<string | null> {
   const { code, stdout, stderr } = await spawnGit(['-C', repoPath, ...args], {
     env: nonInteractiveEnv()
@@ -71,6 +82,20 @@ async function conflictStages(repoPath: string, file: string): Promise<Set<numbe
     }
   }
   return stages
+}
+
+// Whether the step git just refused to finish has nothing left to record. The wording of that
+// refusal varies by operation and by rebase backend ("is now empty", "nothing to commit", "No
+// changes"), so the index and the working tree decide instead: no unmerged entry and nothing that
+// differs from HEAD means neither committing nor resolving can move this step forward.
+async function stepHasNothingToCommit(repoPath: string): Promise<boolean> {
+  if ((await unmergedPaths(repoPath)).length > 0) {
+    return false
+  }
+  const { code } = await spawnGit(['-C', repoPath, 'diff', '--quiet', 'HEAD', '--'], {
+    env: nonInteractiveEnv()
+  })
+  return code === 0
 }
 
 export function abortOperation(
@@ -117,7 +142,17 @@ export function continueOperation(
             })
           )
         }
-        const failure = yield* tryGit(() => runControlGit(repoPath, CONTINUE_ARGS[operation.kind]))
+        let failure = yield* tryGit(() => runControlGit(repoPath, CONTINUE_ARGS[operation.kind]))
+        const skipArgs = SKIP_ARGS[operation.kind]
+        if (failure !== null && skipArgs !== undefined) {
+          // Resolving toward the side already in HEAD is how a step ends up empty, and it is also
+          // the user saying they want the incoming commit dropped — so carry that out. Whatever the
+          // skip lands on next is handled below like any other outcome of continuing.
+          const nothingToCommit = yield* tryGit(() => stepHasNothingToCommit(repoPath))
+          if (nothingToCommit) {
+            failure = yield* tryGit(() => runControlGit(repoPath, skipArgs))
+          }
+        }
         const stopped = yield* tryGit(() => unmergedPaths(repoPath))
         if (stopped.length > 0) {
           return yield* Effect.fail(

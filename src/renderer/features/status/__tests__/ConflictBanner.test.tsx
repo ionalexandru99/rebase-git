@@ -103,9 +103,14 @@ describe('ConflictBanner — operation titles', () => {
     expect(banner()).toHaveTextContent('Cherry-picking feature/login')
   })
 
-  it('names a revert with the reverted ref', () => {
-    renderBanner({ conflicted: ['a.ts'], operation: operation({ kind: 'revert' }) })
-    expect(banner()).toHaveTextContent('Reverting feature/login')
+  // The sidecar labels the incoming side of a revert "revert of <commit>", because that is what
+  // index stage :3 holds — so the title applies that label rather than reverting it a second time.
+  it('names a revert with the revert being applied', () => {
+    renderBanner({
+      conflicted: ['a.ts'],
+      operation: operation({ kind: 'revert', theirsLabel: 'revert of 1a2b3c4 add the widget' })
+    })
+    expect(banner()).toHaveTextContent('Applying revert of 1a2b3c4 add the widget')
   })
 
   it('names an am run without ref labels', () => {

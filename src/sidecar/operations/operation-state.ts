@@ -91,6 +91,18 @@ async function commitLabel(repoPath: string, sha: string): Promise<string> {
   return summary || shortSha(sha)
 }
 
+// theirsLabel names index stage :3, and a revert puts the *parent* of the reverted commit there —
+// the state git is restoring. Naming that stage after the commit being undone would invert it: the
+// UI offers "Keep <label>", and keeping stage :3 is accepting the revert, not the commit.
+async function pickLabel(
+  repoPath: string,
+  kind: 'cherry-pick' | 'revert',
+  sha: string
+): Promise<string> {
+  const label = await commitLabel(repoPath, sha)
+  return kind === 'revert' ? `revert of ${label}` : label
+}
+
 async function countCommitsSince(repoPath: string, sha: string): Promise<number> {
   const count = Number(await readGit(repoPath, ['rev-list', '--count', `${sha}..HEAD`]))
   return Number.isInteger(count) && count >= 0 ? count : 0
@@ -191,7 +203,7 @@ async function sequencerState(
   return {
     kind,
     oursLabel: currentHeadLabel(gitDir),
-    theirsLabel: stoppedAt ? await commitLabel(repoPath, stoppedAt) : instructions[0],
+    theirsLabel: stoppedAt ? await pickLabel(repoPath, kind, stoppedAt) : instructions[0],
     done: applied + 1,
     total: applied + instructions.length
   }
@@ -206,7 +218,7 @@ async function singlePickState(
   return {
     kind,
     oursLabel: currentHeadLabel(gitDir),
-    theirsLabel: await commitLabel(repoPath, sha)
+    theirsLabel: await pickLabel(repoPath, kind, sha)
   }
 }
 

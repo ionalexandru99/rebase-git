@@ -51,10 +51,17 @@ function createTwoStopRepo(sideBranch: string): string {
 const conflictRow = (harness: AppHarness, file: string) =>
   harness.page.getByTestId('status-file-row').filter({ hasText: file })
 
-async function takeSide(harness: AppHarness, file: string, choice: string | RegExp): Promise<void> {
+// The banner comes from the git-dir state files and the row from a separate status refresh, so the
+// operation can be on screen while the row is still un-badged. Waiting for the badge is what stops
+// the menu opening on the pre-conflict row, where none of the Keep items exist yet.
+async function openConflictMenu(harness: AppHarness, file: string): Promise<void> {
   const row = conflictRow(harness, file)
   await expect(row.getByRole('img', { name: 'conflicted' })).toBeVisible({ timeout: 15_000 })
   await row.click({ button: 'right' })
+}
+
+async function takeSide(harness: AppHarness, file: string, choice: string | RegExp): Promise<void> {
+  await openConflictMenu(harness, file)
   await harness.page.getByRole('menuitem', { name: choice }).click()
 }
 
@@ -82,9 +89,7 @@ test('a rebase started in a terminal appears on its own and continues through bo
 
   // Stage 2 of a rebase is the branch being replayed onto and stage 3 the branch being replayed, so
   // "ours" reads as main even though feature is the branch checked out.
-  const alphaRow = conflictRow(harness, 'alpha.txt')
-  await expect(alphaRow.getByRole('img', { name: 'conflicted' })).toBeVisible({ timeout: 15_000 })
-  await alphaRow.click({ button: 'right' })
+  await openConflictMenu(harness, 'alpha.txt')
   await expect(page.getByRole('menuitem', { name: 'Keep main' })).toBeVisible()
   await page.getByRole('menuitem', { name: 'Keep feature' }).click()
 
@@ -142,7 +147,7 @@ test('a multi-commit cherry-pick reports its position and finishes through Conti
   await expect(banner).toContainText('1/2')
   await expect(banner).toContainText('source touches alpha')
 
-  await conflictRow(harness, 'alpha.txt').click({ button: 'right' })
+  await openConflictMenu(harness, 'alpha.txt')
   await expect(page.getByRole('menuitem', { name: 'Keep main' })).toBeVisible()
   await page.getByRole('menuitem', { name: /^Keep \S+ source touches alpha$/ }).click()
 

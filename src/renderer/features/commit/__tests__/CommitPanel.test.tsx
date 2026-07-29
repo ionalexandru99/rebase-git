@@ -396,6 +396,26 @@ describe('CommitPanel', () => {
     ).toBeInTheDocument()
   })
 
+  // Amending is not an escape hatch from the block: git refuses to amend during a sequencer
+  // operation outright, so letting the toggle re-enable the button only promises a failure.
+  it('keeps the block in force when the amend toggle is on', async () => {
+    renderPanel({
+      amendAvailable: true,
+      expectedHead: 'abc123',
+      commitBlockedReason: 'Finish this cherry-pick with Continue above, not a commit.'
+    })
+
+    await act(async () => {
+      fireEvent.click(amendToggle())
+    })
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
+
+    expect(screen.getByRole('button', { name: 'Amend' })).toBeDisabled()
+    expect(
+      screen.getByText('Finish this cherry-pick with Continue above, not a commit.')
+    ).toBeInTheDocument()
+  })
+
   it('updates the subject-length counter as the user types', () => {
     renderPanel()
 

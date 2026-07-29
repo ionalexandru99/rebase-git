@@ -250,6 +250,46 @@ describe('LocalChangesView compact mode', () => {
   })
 })
 
+// amendCommit refuses every in-progress operation with OperationInProgress, so an enabled toggle
+// would offer nothing but a guaranteed failure — and the conflict count drops to zero the moment
+// the last file is resolved, long before the operation itself is finished.
+describe('amend during an in-progress operation', () => {
+  const cherryPick = {
+    kind: 'cherry-pick' as const,
+    oursLabel: 'main',
+    theirsLabel: 'abc1234 add the widget'
+  }
+
+  const streamedCommit = {
+    hash: 'aaa1111',
+    message: 'previous work',
+    author_name: 'Tester',
+    date: '2026-01-01',
+    parents: [] as string[],
+    refs: ''
+  }
+
+  async function renderWithHead(overrides: Partial<GitStatus>) {
+    const logStream = setupLogStream()
+    installViewport(false)
+    mockStatus(overrides)
+    await renderLocalChanges()
+    logStream.fire({ repoPath, commits: [streamedCommit] })
+    logStream.fireDone(repoPath, false)
+    return screen.getByRole('checkbox', { name: 'Amend last commit' })
+  }
+
+  it('disables the amend toggle while an operation is in progress and nothing is conflicted', async () => {
+    const toggle = await renderWithHead({ operation: cherryPick })
+    expect(toggle).toBeDisabled()
+  })
+
+  it('enables the amend toggle once no operation is in progress', async () => {
+    const toggle = await renderWithHead({})
+    expect(toggle).toBeEnabled()
+  })
+})
+
 describe('discard all during an in-progress operation', () => {
   const mergeOperation = { kind: 'merge' as const, oursLabel: 'main', theirsLabel: 'feature' }
 

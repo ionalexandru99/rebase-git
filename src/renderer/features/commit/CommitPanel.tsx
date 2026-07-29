@@ -142,7 +142,9 @@ export function CommitPanel(props: CommitPanelProps) {
         : 'Commit'
   const loading = props.loading || submitting
   const hasDroppedFiles = amend && (props.droppedHeadPaths?.length ?? 0) > 0
-  const commitBlocked = Boolean(props.commitBlockedReason) && !amend
+  // Amending is not a way around the block: git refuses to amend at all while an operation is in
+  // progress, so honouring the reason only when the toggle is off would offer a certain failure.
+  const commitBlocked = Boolean(props.commitBlockedReason)
   const commitDisabled =
     !message.trim() ||
     loading ||

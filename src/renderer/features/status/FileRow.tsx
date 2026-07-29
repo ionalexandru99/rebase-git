@@ -114,10 +114,14 @@ export function FileRow(props: FileRowProps) {
   }
 
   const isStaged = props.stageState === 'staged'
-  const isConflicted = props.kind === 'conflicted' && Boolean(props.onResolveConflict)
-  const conflict = isConflicted
-    ? conflictRowActions(props.conflictCode, props.conflictLabels ?? null)
-    : null
+  // What the file is, not what the caller wired up: the safety rules below (no silent discard, stage
+  // means "mark resolved") hold for a conflicted file either way. Only the keep-a-side choices need
+  // a resolver, so only they are withheld without one.
+  const isConflicted = props.kind === 'conflicted'
+  const conflict =
+    isConflicted && props.onResolveConflict
+      ? conflictRowActions(props.conflictCode, props.conflictLabels ?? null)
+      : null
 
   const toggleStaged = () => {
     if (isStaged) {

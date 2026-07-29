@@ -108,8 +108,10 @@ export type ConflictFixtureKind =
   | 'modify-delete'
   | 'rename-rename'
   | 'binary'
+  | 'cherry-pick'
   | 'cherry-pick-sequence'
   | 'revert'
+  | 'revert-sequence'
   | 'rebase'
   | 'rebase-apply'
   | 'am'
@@ -249,6 +251,10 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
     commitRepoFile(repo, 'image.bin', Buffer.from([0, 1, 2, 0, 9, 9]), 'main binary')
     return
   }
+  if (kind === 'cherry-pick') {
+    makeTwoSidedEdit(repo)
+    return
+  }
   if (kind === 'cherry-pick-sequence') {
     commitRepoFile(repo, 'a.txt', 'base\n', 'base a')
     commitRepoFile(repo, 'b.txt', 'base\n', 'base b')
@@ -268,6 +274,13 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
     commitRepoFile(repo, 'f.txt', 'three\n', 'three')
     return
   }
+  if (kind === 'revert-sequence') {
+    commitRepoFile(repo, 'f.txt', 'one\n', 'one')
+    commitRepoFile(repo, 'f.txt', 'two\n', 'two')
+    commitRepoFile(repo, 'f.txt', 'three\n', 'three')
+    commitRepoFile(repo, 'f.txt', 'four\n', 'four')
+    return
+  }
   makeTwoSidedEdit(repo)
 }
 
@@ -282,12 +295,22 @@ function startConflict(kind: ConflictFixtureKind, repo: string): void {
     gitIgnoringFailure(repo, ['merge', '--no-edit', 'feature'])
     return
   }
+  if (kind === 'cherry-pick') {
+    gitIgnoringFailure(repo, ['cherry-pick', 'feature'])
+    return
+  }
   if (kind === 'cherry-pick-sequence') {
     gitIgnoringFailure(repo, ['cherry-pick', 'feature~1', 'feature'])
     return
   }
   if (kind === 'revert') {
     gitIgnoringFailure(repo, ['revert', '--no-edit', 'HEAD~1'])
+    return
+  }
+  // A range is what makes git write a sequencer todo, which is the only place a revert's position
+  // in a sequence — and the label for the step it stopped on — can be read from.
+  if (kind === 'revert-sequence') {
+    gitIgnoringFailure(repo, ['revert', '--no-edit', 'HEAD~2', 'HEAD~1'])
     return
   }
   if (kind === 'rebase') {

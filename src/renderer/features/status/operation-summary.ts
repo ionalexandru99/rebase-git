@@ -35,8 +35,10 @@ function operationTitle(operation: OperationState): string {
       return 'Applying patches'
     case 'cherry-pick':
       return `Cherry-picking ${operation.theirsLabel}`
+    // theirsLabel already reads "revert of <commit>" — it names the side being applied, not the
+    // commit being undone — so "Reverting <it>" would say the undo twice and mean neither.
     case 'revert':
-      return `Reverting ${operation.theirsLabel}`
+      return `Applying ${operation.theirsLabel}`
   }
 }
 

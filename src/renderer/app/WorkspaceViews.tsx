@@ -204,8 +204,10 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const headAvailabilityLoading = history.logLoading && !hasHeadCommit
   const amendAvailable = hasHeadCommit || headAvailabilityLoading
   const conflictCount = status?.conflicted.length ?? 0
-  const amendDisabled = headAvailabilityLoading || conflictCount > 0
   const operation = status?.operation
+  // The conflict count falls to zero as soon as the last file is resolved, but the operation runs
+  // until Continue finishes it — and git refuses to amend for the whole of it.
+  const amendDisabled = headAvailabilityLoading || conflictCount > 0 || operation !== undefined
   const operationSummary = operation ? summarizeOperation(operation) : null
   const commitBlockedReason = conflictBlockedReason(conflictCount, operationSummary)
 

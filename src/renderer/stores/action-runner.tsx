@@ -38,6 +38,11 @@ export type PushOutcome =
 export interface RunActionOptions {
   /** For actions whose own row or panel already shows the result — failures still toast. */
   silentSuccess?: boolean
+  /**
+   * Failure titles read `<label> failed`, which needs the plain verb where the success label is a
+   * past tense that does not compose — 'Pulled' would announce "Pulled failed".
+   */
+  failureLabel?: string
 }
 
 export type RunAction = (
@@ -145,6 +150,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       return false
     }
     const generation = openGenerationRef.current
+    const failedTitle = `${options?.failureLabel ?? label} failed`
     try {
       const response = await call(repoPath)
       if (!isCurrentRepo(generation, repoPath)) {
@@ -166,20 +172,20 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         return false
       }
       if (response._tag === 'GitError') {
-        toastGitFailure(`${label} failed`, response.message ?? '')
+        toastGitFailure(failedTitle, response.message ?? '')
         return false
       }
       if (response._tag === 'RepoNotOpen') {
         toast.error('Repository is not open')
         return false
       }
-      toast.error(`${label} failed`, { description: `Unexpected response: ${response._tag}` })
+      toast.error(failedTitle, { description: `Unexpected response: ${response._tag}` })
       return false
     } catch (error) {
       if (!isCurrentRepo(generation, repoPath)) {
         return false
       }
-      toastEngineFailure(`${label} failed`, formatCause(error))
+      toastEngineFailure(failedTitle, formatCause(error))
       return false
     }
   }, [])
@@ -341,7 +347,10 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       runPush(variables.force, variables.expectedRemoteSha)
   })
   const pullMutation = useMutation({
-    mutationFn: () => runActionAttempt(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled')
+    mutationFn: () =>
+      runActionAttempt(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled', {
+        failureLabel: 'Pull'
+      })
   })
 
   const push = (force?: PushForce, expectedRemoteSha?: string) =>

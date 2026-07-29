@@ -287,6 +287,115 @@ describe('continueOperation', () => {
   })
 })
 
+// Resolving a step toward the side already in HEAD leaves git nothing to commit for it, and git
+// answers `--continue` by asking for `--skip` instead. The UI only offers Continue and Abort, so the
+// sequence has to advance on its own — the user chose that side, which is exactly "drop this commit".
+describe('continueOperation — a step that resolves to nothing', () => {
+  it('finishes a single-commit cherry-pick without adding a commit', async () => {
+    await withConflictedRepo('cherry-pick', async (fixture) => {
+      await runOp(resolveConflict(fixture.path, 'f.txt', 'ours'))
+
+      await runOp(continueOperation(fixture.path))
+
+      expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(fixture.headBefore)
+      expect(readRepoFile(fixture.path, 'f.txt')).toBe('main\n')
+      expect(porcelain(fixture.path)).toBe('')
+      expect(await currentOperationKind(fixture.path)).toBeUndefined()
+    })
+  })
+
+  it('skips the empty commit of a sequence and reports the conflict the next one hits', async () => {
+    await withConflictedRepo('cherry-pick-sequence', async (fixture) => {
+      await runOp(resolveConflict(fixture.path, 'a.txt', 'ours'))
+
+      expect(await failureTag(continueOperation(fixture.path))).toBe('Conflict')
+
+      const { status } = await runOp(getStatus(fixture.path))
+      expect(status.operation?.kind).toBe('cherry-pick')
+      expect(conflictedPaths(fixture.path)).toContain('b.txt')
+
+      await runOp(resolveConflict(fixture.path, 'b.txt', 'theirs'))
+      await runOp(continueOperation(fixture.path))
+
+      expect(await currentOperationKind(fixture.path)).toBeUndefined()
+      // Only the second commit landed: the first one is the one that resolved to nothing.
+      expect(
+        gitOutput(fixture.path, ['log', '--format=%s', `${fixture.headBefore}..HEAD`]).trim()
+      ).toBe('feature edits b')
+      expect(readRepoFile(fixture.path, 'a.txt')).toBe('main a\n')
+      expect(readRepoFile(fixture.path, 'b.txt')).toBe('feature b\n')
+    })
+  })
+
+  it(
+    'finishes a revert whose result is already in HEAD',
+    async () => {
+      await withConflictedRepo(
+        'revert',
+        async (fixture) => {
+          const headBefore = gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()
+          await runOp(resolveConflict(fixture.path, 'f.txt', 'ours'))
+
+          await withoutAmbientEditors(() => runOp(continueOperation(fixture.path)))
+
+          expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(headBefore)
+          expect(porcelain(fixture.path)).toBe('')
+          expect(await currentOperationKind(fixture.path)).toBeUndefined()
+        },
+        { config: { 'core.editor': BLOCKING_EDITOR } }
+      )
+    },
+    EDITOR_TIMEOUT_MS
+  )
+
+  it(
+    'finishes a rebase whose only commit resolves to the branch it replays onto',
+    async () => {
+      await withConflictedRepo(
+        'rebase',
+        async (fixture) => {
+          await runOp(resolveConflict(fixture.path, 'f.txt', 'ours'))
+
+          await withoutAmbientEditors(() => runOp(continueOperation(fixture.path)))
+
+          expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(
+            gitOutput(fixture.path, ['rev-parse', 'main']).trim()
+          )
+          expect(gitOutput(fixture.path, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe(
+            'feature'
+          )
+          expect(porcelain(fixture.path)).toBe('')
+          expect(await currentOperationKind(fixture.path)).toBeUndefined()
+        },
+        { config: { 'core.editor': BLOCKING_EDITOR } }
+      )
+    },
+    EDITOR_TIMEOUT_MS
+  )
+
+  it.skipIf(!supportsRebaseApplyBackend())(
+    'finishes a rebase-apply whose only commit resolves to the branch it replays onto',
+    async () => {
+      await withConflictedRepo(
+        'rebase-apply',
+        async (fixture) => {
+          await runOp(resolveConflict(fixture.path, 'f.txt', 'ours'))
+
+          await withoutAmbientEditors(() => runOp(continueOperation(fixture.path)))
+
+          expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(
+            gitOutput(fixture.path, ['rev-parse', 'main']).trim()
+          )
+          expect(porcelain(fixture.path)).toBe('')
+          expect(await currentOperationKind(fixture.path)).toBeUndefined()
+        },
+        { config: { 'core.editor': BLOCKING_EDITOR } }
+      )
+    },
+    EDITOR_TIMEOUT_MS
+  )
+})
+
 describe('resolveConflict', () => {
   // Every case below has to start from a genuinely conflicted index, or "no conflicts left"
   // afterwards proves nothing.
@@ -320,14 +429,20 @@ describe('resolveConflict', () => {
   })
 
   it('resolves a both-added file from either side', async () => {
-    await withConflictedRepo('merge-both-added', async (fixture) => {
-      expectConflicted(fixture.path, 'added.txt')
+    for (const { side, contents } of [
+      { side: 'ours' as const, contents: 'from main\n' },
+      { side: 'theirs' as const, contents: 'from feature\n' }
+    ]) {
+      await withConflictedRepo('merge-both-added', async (fixture) => {
+        expectConflicted(fixture.path, 'added.txt')
 
-      await runOp(resolveConflict(fixture.path, 'added.txt', 'theirs'))
+        await runOp(resolveConflict(fixture.path, 'added.txt', side))
 
-      expect(readRepoFile(fixture.path, 'added.txt')).toBe('from feature\n')
-      expect(conflictedPaths(fixture.path)).toEqual([])
-    })
+        expect(readRepoFile(fixture.path, 'added.txt')).toBe(contents)
+        expect(indexStages(fixture.path, 'added.txt')).toEqual([0])
+        expect(conflictedPaths(fixture.path)).toEqual([])
+      })
+    }
   })
 
   it('keeps the file when the chosen side still has it in a modify/delete conflict', async () => {
@@ -365,15 +480,19 @@ describe('resolveConflict', () => {
   })
 
   it('resolves a both-deleted path with either side', async () => {
-    await withConflictedRepo('rename-rename', async (fixture) => {
-      expect(gitOutput(fixture.path, ['status', '--porcelain'])).toContain('DD f.txt')
-      expectConflicted(fixture.path, 'f.txt')
+    // Neither side kept a blob at the path, so both choices have to mean the same thing — and
+    // `theirs` is the one with no stage to check out, which is where a wrong turn would show.
+    for (const side of ['ours', 'theirs'] as const) {
+      await withConflictedRepo('rename-rename', async (fixture) => {
+        expect(gitOutput(fixture.path, ['status', '--porcelain'])).toContain('DD f.txt')
+        expectConflicted(fixture.path, 'f.txt')
 
-      await runOp(resolveConflict(fixture.path, 'f.txt', 'ours'))
+        await runOp(resolveConflict(fixture.path, 'f.txt', side))
 
-      expect(fs.existsSync(path.join(fixture.path, 'f.txt'))).toBe(false)
-      expect(gitOutput(fixture.path, ['ls-files', '-u', '--', 'f.txt']).trim()).toBe('')
-    })
+        expect(fs.existsSync(path.join(fixture.path, 'f.txt'))).toBe(false)
+        expect(gitOutput(fixture.path, ['ls-files', '-u', '--', 'f.txt']).trim()).toBe('')
+      })
+    }
   })
 
   it('resolves a binary conflict byte-for-byte', async () => {
@@ -389,15 +508,21 @@ describe('resolveConflict', () => {
   })
 
   it('resolves each side of a rebase using the same stage numbers', async () => {
-    await withConflictedRepo('rebase', async (fixture) => {
-      expectConflicted(fixture.path, 'f.txt')
+    // Mid-rebase stage :2 is `main` (the branch rebased onto) and stage :3 is `feature` — the
+    // reverse of what the branch names suggest, which is exactly why both sides are checked.
+    for (const { side, contents } of [
+      { side: 'ours' as const, contents: 'main\n' },
+      { side: 'theirs' as const, contents: 'feature\n' }
+    ]) {
+      await withConflictedRepo('rebase', async (fixture) => {
+        expectConflicted(fixture.path, 'f.txt')
 
-      // Mid-rebase stage :2 is `main` (the branch rebased onto) and stage :3 is `feature`.
-      await runOp(resolveConflict(fixture.path, 'f.txt', 'ours'))
+        await runOp(resolveConflict(fixture.path, 'f.txt', side))
 
-      expect(readRepoFile(fixture.path, 'f.txt')).toBe('main\n')
-      expect(conflictedPaths(fixture.path)).toEqual([])
-    })
+        expect(readRepoFile(fixture.path, 'f.txt')).toBe(contents)
+        expect(conflictedPaths(fixture.path)).toEqual([])
+      })
+    }
   })
 
   it('fails for a file that has no conflict stages', async () => {

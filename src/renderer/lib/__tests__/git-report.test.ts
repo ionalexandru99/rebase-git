@@ -65,9 +65,9 @@ describe('git failure reporting', () => {
   it('toasts an engine failure as its own thing', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    toastEngineFailure('Pulled failed', 'sidecar exited')
+    toastEngineFailure('Pull failed', 'sidecar exited')
 
-    expect(toast.error).toHaveBeenCalledWith('Pulled failed', {
+    expect(toast.error).toHaveBeenCalledWith('Pull failed', {
       description: expect.stringContaining('could not reach the Git engine')
     })
   })

@@ -37,7 +37,7 @@ test('a pull that would overwrite a local edit fails without touching the file',
   await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({ timeout: 10_000 })
   await openLocalChanges(page)
 
-  const toast = await harness.expectToast({ type: 'error', title: 'Pulled failed' }, () =>
+  const toast = await harness.expectToast({ type: 'error', title: 'Pull failed' }, () =>
     page.getByRole('button', { name: 'Pull', exact: true }).click()
   )
   expect(toast.description).toMatch(/would be overwritten/i)

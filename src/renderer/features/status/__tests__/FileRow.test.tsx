@@ -98,6 +98,32 @@ describe('FileRow — conflicted', () => {
     expect(screen.getByRole('menuitem', { name: 'Mark as resolved' })).toBeInTheDocument()
   })
 
+  // The keep-a-side choices need a resolver to call, but the destructive item does not: discarding
+  // a conflicted file quietly resolves it to our side, and that has to stay withheld whether or not
+  // the caller happened to pass a callback.
+  it('still withholds Discard changes when no resolver is wired up', () => {
+    render(
+      <FileRow
+        file="src/app.ts"
+        kind="conflicted"
+        stageState="unstaged"
+        source="worktree"
+        conflictCode="UU"
+        conflictLabels={labels}
+        isSelected={false}
+        onSelect={vi.fn()}
+        onStage={vi.fn()}
+        onUnstage={vi.fn()}
+        onFileAction={vi.fn()}
+      />
+    )
+    fireEvent.contextMenu(screen.getByText('src/app.ts'))
+
+    expect(screen.queryByRole('menuitem', { name: 'Discard changes' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Mark as resolved' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /^Keep/ })).not.toBeInTheDocument()
+  })
+
   it('offers no keep choices when both sides deleted the file (DD)', () => {
     renderConflict('DD')
 

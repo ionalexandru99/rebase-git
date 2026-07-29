@@ -106,15 +106,33 @@ describe('operation detection', () => {
     })
   })
 
-  it('reports a single-commit revert with the reverted commit as the other side', async () => {
+  // Stage :3 of a revert holds the *parent* of the reverted commit — the state git is restoring, not
+  // the commit being undone. Labelling it with that commit would make "Keep <it>" mean the opposite
+  // of what it says, so the label names the revert itself.
+  it('labels a single-commit revert as the revert rather than the commit it undoes', async () => {
     await withConflictedRepo('revert', async (fixture) => {
       const revertedSha = gitOutput(fixture.path, ['rev-parse', '--short', 'HEAD~1']).trim()
       const operation = await readOperation(fixture.path)
       expect(operation.kind).toBe('revert')
       expect(operation.oursLabel).toBe('main')
+      expect(operation.theirsLabel).toMatch(/^revert of /)
       expect(operation.theirsLabel).toContain(revertedSha)
       expect(operation.theirsLabel).toContain('two')
       expect(operation.done).toBeUndefined()
+      // What the label stands for: undoing 'two' restores what 'one' left behind.
+      expect(gitOutput(fixture.path, ['cat-file', '-p', ':3:f.txt'])).toBe('one\n')
+    })
+  })
+
+  it('labels the step of a revert sequence as the revert too', async () => {
+    await withConflictedRepo('revert-sequence', async (fixture) => {
+      const operation = await readOperation(fixture.path)
+      expect(operation.kind).toBe('revert')
+      expect(operation.oursLabel).toBe('main')
+      expect(operation.theirsLabel).toMatch(/^revert of /)
+      expect(operation.theirsLabel).toContain('two')
+      expect(operation.total).toBe(2)
+      expect(gitOutput(fixture.path, ['cat-file', '-p', ':3:f.txt'])).toBe('one\n')
     })
   })
 

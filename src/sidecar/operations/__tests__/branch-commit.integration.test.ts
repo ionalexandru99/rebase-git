@@ -194,12 +194,17 @@ describe('merge', () => {
     git('checkout', 'main')
 
     await runOp(Effect.either(mergeBranch(repoDir, 'local', 'merge/prefill')))
-    const operation = await detectOperationState(repoDir)
 
-    expect(operation?.mergeMessage).toMatch(/^Merge branch 'merge\/prefill'/)
-    expect(readFile('prefill.txt')).toContain('>>>>>>> merge/prefill')
-    expect(readFile('prefill.txt')).not.toContain('refs/heads/')
-    git('merge', '--abort')
+    // Every test in this file shares one repo, so the abort has to happen even when an assertion
+    // throws — otherwise a single failure here leaves a half-merged repo and fails everything after.
+    try {
+      const operation = await detectOperationState(repoDir)
+      expect(operation?.mergeMessage).toMatch(/^Merge branch 'merge\/prefill'/)
+      expect(readFile('prefill.txt')).toContain('>>>>>>> merge/prefill')
+      expect(readFile('prefill.txt')).not.toContain('refs/heads/')
+    } finally {
+      git('merge', '--abort')
+    }
   })
 
   it('reports a conflict without throwing', async () => {
@@ -209,11 +214,15 @@ describe('merge', () => {
     commitFile('conflict.txt', 'branch-side\n', 'branch side of conflict')
     git('checkout', 'main')
     const result = await runOp(Effect.either(mergeBranch(repoDir, 'local', 'merge/conflict')))
-    expect(Either.isLeft(result)).toBe(true)
-    if (Either.isLeft(result)) {
-      expect(result.left._tag).toBe('Conflict')
+
+    try {
+      expect(Either.isLeft(result)).toBe(true)
+      if (Either.isLeft(result)) {
+        expect(result.left._tag).toBe('Conflict')
+      }
+    } finally {
+      git('merge', '--abort')
     }
-    git('merge', '--abort')
   })
 
   it('merges the local branch when a tag has the same short name', async () => {
