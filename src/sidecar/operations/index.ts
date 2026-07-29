@@ -198,12 +198,14 @@ export function resetToCommit(
     if (!isSafeRefArg(sha)) {
       return yield* Effect.fail(new GitError({ message: 'invalid commit' }))
     }
-    // Every mode moves HEAD, and moving HEAD deletes the operation's marker; --hard takes the staged
-    // resolution with it.
-    yield* requireNoOperation(repoPath)
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.raw(['reset', `--${mode}`, sha, '--']))
+      Effect.gen(function* () {
+        // Every mode moves HEAD, and moving HEAD deletes the operation's marker; --hard takes the
+        // staged resolution with it.
+        yield* requireNoOperation(repoPath)
+        yield* tryGit(() => git.raw(['reset', `--${mode}`, sha, '--']))
+      })
     )
   })
 }

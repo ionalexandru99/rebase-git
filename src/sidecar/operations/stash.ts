@@ -67,60 +67,62 @@ export function stashPush(
     if (files?.some((file) => !isValidPathArg(file))) {
       return yield* Effect.fail(new GitError({ message: 'invalid file path' }))
     }
-    yield* requireNoOperation(repoPath)
     yield* withRepoLock(
       repoPath,
-      tryGit(async () => {
-        const selectedStagedFiles = files !== undefined && files.length > 0
-        if (selectedStagedFiles) {
-          const gitDir = (await git.raw(['rev-parse', '--absolute-git-dir'])).trim()
-          const temporaryIndex = path.join(gitDir, `rebase-stash-index-${process.pid}`)
-          const env = { ...process.env, GIT_INDEX_FILE: temporaryIndex }
-          const run = async (args: string[], stdin?: string): Promise<string> => {
-            const result = await spawnGit(['-C', repoPath, ...args], { env, stdin })
-            if (result.code !== 0) {
-              throw new Error(
-                result.stderr.trim() || `git ${args[0]} exited with code ${result.code}`
-              )
+      Effect.gen(function* () {
+        yield* requireNoOperation(repoPath)
+        yield* tryGit(async () => {
+          const selectedStagedFiles = files !== undefined && files.length > 0
+          if (selectedStagedFiles) {
+            const gitDir = (await git.raw(['rev-parse', '--absolute-git-dir'])).trim()
+            const temporaryIndex = path.join(gitDir, `rebase-stash-index-${process.pid}`)
+            const env = { ...process.env, GIT_INDEX_FILE: temporaryIndex }
+            const run = async (args: string[], stdin?: string): Promise<string> => {
+              const result = await spawnGit(['-C', repoPath, ...args], { env, stdin })
+              if (result.code !== 0) {
+                throw new Error(
+                  result.stderr.trim() || `git ${args[0]} exited with code ${result.code}`
+                )
+              }
+              return result.stdout
             }
-            return result.stdout
-          }
-          try {
-            await run(['read-tree', 'HEAD'])
-            const patch = await git.raw([
-              'diff',
-              '--cached',
-              '--binary',
-              '--full-index',
-              '--',
-              ...literalPathspecs(files)
-            ])
-            await run(['apply', '--cached', '--whitespace=nowarn', '-'], patch)
-            const args = ['stash', 'push', '--staged']
-            if (message) {
-              args.push('-m', message)
+            try {
+              await run(['read-tree', 'HEAD'])
+              const patch = await git.raw([
+                'diff',
+                '--cached',
+                '--binary',
+                '--full-index',
+                '--',
+                ...literalPathspecs(files)
+              ])
+              await run(['apply', '--cached', '--whitespace=nowarn', '-'], patch)
+              const args = ['stash', 'push', '--staged']
+              if (message) {
+                args.push('-m', message)
+              }
+              const output = await run(args)
+              await git.raw([
+                'restore',
+                '--staged',
+                '--source=HEAD',
+                '--',
+                ...literalPathspecs(files)
+              ])
+              return output
+            } finally {
+              await rm(temporaryIndex, { force: true })
             }
-            const output = await run(args)
-            await git.raw([
-              'restore',
-              '--staged',
-              '--source=HEAD',
-              '--',
-              ...literalPathspecs(files)
-            ])
-            return output
-          } finally {
-            await rm(temporaryIndex, { force: true })
           }
-        }
-        const args = ['stash', 'push']
-        if (includeUntracked) {
-          args.push('--include-untracked')
-        }
-        if (message) {
-          args.push('-m', message)
-        }
-        return git.raw(args)
+          const args = ['stash', 'push']
+          if (includeUntracked) {
+            args.push('--include-untracked')
+          }
+          if (message) {
+            args.push('-m', message)
+          }
+          return git.raw(args)
+        })
       })
     )
   })

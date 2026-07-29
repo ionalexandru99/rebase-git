@@ -240,6 +240,22 @@ describe('a merge parked with its conflict already resolved', () => {
     })
   })
 
+  // A path the incoming side never touches cannot be carrying a resolution, so whatever is staged for
+  // it is the user's own work. Refusing it would be a trap: `merge --abort` is then the only way out
+  // and it discards that work along with the merge.
+  it('lets an unrelated staged edit be unstaged and discarded', async () => {
+    await withResolvedMerge(async (fixture) => {
+      writeRepoFile(fixture.path, 'unrelated.txt', 'my own work\n')
+      gitOutput(fixture.path, ['add', '--', 'unrelated.txt'])
+
+      await runOp(unstageFile(fixture.path, 'unrelated.txt'))
+
+      expect(gitOutput(fixture.path, ['diff', '--cached', '--name-only']).trim()).toBe('f.txt')
+      expect(readRepoFile(fixture.path, 'unrelated.txt')).toBe('my own work\n')
+      expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+
   // Discarding a file that is still conflicted stays allowed — that is a resolution toward our side,
   // covered above. Discarding one that is already resolved is the reverse: it puts HEAD back over the
   // resolution and the merge commit then records HEAD's side.

@@ -53,12 +53,12 @@ export function checkoutRef(
     if (!isSafeCheckoutRef(fullPath)) {
       return yield* Effect.fail(new GitError({ message: 'invalid ref name' }))
     }
-    // git cancels a parked cherry-pick or revert to move HEAD — it says so in a warning nobody sees
-    // and deletes CHERRY_PICK_HEAD, taking the resolution waiting on Continue with it.
-    yield* requireNoOperation(repoPath)
     return yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
+        // git cancels a parked cherry-pick or revert to move HEAD — it says so in a warning nobody
+        // sees and deletes CHERRY_PICK_HEAD, taking the resolution waiting on Continue with it.
+        yield* requireNoOperation(repoPath)
         if (refKind === 'remote') {
           yield* Effect.tryPromise({
             try: () => git.raw(['show-ref', '--verify', `refs/remotes/${fullPath}`]),
@@ -115,18 +115,20 @@ export function createBranch(
     if (!isSafeRefArg(name) || (startPoint !== undefined && !isSafeRefArg(startPoint))) {
       return yield* Effect.fail(new GitError({ message: 'invalid branch name' }))
     }
-    // Creating a branch leaves HEAD alone; checking one out is the same HEAD move as any checkout.
-    if (checkout) {
-      yield* requireNoOperation(repoPath)
-    }
     yield* withRepoLock(
       repoPath,
-      tryGit(() => {
-        const args = checkout ? ['checkout', '-b', name] : ['branch', name]
-        if (startPoint) {
-          args.push(qualifyRef(startPointKind, startPoint))
+      Effect.gen(function* () {
+        // Creating a branch leaves HEAD alone; checking one out is the same HEAD move as any other.
+        if (checkout) {
+          yield* requireNoOperation(repoPath)
         }
-        return git.raw(args)
+        yield* tryGit(() => {
+          const args = checkout ? ['checkout', '-b', name] : ['branch', name]
+          if (startPoint) {
+            args.push(qualifyRef(startPointKind, startPoint))
+          }
+          return git.raw(args)
+        })
       })
     )
   })

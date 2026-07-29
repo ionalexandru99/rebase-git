@@ -1,7 +1,7 @@
 import type { FileDiff, GitStatus } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
 import { buildHunkPatch, parseUnifiedDiff, toFileDiff } from '../git/diff'
-import { GitError, HunkNotFound, OperationInProgress, type RepoNotOpen } from '../git/errors'
+import { GitError, HunkNotFound, type OperationInProgress, type RepoNotOpen } from '../git/errors'
 import { isValidPathArg, literalPathspec, literalPathspecs } from '../git/pathspec'
 import { isSafeRefArg } from '../git/ref-args'
 import { serializeStatus } from '../git/serialize'
@@ -10,7 +10,7 @@ import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
 import { unmergedPaths } from './conflict-resolution'
 import { requireGit, requireOpen, tryGit } from './helpers'
-import { detectInProgressOperation, requireNoOperation } from './in-progress'
+import { requireNoOperationForPaths } from './in-progress'
 import { detectOperationState } from './operation-state'
 
 // The in-progress merge/rebase/sequence rides along with the status so the renderer learns about a
@@ -46,11 +46,13 @@ export function unstageFile(
 ): Effect.Effect<void, RepoNotOpen | GitError | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
-    yield* requireNoOperation(repoPath)
     const files = renameSource ? [renameSource, file] : [file]
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.reset(['HEAD', '--', ...literalPathspecs(files)]))
+      Effect.gen(function* () {
+        yield* requireNoOperationForPaths(repoPath, files)
+        yield* tryGit(() => git.reset(['HEAD', '--', ...literalPathspecs(files)]))
+      })
     )
   })
 }
@@ -80,10 +82,12 @@ export function unstageAll(
     if (files.length === 0) {
       return
     }
-    yield* requireNoOperation(repoPath)
     yield* withRepoLock(
       repoPath,
-      tryGit(() => git.reset(['HEAD', '--', ...literalPathspecs(files)]))
+      Effect.gen(function* () {
+        yield* requireNoOperationForPaths(repoPath, files)
+        yield* tryGit(() => git.reset(['HEAD', '--', ...literalPathspecs(files)]))
+      })
     )
   })
 }
@@ -191,17 +195,22 @@ export function getDiff(
   })
 }
 
-function applyHunk(
+function applyHunk<GuardError = never>(
   repoPath: string,
   file: string,
   hunkHeader: string,
-  direction: 'stage' | 'unstage'
-): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound, RepoSessions> {
+  direction: 'stage' | 'unstage',
+  // Runs under the same lock as the write it guards, so nothing can park an operation in between.
+  guard?: Effect.Effect<void, GuardError>
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | GuardError, RepoSessions> {
   return Effect.gen(function* () {
     yield* requireOpen(repoPath)
     yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
+        if (guard) {
+          yield* guard
+        }
         const raw = yield* tryGit(() =>
           readFileDiff(repoPath, file, direction === 'unstage', undefined)
         )
@@ -233,11 +242,13 @@ export function unstageHunk(
   file: string,
   hunkHeader: string
 ): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | OperationInProgress, RepoSessions> {
-  return Effect.gen(function* () {
-    yield* requireOpen(repoPath)
-    yield* requireNoOperation(repoPath)
-    yield* applyHunk(repoPath, file, hunkHeader, 'unstage')
-  })
+  return applyHunk(
+    repoPath,
+    file,
+    hunkHeader,
+    'unstage',
+    requireNoOperationForPaths(repoPath, [file])
+  )
 }
 
 export function discardChanges(
@@ -256,16 +267,12 @@ export function discardChanges(
     // operation running, which is the documented behaviour. Discarding one that is already resolved
     // is the opposite: it restores HEAD over the resolution while the operation stays parked, and the
     // commit that ends it then records HEAD's side instead of the user's.
-    const inProgress = yield* tryGit(() => detectInProgressOperation(repoPath))
-    if (inProgress) {
-      const conflicted = new Set(yield* tryGit(() => unmergedPaths(repoPath)))
-      if (files.some((file) => !conflicted.has(file))) {
-        return yield* Effect.fail(new OperationInProgress({ operation: inProgress }))
-      }
-    }
     yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
+        yield* requireNoOperationForPaths(repoPath, files, {
+          exempt: yield* tryGit(() => unmergedPaths(repoPath))
+        })
         const statusRaw = yield* tryGit(() =>
           git.raw(['status', '--porcelain', '-z', '--', ...literalPathspecs(files)])
         )
