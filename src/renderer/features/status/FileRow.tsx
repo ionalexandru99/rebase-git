@@ -148,6 +148,9 @@ export function FileRow(props: FileRowProps) {
         <button
           type="button"
           onClick={toggleStaged}
+          // The row's own double-click stages too, so a quick double-tap on the button would
+          // otherwise send the same move twice.
+          onDoubleClick={(event) => event.stopPropagation()}
           aria-label={actionLabel}
           title={actionLabel}
           className="grid size-5 shrink-0 place-content-center rounded-[var(--r-xs)] text-muted-foreground opacity-0 transition-opacity hover:bg-card-2 hover:text-foreground focus-visible:opacity-100 group-hover/file-row:opacity-100"
