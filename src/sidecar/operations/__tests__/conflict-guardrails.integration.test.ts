@@ -287,6 +287,60 @@ describe('a merge parked with its conflict already resolved', () => {
   })
 })
 
+// A revert reverses the commit it names, so a path that commit touched and nothing has touched since
+// reads identically on HEAD and REVERT_HEAD while the revert is staging a reversal for it. Comparing
+// those two snapshots would call that path unrelated and let its reversal be unstaged, and Continue
+// would then commit a revert missing part of the commit it claims to undo.
+describe('a revert parked with one path conflicted and another reversed cleanly', () => {
+  async function withPartialRevert<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
+    const fixture = makeConflictedRepo('revert-partial')
+    await runOp(openRepo(fixture.path))
+    try {
+      return await use(fixture)
+    } finally {
+      await runOp(closeRepo(fixture.path))
+      removeRepoDir(fixture.path)
+    }
+  }
+
+  it('stages the clean reversal even though HEAD and REVERT_HEAD agree on it', async () => {
+    await withPartialRevert(async (fixture) => {
+      expect(conflictedPaths(fixture.path)).toEqual(['a.txt'])
+      expect(
+        gitOutput(fixture.path, [
+          'diff',
+          '--name-only',
+          'HEAD',
+          'REVERT_HEAD',
+          '--',
+          'b.txt'
+        ]).trim()
+      ).toBe('')
+      expect(gitOutput(fixture.path, ['show', ':b.txt'])).toBe('b base\n')
+      expect(gitOutput(fixture.path, ['show', 'HEAD:b.txt'])).toBe('b target\n')
+    })
+  })
+
+  it('refuses to unstage the clean reversal', async () => {
+    await withPartialRevert(async (fixture) => {
+      const error = await failure(unstageFile(fixture.path, 'b.txt'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'revert' })
+      expect(gitOutput(fixture.path, ['show', ':b.txt'])).toBe('b base\n')
+      expect(await operationKind(fixture.path)).toBe('revert')
+    })
+  })
+
+  it('refuses to unstage it through Unstage all as well', async () => {
+    await withPartialRevert(async (fixture) => {
+      const error = await failure(unstageAll(fixture.path, ['a.txt', 'b.txt']))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'revert' })
+      expect(gitOutput(fixture.path, ['show', ':b.txt'])).toBe('b base\n')
+    })
+  })
+})
+
 // Moving HEAD is the third way out. git does not refuse a checkout for a parked cherry-pick or
 // revert the way it does for a conflicted index — it cancels the operation to make room, says so in a
 // warning that never reaches a GUI, and the resolution waiting on Continue goes with it.

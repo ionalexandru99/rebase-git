@@ -62,9 +62,8 @@ export function requireNoOperation(
   })
 }
 
-// What the operation is bringing in, so a path can be tested against it. Every kind git gives a ref
-// for is listed; `am` has none, and a patch series is left protected wholesale rather than guessed
-// at.
+// The ref naming what the operation is applying. `am` has none, and a patch series is left
+// protected wholesale rather than guessed at.
 const INCOMING_REFS: Record<InProgressOperation, string | undefined> = {
   merge: 'MERGE_HEAD',
   'cherry-pick': 'CHERRY_PICK_HEAD',
@@ -72,28 +71,60 @@ const INCOMING_REFS: Record<InProgressOperation, string | undefined> = {
   rebase: 'REBASE_HEAD'
 }
 
+async function revision(repoPath: string, spec: string): Promise<string | undefined> {
+  const output = await runGit(['-C', repoPath, 'rev-parse', '--verify', '--quiet', spec], {
+    okExitCodes: [0, 1]
+  })
+  const resolved = output.trim()
+  return resolved.length > 0 ? resolved : undefined
+}
+
 /**
- * Of `files`, the ones the parked operation could have staged something for — a path the incoming
- * side leaves alone cannot be carrying a resolution, so whatever is staged for it is the user's own
- * work and is theirs to unstage or discard.
+ * The two ends of the change the operation is applying, or undefined when it cannot be named.
  *
- * Any path that was ever conflicted is necessarily in here: a conflict means both sides changed the
- * path, so it always differs between HEAD and the incoming side. Where the incoming side cannot be
- * named, every path is reported as the operation's.
+ * It has to be the step's own delta, not HEAD against the incoming commit. Reverting a commit
+ * reverses its diff, so a path that commit touched and nothing has touched since reads as identical
+ * on both ends — the revert is staging a reversal for it while a HEAD-to-incoming comparison calls it
+ * untouched. A merge has no single commit, so its delta is what the incoming side did since the base.
+ */
+async function stepRange(
+  repoPath: string,
+  operation: InProgressOperation
+): Promise<{ from: string; to: string } | undefined> {
+  const incoming = INCOMING_REFS[operation]
+  if (!incoming) {
+    return undefined
+  }
+  const to = await revision(repoPath, incoming)
+  if (!to) {
+    return undefined
+  }
+  if (operation === 'merge') {
+    const base = await runGit(['-C', repoPath, 'merge-base', 'HEAD', to], {
+      okExitCodes: [0, 1]
+    }).catch(() => '')
+    const from = base.trim()
+    return from.length > 0 ? { from, to } : undefined
+  }
+  const from = await revision(repoPath, `${to}^`)
+  return from ? { from, to } : undefined
+}
+
+/**
+ * Of `files`, the ones the parked operation could have staged something for — a path its step does
+ * not touch cannot be carrying a resolution, so whatever is staged for it is the user's own work and
+ * is theirs to unstage or discard.
+ *
+ * Any path that was ever conflicted is necessarily in here: a conflict means the step touched it.
+ * Where the step cannot be named, every path is reported as the operation's.
  */
 async function operationPaths(
   repoPath: string,
   operation: InProgressOperation,
   files: readonly string[]
 ): Promise<string[]> {
-  const incoming = INCOMING_REFS[operation]
-  if (!incoming) {
-    return [...files]
-  }
-  const resolved = await runGit(['-C', repoPath, 'rev-parse', '--verify', '--quiet', incoming], {
-    okExitCodes: [0, 1]
-  })
-  if (resolved.trim().length === 0) {
+  const range = await stepRange(repoPath, operation)
+  if (!range) {
     return [...files]
   }
   const changed = await runGit([
@@ -101,8 +132,8 @@ async function operationPaths(
     repoPath,
     'diff',
     '--name-only',
-    'HEAD',
-    resolved.trim(),
+    range.from,
+    range.to,
     '--',
     ...files
   ])

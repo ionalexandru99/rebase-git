@@ -111,6 +111,7 @@ export type ConflictFixtureKind =
   | 'cherry-pick'
   | 'cherry-pick-sequence'
   | 'revert'
+  | 'revert-partial'
   | 'revert-sequence'
   | 'rebase'
   | 'rebase-apply'
@@ -274,6 +275,21 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
     commitRepoFile(repo, 'f.txt', 'three\n', 'three')
     return
   }
+  // The reverted commit touches two files and only one of them has moved since, so reverting it
+  // conflicts on that one and reverses the other cleanly — the clean reversal is staged straight
+  // away, with nothing left in HEAD to distinguish it from an untouched path.
+  if (kind === 'revert-partial') {
+    writeRepoFile(repo, 'a.txt', 'a base\n')
+    writeRepoFile(repo, 'b.txt', 'b base\n')
+    git(repo, ['add', '--', 'a.txt', 'b.txt'])
+    git(repo, ['commit', '-m', 'base'])
+    writeRepoFile(repo, 'a.txt', 'a target\n')
+    writeRepoFile(repo, 'b.txt', 'b target\n')
+    git(repo, ['add', '--', 'a.txt', 'b.txt'])
+    git(repo, ['commit', '-m', 'target of the revert'])
+    commitRepoFile(repo, 'a.txt', 'a later\n', 'later work on a')
+    return
+  }
   if (kind === 'revert-sequence') {
     commitRepoFile(repo, 'f.txt', 'one\n', 'one')
     commitRepoFile(repo, 'f.txt', 'two\n', 'two')
@@ -304,6 +320,10 @@ function startConflict(kind: ConflictFixtureKind, repo: string): void {
     return
   }
   if (kind === 'revert') {
+    gitIgnoringFailure(repo, ['revert', '--no-edit', 'HEAD~1'])
+    return
+  }
+  if (kind === 'revert-partial') {
     gitIgnoringFailure(repo, ['revert', '--no-edit', 'HEAD~1'])
     return
   }
