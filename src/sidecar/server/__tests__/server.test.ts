@@ -506,6 +506,12 @@ function createHangingStatusRepo(): HangingStatusRepo {
       const raw = fs.readFileSync(pidPath, 'utf8').trim()
       return /^\d+$/.test(raw) ? Number(raw) : undefined
     },
-    cleanup: () => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 })
+    // Housekeeping, not an assertion: a temp directory Windows will not unlink yet — the killed
+    // filter can outhold every retry — must not turn a passing test red.
+    cleanup: () => {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 })
+      } catch {}
+    }
   }
 }

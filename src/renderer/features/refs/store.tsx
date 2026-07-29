@@ -10,15 +10,16 @@ import {
   useRef,
   useState
 } from 'react'
+import { toast } from 'sonner'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
+import { toastEngineFailure, toastGitFailure } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcFetch, rpcGetLocalBranches, rpcGetRemoteRefs } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import type { GitBranches } from '@/types'
 import type { RepoMutationCoordinator } from '../../stores/action-runner'
-import type { RepoSessionErrorSource } from '../../stores/repo-session'
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000
 const combineBranches = (
@@ -55,8 +56,6 @@ export interface RefsDeps {
   liveRepoPath: RefObject<string | null>
   openGenerationRef: RefObject<number>
   isCurrentRepo: (generation: number, repoPath: string) => boolean
-  setError: (source: RepoSessionErrorSource, error: string) => void
-  clearError: (source: RepoSessionErrorSource) => void
   mutationCoordinator: RepoMutationCoordinator
   refreshAfterFetch: (repoPath: string) => Promise<unknown>
 }
@@ -93,8 +92,6 @@ export function useRefsController(deps: RefsDeps): RefsController {
     liveRepoPath,
     openGenerationRef,
     isCurrentRepo,
-    setError,
-    clearError,
     mutationCoordinator,
     refreshAfterFetch
   } = deps
@@ -106,6 +103,7 @@ export function useRefsController(deps: RefsDeps): RefsController {
 
   const [fetchTick, setFetchTick] = useState(0)
   const pendingRefresh = useRef<string | null>(null)
+  const lastFetchFailure = useRef<string | null>(null)
   const [lastFetch, setLastFetch] = useState<{ repoPath: string; fetchedAt: number } | null>(null)
   const lastFetchedAt = lastFetch?.repoPath === repoPath ? lastFetch.fetchedAt : null
 
@@ -131,35 +129,63 @@ export function useRefsController(deps: RefsDeps): RefsController {
   const currentBranch = localBranchesQuery.data?.current || statusCurrent || ''
   const branchesLoading = localBranchesQuery.isFetching && !localBranchesQuery.data
 
-  const runFetchAndRefresh = (path: string) =>
-    mutationCoordinator.run('fetch', undefined, async () => {
-      const generation = openGenerationRef.current
-      if (!isCurrentRepo(generation, path)) {
-        return
-      }
-      try {
-        const response = await rpcFetch(path)
+  const notifyFetchBusy = () => {
+    toast.info('Another Git action is still running', {
+      description: 'Wait for it to finish, then fetch again.'
+    })
+  }
+
+  // One surface per failure: the toast. A fetch the user asked for always answers; a background fetch
+  // only speaks up when it has something new to say, so a remote that stays broken does not toast
+  // every five minutes.
+  const reportFetchFailure = (rawMessage: string, manual: boolean) => {
+    const alreadyReported = lastFetchFailure.current === rawMessage
+    lastFetchFailure.current = rawMessage
+    if (manual || !alreadyReported) {
+      toastGitFailure('Fetch failed', rawMessage)
+    }
+  }
+
+  const runFetchAndRefresh = (path: string, manual = false) =>
+    mutationCoordinator.run(
+      'fetch',
+      undefined,
+      async () => {
+        const generation = openGenerationRef.current
         if (!isCurrentRepo(generation, path)) {
           return
         }
-        if (response._tag === 'Ok') {
-          clearError('fetch')
-          setLastFetch({ repoPath: path, fetchedAt: Date.now() })
-          if (tabActiveRef.current) {
-            await refreshAfterFetch(path)
-          } else {
-            pendingRefresh.current = path
+        try {
+          const response = await rpcFetch(path)
+          if (!isCurrentRepo(generation, path)) {
+            return
           }
-        } else if (response._tag === 'GitError') {
-          setError('fetch', response.message)
+          if (response._tag === 'Ok') {
+            lastFetchFailure.current = null
+            setLastFetch({ repoPath: path, fetchedAt: Date.now() })
+            if (manual) {
+              toast.success('Fetched from remote')
+            }
+            if (tabActiveRef.current) {
+              await refreshAfterFetch(path)
+            } else {
+              pendingRefresh.current = path
+            }
+          } else if (response._tag === 'FetchSkipped') {
+            if (manual) {
+              toast.info('A fetch is already running')
+            }
+          } else if (response._tag === 'GitError') {
+            reportFetchFailure(response.message, manual)
+          }
+        } catch (error) {
+          if (isCurrentRepo(generation, path)) {
+            toastEngineFailure('Fetch failed', formatCause(error))
+          }
         }
-      } catch (error) {
-        if (isCurrentRepo(generation, path)) {
-          const message = formatCause(error)
-          setError('fetch', message)
-        }
-      }
-    })
+      },
+      manual ? notifyFetchBusy : undefined
+    )
 
   const fetchNowImpl = async () => {
     const path = liveRepoPath.current
@@ -167,7 +193,7 @@ export function useRefsController(deps: RefsDeps): RefsController {
       return
     }
     setFetchTick((tick) => tick + 1)
-    await runFetchAndRefresh(path)
+    await runFetchAndRefresh(path, true)
   }
 
   const latest = useLatestRef({

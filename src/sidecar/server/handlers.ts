@@ -1,12 +1,16 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import nodePath from 'node:path'
 import { Etag, FileSystem, HttpPlatform, Path } from '@effect/platform'
 import { RpcSerialization, RpcServer } from '@effect/rpc'
 import { GitError, SidecarRpcs } from '@shared/rpc'
 import { Effect, Layer, Stream } from 'effect'
 import { createGit, normalizeRepoPath } from '../git/instances'
-import { resolveExistingRepoRoot, resolveRepoRelativeFile } from '../git/path-guards'
+import {
+  resolveDirectoryWithinHome,
+  resolveExistingRepoRoot,
+  resolveRepoRelativeFile
+} from '../git/path-guards'
+import { isCloneStagingName } from '../operations/clone'
 import { requireOpen } from '../operations/helpers'
 import * as operations from '../operations/index'
 import { clearLogContinuation, logChunkStream } from '../operations/log-stream'
@@ -83,40 +87,13 @@ const resolveDroppedHunks = (
 const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], GitError> =>
   Effect.tryPromise({
     try: async () => {
-      if (!requestedDirPath || requestedDirPath.includes('\0')) {
+      const scanRoot = resolveDirectoryWithinHome(requestedDirPath)
+      if (!scanRoot) {
         throw new Error(INVALID_DIRECTORY_PATH)
       }
-      if (!nodePath.isAbsolute(requestedDirPath)) {
-        throw new Error(INVALID_DIRECTORY_PATH)
-      }
-      if (requestedDirPath.split(/[/\\]/).includes('..')) {
-        throw new Error(INVALID_DIRECTORY_PATH)
-      }
-
-      let scanRoot: string
-      let homeRoot: string
-      try {
-        scanRoot = fs.realpathSync.native(nodePath.resolve(requestedDirPath))
-        if (!fs.statSync(scanRoot).isDirectory()) {
-          throw new Error(INVALID_DIRECTORY_PATH)
-        }
-        homeRoot = fs.realpathSync.native(os.homedir())
-      } catch {
-        throw new Error(INVALID_DIRECTORY_PATH)
-      }
-
-      const resolvedPath = nodePath.resolve(requestedDirPath)
       const scanRootPrefix = scanRoot.endsWith(nodePath.sep)
         ? scanRoot
         : `${scanRoot}${nodePath.sep}`
-      if (resolvedPath !== scanRoot && !resolvedPath.startsWith(scanRootPrefix)) {
-        throw new Error(INVALID_DIRECTORY_PATH)
-      }
-
-      const homePrefix = homeRoot.endsWith(nodePath.sep) ? homeRoot : `${homeRoot}${nodePath.sep}`
-      if (scanRoot !== homeRoot && !scanRoot.startsWith(homePrefix)) {
-        throw new Error(INVALID_DIRECTORY_PATH)
-      }
 
       const entries = await fs.promises.readdir(scanRoot, { withFileTypes: true })
       const repos: string[] = []
@@ -126,6 +103,11 @@ const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], 
         }
         const childName = nodePath.basename(entry.name)
         if (childName !== entry.name) {
+          continue
+        }
+        // A clone in flight keeps a real working tree in its staging directory; offering it here
+        // would let the user open a repository that is still being written.
+        if (isCloneStagingName(childName)) {
           continue
         }
         const childPath = nodePath.join(scanRoot, childName)
@@ -164,6 +146,8 @@ export const handlersLayer = SidecarRpcs.toLayer({
     }),
   scanForRepos: ({ dirPath }) =>
     scanForReposGuarded(dirPath).pipe(Effect.map((repos) => ({ repos }))),
+  cloneRepo: ({ url, parentDir, folderName }) =>
+    operations.cloneRepo({ url, parentDir, folderName }),
   commit: ({ repoPath, message }) =>
     withResolvedRepo(repoPath, (repo) => operations.commit(repo, message)),
   getHeadCommit: ({ repoPath }) =>

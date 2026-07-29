@@ -6,8 +6,16 @@ import type {
   StatusFileCode
 } from '@shared/schemas/git'
 import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
+import type { CloneProgressEvent } from '@shared/schemas/ipc'
 import type { LogStreamOptions } from '@shared/schemas/log-stream'
 import type { IElectronAPI } from '../../preload'
+
+const CLONE_PHASES: [string, number][] = [
+  ['Counting objects', 40],
+  ['Compressing objects', 72],
+  ['Receiving objects', 96],
+  ['Resolving deltas', 100]
+]
 
 export const PLAYWRIGHT_MCP_WORKSPACE_PATH = '/Users/playwright/Projects'
 export const PLAYWRIGHT_MCP_REPO_PATH = `${PLAYWRIGHT_MCP_WORKSPACE_PATH}/rebase-demo`
@@ -429,6 +437,7 @@ export function createPlaywrightMcpElectronApi(
   const logListeners = new Set<(chunk: LogChunk) => void>()
   const repoListeners = new Set<(event: RepoChangedEvent) => void>()
   const restartListeners = new Set<() => void>()
+  const cloneListeners = new Set<(event: CloneProgressEvent) => void>()
 
   const notifyRepoChanged = (kind: RepoChangedEvent['kind']): void => {
     const event = { repoPath: PLAYWRIGHT_MCP_REPO_PATH, kind }
@@ -534,6 +543,21 @@ export function createPlaywrightMcpElectronApi(
       state.onboardingComplete = complete
     },
     scanForRepos: async () => ({ _tag: 'Ok', repos: [PLAYWRIGHT_MCP_REPO_PATH] }),
+    // Walks the real progress phases, then lands on the one repo this double can open.
+    cloneRepo: async (request) => {
+      for (const [phase, percent] of CLONE_PHASES) {
+        for (const listener of cloneListeners) {
+          listener({ cloneId: request.cloneId, phase, percent })
+        }
+        await new Promise((resolve) => setTimeout(resolve, 220))
+      }
+      return { _tag: 'Ok', path: PLAYWRIGHT_MCP_REPO_PATH }
+    },
+    cancelClone: async () => {},
+    onCloneProgress: (callback) => {
+      cloneListeners.add(callback)
+      return () => cloneListeners.delete(callback)
+    },
     sidecarRequest: async (operation, body) => {
       const repoPath = bodyString(body, 'repoPath')
       if (repoPath && repoPath !== PLAYWRIGHT_MCP_REPO_PATH) {

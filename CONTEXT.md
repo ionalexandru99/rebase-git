@@ -35,3 +35,16 @@ _Avoid_: fixup, squash (those fold one commit into another; Amend rewrites a sin
 **Reword**:
 The message-only case of [[Amend]] — nothing staged, HEAD's tree unchanged, only its message replaced. Not a separate operation; the same Amend with an empty stage.
 _Avoid_: edit, rename
+
+**System auth**:
+Rebase carries no credentials of its own: every remote operation authenticates through the machine's
+own Git setup (SSH agent, `known_hosts`, credential helper). Git runs with prompts suppressed, so a
+machine without that setup fails immediately rather than waiting on input — the renderer names the
+missing piece and links to its documentation.
+_Avoid_: login, sign-in (nothing is signed into inside the app)
+
+**Failure class**:
+The category a raw Git failure is mapped to before it is shown — unconfigured auth, untrusted host
+key, network, non-fast-forward, dirty tree, conflict, and so on. Each class carries the sentence that
+explains the fix; a failure that matches no class keeps Git's own words rather than being softened.
+_Avoid_: error code, error type (a class is a presentation decision, not something Git reports)

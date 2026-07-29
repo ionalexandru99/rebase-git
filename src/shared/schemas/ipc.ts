@@ -11,6 +11,27 @@ export type StartLogStreamResponse = typeof StartLogStreamResponseSchema.Type
 export const CancelLogStreamResponseSchema = Schema.Struct({})
 export type CancelLogStreamResponse = typeof CancelLogStreamResponseSchema.Type
 
+export const CloneRequestSchema = Schema.Struct({
+  cloneId: Schema.Int,
+  url: Schema.String,
+  parentDir: Schema.String,
+  folderName: Schema.String
+})
+export type CloneRequest = typeof CloneRequestSchema.Type
+
+export const CloneRepoResponseSchema = Schema.Union(
+  Schema.TaggedStruct('Ok', { path: Schema.String }),
+  gitError
+)
+export type CloneRepoResponse = typeof CloneRepoResponseSchema.Type
+
+export const CloneProgressEventSchema = Schema.Struct({
+  cloneId: Schema.Int,
+  phase: Schema.String,
+  percent: Schema.optional(NonNaNNumber)
+})
+export type CloneProgressEvent = typeof CloneProgressEventSchema.Type
+
 export const RefKindSchema = Schema.Literal('local', 'remote', 'tag')
 export type RefKind = typeof RefKindSchema.Type
 

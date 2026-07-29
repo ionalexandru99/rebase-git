@@ -12,6 +12,7 @@ import { createBeforeQuitHandler } from './app/shutdown'
 import { focusExistingWindow } from './app/single-instance'
 import { resolveBackgroundColor } from './app/theme'
 import { setupUpdater } from './app/updater'
+import * as cloneIpc from './ipc/clone'
 import * as logStreamIpc from './ipc/log-stream'
 import * as repoIpc from './ipc/repo'
 import * as settingsIpc from './ipc/settings'
@@ -147,6 +148,7 @@ function createWindow(): void {
 function registerIpcHandlers(): void {
   repoIpc.register()
   logStreamIpc.register()
+  cloneIpc.register()
   workspaceIpc.register(() => mainWindow)
   settingsIpc.register()
 }

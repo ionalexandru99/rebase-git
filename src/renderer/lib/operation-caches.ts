@@ -14,6 +14,7 @@ const OPERATION_CACHES = {
   openRepo: null,
   closeRepo: null,
   scanForRepos: null,
+  cloneRepo: null,
   commit: ['status', 'localBranches', 'diff', 'log', 'headCommit'],
   getHeadCommit: null,
   amendCommit: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],

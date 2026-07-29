@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { CloneRepoDialog } from '../features/repos/CloneRepoDialog'
 import { RepoPicker } from '../features/repos/RepoPicker'
 
 interface WorkspaceCatalog {
@@ -8,6 +10,7 @@ interface WorkspaceCatalog {
   switchWorkspace: (path: string) => Promise<void>
   addWorkspace: () => Promise<unknown>
   removeWorkspace: (path: string) => Promise<void>
+  refresh: () => Promise<void>
 }
 
 interface NewTabProps {
@@ -16,17 +19,36 @@ interface NewTabProps {
 }
 
 export function NewTab(props: NewTabProps) {
+  const [cloning, setCloning] = useState(false)
+
   return (
-    <RepoPicker
-      recentRepos={props.catalog.recentRepos}
-      discoveredRepos={props.catalog.discoveredRepos}
-      workspaces={props.catalog.workspaces}
-      activeWorkspace={props.catalog.activeWorkspace}
-      onSwitchWorkspace={props.catalog.switchWorkspace}
-      onAddWorkspace={props.catalog.addWorkspace}
-      onRemoveWorkspace={props.catalog.removeWorkspace}
-      onOpenRepo={props.onOpenRepo}
-    />
+    <>
+      <RepoPicker
+        recentRepos={props.catalog.recentRepos}
+        discoveredRepos={props.catalog.discoveredRepos}
+        workspaces={props.catalog.workspaces}
+        activeWorkspace={props.catalog.activeWorkspace}
+        onSwitchWorkspace={props.catalog.switchWorkspace}
+        onAddWorkspace={props.catalog.addWorkspace}
+        onRemoveWorkspace={props.catalog.removeWorkspace}
+        onOpenRepo={props.onOpenRepo}
+        onCloneRepo={() => setCloning(true)}
+      />
+      {cloning && (
+        <CloneRepoDialog
+          defaultParentDir={props.catalog.activeWorkspace}
+          onSelectParentDir={() => window.electronAPI.selectFolder()}
+          onCloned={(repoPath) => {
+            setCloning(false)
+            props.onOpenRepo(repoPath)
+            // The clone is a repository the app did not know about a moment ago; without this it
+            // stays missing from every later new tab until a restart.
+            void props.catalog.refresh()
+          }}
+          onClose={() => setCloning(false)}
+        />
+      )}
+    </>
   )
 }
 

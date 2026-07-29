@@ -23,6 +23,7 @@ export {
   getRemoteRefs,
   renameBranch
 } from './branches'
+export { cloneRepo } from './clone'
 export { getCommitDetail } from './commit-detail'
 export {
   abortOperation,

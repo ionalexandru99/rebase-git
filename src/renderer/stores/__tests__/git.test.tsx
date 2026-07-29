@@ -1037,7 +1037,9 @@ describe('GitStoreProvider — parallel repo loading', () => {
     await git.stageFile('a.ts')
 
     await waitFor(() => {
-      expect(git.state.error).toBe('cannot stage')
+      expect(git.state.error).toBe(
+        `Git rejected the change: Git rejected the operation. The full output is in the developer console.`
+      )
     })
     expect(git.state.status?.staged).toEqual([])
     expect(git.state.status?.modified).toEqual(['a.ts'])
@@ -1065,7 +1067,9 @@ describe('GitStoreProvider — parallel repo loading', () => {
 
     await git.stageFile('a.ts')
     await waitFor(() => {
-      expect(git.state.error).toBe('cannot stage')
+      expect(git.state.error).toBe(
+        `Git rejected the change: Git rejected the operation. The full output is in the developer console.`
+      )
     })
 
     await git.stageFile('a.ts')
@@ -1082,7 +1086,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
 
     await git.openRepo(repoPath)
     await waitFor(() => {
-      expect(git.state.error).toBe('index.lock exists')
+      expect(git.state.error).toContain('Another Git process holds this repository')
     })
 
     sidecarMock.getStatus.mockResolvedValue(statusOk)
@@ -1110,7 +1114,9 @@ describe('GitStoreProvider — parallel repo loading', () => {
     await waitFor(() => {
       expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
     })
-    expect(git.state.error).toBe('hunk gone')
+    expect(git.state.error).toBe(
+      `Git rejected the change: Git rejected the operation. The full output is in the developer console.`
+    )
   })
 
   it('reads server state from the query cache (cache is the source of truth)', async () => {
@@ -1256,7 +1262,9 @@ describe('GitStoreProvider — parallel repo loading', () => {
     const amended = await git.amend('rewritten message', [], [], 'headsha123')
 
     expect(amended).toBe(false)
-    expect(toast.error).toHaveBeenCalledWith('Amend failed', { description: 'index locked' })
+    expect(toast.error).toHaveBeenCalledWith('Amend failed', {
+      description: 'Git rejected the operation. The full output is in the developer console.'
+    })
     expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
     expect(sidecarMock.getLocalBranches).toHaveBeenCalledWith(repoPath)
     expect(window.electronAPI.startLogStream).toHaveBeenCalled()
@@ -1314,7 +1322,10 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
 
     await waitFor(() => {
-      expect(git.state.error).toBe('network down')
+      // The RPC itself rejected, so git never ran — the banner must not blame it.
+      expect(git.state.error).toBe(
+        'The change did not run: Rebase could not reach the Git engine — it may have restarted. Try again; the error is in the developer console.'
+      )
     })
     expect(git.state.status?.staged).toEqual([])
     expect(git.state.status?.modified).toEqual(['a.ts'])
@@ -1505,9 +1516,66 @@ describe('GitStoreProvider — push and pull', () => {
 
     await git.pushNow()
 
-    expect(toast.error).toHaveBeenCalledWith('Pushed failed', { description: 'no upstream' })
+    expect(toast.error).toHaveBeenCalledWith('Pushed failed', {
+      description: 'Git rejected the operation. The full output is in the developer console.'
+    })
     expect(git.state.error).toBeNull()
     expect(git.state.pushing).toBe(false)
+  })
+
+  it('pushNow explains a push blocked by unconfigured auth and logs git verbatim', async () => {
+    const raw = 'git@github.com: Permission denied (publickey).'
+    sidecarMock.pushRepo.mockResolvedValue({ _tag: 'GitError', message: raw })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    await git.pushNow()
+
+    expect(toast.error).toHaveBeenCalledWith(
+      'Pushed failed',
+      expect.objectContaining({
+        description: expect.stringContaining('github.com refused your SSH key')
+      })
+    )
+    expect(logged).toHaveBeenCalledWith('[git] Pushed failed:', raw)
+    logged.mockRestore()
+  })
+
+  it('says so instead of dropping a push that lands while another action runs', async () => {
+    let resolveCommit: () => void = () => {}
+    sidecarMock.commit.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCommit = () =>
+            resolve({
+              _tag: 'Ok',
+              result: {
+                commit: 'abc1234',
+                branch: 'main',
+                summary: { changes: 1, insertions: 1, deletions: 0 }
+              }
+            })
+        })
+    )
+    const { git, startGitCall } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    const commitPromise = startGitCall((current) => current.commit('slow commit'))
+    const pushed = await git.pushNow()
+
+    expect(pushed).toBe(false)
+    expect(sidecarMock.pushRepo).not.toHaveBeenCalled()
+    expect(toast.info).toHaveBeenCalledWith(
+      'Another Git action is still running',
+      expect.objectContaining({ description: expect.any(String) })
+    )
+    await act(async () => {
+      resolveCommit()
+      await commitPromise
+    })
   })
 
   it('ignores a stale push error after switching repos', async () => {
@@ -1574,7 +1642,9 @@ describe('GitStoreProvider — push and pull', () => {
 
     await git.pullNow()
 
-    expect(toast.error).toHaveBeenCalledWith('Pulled failed', { description: 'not fast-forward' })
+    expect(toast.error).toHaveBeenCalledWith('Pulled failed', {
+      description: 'Git rejected the operation. The full output is in the developer console.'
+    })
     expect(git.state.error).toBeNull()
     expect(git.state.pulling).toBe(false)
   })
@@ -1781,8 +1851,10 @@ describe('GitStoreProvider — runAction', () => {
     )
 
     expect(failed).toBe(false)
+    // The raw sidecar message has no actionable mapping, so toastGitFailure falls back to its
+    // generic description; the point pinned here is that errors still toast despite silentSuccess.
     expect(toast.error).toHaveBeenCalledWith('Resolve src/a.ts failed', {
-      description: 'no conflict to resolve'
+      description: 'Git rejected the operation. The full output is in the developer console.'
     })
   })
 
@@ -1794,7 +1866,7 @@ describe('GitStoreProvider — runAction', () => {
 
     expect(ok).toBe(false)
     expect(toast.error).toHaveBeenCalledWith('Deleted branch feature failed', {
-      description: 'branch not found'
+      description: 'Git rejected the operation. The full output is in the developer console.'
     })
     expect(toast.success).not.toHaveBeenCalled()
     expect(sidecarMock.getLocalBranches).not.toHaveBeenCalled()

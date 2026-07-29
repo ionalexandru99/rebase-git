@@ -167,6 +167,9 @@ const mockElectronAPI = {
   getOnboardingComplete: vi.fn(),
   setOnboardingComplete: vi.fn(),
   scanForRepos: vi.fn(),
+  cloneRepo: vi.fn(),
+  cancelClone: vi.fn(),
+  onCloneProgress: vi.fn(),
   sidecarRequest: vi.fn()
 }
 

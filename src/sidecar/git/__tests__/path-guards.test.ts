@@ -4,6 +4,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   assertPathWithinDirectory,
+  resolveDirectoryWithinHome,
   resolveExistingDirectory,
   resolveRepoRelativeFile
 } from '../path-guards'
@@ -38,6 +39,33 @@ describe('resolveExistingDirectory', () => {
       expect(resolveExistingDirectory(filePath)).toBeNull()
     } finally {
       fs.rmSync(file, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('resolveDirectoryWithinHome', () => {
+  it('accepts a directory inside the user home tree', () => {
+    const directory = fs.realpathSync.native(
+      fs.mkdtempSync(path.join(os.homedir(), '.rebase-home-guard-'))
+    )
+    try {
+      expect(resolveDirectoryWithinHome(directory)).toBe(directory)
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects the filesystem root and a symlink pointing out of the named tree', () => {
+    expect(resolveDirectoryWithinHome(path.parse(os.homedir()).root)).toBeNull()
+
+    const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-out-')))
+    const link = path.join(os.homedir(), `.rebase-home-link-${process.pid}`)
+    try {
+      fs.symlinkSync(outside, link, 'dir')
+      expect(resolveDirectoryWithinHome(link)).toBeNull()
+    } finally {
+      fs.rmSync(link, { force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
     }
   })
 })

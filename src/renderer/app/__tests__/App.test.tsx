@@ -361,7 +361,8 @@ describe('App — persisted tabs', () => {
             activeWorkspace: null,
             switchWorkspace: vi.fn(),
             addWorkspace: vi.fn(),
-            removeWorkspace: vi.fn()
+            removeWorkspace: vi.fn(),
+            refresh: vi.fn()
           }}
           onOpenRepo={vi.fn()}
           onRepoOpened={onRepoOpened}

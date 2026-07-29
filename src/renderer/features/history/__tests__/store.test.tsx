@@ -132,7 +132,7 @@ describe('useCommitHistory — concern isolation', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('session-error')).toHaveTextContent('operation failed')
+      expect(screen.getByTestId('session-error')).toHaveTextContent('Git rejected the change')
     })
   })
 
@@ -156,7 +156,7 @@ describe('useCommitHistory — concern isolation', () => {
       await openRepo?.(repoPath)
     })
     logStream.fire({ repoPath, commits: [], error: 'history unavailable' })
-    expect(screen.getByTestId('session-error')).toHaveTextContent('history unavailable')
+    expect(screen.getByTestId('session-error')).toHaveTextContent('Could not read history')
 
     await act(async () => {
       repoChanged.fire({ repoPath, kind: 'refs' })
@@ -174,7 +174,7 @@ describe('useCommitHistory — concern isolation', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('session-error')).toHaveTextContent('cannot stage')
+      expect(screen.getByTestId('session-error')).toHaveTextContent('Git rejected the change')
     })
   })
 
