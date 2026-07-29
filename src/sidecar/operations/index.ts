@@ -4,7 +4,13 @@ import type { RefKind, ResetMode } from '@shared/schemas/ipc'
 import { Effect } from 'effect'
 import type { SimpleGit } from 'simple-git'
 import { resolveDefaultBranch } from '../git/default-branch'
-import { type Conflict, GitError, type NotARepo, type RepoNotOpen } from '../git/errors'
+import {
+  type Conflict,
+  GitError,
+  type NotARepo,
+  type OperationInProgress,
+  type RepoNotOpen
+} from '../git/errors'
 import { normalizeRepoPath } from '../git/instances'
 import { isSafeRefArg } from '../git/ref-args'
 import { serializeRemotes } from '../git/serialize'
@@ -139,7 +145,7 @@ export function mergeBranch(
   repoPath: string,
   refKind: RefKind,
   fullPath: string
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(fullPath)) {
@@ -201,7 +207,7 @@ export function resetToCommit(
 export function revertCommit(
   repoPath: string,
   sha: string
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(sha)) {
@@ -214,7 +220,7 @@ export function revertCommit(
 export function cherryPick(
   repoPath: string,
   sha: string
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(sha)) {

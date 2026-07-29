@@ -102,13 +102,20 @@ export function stashEntries(repo: string): string[] {
   return list === '' ? [] : list.split('\n')
 }
 
-// Windows runners ship Git with core.autocrlf=true, so every checkout — including the one that
-// resolving a conflict performs — rewrites LF to CRLF and a test comparing the file against the
-// bytes it wrote fails on that platform alone.
+// Everything the machine running the suite could otherwise change or break, pinned the same way the
+// demo capture script pins it: a signing key or a hooks path would hang or divert the fixture's own
+// commits, a different conflict style would rewrite the markers the specs read, and Windows runners
+// default core.autocrlf to true — which rewrites LF to CRLF on every checkout, including the one
+// that resolving a conflict performs, so a spec comparing a file against the bytes it wrote fails on
+// that platform alone.
 function configureFixtureRepo(git: (args: string[]) => void): void {
   git(['config', 'user.email', 'test@example.com'])
   git(['config', 'user.name', 'Test'])
+  git(['config', 'commit.gpgsign', 'false'])
+  git(['config', 'core.hooksPath', ''])
   git(['config', 'core.autocrlf', 'false'])
+  git(['config', 'merge.conflictstyle', 'merge'])
+  git(['config', 'pull.rebase', 'false'])
 }
 
 export interface FixtureRepoOptions {

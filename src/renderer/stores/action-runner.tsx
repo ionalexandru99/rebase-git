@@ -52,7 +52,7 @@ export interface RunActionOptions {
 
 export type RunAction = (
   operation: MappedOperation,
-  call: (repoPath: string) => Promise<{ _tag: string; message?: string }>,
+  call: (repoPath: string) => Promise<{ _tag: string; message?: string; operation?: string }>,
   label: string,
   options?: RunActionOptions
 ) => Promise<boolean>
@@ -174,6 +174,12 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         toast.warning(`${label} hit conflicts`, {
           description:
             options?.conflictDescription ?? 'Resolve the conflicted files, then commit or abort.'
+        })
+        return false
+      }
+      if (response._tag === 'OperationInProgress') {
+        toast.warning('Another Git operation is in progress', {
+          description: `Finish or abort the in-progress ${response.operation} first.`
         })
         return false
       }

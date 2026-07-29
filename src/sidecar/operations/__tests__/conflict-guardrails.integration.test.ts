@@ -13,12 +13,14 @@ import {
 import { runOp } from '../../test-support/run-op'
 import {
   checkoutRef,
+  cherryPick,
   closeRepo,
   discardAll,
   discardChanges,
   getStatus,
   mergeBranch,
   openRepo,
+  resolveConflict,
   stashList,
   stashPush
 } from '../index'
@@ -116,12 +118,68 @@ describe('operations attempted while a merge conflict is unresolved', () => {
 
       const error = await failure(mergeBranch(fixture.path, 'local', 'feature'))
 
-      expect(error._tag).toBe('GitError')
-      expect(error.message).toBe('cannot merge: resolve the current conflicts first')
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
       expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(headBefore)
       expect(readRepoFile(fixture.path, 'f.txt')).toBe(conflictedContents)
       expect(conflictedPaths(fixture.path)).toEqual(['f.txt'])
       expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+})
+
+// Resolving the last conflicted file empties the index of unmerged paths while the sequence itself is
+// still parked. Git starts a second operation in that window without complaint: it commits, deletes
+// CHERRY_PICK_HEAD and strands the remaining todo, so the step the user had just resolved is dropped
+// on the floor and never applied. Only the marker files still say the repository is mid-sequence.
+describe('a sequence parked with every conflict already resolved', () => {
+  async function withResolvedSequence<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
+    const fixture = makeConflictedRepo('cherry-pick-sequence')
+    await runOp(openRepo(fixture.path))
+    try {
+      for (const file of conflictedPaths(fixture.path)) {
+        await runOp(resolveConflict(fixture.path, file, 'ours'))
+      }
+      return await use(fixture)
+    } finally {
+      await runOp(closeRepo(fixture.path))
+      removeRepoDir(fixture.path)
+    }
+  }
+
+  const sequencerTodo = (repo: string): string =>
+    gitOutput(repo, ['rev-parse', '--git-path', 'sequencer/todo']).trim()
+
+  it('looks clean to git yet is still mid-sequence', async () => {
+    await withResolvedSequence(async (fixture) => {
+      expect(conflictedPaths(fixture.path)).toEqual([])
+      expect(gitOutput(fixture.path, ['status', '--porcelain']).trim()).toBe('')
+      expect(await operationKind(fixture.path)).toBe('cherry-pick')
+    })
+  })
+
+  it('refuses a cherry-pick and leaves the pending step and its resolution intact', async () => {
+    await withResolvedSequence(async (fixture) => {
+      const headBefore = gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()
+      const todoBefore = readRepoFile(fixture.path, sequencerTodo(fixture.path))
+
+      const error = await failure(cherryPick(fixture.path, 'feature'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'cherry-pick' })
+      expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(headBefore)
+      expect(readRepoFile(fixture.path, sequencerTodo(fixture.path))).toBe(todoBefore)
+      expect(await operationKind(fixture.path)).toBe('cherry-pick')
+    })
+  })
+
+  it('refuses a merge just the same', async () => {
+    await withResolvedSequence(async (fixture) => {
+      const headBefore = gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()
+
+      const error = await failure(mergeBranch(fixture.path, 'local', 'feature'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'cherry-pick' })
+      expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(headBefore)
+      expect(await operationKind(fixture.path)).toBe('cherry-pick')
     })
   })
 })

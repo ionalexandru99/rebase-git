@@ -1917,6 +1917,21 @@ describe('GitStoreProvider — runAction', () => {
     expect(window.electronAPI.startLogStream).toHaveBeenCalled()
   })
 
+  it('names the operation standing in the way when one is already in progress', async () => {
+    const git = await openedStore()
+
+    const call = vi
+      .fn()
+      .mockResolvedValue({ _tag: 'OperationInProgress', operation: 'cherry-pick' })
+    const ok = await git.runAction('mergeBranch', call, 'Merged feature')
+
+    expect(ok).toBe(false)
+    expect(toast.warning).toHaveBeenCalledWith('Another Git operation is in progress', {
+      description: 'Finish or abort the in-progress cherry-pick first.'
+    })
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('prefers the caller conflict guidance over the commit-or-abort default', async () => {
     const git = await openedStore()
 

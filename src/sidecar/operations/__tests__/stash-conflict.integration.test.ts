@@ -93,6 +93,21 @@ describe('a stash that cannot be applied cleanly', () => {
     })
   })
 
+  // The one conflicted state with no operation marker behind it, so it is also the only one where a
+  // second operation is turned away for the unmerged index rather than for an operation in progress.
+  it('refuses a second apply for the unresolved conflict, not for an operation', async () => {
+    await withStashConflictRepo(async (fixture) => {
+      await failure(stashApply(fixture.path, 0, fixture.stashOid))
+
+      const error = await failure(stashApply(fixture.path, 0, fixture.stashOid))
+
+      expect(error._tag).toBe('GitError')
+      expect(error.message).toBe('cannot stash: resolve the current conflicts first')
+      expect(conflictedPaths(fixture.path)).toEqual([fixture.file])
+      expect((await readStatus(fixture.path)).operation).toBeUndefined()
+    })
+  })
+
   it('resolves to the branch side with no operation to read the stages from', async () => {
     await withStashConflictRepo(async (fixture) => {
       await failure(stashPop(fixture.path, 0, fixture.stashOid))

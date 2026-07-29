@@ -2,7 +2,7 @@ import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { StashEntry } from '@shared/schemas/ipc'
 import { Effect } from 'effect'
-import { type Conflict, GitError, type RepoNotOpen } from '../git/errors'
+import { type Conflict, GitError, type OperationInProgress, type RepoNotOpen } from '../git/errors'
 import { isValidPathArg, literalPathspecs } from '../git/pathspec'
 import { spawnGit } from '../git/spawn'
 import { withRepoLock } from '../session/lock'
@@ -143,7 +143,7 @@ export function stashApply(
   repoPath: string,
   index: number,
   expectedOid: string
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const ref = stashRef(index)
@@ -160,7 +160,7 @@ export function stashPop(
   repoPath: string,
   index: number,
   expectedOid: string
-): Effect.Effect<void, RepoNotOpen | GitError | Conflict, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const ref = stashRef(index)
