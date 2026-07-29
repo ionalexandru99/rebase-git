@@ -1,6 +1,6 @@
 import type { FileDiff, GitStatus } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
-import { buildHunkPatch, parseUnifiedDiff, toFileDiff } from '../git/diff'
+import { buildHunkPatch, type ParsedFileDiff, parseUnifiedDiff, toFileDiff } from '../git/diff'
 import { GitError, HunkNotFound, type OperationInProgress, type RepoNotOpen } from '../git/errors'
 import { isValidPathArg, literalPathspec, literalPathspecs } from '../git/pathspec'
 import { isSafeRefArg } from '../git/ref-args'
@@ -164,6 +164,33 @@ async function readConflictDiff(repoPath: string, file: string): Promise<string>
   return runGit(['-C', repoPath, 'diff', ...DIFF_BASE_ARGS, '--ours', '--', literalPathspec(file)])
 }
 
+// Plain `git diff` says nothing about a path git does not track, and answers a conflicted one with a
+// combined diff no hunk parser can use — so a working-tree read falls back to `--no-index` against
+// /dev/null for the first case and to `--ours` for the second. Every caller has to walk the same
+// chain: a hunk the renderer shows is a hunk the patch builder must be able to find again, or its
+// checkbox fails with HunkNotFound.
+// `raw` is always the text `parsed` was parsed from, including when a fallback replaced it — the
+// renderer parses that same patch itself, so shipping the pre-fallback text would hand it a diff
+// that disagrees with the hunks alongside it.
+async function readDiff(
+  repoPath: string,
+  file: string,
+  staged: boolean,
+  scope?: DiffScope
+): Promise<{ raw: string; parsed: ParsedFileDiff }> {
+  const isWorkingTree = scope?.range === undefined && scope?.commit === undefined
+  let raw = await readFileDiff(repoPath, file, staged, scope)
+  if (!raw && !staged && isWorkingTree && (await isUntracked(repoPath, file))) {
+    raw = await readUntrackedDiff(repoPath, file)
+  }
+  const parsed = parseUnifiedDiff(raw)
+  if (parsed.hunks.length === 0 && raw.includes('@@@') && !staged && isWorkingTree) {
+    const conflictRaw = await readConflictDiff(repoPath, file)
+    return { raw: conflictRaw, parsed: parseUnifiedDiff(conflictRaw) }
+  }
+  return { raw, parsed }
+}
+
 export function getDiff(
   repoPath: string,
   file: string,
@@ -178,19 +205,7 @@ export function getDiff(
     if (scope?.commit !== undefined && !isSafeRefArg(scope.commit)) {
       return yield* Effect.fail(new GitError({ message: `unsafe diff commit: ${scope.commit}` }))
     }
-    const isWorkingTree = scope?.range === undefined && scope?.commit === undefined
-    let raw = yield* tryGit(() => readFileDiff(repoPath, file, staged, scope))
-    if (!raw && !staged && isWorkingTree) {
-      const untracked = yield* tryGit(() => isUntracked(repoPath, file))
-      if (untracked) {
-        raw = yield* tryGit(() => readUntrackedDiff(repoPath, file))
-      }
-    }
-    let parsed = parseUnifiedDiff(raw)
-    if (parsed.hunks.length === 0 && raw.includes('@@@') && !staged && isWorkingTree) {
-      raw = yield* tryGit(() => readConflictDiff(repoPath, file))
-      parsed = parseUnifiedDiff(raw)
-    }
+    const { raw, parsed } = yield* tryGit(() => readDiff(repoPath, file, staged, scope))
     return { diff: toFileDiff(file, parsed), patch: raw }
   })
 }
@@ -211,10 +226,8 @@ function applyHunk<GuardError = never>(
         if (guard) {
           yield* guard
         }
-        const raw = yield* tryGit(() =>
-          readFileDiff(repoPath, file, direction === 'unstage', undefined)
-        )
-        const patch = buildHunkPatch(parseUnifiedDiff(raw), hunkHeader)
+        const { parsed } = yield* tryGit(() => readDiff(repoPath, file, direction === 'unstage'))
+        const patch = buildHunkPatch(parsed, hunkHeader)
         if (!patch) {
           return yield* Effect.fail(new HunkNotFound())
         }
