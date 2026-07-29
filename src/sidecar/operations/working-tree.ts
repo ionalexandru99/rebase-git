@@ -1,15 +1,16 @@
 import type { FileDiff, GitStatus } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
 import { buildHunkPatch, parseUnifiedDiff, toFileDiff } from '../git/diff'
-import { GitError, HunkNotFound, type OperationInProgress, type RepoNotOpen } from '../git/errors'
+import { GitError, HunkNotFound, OperationInProgress, type RepoNotOpen } from '../git/errors'
 import { isValidPathArg, literalPathspec, literalPathspecs } from '../git/pathspec'
 import { isSafeRefArg } from '../git/ref-args'
 import { serializeStatus } from '../git/serialize'
 import { runGit } from '../git/spawn'
 import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
+import { unmergedPaths } from './conflict-resolution'
 import { requireGit, requireOpen, tryGit } from './helpers'
-import { requireNoOperation } from './in-progress'
+import { detectInProgressOperation, requireNoOperation } from './in-progress'
 import { detectOperationState } from './operation-state'
 
 // The in-progress merge/rebase/sequence rides along with the status so the renderer learns about a
@@ -242,7 +243,7 @@ export function unstageHunk(
 export function discardChanges(
   repoPath: string,
   files: string[]
-): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (files.length === 0) {
@@ -250,6 +251,17 @@ export function discardChanges(
     }
     if (files.some((file) => !isValidPathArg(file))) {
       return yield* Effect.fail(new GitError({ message: 'invalid file path' }))
+    }
+    // Discarding a file that is still conflicted is a resolution — it takes our side and leaves the
+    // operation running, which is the documented behaviour. Discarding one that is already resolved
+    // is the opposite: it restores HEAD over the resolution while the operation stays parked, and the
+    // commit that ends it then records HEAD's side instead of the user's.
+    const inProgress = yield* tryGit(() => detectInProgressOperation(repoPath))
+    if (inProgress) {
+      const conflicted = new Set(yield* tryGit(() => unmergedPaths(repoPath)))
+      if (files.some((file) => !conflicted.has(file))) {
+        return yield* Effect.fail(new OperationInProgress({ operation: inProgress }))
+      }
     }
     yield* withRepoLock(
       repoPath,

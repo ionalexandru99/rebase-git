@@ -18,6 +18,7 @@ import { withRepoLock } from '../session/lock'
 import { closeSession, openSession, type RepoSessions } from '../session/sessions'
 import { runWithConflictDetection } from './conflict'
 import { requireGit, tryGit } from './helpers'
+import { requireNoOperation } from './in-progress'
 
 export { isCommitGraphTracked } from '../session/sessions'
 export { amendCommit, casAdvanceHead, getHeadCommit } from './amend'
@@ -191,12 +192,15 @@ export function resetToCommit(
   repoPath: string,
   sha: string,
   mode: ResetMode
-): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<void, RepoNotOpen | GitError | OperationInProgress, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     if (!isSafeRefArg(sha)) {
       return yield* Effect.fail(new GitError({ message: 'invalid commit' }))
     }
+    // Every mode moves HEAD, and moving HEAD deletes the operation's marker; --hard takes the staged
+    // resolution with it.
+    yield* requireNoOperation(repoPath)
     yield* withRepoLock(
       repoPath,
       tryGit(() => git.raw(['reset', `--${mode}`, sha, '--']))

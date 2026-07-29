@@ -57,7 +57,7 @@ async function runControlGit(repoPath: string, args: string[]): Promise<string |
   )
 }
 
-async function unmergedPaths(repoPath: string): Promise<string[]> {
+export async function unmergedPaths(repoPath: string): Promise<string[]> {
   const output = await runGit(['-C', repoPath, 'diff', '--name-only', '--diff-filter=U', '-z'], {
     env: nonInteractiveEnv()
   })

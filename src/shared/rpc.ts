@@ -157,7 +157,7 @@ export const UnstageHunk = Rpc.make('unstageHunk', {
 export const DiscardChanges = Rpc.make('discardChanges', {
   payload: { repoPath: OpaqueString, files: FileList },
   success: Schema.Void,
-  error: StageError
+  error: GuardedWriteError
 })
 
 export const DiscardAll = Rpc.make('discardAll', {
@@ -268,7 +268,7 @@ export const StashPush = Rpc.make('stashPush', {
 export const Reset = Rpc.make('reset', {
   payload: { repoPath: OpaqueString, sha: RequiredString, mode: ResetModeSchema },
   success: Schema.Void,
-  error: RefWriteError
+  error: GuardedWriteError
 })
 
 export const Fetch = Rpc.make('fetch', {

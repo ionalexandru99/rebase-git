@@ -21,6 +21,7 @@ import {
   getStatus,
   mergeBranch,
   openRepo,
+  resetToCommit,
   resolveConflict,
   stashList,
   stashPush,
@@ -235,6 +236,36 @@ describe('a merge parked with its conflict already resolved', () => {
       const error = await failure(unstageAll(fixture.path, ['f.txt']))
 
       expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+
+  // Discarding a file that is still conflicted stays allowed — that is a resolution toward our side,
+  // covered above. Discarding one that is already resolved is the reverse: it puts HEAD back over the
+  // resolution and the merge commit then records HEAD's side.
+  it('refuses to discard a file whose conflict is already resolved', async () => {
+    await withResolvedMerge(async (fixture) => {
+      const resolved = readRepoFile(fixture.path, 'f.txt')
+
+      const error = await failure(discardChanges(fixture.path, ['f.txt']))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(readRepoFile(fixture.path, 'f.txt')).toBe(resolved)
+      expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+
+  // Every mode moves HEAD, and moving HEAD deletes the operation's marker; --hard also throws away
+  // the staged resolution on the way past.
+  it.each(['soft', 'mixed', 'hard'] as const)('refuses a %s reset', async (mode) => {
+    await withResolvedMerge(async (fixture) => {
+      const resolved = readRepoFile(fixture.path, 'f.txt')
+
+      const error = await failure(resetToCommit(fixture.path, `${fixture.headBefore}~1`, mode))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(fixture.headBefore)
+      expect(readRepoFile(fixture.path, 'f.txt')).toBe(resolved)
       expect(await operationKind(fixture.path)).toBe('merge')
     })
   })

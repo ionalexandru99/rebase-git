@@ -216,7 +216,10 @@ export async function rpcUnstageHunk(
   })
 }
 
-export async function rpcDiscardChanges(repoPath: string, files: string[]): Promise<StageResult> {
+export async function rpcDiscardChanges(
+  repoPath: string,
+  files: string[]
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(DiscardChanges, { repoPath, files })
 }
 
@@ -354,7 +357,7 @@ export async function rpcReset(
   repoPath: string,
   sha: string,
   mode: ResetMode
-): Promise<RefWriteResult> {
+): Promise<GuardedWriteResult> {
   return callSidecarRpc(Reset, { repoPath, sha, mode })
 }
 
