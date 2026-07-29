@@ -149,9 +149,9 @@ function gitIgnoringFailure(cwd: string, args: string[]): void {
   } catch {}
 }
 
-function initConflictRepo(kind: ConflictFixtureKind, config?: Record<string, string>): string {
+function initConflictRepo(label: string, config?: Record<string, string>): string {
   const repo = fs.realpathSync.native(
-    fs.mkdtempSync(path.join(os.tmpdir(), `rebase-conflict-${kind}-`))
+    fs.mkdtempSync(path.join(os.tmpdir(), `rebase-conflict-${label}-`))
   )
   git(repo, ['init', '-b', 'main'])
   git(repo, ['config', 'user.email', 'test@example.com'])
@@ -324,6 +324,38 @@ export function makeConflictedRepo(
   const branchBefore = currentBranch(repo)
   startConflict(kind, repo)
   return { path: repo, kind, headBefore, branchBefore }
+}
+
+export interface StashConflictRepo {
+  path: string
+  /** The single stash entry, ready for the oid staleness check stashApply/stashPop perform. */
+  stashOid: string
+  file: string
+  /** Committed on the branch after the stash was taken — index stage :2 once the apply conflicts. */
+  oursContent: string
+  /** What was stashed — index stage :3. */
+  theirsContent: string
+}
+
+const STASHED_CONTENT = 'stashed\n'
+const COMMITTED_CONTENT = 'committed\n'
+
+// A repo whose single stash entry cannot be applied cleanly, left un-applied so the caller decides
+// whether pop or apply is what stops on the conflict. Unlike every other fixture here the conflicted
+// state it leads to has no operation behind it: git writes unmerged index entries and nothing else.
+export function makeStashConflictRepo(): StashConflictRepo {
+  const repo = initConflictRepo('stash')
+  commitRepoFile(repo, 'f.txt', 'base\n', 'base')
+  writeRepoFile(repo, 'f.txt', STASHED_CONTENT)
+  git(repo, ['stash', 'push', '-m', 'stashed work'])
+  commitRepoFile(repo, 'f.txt', COMMITTED_CONTENT, 'diverging work')
+  return {
+    path: repo,
+    stashOid: gitOutput(repo, ['rev-parse', 'stash@{0}']).trim(),
+    file: 'f.txt',
+    oursContent: COMMITTED_CONTENT,
+    theirsContent: STASHED_CONTENT
+  }
 }
 
 export function conflictedPaths(repo: string): string[] {

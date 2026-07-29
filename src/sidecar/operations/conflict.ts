@@ -22,6 +22,15 @@ export function runWithConflictDetection(
   return withRepoLock(
     repoPath,
     Effect.gen(function* () {
+      // Refuse up front while unmerged paths exist: git would refuse anyway, but the leftover
+      // conflicts would make the outcome classify as a fresh Conflict — telling the user a new
+      // operation started when nothing ran at all.
+      const alreadyConflicted = yield* tryGit(() => workingTreeHasConflicts(git))
+      if (alreadyConflicted) {
+        return yield* Effect.fail(
+          new GitError({ message: `cannot ${args[0]}: resolve the current conflicts first` })
+        )
+      }
       if (before) {
         yield* tryGit(before)
       }

@@ -161,9 +161,13 @@ export function FileRow(props: FileRowProps) {
             {isConflicted ? 'Mark as resolved' : 'Stage'}
           </ContextMenuItem>
         )}
-        <ContextMenuItem variant="destructive" onSelect={() => fileAction('discard')}>
-          Discard changes
-        </ContextMenuItem>
+        {/* Discarding a conflicted file quietly resolves it to our side — the explicit Keep
+            actions above say what they do, so the misleading item is withheld here. */}
+        {isConflicted ? null : (
+          <ContextMenuItem variant="destructive" onSelect={() => fileAction('discard')}>
+            Discard changes
+          </ContextMenuItem>
+        )}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => props.onFileAction?.('copy-path', props.file)}>
           Copy path

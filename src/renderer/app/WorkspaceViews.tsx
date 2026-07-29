@@ -165,13 +165,29 @@ function LocalChangesView(props: WorkspaceViewProps) {
     })
   }
 
+  // A bare reset --hard ends a merge but leaves a rebase or sequencer mid-flight, so discarding
+  // during an operation aborts it properly first — and the confirm says so instead of letting a
+  // merge die silently.
   const discardAll = () => {
+    const summary = status?.operation ? summarizeOperation(status.operation) : null
     confirm({
       title: 'Discard all changes?',
-      message: 'Every uncommitted change in the working tree is permanently lost.',
+      message: summary
+        ? `Every uncommitted change in the working tree is permanently lost, and the in-progress ${summary.noun} is aborted.`
+        : 'Every uncommitted change in the working tree is permanently lost.',
       confirmText: 'Discard all',
       destructive: true,
-      onConfirm: () => void actions.discardAll()
+      onConfirm: () => {
+        void (async () => {
+          if (summary) {
+            const aborted = await actions.abortOperation(summary.noun)
+            if (!aborted) {
+              return
+            }
+          }
+          await actions.discardAll()
+        })()
+      }
     })
   }
   const { size: filesWidth, onResizeStart } = useDraggablePane({

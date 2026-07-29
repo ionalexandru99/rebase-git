@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceProvider } from '@/app/WorkspaceContext'
 import { WorkspaceViewRenderer } from '@/app/WorkspaceViews'
@@ -95,12 +95,13 @@ function LocalChangesHarness(props: { onSession: (session: RepoSession) => void 
   const actionRunner = useActionRunner()
   const actions = useGitActions(actionRunner)
   const stashList = useStashes(session.repoPath)
-  const { prompt, confirm } = useDialogs()
+  const { prompt, confirm, dialogs } = useDialogs()
   props.onSession(session)
 
   return (
     <WorkspaceProvider value={{ actions, stashList, prompt, confirm }}>
       <WorkspaceViewRenderer activeView="local-changes" {...localChangesProps} />
+      {dialogs}
     </WorkspaceProvider>
   )
 }
@@ -246,5 +247,56 @@ describe('LocalChangesView compact mode', () => {
     )
     expect(isHidden(compactPanes().filesPane)).toBe(false)
     expect(isHidden(compactPanes().diffPane)).toBe(true)
+  })
+})
+
+describe('discard all during an in-progress operation', () => {
+  const mergeOperation = { kind: 'merge' as const, oursLabel: 'main', theirsLabel: 'feature' }
+
+  it('names the abort in the confirm and aborts before discarding', async () => {
+    installViewport(false)
+    mockStatus({ operation: mergeOperation })
+    const rpcCalls: string[] = []
+    sidecarMock.respond('abortOperation', () => {
+      rpcCalls.push('abortOperation')
+      return { _tag: 'Ok' }
+    })
+    sidecarMock.respond('discardAll', () => {
+      rpcCalls.push('discardAll')
+      return { _tag: 'Ok' }
+    })
+    await renderLocalChanges()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard all' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('Discard all changes?')
+    expect(dialog).toHaveTextContent('the in-progress merge is aborted')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Discard all' }))
+    await waitFor(() => expect(rpcCalls).toEqual(['abortOperation', 'discardAll']))
+  })
+
+  it('keeps the plain warning and skips the abort when nothing is in progress', async () => {
+    installViewport(false)
+    mockStatus()
+    const rpcCalls: string[] = []
+    sidecarMock.respond('abortOperation', () => {
+      rpcCalls.push('abortOperation')
+      return { _tag: 'Ok' }
+    })
+    sidecarMock.respond('discardAll', () => {
+      rpcCalls.push('discardAll')
+      return { _tag: 'Ok' }
+    })
+    await renderLocalChanges()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard all' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).not.toHaveTextContent('aborted')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Discard all' }))
+    await waitFor(() => expect(rpcCalls).toEqual(['discardAll']))
   })
 })

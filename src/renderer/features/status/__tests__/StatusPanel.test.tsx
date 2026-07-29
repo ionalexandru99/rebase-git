@@ -205,6 +205,27 @@ describe('StatusPanel', () => {
     expect(onResolveConflict).toHaveBeenCalledWith('src/conflict.ts', 'theirs')
   })
 
+  // A conflicted stash apply/pop is the one conflict git leaves with no operation behind it, so
+  // there are no branch names to put on the menu items — the rows still have to offer both sides.
+  it('names both sides generically when no operation supplies branch labels', async () => {
+    const onResolveConflict = vi.fn()
+    renderPanel({
+      status: emptyStatus({
+        conflicted: ['src/conflict.ts'],
+        files: [code('src/conflict.ts', 'U', 'U')]
+      }),
+      onResolveConflict
+    })
+
+    fireEvent.contextMenu(screen.getByText('src/conflict.ts'))
+    expect(
+      await screen.findByRole('menuitem', { name: 'Keep the current version' })
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keep the incoming version' }))
+    expect(onResolveConflict).toHaveBeenCalledWith('src/conflict.ts', 'theirs')
+  })
+
   it('renders renamed files as "from → to"', () => {
     renderPanel({
       status: emptyStatus({

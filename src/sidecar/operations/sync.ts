@@ -263,10 +263,15 @@ export function pullRepo(
     // `git pull` fetches, so it must hold the fetch semaphore that standalone fetchRepo uses —
     // otherwise a concurrent fetch and this pull race to write FETCH_HEAD/remote refs and one
     // dies on a git lock. withPermits waits for an in-flight fetch instead of skipping.
+    // The app's pull is fast-forward-only by design; a user-level pull.rebase=true would otherwise
+    // make git run rebase preconditions and refuse any dirty tree with an error naming an
+    // operation the app never requested.
     yield* withRepoLock(
       key,
       Effect.promise(() =>
-        fetchSemaphoreFor(key).withPermits(() => runGitCommand(key, ['pull', '--ff-only']))
+        fetchSemaphoreFor(key).withPermits(() =>
+          runGitCommand(key, ['-c', 'pull.rebase=false', 'pull', '--ff-only'])
+        )
       ).pipe(
         Effect.flatMap((result) =>
           result.ok ? Effect.void : Effect.fail(new GitError({ message: result.message }))

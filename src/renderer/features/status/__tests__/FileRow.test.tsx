@@ -91,6 +91,13 @@ describe('FileRow — conflicted', () => {
     expect(onResolveConflict).toHaveBeenCalledWith('src/app.ts', 'theirs')
   })
 
+  it('withholds Discard changes while the file is conflicted', () => {
+    renderConflict('UU')
+
+    expect(screen.queryByRole('menuitem', { name: 'Discard changes' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Mark as resolved' })).toBeInTheDocument()
+  })
+
   it('offers no keep choices when both sides deleted the file (DD)', () => {
     renderConflict('DD')
 

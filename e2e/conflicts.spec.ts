@@ -165,3 +165,27 @@ test('aborting a conflicted merge restores the pre-merge state', async ({ harnes
   expect(commitParents(repo)).toHaveLength(1)
   expect(fs.readFileSync(path.join(repo, 'conflict.txt'), 'utf8')).toBe(MAIN_SIDE)
 })
+
+// The banner is driven by the git-dir state files, not by what the app remembers doing — so a merge
+// ended from a terminal has to clear it with no click on this side.
+test('a merge aborted from outside the app clears the banner unprompted', async ({ harness }) => {
+  const repo = createConflictingRepo()
+  const page = await harness.openRepo(repo)
+
+  await mergeFeatureIntoMain(harness)
+
+  const banner = page.getByRole('status').filter({ hasText: 'Merging feature into main' })
+  await expect(banner).toBeVisible({ timeout: 10_000 })
+
+  gitIn(repo)(['merge', '--abort'])
+
+  await expect(page.getByRole('status').filter({ hasText: 'Merging' })).toHaveCount(0, {
+    timeout: 20_000
+  })
+  await expect(page.getByText('Working tree clean')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByTestId('status-file-row')).toHaveCount(0)
+
+  expect(porcelainStatus(repo)).toEqual([])
+  expect(commitSubjects(repo)[0]).toBe('main side')
+  expect(fs.readFileSync(path.join(repo, 'conflict.txt'), 'utf8')).toBe(MAIN_SIDE)
+})
