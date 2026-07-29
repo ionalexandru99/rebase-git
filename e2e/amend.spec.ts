@@ -5,7 +5,7 @@ import {
   commitSubjects,
   createFixtureRepo,
   expect,
-  fileRowCheckbox,
+  unstagedFileRow,
   gitIn,
   openHistory,
   openLocalChanges,
@@ -87,7 +87,7 @@ test('drops a file from the last commit while amending, surfacing it as a workin
   await expect.poll(headHasFeature, { timeout: 10_000 }).toBe(false)
 
   // ...and it surfaces as an untracked working-tree change.
-  await expect(fileRowCheckbox(page, 'feature.txt')).toBeVisible({
+  await expect(unstagedFileRow(page, 'feature.txt')).toBeVisible({
     timeout: 10_000
   })
 })

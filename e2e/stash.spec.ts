@@ -3,7 +3,9 @@ import path from 'node:path'
 import {
   createFixtureRepo,
   expect,
-  fileRowCheckbox,
+  stageFileFromRow,
+  stagedFileRow,
+  unstagedFileRow,
   openLocalChanges,
   porcelainStatus,
   stashEntries,
@@ -20,10 +22,9 @@ test('stashes staged files through the StashControl and lists the stash in the s
   await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({ timeout: 10_000 })
   await openLocalChanges(page)
 
-  const note = fileRowCheckbox(page, 'note.txt')
-  await expect(note).toBeVisible({ timeout: 10_000 })
-  await note.click()
-  await expect(note).toBeChecked({ timeout: 10_000 })
+  await expect(unstagedFileRow(page, 'note.txt')).toBeVisible({ timeout: 10_000 })
+  await stageFileFromRow(page, 'note.txt')
+  await expect(stagedFileRow(page, 'note.txt')).toBeVisible({ timeout: 10_000 })
 
   const stashTrigger = page.getByRole('button', { name: /^Stash/ })
   await expect(stashTrigger).toBeEnabled({ timeout: 10_000 })

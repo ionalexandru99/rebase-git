@@ -876,13 +876,26 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
 })
 
 export const refTree = (page: Page) => page.getByTestId('ref-tree-scroll')
-export const fileRowCheckbox = (page: Page, file: string) => {
-  const escapedFile = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return page
-    .getByTestId('status-file-row')
-    .filter({ hasText: file })
-    .getByRole('checkbox', { name: new RegExp(`^(Stage|Unstage) ${escapedFile}$`) })
+
+export type FileListGroup = 'conflicts' | 'staged' | 'unstaged' | 'head-commit'
+
+// Which group a row sits in is how staged state reads now — there is no per-row checkbox to poll.
+export const fileRow = (page: Page, file: string, group?: FileListGroup) => {
+  const rows = group
+    ? page.locator(`[data-testid="status-file-row"][data-group="${group}"]`)
+    : page.getByTestId('status-file-row')
+  return rows.filter({ hasText: file })
 }
+export const stagedFileRow = (page: Page, file: string) => fileRow(page, file, 'staged')
+export const unstagedFileRow = (page: Page, file: string) => fileRow(page, file, 'unstaged')
+export const stageFileFromRow = (page: Page, file: string) =>
+  fileRow(page, file, 'unstaged')
+    .getByRole('button', { name: `Stage ${file}`, exact: true })
+    .click()
+export const unstageFileFromRow = (page: Page, file: string) =>
+  fileRow(page, file, 'staged')
+    .getByRole('button', { name: `Unstage ${file}`, exact: true })
+    .click()
 export const openLocalChanges = (page: Page) =>
   page.getByRole('button', { name: 'Local changes', exact: true }).filter({ visible: true }).click()
 export const openHistory = (page: Page) =>

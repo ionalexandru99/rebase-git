@@ -9,7 +9,6 @@ import {
   type LineTokens,
   languageForFile
 } from '@/features/diff/diff-highlight'
-import { type HunkEntry, type PendingHunk, remapHunk } from '@/features/diff/diff-merge'
 import { type RepoQueryKeys, repoQueryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import { useCommitFileDiff, useFileDiff, useRepoSession, useWorkingTreeStatus } from '@/stores/git'
@@ -29,15 +28,18 @@ interface DiffPanelProps {
   amendDrop?: AmendDropControls
 }
 
+/** A hunk whose stage/unstage is in flight: it stays on screen until the diff it left refetches. */
+interface PendingHunk {
+  file: string
+  staged: boolean
+  header: string
+  hunk: DiffHunk
+  position: number
+}
+
 export function DiffPanel(props: DiffPanelProps) {
   const { repoPath } = useRepoSession()
-  const {
-    status,
-    stageFile,
-    unstageFile,
-    stageHunk: stageHunkOp,
-    unstageHunk: unstageHunkOp
-  } = useWorkingTreeStatus()
+  const { status, stageHunk: stageHunkOp, unstageHunk: unstageHunkOp } = useWorkingTreeStatus()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
 
   const source = props.selected?.source ?? 'worktree'
@@ -45,6 +47,10 @@ export function DiffPanel(props: DiffPanelProps) {
   // An existing commit is a read: there is nothing to stage or drop, so every control goes away.
   const isCommit = source === 'commit'
   const isWorktree = source === 'worktree'
+  // The group the row was picked from decides which side of the file this pane reads. A conflicted
+  // file has no index side to show: its worktree diff is where git falls back to `--ours`.
+  const isConflict = props.selected?.group === 'conflicts'
+  const showsStagedSide = props.selected?.group === 'staged'
   const worktreeFile = isWorktree ? (props.selected?.file ?? null) : null
   const headFile = isHeadCommit ? (props.selected?.file ?? null) : null
   const commitFile = isCommit ? (props.selected?.file ?? null) : null
@@ -54,8 +60,7 @@ export function DiffPanel(props: DiffPanelProps) {
     isWorktree &&
     (status?.not_added.includes(props.selected.file) ?? false)
 
-  const unstagedQuery = useFileDiff(worktreeFile, false)
-  const stagedQuery = useFileDiff(worktreeFile, true)
+  const worktreeQuery = useFileDiff(worktreeFile, showsStagedSide)
   const rangeQuery = useFileDiff(headFile, false, props.selected?.range)
   const commitQuery = useCommitFileDiff(
     isCommit ? (props.selected?.commit ?? null) : null,
@@ -64,108 +69,34 @@ export function DiffPanel(props: DiffPanelProps) {
   )
   const [pendingHunk, setPendingHunk] = useState<PendingHunk | null>(null)
 
-  const unstagedDiff = props.selected && isWorktree ? (unstagedQuery.data ?? null) : null
-  const stagedDiff = props.selected && isWorktree ? (stagedQuery.data ?? null) : null
-  const rangeDiff = props.selected && isHeadCommit ? (rangeQuery.data ?? null) : null
-  const commitDiff = props.selected && isCommit ? (commitQuery.data ?? null) : null
-
-  const isBinary = Boolean(
-    unstagedDiff?.binary || stagedDiff?.binary || rangeDiff?.binary || commitDiff?.binary
-  )
-  const singleSidedQuery = isCommit ? commitQuery : rangeQuery
-  const hasError = isWorktree
-    ? unstagedQuery.isError || stagedQuery.isError
-    : singleSidedQuery.isError
-  const errorMessage = isWorktree
-    ? (unstagedQuery.error?.message ?? stagedQuery.error?.message)
-    : singleSidedQuery.error?.message
-  const isLoading = isWorktree
-    ? unstagedQuery.isPending || stagedQuery.isPending
-    : singleSidedQuery.isPending
+  const activeQuery = isCommit ? commitQuery : isHeadCommit ? rangeQuery : worktreeQuery
+  const diff = props.selected ? (activeQuery.data ?? null) : null
+  const isBinary = Boolean(diff?.binary)
+  const hasError = activeQuery.isError
+  const errorMessage = activeQuery.error?.message
+  const isLoading = activeQuery.isPending
 
   const activePending =
-    pendingHunk && pendingHunk.file === props.selected?.file ? pendingHunk : null
+    pendingHunk &&
+    pendingHunk.file === props.selected?.file &&
+    pendingHunk.staged === showsStagedSide
+      ? pendingHunk
+      : null
 
-  const actualMergedHunks = useMemo<HunkEntry[]>(() => {
-    const selected = props.selected
-    if (selected && !isWorktree) {
-      const hunks = (isCommit ? commitQuery.data?.hunks : rangeQuery.data?.hunks) ?? []
-      return hunks.map((hunk) => ({
-        hunk,
-        display: hunk,
-        staged: false,
-        indexStart: hunk.oldStart
-      }))
+  const actualHunks = diff?.hunks ?? []
+  const hunks = useMemo<DiffHunk[]>(() => {
+    if (!activePending || actualHunks.some((hunk) => hunk.header === activePending.header)) {
+      return actualHunks
     }
-    const staged = selected ? (stagedQuery.data?.hunks ?? []) : []
-    const unstaged = selected ? (unstagedQuery.data?.hunks ?? []) : []
-    const headShiftAt = (indexLine: number) =>
-      staged.reduce(
-        (shift, hunk) =>
-          hunk.newStart < indexLine ? shift + (hunk.oldCount - hunk.newCount) : shift,
-        0
-      )
-    const worktreeShiftAt = (indexLine: number) =>
-      unstaged.reduce(
-        (shift, hunk) =>
-          hunk.oldStart < indexLine ? shift + (hunk.newCount - hunk.oldCount) : shift,
-        0
-      )
-    const entries: HunkEntry[] = [
-      ...staged.map((hunk) => ({
-        hunk,
-        display: remapHunk(hunk, 0, worktreeShiftAt(hunk.newStart)),
-        staged: true,
-        indexStart: hunk.newStart
-      })),
-      ...unstaged.map((hunk) => ({
-        hunk,
-        display: remapHunk(hunk, headShiftAt(hunk.oldStart), 0),
-        staged: false,
-        indexStart: hunk.oldStart
-      }))
-    ]
-    return entries.sort((left, right) => left.indexStart - right.indexStart)
-  }, [
-    props.selected,
-    isWorktree,
-    isCommit,
-    commitQuery.data,
-    rangeQuery.data,
-    stagedQuery.data,
-    unstagedQuery.data
-  ])
-
-  const mergedHunks = useMemo<HunkEntry[]>(() => {
-    if (!activePending) {
-      return actualMergedHunks
-    }
-    const targetStaged = activePending.op === 'stage'
-    const entries = actualMergedHunks.filter(
-      (entry) => entry.staged === targetStaged || entry.hunk.header !== activePending.opHeader
-    )
-    const hasTarget = entries.some(
-      (entry) =>
-        entry.staged === targetStaged &&
-        (entry.hunk.header === activePending.opHeader ||
-          hunkHighlightKey(entry.hunk) === activePending.key)
-    )
-    if (!hasTarget) {
-      entries.push({
-        hunk: activePending.hunk,
-        display: activePending.display,
-        staged: targetStaged,
-        indexStart: activePending.indexStart
-      })
-    }
-    return entries.sort((left, right) => left.indexStart - right.indexStart)
-  }, [actualMergedHunks, activePending])
+    const withPending = [...actualHunks]
+    withPending.splice(Math.min(activePending.position, withPending.length), 0, activePending.hunk)
+    return withPending
+  }, [actualHunks, activePending])
 
   const totals = useMemo(() => {
     let adds = 0
     let dels = 0
-    for (const entry of mergedHunks) {
-      const hunk = entry.display
+    for (const hunk of hunks) {
       for (const line of hunk.lines) {
         if (line.kind === 'add') {
           adds++
@@ -175,86 +106,36 @@ export function DiffPanel(props: DiffPanelProps) {
       }
     }
     return { adds, dels }
-  }, [mergedHunks])
+  }, [hunks])
 
-  const hasAnyHunks = mergedHunks.length > 0
-  const stagedEntryCount = mergedHunks.filter((entry) => entry.staged).length
-  const unstagedEntryCount = mergedHunks.filter((entry) => !entry.staged).length
-
-  const fileStageState =
-    stagedEntryCount === 0 ? 'unstaged' : unstagedEntryCount > 0 ? 'partial' : 'staged'
+  const hasAnyHunks = hunks.length > 0
 
   const clearPendingHunk = (pending: PendingHunk) => {
     setPendingHunk((current) => (current === pending ? null : current))
   }
 
-  const stageHunk = async (entry: HunkEntry) => {
+  const toggleHunk = async (hunk: DiffHunk, position: number) => {
     const file = props.selected?.file
     if (!file) {
       return
     }
-    const fullyStagesFile = unstagedEntryCount === 1
+    const isLastOnSide = actualHunks.length === 1
     const pending: PendingHunk = {
       file,
-      op: 'stage',
-      opHeader: entry.hunk.header,
-      hunk: entry.hunk,
-      display: entry.display,
-      staged: entry.staged,
-      indexStart: entry.indexStart,
-      key: hunkHighlightKey(entry.hunk)
+      staged: showsStagedSide,
+      header: hunk.header,
+      hunk,
+      position
     }
     setPendingHunk(pending)
     try {
-      await stageHunkOp(file, entry.hunk.header, { fullyStagesFile })
+      if (showsStagedSide) {
+        await unstageHunkOp(file, hunk.header, { fullyUnstagesFile: isLastOnSide })
+      } else {
+        await stageHunkOp(file, hunk.header, { fullyStagesFile: isLastOnSide })
+      }
     } finally {
       clearPendingHunk(pending)
-    }
-  }
-
-  const unstageHunk = async (entry: HunkEntry) => {
-    const file = props.selected?.file
-    if (!file) {
-      return
-    }
-    const fullyUnstagesFile = stagedEntryCount === 1
-    const pending: PendingHunk = {
-      file,
-      op: 'unstage',
-      opHeader: entry.hunk.header,
-      hunk: entry.hunk,
-      display: entry.display,
-      staged: entry.staged,
-      indexStart: entry.indexStart,
-      key: hunkHighlightKey(entry.hunk)
-    }
-    setPendingHunk(pending)
-    try {
-      await unstageHunkOp(file, entry.hunk.header, { fullyUnstagesFile })
-    } finally {
-      clearPendingHunk(pending)
-    }
-  }
-
-  const isPendingEntry = (entry: HunkEntry) => {
-    if (!activePending) {
-      return false
-    }
-    return (
-      entry.hunk.header === activePending.opHeader ||
-      hunkHighlightKey(entry.hunk) === activePending.key
-    )
-  }
-
-  const toggleFileStaged = () => {
-    const file = props.selected?.file
-    if (!file) {
-      return
-    }
-    if (fileStageState === 'staged') {
-      void unstageFile(file, props.selected?.renameSource)
-    } else {
-      void stageFile(file)
     }
   }
 
@@ -264,23 +145,11 @@ export function DiffPanel(props: DiffPanelProps) {
         <div
           className={cn(
             'flex shrink-0 items-center gap-2.5 border-b pl-3.5 pr-2',
-            // The staging modes need room for a checkbox; a commit's header is one line of text, and
+            // The amend mode needs room for a checkbox; a commit's header is one line of text, and
             // in the details panel it sits above a diff that has little height to spare.
             isCommit ? 'min-h-8 py-1' : 'min-h-[46px] py-1.5'
           )}
         >
-          {hasAnyHunks && !isBinary && isWorktree ? (
-            <Checkbox
-              checked={fileStageState === 'staged'}
-              indeterminate={fileStageState === 'partial'}
-              aria-label={
-                fileStageState === 'staged'
-                  ? `Unstage ${props.selected.file}`
-                  : `Stage ${props.selected.file}`
-              }
-              onChange={toggleFileStaged}
-            />
-          ) : null}
           {hasAnyHunks && !isBinary && isHeadCommit && props.amendDrop ? (
             <Checkbox
               checked={props.amendDrop.dropState === 'kept'}
@@ -327,31 +196,35 @@ export function DiffPanel(props: DiffPanelProps) {
         ) : isLoading ? (
           <div className="px-2 py-4 text-sm text-muted-foreground">Loading diff…</div>
         ) : hasAnyHunks ? (
-          mergedHunks.map((entry) => (
-            <HunkCard
-              key={`${entry.staged ? 'staged' : 'unstaged'}:${hunkHighlightKey(entry.hunk)}:${entry.indexStart}`}
-              hunk={entry.display}
-              filePath={props.selected?.file ?? ''}
-              queryKeys={queryKeys}
-              staged={entry.staged}
-              pending={isPendingEntry(entry)}
-              hunkActionsEnabled={isWorktree && (entry.staged || !isUntracked)}
-              amend={
-                isHeadCommit && props.amendDrop
-                  ? {
-                      dropped: props.amendDrop.isHunkDropped(entry.hunk.header),
-                      onToggleDrop: () =>
-                        props.amendDrop?.onToggleHunk(
-                          entry.hunk.header,
-                          mergedHunks.map((merged) => merged.hunk.header)
-                        )
-                    }
-                  : undefined
-              }
-              onStageHunk={() => void stageHunk(entry)}
-              onUnstageHunk={() => void unstageHunk(entry)}
-            />
-          ))
+          hunks.map((hunk, position) => {
+            const pending = activePending?.header === hunk.header
+            return (
+              <HunkCard
+                key={`${hunkHighlightKey(hunk)}:${hunk.oldStart}`}
+                hunk={hunk}
+                filePath={props.selected?.file ?? ''}
+                queryKeys={queryKeys}
+                // While the op is in flight the hunk already belongs to the other side; showing it
+                // there is the whole point of keeping it on screen.
+                staged={pending ? !showsStagedSide : showsStagedSide}
+                pending={pending}
+                hunkActionsEnabled={isWorktree && !isConflict && (showsStagedSide || !isUntracked)}
+                amend={
+                  isHeadCommit && props.amendDrop
+                    ? {
+                        dropped: props.amendDrop.isHunkDropped(hunk.header),
+                        onToggleDrop: () =>
+                          props.amendDrop?.onToggleHunk(
+                            hunk.header,
+                            hunks.map((entry) => entry.header)
+                          )
+                      }
+                    : undefined
+                }
+                onToggleHunk={() => void toggleHunk(hunk, position)}
+              />
+            )
+          })
         ) : (
           <div className="px-2 py-4 text-sm text-muted-foreground">No changes to show.</div>
         )}
@@ -376,8 +249,7 @@ interface HunkCardProps {
   pending: boolean
   hunkActionsEnabled: boolean
   amend?: { dropped: boolean; onToggleDrop: () => void }
-  onStageHunk: () => void
-  onUnstageHunk: () => void
+  onToggleHunk: () => void
 }
 
 function HunkCard(props: HunkCardProps) {
@@ -385,11 +257,7 @@ function HunkCard(props: HunkCardProps) {
     if (props.pending) {
       return
     }
-    if (props.staged) {
-      props.onUnstageHunk()
-    } else {
-      props.onStageHunk()
-    }
+    props.onToggleHunk()
   }
 
   const highlightQuery = useQuery<Array<LineTokens | null> | null>({

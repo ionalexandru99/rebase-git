@@ -2,26 +2,104 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { FileRow } from '../FileRow'
 
-describe('FileRow — worktree', () => {
-  it('renders a stage checkbox and stages on toggle', () => {
+describe('FileRow — unstaged group', () => {
+  const renderRow = (overrides: Partial<Parameters<typeof FileRow>[0]> = {}) => {
     const onStage = vi.fn()
+    const onUnstage = vi.fn()
     render(
       <FileRow
         file="src/app.ts"
         kind="modified"
-        stageState="unstaged"
-        source="worktree"
+        group="unstaged"
         isSelected={false}
         onSelect={vi.fn()}
         onStage={onStage}
-        onUnstage={vi.fn()}
+        onUnstage={onUnstage}
+        {...overrides}
       />
     )
+    return { onStage, onUnstage }
+  }
 
-    const checkbox = screen.getByRole('checkbox', { name: /stage src\/app\.ts/i })
-    expect(checkbox).not.toBeChecked()
-    fireEvent.click(checkbox)
+  // Group membership is the staging model now; a checkbox column asks the eye to read state row by
+  // row that the lists already say.
+  it('renders no staging checkbox', () => {
+    renderRow()
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('stages the file through its row button', () => {
+    const { onStage } = renderRow()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }))
     expect(onStage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('stages the file on double-click', () => {
+    const { onStage } = renderRow()
+
+    fireEvent.doubleClick(screen.getByText('src/app.ts'))
+    expect(onStage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('stages the file from the context menu', () => {
+    const { onStage } = renderRow()
+
+    fireEvent.contextMenu(screen.getByText('src/app.ts'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Stage' }))
+    expect(onStage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('tags the row with its group so the lists can be told apart', () => {
+    renderRow()
+
+    expect(screen.getByTestId('status-file-row')).toHaveAttribute('data-group', 'unstaged')
+  })
+})
+
+describe('FileRow — staged group', () => {
+  const renderRow = (overrides: Partial<Parameters<typeof FileRow>[0]> = {}) => {
+    const onUnstage = vi.fn()
+    render(
+      <FileRow
+        file="src/app.ts"
+        kind="modified"
+        group="staged"
+        isSelected={false}
+        onSelect={vi.fn()}
+        onStage={vi.fn()}
+        onUnstage={onUnstage}
+        {...overrides}
+      />
+    )
+    return { onUnstage }
+  }
+
+  it('unstages the file through its row button', () => {
+    const { onUnstage } = renderRow()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage src/app.ts' }))
+    expect(onUnstage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('unstages the file on double-click', () => {
+    const { onUnstage } = renderRow()
+
+    fireEvent.doubleClick(screen.getByText('src/app.ts'))
+    expect(onUnstage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('carries the rename source when unstaging', () => {
+    const { onUnstage } = renderRow({
+      file: 'new.ts',
+      renameSource: 'old.ts',
+      display: 'old.ts → new.ts',
+      kind: 'renamed'
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage old.ts → new.ts' }))
+    expect(onUnstage).toHaveBeenCalledWith('new.ts', 'old.ts')
   })
 })
 
@@ -34,8 +112,7 @@ describe('FileRow — conflicted', () => {
       <FileRow
         file="src/app.ts"
         kind="conflicted"
-        stageState="unstaged"
-        source="worktree"
+        group="conflicts"
         conflictCode={conflictCode}
         conflictLabels={labels}
         isSelected={false}
@@ -106,8 +183,7 @@ describe('FileRow — conflicted', () => {
       <FileRow
         file="src/app.ts"
         kind="conflicted"
-        stageState="unstaged"
-        source="worktree"
+        group="conflicts"
         conflictCode="UU"
         conflictLabels={labels}
         isSelected={false}
@@ -140,8 +216,7 @@ describe('FileRow — conflicted', () => {
       <FileRow
         file="src/app.ts"
         kind="conflicted"
-        stageState="unstaged"
-        source="worktree"
+        group="conflicts"
         conflictCode="UU"
         conflictLabels={labels}
         isSelected={false}
@@ -154,6 +229,27 @@ describe('FileRow — conflicted', () => {
 
     fireEvent.contextMenu(screen.getByText('src/app.ts'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Mark as resolved' }))
+    expect(onStage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('names its row button after resolving rather than staging', () => {
+    const onStage = vi.fn()
+    render(
+      <FileRow
+        file="src/app.ts"
+        kind="conflicted"
+        group="conflicts"
+        conflictCode="UU"
+        conflictLabels={labels}
+        isSelected={false}
+        onSelect={vi.fn()}
+        onStage={onStage}
+        onUnstage={vi.fn()}
+        onResolveConflict={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark src/app.ts as resolved' }))
     expect(onStage).toHaveBeenCalledWith('src/app.ts')
   })
 
@@ -173,8 +269,7 @@ describe('FileRow — head-commit (amend)', () => {
       <FileRow
         file="src/app.ts"
         kind="modified"
-        stageState="staged"
-        source="head-commit"
+        group="head-commit"
         dropState="kept"
         isSelected={false}
         onSelect={vi.fn()}
@@ -186,7 +281,6 @@ describe('FileRow — head-commit (amend)', () => {
     expect(checkbox).toBeChecked()
     fireEvent.click(checkbox)
     expect(onToggleDrop).toHaveBeenCalledWith('src/app.ts')
-    expect(screen.getByText('Last commit')).toBeInTheDocument()
   })
 
   it('renders a dropped file as unchecked', () => {
@@ -194,8 +288,7 @@ describe('FileRow — head-commit (amend)', () => {
       <FileRow
         file="src/app.ts"
         kind="modified"
-        stageState="staged"
-        source="head-commit"
+        group="head-commit"
         dropState="dropped"
         isSelected={false}
         onSelect={vi.fn()}
@@ -213,8 +306,7 @@ describe('FileRow — head-commit (amend)', () => {
       <FileRow
         file="src/app.ts"
         kind="modified"
-        stageState="staged"
-        source="head-commit"
+        group="head-commit"
         dropState="partial"
         isSelected={false}
         onSelect={vi.fn()}
@@ -227,5 +319,21 @@ describe('FileRow — head-commit (amend)', () => {
     }) as HTMLInputElement
     expect(checkbox.indeterminate).toBe(true)
     expect(checkbox).not.toBeChecked()
+  })
+
+  it('offers no staging action for a committed file', () => {
+    render(
+      <FileRow
+        file="src/app.ts"
+        kind="modified"
+        group="head-commit"
+        dropState="kept"
+        isSelected={false}
+        onSelect={vi.fn()}
+        onToggleDrop={vi.fn()}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: /^(Stage|Unstage) / })).not.toBeInTheDocument()
   })
 })

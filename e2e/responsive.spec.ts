@@ -31,7 +31,10 @@ test('keeps history and diffs usable at the minimum window size', async ({ harne
   await openLocalChanges(page)
   await expect(page.getByRole('button', { name: 'Files', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Diff', exact: true })).toBeVisible()
-  await page.getByTestId('status-file-row').getByRole('button', { name: 'README.md' }).click()
+  await page
+    .getByTestId('status-file-row')
+    .getByRole('button', { name: 'README.md', exact: true })
+    .click()
   await expect(page.getByRole('button', { name: 'Diff', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true'

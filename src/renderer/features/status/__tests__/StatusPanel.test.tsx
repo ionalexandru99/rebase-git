@@ -3,7 +3,8 @@ import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { HeadDropState } from '@/features/commit/amend-drops'
 import type { ConflictSide } from '@/features/status/conflict-resolution'
-import type { FileRowSource, UnifiedFileRow } from '@/features/status/status-file-rows'
+import type { FileRowGroup } from '@/features/status/FileRow'
+import type { UnifiedFileRow } from '@/features/status/status-file-rows'
 import { buildUnifiedFileRows } from '@/features/status/status-file-rows'
 import { type WorkingTreeStatus, WorkingTreeStatusProvider } from '@/features/status/store'
 import type { FileAction } from '@/lib/git-actions'
@@ -58,7 +59,7 @@ function renderPanel(props: {
   status: GitStatus | null
   statusState?: WorkingTreeStatus['statusState']
   selected?: SelectedFile | null
-  onSelect?: (file: string, source: FileRowSource) => void
+  onSelect?: (file: string, group: FileRowGroup) => void
   onStage?: WorkingTreeStatus['stageFile']
   onUnstage?: WorkingTreeStatus['unstageFile']
   onStageAll?: WorkingTreeStatus['stageAll']
@@ -67,6 +68,7 @@ function renderPanel(props: {
   amendRows?: UnifiedFileRow[]
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
   onResolveConflict?: (file: string, side: ConflictSide) => void
+  headerActions?: ReactNode
   loading?: boolean
 }) {
   const wrap = provideStatus(props.status, {
@@ -85,6 +87,7 @@ function renderPanel(props: {
         amendRows={props.amendRows}
         onFileAction={props.onFileAction}
         onResolveConflict={props.onResolveConflict}
+        headerActions={props.headerActions}
         loading={props.loading ?? false}
       />
     )
@@ -100,6 +103,12 @@ const amendRow = (path: string, dropState: HeadDropState = 'kept'): UnifiedFileR
   source: 'head-commit',
   dropState
 })
+
+const groupOf = (file: string) =>
+  screen
+    .getAllByTestId('status-file-row')
+    .filter((row) => row.textContent?.includes(file))
+    .map((row) => row.getAttribute('data-group'))
 
 describe('StatusPanel', () => {
   it('renders nothing when status is null', () => {
@@ -129,7 +138,7 @@ describe('StatusPanel', () => {
     expect(onFileAction).toHaveBeenCalledWith('copy-path', 'a.ts')
   })
 
-  it('lists every change in one flat list with a staged count', () => {
+  it('splits the changes into staged and unstaged groups with a staged count', () => {
     renderPanel({
       status: emptyStatus({
         files: [
@@ -142,11 +151,31 @@ describe('StatusPanel', () => {
     })
 
     expect(screen.getByText('4 files · 1 staged')).toBeInTheDocument()
-    expect(screen.getByText('a.ts')).toBeInTheDocument()
-    expect(screen.getByText('c.ts')).toBeInTheDocument()
-    expect(screen.getByText('d.ts')).toBeInTheDocument()
-    expect(screen.queryByText('Staged')).not.toBeInTheDocument()
-    expect(screen.queryByText('Untracked')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Staged' }).closest('li')).toHaveTextContent('1')
+    expect(screen.getByRole('heading', { name: 'Unstaged' }).closest('li')).toHaveTextContent('3')
+    expect(groupOf('c.ts')).toEqual(['staged'])
+    expect(groupOf('a.ts')).toEqual(['unstaged'])
+    expect(groupOf('d.ts')).toEqual(['unstaged'])
+    expect(screen.queryByRole('heading', { name: 'Conflicts' })).not.toBeInTheDocument()
+  })
+
+  it('lists a partially-staged file in both groups', () => {
+    renderPanel({ status: emptyStatus({ files: [code('index.ts', 'M', 'M')] }) })
+
+    expect(groupOf('index.ts')).toEqual(['staged', 'unstaged'])
+  })
+
+  it('sorts conflicts into their own group above the rest', () => {
+    renderPanel({
+      status: emptyStatus({
+        conflicted: ['src/conflict.ts'],
+        files: [code('src/conflict.ts', 'U', 'U'), code('a.ts', 'M', ' ')]
+      })
+    })
+
+    const headings = screen.getAllByRole('heading').map((heading) => heading.textContent)
+    expect(headings).toEqual(['Conflicts', 'Staged'])
+    expect(groupOf('src/conflict.ts')).toEqual(['conflicts'])
   })
 
   it('renders a deleted file with a D badge', () => {
@@ -249,7 +278,7 @@ describe('StatusPanel', () => {
       onFileAction
     })
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Unstage old.ts → new.ts' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage old.ts → new.ts' }))
     expect(onUnstage).toHaveBeenCalledWith('new.ts', 'old.ts')
 
     fireEvent.contextMenu(screen.getByText('old.ts → new.ts'))
@@ -262,41 +291,43 @@ describe('StatusPanel', () => {
     expect(screen.getByText('Loading')).toBeInTheDocument()
   })
 
-  it('stages an unstaged file through its checkbox', () => {
+  it('stages an unstaged file through its row button', () => {
     const onStage = vi.fn()
     renderPanel({ status: emptyStatus({ files: [code('index.ts', ' ', 'M')] }), onStage })
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Stage index.ts' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stage index.ts' }))
     expect(onStage).toHaveBeenCalledWith('index.ts')
   })
 
-  it('unstages a staged file through its checkbox', () => {
+  it('unstages a staged file through its row button', () => {
     const onUnstage = vi.fn()
     renderPanel({ status: emptyStatus({ files: [code('index.ts', 'M', ' ')] }), onUnstage })
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Unstage index.ts' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage index.ts' }))
     expect(onUnstage).toHaveBeenCalledWith('index.ts')
   })
 
-  it('renders a partially-staged file as indeterminate and stages the rest on click', () => {
+  it('stages a file by double-clicking its row', () => {
     const onStage = vi.fn()
-    renderPanel({ status: emptyStatus({ files: [code('index.ts', 'M', 'M')] }), onStage })
+    renderPanel({ status: emptyStatus({ files: [code('index.ts', ' ', 'M')] }), onStage })
 
-    const checkbox = screen.getByRole('checkbox', { name: 'Stage index.ts' }) as HTMLInputElement
-    expect(checkbox.indeterminate).toBe(true)
-    fireEvent.click(checkbox)
+    fireEvent.doubleClick(screen.getByText('index.ts'))
     expect(onStage).toHaveBeenCalledWith('index.ts')
   })
 
-  it('selects a file when its row is clicked, tagging the worktree source', () => {
+  it('selects a file with the group its row was picked from', () => {
     const onSelect = vi.fn()
-    renderPanel({ status: emptyStatus({ files: [code('index.ts', ' ', 'M')] }), onSelect })
+    renderPanel({ status: emptyStatus({ files: [code('index.ts', 'M', 'M')] }), onSelect })
 
-    fireEvent.click(screen.getByText('index.ts'))
-    expect(onSelect).toHaveBeenCalledWith('index.ts', 'worktree')
+    const [stagedRow, unstagedRow] = screen.getAllByText('index.ts')
+    fireEvent.click(stagedRow as HTMLElement)
+    expect(onSelect).toHaveBeenCalledWith('index.ts', 'staged')
+
+    fireEvent.click(unstagedRow as HTMLElement)
+    expect(onSelect).toHaveBeenCalledWith('index.ts', 'unstaged')
   })
 
-  it('folds amend rows into the same list with drop checkboxes and counts them', () => {
+  it('folds amend rows into their own group with drop checkboxes and counts them', () => {
     const onToggleDrop = vi.fn()
     renderPanel({
       status: emptyStatus({ files: [code('work.ts', ' ', 'M')] }),
@@ -305,9 +336,9 @@ describe('StatusPanel', () => {
     })
 
     expect(screen.getByText('2 files · 0 staged')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Working tree' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Unstaged' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Last commit' })).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Stage work.ts' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stage work.ts' })).toBeInTheDocument()
 
     const dropBox = screen.getByRole('checkbox', { name: /drop committed\.ts from last commit/i })
     expect(dropBox).toBeChecked()
@@ -315,35 +346,26 @@ describe('StatusPanel', () => {
     expect(onToggleDrop).toHaveBeenCalledWith('committed.ts')
   })
 
-  it('labels grouped rows only through their section heading', () => {
-    renderPanel({
-      status: emptyStatus({ files: [code('work.ts', ' ', 'M')] }),
-      amendRows: [amendRow('committed.ts')]
-    })
-
-    expect(screen.getAllByText('Last commit')).toHaveLength(1)
-    expect(screen.getAllByText('Working tree')).toHaveLength(1)
-  })
-
-  it('omits the working tree section when only the last commit has rows', () => {
+  it('omits the working-copy groups when only the last commit has rows', () => {
     renderPanel({ status: emptyStatus(), amendRows: [amendRow('committed.ts')] })
 
-    expect(screen.getByRole('heading', { name: 'Last commit' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Working tree' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('heading').map((heading) => heading.textContent)).toEqual([
+      'Last commit'
+    ])
     expect(screen.getByText('committed.ts')).toBeInTheDocument()
   })
 
   it('highlights the selected file row', () => {
     renderPanel({
       status: emptyStatus({ files: [code('index.ts', ' ', 'M')] }),
-      selected: { file: 'index.ts' }
+      selected: { file: 'index.ts', group: 'unstaged' }
     })
 
     const row = screen.getByText('index.ts').closest('[data-testid="status-file-row"]')
     expect(row?.className).toMatch(/brand-soft/)
   })
 
-  it('stages every unstaged file in one call via the "Stage all" button', () => {
+  it('stages every unstaged file in one call from the group heading', () => {
     const onStageAll = vi.fn()
     renderPanel({
       status: emptyStatus({
@@ -357,7 +379,7 @@ describe('StatusPanel', () => {
     expect(onStageAll).toHaveBeenCalledWith(['a.ts', 'b.ts'])
   })
 
-  it('unstages everything in one call via the "Unstage all" button when all staged', () => {
+  it('unstages every staged file in one call from the group heading', () => {
     const onUnstageAll = vi.fn()
     renderPanel({
       status: emptyStatus({ files: [code('a.ts', 'M', ' '), code('b.ts', 'M', ' ')] }),
@@ -369,7 +391,28 @@ describe('StatusPanel', () => {
     expect(onUnstageAll).toHaveBeenCalledWith(['a.ts', 'b.ts'])
   })
 
-  it('includes both paths of a staged rename when unstaging all', () => {
+  it('offers both group actions while each group has rows', () => {
+    renderPanel({
+      status: emptyStatus({ files: [code('a.ts', ' ', 'M'), code('b.ts', 'M', ' ')] })
+    })
+
+    expect(screen.getByRole('button', { name: 'Stage all' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unstage all' })).toBeInTheDocument()
+  })
+
+  it('offers no bulk staging action on the conflicts group', () => {
+    renderPanel({
+      status: emptyStatus({
+        conflicted: ['src/conflict.ts'],
+        files: [code('src/conflict.ts', 'U', 'U')]
+      })
+    })
+
+    expect(screen.queryByRole('button', { name: 'Stage all' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Unstage all' })).not.toBeInTheDocument()
+  })
+
+  it('includes both paths of a staged rename when unstaging a group', () => {
     const onUnstageAll = vi.fn()
     renderPanel({
       status: emptyStatus({
@@ -381,6 +424,15 @@ describe('StatusPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Unstage all' }))
     expect(onUnstageAll).toHaveBeenCalledWith(['old.ts', 'new.ts'])
+  })
+
+  it('renders the header actions it is given', () => {
+    renderPanel({
+      status: emptyStatus({ files: [code('a.ts', ' ', 'M')] }),
+      headerActions: <button type="button">Discard all</button>
+    })
+
+    expect(screen.getByRole('button', { name: 'Discard all' })).toBeInTheDocument()
   })
 
   it('truncates long file names and exposes the full path as a title attribute', () => {

@@ -4,14 +4,18 @@ import {
   commitSubjects,
   createFixtureRepo,
   expect,
-  fileRowCheckbox,
+  fileRow,
   openHistory,
   openLocalChanges,
   porcelainStatus,
-  test
+  stageFileFromRow,
+  stagedFileRow,
+  test,
+  unstageFileFromRow,
+  unstagedFileRow
 } from './fixtures'
 
-test('stages a file via checkbox and commits through the UI, draining the tree into history', async ({
+test('stages a file from its row and commits through the UI, draining the tree into history', async ({
   harness
 }) => {
   const repo = createFixtureRepo()
@@ -20,10 +24,9 @@ test('stages a file via checkbox and commits through the UI, draining the tree i
 
   await openLocalChanges(page)
 
-  const note = fileRowCheckbox(page, 'note.txt')
-  await expect(note).toBeVisible({ timeout: 10_000 })
-  await note.click()
-  await expect(note).toBeChecked({ timeout: 10_000 })
+  await expect(unstagedFileRow(page, 'note.txt')).toBeVisible({ timeout: 10_000 })
+  await stageFileFromRow(page, 'note.txt')
+  await expect(stagedFileRow(page, 'note.txt')).toBeVisible({ timeout: 10_000 })
 
   const commitButton = page.getByRole('button', { name: /^Commit/ })
   await expect(commitButton).toHaveText(/Commit 1 file/)
@@ -43,7 +46,50 @@ test('stages a file via checkbox and commits through the UI, draining the tree i
   expect(porcelainStatus(repo)).toEqual([])
 })
 
-test('Stage all / Unstage all toggles every row and gates the Commit button', async ({
+// The grouped lists are the staging model: a file's state is which list it is in, and staging is a
+// move between them.
+test('moves a file between the Unstaged and Staged groups, in the list and in the index', async ({
+  harness
+}) => {
+  const repo = createFixtureRepo()
+  fs.writeFileSync(path.join(repo, 'note.txt'), 'hello\n')
+  const page = await harness.openRepo(repo)
+
+  await openLocalChanges(page)
+
+  await expect(page.getByRole('heading', { name: 'Unstaged', exact: true })).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByRole('heading', { name: 'Staged', exact: true })).toHaveCount(0)
+  await expect(unstagedFileRow(page, 'note.txt')).toBeVisible()
+
+  await stageFileFromRow(page, 'note.txt')
+
+  await expect(stagedFileRow(page, 'note.txt')).toBeVisible({ timeout: 10_000 })
+  await expect(unstagedFileRow(page, 'note.txt')).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Unstaged', exact: true })).toHaveCount(0)
+  await expect.poll(() => porcelainStatus(repo), { timeout: 10_000 }).toEqual(['A  note.txt'])
+
+  await unstageFileFromRow(page, 'note.txt')
+
+  await expect(unstagedFileRow(page, 'note.txt')).toBeVisible({ timeout: 10_000 })
+  await expect(stagedFileRow(page, 'note.txt')).toHaveCount(0)
+  await expect.poll(() => porcelainStatus(repo), { timeout: 10_000 }).toEqual(['?? note.txt'])
+})
+
+test('stages a file by double-clicking its row', async ({ harness }) => {
+  const repo = createFixtureRepo()
+  fs.writeFileSync(path.join(repo, 'note.txt'), 'hello\n')
+  const page = await harness.openRepo(repo)
+
+  await openLocalChanges(page)
+  await expect(unstagedFileRow(page, 'note.txt')).toBeVisible({ timeout: 10_000 })
+
+  await unstagedFileRow(page, 'note.txt').dblclick()
+
+  await expect(stagedFileRow(page, 'note.txt')).toBeVisible({ timeout: 10_000 })
+  await expect.poll(() => porcelainStatus(repo), { timeout: 10_000 }).toEqual(['A  note.txt'])
+})
+
+test('Stage all / Unstage all move whole groups and gate the Commit button', async ({
   harness
 }) => {
   const repo = createFixtureRepo()
@@ -55,14 +101,9 @@ test('Stage all / Unstage all toggles every row and gates the Commit button', as
   await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({ timeout: 10_000 })
   await openLocalChanges(page)
 
-  const readme = fileRowCheckbox(page, 'README.md')
-  const note = fileRowCheckbox(page, 'note.txt')
-  const second = fileRowCheckbox(page, 'second.txt')
-
-  await expect(readme).toBeVisible({ timeout: 10_000 })
-  await expect(readme).not.toBeChecked()
-  await expect(note).not.toBeChecked()
-  await expect(second).not.toBeChecked()
+  await expect(unstagedFileRow(page, 'README.md')).toBeVisible({ timeout: 10_000 })
+  await expect(unstagedFileRow(page, 'note.txt')).toBeVisible()
+  await expect(unstagedFileRow(page, 'second.txt')).toBeVisible()
 
   const subtitle = page.getByText(/\d+ files.*\d+ staged/)
   await expect(subtitle).toHaveText(/3 files.*0 staged/)
@@ -76,11 +117,11 @@ test('Stage all / Unstage all toggles every row and gates the Commit button', as
 
   await page.getByRole('button', { name: 'Stage all', exact: true }).click()
 
-  await expect(readme).toBeChecked({ timeout: 10_000 })
-  await expect(note).toBeChecked()
-  await expect(second).toBeChecked()
+  await expect(stagedFileRow(page, 'README.md')).toBeVisible({ timeout: 10_000 })
+  await expect(stagedFileRow(page, 'note.txt')).toBeVisible()
+  await expect(stagedFileRow(page, 'second.txt')).toBeVisible()
   await expect(subtitle).toHaveText(/3 files.*3 staged/)
-  await expect(page.getByRole('button', { name: 'Unstage all', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Stage all', exact: true })).toHaveCount(0)
   await expect(commitButton).toHaveText('Commit 3 files')
   await expect(commitButton).toBeEnabled()
 
@@ -92,16 +133,16 @@ test('Stage all / Unstage all toggles every row and gates the Commit button', as
 
   await page.getByRole('button', { name: 'Unstage all', exact: true }).click()
 
-  await expect(readme).not.toBeChecked({ timeout: 10_000 })
-  await expect(note).not.toBeChecked()
-  await expect(second).not.toBeChecked()
+  await expect(unstagedFileRow(page, 'README.md')).toBeVisible({ timeout: 10_000 })
+  await expect(unstagedFileRow(page, 'note.txt')).toBeVisible()
+  await expect(unstagedFileRow(page, 'second.txt')).toBeVisible()
   await expect(subtitle).toHaveText(/3 files.*0 staged/)
-  await expect(page.getByRole('button', { name: 'Stage all', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Unstage all', exact: true })).toHaveCount(0)
   await expect(commitButton).toHaveText('Commit')
   await expect(commitButton).toBeDisabled()
 })
 
-test('selecting a modified file renders diff hunks and staging a hunk flips its checkbox', async ({
+test('selecting a modified file renders diff hunks and staging its hunk carries the file over', async ({
   harness
 }) => {
   const repo = createFixtureRepo()
@@ -113,8 +154,10 @@ test('selecting a modified file renders diff hunks and staging a hunk flips its 
 
   await openLocalChanges(page)
 
-  const fileRow = page.getByTestId('status-file-row')
-  const fileButton = fileRow.getByRole('button', { name: 'README.md' })
+  const fileButton = fileRow(page, 'README.md', 'unstaged').getByRole('button', {
+    name: 'README.md',
+    exact: true
+  })
   await expect(fileButton).toBeVisible({ timeout: 10_000 })
   await fileButton.click()
 
@@ -127,10 +170,12 @@ test('selecting a modified file renders diff hunks and staging a hunk flips its 
   await expect(stageHunk).toBeVisible({ timeout: 10_000 })
   await stageHunk.click()
 
+  // The file's only hunk is staged, so it leaves the unstaged list and the selection follows it into
+  // Staged — where the same hunk now reads from the index side.
+  await expect(stagedFileRow(page, 'README.md')).toBeVisible({ timeout: 10_000 })
   await expect(diffBody.getByRole('checkbox', { name: 'Unstage hunk' }).first()).toBeVisible({
     timeout: 10_000
   })
-  await expect(fileRowCheckbox(page, 'README.md')).toBeChecked({ timeout: 10_000 })
 })
 
 test('scrolls a long working-tree diff instead of clipping it', async ({ harness }) => {
