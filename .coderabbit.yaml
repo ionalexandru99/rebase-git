@@ -1,0 +1,20 @@
+# Review-noise controls. Each push previously triggered a fresh incremental review that filed new
+# threads; with incremental reviews off, CodeRabbit reviews a PR once when it opens and again only
+# when asked with `@coderabbitai review`.
+language: en-US
+tone_instructions: >-
+  Follow AGENTS.md. Prioritise correctness, data-loss risk, security, and cross-platform or
+  timing-sensitive issues. Do not flag style that biome enforces, and do not re-litigate decisions
+  AGENTS.md or the PR description document as deliberate.
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  review_status: false
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: false
+  path_filters:
+    - "!scripts/**"
