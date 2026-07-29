@@ -110,15 +110,12 @@ async function stepRange(
   return from ? { from, to } : undefined
 }
 
-/**
- * Where our side renamed a path the step also touches, git carries the step's change into the new
- * name — so the destination holds the step's work under a name the step's own delta never mentions.
- */
-async function renameDestinations(
-  repoPath: string,
-  from: string,
-  touched: ReadonlySet<string>
-): Promise<string[]> {
+interface RenamePair {
+  from: string
+  to: string
+}
+
+async function detectedRenames(repoPath: string, from: string): Promise<RenamePair[]> {
   const output = await runGit([
     '-C',
     repoPath,
@@ -131,17 +128,54 @@ async function renameDestinations(
     'HEAD'
   ])
   const fields = output.split('\0')
-  const destinations: string[] = []
+  const renames: RenamePair[] = []
   // `-z` splits a rename into three records: the status, then the source, then the destination.
   for (let index = 0; index + 2 < fields.length; index += 3) {
     if (!fields[index].startsWith('R')) {
       break
     }
-    if (touched.has(fields[index + 1])) {
-      destinations.push(fields[index + 2])
+    renames.push({ from: fields[index + 1], to: fields[index + 2] })
+  }
+  return renames
+}
+
+const parentOf = (filePath: string): string => {
+  const cut = filePath.lastIndexOf('/')
+  return cut === -1 ? '' : filePath.slice(0, cut)
+}
+
+/**
+ * Where our side renamed something the step also touches, the step's work lands under a name its own
+ * delta never mentions, and the guard has to follow it there.
+ *
+ * Two ways that happens. A renamed file carries the step's edit to the file into its new name. And a
+ * renamed directory carries the step's *additions* into it: git's directory-rename detection sees
+ * `old/a` become `new/a` and relocates an incoming `old/new` to `new/new`, a path no rename record
+ * names. Both are read off the same rename detection — the second by taking the directories the
+ * renames imply and re-homing every touched path underneath them.
+ */
+function relocationsOf(renames: readonly RenamePair[], touched: ReadonlySet<string>): string[] {
+  const relocated: string[] = []
+  const directories: RenamePair[] = []
+  for (const rename of renames) {
+    if (touched.has(rename.from)) {
+      relocated.push(rename.to)
+    }
+    const fromParent = parentOf(rename.from)
+    const toParent = parentOf(rename.to)
+    if (fromParent !== toParent && fromParent !== '') {
+      directories.push({ from: fromParent, to: toParent })
     }
   }
-  return destinations
+  for (const filePath of touched) {
+    for (const directory of directories) {
+      if (filePath.startsWith(`${directory.from}/`)) {
+        const tail = filePath.slice(directory.from.length + 1)
+        relocated.push(directory.to === '' ? tail : `${directory.to}/${tail}`)
+      }
+    }
+  }
+  return relocated
 }
 
 /**
@@ -163,8 +197,9 @@ async function operationPaths(
   }
   const changed = await runGit(['-C', repoPath, 'diff', '--name-only', '-z', range.from, range.to])
   const touched = new Set(changed.split('\0').filter((line) => line.length > 0))
-  for (const destination of await renameDestinations(repoPath, range.from, touched)) {
-    touched.add(destination)
+  const renames = await detectedRenames(repoPath, range.from)
+  for (const relocated of relocationsOf(renames, touched)) {
+    touched.add(relocated)
   }
   return files.filter((file) => touched.has(file))
 }

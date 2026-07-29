@@ -108,6 +108,7 @@ export type ConflictFixtureKind =
   | 'modify-delete'
   | 'rename-rename'
   | 'merge-rename-carry'
+  | 'merge-directory-rename'
   | 'binary'
   | 'cherry-pick'
   | 'cherry-pick-sequence'
@@ -273,6 +274,28 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
     git(repo, ['commit', '-m', 'main renames f to g and edits c'])
     return
   }
+  // Our side renames a directory while the incoming side adds a file to the old one, and a second
+  // file conflicts so the merge parks. Git's directory-rename detection relocates the addition into
+  // the new directory — a path no rename record and no delta of the merge ever names.
+  if (kind === 'merge-directory-rename') {
+    writeRepoFile(repo, 'c.txt', 'c base\n')
+    fs.mkdirSync(path.join(repo, 'old'), { recursive: true })
+    writeRepoFile(repo, 'old/a.txt', 'a\n')
+    git(repo, ['add', '--all'])
+    git(repo, ['commit', '-m', 'base'])
+    git(repo, ['checkout', '-b', 'feature'])
+    writeRepoFile(repo, 'old/new.txt', 'incoming file\n')
+    writeRepoFile(repo, 'c.txt', 'c feature\n')
+    git(repo, ['add', '--all'])
+    git(repo, ['commit', '-m', 'feature adds old/new.txt and edits c'])
+    git(repo, ['checkout', 'main'])
+    fs.mkdirSync(path.join(repo, 'new'), { recursive: true })
+    git(repo, ['mv', 'old/a.txt', 'new/a.txt'])
+    writeRepoFile(repo, 'c.txt', 'c main\n')
+    git(repo, ['add', '--all'])
+    git(repo, ['commit', '-m', 'main renames old to new and edits c'])
+    return
+  }
   if (kind === 'cherry-pick') {
     makeTwoSidedEdit(repo)
     return
@@ -325,6 +348,7 @@ function startConflict(kind: ConflictFixtureKind, repo: string): void {
   if (
     kind === 'merge' ||
     kind === 'merge-rename-carry' ||
+    kind === 'merge-directory-rename' ||
     kind === 'merge-both-added' ||
     kind === 'binary' ||
     kind === 'modify-delete' ||

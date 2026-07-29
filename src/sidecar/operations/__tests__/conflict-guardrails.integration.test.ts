@@ -396,6 +396,55 @@ describe('a merge that carried an incoming change into a renamed path', () => {
   })
 })
 
+// Git's directory-rename detection relocates an incoming addition into the directory our side
+// renamed. The merge's delta names the addition where the incoming side put it, and the rename record
+// names only the file that moved — so the path the addition actually landed in appears in neither,
+// and letting it be unstaged would finish the merge without the incoming file at all.
+describe('a merge that relocated an incoming file through a directory rename', () => {
+  async function withDirectoryRename<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
+    const fixture = makeConflictedRepo('merge-directory-rename')
+    await runOp(openRepo(fixture.path))
+    try {
+      for (const file of conflictedPaths(fixture.path)) {
+        await runOp(resolveConflict(fixture.path, file, 'theirs'))
+      }
+      return await use(fixture)
+    } finally {
+      await runOp(closeRepo(fixture.path))
+      removeRepoDir(fixture.path)
+    }
+  }
+
+  it('stages the addition under a path neither the delta nor the rename record names', async () => {
+    await withDirectoryRename(async (fixture) => {
+      const base = gitOutput(fixture.path, ['merge-base', 'HEAD', 'MERGE_HEAD']).trim()
+      const delta = gitOutput(fixture.path, ['diff', '--name-only', base, 'MERGE_HEAD'])
+      const renames = gitOutput(fixture.path, [
+        'diff',
+        '-M',
+        '--name-status',
+        '--diff-filter=R',
+        base,
+        'HEAD'
+      ])
+      expect(delta).toContain('old/new.txt')
+      expect(delta).not.toContain('new/new.txt')
+      expect(renames).not.toContain('new/new.txt')
+      expect(gitOutput(fixture.path, ['show', ':new/new.txt'])).toBe('incoming file\n')
+    })
+  })
+
+  it('refuses to unstage the relocated file', async () => {
+    await withDirectoryRename(async (fixture) => {
+      const error = await failure(unstageFile(fixture.path, 'new/new.txt'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(gitOutput(fixture.path, ['show', ':new/new.txt'])).toBe('incoming file\n')
+      expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+})
+
 // Moving HEAD is the third way out. git does not refuse a checkout for a parked cherry-pick or
 // revert the way it does for a conflicted index — it cancels the operation to make room, says so in a
 // warning that never reaches a GUI, and the resolution waiting on Continue goes with it.
