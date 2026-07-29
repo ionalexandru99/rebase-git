@@ -101,7 +101,7 @@ test('a rebase started in a terminal appears on its own and continues through bo
     {
       type: 'warning',
       title: 'Continued rebase hit conflicts',
-      description: 'Resolve and stage the conflicted files, then continue the rebase again.'
+      description: 'Resolve and stage the conflicted files, then finish from the conflict banner.'
     },
     () => banner.getByRole('button', { name: 'Continue rebase' }).click()
   )
@@ -157,7 +157,7 @@ test('a multi-commit cherry-pick reports its position and finishes through Conti
     {
       type: 'warning',
       title: 'Continued cherry-pick hit conflicts',
-      description: 'Resolve and stage the conflicted files, then continue the cherry-pick again.'
+      description: 'Resolve and stage the conflicted files, then finish from the conflict banner.'
     },
     () => banner.getByRole('button', { name: 'Continue cherry-pick' }).click()
   )

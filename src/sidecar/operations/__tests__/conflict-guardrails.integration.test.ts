@@ -1,3 +1,5 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { describe, expect, it } from 'vitest'
 import type { RepoSessions } from '../../session/sessions'
@@ -252,6 +254,12 @@ describe('a merge parked with its conflict already resolved', () => {
 
       expect(gitOutput(fixture.path, ['diff', '--cached', '--name-only']).trim()).toBe('f.txt')
       expect(readRepoFile(fixture.path, 'unrelated.txt')).toBe('my own work\n')
+      expect(await operationKind(fixture.path)).toBe('merge')
+
+      await runOp(discardChanges(fixture.path, ['unrelated.txt']))
+
+      expect(fs.existsSync(path.join(fixture.path, 'unrelated.txt'))).toBe(false)
+      expect(gitOutput(fixture.path, ['diff', '--cached', '--name-only']).trim()).toBe('f.txt')
       expect(await operationKind(fixture.path)).toBe('merge')
     })
   })

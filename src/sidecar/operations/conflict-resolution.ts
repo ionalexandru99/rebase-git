@@ -159,6 +159,18 @@ export function continueOperation(
         }
         const stopped = yield* tryGit(() => unmergedPaths(repoPath))
         if (stopped.length > 0) {
+          // Unmerged paths do not always mean the operation is still running: a rebase started with
+          // --autostash can complete on this very continue and then conflict while reapplying the
+          // stash — git exits 0 and removes the rebase state. Telling the user to "continue again"
+          // there would point at a control that no longer exists.
+          const stillRunning = yield* tryGit(() => detectOperationState(repoPath))
+          if (!stillRunning) {
+            return yield* Effect.fail(
+              new Conflict({
+                message: `the ${operation.kind} finished, but reapplying stashed changes hit conflicts`
+              })
+            )
+          }
           return yield* Effect.fail(
             new Conflict({ message: failure ?? `${operation.kind} stopped on conflicts` })
           )

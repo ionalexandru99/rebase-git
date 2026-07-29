@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { describe, expect, it } from 'vitest'
@@ -552,5 +553,57 @@ describe('resolveConflict', () => {
         expect((result.left as { message: string }).message).toMatch(/conflict/i)
       }
     })
+  })
+})
+
+// `git rebase --autostash` can complete on the very continue that was issued and only then conflict
+// while reapplying the stash: git exits 0, prints "Successfully rebased", and deletes the rebase
+// state — so unmerged paths after a continue must not be read as "the rebase stopped".
+describe('continueOperation — autostash completion', () => {
+  it('reports a rebase that finished with autostash conflicts as finished, not stopped', async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-autostash-'))
+    git(repo, ['init', '-b', 'main'])
+    git(repo, ['config', 'user.email', 'test@example.com'])
+    git(repo, ['config', 'user.name', 'Test'])
+    git(repo, ['config', 'commit.gpgsign', 'false'])
+    writeRepoFile(repo, 'f.txt', 'base\n')
+    writeRepoFile(repo, 'g.txt', 'g base\n')
+    git(repo, ['add', '.'])
+    git(repo, ['commit', '-m', 'base'])
+    git(repo, ['checkout', '-b', 'feature'])
+    writeRepoFile(repo, 'f.txt', 'feature\n')
+    git(repo, ['commit', '-am', 'feature changes f'])
+    git(repo, ['checkout', 'main'])
+    writeRepoFile(repo, 'f.txt', 'main\n')
+    writeRepoFile(repo, 'g.txt', 'g main\n')
+    git(repo, ['commit', '-am', 'main changes f and g'])
+    git(repo, ['checkout', 'feature'])
+    writeRepoFile(repo, 'g.txt', 'g dirty\n')
+    try {
+      git(repo, ['rebase', 'main', '--autostash'])
+    } catch {}
+    expect(conflictedPaths(repo)).toEqual(['f.txt'])
+
+    await runOp(openRepo(repo))
+    try {
+      await runOp(resolveConflict(repo, 'f.txt', 'theirs'))
+
+      const result = await runOp(Effect.either(continueOperation(repo)))
+
+      expect(Either.isLeft(result)).toBe(true)
+      if (Either.isLeft(result)) {
+        expect(result.left._tag).toBe('Conflict')
+        expect((result.left as { message: string }).message).toBe(
+          'the rebase-merge finished, but reapplying stashed changes hit conflicts'
+        )
+      }
+      const { status } = await runOp(getStatus(repo))
+      expect(status.operation).toBeUndefined()
+      expect(status.conflicted).toEqual(['g.txt'])
+      expect(gitOutput(repo, ['log', '--format=%s', '-n', '1']).trim()).toBe('feature changes f')
+    } finally {
+      await runOp(closeRepo(repo))
+      removeRepoDir(repo)
+    }
   })
 })

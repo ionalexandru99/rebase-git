@@ -1937,12 +1937,13 @@ describe('GitStoreProvider — runAction', () => {
 
     const call = vi.fn().mockResolvedValue({ _tag: 'Conflict', message: 'rebase stopped' })
     const ok = await git.runAction('continueOperation', call, 'Continued rebase', {
-      conflictDescription: 'Resolve and stage the conflicted files, then continue the rebase again.'
+      conflictDescription:
+        'Resolve and stage the conflicted files, then finish from the conflict banner.'
     })
 
     expect(ok).toBe(false)
     expect(toast.warning).toHaveBeenCalledWith('Continued rebase hit conflicts', {
-      description: 'Resolve and stage the conflicted files, then continue the rebase again.'
+      description: 'Resolve and stage the conflicted files, then finish from the conflict banner.'
     })
   })
 
