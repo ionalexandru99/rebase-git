@@ -341,6 +341,61 @@ describe('a revert parked with one path conflicted and another reversed cleanly'
   })
 })
 
+// When our side renames a path the incoming side modifies, git carries that modification into the new
+// name. The merge's delta is written in the old name, so the destination holds the merge's work under
+// a name the delta never mentions — and letting it be unstaged would leave the incoming change out of
+// the merge commit entirely.
+describe('a merge that carried an incoming change into a renamed path', () => {
+  async function withRenameCarry<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
+    const fixture = makeConflictedRepo('merge-rename-carry')
+    await runOp(openRepo(fixture.path))
+    try {
+      for (const file of conflictedPaths(fixture.path)) {
+        await runOp(resolveConflict(fixture.path, file, 'ours'))
+      }
+      return await use(fixture)
+    } finally {
+      await runOp(closeRepo(fixture.path))
+      removeRepoDir(fixture.path)
+    }
+  }
+
+  it('stages the incoming change under the new name the merge delta never lists', async () => {
+    await withRenameCarry(async (fixture) => {
+      const base = gitOutput(fixture.path, ['merge-base', 'HEAD', 'MERGE_HEAD']).trim()
+      const delta = gitOutput(fixture.path, ['diff', '--name-only', base, 'MERGE_HEAD'])
+      expect(delta).not.toContain('g.txt')
+      expect(gitOutput(fixture.path, ['show', ':g.txt']).trimEnd().split('\n').pop()).toBe(
+        'incoming'
+      )
+      expect(gitOutput(fixture.path, ['show', 'HEAD:g.txt']).trimEnd().split('\n').pop()).toBe(
+        'line8'
+      )
+    })
+  })
+
+  it('refuses to unstage the renamed path', async () => {
+    await withRenameCarry(async (fixture) => {
+      const error = await failure(unstageFile(fixture.path, 'g.txt'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(gitOutput(fixture.path, ['show', ':g.txt']).trimEnd().split('\n').pop()).toBe(
+        'incoming'
+      )
+      expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+
+  it('refuses to discard the renamed path', async () => {
+    await withRenameCarry(async (fixture) => {
+      const error = await failure(discardChanges(fixture.path, ['g.txt']))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(await operationKind(fixture.path)).toBe('merge')
+    })
+  })
+})
+
 // Moving HEAD is the third way out. git does not refuse a checkout for a parked cherry-pick or
 // revert the way it does for a conflicted index — it cancels the operation to make room, says so in a
 // warning that never reaches a GUI, and the resolution waiting on Continue goes with it.

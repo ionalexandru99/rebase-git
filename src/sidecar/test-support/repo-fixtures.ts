@@ -107,6 +107,7 @@ export type ConflictFixtureKind =
   | 'merge-both-added'
   | 'modify-delete'
   | 'rename-rename'
+  | 'merge-rename-carry'
   | 'binary'
   | 'cherry-pick'
   | 'cherry-pick-sequence'
@@ -252,6 +253,26 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
     commitRepoFile(repo, 'image.bin', Buffer.from([0, 1, 2, 0, 9, 9]), 'main binary')
     return
   }
+  // Our side renames a file the incoming side modifies, and a second file conflicts so the merge
+  // parks. Git carries the incoming change into the new name, which the merge's own delta — written
+  // in the old name — never mentions.
+  if (kind === 'merge-rename-carry') {
+    writeRepoFile(repo, 'f.txt', 'line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\n')
+    writeRepoFile(repo, 'c.txt', 'c base\n')
+    git(repo, ['add', '--', 'f.txt', 'c.txt'])
+    git(repo, ['commit', '-m', 'base'])
+    git(repo, ['checkout', '-b', 'feature'])
+    writeRepoFile(repo, 'f.txt', 'line1\nline2\nline3\nline4\nline5\nline6\nline7\nincoming\n')
+    writeRepoFile(repo, 'c.txt', 'c feature\n')
+    git(repo, ['add', '--', 'f.txt', 'c.txt'])
+    git(repo, ['commit', '-m', 'feature edits f and c'])
+    git(repo, ['checkout', 'main'])
+    git(repo, ['mv', 'f.txt', 'g.txt'])
+    writeRepoFile(repo, 'c.txt', 'c main\n')
+    git(repo, ['add', '--', 'c.txt'])
+    git(repo, ['commit', '-m', 'main renames f to g and edits c'])
+    return
+  }
   if (kind === 'cherry-pick') {
     makeTwoSidedEdit(repo)
     return
@@ -303,6 +324,7 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
 function startConflict(kind: ConflictFixtureKind, repo: string): void {
   if (
     kind === 'merge' ||
+    kind === 'merge-rename-carry' ||
     kind === 'merge-both-added' ||
     kind === 'binary' ||
     kind === 'modify-delete' ||

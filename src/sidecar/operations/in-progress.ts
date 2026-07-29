@@ -111,6 +111,40 @@ async function stepRange(
 }
 
 /**
+ * Where our side renamed a path the step also touches, git carries the step's change into the new
+ * name — so the destination holds the step's work under a name the step's own delta never mentions.
+ */
+async function renameDestinations(
+  repoPath: string,
+  from: string,
+  touched: ReadonlySet<string>
+): Promise<string[]> {
+  const output = await runGit([
+    '-C',
+    repoPath,
+    'diff',
+    '-M',
+    '--name-status',
+    '--diff-filter=R',
+    '-z',
+    from,
+    'HEAD'
+  ])
+  const fields = output.split('\0')
+  const destinations: string[] = []
+  // `-z` splits a rename into three records: the status, then the source, then the destination.
+  for (let index = 0; index + 2 < fields.length; index += 3) {
+    if (!fields[index].startsWith('R')) {
+      break
+    }
+    if (touched.has(fields[index + 1])) {
+      destinations.push(fields[index + 2])
+    }
+  }
+  return destinations
+}
+
+/**
  * Of `files`, the ones the parked operation could have staged something for — a path its step does
  * not touch cannot be carrying a resolution, so whatever is staged for it is the user's own work and
  * is theirs to unstage or discard.
@@ -127,17 +161,12 @@ async function operationPaths(
   if (!range) {
     return [...files]
   }
-  const changed = await runGit([
-    '-C',
-    repoPath,
-    'diff',
-    '--name-only',
-    range.from,
-    range.to,
-    '--',
-    ...files
-  ])
-  return changed.split('\n').filter((line) => line.length > 0)
+  const changed = await runGit(['-C', repoPath, 'diff', '--name-only', '-z', range.from, range.to])
+  const touched = new Set(changed.split('\0').filter((line) => line.length > 0))
+  for (const destination of await renameDestinations(repoPath, range.from, touched)) {
+    touched.add(destination)
+  }
+  return files.filter((file) => touched.has(file))
 }
 
 export interface PathGuardOptions {
