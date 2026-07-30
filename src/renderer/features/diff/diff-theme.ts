@@ -21,6 +21,11 @@ export function diffThemeStyle(): Record<string, string> {
 }
 
 export const DIFF_UNSAFE_CSS = `
+:host {
+  --diffs-bg: var(--card);
+  background-color: var(--card);
+}
+
 [data-column-number] {
   border-right: 1px solid var(--diffs-bg-separator);
 }
