@@ -41,7 +41,11 @@ describe('DiffWorkerPoolProvider', () => {
   })
 
   it('mounts the library provider with pool and highlighter options when Worker exists', () => {
+    const constructed: Array<{ url: URL; options: WorkerOptions | undefined }> = []
     class FakeWorker {
+      constructor(url: URL, options?: WorkerOptions) {
+        constructed.push({ url, options })
+      }
       terminate(): void {}
     }
     vi.stubGlobal('Worker', FakeWorker)
@@ -58,8 +62,14 @@ describe('DiffWorkerPoolProvider', () => {
         totalASTLRUCacheSize: 240
       })
       expect(props?.highlighterOptions).toMatchObject({
-        preferredHighlighter: 'shiki-js'
+        preferredHighlighter: 'shiki-js',
+        theme: 'pierre-dark'
       })
+      const poolOptions = props?.poolOptions as { workerFactory: () => Worker }
+      poolOptions.workerFactory()
+      expect(constructed).toHaveLength(1)
+      expect(constructed[0].options).toEqual({ type: 'module' })
+      expect(String(constructed[0].url)).toContain('worker')
     } finally {
       vi.unstubAllGlobals()
     }

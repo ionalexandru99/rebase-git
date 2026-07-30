@@ -2,6 +2,16 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
+import {
+  commitRow,
+  detailsPanel,
+  diffBody,
+  diffLine,
+  diffLines,
+  diffPre,
+  diffScrollHost,
+  styleButton
+} from './diff-locators'
 import { createFixtureRepo, expect, gitIn, test } from './fixtures'
 
 const PINNED_COMMIT_ENV = {
@@ -28,24 +38,6 @@ function createModifiedFileRepo(): string {
   commitAllPinned(repo, 'update notes')
   return repo
 }
-
-const commitRow = (page: Page, subject: string) =>
-  page.getByTestId('commit-row').filter({ hasText: subject })
-
-const detailsPanel = (page: Page) => page.getByTestId('commit-details-panel')
-
-const diffBody = (page: Page) => detailsPanel(page).getByTestId('diff-body')
-
-const diffLines = (page: Page) => diffBody(page).locator('[data-line]')
-
-const diffLine = (page: Page, text: string | RegExp) => diffLines(page).filter({ hasText: text })
-
-const diffPre = (page: Page) => diffBody(page).locator('pre[data-diff]')
-
-const diffScrollHost = (page: Page) => diffBody(page).locator('.scroll-host')
-
-const styleButton = (page: Page, name: 'Unified' | 'Split') =>
-  detailsPanel(page).getByRole('button', { name, exact: true })
 
 async function openCommitDetails(page: Page, subject: string): Promise<void> {
   await expect(commitRow(page, subject)).toBeVisible({ timeout: 15_000 })

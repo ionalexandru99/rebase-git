@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
+import { commitRow, detailsPanel, diffBody, diffLine, diffLines, diffScrollHost } from './diff-locators'
 import { createFixtureRepo, expect, gitIn, revParse, setWindowSize, test } from './fixtures'
 
 function createDetailRepo(): string {
@@ -30,21 +31,8 @@ function createDetailRepo(): string {
   return repo
 }
 
-const commitRow = (page: Page, subject: string) =>
-  page.getByTestId('commit-row').filter({ hasText: subject })
-
-const detailsPanel = (page: Page) => page.getByTestId('commit-details-panel')
-
 const fileRow = (page: Page, name: string) =>
   detailsPanel(page).getByTestId('commit-file-row').filter({ hasText: name })
-
-const diffBody = (page: Page) => detailsPanel(page).getByTestId('diff-body')
-
-const diffLines = (page: Page) => diffBody(page).locator('[data-line]')
-
-const diffLine = (page: Page, text: string | RegExp) => diffLines(page).filter({ hasText: text })
-
-const diffScrollHost = (page: Page) => diffBody(page).locator('.scroll-host')
 
 test('shows a commit’s message, identity, files and diff in the details panel', async ({
   harness

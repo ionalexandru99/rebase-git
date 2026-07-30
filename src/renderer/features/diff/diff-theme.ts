@@ -9,7 +9,7 @@ const DIFF_THEME_STYLE: Record<string, string> = {
   '--diffs-bg-selection-override': 'var(--brand)',
   '--diffs-bg-selection-number-override': 'var(--brand)',
   '--diffs-bg-hover-override': 'var(--brand)',
-  '--diffs-fg-conflict-marker-override': 'oklch(0.7 0.15 60)',
+  '--diffs-fg-conflict-marker-override': 'var(--orange)',
   '--diffs-font-family': 'var(--font-mono)',
   '--diffs-font-size': '14px',
   '--diffs-line-height': '24px',
