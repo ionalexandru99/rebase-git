@@ -7,8 +7,6 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['src/sidecar/**/*.test.{ts,tsx}'],
-    minWorkers: 1,
-    maxWorkers: 2,
     testTimeout: 15_000,
     hookTimeout: 15_000,
     env: {
