@@ -11,6 +11,7 @@ import {
   processAlive,
   waitUntil
 } from '../../test-support/hanging-git'
+import { removeRepoDir } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import { repoLockCount } from '../lock'
 
@@ -48,8 +49,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await runOp(closeRepo(repoDir))
   // Closing kills the session's commit-graph write mid-flight, and Windows keeps a killed process's
-  // files undeletable for a moment after it exits — long enough to fail this rm with EPERM.
-  fs.rmSync(baseDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 })
+  // files undeletable for a moment after it exits — long enough to outlast every retry.
+  removeRepoDir(baseDir)
 })
 
 describe('fetch does not serialize behind the repo lock', () => {
