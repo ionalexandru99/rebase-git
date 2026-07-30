@@ -1,9 +1,9 @@
+import type { HunkLineSelection } from '@shared/rpc'
 import type { FileDiff, GitStatus } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
 import {
   buildHunkPatch,
   buildSelectedLinesPatch,
-  type HunkLineSelection,
   type ParsedFileDiff,
   parseUnifiedDiff,
   toFileDiff
@@ -274,7 +274,7 @@ function applyLines<GuardError = never>(
         const unmerged = yield* tryGit(() => unmergedPaths(repoPath))
         if (unmerged.includes(file)) {
           return yield* Effect.fail(
-            new GitError({ message: `cannot stage lines of conflicted file: ${file}` })
+            new GitError({ message: `cannot ${direction} lines of conflicted file: ${file}` })
           )
         }
         const { parsed } = yield* tryGit(() => readDiff(repoPath, file, direction === 'unstage'))

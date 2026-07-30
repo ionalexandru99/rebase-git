@@ -1,4 +1,5 @@
 import { fingerprintHunk } from '@shared/hunk-fingerprint'
+import type { HunkLineSelection } from '@shared/rpc'
 import type { DiffHunk, DiffLine, FileDiff } from '@shared/schemas/git'
 
 export interface ParsedHunk extends DiffHunk {
@@ -119,12 +120,6 @@ export function buildHunksPatch(
   return parsed.rawHeader + hunks.map((hunk) => hunk.raw).join('')
 }
 
-export interface HunkLineSelection {
-  hunkHeader: string
-  lineIndexes: readonly number[]
-  fingerprint: string
-}
-
 type Direction = 'stage' | 'unstage'
 
 interface EmittedLine {
@@ -227,7 +222,8 @@ function renderReducedHunk(
   baseDelta: number
 ): string {
   const preservedStart = direction === 'stage' ? hunk.oldStart : hunk.newStart
-  const derivedStart = preservedStart + baseDelta + drift
+  const derivedCount = direction === 'stage' ? reduced.newCount : reduced.oldCount
+  const derivedStart = Math.max(preservedStart + baseDelta + drift, derivedCount > 0 ? 1 : 0)
   const oldStart = direction === 'stage' ? preservedStart : derivedStart
   const newStart = direction === 'stage' ? derivedStart : preservedStart
   const trailer = hunk.header.replace(HEADER_TRAILER_RE, '')
