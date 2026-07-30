@@ -112,6 +112,22 @@ describe('hunk staging on files git does not track yet', () => {
     expect(remaining.diff.hunks[0].lines.some((line) => line.text === 'line 36 EDITED')).toBe(true)
   })
 
+  // GetDiff ships the raw patch alongside the parsed hunks and the renderer parses it again, so the
+  // two have to describe the same diff. The untracked fallback is where they can silently diverge:
+  // the patch comes from a second git invocation, not the one the first read returned nothing from.
+  it('ships the untracked fallback text as the patch, matching the hunks beside it', async () => {
+    write('patch-check.txt', ['alpha', 'beta'])
+
+    const result = await runOp(getDiff(repoDir, 'patch-check.txt', false))
+
+    expect(result.patch).toContain('new file mode')
+    expect(result.patch).toContain('@@ -0,0 +1,2 @@')
+    for (const hunk of result.diff.hunks) {
+      expect(result.patch).toContain(hunk.header)
+    }
+    expect(result.patch).toContain('+alpha')
+  })
+
   it('unstages the hunk of a staged new file back to untracked', async () => {
     write('staged-new.txt', ['alpha', 'beta'])
     git('add', '--', 'staged-new.txt')

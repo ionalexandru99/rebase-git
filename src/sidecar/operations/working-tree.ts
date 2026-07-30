@@ -169,9 +169,10 @@ async function readConflictDiff(repoPath: string, file: string): Promise<string>
 // /dev/null for the first case and to `--ours` for the second. Every caller has to walk the same
 // chain: a hunk the renderer shows is a hunk the patch builder must be able to find again, or its
 // checkbox fails with HunkNotFound.
-// `raw` is always the text `parsed` was parsed from, including when a fallback replaced it — the
-// renderer parses that same patch itself, so shipping the pre-fallback text would hand it a diff
-// that disagrees with the hunks alongside it.
+//
+// `raw` is always the text `parsed` came from, fallbacks included. The renderer parses that patch
+// itself, so returning the pre-fallback text would hand it a diff that disagrees with the hunks
+// shipped beside it.
 async function readDiff(
   repoPath: string,
   file: string,
