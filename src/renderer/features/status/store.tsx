@@ -405,11 +405,14 @@ export function useCommitFileDiff(sha: string | null, file: string | null, renam
     enabled: Boolean(repoPath && sha && file),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: async (): Promise<FileDiff> => {
+    queryFn: async (): Promise<{ diff: FileDiff; patch: string }> => {
       if (!repoPath || !sha || !file) {
         throw new Error('No commit file selected')
       }
-      return unwrapOk(await rpcGetDiff(repoPath, file, false, { commit: sha, renameSource })).diff
+      const response = unwrapOk(
+        await rpcGetDiff(repoPath, file, false, { commit: sha, renameSource })
+      )
+      return { diff: response.diff, patch: response.patch }
     }
   })
 }

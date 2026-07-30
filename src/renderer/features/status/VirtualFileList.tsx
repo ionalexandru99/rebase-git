@@ -10,10 +10,9 @@ import { FileRow } from './FileRow'
 export interface SelectedFile {
   file: string
   renameSource?: string
-  source?: 'worktree' | 'head-commit' | 'commit'
+  source?: 'worktree' | 'head-commit'
   group?: StatusGroupKind
   range?: string
-  commit?: string
 }
 
 export interface FileListSection {

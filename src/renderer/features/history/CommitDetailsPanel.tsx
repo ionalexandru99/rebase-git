@@ -1,9 +1,8 @@
 import type { CommitDetail, CommitDetailFile } from '@shared/schemas/git'
 import { CopyIcon, GitCommitHorizontalIcon, XIcon } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { DiffPanel } from '@/features/diff/DiffPanel'
+import { type CommitDiffSelection, CommitDiffView } from '@/features/diff/CommitDiffView'
 import { parseRefs } from '@/features/history/graph/refs'
-import type { SelectedFile } from '@/features/status/StatusPanel'
 import type { CommitAction } from '@/lib/git-actions'
 import type { GitLogEntry } from '@/types'
 import { EmptyState } from '../../components/ui/empty-state'
@@ -131,14 +130,14 @@ function SingleCommitDetails(props: {
   }, [files])
 
   const selectedFile = files.find((file) => file.path === selectedPath)
-  const selected = useMemo<SelectedFile | null>(
+  const selected = useMemo<CommitDiffSelection | null>(
     () =>
       selectedFile
         ? {
+            commit: props.sha,
             file: selectedFile.path,
             renameSource: selectedFile.oldPath,
-            source: 'commit',
-            commit: props.sha
+            binary: selectedFile.binary
           }
         : null,
     [selectedFile, props.sha]
@@ -218,7 +217,7 @@ function SingleCommitDetails(props: {
                 />
               </div>
               <div className="min-h-0 min-w-0 overflow-hidden">
-                <DiffPanel selected={selected} />
+                <CommitDiffView selected={selected} />
               </div>
             </div>
           )}

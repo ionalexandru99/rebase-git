@@ -11,7 +11,7 @@ import {
 } from '@/features/diff/diff-highlight'
 import { type RepoQueryKeys, repoQueryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
-import { useCommitFileDiff, useFileDiff, useRepoSession, useWorkingTreeStatus } from '@/stores/git'
+import { useFileDiff, useRepoSession, useWorkingTreeStatus } from '@/stores/git'
 import { Checkbox } from '../../components/ui/checkbox'
 import { EmptyState } from '../../components/ui/empty-state'
 import type { SelectedFile } from '../status/StatusPanel'
@@ -43,13 +43,11 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const source = props.selected?.source ?? 'worktree'
   const isHeadCommit = source === 'head-commit'
-  const isCommit = source === 'commit'
   const isWorktree = source === 'worktree'
   const isConflict = props.selected?.group === 'conflicts'
   const showsStagedSide = props.selected?.group === 'staged'
   const worktreeFile = isWorktree ? (props.selected?.file ?? null) : null
   const headFile = isHeadCommit ? (props.selected?.file ?? null) : null
-  const commitFile = isCommit ? (props.selected?.file ?? null) : null
 
   const isUntracked =
     props.selected !== null &&
@@ -58,14 +56,9 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const worktreeQuery = useFileDiff(worktreeFile, showsStagedSide)
   const rangeQuery = useFileDiff(headFile, false, props.selected?.range)
-  const commitQuery = useCommitFileDiff(
-    isCommit ? (props.selected?.commit ?? null) : null,
-    commitFile,
-    props.selected?.renameSource
-  )
   const [pendingHunk, setPendingHunk] = useState<PendingHunk | null>(null)
 
-  const activeQuery = isCommit ? commitQuery : isHeadCommit ? rangeQuery : worktreeQuery
+  const activeQuery = isHeadCommit ? rangeQuery : worktreeQuery
   const diff = props.selected ? (activeQuery.data ?? null) : null
   const isBinary = Boolean(diff?.binary)
   const hasError = activeQuery.isError
@@ -139,12 +132,7 @@ export function DiffPanel(props: DiffPanelProps) {
   return (
     <section className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
       {props.selected ? (
-        <div
-          className={cn(
-            'flex shrink-0 items-center gap-2.5 border-b pl-3.5 pr-2',
-            isCommit ? 'min-h-8 py-1' : 'min-h-[46px] py-1.5'
-          )}
-        >
+        <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 border-b py-1.5 pl-3.5 pr-2">
           {hasAnyHunks && !isBinary && isHeadCommit && props.amendDrop ? (
             <Checkbox
               checked={props.amendDrop.dropState === 'kept'}
