@@ -16,14 +16,12 @@ import {
   unstageAll,
   unstageFile
 } from '../../operations/index'
+import { makeGit } from '../../test-support/git-cli'
 import { runOp } from '../../test-support/run-op'
 import { handlersLayer } from '../handlers'
 
 let repoDir: string
-
-function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
-}
+let git: ReturnType<typeof makeGit>
 
 function write(name: string, contents: string): void {
   fs.writeFileSync(path.join(repoDir, name), contents)
@@ -66,6 +64,7 @@ beforeAll(async () => {
   const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-stage-')))
   repoDir = path.join(base, 'repo')
   fs.mkdirSync(repoDir)
+  git = makeGit(repoDir)
   execFileSync('git', ['-C', repoDir, 'init', '-b', 'main'])
   git('config', 'user.email', 'test@example.com')
   git('config', 'user.name', 'Test')

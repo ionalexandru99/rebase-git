@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -6,6 +5,7 @@ import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import type { DiffLine } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { makeGit } from '../../test-support/git-cli'
 import {
   conflictedPaths,
   makeConflictedRepo,
@@ -15,10 +15,7 @@ import { runOp } from '../../test-support/run-op'
 import { closeRepo, getDiff, openRepo, stageLines, unstageLines } from '../index'
 
 let repoDir: string
-
-function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
-}
+let git: ReturnType<typeof makeGit>
 
 function write(file: string, content: string): void {
   fs.mkdirSync(path.dirname(path.join(repoDir, file)), { recursive: true })
@@ -61,6 +58,7 @@ async function selectLines(
 
 beforeEach(async () => {
   repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-line-stage-')))
+  git = makeGit(repoDir)
   git('init', '-b', 'main')
   git('config', 'user.email', 'test@example.com')
   git('config', 'user.name', 'Test')
