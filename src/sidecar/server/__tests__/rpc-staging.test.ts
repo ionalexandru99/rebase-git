@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { RpcTest } from '@effect/rpc'
 import { GitError, HunkNotFound, RepoNotOpen } from '@shared/git-rpc-errors'
-import { SidecarRpcs, StageHunk } from '@shared/rpc'
+import { SidecarRpcs, StageHunk, StageLines } from '@shared/rpc'
 import { Effect, Either, Schema } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { handlersLayer } from '../handlers'
@@ -22,6 +22,64 @@ describe('StageHunk RPC payload schema', () => {
     expect(Either.isLeft(decode(schema, { repoPath: '/repo', file: 'a.txt' }))).toBe(true)
     expect(
       Either.isLeft(decode(schema, { repoPath: '/repo', file: 'a.txt', hunkHeader: '   ' }))
+    ).toBe(true)
+  })
+})
+
+describe('StageLines RPC payload schema', () => {
+  const validSelection = {
+    hunkHeader: '@@ -1,3 +1,4 @@',
+    lineIndexes: [1, 2],
+    fingerprint: 'a1b2c3d4'
+  }
+
+  it('accepts a payload with fingerprinted selections', () => {
+    expect(
+      Either.isRight(
+        decode(StageLines.payloadSchema, {
+          repoPath: '/repo',
+          file: 'a.txt',
+          selections: [validSelection]
+        })
+      )
+    ).toBe(true)
+  })
+
+  it('rejects an empty selections array', () => {
+    expect(
+      Either.isLeft(
+        decode(StageLines.payloadSchema, { repoPath: '/repo', file: 'a.txt', selections: [] })
+      )
+    ).toBe(true)
+  })
+
+  it('rejects a selection without a fingerprint or with negative line indexes', () => {
+    expect(
+      Either.isLeft(
+        decode(StageLines.payloadSchema, {
+          repoPath: '/repo',
+          file: 'a.txt',
+          selections: [{ hunkHeader: '@@ -1,3 +1,4 @@', lineIndexes: [0] }]
+        })
+      )
+    ).toBe(true)
+    expect(
+      Either.isLeft(
+        decode(StageLines.payloadSchema, {
+          repoPath: '/repo',
+          file: 'a.txt',
+          selections: [{ ...validSelection, lineIndexes: [-1] }]
+        })
+      )
+    ).toBe(true)
+    expect(
+      Either.isLeft(
+        decode(StageLines.payloadSchema, {
+          repoPath: '/repo',
+          file: 'a.txt',
+          selections: [{ ...validSelection, lineIndexes: [] }]
+        })
+      )
     ).toBe(true)
   })
 })

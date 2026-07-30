@@ -150,6 +150,28 @@ export const UnstageHunk = Rpc.make('unstageHunk', {
   error: GuardedHunkError
 })
 
+export const HunkLineSelectionSchema = Schema.Struct({
+  hunkHeader: OpaqueHunkHeaderString,
+  lineIndexes: Schema.Array(Schema.Int.pipe(Schema.nonNegative())).pipe(Schema.minItems(1)),
+  fingerprint: RequiredString
+})
+
+export type HunkLineSelection = Schema.Schema.Type<typeof HunkLineSelectionSchema>
+
+const LineSelections = Schema.Array(HunkLineSelectionSchema).pipe(Schema.minItems(1))
+
+export const StageLines = Rpc.make('stageLines', {
+  payload: { repoPath: OpaqueString, file: OpaqueString, selections: LineSelections },
+  success: Schema.Void,
+  error: HunkError
+})
+
+export const UnstageLines = Rpc.make('unstageLines', {
+  payload: { repoPath: OpaqueString, file: OpaqueString, selections: LineSelections },
+  success: Schema.Void,
+  error: GuardedHunkError
+})
+
 export const DiscardChanges = Rpc.make('discardChanges', {
   payload: { repoPath: OpaqueString, files: FileList },
   success: Schema.Void,
@@ -380,6 +402,8 @@ export const SidecarRpcs = RpcGroup.make(
   UnstageAll,
   StageHunk,
   UnstageHunk,
+  StageLines,
+  UnstageLines,
   DiscardChanges,
   DiscardAll,
   MergeBranch,

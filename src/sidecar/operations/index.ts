@@ -49,9 +49,11 @@ export {
   stageAll,
   stageFile,
   stageHunk,
+  stageLines,
   unstageAll,
   unstageFile,
-  unstageHunk
+  unstageHunk,
+  unstageLines
 } from './working-tree'
 
 export async function resolveGitDirs(
