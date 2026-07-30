@@ -307,6 +307,21 @@ describe('DiffPanel', () => {
     expect(sidecarMock.stageHunk).not.toHaveBeenCalled()
   })
 
+  // A rejected mutation already rolls the status back and banners the reason; the click must not
+  // also end as an unhandled rejection, and the hunk has to become clickable again.
+  it('recovers when the hunk mutation rejects outright', async () => {
+    mockPartiallyStagedDiff()
+    sidecarMock.stageHunk.mockRejectedValue(new Error('sidecar is gone'))
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Stage hunk' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Stage hunk' })).not.toBeDisabled()
+    })
+    expect(screen.getAllByTestId('diff-hunk')).toHaveLength(1)
+  })
+
   it('keeps a staged hunk on screen until its refetch lands, then lets it leave the side', async () => {
     const lastHunk = hunkAt('@@ -30,2 +30,2 @@ last', 30, 30)
     let unstagedCalls = 0

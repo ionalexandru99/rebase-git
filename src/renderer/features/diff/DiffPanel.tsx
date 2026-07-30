@@ -134,6 +134,10 @@ export function DiffPanel(props: DiffPanelProps) {
       } else {
         await stageHunkOp(file, hunk.header, { fullyStagesFile: isLastOnSide })
       }
+    } catch {
+      // A transport or decode failure rejects the mutation, which already rolled the status back
+      // and put the reason on the banner. Swallowing it here only keeps the click from ending as an
+      // unhandled rejection.
     } finally {
       clearPendingHunk(pending)
     }

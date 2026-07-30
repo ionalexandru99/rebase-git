@@ -882,9 +882,11 @@ export type FileListGroup = 'conflicts' | 'staged' | 'unstaged' | 'head-commit'
 // Which group a row sits in is how staged state reads now — there is no per-row checkbox to poll.
 // A renamed row reads `old.ts → new.ts`, so the row carries its path as an attribute rather than
 // leaving the helpers to match on rendered text.
+const cssAttributeValue = (value: string) => value.replace(/["\\]/g, '\\$&')
 export const fileRow = (page: Page, file: string, group?: FileListGroup) => {
   const groupFilter = group ? `[data-group="${group}"]` : ''
-  return page.locator(`[data-testid="status-file-row"]${groupFilter}[data-file="${file}"]`)
+  const path = cssAttributeValue(file)
+  return page.locator(`[data-testid="status-file-row"]${groupFilter}[data-file="${path}"]`)
 }
 export const stagedFileRow = (page: Page, file: string) => fileRow(page, file, 'staged')
 export const unstagedFileRow = (page: Page, file: string) => fileRow(page, file, 'unstaged')
