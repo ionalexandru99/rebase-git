@@ -393,7 +393,7 @@ describe('DiffPanel', () => {
     await waitFor(() => {
       const keywords = screen
         .getAllByText('const')
-        .filter((element) => element.getAttribute('style')?.includes('--shiki-dark'))
+        .filter((element) => element.getAttribute('style')?.includes('color'))
       expect(keywords).toHaveLength(2)
     })
   })

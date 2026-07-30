@@ -67,7 +67,7 @@ describe('main-process E2E control', () => {
   it('atomically replaces the store through the gated control', () => {
     const target: Record<string, unknown> = {}
     const replacement = {
-      theme: 'light' as const,
+      sidebarOpen: false,
       onboardingComplete: true
     }
     const replacedStore = { ...storeDefaults, ...replacement }

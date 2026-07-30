@@ -26,22 +26,6 @@ describe('RepoRail', () => {
     expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
   })
 
-  it('renders the theme toggle in the rail', () => {
-    render(
-      <RepoRail
-        tabs={baseTabs}
-        activeTabId="a"
-        onSelect={vi.fn()}
-        onClose={vi.fn()}
-        onNew={vi.fn()}
-      />
-    )
-
-    expect(
-      screen.getByRole('button', { name: /Switch to (light|dark) theme/i })
-    ).toBeInTheDocument()
-  })
-
   it('marks the active tab with aria-selected', () => {
     render(
       <RepoRail

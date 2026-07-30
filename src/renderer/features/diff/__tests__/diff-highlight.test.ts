@@ -38,7 +38,7 @@ describe('languageForFile', () => {
 })
 
 describe('alignHunkTokens', () => {
-  const tok = (text: string) => [{ content: text, lightColor: '', darkColor: '' }]
+  const tok = (text: string) => [{ content: text, color: '' }]
 
   it('routes del lines to the old side, add lines to the new side, context to both', () => {
     const lines = [
@@ -87,8 +87,7 @@ describe('highlightHunk', () => {
     expect(rebuilt).toEqual(lines.map((diffLine) => diffLine.text))
     const addLine = result?.[2]
     const keyword = addLine?.find((token) => token.content === 'const')
-    expect(keyword?.lightColor).toBe('#A631BE')
-    expect(keyword?.darkColor).toBe('#D568EA')
+    expect(keyword?.color).toBe('#D568EA')
   })
 })
 

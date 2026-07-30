@@ -157,25 +157,13 @@ test('closing tabs activates the survivor; closing the last resets to a blank pi
   })
 })
 
-test('persisted tabs and theme survive a second relaunch without re-seeding', async ({
-  harness
-}) => {
+test('persisted tabs survive a second relaunch without re-seeding', async ({ harness }) => {
   const repoA = createFixtureRepo()
   const page = await harness.openRepo(repoA)
 
   await expect(page.getByRole('tab', { name: path.basename(repoA) })).toBeVisible({
     timeout: 10_000
   })
-  await expect(page.locator('html')).toHaveClass(/dark/)
-
-  const switchToLight = page.getByRole('button', { name: 'Switch to light theme' })
-  await expect(switchToLight).toBeVisible({ timeout: 10_000 })
-  await switchToLight.click()
-
-  await expect(page.locator('html')).not.toHaveClass(/dark/)
-  await expect
-    .poll(() => page.evaluate(() => localStorage.getItem('theme')), { timeout: 10_000 })
-    .toBe('light')
 
   const mainProcessId = await harness.mainProcessId()
   const relaunched = await harness.restart()
@@ -185,11 +173,6 @@ test('persisted tabs and theme survive a second relaunch without re-seeding', as
   await expect(relaunched.getByRole('tab', { name: path.basename(repoA) })).toBeVisible({
     timeout: 10_000
   })
-  await expect(relaunched.locator('html')).not.toHaveClass(/dark/)
-  await expect(relaunched.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible({
-    timeout: 10_000
-  })
-  expect(await relaunched.evaluate(() => localStorage.getItem('theme'))).toBe('light')
   await expect.poll(() => harness.inspectLifecycle()).toMatchObject({
     sidecarProcessCount: 1,
     sidecarRespawnCount: 0

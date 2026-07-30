@@ -11,12 +11,10 @@ async function runSmokeTest() {
   const electronBin = findElectron(rootDir)
   const mainJs = resolve(rootDir, 'out/main/index.js')
   const rendererHtml = resolve(rootDir, 'out/renderer/index.html')
-  const themeBootstrap = resolve(rootDir, 'out/renderer/theme-init.js')
   const html = readFileSync(rendererHtml, 'utf8')
-  if (!html.includes('<script src="./theme-init.js"></script>')) {
-    throw new Error('Packaged theme bootstrap must be a relative parser-blocking script')
+  if (!html.includes('style="background-color: #131313"')) {
+    throw new Error('Packaged document must paint the dark background before styles load')
   }
-  accessSync(themeBootstrap, constants.R_OK)
   accessSync(findWindowIcon(resolve(rootDir, 'out/main')), constants.R_OK)
 
   console.log('\nLaunching Electron smoke test...')

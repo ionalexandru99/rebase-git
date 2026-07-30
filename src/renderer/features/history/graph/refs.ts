@@ -68,7 +68,7 @@ export function refClass(kind: ParsedRef['kind']): string {
     case 'tag':
       return 'border-chart-3/50 bg-chart-3/20 text-chart-3'
     case 'stash':
-      return 'border-amber-500/50 bg-amber-500/20 text-amber-600 dark:text-amber-400'
+      return 'border-amber-500/50 bg-amber-500/20 text-amber-400'
     default:
       return ''
   }

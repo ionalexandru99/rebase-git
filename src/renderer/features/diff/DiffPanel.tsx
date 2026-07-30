@@ -1,7 +1,7 @@
 import type { DiffHunk, DiffLine } from '@shared/schemas/git'
 import { useQuery } from '@tanstack/react-query'
 import { FileDiffIcon } from 'lucide-react'
-import { type CSSProperties, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { HeadDropState } from '@/features/commit/amend-drops'
 import {
   highlightHunk,
@@ -296,7 +296,7 @@ function diffLineKey(line: DiffLine) {
 }
 
 function tokenKey(token: LineTokens[number], index: number) {
-  return `${token.content}:${token.lightColor}:${token.darkColor}:${index}`
+  return `${token.content}:${token.color}:${index}`
 }
 
 function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
@@ -326,16 +326,7 @@ function DiffLineRow(props: { line: DiffLine; tokens: LineTokens | null }) {
       <span>
         {props.tokens
           ? props.tokens.map((token, index) => (
-              <span
-                key={tokenKey(token, index)}
-                className="text-(--shiki-light) dark:text-(--shiki-dark)"
-                style={
-                  {
-                    '--shiki-light': token.lightColor,
-                    '--shiki-dark': token.darkColor
-                  } as CSSProperties
-                }
-              >
+              <span key={tokenKey(token, index)} style={{ color: token.color }}>
                 {token.content}
               </span>
             ))

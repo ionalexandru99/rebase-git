@@ -2,7 +2,6 @@ import { PlusIcon, XIcon } from 'lucide-react'
 import { avatarColor, avatarInitials } from '@/features/repos/repo-avatar'
 import { cn } from '@/lib/utils'
 import type { TabDescriptor } from '../hooks/useTabs'
-import { ThemeToggle } from './ThemeToggle'
 
 interface RepoRailProps {
   tabs: TabDescriptor[]
@@ -54,9 +53,6 @@ export function RepoRail(props: RepoRailProps) {
         >
           <PlusIcon className="size-4" />
         </button>
-      </div>
-      <div className="no-drag flex shrink-0 justify-center px-1 pb-3">
-        <ThemeToggle />
       </div>
     </nav>
   )

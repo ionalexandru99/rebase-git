@@ -27,7 +27,6 @@ interface CommitGraphCanvasProps {
   scrollContainer: HTMLDivElement | undefined
   viewportHeight: number
   visibleSet: Set<string> | null
-  themeNonce: number
   rowCount: number
   mergeSideRanges?: ReadonlyMap<string, MergeSideRange>
 }
@@ -45,8 +44,7 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     const edges = createEdgeBatch()
     const walker = createLaneWalker()
     let frame: number | null = null
-    let drawnThemeNonce = -1
-    let backgroundColor = '#ffffff'
+    const backgroundColor = readCssVar('--color-background', '#131313')
 
     const draw = () => {
       const canvas = canvasRef.current
@@ -56,11 +54,6 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       }
       const { layout, topology, commits, metrics, viewportHeight, visibleSet, rowCount } =
         latest.current
-      if (latest.current.themeNonce !== drawnThemeNonce) {
-        drawnThemeNonce = latest.current.themeNonce
-        backgroundColor = readCssVar('--color-background', '#ffffff')
-      }
-
       const scrollTop = scroller.scrollTop
       const rowHeight = metrics.rowHeight
       const firstRow = Math.max(0, Math.floor(scrollTop / rowHeight))

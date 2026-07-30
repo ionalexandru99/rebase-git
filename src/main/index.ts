@@ -10,7 +10,6 @@ import { installE2eControl } from './app/e2e-control'
 import { setupContextMenu } from './app/menu'
 import { createBeforeQuitHandler } from './app/shutdown'
 import { focusExistingWindow } from './app/single-instance'
-import { resolveBackgroundColor } from './app/theme'
 import { setupUpdater } from './app/updater'
 import * as cloneIpc from './ipc/clone'
 import * as logStreamIpc from './ipc/log-stream'
@@ -19,9 +18,10 @@ import * as settingsIpc from './ipc/settings'
 import * as workspaceIpc from './ipc/workspace'
 import { killSidecar, startSidecar } from './sidecar/process'
 import { wireProcessRecovery, wireWindowRecovery } from './sidecar/recovery'
-import { getTheme, replaceStoreWithDefaults } from './store/index'
+import { replaceStoreWithDefaults } from './store/index'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const WINDOW_BACKGROUND_COLOR = '#131313'
 
 function resolvePreload(): string {
   const base = path.join(__dirname, '../preload/index')
@@ -108,7 +108,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     icon: appIcon,
-    backgroundColor: resolveBackgroundColor(getTheme()),
+    backgroundColor: WINDOW_BACKGROUND_COLOR,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: resolvePreload(),

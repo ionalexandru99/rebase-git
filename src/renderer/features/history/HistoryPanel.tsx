@@ -12,7 +12,6 @@ import type { GitLog, GitLogEntry } from '@/types'
 import { EmptyState } from '../../components/ui/empty-state'
 import { useDraggablePane } from '../../hooks/useDraggablePane'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
-import { useThemeNonce } from '../../hooks/useThemeNonce'
 import { CommitDetailsPanel } from './CommitDetailsPanel'
 import { CommitGraphCanvas } from './CommitGraphCanvas'
 import { CommitRow } from './CommitRow'
@@ -149,7 +148,6 @@ export function HistoryPanel(props: HistoryPanelProps) {
     isHiddenParent
   })
 
-  const themeNonce = useThemeNonce()
   const gridTail = 'var(--history-grid-tail)'
 
   const colorByRefKey = useMemo(() => {
@@ -241,7 +239,6 @@ export function HistoryPanel(props: HistoryPanelProps) {
           onLoadMore={props.onLoadMore}
           repoPath={props.repoPath}
           visibleSet={visibleSet}
-          themeNonce={themeNonce}
           mergeSideRanges={mergeSideRanges}
           onCurrentBranchSet={onCurrentBranchSet}
           gridTail={gridTail}
@@ -288,7 +285,6 @@ interface HistoryViewportProps {
   onLoadMore?: () => void
   repoPath?: string | null
   visibleSet: Set<string> | null
-  themeNonce: number
   mergeSideRanges: ReadonlyMap<string, MergeSideRange>
   onCurrentBranchSet: Set<string> | null
   gridTail: string
@@ -388,7 +384,6 @@ function HistoryViewport(props: HistoryViewportProps) {
             scrollContainer={scrollElement}
             viewportHeight={viewportHeight}
             visibleSet={props.visibleSet}
-            themeNonce={props.themeNonce}
             rowCount={props.validRows}
             mergeSideRanges={props.mergeSideRanges}
           />
