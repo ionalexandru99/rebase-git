@@ -8,6 +8,10 @@ export default defineConfig({
   workers: 1,
   timeout: 60_000,
   reporter: 'html',
+  snapshotPathTemplate: '{testDir}/__screenshots__/{testFileName}/{arg}{ext}',
+  expect: {
+    toHaveScreenshot: { maxDiffPixelRatio: 0.02 },
+  },
   use: {
     trace: 'on-first-retry',
   },

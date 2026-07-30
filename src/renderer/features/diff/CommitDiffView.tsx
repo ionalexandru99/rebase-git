@@ -126,7 +126,10 @@ export function CommitDiffView(props: CommitDiffViewProps) {
         <StateNotice testId="diff-body">No changes to show.</StateNotice>
       ) : (
         <div className="min-h-0 overflow-hidden" data-testid="diff-body">
-          <Virtualizer className="scroll-host h-full min-h-0" style={diffThemeStyle()}>
+          <Virtualizer
+            className="scroll-host h-full min-h-0 overflow-y-auto"
+            style={diffThemeStyle()}
+          >
             {parsedFiles.map((file) => (
               <FileDiff key={file.name} fileDiff={file} options={options} />
             ))}

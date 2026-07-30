@@ -38,6 +38,14 @@ const detailsPanel = (page: Page) => page.getByTestId('commit-details-panel')
 const fileRow = (page: Page, name: string) =>
   detailsPanel(page).getByTestId('commit-file-row').filter({ hasText: name })
 
+const diffBody = (page: Page) => detailsPanel(page).getByTestId('diff-body')
+
+const diffLines = (page: Page) => diffBody(page).locator('[data-line]')
+
+const diffLine = (page: Page, text: string | RegExp) => diffLines(page).filter({ hasText: text })
+
+const diffScrollHost = (page: Page) => diffBody(page).locator('.scroll-host')
+
 test('shows a commit’s message, identity, files and diff in the details panel', async ({
   harness
 }) => {
@@ -72,11 +80,11 @@ test('shows a commit’s message, identity, files and diff in the details panel'
   await expect(fileRows.nth(2)).toContainText('fresh.txt')
   await expect(fileRows.nth(3)).toContainText('keep.txt')
 
-  await expect(panel.getByTestId('diff-hunk')).toBeVisible()
-  await expect(panel.getByTestId('diff-body')).toContainText('nested TWO')
+  await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
+  await expect(diffLine(page, 'nested TWO').first()).toBeVisible()
 
   await fileRow(page, 'keep.txt').click()
-  await expect(panel.getByTestId('diff-body')).toContainText('TWO')
+  await expect(diffLine(page, /^TWO$/).first()).toBeVisible()
 
   await expect(panel.locator('input[type="checkbox"]')).toHaveCount(0)
 })
@@ -91,14 +99,14 @@ test('collapses a directory in the changed-files tree without changing the diff'
   await commitRow(page, 'reshape the files').dblclick()
 
   const panel = detailsPanel(page)
-  await expect(panel.getByTestId('diff-hunk')).toBeVisible({ timeout: 10_000 })
+  await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
   await expect(fileRow(page, 'nested.txt')).toBeVisible()
 
   await panel.getByTestId('commit-directory-row').click()
 
   await expect(fileRow(page, 'nested.txt')).toHaveCount(0)
   await expect(fileRow(page, 'keep.txt')).toBeVisible()
-  await expect(panel.getByTestId('diff-body')).toContainText('nested TWO')
+  await expect(diffLine(page, 'nested TWO').first()).toBeVisible()
 
   await panel.getByTestId('commit-directory-row').click()
   await expect(fileRow(page, 'nested.txt')).toBeVisible()
@@ -116,19 +124,18 @@ test('scrolls a long commit diff inside the panel', async ({ harness }) => {
   await expect(page.getByText('add a long file')).toBeVisible({ timeout: 10_000 })
   await commitRow(page, 'add a long file').dblclick()
 
-  const panel = detailsPanel(page)
-  await expect(panel.getByTestId('diff-hunk').first()).toBeVisible({ timeout: 10_000 })
+  await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
 
-  const body = panel.getByTestId('diff-body')
-  const overflows = await body.evaluate(
+  const host = diffScrollHost(page)
+  const overflows = await host.evaluate(
     (element) => element.scrollHeight > element.clientHeight + 1
   )
   expect(overflows).toBe(true)
 
-  await body.evaluate((element) => {
+  await host.evaluate((element) => {
     element.scrollTop = 400
   })
-  expect(await body.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  expect(await host.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
 })
 
 test('selects several commits and summarises them instead of guessing a merged diff', async ({
@@ -140,7 +147,7 @@ test('selects several commits and summarises them instead of guessing a merged d
   await expect(page.getByText('reshape the files')).toBeVisible({ timeout: 10_000 })
 
   await commitRow(page, 'reshape the files').dblclick()
-  await expect(detailsPanel(page).getByTestId('diff-hunk')).toBeVisible({ timeout: 10_000 })
+  await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
 
   await commitRow(page, 'initial').click({ modifiers: ['Shift'] })
 
@@ -150,7 +157,7 @@ test('selects several commits and summarises them instead of guessing a merged d
   await expect(summary).toContainText('reshape the files')
   await expect(summary).toContainText('add files')
   await expect(summary).toContainText('initial')
-  await expect(panel.getByTestId('diff-hunk')).toHaveCount(0)
+  await expect(diffLines(page)).toHaveCount(0)
 
   await page.keyboard.press('Escape')
   await expect(panel).toBeHidden()
@@ -173,10 +180,10 @@ test('follows a plain click while open, and closes from the panel button', async
   await commitRow(page, 'add files').click()
   await expect(panel.getByTestId('commit-stats')).toContainText('3 files', { timeout: 10_000 })
   await expect(panel.getByTestId('commit-file-row').first()).toContainText('nested.txt')
-  await expect(panel.getByTestId('diff-body')).toContainText('nested one')
+  await expect(diffLine(page, 'nested one').first()).toBeVisible()
 
   await fileRow(page, 'keep.txt').click()
-  await expect(panel.getByTestId('diff-body')).toContainText('three')
+  await expect(diffLine(page, /^three$/).first()).toBeVisible()
 
   await panel.getByRole('button', { name: 'Close commit details' }).click()
   await expect(panel).toBeHidden()
@@ -228,8 +235,7 @@ test('keeps every region of the details panel usable at any window size', async 
 
       await expect(page.getByText('feat: a wordy commit')).toBeVisible({ timeout: 15_000 })
       await commitRow(page, 'a wordy commit').dblclick()
-      const panel = detailsPanel(page)
-      await expect(panel.getByTestId('diff-hunk').first()).toBeVisible({ timeout: 10_000 })
+      await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
 
       const layout = await page.evaluate(() => {
         const find = (selector: string) => document.querySelector(selector) as HTMLElement | null
@@ -239,8 +245,9 @@ test('keeps every region of the details panel usable at any window size', async 
         const rows = meta?.querySelector('dl') as HTMLElement | null
         const files = find('[data-testid="commit-file-scroll"]')
         const diff = find('[data-testid="commit-details-panel"] [data-testid="diff-body"]')
+        const diffHost = diff?.firstElementChild as HTMLElement | null
         const graph = find('[data-testid="history-scroll"]')
-        if (!panelElement || !meta || !body || !rows || !files || !diff || !graph) {
+        if (!panelElement || !meta || !body || !rows || !files || !diff || !diffHost || !graph) {
           throw new Error('details panel regions missing')
         }
         const panelBox = panelElement.getBoundingClientRect()
@@ -252,8 +259,8 @@ test('keeps every region of the details panel usable at any window size', async 
           bodyHeight: body.clientHeight,
           bodyScrolls: body.scrollHeight > body.clientHeight,
           filesHeight: files.clientHeight,
-          diffHeight: diff.clientHeight,
-          diffScrolls: diff.scrollHeight > diff.clientHeight,
+          diffHeight: diffHost.clientHeight,
+          diffScrolls: diffHost.scrollHeight > diffHost.clientHeight,
           graphHeight: graph.clientHeight
         }
       })
