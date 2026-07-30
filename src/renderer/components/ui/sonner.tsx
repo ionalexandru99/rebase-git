@@ -7,10 +7,9 @@ import {
 } from 'lucide-react'
 import { Toaster as Sonner, type ToasterProps } from 'sonner'
 
-function Toaster(props: ToasterProps) {
+function Toaster(props: Omit<ToasterProps, 'theme'>) {
   return (
     <Sonner
-      theme="dark"
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,
@@ -27,6 +26,7 @@ function Toaster(props: ToasterProps) {
         '--border-radius': 'var(--radius)'
       }}
       {...props}
+      theme="dark"
     />
   )
 }

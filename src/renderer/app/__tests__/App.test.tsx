@@ -104,7 +104,7 @@ describe('App — onboarding gate', () => {
 })
 
 describe('App — tab shell', () => {
-  it('renders the repo rail with a new-tab button after onboarding', async () => {
+  it('renders the repo rail with a new-tab button and no theme toggle after onboarding', async () => {
     mockBaseAPI()
 
     renderApp()
@@ -112,6 +112,9 @@ describe('App — tab shell', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
     })
+    expect(
+      screen.queryByRole('button', { name: /Switch to (light|dark) theme/i })
+    ).not.toBeInTheDocument()
   })
 
   it('starts with a single empty tab that shows the repo picker', async () => {
