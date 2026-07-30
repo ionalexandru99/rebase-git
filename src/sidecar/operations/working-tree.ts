@@ -1,6 +1,13 @@
+import type { HunkLineSelection } from '@shared/rpc'
 import type { FileDiff, GitStatus } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
-import { buildHunkPatch, type ParsedFileDiff, parseUnifiedDiff, toFileDiff } from '../git/diff'
+import {
+  buildHunkPatch,
+  buildSelectedLinesPatch,
+  type ParsedFileDiff,
+  parseUnifiedDiff,
+  toFileDiff
+} from '../git/diff'
 import { GitError, HunkNotFound, type OperationInProgress, type RepoNotOpen } from '../git/errors'
 import { isValidPathArg, literalPathspec, literalPathspecs } from '../git/pathspec'
 import { isSafeRefArg } from '../git/ref-args'
@@ -244,6 +251,65 @@ export function unstageHunk(
     repoPath,
     file,
     hunkHeader,
+    'unstage',
+    requireNoOperationForPaths(repoPath, [file])
+  )
+}
+
+function applyLines<GuardError = never>(
+  repoPath: string,
+  file: string,
+  selections: readonly HunkLineSelection[],
+  direction: 'stage' | 'unstage',
+  guard?: Effect.Effect<void, GuardError>
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | GuardError, RepoSessions> {
+  return Effect.gen(function* () {
+    yield* requireOpen(repoPath)
+    yield* withRepoLock(
+      repoPath,
+      Effect.gen(function* () {
+        if (guard) {
+          yield* guard
+        }
+        const unmerged = yield* tryGit(() => unmergedPaths(repoPath))
+        if (unmerged.includes(file)) {
+          return yield* Effect.fail(
+            new GitError({ message: `cannot ${direction} lines of conflicted file: ${file}` })
+          )
+        }
+        const { parsed } = yield* tryGit(() => readDiff(repoPath, file, direction === 'unstage'))
+        const patch = buildSelectedLinesPatch(parsed, selections, direction)
+        if (!patch) {
+          return yield* Effect.fail(new HunkNotFound())
+        }
+        const applyArgs = ['-C', repoPath, 'apply', '--cached', '--whitespace=nowarn']
+        if (direction === 'unstage') {
+          applyArgs.push('-R')
+        }
+        applyArgs.push('-')
+        yield* tryGit(() => runGit(applyArgs, { stdin: patch }))
+      })
+    )
+  })
+}
+
+export function stageLines(
+  repoPath: string,
+  file: string,
+  selections: readonly HunkLineSelection[]
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound, RepoSessions> {
+  return applyLines(repoPath, file, selections, 'stage')
+}
+
+export function unstageLines(
+  repoPath: string,
+  file: string,
+  selections: readonly HunkLineSelection[]
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | OperationInProgress, RepoSessions> {
+  return applyLines(
+    repoPath,
+    file,
+    selections,
     'unstage',
     requireNoOperationForPaths(repoPath, [file])
   )

@@ -4,18 +4,24 @@ import os from 'node:os'
 import path from 'node:path'
 import { RpcTest } from '@effect/rpc'
 import { HunkNotFound } from '@shared/git-rpc-errors'
+import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import { SidecarRpcs } from '@shared/rpc'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { closeRepo, getStatus, openRepo, unstageAll, unstageFile } from '../../operations/index'
+import {
+  closeRepo,
+  getDiff,
+  getStatus,
+  openRepo,
+  unstageAll,
+  unstageFile
+} from '../../operations/index'
+import { makeGit } from '../../test-support/git-cli'
 import { runOp } from '../../test-support/run-op'
 import { handlersLayer } from '../handlers'
 
 let repoDir: string
-
-function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
-}
+let git: ReturnType<typeof makeGit>
 
 function write(name: string, contents: string): void {
   fs.writeFileSync(path.join(repoDir, name), contents)
@@ -58,6 +64,7 @@ beforeAll(async () => {
   const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-stage-')))
   repoDir = path.join(base, 'repo')
   fs.mkdirSync(repoDir)
+  git = makeGit(repoDir)
   execFileSync('git', ['-C', repoDir, 'init', '-b', 'main'])
   git('config', 'user.email', 'test@example.com')
   git('config', 'user.name', 'Test')
@@ -90,6 +97,64 @@ describe('staging through the RPC group against a real repo', () => {
       file: 'tracked.txt',
       hunkHeader: '@@ -999,1 +999,1 @@ no such hunk'
     })
+    expect(Either.isLeft(result)).toBe(true)
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(HunkNotFound)
+    }
+  })
+
+  it('stages a single selected line through the RPC group', async () => {
+    git('reset', '--hard', 'HEAD')
+    git('clean', '-fd')
+    write('tracked.txt', 'base\nfirst-added\nsecond-added\n')
+
+    try {
+      const { diff, patch } = await runOp(getDiff(repoDir, 'tracked.txt', false))
+      const hunk = diff.hunks[0]
+      const lineIndexes = hunk.lines.flatMap((line, index) =>
+        line.kind === 'add' && line.text === 'first-added' ? [index] : []
+      )
+      const fingerprint = fingerprintHunk(patch, hunk.header)
+      expect(fingerprint).not.toBeNull()
+
+      const result = await runOp(
+        Effect.gen(function* () {
+          const client = yield* RpcTest.makeClient(SidecarRpcs)
+          return yield* Effect.either(
+            client.stageLines({
+              repoPath: repoDir,
+              file: 'tracked.txt',
+              selections: [
+                { hunkHeader: hunk.header, lineIndexes, fingerprint: fingerprint as string }
+              ]
+            })
+          )
+        }).pipe(Effect.scoped, Effect.provide(handlersLayer))
+      )
+
+      expect(Either.isRight(result)).toBe(true)
+      expect(git('show', ':tracked.txt')).toBe('base\nfirst-added\n')
+    } finally {
+      git('reset', '--hard', 'HEAD')
+      git('clean', '-fd')
+    }
+  })
+
+  it('returns a typed HunkNotFound from unstageLines for a stale selection', async () => {
+    const result = await runOp(
+      Effect.gen(function* () {
+        const client = yield* RpcTest.makeClient(SidecarRpcs)
+        return yield* Effect.either(
+          client.unstageLines({
+            repoPath: repoDir,
+            file: 'tracked.txt',
+            selections: [
+              { hunkHeader: '@@ -999,1 +999,1 @@', lineIndexes: [0], fingerprint: '00000000' }
+            ]
+          })
+        )
+      }).pipe(Effect.scoped, Effect.provide(handlersLayer))
+    )
     expect(Either.isLeft(result)).toBe(true)
     if (Either.isLeft(result)) {
       expect(result.left).toBeInstanceOf(HunkNotFound)

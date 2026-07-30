@@ -1,5 +1,6 @@
+import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import { describe, expect, it } from 'vitest'
-import { buildHunkPatch, parseUnifiedDiff, toFileDiff } from '../diff'
+import { buildHunkPatch, buildSelectedLinesPatch, parseUnifiedDiff, toFileDiff } from '../diff'
 
 const MODIFIED_DIFF = `diff --git a/src/app.ts b/src/app.ts
 index 1111111..2222222 100644
@@ -155,5 +156,57 @@ describe('toFileDiff', () => {
     expect(fileDiff.binary).toBe(false)
     expect(fileDiff.hunks).toHaveLength(2)
     expect('raw' in fileDiff.hunks[0]).toBe(false)
+  })
+})
+
+describe('buildSelectedLinesPatch derived starts', () => {
+  const DELETED_FILE_DIFF = `diff --git a/f.txt b/f.txt
+deleted file mode 100644
+index 1111111..0000000
+--- a/f.txt
++++ /dev/null
+@@ -1,3 +0,0 @@
+-one
+-two
+-three
+`
+
+  const STAGED_NEW_FILE_DIFF = `diff --git a/f.txt b/f.txt
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/f.txt
+@@ -0,0 +1,3 @@
++one
++two
++three
+`
+
+  function selectionFor(raw: string, lineIndexes: number[]) {
+    const parsed = parseUnifiedDiff(raw)
+    const hunk = parsed.hunks[0]
+    const fingerprint = fingerprintHunk(raw, hunk.header)
+    if (fingerprint === null) {
+      throw new Error('no fingerprint')
+    }
+    return { parsed, selections: [{ hunkHeader: hunk.header, lineIndexes, fingerprint }] }
+  }
+
+  it('starts a non-empty derived new side at 1 when partially staging a deletion', () => {
+    const { parsed, selections } = selectionFor(DELETED_FILE_DIFF, [1])
+    const patch = buildSelectedLinesPatch(parsed, selections, 'stage')
+    expect(patch).toContain('@@ -1,3 +1,2 @@')
+  })
+
+  it('starts a non-empty derived old side at 1 when partially unstaging a staged-new file', () => {
+    const { parsed, selections } = selectionFor(STAGED_NEW_FILE_DIFF, [1])
+    const patch = buildSelectedLinesPatch(parsed, selections, 'unstage')
+    expect(patch).toContain('@@ -1,2 +1,3 @@')
+  })
+
+  it('keeps start 0 for a side that stays empty', () => {
+    const { parsed, selections } = selectionFor(STAGED_NEW_FILE_DIFF, [0, 1, 2])
+    const patch = buildSelectedLinesPatch(parsed, selections, 'unstage')
+    expect(patch).toContain('@@ -0,0 +1,3 @@')
   })
 })
