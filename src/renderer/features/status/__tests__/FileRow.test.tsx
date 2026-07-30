@@ -21,8 +21,6 @@ describe('FileRow — unstaged group', () => {
     return { onStage, onUnstage }
   }
 
-  // Group membership is the staging model now; a checkbox column asks the eye to read state row by
-  // row that the lists already say.
   it('renders no staging checkbox', () => {
     renderRow()
 
@@ -43,8 +41,6 @@ describe('FileRow — unstaged group', () => {
     expect(onStage).toHaveBeenCalledWith('src/app.ts')
   })
 
-  // The real gesture is click, click, dblclick — the button stages on click and the row stages on
-  // dblclick, so an unguarded double-tap sends the same move three times.
   it('stages once when its row button is double-tapped', () => {
     const { onStage } = renderRow()
     const button = screen.getByRole('button', { name: 'Stage src/app.ts' })
@@ -197,9 +193,6 @@ describe('FileRow — conflicted', () => {
     expect(screen.getByRole('menuitem', { name: 'Mark as resolved' })).toBeInTheDocument()
   })
 
-  // The keep-a-side choices need a resolver to call, but the destructive item does not: discarding
-  // a conflicted file quietly resolves it to our side, and that has to stay withheld whether or not
-  // the caller happened to pass a callback.
   it('still withholds Discard changes when no resolver is wired up', () => {
     render(
       <FileRow

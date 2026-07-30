@@ -41,8 +41,6 @@ const log: GitLog = {
 
 const VISIBLE_REFS = new Set([refFilterKey('local', 'main')])
 
-// Rerendering the panel with the same data must not re-render a single row: rows are memoised, and
-// every prop they take has to be stable for that to hold.
 function Harness({ nudge }: { nudge: number }) {
   const [tips] = useState(() => ['c1'])
   const displayed = computeCollapsedView(log.all, tips, new Set())

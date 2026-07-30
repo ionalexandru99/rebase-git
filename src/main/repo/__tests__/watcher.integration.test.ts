@@ -61,8 +61,6 @@ async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<bool
   return predicate()
 }
 
-// Native recursive watchers can report ready before the OS subscription is armed. Each retry gets
-// its own quiet window so the debounce can flush instead of being reset by continuous mutations.
 async function waitForEvent(
   events: RepoChange[],
   kind: string,
@@ -143,8 +141,6 @@ describe('repo watcher integration', () => {
     }
   })
 
-  // `--quit` drops CHERRY_PICK_HEAD and sequencer/ and never rewrites the index, so a watch on the
-  // index alone would leave the renderer showing a banner for an operation that no longer exists.
   it('emits an index change when a cherry-pick is quit from outside the app', async () => {
     const events: RepoChange[] = []
     const fakeWebContents = makeFakeWebContents(4, events)

@@ -1,5 +1,3 @@
-// style-src keeps 'unsafe-inline': react-virtual and many components set dynamic
-// inline style attributes (transforms, computed heights) that can't be hashed ahead of time.
 export const packagedContentSecurityPolicy =
   "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';"
 

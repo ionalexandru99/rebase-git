@@ -1,7 +1,3 @@
-// Records the grouped staging lists (Conflicts / Staged / Unstaged) and the single-side diff against
-// the built app in out/.
-// Run `pnpm build` first, then `node scripts/capture-staging-demo.mjs [scenario|all]`.
-// Output: /tmp/rebase-staging-demo/scenarios/<name>/<name>.webm and <name>.png
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -104,9 +100,6 @@ function gitRunner(repo, tolerateFailure = false) {
   }
 }
 
-// Everything the recording machine's global git config could otherwise change or break: a signing
-// key the recorder cannot reach, a hooks path that rejects the commit, or a diff3 conflict style
-// that puts a third section in every screenshot.
 function pinDemoConfig(git) {
   git(['config', 'user.email', 'demo@example.com'])
   git(['config', 'user.name', 'Demo'])
@@ -131,10 +124,7 @@ const write = (repo, file, content) => {
   fs.writeFileSync(path.join(repo, file), content)
 }
 
-// --- fixtures ---------------------------------------------------------------
 
-// One file per state the lists have to tell apart: staged, unstaged, untracked, and one that is
-// half-staged and therefore listed on both sides.
 function mixedTreeRepo() {
   const { repo, git } = makeRepo('staging')
   write(repo, 'README.md', BASE_README)
@@ -175,7 +165,6 @@ function conflictingMergeRepo() {
   return { repo, paths: [repo] }
 }
 
-// --- page helpers -----------------------------------------------------------
 
 const refTree = (page) => page.getByTestId('ref-tree-scroll')
 const groupRow = (page, group, file) =>
@@ -198,7 +187,6 @@ async function stageRow(page, file) {
   await beat(page, 1200)
 }
 
-// --- scenarios --------------------------------------------------------------
 
 const scenarios = [
   {
@@ -212,22 +200,18 @@ const scenarios = [
       await shot()
       await beat(page, 1600)
 
-      // Whole-file staging is a move between lists: the row leaves Unstaged and lands in Staged.
       await stageRow(page, 'README.md')
       await beat(page, 900)
 
-      // Double-click does the same thing, without going for the button.
       await groupRow(page, 'unstaged', 'NOTES.md').dblclick()
       await groupRow(page, 'staged', 'NOTES.md').waitFor({ timeout: 30_000 })
       await beat(page, 1600)
 
-      // limits.ts is half-staged, so it is listed on both sides — each row diffs only its own side.
       await groupRow(page, 'unstaged', 'limits.ts').click()
       await beat(page, 2200)
       await groupRow(page, 'staged', 'limits.ts').click()
       await beat(page, 2400)
 
-      // The context menu carries the same move, and the group heading does it for the whole list.
       await groupRow(page, 'staged', 'app.ts').click({ button: 'right' })
       await menuItem(page, 'Unstage').waitFor({ timeout: 15_000 })
       await beat(page, 1400)
@@ -254,7 +238,6 @@ const scenarios = [
       await beat(page, 1800)
       await openLocalChanges(page)
 
-      // Conflicts sort above everything, with their own group and marker.
       await groupHeading(page, 'Conflicts').waitFor({ timeout: 30_000 })
       await groupRow(page, 'conflicts', 'app.ts').click()
       await beat(page, 2200)
@@ -266,14 +249,12 @@ const scenarios = [
       await beat(page, 1400)
       await menuItem(page, 'Keep feature').click()
 
-      // Resolving stages the file: it leaves Conflicts for Staged, and the selection follows it.
       await groupRow(page, 'staged', 'app.ts').waitFor({ timeout: 30_000 })
       await beat(page, 3000)
     }
   }
 ]
 
-// --- runner -----------------------------------------------------------------
 
 async function openRepoInApp(app, page, repo) {
   await app.evaluate(
@@ -303,7 +284,6 @@ async function runScenario(scenario) {
   fs.mkdirSync(scenarioDir, { recursive: true })
 
   const { repo, paths } = scenario.setup()
-  // The main process only installs its E2E control for a temp dir with this exact prefix.
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
 
   const env = { ...process.env, NODE_ENV: 'test' }
@@ -364,7 +344,6 @@ async function runScenario(scenario) {
   } catch (error) {
     failure ??= error
   } finally {
-    // The webm only finalizes once the window and the app are both down.
     const video = page && !page.isClosed() ? page.video() : null
     await page?.close().catch(() => {})
     await app?.close().catch(() => {})

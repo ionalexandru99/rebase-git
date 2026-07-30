@@ -61,7 +61,6 @@ test('shows a commit’s message, identity, files and diff in the details panel'
   await expect(panel.getByTestId('commit-stats')).toContainText('4 files')
   await expect(panel.getByRole('button', { name: `Copy full SHA ${sha}` })).toBeVisible()
 
-  // The changed files read as a tree: the directory first, then the root-level files.
   const directories = panel.getByTestId('commit-directory-row')
   await expect(directories).toHaveCount(1)
   await expect(directories.first()).toContainText('src/deep')
@@ -73,14 +72,12 @@ test('shows a commit’s message, identity, files and diff in the details panel'
   await expect(fileRows.nth(2)).toContainText('fresh.txt')
   await expect(fileRows.nth(3)).toContainText('keep.txt')
 
-  // The first file in tree order has its diff on screen without a second click.
   await expect(panel.getByTestId('diff-hunk')).toBeVisible()
   await expect(panel.getByTestId('diff-body')).toContainText('nested TWO')
 
   await fileRow(page, 'keep.txt').click()
   await expect(panel.getByTestId('diff-body')).toContainText('TWO')
 
-  // A commit that already exists is read-only: nothing to stage, unstage or drop.
   await expect(panel.locator('input[type="checkbox"]')).toHaveCount(0)
 })
 
@@ -155,7 +152,6 @@ test('selects several commits and summarises them instead of guessing a merged d
   await expect(summary).toContainText('initial')
   await expect(panel.getByTestId('diff-hunk')).toHaveCount(0)
 
-  // First Escape gives the graph its height back; the selection survives for a follow-up action.
   await page.keyboard.press('Escape')
   await expect(panel).toBeHidden()
   await expect(commitRow(page, 'reshape the files')).toHaveAttribute('data-selected', 'true')
@@ -174,7 +170,6 @@ test('follows a plain click while open, and closes from the panel button', async
   const panel = detailsPanel(page)
   await expect(panel).toBeVisible({ timeout: 10_000 })
 
-  // The panel follows a plain click once it is open, auto-selecting that commit's first file.
   await commitRow(page, 'add files').click()
   await expect(panel.getByTestId('commit-stats')).toContainText('3 files', { timeout: 10_000 })
   await expect(panel.getByTestId('commit-file-row').first()).toContainText('nested.txt')
@@ -208,8 +203,6 @@ function createWordyRepo(): string {
   return repo
 }
 
-// A long message must never cost the reader the identity rows, the file tree or the diff — at any
-// window size, and at any remembered panel height. 800x560 is the app's smallest window.
 const PANEL_LAYOUT_CASES = [
   { width: 1600, height: 1000, storedHeight: 900 },
   { width: 1200, height: 800, storedHeight: 360 },
@@ -218,9 +211,6 @@ const PANEL_LAYOUT_CASES = [
   { width: 800, height: 560, storedHeight: 900 }
 ]
 
-// The Electron window is shared across the whole run, and these cases leave it below the width at
-// which the timeline hides its Date column. Restore it so later specs are not measuring a narrow
-// window, even when an assertion here fails.
 const LAUNCH_WINDOW = { width: 1200, height: 800 }
 
 test('keeps every region of the details panel usable at any window size', async ({ harness }) => {
@@ -269,17 +259,13 @@ test('keeps every region of the details panel usable at any window size', async 
       })
 
       const at = `${size.width}x${size.height} @ ${size.storedHeight}px`
-      // The labelled rows are the first thing to protect: they never scroll out or get clipped.
       expect(layout.rowsFullyInsidePanel, `rows inside panel at ${at}`).toBe(true)
-      // The body gives up space instead, and stays reachable by scrolling.
       expect(layout.bodyHeight, `body visible at ${at}`).toBeGreaterThan(16)
       expect(layout.bodyScrolls, `body scrolls at ${at}`).toBe(true)
       expect(layout.metaShareOfPanel, `metadata share at ${at}`).toBeLessThanOrEqual(0.46)
-      // The files and the diff keep the majority, and a long diff scrolls rather than clipping.
       expect(layout.filesHeight, `file tree at ${at}`).toBeGreaterThan(48)
       expect(layout.diffHeight, `diff at ${at}`).toBeGreaterThan(24)
       expect(layout.diffScrolls, `diff scrolls at ${at}`).toBe(true)
-      // And the panel never swallows the timeline it belongs to.
       expect(layout.graphHeight, `graph at ${at}`).toBeGreaterThan(64)
     }
   } finally {

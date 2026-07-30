@@ -42,17 +42,10 @@ async function withConflictedRepo<T>(
   }
 }
 
-// A `--continue` that reaches for an editor lands here and never returns, so the test fails on its
-// own timeout instead of passing because some ambient setting happened to defuse the prompt. git
-// runs the editor as `sh -c "<core.editor> <messagefile>"`, and the trailing `#` comments the
-// filename out so the command blocks rather than choking on an argument it does not understand.
 const BLOCKING_EDITOR = 'sleep 30 #'
 const EDITOR_TIMEOUT_MS = 10_000
 const AMBIENT_EDITOR_VARS = ['GIT_EDITOR', 'GIT_SEQUENCE_EDITOR', 'EDITOR', 'VISUAL']
 
-// nonInteractiveEnv() spreads process.env, and a developer machine or CI image commonly exports
-// GIT_EDITOR=true itself — which would mask the explicit overrides and make the guarantee untested.
-// Removing them for the duration of the call leaves those overrides as the only thing in the way.
 async function withoutAmbientEditors<T>(run: () => Promise<T>): Promise<T> {
   const saved = AMBIENT_EDITOR_VARS.map((name) => [name, process.env[name]] as const)
   for (const name of AMBIENT_EDITOR_VARS) {
@@ -99,7 +92,6 @@ function stagedEntry(repo: string, file: string): string {
   return line.slice(0, 2)
 }
 
-// The index stage each entry for `file` sits at: 0 once resolved, 1/2/3 while still conflicted.
 function indexStages(repo: string, file: string): number[] {
   return gitOutput(repo, ['ls-files', '-s', '--', file])
     .split('\n')
@@ -180,8 +172,6 @@ describe('continueOperation', () => {
     })
   })
 
-  // `git rebase --continue` launches an editor for the commit message. The repo is configured with
-  // one that never returns, so this only completes because the sidecar forces GIT_EDITOR itself.
   it(
     'completes a resolved rebase without waiting on an editor',
     async () => {
@@ -288,9 +278,6 @@ describe('continueOperation', () => {
   })
 })
 
-// Resolving a step toward the side already in HEAD leaves git nothing to commit for it, and git
-// answers `--continue` by asking for `--skip` instead. The UI only offers Continue and Abort, so the
-// sequence has to advance on its own — the user chose that side, which is exactly "drop this commit".
 describe('continueOperation — a step that resolves to nothing', () => {
   it('finishes a single-commit cherry-pick without adding a commit', async () => {
     await withConflictedRepo('cherry-pick', async (fixture) => {
@@ -305,10 +292,6 @@ describe('continueOperation — a step that resolves to nothing', () => {
     })
   })
 
-  // The step is empty because nothing is *staged* for it, which an unstaged edit the user is carrying
-  // does not change. Reading the whole working tree instead of the index would call the step
-  // non-empty, refuse to skip, and strand the sequence: `--continue` keeps refusing for a change it
-  // is never going to commit, and the UI offers no third button.
   it('skips an empty step while an unstaged edit sits in the working tree', async () => {
     await withConflictedRepo('cherry-pick-sequence', async (fixture) => {
       await runOp(resolveConflict(fixture.path, 'a.txt', 'ours'))
@@ -336,7 +319,6 @@ describe('continueOperation — a step that resolves to nothing', () => {
       await runOp(continueOperation(fixture.path))
 
       expect(await currentOperationKind(fixture.path)).toBeUndefined()
-      // Only the second commit landed: the first one is the one that resolved to nothing.
       expect(
         gitOutput(fixture.path, ['log', '--format=%s', `${fixture.headBefore}..HEAD`]).trim()
       ).toBe('feature edits b')
@@ -415,8 +397,6 @@ describe('continueOperation — a step that resolves to nothing', () => {
 })
 
 describe('resolveConflict', () => {
-  // Every case below has to start from a genuinely conflicted index, or "no conflicts left"
-  // afterwards proves nothing.
   function expectConflicted(repo: string, file: string): void {
     expect(indexStages(repo, file).filter((stage) => stage > 0).length).toBeGreaterThan(0)
   }
@@ -498,8 +478,6 @@ describe('resolveConflict', () => {
   })
 
   it('resolves a both-deleted path with either side', async () => {
-    // Neither side kept a blob at the path, so both choices have to mean the same thing — and
-    // `theirs` is the one with no stage to check out, which is where a wrong turn would show.
     for (const side of ['ours', 'theirs'] as const) {
       await withConflictedRepo('rename-rename', async (fixture) => {
         expect(gitOutput(fixture.path, ['status', '--porcelain'])).toContain('DD f.txt')
@@ -526,8 +504,6 @@ describe('resolveConflict', () => {
   })
 
   it('resolves each side of a rebase using the same stage numbers', async () => {
-    // Mid-rebase stage :2 is `main` (the branch rebased onto) and stage :3 is `feature` — the
-    // reverse of what the branch names suggest, which is exactly why both sides are checked.
     for (const { side, contents } of [
       { side: 'ours' as const, contents: 'main\n' },
       { side: 'theirs' as const, contents: 'feature\n' }
@@ -556,9 +532,6 @@ describe('resolveConflict', () => {
   })
 })
 
-// `git rebase --autostash` can complete on the very continue that was issued and only then conflict
-// while reapplying the stash: git exits 0, prints "Successfully rebased", and deletes the rebase
-// state — so unmerged paths after a continue must not be read as "the rebase stopped".
 describe('continueOperation — autostash completion', () => {
   it('reports a rebase that finished with autostash conflicts as finished, not stopped', async () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-autostash-'))

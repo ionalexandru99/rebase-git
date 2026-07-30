@@ -117,8 +117,6 @@ describe('VirtualFileList — groups', () => {
     expect(onUnstage).toHaveBeenCalledWith('b.ts')
   })
 
-  // A partially-staged file is listed twice; highlighting both rows would hide which side the diff
-  // pane is showing.
   it('highlights only the row in the selected group when a file is listed twice', () => {
     const partial: UnifiedFileRow = { ...unstagedRow, stageState: 'partial' }
     renderList({

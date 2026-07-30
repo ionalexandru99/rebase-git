@@ -111,8 +111,6 @@ describe('conflict control RPC handlers', () => {
 
   it('rejects every file path that is not plainly repo-relative', async () => {
     await withConflictedRepo('merge', async (fixture) => {
-      // An absolute path is refused even when it points inside the repo at a genuinely conflicted
-      // file: the handler's contract is a repo-relative path, and nothing else gets to git.
       const rejected = [
         `..${path.sep}outside.txt`,
         path.join(fixture.path, 'f.txt'),

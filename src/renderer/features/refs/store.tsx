@@ -135,9 +135,6 @@ export function useRefsController(deps: RefsDeps): RefsController {
     })
   }
 
-  // One surface per failure: the toast. A fetch the user asked for always answers; a background fetch
-  // only speaks up when it has something new to say, so a remote that stays broken does not toast
-  // every five minutes.
   const reportFetchFailure = (rawMessage: string, manual: boolean) => {
     const alreadyReported = lastFetchFailure.current === rawMessage
     lastFetchFailure.current = rawMessage

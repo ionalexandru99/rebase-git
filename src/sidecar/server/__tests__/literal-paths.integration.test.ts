@@ -100,8 +100,6 @@ const rpcGetDiff = (payload: { repoPath: string; file: string; staged?: boolean 
     }).pipe(Effect.scoped, Effect.provide(handlersLayer))
   )
 
-// `*` and `:` are illegal in Win32 filenames, so these fixtures cannot exist there. The
-// bracket-glob suite below covers the same literal-pathspec contract with Windows-legal names.
 describe.skipIf(process.platform === 'win32')('glob-named files are matched literally', () => {
   let repo: TestRepo
 
@@ -204,8 +202,6 @@ describe.skipIf(process.platform === 'win32')('glob-named files are matched lite
   })
 })
 
-// `[abc]` is a glob character class that Win32 permits in filenames, so this runs everywhere.
-// `a.txt` is the decoy the class would match if a pathspec were ever passed unescaped.
 describe('bracket-globbed files are matched literally', () => {
   let repo: TestRepo
 
@@ -365,8 +361,6 @@ describe('dash-named files are file arguments, not options', () => {
   })
 })
 
-// Win32 forbids tab characters and silently strips trailing spaces, so these names are
-// uncreatable there — the fixture itself cannot be built, not just the assertions.
 describe.skipIf(process.platform === 'win32')('whitespace-edged names survive end to end', () => {
   let repo: TestRepo
 

@@ -44,9 +44,6 @@ function shortSha(sha: string): string {
   return sha.slice(0, SHORT_SHA_LENGTH)
 }
 
-// git's own resolution rule, done with two filesystem reads instead of a spawn: `.git` is a
-// directory in a normal clone and a `gitdir:` pointer file in a linked worktree or a submodule,
-// where the per-worktree state files (rebase-merge/, MERGE_HEAD, …) live at the pointed-to path.
 export function resolveGitDir(repoPath: string): string {
   const dotGit = path.join(repoPath, '.git')
   if (isDirectory(dotGit)) {
@@ -76,8 +73,6 @@ async function readGit(repoPath: string, args: string[]): Promise<string> {
   }
 }
 
-// The friendliest name a sha answers to. name-rev walks refs, so a tip resolves to its branch and an
-// older commit to `branch~n`; `remotes/` is noise once the rest of the name identifies the remote.
 async function refNameFor(repoPath: string, sha: string): Promise<string> {
   const name = await readGit(repoPath, ['name-rev', '--name-only', '--no-undefined', sha])
   if (!name) {
@@ -91,9 +86,6 @@ async function commitLabel(repoPath: string, sha: string): Promise<string> {
   return summary || shortSha(sha)
 }
 
-// theirsLabel names index stage :3, and a revert puts the *parent* of the reverted commit there —
-// the state git is restoring. Naming that stage after the commit being undone would invert it: the
-// UI offers "Keep <label>", and keeping stage :3 is accepting the revert, not the commit.
 async function pickLabel(
   repoPath: string,
   kind: 'cherry-pick' | 'revert',
@@ -108,10 +100,6 @@ async function countCommitsSince(repoPath: string, sha: string): Promise<number>
   return Number.isInteger(count) && count >= 0 ? count : 0
 }
 
-// The renderer prefills the commit box with this, and `git commit -m` cleans up whitespace only —
-// so the "Conflicts:" block MERGE_MSG carries would land verbatim in the commit. What counts as a
-// comment line is the repo's own core.commentChar/commentString, which is exactly what `git
-// stripspace` applies; assuming '#' leaks the block on any repo that configured something else.
 async function stripMessageComments(repoPath: string, message: string): Promise<string> {
   try {
     const stripped = await runGit(['-C', repoPath, 'stripspace', '--strip-comments'], {
@@ -139,8 +127,6 @@ async function rebaseState(
   const onto = readTrimmed(path.join(stateDir, 'onto'))
   const headName = readTrimmed(path.join(stateDir, 'head-name')) ?? ''
   const origHead = readTrimmed(path.join(stateDir, 'orig-head'))
-  // An external `rebase --quit`/`--abort` can delete the directory between the isDirectory check and
-  // these reads. Nothing identifying left means no rebase, not a rebase with placeholder labels.
   if (onto === undefined && headName.length === 0) {
     return undefined
   }
@@ -174,9 +160,6 @@ function amState(gitDir: string, stateDir: string): OperationState | undefined {
   }
 }
 
-// A multi-commit cherry-pick/revert. `sequencer/todo` holds the instructions still to run, current
-// one included, and `sequencer/head` the tip the sequence started from — so the commits already made
-// since that tip give the position within a total git never writes down.
 async function sequencerState(
   repoPath: string,
   gitDir: string
@@ -237,9 +220,6 @@ async function mergeState(
   }
 }
 
-// One read of the repo's state files, in git's own precedence order: a rebase owns the tree even
-// though it also leaves CHERRY_PICK_HEAD-style markers behind, and a sequencer todo outranks the
-// single-commit markers because those name only the commit the sequence is currently stopped on.
 export async function detectOperationState(repoPath: string): Promise<OperationState | undefined> {
   const gitDir = resolveGitDir(repoPath)
 

@@ -48,8 +48,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await runOp(closeRepo(repoDir))
-  // Closing kills the session's commit-graph write mid-flight, and Windows keeps a killed process's
-  // files undeletable for a moment after it exits — long enough to outlast every retry.
   removeRepoDir(baseDir)
 })
 

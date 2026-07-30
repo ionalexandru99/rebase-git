@@ -11,9 +11,6 @@ export default defineConfig({
     maxWorkers: 2,
     testTimeout: 15_000,
     hookTimeout: 15_000,
-    // Git for Windows defaults core.autocrlf=true, which rewrites checkouts to CRLF and breaks
-    // every fixture that round-trips '\n' content through a git operation. Pin it for all git
-    // children — tests spawn git directly and through the sidecar's simple-git.
     env: {
       GIT_CONFIG_COUNT: '1',
       GIT_CONFIG_KEY_0: 'core.autocrlf',

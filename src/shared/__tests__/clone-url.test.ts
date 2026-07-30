@@ -9,7 +9,6 @@ describe('isSupportedCloneUrl', () => {
     expect(isSupportedCloneUrl('git://example.com/repo.git')).toBe(true)
     expect(isSupportedCloneUrl('git@github.com:owner/repo.git')).toBe(true)
     expect(isSupportedCloneUrl('  https://github.com/owner/repo  ')).toBe(true)
-    // A local repository reached as a URL, which is also how the clone tests talk to their fixtures.
     expect(isSupportedCloneUrl('file:///tmp/repo.git')).toBe(true)
     expect(isSupportedCloneUrl('file:///home/user/code/repo')).toBe(true)
   })

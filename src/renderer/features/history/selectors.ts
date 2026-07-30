@@ -34,8 +34,6 @@ export interface CommitIndex {
   positionByHash: Map<string, number>
 }
 
-// Keyed by the commits array so each open repo keeps its own index instead of thrashing a single
-// global slot; entries are released automatically when a repo's log array is dropped.
 const commitIndexCache = new WeakMap<GitLogEntry[], CommitIndex>()
 
 export function getCommitIndex(commits: GitLogEntry[]): CommitIndex {
@@ -248,10 +246,6 @@ export function countVisibleBranchRefs(
   return count
 }
 
-// Relies on commits being topo-ordered (children before parents), which the log stream
-// guarantees: walking tips most-descendant-first means any tip already visited when its
-// turn comes is an ancestor of an earlier tip. One shared visited set bounds the total
-// walk at O(commits) regardless of tip count.
 export function pruneAncestorTips(commits: GitLogEntry[], tipHashes: string[]): string[] {
   const { byHash, positionByHash } = getCommitIndex(commits)
   const ordered = [...tipHashes].sort(
@@ -425,9 +419,6 @@ export function sideRange(
   return revealed
 }
 
-// A merge is only revealed once it is itself displayed, so expanding an outer merge can make a
-// nested one eligible; iterate to a fixpoint. Stale entries (a merge no longer displayed) are
-// skipped because their merge commit never enters `displayed`.
 export function computeCollapsedView(
   commits: GitLogEntry[],
   tips: readonly string[],
@@ -463,11 +454,6 @@ export function computeCollapsedView(
   return displayed
 }
 
-// The set of merges to expand so every reachable match becomes displayed — the full chain from a
-// visible Mainline down to each match. A single children-first pass (a merge's container is always
-// its descendant, so it appears earlier) builds `revealedBy`, mapping each hidden commit to the
-// merge that directly surfaces it; walking that chain up from a match collects its whole reveal
-// path. Matches already on the Mainline or unreachable under these tips contribute nothing.
 export function computeMergesToReveal(
   commits: GitLogEntry[],
   tips: readonly string[],

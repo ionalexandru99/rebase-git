@@ -87,8 +87,6 @@ describe('operations attempted while a merge conflict is unresolved', () => {
     })
   })
 
-  // Discarding a conflicted file is a resolution, not a refusal: restoring it from HEAD drops the
-  // unmerged stages, so the file silently ends up on our side with the merge still in progress.
   it('resolves a conflicted file to our side when its changes are discarded', async () => {
     await withMergeConflict(async (fixture) => {
       expect(conflictedPaths(fixture.path)).toEqual(['f.txt'])
@@ -101,8 +99,6 @@ describe('operations attempted while a merge conflict is unresolved', () => {
     })
   })
 
-  // `reset --hard` clears MERGE_HEAD, so discarding everything ends the merge as surely as an abort
-  // would — it just never says so.
   it('ends the merge outright when every change is discarded', async () => {
     await withMergeConflict(async (fixture) => {
       writeRepoFile(fixture.path, 'stray.txt', 'untracked\n')
@@ -132,10 +128,6 @@ describe('operations attempted while a merge conflict is unresolved', () => {
   })
 })
 
-// Resolving the last conflicted file empties the index of unmerged paths while the sequence itself is
-// still parked. Git starts a second operation in that window without complaint: it commits, deletes
-// CHERRY_PICK_HEAD and strands the remaining todo, so the step the user had just resolved is dropped
-// on the floor and never applied. Only the marker files still say the repository is mid-sequence.
 describe('a sequence parked with every conflict already resolved', () => {
   async function withResolvedSequence<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
     const fixture = makeConflictedRepo('cherry-pick-sequence')
@@ -189,10 +181,6 @@ describe('a sequence parked with every conflict already resolved', () => {
   })
 })
 
-// Two more ways to walk off with the resolution once the index holds no unmerged entries. git accepts
-// both: `stash push` banks the resolution and deletes MERGE_HEAD, ending the merge silently, and
-// unstaging resets the index entry to HEAD so the merge commit records HEAD's side while the side the
-// user picked is left behind as an unstaged change.
 describe('a merge parked with its conflict already resolved', () => {
   async function withResolvedMerge<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
     const fixture = makeConflictedRepo('merge')
@@ -242,9 +230,6 @@ describe('a merge parked with its conflict already resolved', () => {
     })
   })
 
-  // A path the incoming side never touches cannot be carrying a resolution, so whatever is staged for
-  // it is the user's own work. Refusing it would be a trap: `merge --abort` is then the only way out
-  // and it discards that work along with the merge.
   it('lets an unrelated staged edit be unstaged and discarded', async () => {
     await withResolvedMerge(async (fixture) => {
       writeRepoFile(fixture.path, 'unrelated.txt', 'my own work\n')
@@ -264,9 +249,6 @@ describe('a merge parked with its conflict already resolved', () => {
     })
   })
 
-  // Discarding a file that is still conflicted stays allowed — that is a resolution toward our side,
-  // covered above. Discarding one that is already resolved is the reverse: it puts HEAD back over the
-  // resolution and the merge commit then records HEAD's side.
   it('refuses to discard a file whose conflict is already resolved', async () => {
     await withResolvedMerge(async (fixture) => {
       const resolved = readRepoFile(fixture.path, 'f.txt')
@@ -279,8 +261,6 @@ describe('a merge parked with its conflict already resolved', () => {
     })
   })
 
-  // Every mode moves HEAD, and moving HEAD deletes the operation's marker; --hard also throws away
-  // the staged resolution on the way past.
   it.each(['soft', 'mixed', 'hard'] as const)('refuses a %s reset', async (mode) => {
     await withResolvedMerge(async (fixture) => {
       const resolved = readRepoFile(fixture.path, 'f.txt')
@@ -295,10 +275,6 @@ describe('a merge parked with its conflict already resolved', () => {
   })
 })
 
-// A revert reverses the commit it names, so a path that commit touched and nothing has touched since
-// reads identically on HEAD and REVERT_HEAD while the revert is staging a reversal for it. Comparing
-// those two snapshots would call that path unrelated and let its reversal be unstaged, and Continue
-// would then commit a revert missing part of the commit it claims to undo.
 describe('a revert parked with one path conflicted and another reversed cleanly', () => {
   async function withPartialRevert<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
     const fixture = makeConflictedRepo('revert-partial')
@@ -349,10 +325,6 @@ describe('a revert parked with one path conflicted and another reversed cleanly'
   })
 })
 
-// When our side renames a path the incoming side modifies, git carries that modification into the new
-// name. The merge's delta is written in the old name, so the destination holds the merge's work under
-// a name the delta never mentions — and letting it be unstaged would leave the incoming change out of
-// the merge commit entirely.
 describe('a merge that carried an incoming change into a renamed path', () => {
   async function withRenameCarry<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
     const fixture = makeConflictedRepo('merge-rename-carry')
@@ -404,10 +376,6 @@ describe('a merge that carried an incoming change into a renamed path', () => {
   })
 })
 
-// Git's directory-rename detection relocates an incoming addition into the directory our side
-// renamed. The merge's delta names the addition where the incoming side put it, and the rename record
-// names only the file that moved — so the path the addition actually landed in appears in neither,
-// and letting it be unstaged would finish the merge without the incoming file at all.
 describe('a merge that relocated an incoming file through a directory rename', () => {
   async function withDirectoryRename<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
     const fixture = makeConflictedRepo('merge-directory-rename')
@@ -453,9 +421,6 @@ describe('a merge that relocated an incoming file through a directory rename', (
   })
 })
 
-// Moving HEAD is the third way out. git does not refuse a checkout for a parked cherry-pick or
-// revert the way it does for a conflicted index — it cancels the operation to make room, says so in a
-// warning that never reaches a GUI, and the resolution waiting on Continue goes with it.
 describe('checking out while a cherry-pick is parked with its conflict resolved', () => {
   async function withResolvedPick<T>(use: (fixture: ConflictedRepo) => Promise<T>): Promise<T> {
     const fixture = makeConflictedRepo('cherry-pick')

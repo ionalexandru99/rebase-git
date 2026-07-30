@@ -134,8 +134,6 @@
   --shadow: 0 12px 30px oklch(0.25 0.01 260 / 7%);
 }
 
-/* Widths mirror HISTORY_DATE_MAX_WIDTH and COMPACT_MAX_WIDTH in src/renderer/lib/breakpoints.ts;
-   media query features cannot read custom properties, so the numbers stay literal here. */
 @media (max-width: 1100px) {
   :root {
     --history-grid-tail: 12rem 4.5rem;
@@ -254,10 +252,6 @@ body {
   background-clip: padding-box;
 }
 
-/* Reveal the thumb only while pointing inside an actual scroll container. Scoped to
-   .scroll-host so the hover-state restyle fires for a handful of elements, not every
-   element under the cursor — a universal `*:hover` here causes a style-recalc storm on
-   every mousemove across the whole window. */
 .scroll-host:hover {
   scrollbar-color: var(--border) transparent;
 }

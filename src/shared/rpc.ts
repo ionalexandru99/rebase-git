@@ -42,8 +42,6 @@ export {
 const ReadError = Schema.Union(RepoNotOpen, GitError)
 const CommitError = Schema.Union(RepoNotOpen, GitError)
 const StageError = Schema.Union(RepoNotOpen, GitError)
-// Unstaging or stashing while an operation is parked carries the resolution out of the index and
-// abandons the operation with it, so these refuse where their staging counterparts do not.
 const GuardedWriteError = Schema.Union(RepoNotOpen, GitError, OperationInProgress)
 const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)
 const GuardedHunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound, OperationInProgress)
@@ -73,8 +71,6 @@ export const ScanForRepos = Rpc.make('scanForRepos', {
   error: ScanError
 })
 
-// Streamed rather than a plain call: a clone can run for minutes, so it needs progress on the way
-// and must not sit under the request timeout every other op shares.
 export const CloneRepo = Rpc.make('cloneRepo', {
   payload: {
     url: RequiredString,
@@ -299,8 +295,6 @@ export const AbortOperation = Rpc.make('abortOperation', {
   error: RefWriteError
 })
 
-// Continuing a multi-commit cherry-pick/revert/rebase can immediately conflict again on the next
-// commit, so this is conflictable like the operations that start a sequence.
 export const ContinueOperation = Rpc.make('continueOperation', {
   payload: { repoPath: OpaqueString },
   success: Schema.Void,
@@ -344,8 +338,6 @@ export const GetDiff = Rpc.make('getDiff', {
     commit: Schema.optional(RequiredString),
     renameSource: Schema.optional(OpaqueString)
   },
-  // `patch` is the raw `git diff` text the structured `diff` was parsed from. The renderer parses it
-  // with @pierre/diffs; `binary` stays structured because that patch carries no binary signal.
   success: Schema.Struct({ diff: FileDiffSchema, patch: Schema.String }),
   error: ReadError
 })

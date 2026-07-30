@@ -437,10 +437,6 @@ export interface RunningGitProcess {
   terminate: () => Promise<void>
 }
 
-// Emptying core.askpass is what stops a configured desktop helper from popping a dialog nobody can
-// answer. It rides on the command line rather than git's config-environment protocol because that
-// protocol needs an empty-valued variable, and Windows drops those — leaving git to abort with
-// "missing config value" on every call.
 const NON_INTERACTIVE_ARGS = ['-c', 'core.askpass=']
 
 function repoPathFromArgs(args: string[]): string | undefined {
@@ -512,9 +508,6 @@ export function spawnGit(args: string[], options?: SpawnGitOptions): Promise<Spa
   return startGit(args, options).result
 }
 
-// `rebase --continue` and `revert --continue` launch $GIT_EDITOR for the commit message and would
-// block forever in a process with no tty; `rebase -i` reaches for $GIT_SEQUENCE_EDITOR the same way.
-// LC_ALL pins the messages we classify, GIT_TERMINAL_PROMPT stops credential prompts.
 export function nonInteractiveEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,

@@ -61,8 +61,6 @@ describe('operation detection', () => {
     })
   })
 
-  // The one label pairing intuition gets backwards: mid-rebase, index stage :2 ("ours") holds the
-  // branch being rebased ONTO, and stage :3 ("theirs") holds the branch being replayed.
   it('inverts the rebase labels: ours names the branch rebased onto', async () => {
     await withConflictedRepo('rebase', async (fixture) => {
       const operation = await readOperation(fixture.path)
@@ -75,8 +73,6 @@ describe('operation detection', () => {
     })
   })
 
-  // Every test guarded on this probe disappears silently if the probe starts answering false, so the
-  // probe itself is asserted: `--apply` has been a rebase backend since git 2.26.
   it('probes the apply backend as available on this git', () => {
     expect(supportsRebaseApplyBackend()).toBe(true)
   })
@@ -106,9 +102,6 @@ describe('operation detection', () => {
     })
   })
 
-  // Stage :3 of a revert holds the *parent* of the reverted commit — the state git is restoring, not
-  // the commit being undone. Labelling it with that commit would make "Keep <it>" mean the opposite
-  // of what it says, so the label names the revert itself.
   it('labels a single-commit revert as the revert rather than the commit it undoes', async () => {
     await withConflictedRepo('revert', async (fixture) => {
       const revertedSha = gitOutput(fixture.path, ['rev-parse', '--short', 'HEAD~1']).trim()
@@ -119,7 +112,6 @@ describe('operation detection', () => {
       expect(operation.theirsLabel).toContain(revertedSha)
       expect(operation.theirsLabel).toContain('two')
       expect(operation.done).toBeUndefined()
-      // What the label stands for: undoing 'two' restores what 'one' left behind.
       expect(gitOutput(fixture.path, ['cat-file', '-p', ':3:f.txt'])).toBe('one\n')
     })
   })
@@ -147,7 +139,6 @@ describe('operation detection', () => {
 
       writeRepoFile(fixture.path, 'a.txt', 'resolved a\n')
       git(fixture.path, ['add', '--', 'a.txt'])
-      // The second pick conflicts too, so git exits non-zero: that is the state under test.
       try {
         git(fixture.path, ['-c', 'core.editor=true', 'cherry-pick', '--continue'])
       } catch {}
@@ -192,8 +183,6 @@ describe('operation detection', () => {
   })
 })
 
-// An external `--quit`/`--abort` can unlink a state directory between the check that it exists and
-// the reads of the files inside it. A state built entirely from failed reads is not an operation.
 describe('operation detection — state directory emptied mid-read', () => {
   async function withEmptiedStateDir<T>(
     stateDir: string,

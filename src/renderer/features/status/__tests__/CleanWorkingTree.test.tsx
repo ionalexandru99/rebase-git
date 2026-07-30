@@ -18,8 +18,6 @@ describe('CleanWorkingTree', () => {
     expect(screen.getByText('Nothing to commit — every change is on a branch.')).toBeInTheDocument()
   })
 
-  // Resolving every conflict toward "ours" empties the file list while the merge is still parked, and
-  // the banner right above says to finish it — "nothing to commit" would contradict it outright.
   it('does not claim there is nothing to commit while a merge is in progress', () => {
     render(<CleanWorkingTree operation={operation({ kind: 'merge' })} />)
 

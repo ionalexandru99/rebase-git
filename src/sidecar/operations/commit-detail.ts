@@ -30,13 +30,10 @@ function parseCommitMeta(output: string): CommitMeta {
     author: { name: authorName, email: authorEmail },
     authorDate,
     subject,
-    // %b keeps the trailing newlines git stores; the panel renders the body verbatim.
     body: body.replace(/\n+$/, '')
   }
 }
 
-// A commit's own diff-tree output is empty for a merge, so the base is always named explicitly:
-// the first parent, or --root for a commit that has none.
 function fileListArgs(repoPath: string, meta: CommitMeta, format: string): string[] {
   const base = ['-C', repoPath, 'diff-tree', '--no-commit-id', format, '-z', '-r', '-M']
   const firstParent = meta.parents[0]
@@ -62,8 +59,6 @@ export function getCommitDetail(
         runGit(fileListArgs(key, meta, '--numstat'))
       ])
     )
-    // The response is enumerated rather than spread: `parents` is read to pick the diff base above
-    // and stays internal, so a future field cannot leak into the contract by accident.
     return {
       detail: {
         sha: meta.sha,

@@ -207,7 +207,6 @@ describe('commit index cache', () => {
 
     expect(getCommitIndex(repoA)).toBe(indexA)
     expect(indexB).not.toBe(indexA)
-    // A single global slot would have been overwritten by repoB; the WeakMap keeps repoA's index.
     expect(getCommitIndex(repoA)).toBe(indexA)
   })
 })

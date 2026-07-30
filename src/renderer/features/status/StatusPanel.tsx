@@ -39,8 +39,6 @@ function groupAction(
   if (group.kind === 'unstaged') {
     return { label: 'Stage all', onAction: () => stageAll(group.rows.map((row) => row.file)) }
   }
-  // Staging a whole conflict group would mark every file resolved in one click — the one bulk
-  // action worth making the user take file by file.
   return undefined
 }
 

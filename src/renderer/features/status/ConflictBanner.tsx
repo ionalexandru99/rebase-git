@@ -15,7 +15,6 @@ const BUTTON_CLASS =
 interface ConflictBannerProps {
   busy?: boolean
   onContinue: (noun: string) => void
-  /** Owns the confirmation: aborting throws away resolved conflicts. */
   onAbort: (summary: OperationSummary) => void
 }
 

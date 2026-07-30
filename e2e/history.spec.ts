@@ -147,8 +147,6 @@ test('opens the row context menu when right-clicking over the pinned metadata', 
   await expect(mergeRow).toBeVisible({ timeout: 10_000 })
 
   const dateCell = mergeRow.locator('time')
-  // The Date column is hidden on a narrow window, so wait for it rather than measuring whatever the
-  // layout happens to be mid-resize.
   await expect(dateCell).toBeVisible({ timeout: 10_000 })
   const dateBox = await dateCell.boundingBox()
   if (!dateBox) {

@@ -1,12 +1,3 @@
-// Records the before/after for the untracked-hunk fix at the layer the fix lives in: it runs the
-// hunk-untracked integration suite against the pre-fix working-tree.ts and then against the current
-// one, and replays both real runs in a terminal-styled page that Playwright films.
-//
-// The renderer hides the per-hunk checkbox for untracked files (DiffPanel's `!isUntracked` guard),
-// so there is no UI before/after to film — the sidecar operation is where the change is observable.
-//
-// Usage: node scripts/capture-hunk-stage-demo.mjs <output-dir> [before-ref]
-// Output: <output-dir>/hunk-stage.{webm,mp4,gif} plus the captured run logs.
 import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -22,8 +13,6 @@ const width = 1280
 const height = 720
 const fps = 10
 
-// Vitest's reporter is far noisier than the point being made, and its failure blocks repeat the same
-// FiberFailure dump per test. Keep the lines that carry the verdict.
 function distill(output) {
   const kept = []
   let causes = 0
@@ -39,8 +28,6 @@ function distill(output) {
       causes++
       continue
     }
-    // Every failure repeats the same FAIL header and the same cause dump. One summary line carries
-    // that, and the frame has to fit the 'after' run underneath.
     if (/^FAIL /.test(plain)) {
       continue
     }
@@ -129,8 +116,6 @@ async function main() {
 
   const absoluteTarget = path.join(repoRoot, targetFile)
   const afterSource = fs.readFileSync(absoluteTarget, 'utf8')
-  // The pre-fix implementation, read straight out of git so the "before" is the real parent commit
-  // rather than a hand-reverted approximation.
   const beforeSource = execFileSync('git', ['show', `${beforeRef}:${targetFile}`], {
     cwd: repoRoot,
     encoding: 'utf8'
@@ -142,8 +127,6 @@ async function main() {
     fs.writeFileSync(absoluteTarget, beforeSource)
     beforeRaw = runSuite('before')
   } finally {
-    // Restore before anything else can fail: leaving the pre-fix source in the working tree would be
-    // a silent regression that outlives this script.
     fs.writeFileSync(absoluteTarget, afterSource)
   }
   afterRaw = runSuite('after')
@@ -192,8 +175,6 @@ async function main() {
   }
   await page.waitForTimeout(4000)
 
-  // The webm only finalizes once the page and context are down, and saveAs needs the browser still
-  // alive to reach it — so the close order here is load-bearing.
   const video = page.video()
   const webmPath = path.join(outputDir, 'hunk-stage.webm')
   await page.close()
@@ -207,9 +188,7 @@ async function main() {
   const gifPath = path.join(outputDir, 'hunk-stage.gif')
   const palette = path.join(outputDir, 'palette.png')
   const filters = `fps=${fps},scale=960:-1:flags=lanczos`
-  // libopenh264 rather than libx264: this box's ffmpeg ships only the former.
   ffmpeg(['-i', webmPath, '-c:v', 'libopenh264', '-b:v', '2M', '-pix_fmt', 'yuv420p', mp4Path])
-  // A palette-optimized GIF, because GitHub renders GIF inline in a PR body and mp4 only as a link.
   ffmpeg(['-i', webmPath, '-vf', `${filters},palettegen=stats_mode=diff`, palette])
   ffmpeg([
     '-i',

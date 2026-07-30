@@ -20,8 +20,6 @@ const FEATURE_BETA = 'feature-beta\n'
 const MAIN_ALPHA = 'main-alpha\n'
 const MAIN_BETA = 'main-beta\n'
 
-// Two files, each touched once per side, so replaying the branch stops twice — once per commit —
-// instead of collapsing into a single conflict the moment the first one is resolved.
 function createTwoStopRepo(sideBranch: string): string {
   const repo = createFixtureRepo()
   const git = gitIn(repo)
@@ -51,9 +49,6 @@ function createTwoStopRepo(sideBranch: string): string {
 const conflictRow = (harness: AppHarness, file: string) =>
   harness.page.getByTestId('status-file-row').filter({ hasText: file })
 
-// The banner comes from the git-dir state files and the row from a separate status refresh, so the
-// operation can be on screen while the row is still un-badged. Waiting for the badge is what stops
-// the menu opening on the pre-conflict row, where none of the Keep items exist yet.
 async function openConflictMenu(harness: AppHarness, file: string): Promise<void> {
   const row = conflictRow(harness, file)
   await expect(row.getByRole('img', { name: 'conflicted' })).toBeVisible({ timeout: 15_000 })
@@ -65,7 +60,6 @@ async function takeSide(harness: AppHarness, file: string, choice: string | RegE
   await harness.page.getByRole('menuitem', { name: choice }).click()
 }
 
-// The flagship: a rebase nobody asked the app to start, driven to completion from inside it.
 test('a rebase started in a terminal appears on its own and continues through both conflicts', async ({
   harness
 }) => {
@@ -79,7 +73,6 @@ test('a rebase started in a terminal appears on its own and continues through bo
   await openLocalChanges(page)
   await expect(page.getByText('Working tree clean')).toBeVisible({ timeout: 10_000 })
 
-  // No UI action starts this. Everything below hangs off the git-dir watcher noticing rebase-merge/.
   gitStoppingOnConflict(repo)(['rebase', 'main'])
 
   const banner = page.getByRole('status').filter({ hasText: 'Rebasing feature onto main' })
@@ -87,8 +80,6 @@ test('a rebase started in a terminal appears on its own and continues through bo
   await expect(banner).toContainText('1/2')
   await expect(banner).toContainText('1 conflicted file left')
 
-  // Stage 2 of a rebase is the branch being replayed onto and stage 3 the branch being replayed, so
-  // "ours" reads as main even though feature is the branch checked out.
   await openConflictMenu(harness, 'alpha.txt')
   await expect(page.getByRole('menuitem', { name: 'Keep main' })).toBeVisible()
   await page.getByRole('menuitem', { name: 'Keep feature' }).click()
@@ -138,8 +129,6 @@ test('a multi-commit cherry-pick reports its position and finishes through Conti
   await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({ timeout: 10_000 })
   await openLocalChanges(page)
 
-  // A range picks more than one commit, which is what makes git write a sequencer todo — the only
-  // place a cherry-pick's position in a sequence can be read from.
   gitStoppingOnConflict(repo)(['cherry-pick', 'source~2..source'])
 
   const banner = page.getByRole('status').filter({ hasText: 'Cherry-picking' })
@@ -183,8 +172,6 @@ test('a multi-commit cherry-pick reports its position and finishes through Conti
   ])
 })
 
-// A single-commit cherry-pick leaves only CHERRY_PICK_HEAD, so it names the commit and shows no
-// position — and it is reachable without leaving the app at all.
 test('cherry-picking a conflicting commit from the history menu resolves in-app', async ({
   harness
 }) => {
@@ -205,8 +192,6 @@ test('cherry-picking a conflicting commit from the history menu resolves in-app'
 
   const page = await harness.openRepo(repo)
   await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({ timeout: 10_000 })
-  // The timeline starts scoped to the current branch, so the commit has to be brought into view
-  // before it can be picked off it.
   const sourceRef = refTree(page).getByTestId('ref-tree-leaf-row').filter({ hasText: 'source' })
   await expect(sourceRef).toBeVisible({ timeout: 10_000 })
   await sourceRef.hover()
@@ -231,7 +216,6 @@ test('cherry-picking a conflicting commit from the history menu resolves in-app'
   const banner = page.getByRole('status').filter({ hasText: 'Cherry-picking' })
   await expect(banner).toBeVisible({ timeout: 15_000 })
   await expect(banner).toContainText('source rewrites contested')
-  // One commit is not a sequence, so there is no position to report.
   await expect(banner.locator('span.tabular-nums')).toHaveCount(0)
 
   await takeSide(harness, 'contested.txt', /^Keep \S+ source rewrites contested$/)

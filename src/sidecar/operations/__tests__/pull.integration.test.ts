@@ -9,14 +9,10 @@ import { closeRepo, getStatus, openRepo, pullRepo } from '../index'
 
 interface PullFixture {
   path: string
-  /** Where the remote's `main` sits after it advanced past the clone. */
   remoteTip: string
-  /** The commit the clone starts on, shared with the remote's history. */
   base: string
 }
 
-// stdio keeps git's own progress and conflict chatter out of the test reporter; execFileSync would
-// otherwise pass stderr straight through to the parent.
 function runGit(args: string[]): string {
   return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 }
@@ -43,7 +39,6 @@ function identify(repo: string): void {
   run(repo, ['config', 'commit.gpgsign', 'false'])
 }
 
-// A clone whose remote has moved on: `a.txt` was rewritten upstream, `b.txt` was left alone.
 function makePullFixture(): PullFixture {
   const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-pull-test-')))
   const remote = path.join(base, 'remote.git')
@@ -61,9 +56,6 @@ function makePullFixture(): PullFixture {
 
   runGit(['clone', '--quiet', remote, clone])
   identify(clone)
-  // The whole suite runs under the hostile config on purpose: pullRepo must neutralize a
-  // user-level pull.rebase=true, or git swaps the integration strategy under --ff-only and
-  // refuses any dirty tree with "cannot pull with rebase".
   run(clone, ['config', 'pull.rebase', 'true'])
   const baseSha = sha(clone, 'HEAD')
 
@@ -139,8 +131,6 @@ describe('pullRepo with local changes in the way', () => {
     })
   })
 
-  // A stray Pull click during a conflict resolution must not touch the operation the user is
-  // halfway through.
   it('refuses while a conflicted merge is in progress and leaves it intact', async () => {
     await withPullFixture(async (fixture) => {
       run(fixture.path, ['checkout', '--quiet', '-b', 'feature'])
@@ -150,9 +140,6 @@ describe('pullRepo with local changes in the way', () => {
       writeFile(fixture.path, 'b.txt', 'b main\n')
       run(fixture.path, ['commit', '-am', 'main edits b'])
       const headBefore = sha(fixture.path, 'HEAD')
-      // The merge is expected to fail, but swallowing its exit code would also swallow a merge that
-      // unexpectedly succeeded — and then the pull below would be refused for some other reason
-      // entirely while this test still passed.
       try {
         run(fixture.path, ['merge', '--no-edit', 'feature'])
       } catch {}

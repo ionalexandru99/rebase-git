@@ -26,10 +26,6 @@ interface Watcher {
   onDestroyed: () => void
 }
 
-// macOS and Windows back recursive fs.watch with a single OS-level stream (FSEvents / ReadDirectoryChangesW)
-// for the whole subtree. chokidar 4 dropped fsevents and watches per file, which exhausts file
-// descriptors (EMFILE) on huge working trees like the linux kernel — so prefer the native recursive
-// watch where it exists and keep chokidar only on Linux, where fs.watch lacks recursive support.
 const SUPPORTS_RECURSIVE_FS_WATCH = process.platform === 'darwin' || process.platform === 'win32'
 
 function startWorkingTreeWatch(repoPath: string, onChange: () => void): CloseableWatch {
@@ -98,8 +94,6 @@ export function shouldEmitWorkingTreeChange(filename: string | Buffer | null): b
   return filename !== null && !ignoreWorkingTree(filename.toString())
 }
 
-// The per-worktree markers that say an operation is in progress. They are what the conflict banner
-// is drawn from, and they live beside the index rather than inside it.
 const OPERATION_STATE_ENTRIES = new Set([
   'MERGE_HEAD',
   'CHERRY_PICK_HEAD',
@@ -116,9 +110,6 @@ export function isOperationStateEntry(filename: string | Buffer | null): boolean
   return OPERATION_STATE_ENTRIES.has(path.basename(filename.toString()))
 }
 
-// `git cherry-pick --quit` and `git rebase --quit` in a terminal delete these markers without
-// touching the index, so a watch on the index alone leaves a live conflict banner on screen for an
-// operation that already ended. One non-recursive watch on the git dir covers the whole set.
 function startOperationStateWatch(gitDir: string, onChange: () => void): CloseableWatch {
   try {
     const watcher = fs.watch(gitDir, { persistent: true }, (_event, filename) => {
@@ -142,9 +133,6 @@ export interface GitDirs {
   commonDir?: string
 }
 
-// gitDir/commonDir come resolved from the sidecar's open response (git logic stays out of main);
-// they differ from `<repo>/.git` for linked worktrees and submodules. Fall back to the plain
-// layout when absent.
 export function startWatching(
   repoPath: string,
   webContents: WebContents,
@@ -195,12 +183,8 @@ export function startWatching(
   index.on('all', () => indexDrain.push())
   index.on('error', (err) => console.warn('[repoWatcher] index error', err))
 
-  // An operation appearing or vanishing changes the same thing the index does — what getStatus
-  // reports — so it drains through the same debounce and emits the same kind.
   const operationState = startOperationStateWatch(gitDir, () => indexDrain.push())
 
-  // Watch the whole working tree. `ignoreWorkingTree` prunes .git and heavy build dirs so edits to
-  // nested source files are detected without drowning in node_modules churn or git-internal events.
   const workingTree = startWorkingTreeWatch(repoPath, () => workingTreeDrain.push())
 
   const onDestroyed = () => {

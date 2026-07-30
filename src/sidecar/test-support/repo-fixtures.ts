@@ -16,11 +16,6 @@ export function gitOutput(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
 }
 
-// Windows refuses to delete a file another handle still holds, and a git child released moments ago
-// (a paging process, or the background commit-graph write a session owns) can still be exiting. Close
-// any open session first, then let the retries cover that window. On Linux the unlink just succeeds.
-// Housekeeping, not an assertion: a git that was just killed can outhold every retry on Windows,
-// and a temp directory the runner is about to throw away must not turn a passing test red.
 export function removeRepoDir(repo: string): void {
   try {
     fs.rmSync(repo, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
@@ -38,9 +33,6 @@ export function makeRepo(messages: string[]): string {
   return repo
 }
 
-// A history long enough that `git commit-graph write --reachable` stays in flight for over a second,
-// which is the only lever a test has over a write the product itself starts. Cost scales with the
-// commit count, and empty commits are the cheapest commits to import — no tree or blob per commit.
 export function makeCommitHeavyRepo(count: number): string {
   const repo = fs.realpathSync.native(
     fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-commit-heavy-'))
@@ -69,9 +61,6 @@ export function makeCommitHeavyRepo(count: number): string {
   return repo
 }
 
-// A linear history big enough to span many STREAM_BATCH_SIZE (500) chunks, so a stream is reliably
-// still in-flight after its first chunk. fast-import builds it in one pass (a per-commit loop would be
-// far too slow). Newest commit is `c${count}`; --topo-order yields newest-first.
 export function makeBigRepo(count: number): string {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-stream-big-'))
   git(repo, ['init', '-b', 'main'])
@@ -122,16 +111,12 @@ export type ConflictFixtureKind =
 export interface ConflictedRepo {
   path: string
   kind: ConflictFixtureKind
-  // HEAD and its branch as they were immediately before the conflicting operation started — what an
-  // abort has to restore. A rebase detaches HEAD, so these differ from the state under conflict.
   headBefore: string
   branchBefore: string
 }
 
 let rebaseApplySupport: boolean | undefined
 
-// Grepping `git rebase -h` would make a wording change silently skip every test that guards on this,
-// so the probe runs the backend for real in a throwaway repo. Cached: it costs a repo and a rebase.
 export function supportsRebaseApplyBackend(): boolean {
   if (rebaseApplySupport !== undefined) {
     return rebaseApplySupport
@@ -254,9 +239,6 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
     commitRepoFile(repo, 'image.bin', Buffer.from([0, 1, 2, 0, 9, 9]), 'main binary')
     return
   }
-  // Our side renames a file the incoming side modifies, and a second file conflicts so the merge
-  // parks. Git carries the incoming change into the new name, which the merge's own delta — written
-  // in the old name — never mentions.
   if (kind === 'merge-rename-carry') {
     writeRepoFile(repo, 'f.txt', 'line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\n')
     writeRepoFile(repo, 'c.txt', 'c base\n')
@@ -274,9 +256,6 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
     git(repo, ['commit', '-m', 'main renames f to g and edits c'])
     return
   }
-  // Our side renames a directory while the incoming side adds a file to the old one, and a second
-  // file conflicts so the merge parks. Git's directory-rename detection relocates the addition into
-  // the new directory — a path no rename record and no delta of the merge ever names.
   if (kind === 'merge-directory-rename') {
     writeRepoFile(repo, 'c.txt', 'c base\n')
     fs.mkdirSync(path.join(repo, 'old'), { recursive: true })
@@ -319,9 +298,6 @@ function buildConflict(kind: ConflictFixtureKind, repo: string): void {
     commitRepoFile(repo, 'f.txt', 'three\n', 'three')
     return
   }
-  // The reverted commit touches two files and only one of them has moved since, so reverting it
-  // conflicts on that one and reverses the other cleanly — the clean reversal is staged straight
-  // away, with nothing left in HEAD to distinguish it from an untouched path.
   if (kind === 'revert-partial') {
     writeRepoFile(repo, 'a.txt', 'a base\n')
     writeRepoFile(repo, 'b.txt', 'b base\n')
@@ -373,8 +349,6 @@ function startConflict(kind: ConflictFixtureKind, repo: string): void {
     gitIgnoringFailure(repo, ['revert', '--no-edit', 'HEAD~1'])
     return
   }
-  // A range is what makes git write a sequencer todo, which is the only place a revert's position
-  // in a sequence — and the label for the step it stopped on — can be read from.
   if (kind === 'revert-sequence') {
     gitIgnoringFailure(repo, ['revert', '--no-edit', 'HEAD~2', 'HEAD~1'])
     return
@@ -397,20 +371,15 @@ function startConflict(kind: ConflictFixtureKind, repo: string): void {
 }
 
 export interface ConflictFixtureOptions {
-  /** `git config` entries applied before any history exists, so git's own state files honour them. */
   config?: Record<string, string>
 }
 
-// A repo parked in a real conflicted state of the given kind, built with git itself so the on-disk
-// state files (rebase-merge/, sequencer/, MERGE_HEAD, …) are exactly what the product will read.
 export function makeConflictedRepo(
   kind: ConflictFixtureKind,
   options?: ConflictFixtureOptions
 ): ConflictedRepo {
   const repo = initConflictRepo(kind, options?.config)
   buildConflict(kind, repo)
-  // A rebase replays the checked-out branch, so it is `feature` that must be current — and `feature`,
-  // not `main`, whose tip an abort has to restore.
   const branchAtStart = kind === 'rebase' || kind === 'rebase-apply' ? 'feature' : 'main'
   git(repo, ['checkout', branchAtStart])
   const headBefore = headSha(repo)
@@ -421,21 +390,15 @@ export function makeConflictedRepo(
 
 export interface StashConflictRepo {
   path: string
-  /** The single stash entry, ready for the oid staleness check stashApply/stashPop perform. */
   stashOid: string
   file: string
-  /** Committed on the branch after the stash was taken — index stage :2 once the apply conflicts. */
   oursContent: string
-  /** What was stashed — index stage :3. */
   theirsContent: string
 }
 
 const STASHED_CONTENT = 'stashed\n'
 const COMMITTED_CONTENT = 'committed\n'
 
-// A repo whose single stash entry cannot be applied cleanly, left un-applied so the caller decides
-// whether pop or apply is what stops on the conflict. Unlike every other fixture here the conflicted
-// state it leads to has no operation behind it: git writes unmerged index entries and nothing else.
 export function makeStashConflictRepo(): StashConflictRepo {
   const repo = initConflictRepo('stash')
   commitRepoFile(repo, 'f.txt', 'base\n', 'base')

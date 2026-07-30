@@ -224,8 +224,6 @@ export function useWorkingTreeStatusController(
       if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
         setError('mutation', gitFailureBannerText('Git rejected the change', response.message))
       }
-      // Unstaging would carry the resolution out of the index and leave the operation to be
-      // finished from HEAD's side instead of the user's, so it is refused rather than undone.
       if (
         response._tag === 'OperationInProgress' &&
         isCurrentRepo(context.generation, context.path)
@@ -399,7 +397,6 @@ export function useFileDiff(file: string | null, staged: boolean, range?: string
   })
 }
 
-// A commit's diff can never change, so it is cached for the life of the tab and never refetched.
 export function useCommitFileDiff(sha: string | null, file: string | null, renameSource?: string) {
   const { repoPath } = useRepoSession()
   const queryKeys = repoQueryKeys(repoPath, { idle: 'commit-diff' })

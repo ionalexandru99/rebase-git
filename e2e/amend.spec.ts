@@ -24,7 +24,6 @@ test('rewords the last commit via the amend toggle and lands the new message in 
 
   await openLocalChanges(page)
 
-  // Clean working tree, but there's a HEAD to amend, so the panel + amend toggle are present.
   const amendToggle = page.getByRole('checkbox', { name: /amend last commit/i })
   await expect(amendToggle).toBeVisible({ timeout: 10_000 })
   await amendToggle.click()
@@ -51,7 +50,6 @@ test('drops a file from the last commit while amending, surfacing it as a workin
 }) => {
   const repo = createFixtureRepo()
   const git = gitIn(repo)
-  // A second commit adds feature.txt — this becomes HEAD, the commit we amend.
   fs.writeFileSync(path.join(repo, 'feature.txt'), 'feature\n')
   git(['add', '.'])
   git(['commit', '-m', 'add feature'])
@@ -63,19 +61,16 @@ test('drops a file from the last commit while amending, surfacing it as a workin
   await expect(amendToggle).toBeVisible({ timeout: 10_000 })
   await amendToggle.click()
 
-  // The "From last commit" group lists feature.txt kept (checked); untick it to drop.
   const dropToggle = page.getByRole('checkbox', { name: /drop feature\.txt from last commit/i })
   await expect(dropToggle).toBeVisible({ timeout: 10_000 })
   await dropToggle.click()
 
-  // Dropping flips the row to its kept-out state: the checkbox is now an unchecked "Keep" control.
   await expect(page.getByRole('checkbox', { name: /keep feature\.txt in last commit/i })).not.toBeChecked()
 
   const amendButton = page.getByRole('button', { name: 'Amend', exact: true })
   await expect(amendButton).toBeEnabled()
   await amendButton.click()
 
-  // The amend lands: the rewritten commit no longer carries the dropped file.
   const headHasFeature = () => {
     try {
       git(['show', 'HEAD:feature.txt'])
@@ -86,7 +81,6 @@ test('drops a file from the last commit while amending, surfacing it as a workin
   }
   await expect.poll(headHasFeature, { timeout: 10_000 }).toBe(false)
 
-  // ...and it surfaces as an untracked working-tree change.
   await expect(unstagedFileRow(page, 'feature.txt')).toBeVisible({
     timeout: 10_000
   })
@@ -113,7 +107,6 @@ test('drops a single hunk of a last-commit file while amending, keeping the rest
   await expect(amendToggle).toBeVisible({ timeout: 10_000 })
   await amendToggle.click()
 
-  // Select the last-commit file to inspect its committed diff, then drop just its first hunk.
   await page.getByText('multi.txt').click()
   const firstHunkDrop = page.getByRole('checkbox', { name: 'Drop hunk' }).first()
   await expect(firstHunkDrop).toBeVisible({ timeout: 10_000 })
@@ -123,7 +116,6 @@ test('drops a single hunk of a last-commit file while amending, keeping the rest
   await expect(amendButton).toBeEnabled()
   await amendButton.click()
 
-  // The dropped hunk (top) reverts to the parent line while the kept hunk (bottom) stays in the commit.
   await expect.poll(() => gitOut(repo, 'show', 'HEAD:multi.txt').split('\n')[0], {
     timeout: 10_000
   }).toBe('a1')

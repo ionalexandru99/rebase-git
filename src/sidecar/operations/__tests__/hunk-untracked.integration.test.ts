@@ -85,9 +85,6 @@ describe('hunk staging on files git does not track yet', () => {
     expect(statusFor('first.txt')).toBe('A ')
   })
 
-  // An untracked file's `--no-index` diff is a single all-additions hunk, so the multi-hunk case for
-  // a new file only exists once part of it sits in the index — which is exactly what the first stage
-  // produces.
   it('stages one hunk of a partially staged new file and leaves the other unstaged', async () => {
     const lines = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`)
     write('multi.txt', lines)
@@ -112,9 +109,6 @@ describe('hunk staging on files git does not track yet', () => {
     expect(remaining.diff.hunks[0].lines.some((line) => line.text === 'line 36 EDITED')).toBe(true)
   })
 
-  // GetDiff ships the raw patch alongside the parsed hunks and the renderer parses it again, so the
-  // two have to describe the same diff. The untracked fallback is where they can silently diverge:
-  // the patch comes from a second git invocation, not the one the first read returned nothing from.
   it('ships the untracked fallback text as the patch, matching the hunks beside it', async () => {
     write('patch-check.txt', ['alpha', 'beta'])
 

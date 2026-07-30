@@ -121,9 +121,6 @@ function addEdge(
   }
 }
 
-// Draws the row the walker has just stepped over: `walker.incoming` is the lane state entering it,
-// `walker.lanes` the state leaving it, and the parents that rejoined a lane already in flight need
-// an edge of their own.
 export function collectRowEdges(
   batch: EdgeBatch,
   walker: LaneWalker,
@@ -144,8 +141,6 @@ export function collectRowEdges(
   const dotX = laneX(commitLane, metrics)
   const curveOffset = metrics.rowHeight / 4
 
-  // Every lane entering the row drops straight to the row's middle — including the lane holding this
-  // commit, which the layout guarantees is the commit's own lane and no other.
   if (row > 0) {
     for (let lane = 0; lane < incomingLanes; lane++) {
       if (incoming[lane] === EMPTY_LANE) {

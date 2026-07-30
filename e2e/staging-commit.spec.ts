@@ -47,8 +47,6 @@ test('stages a file from its row and commits through the UI, draining the tree i
   expect(porcelainStatus(repo)).toEqual([])
 })
 
-// The grouped lists are the staging model: a file's state is which list it is in, and staging is a
-// move between them.
 test('moves a file between the Unstaged and Staged groups, in the list and in the index', async ({
   harness
 }) => {
@@ -171,16 +169,12 @@ test('selecting a modified file renders diff hunks and staging its hunk carries 
   await expect(stageHunk).toBeVisible({ timeout: 10_000 })
   await stageHunk.click()
 
-  // The file's only hunk is staged, so it leaves the unstaged list and the selection follows it into
-  // Staged — where the same hunk now reads from the index side.
   await expect(stagedFileRow(page, 'README.md')).toBeVisible({ timeout: 10_000 })
   await expect(diffBody.getByRole('checkbox', { name: 'Unstage hunk' }).first()).toBeVisible({
     timeout: 10_000
   })
 })
 
-// Half-staging is the state the old merged diff pane could not express: the file belongs to both
-// lists, and each row diffs only its own side.
 test('lists a partially staged file in both groups, each row showing only its side', async ({
   harness
 }) => {
@@ -190,7 +184,6 @@ test('lists a partially staged file in both groups, each row showing only its si
   fs.writeFileSync(path.join(repo, 'long.txt'), base)
   git(['add', '.'])
   git(['commit', '-m', 'add long file'])
-  // Two edits far enough apart that git reports them as separate hunks.
   fs.writeFileSync(
     path.join(repo, 'long.txt'),
     base.replace('line 2\n', 'line 2 edited\n').replace('line 36\n', 'line 36 edited\n')
@@ -209,7 +202,6 @@ test('lists a partially staged file in both groups, each row showing only its si
   await expect(unstagedFileRow(page, 'long.txt')).toBeVisible()
   await expect.poll(() => porcelainStatus(repo), { timeout: 10_000 }).toEqual(['MM long.txt'])
 
-  // The selection stayed on the unstaged row, which now holds only the hunk that is still local.
   await expect(diffBody.getByTestId('diff-hunk')).toHaveCount(1)
   await expect(diffBody.getByText('line 36 edited')).toBeVisible()
   await expect(diffBody.getByText('line 2 edited')).toHaveCount(0)

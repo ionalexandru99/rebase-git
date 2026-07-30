@@ -36,17 +36,8 @@ export type PushOutcome =
   | { kind: 'error'; message: string }
 
 export interface RunActionOptions {
-  /** For actions whose own row or panel already shows the result — failures still toast. */
   silentSuccess?: boolean
-  /**
-   * Failure titles read `<label> failed`, which needs the plain verb where the success label is a
-   * past tense that does not compose — 'Pulled' would announce "Pulled failed".
-   */
   failureLabel?: string
-  /**
-   * A sequencer stops on each conflict in turn and the commit box stays disabled for the whole run,
-   * so the default "commit or abort" would send the user at a button that cannot end it.
-   */
   conflictDescription?: string
 }
 
@@ -77,8 +68,6 @@ export interface ActionRunner {
   busy: boolean
 }
 
-// The write buttons disable themselves while an action runs, but a keyboard shortcut or a second
-// window can still land one mid-flight — say so instead of dropping it.
 const notifyBusy = (): void => {
   toast.info('Another Git action is still running', {
     description: 'Wait for it to finish, then try again.'

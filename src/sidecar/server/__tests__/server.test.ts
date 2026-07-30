@@ -457,11 +457,6 @@ interface HangingStatusRepo {
   cleanup: () => void
 }
 
-// A repo whose `git status` blocks forever inside a real descendant process, so the RPC's SimpleGit
-// child can be observed dying with its tree. git runs a clean filter through a shell on every
-// platform — unlike a PATH shim, which Win32 cannot execute by bare name. git only reaches for the
-// filter when it has to hash a tracked file to decide whether it changed, and it only has to do that
-// when the worktree file's size still matches the index, hence the same-length dirty content.
 function createHangingStatusRepo(): HangingStatusRepo {
   const dir = fs.realpathSync.native(
     fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-read-cancel-'))
@@ -506,8 +501,6 @@ function createHangingStatusRepo(): HangingStatusRepo {
       const raw = fs.readFileSync(pidPath, 'utf8').trim()
       return /^\d+$/.test(raw) ? Number(raw) : undefined
     },
-    // Housekeeping, not an assertion: a temp directory Windows will not unlink yet — the killed
-    // filter can outhold every retry — must not turn a passing test red.
     cleanup: () => {
       try {
         fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 })

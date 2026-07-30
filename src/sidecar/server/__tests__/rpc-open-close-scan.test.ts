@@ -134,8 +134,6 @@ describe('scanForRepos RPC handler', () => {
     }
   })
 
-  // A clone in flight keeps a real working tree in its staging directory next to the destination;
-  // the scan must not offer a repository that is still being written.
   it('leaves a clone staging directory out of the listing', async () => {
     const staging = path.join(homeScanDir, '.stalled.rebase-clone-ab12cd34')
     fs.mkdirSync(staging)

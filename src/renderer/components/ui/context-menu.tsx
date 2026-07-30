@@ -65,8 +65,6 @@ function ContextMenuTrigger(
   )
 }
 
-// A non-button trigger for cases where the right-clickable element must stay a plain element
-// (grid rows, list items) rather than a <button>.
 function ContextMenuTriggerArea(props: HTMLAttributes<HTMLDivElement> & { children?: ReactNode }) {
   const { openAt } = useContextMenu()
   const { onContextMenu, ...rest } = props
@@ -134,8 +132,6 @@ function ContextMenuContent(props: HTMLAttributes<HTMLDivElement>) {
     }
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
-        // Mark the key consumed so other Escape listeners (the commit-details panel) leave it alone:
-        // one press dismisses the topmost thing, not everything at once.
         event.preventDefault()
         close()
       }

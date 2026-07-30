@@ -103,8 +103,6 @@ export function buildHunkPatch(parsed: ParsedFileDiff, hunkHeader: string): stri
   return parsed.rawHeader + hunk.raw
 }
 
-// One patch carrying several of a file's hunks — the file header plus each requested hunk's raw body —
-// for applying a subset of a diff in a single `git apply` (e.g. reverting just the dropped amend hunks).
 export function buildHunksPatch(
   parsed: ParsedFileDiff,
   hunkHeaders: readonly string[]

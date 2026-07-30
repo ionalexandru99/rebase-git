@@ -104,9 +104,6 @@ export function PushControl(props: PushControlProps) {
     setMode('tier1')
   }
 
-  // A leased force refused for a lease reason means the remote genuinely moved: escalate to the pinned
-  // overwrite, showing exactly what the sidecar's fetch found would be lost. A generic error is already
-  // toasted by the runner; a refusal we cannot escalate would otherwise close the flow saying nothing.
   const handleForceOutcome = (outcome: PushOutcome) => {
     if (
       outcome.kind === 'rejected' &&

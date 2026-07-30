@@ -37,8 +37,6 @@ export function useCloneRepo(): CloneRepoStore {
     })
   }, [])
 
-  // The clone keeps running in the main process after this component goes away, so an abandoned
-  // dialog has to cancel it — otherwise a half-written folder is left behind with nobody watching.
   useEffect(() => {
     return () => {
       if (cloneIdRef.current !== null) {

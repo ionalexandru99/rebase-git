@@ -4,9 +4,6 @@ import path from 'node:path'
 import type { Page } from '@playwright/test'
 import { createFixtureRepo, expect, gitIn, test } from './fixtures'
 
-// A long mainline, built through fast-import rather than a commit loop: `git add` + `git commit` per
-// commit is two process spawns, and several hundred of those cost more than the whole test budget on
-// Windows, where spawning is the expensive part. One stream builds the same history.
 function appendLinearCommits(repo: string, count: number): void {
   const stream: string[] = []
   for (let commit = 0; commit < count; commit++) {
@@ -19,8 +16,6 @@ function appendLinearCommits(repo: string, count: number): void {
         'author Test <test@example.com> 1700000000 +0000\n' +
         'committer Test <test@example.com> 1700000000 +0000\n' +
         `data ${Buffer.byteLength(message)}\n${message}\n` +
-        // Only the first commit needs to name a parent; the rest follow the branch fast-import is
-        // already holding open.
         (commit === 0 ? 'from refs/heads/main^0\n' : '') +
         `M 100644 :${mark} file.txt\n\n`
     )
@@ -33,8 +28,6 @@ function appendLinearCommits(repo: string, count: number): void {
   execFileSync('git', ['reset', '--hard', 'main'], { cwd: repo, stdio: 'ignore' })
 }
 
-// A branchy history: several side branches merged back at different points, so the rail has to hold
-// multiple lanes, curves in both directions, merge rings and collapsed-merge glyphs at once.
 function createBranchyRepo(): string {
   const repo = createFixtureRepo()
   const git = gitIn(repo)
@@ -54,7 +47,6 @@ function createBranchyRepo(): string {
   return repo
 }
 
-// Pixels the rail has actually painted. The draw runs on an animation frame, so callers poll this.
 function paintedPixels(page: Page, scrollTop?: number): Promise<number> {
   return page.evaluate((offset) => {
     const canvas = document.querySelector<HTMLCanvasElement>('[data-testid="commit-graph-canvas"]')
@@ -93,7 +85,6 @@ test('renders the commit graph rail for a branchy history', async ({ harness }) 
   await expect(page.getByTestId('commit-graph-canvas')).toBeVisible()
   await expect(page.getByTestId('commit-row').first()).toBeVisible()
 
-  // The rail is genuinely drawn, not a blank bitmap sized to the viewport.
   await expect.poll(() => paintedPixels(page)).toBeGreaterThan(500)
 })
 
@@ -102,7 +93,6 @@ test('renders side-branch lanes when a merge is expanded', async ({ harness }) =
   const page = await harness.openRepo(repo)
   await expect(page.getByTestId('commit-row').first()).toBeVisible()
 
-  // Expanding shifts the rows below, so each click is resolved against the current DOM.
   for (let merge = 0; merge < 2; merge++) {
     await page.getByRole('button', { name: 'Expand merge side branch' }).first().click()
   }
@@ -114,7 +104,6 @@ test('renders side-branch lanes when a merge is expanded', async ({ harness }) =
     return rows.map((row) => row.querySelector<HTMLElement>('span[style*="left"]')?.style.left)
   })
 
-  // Side-branch rows sit a lane further in than the mainline, so their text starts further right.
   expect(new Set(railOffsets.filter(Boolean)).size).toBeGreaterThan(1)
 })
 
@@ -125,6 +114,5 @@ test('keeps drawing the rail after a fast scroll to the middle of the log', asyn
   await expect(page.getByTestId('commit-row').first()).toBeVisible()
 
   await expect.poll(() => paintedPixels(page, 0)).toBeGreaterThan(500)
-  // The rail follows the live scroll offset rather than the last committed React range.
   await expect.poll(() => paintedPixels(page, 4_000)).toBeGreaterThan(500)
 })

@@ -85,8 +85,6 @@ describe('classifyGitFailure', () => {
     )
   })
 
-  // git reports both lists in one refusal, each under its own header — the tracked files must not be
-  // read out under the untracked heading.
   it('keeps the tracked and untracked lists apart when a checkout hits both', () => {
     const failure = classifyGitFailure(
       [
@@ -106,7 +104,6 @@ describe('classifyGitFailure', () => {
     )
   })
 
-  // An unstaged tree can hold hundreds of files; a toast must not try to name them all.
   it('counts a long blocking-file list instead of naming it', () => {
     const failure = classifyGitFailure(
       [
@@ -139,8 +136,6 @@ describe('classifyGitFailure', () => {
     expect(failure.message).not.toContain('GH006')
   })
 
-  // git tails almost every transport failure with "Could not read from remote repository… correct
-  // access rights", so a missing remote must not be read as rejected credentials.
   it('reads a push with no remote configured as a missing remote, not an auth problem', () => {
     const failure = classifyGitFailure(
       [
@@ -185,7 +180,6 @@ describe('classifyGitFailure', () => {
     ).toBe('no-upstream')
   })
 
-  // Raw stderr belongs in the developer console, not in a toast the user has to decipher.
   it('keeps an unrecognised message out of the user-facing text', () => {
     const failure = classifyGitFailure('fatal: something nobody has seen before\n  at line 2')
 

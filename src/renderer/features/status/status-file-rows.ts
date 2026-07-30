@@ -24,7 +24,6 @@ export interface UnifiedFileRow {
   isUntracked: boolean
   source: FileRowSource
   dropState?: HeadDropState
-  /** Porcelain XY code of a conflicted file, e.g. `UU` or `DU`. Drives the per-file keep actions. */
   conflictCode?: string
 }
 

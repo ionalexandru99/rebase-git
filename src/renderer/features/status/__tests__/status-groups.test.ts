@@ -43,8 +43,6 @@ describe('buildStatusGroups', () => {
     expect(buildStatusGroups([])).toEqual([])
   })
 
-  // Fork lists a partially-staged file twice — once per side — so each row can be acted on and
-  // diffed independently.
   it('lists a partially-staged file in both the staged and the unstaged group', () => {
     const groups = buildStatusGroups([row('a.ts', 'partial')])
 

@@ -56,9 +56,6 @@ function stagedEntry(repo: string, file: string): string {
 }
 
 describe('a stash that cannot be applied cleanly', () => {
-  // The load-bearing one. A conflicted stash is the one conflicted state with no operation behind
-  // it, so misreporting it as an operation would put Abort/Continue in front of the user — buttons
-  // whose git commands have nothing to act on.
   it('reports Conflict for a pop, with conflicted files and no operation in progress', async () => {
     await withStashConflictRepo(async (fixture) => {
       const error = await failure(stashPop(fixture.path, 0, fixture.stashOid))
@@ -93,8 +90,6 @@ describe('a stash that cannot be applied cleanly', () => {
     })
   })
 
-  // The one conflicted state with no operation marker behind it, so it is also the only one where a
-  // second operation is turned away for the unmerged index rather than for an operation in progress.
   it('refuses a second apply for the unresolved conflict, not for an operation', async () => {
     await withStashConflictRepo(async (fixture) => {
       await failure(stashApply(fixture.path, 0, fixture.stashOid))

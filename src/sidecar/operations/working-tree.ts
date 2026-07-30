@@ -13,8 +13,6 @@ import { requireGit, requireOpen, tryGit } from './helpers'
 import { requireNoOperationForPaths } from './in-progress'
 import { detectOperationState } from './operation-state'
 
-// The in-progress merge/rebase/sequence rides along with the status so the renderer learns about a
-// conflicted operation in the same round trip that tells it which files are conflicted.
 export function getStatus(
   repoPath: string
 ): Effect.Effect<{ status: GitStatus }, RepoNotOpen | GitError, RepoSessions> {
@@ -94,10 +92,6 @@ export function unstageAll(
 
 const DIFF_BASE_ARGS = ['--no-color', '--no-ext-diff', '--unified=3']
 
-// An alternate base for the diff. `range` is a raw revision range; `commit` reads one commit against
-// its first parent (or the empty tree, for a root commit) — `git show` resolves both without a
-// second round trip. `renameSource` widens the pathspec so a rename still reads as a rename: with
-// only the destination path in scope, git has nothing to detect the rename against.
 export interface DiffScope {
   range?: string
   commit?: string
@@ -164,15 +158,6 @@ async function readConflictDiff(repoPath: string, file: string): Promise<string>
   return runGit(['-C', repoPath, 'diff', ...DIFF_BASE_ARGS, '--ours', '--', literalPathspec(file)])
 }
 
-// Plain `git diff` says nothing about a path git does not track, and answers a conflicted one with a
-// combined diff no hunk parser can use — so a working-tree read falls back to `--no-index` against
-// /dev/null for the first case and to `--ours` for the second. Every caller has to walk the same
-// chain: a hunk the renderer shows is a hunk the patch builder must be able to find again, or its
-// checkbox fails with HunkNotFound.
-//
-// `raw` is always the text `parsed` came from, fallbacks included. The renderer parses that patch
-// itself, so returning the pre-fallback text would hand it a diff that disagrees with the hunks
-// shipped beside it.
 async function readDiff(
   repoPath: string,
   file: string,
@@ -216,7 +201,6 @@ function applyHunk<GuardError = never>(
   file: string,
   hunkHeader: string,
   direction: 'stage' | 'unstage',
-  // Runs under the same lock as the write it guards, so nothing can park an operation in between.
   guard?: Effect.Effect<void, GuardError>
 ): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | GuardError, RepoSessions> {
   return Effect.gen(function* () {
@@ -277,10 +261,6 @@ export function discardChanges(
     if (files.some((file) => !isValidPathArg(file))) {
       return yield* Effect.fail(new GitError({ message: 'invalid file path' }))
     }
-    // Discarding a file that is still conflicted is a resolution — it takes our side and leaves the
-    // operation running, which is the documented behaviour. Discarding one that is already resolved
-    // is the opposite: it restores HEAD over the resolution while the operation stays parked, and the
-    // commit that ends it then records HEAD's side instead of the user's.
     yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {

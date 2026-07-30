@@ -28,7 +28,6 @@ interface CommitGraphCanvasProps {
   viewportHeight: number
   visibleSet: Set<string> | null
   themeNonce: number
-  // Rows with a layout that matches `commits`; rows past it are left blank until the relayout lands.
   rowCount: number
   mergeSideRanges?: ReadonlyMap<string, MergeSideRange>
 }
@@ -39,8 +38,6 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
   const scheduleDraw = useRef<() => void>(noop)
   const scroller = props.scrollContainer
 
-  // Mounted once per scroll container: the draw reads live props and the live scroll offset, so a
-  // scroll never costs a listener rebind, a style read, or a React render.
   useLayoutEffect(() => {
     if (!scroller) {
       return
@@ -67,16 +64,12 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       const scrollTop = scroller.scrollTop
       const rowHeight = metrics.rowHeight
       const firstRow = Math.max(0, Math.floor(scrollTop / rowHeight))
-      // Bounded by the commits too: a filter can shrink the list a render before the layout catches
-      // up, and the rows in between have no commit to draw.
       const lastRow = Math.min(
         rowCount,
         commits.length,
         Math.ceil((scrollTop + viewportHeight) / rowHeight)
       )
 
-      // Only the rows on screen decide how wide the rail has to be, so a deep fan-out further down
-      // the log never inflates the bitmap here.
       let laneSpan = 1
       for (let row = firstRow; row < lastRow; row++) {
         laneSpan = Math.max(laneSpan, layout.railLanes[row])
@@ -160,8 +153,6 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     }
   }, [scroller])
 
-  // The canvas mirrors whatever the props currently say, so any render queues a frame; the request
-  // animation frame guard collapses that with the scroll handler into one draw per frame.
   useLayoutEffect(() => {
     scheduleDraw.current()
   })

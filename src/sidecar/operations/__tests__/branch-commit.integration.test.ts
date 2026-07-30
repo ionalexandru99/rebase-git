@@ -172,8 +172,6 @@ describe('merge', () => {
     expect(fs.existsSync(path.join(repoDir, 'clean.txt'))).toBe(true)
   })
 
-  // git names the commit after the ref as spelled, so merging the qualified form would stamp
-  // `Merge branch 'refs/heads/x'` onto every merge the app makes.
   it('names a merge commit after the short ref, not the qualified one', async () => {
     git('checkout', 'main')
     await runOp(createBranch(repoDir, 'merge/named', undefined, true))
@@ -195,8 +193,6 @@ describe('merge', () => {
 
     await runOp(Effect.either(mergeBranch(repoDir, 'local', 'merge/prefill')))
 
-    // Every test in this file shares one repo, so the abort has to happen even when an assertion
-    // throws — otherwise a single failure here leaves a half-merged repo and fails everything after.
     try {
       const operation = await detectOperationState(repoDir)
       expect(operation?.mergeMessage).toMatch(/^Merge branch 'merge\/prefill'/)
@@ -262,7 +258,6 @@ describe('reset', () => {
 
     await runOp(resetToCommit(repoDir, headBefore, 'soft'))
     expect(git('rev-parse', 'HEAD').trim()).toBe(headBefore)
-    // soft keeps the working tree, so the later content survives
     expect(readFile('reset.txt')).toBe('second\n')
 
     await runOp(resetToCommit(repoDir, headBefore, 'hard'))

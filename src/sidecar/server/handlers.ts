@@ -105,8 +105,6 @@ const scanForReposGuarded = (requestedDirPath: string): Effect.Effect<string[], 
         if (childName !== entry.name) {
           continue
         }
-        // A clone in flight keeps a real working tree in its staging directory; offering it here
-        // would let the user open a repository that is still being written.
         if (isCloneStagingName(childName)) {
           continue
         }

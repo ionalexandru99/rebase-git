@@ -30,8 +30,6 @@ function renderControl(
 }
 
 describe('StashControl', () => {
-  // Once the last conflict is resolved the index looks ordinary, and `git stash push` will happily
-  // bank the resolution and delete MERGE_HEAD — ending the merge without a word.
   it('disables stashing and says why while an operation is parked', () => {
     renderControl({ stagedFiles: ['a.ts'], blockedReason: 'Finish or abort the merge first.' })
 

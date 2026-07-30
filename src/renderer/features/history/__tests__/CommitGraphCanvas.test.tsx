@@ -133,7 +133,6 @@ describe('CommitGraphCanvas', () => {
     container.dispatchEvent(new Event('scroll'))
     await nextFrames()
 
-    // Row 100 now sits at the top of the viewport; nothing about the React props changed.
     expect(arcCenters.length).toBeGreaterThan(0)
     expect(Math.min(...arcCenters.map((center) => center.y))).toBeCloseTo(METRICS.rowHeight / 2, 5)
   })
@@ -209,7 +208,6 @@ describe('CommitGraphCanvas', () => {
       expect(dotCount).toBeGreaterThan(0)
     })
 
-    // One stroke per lane colour for all edges, plus at most one merge ring per drawn row.
     expect(strokeCount).toBeLessThanOrEqual(LANE_PALETTE.length + 13)
   })
 
@@ -288,7 +286,6 @@ describe('CommitGraphCanvas', () => {
     const container = scroller()
     const graph = graphOf(chain(20))
 
-    // A layout that still counts 20 rows paired with the 3 commits a filter just left behind.
     expect(() =>
       render(
         renderCanvas({

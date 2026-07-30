@@ -48,9 +48,6 @@ async function closeRepo(target: string): Promise<void> {
   )
 }
 
-// An open session owns the repo — including the background commit-graph write it started — so the
-// directory cannot be deleted until the session is closed. On Linux the unlink succeeds anyway; on
-// Windows it fails with EPERM.
 async function closeAndRemoveRepo(target: string): Promise<void> {
   await closeRepo(target)
   removeRepoDir(target)
@@ -292,7 +289,6 @@ describe('streamLog RPC over the /rpc transport', () => {
         const current = Chunk.toReadonlyArray(currentChunks) as LogChunk[]
         const currentCommits = current.flatMap((chunk) => chunk.commits)
 
-        // The current stream is unaffected: every commit, in topo order, terminating cleanly.
         expect(currentCommits).toHaveLength(4000)
         expect(currentCommits[0]?.message).toBe('c4000')
         expect(currentCommits.at(-1)?.message).toBe('c1')
@@ -300,8 +296,6 @@ describe('streamLog RPC over the /rpc transport', () => {
         expect(currentTerminal?.done).toBe(true)
         expect(currentTerminal?.streamId).toBe(2)
 
-        // The superseded stream stopped: it never reached its terminal chunk and delivered fewer
-        // chunks than the full run — proof the interruption cut it off rather than buffering.
         expect(superseded.some((chunk) => chunk.done)).toBe(false)
         expect(supersededCount).toBeLessThan(current.length)
         expect(superseded.every((chunk) => chunk.streamId === 1)).toBe(true)

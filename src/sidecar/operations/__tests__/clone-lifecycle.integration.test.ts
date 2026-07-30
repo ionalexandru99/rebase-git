@@ -11,15 +11,11 @@ import { cloneRepo, destinationClaimKey, forceRemove, promoteClone } from '../cl
 let homeRoot: string
 let sourceRepo: string
 let destination: string
-// A server that accepts the connection and then answers nothing: git sits in the protocol
-// handshake for as long as the test needs, without a network or a second git installation.
 let stalledServer: net.Server
 let stalledPort: number
 
 const fileUrl = (repoPath: string): string => `file://${repoPath.split(path.sep).join('/')}`
 
-// Runs a clone in the background and resolves once it has emitted its first chunk, which is the
-// point where it has validated the request and taken the destination.
 async function startCloneInBackground(request: {
   url: string
   parentDir: string
@@ -29,8 +25,6 @@ async function startCloneInBackground(request: {
   const started = new Promise<void>((resolve) => {
     markStarted = resolve
   })
-  // runFork, not Effect.fork: a child fiber would be interrupted the moment the parent effect that
-  // spawned it completes, and the clone would never get off the ground.
   const fiber = Effect.runFork(
     Stream.runForEach(cloneRepo(request), () => Effect.sync(() => markStarted())).pipe(
       Effect.ignore
@@ -64,12 +58,8 @@ beforeAll(async () => {
 
   stalledServer = net.createServer((socket) => {
     socket.on('data', () => {})
-    // Killing git resets the connection rather than closing it on Windows, and an unhandled
-    // ECONNRESET here would fail the run even though every assertion passed.
     socket.on('error', () => {})
   })
-  // Reject a bind failure instead of hanging on a listen callback that will never fire; once
-  // bound, later resets from killed clones are the point of this server.
   await new Promise<void>((resolve, reject) => {
     stalledServer.once('error', reject)
     stalledServer.listen(0, '127.0.0.1', () => {
@@ -87,8 +77,6 @@ afterAll(async () => {
 })
 
 describe('two clones aimed at one destination', () => {
-  // Neither `existsSync` nor git itself can see a clone that has not written anything yet, so the
-  // loser has to be turned away before it spawns — otherwise its cleanup deletes the winner's work.
   it('turns the second one away instead of letting it delete the first one’s work', async () => {
     const request = {
       url: `git://127.0.0.1:${stalledPort}/stalled.git`,
@@ -106,9 +94,6 @@ describe('two clones aimed at one destination', () => {
     await Effect.runPromise(Fiber.interrupt(first))
   })
 
-  // The same contest wearing a different spelling. Whether this disk folds case is not knowable
-  // without writing to it, so the claim folds it everywhere: better a needless wait on a
-  // case-sensitive disk than one clone deleting the other's work on a folding one.
   it('turns away a destination that differs only in case', async () => {
     const first = await startCloneInBackground({
       url: `git://127.0.0.1:${stalledPort}/stalled.git`,
@@ -146,9 +131,6 @@ describe('two clones aimed at one destination', () => {
   })
 })
 
-// One directory answers to several spellings: `Repo` and `repo` wherever the filesystem folds case,
-// and NFC/NFD spellings of the same accented name on macOS. Which aliases a disk honours cannot be
-// known without writing to it, so the key folds them everywhere rather than guessing by platform.
 describe('destination claim keys', () => {
   it('gives one key to every spelling of the same directory', () => {
     const target = path.join('/home/user/code', 'Repo')
@@ -160,8 +142,6 @@ describe('destination claim keys', () => {
     expect(destinationClaimKey(composed)).toBe(destinationClaimKey(decomposed))
   })
 
-  // Win32 ignores dots and spaces trailing a final path component: `repo` and `repo.` name the same
-  // directory there, and two clones holding separate claims on them would rename into one place.
   it('folds the trailing dots and spaces Win32 ignores', () => {
     expect(destinationClaimKey('/home/user/code/repo.')).toBe(
       destinationClaimKey('/home/user/code/repo')
@@ -178,8 +158,6 @@ describe('destination claim keys', () => {
   })
 })
 
-// People pre-create the folder they mean to clone into, and git itself is happy to clone into an
-// empty directory — refusing one would block the clone on a folder with nothing in it.
 describe('an empty directory on the destination', () => {
   it('is cloned into rather than refused', async () => {
     const folderName = 'left-empty'
@@ -193,8 +171,6 @@ describe('an empty directory on the destination', () => {
     expect(fs.existsSync(path.join(destination, folderName, '.git'))).toBe(true)
   })
 
-  // git writes into staging, not into the borrowed directory, so a failed clone leaves it exactly
-  // as it found it.
   it('is given back rather than deleted when the clone fails', async () => {
     const folderName = 'borrowed'
     const borrowed = path.join(destination, folderName)
@@ -232,8 +208,6 @@ describe('an empty directory on the destination', () => {
 describe('clearing what a dead clone left in staging', () => {
   const partial = (name: string): string => path.join(destination, name)
 
-  // git writes its objects and packs read-only, which Windows will not unlink: the staging directory
-  // stayed behind, and no amount of retrying a permission error was going to change that.
   it('removes the read-only files git leaves in a pack directory', async () => {
     const packDirectory = path.join(partial('read-only'), '.git', 'objects', 'pack')
     fs.mkdirSync(packDirectory, { recursive: true })
@@ -246,10 +220,6 @@ describe('clearing what a dead clone left in staging', () => {
     expect(fs.existsSync(partial('read-only'))).toBe(false)
   })
 
-  // chmod follows symlinks, and a hostile repository can check one out pointing anywhere on the
-  // machine: clearing the read-only bits must not reach through the link and change the mode of
-  // whatever it points at. Windows is skipped because creating symlinks there needs a privilege
-  // the runner does not hold.
   it.skipIf(process.platform === 'win32')(
     'does not follow a symlink out of the clone while clearing read-only bits',
     async () => {
@@ -257,8 +227,6 @@ describe('clearing what a dead clone left in staging', () => {
       fs.writeFileSync(outside, 'precious\n')
       fs.chmodSync(outside, 0o444)
 
-      // A read-only subdirectory forces the plain rm to fail everywhere, so the clearing pass
-      // actually walks the tree and meets the link.
       const lockedDirectory = path.join(partial('linked'), 'locked')
       fs.mkdirSync(lockedDirectory, { recursive: true })
       fs.symlinkSync(outside, path.join(lockedDirectory, 'escape'))
@@ -277,17 +245,11 @@ describe('clearing what a dead clone left in staging', () => {
   )
 })
 
-// A sidecar crash mid-clone takes the sweep down with it: nothing in-process survives to remember
-// the staging directory git was writing. The next attempt at the same folder has to clear it, or
-// the crash leaves litter behind forever — and the destination itself must never be poisoned by a
-// crash, which is the point of staging.
 describe('what a crashed sidecar left behind', () => {
   it('is swept by the next clone of the same folder', async () => {
     const orphan = path.join(destination, '.crashy.rebase-clone-dead00ab')
     fs.mkdirSync(path.join(orphan, '.git'), { recursive: true })
     fs.writeFileSync(path.join(orphan, 'README.md'), 'half-written\n')
-    // A near miss wears the prefix but not the exact hex suffix the sidecar generates: it is
-    // somebody's own file, and the sweep has no business touching it.
     const nearMiss = path.join(destination, '.crashy.rebase-clone-backup')
     fs.mkdirSync(nearMiss)
     fs.writeFileSync(path.join(nearMiss, 'notes.txt'), 'mine\n')
@@ -300,17 +262,13 @@ describe('what a crashed sidecar left behind', () => {
 
     expect(Exit.isSuccess(exit)).toBe(true)
     expect(fs.existsSync(path.join(destination, 'crashy', '.git'))).toBe(true)
-    // The sweep runs detached so it cannot stall the sidecar; give it a moment to land.
     await expect.poll(() => fs.existsSync(orphan), { timeout: 10_000, interval: 250 }).toBe(false)
     expect(fs.readFileSync(path.join(nearMiss, 'notes.txt'), 'utf8')).toBe('mine\n')
     fs.rmSync(nearMiss, { recursive: true, force: true })
   })
 })
 
-// The empty directory the user pre-created is removed to make room for the rename; a promotion
-// that never lands — Windows can hold a freshly written staging tree — has to give it back.
 describe('a promotion that cannot land', () => {
-  // The full retry budget is spent before the throw, so this test runs for the whole of it.
   it('gives a borrowed empty destination back', { timeout: 15_000 }, async () => {
     const borrowed = path.join(destination, 'borrowed-back')
     fs.mkdirSync(borrowed)
@@ -335,8 +293,6 @@ describe('interrupting a clone in flight', () => {
     const fiber = await startCloneInBackground(request)
     await Effect.runPromise(Fiber.interrupt(fiber))
 
-    // The destination was never written to — git works in staging — and the detached sweep clears
-    // the staging directory once the killed git lets go of it.
     expect(fs.existsSync(path.join(destination, 'interrupted'))).toBe(false)
     await expect
       .poll(
@@ -346,8 +302,6 @@ describe('interrupting a clone in flight', () => {
       )
       .toBe(0)
 
-    // The destination is claimed for the length of the operation; an interrupt has to release it,
-    // or the tab that retries after a reload would be told it is already being cloned.
     const retry = await Effect.runPromiseExit(
       Stream.runDrain(cloneRepo({ ...request, url: fileUrl(sourceRepo) }))
     )

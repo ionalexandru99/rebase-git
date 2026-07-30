@@ -1,16 +1,9 @@
-# Review-noise controls. Incremental reviews are on and the auto-pause is off, so every push to an
-# open PR gets reviewed — each one files fresh threads for what that push changed. Left at its
-# default of 5, the pause would stop reviewing a branch after its fifth reviewed commit.
 language: en-US
 tone_instructions: >-
   Follow AGENTS.md. Prioritise correctness, data-loss risk, security, and cross-platform or
   timing-sensitive issues. Do not flag style that biome enforces, and do not re-litigate decisions
   AGENTS.md or the PR description document as deliberate.
 reviews:
-  # Must be spelled out here: this file overrides the CodeRabbit dashboard, and every key it omits
-  # falls back to the schema default rather than the dashboard value — which silently turned the
-  # approvals off when the file first landed. Off, CodeRabbit only ever comments; on, it requests
-  # changes when it finds something and approves once those threads are resolved.
   request_changes_workflow: true
   profile: chill
   high_level_summary: true

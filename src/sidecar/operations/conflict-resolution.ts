@@ -22,8 +22,6 @@ const ABORT_ARGS: Record<ConflictOperationKind, string[]> = {
   revert: ['revert', '--abort']
 }
 
-// A merge has no `--continue`: the conflicted merge is finished by committing the index, which picks
-// up the MERGE_MSG git already prepared.
 const CONTINUE_ARGS: Record<ConflictOperationKind, string[]> = {
   merge: ['commit', '--no-edit'],
   'rebase-merge': ['rebase', '--continue'],
@@ -33,10 +31,6 @@ const CONTINUE_ARGS: Record<ConflictOperationKind, string[]> = {
   revert: ['revert', '--continue']
 }
 
-// Steps git can drop on request. A merge has no `--skip` and never needs one — its commit records a
-// second parent, so an unchanged tree still has something to write. `am` is left out on purpose: a
-// patch it failed to apply at all also leaves nothing staged, and there the empty index means "edit
-// these files yourself", so skipping would silently throw the patch away.
 const SKIP_ARGS: Partial<Record<ConflictOperationKind, string[]>> = {
   'rebase-merge': ['rebase', '--skip'],
   'rebase-apply': ['rebase', '--skip'],
@@ -64,8 +58,6 @@ export async function unmergedPaths(repoPath: string): Promise<string[]> {
   return output.split('\0').filter((entry) => entry.length > 0)
 }
 
-// `<mode> <sha> <stage>\t<path>` per unmerged index entry: stage 1 is the merge base, 2 ours, 3
-// theirs. A side missing from that set is a side that deleted the file.
 async function conflictStages(repoPath: string, file: string): Promise<Set<number>> {
   const output = await runGit(
     ['-C', repoPath, 'ls-files', '-u', '-z', '--', literalPathspec(file)],
@@ -84,14 +76,6 @@ async function conflictStages(repoPath: string, file: string): Promise<Set<numbe
   return stages
 }
 
-// Whether the step git just refused to finish has nothing left to record. The wording of that
-// refusal varies by operation and by rebase backend ("is now empty", "nothing to commit", "No
-// changes"), so the index decides instead: no unmerged entry and nothing staged that differs from
-// HEAD means neither committing nor resolving can move this step forward.
-//
-// Staged, not the whole working tree: an unrelated unstaged edit the user happened to be carrying is
-// not part of the step, and counting it would suppress the skip and strand the operation with no way
-// forward — `--continue` would keep refusing for a change it is never going to commit.
 async function stepHasNothingToCommit(repoPath: string): Promise<boolean> {
   if ((await unmergedPaths(repoPath)).length > 0) {
     return false
@@ -135,9 +119,6 @@ export function continueOperation(
         if (!operation) {
           return yield* Effect.fail(new GitError({ message: 'no git operation in progress' }))
         }
-        // Checked up front so a caller who has not finished resolving gets a clear refusal and the
-        // repo is left untouched — otherwise git's own failure is indistinguishable from the next
-        // commit of a sequence conflicting.
         const unresolved = yield* tryGit(() => unmergedPaths(repoPath))
         if (unresolved.length > 0) {
           return yield* Effect.fail(
@@ -149,9 +130,6 @@ export function continueOperation(
         let failure = yield* tryGit(() => runControlGit(repoPath, CONTINUE_ARGS[operation.kind]))
         const skipArgs = SKIP_ARGS[operation.kind]
         if (failure !== null && skipArgs !== undefined) {
-          // Resolving toward the side already in HEAD is how a step ends up empty, and it is also
-          // the user saying they want the incoming commit dropped — so carry that out. Whatever the
-          // skip lands on next is handled below like any other outcome of continuing.
           const nothingToCommit = yield* tryGit(() => stepHasNothingToCommit(repoPath))
           if (nothingToCommit) {
             failure = yield* tryGit(() => runControlGit(repoPath, skipArgs))
@@ -159,10 +137,6 @@ export function continueOperation(
         }
         const stopped = yield* tryGit(() => unmergedPaths(repoPath))
         if (stopped.length > 0) {
-          // Unmerged paths do not always mean the operation is still running: a rebase started with
-          // --autostash can complete on this very continue and then conflict while reapplying the
-          // stash — git exits 0 and removes the rebase state. Telling the user to "continue again"
-          // there would point at a control that no longer exists.
           const stillRunning = yield* tryGit(() => detectOperationState(repoPath))
           if (!stillRunning) {
             return yield* Effect.fail(
@@ -183,9 +157,6 @@ export function continueOperation(
   })
 }
 
-// Conflict markers are never parsed: the index already holds both sides as stages 2 and 3, so taking
-// a side is a checkout of that stage — and a side with no stage is a side that deleted the file,
-// which makes "keep it" and "delete it" the same call for modify/delete and both-deleted conflicts.
 export function resolveConflict(
   repoPath: string,
   file: string,

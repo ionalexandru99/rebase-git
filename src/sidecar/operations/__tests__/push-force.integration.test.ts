@@ -7,9 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type RepoSessions, RepoSessionsLive } from '../../session/sessions'
 import { closeRepo, openRepo, pushRepo } from '../index'
 
-// Each case spins a fresh bare remote, a clone, and teammate clones, then drives a real push (and an
-// internal fetch on lease refusal). Under full-suite parallelism those git spawns blow past the 5s
-// default, so give the real-git work room.
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 })
 
 let base: string
@@ -30,8 +27,6 @@ function writeCommit(dir: string, content: string, message: string): void {
   git(dir, 'commit', '-m', message)
 }
 
-// A second clone advancing the remote stands in for a teammate (or another machine) publishing while
-// the user holds a stale view of the branch — the exact condition the lease must refuse.
 function advanceRemote(content: string, message: string): string {
   const other = fs.mkdtempSync(path.join(base, 'other-'))
   execFileSync('git', ['clone', remoteDir, other])

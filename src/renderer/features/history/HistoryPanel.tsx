@@ -44,7 +44,6 @@ interface HistoryPanelProps {
   currentBranch?: string
   remoteBranches?: string[]
   visibleBranchRefs?: ReadonlySet<string>
-  // The whole loaded log, coalesced while streaming; `filteredCommits` is the subset on screen.
   graphCommits?: GitLogEntry[]
   filteredCommits?: GitLogEntry[]
   displayedCommitSet?: ReadonlySet<string>
@@ -62,8 +61,6 @@ interface HistoryPanelProps {
 const HISTORY_SCROLL_CACHE_LIMIT = 32
 const historyScrollPositions = new Map<string, number>()
 
-// Floor and default are chosen so the metadata, the file tree and the diff all keep usable room at
-// every window size; the panel is additionally capped against the history height in the markup.
 const DETAILS_HEIGHT_MIN = 260
 const DETAILS_HEIGHT_MAX = 900
 const DETAILS_HEIGHT_DEFAULT = 360
@@ -126,8 +123,6 @@ export function HistoryPanel(props: HistoryPanelProps) {
     [graphCommits, commits, displayedSet, expandedMerges, timelineTips]
   )
 
-  // A parent that is loaded but filtered out gets no lane; one that has not streamed in yet still
-  // opens one. Reuses the commit index the panel already keeps rather than a second hash set.
   const loadedCommits = useMemo(() => getCommitIndex(graphCommits).byHash, [graphCommits])
   const isHiddenParent = useCallback(
     (hash: string) => loadedCommits.has(hash) && !displayedSet.has(hash),
@@ -231,8 +226,6 @@ export function HistoryPanel(props: HistoryPanelProps) {
         </div>
       ) : null}
 
-      {/* Viewport and details share this region, so the panel's percentage cap is measured against
-          the space they actually split rather than against the header chrome as well. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <HistoryViewport
           commits={commits}

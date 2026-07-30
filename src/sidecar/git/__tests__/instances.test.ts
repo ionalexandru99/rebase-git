@@ -86,7 +86,6 @@ describe('getOrCreateGit + lookupGit', () => {
 
   it('cancels a SimpleGit process on lock timeout before admitting the next owner', async () => {
     const fake = createHangingGit('rebase-simple-git-cancel-')
-    // simple-git rejects `--upload-pack` on the command line, so the hang comes from repo config.
     execFileSync('git', ['-C', fake.repoDir, 'remote', 'add', 'hanging', fake.remoteDir], {
       stdio: 'ignore'
     })

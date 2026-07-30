@@ -364,8 +364,6 @@ describe('CommitPanel', () => {
     expect(textarea).toHaveValue('')
   })
 
-  // Resolving every conflict toward our side leaves an index identical to HEAD, so the merge commit
-  // has to stay reachable with nothing staged.
   it('keeps commit enabled with nothing staged while a merge is waiting to be concluded', () => {
     renderPanel({ stagedCount: 0, concludesMerge: true })
     fireEvent.input(screen.getByRole('textbox'), { target: { value: "Merge branch 'feature'" } })
@@ -396,8 +394,6 @@ describe('CommitPanel', () => {
     ).toBeInTheDocument()
   })
 
-  // Amending is not an escape hatch from the block: git refuses to amend during a sequencer
-  // operation outright, so letting the toggle re-enable the button only promises a failure.
   it('keeps the block in force when the amend toggle is on', async () => {
     renderPanel({
       amendAvailable: true,

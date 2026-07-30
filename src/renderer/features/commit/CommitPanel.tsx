@@ -22,15 +22,8 @@ interface CommitPanelProps {
   onAmendChange?: (amend: boolean) => void
   droppedHeadPaths?: string[]
   droppedHeadHunks?: { file: string; hunks: string[] }[]
-  /** Message git prepared for an in-progress merge. Only fills a box the user has not typed in. */
   prefillMessage?: string
-  /**
-   * A merge is concluded by committing the index, and resolving every conflict toward our side
-   * leaves an index identical to HEAD — so the merge commit has to stay reachable with nothing
-   * staged, or the merge is a dead end with Abort as the only way out.
-   */
   concludesMerge?: boolean
-  /** Set when committing cannot finish the in-progress operation; disables and explains. */
   commitBlockedReason?: string
 }
 
@@ -142,8 +135,6 @@ export function CommitPanel(props: CommitPanelProps) {
         : 'Commit'
   const loading = props.loading || submitting
   const hasDroppedFiles = amend && (props.droppedHeadPaths?.length ?? 0) > 0
-  // Amending is not a way around the block: git refuses to amend at all while an operation is in
-  // progress, so honouring the reason only when the toggle is off would offer a certain failure.
   const commitBlocked = Boolean(props.commitBlockedReason)
   const commitDisabled =
     !message.trim() ||

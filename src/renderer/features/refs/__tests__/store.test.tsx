@@ -192,8 +192,6 @@ describe('useRefs — concern isolation', () => {
     await act(async () => {
       await openRepo?.(repoPath)
     })
-    // Wait for every refs query (local branches AND remote refs) to settle before snapshotting, so
-    // a trailing remote-refs render — a legitimate refs change — is not mistaken for stream fallout.
     await waitFor(() => {
       expect(screen.getByTestId('remote-refs')).toHaveTextContent('origin/main')
     })
@@ -396,11 +394,9 @@ describe('useRefs — auto-fetch', () => {
     expect(sidecarMock.fetchRepo).toHaveBeenCalledTimes(1)
     sidecarMock.fetchRepo.mockClear()
 
-    // Four more minutes — only four since the manual fetch, so the reset interval has not elapsed.
     await advanceTimers(4 * 60 * 1000)
     expect(sidecarMock.fetchRepo).not.toHaveBeenCalled()
 
-    // Crossing five minutes since the manual fetch fires the auto-fetch.
     await advanceTimers(60 * 1000)
     expect(sidecarMock.fetchRepo).toHaveBeenCalledTimes(1)
   })

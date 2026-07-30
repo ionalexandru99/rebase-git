@@ -11,9 +11,6 @@ export async function workingTreeHasConflicts(git: RawGit): Promise<boolean> {
   return out.trim().length > 0
 }
 
-// merge/revert/cherry-pick leave the tree conflicted on failure, but simple-git's `raw` does NOT
-// reject for a conflicting merge (it resolves while the index holds unmerged entries). So the
-// classification has to inspect the index for unmerged paths rather than trusting the thrown error.
 export function runWithConflictDetection(
   repoPath: string,
   git: RawGit,
@@ -23,14 +20,7 @@ export function runWithConflictDetection(
   return withRepoLock(
     repoPath,
     Effect.gen(function* () {
-      // Resolving the last conflicted file empties the index of unmerged paths while the operation
-      // itself is still parked, and in that window git happily starts a second one: it commits, drops
-      // CHERRY_PICK_HEAD and strands the sequencer's remaining todo, silently throwing away the
-      // resolution the user just made. The marker files are the only thing that still says "parked".
       yield* requireNoOperation(repoPath)
-      // Refuse up front while unmerged paths exist: git would refuse anyway, but the leftover
-      // conflicts would make the outcome classify as a fresh Conflict — telling the user a new
-      // operation started when nothing ran at all.
       const alreadyConflicted = yield* tryGit(() => workingTreeHasConflicts(git))
       if (alreadyConflicted) {
         return yield* Effect.fail(

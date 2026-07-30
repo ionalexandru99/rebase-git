@@ -46,13 +46,9 @@ describe('NewTab recent repositories', () => {
   })
 })
 
-// Cloning is offered with no workspace configured, so this screen has to be able to show the result:
-// otherwise closing the cloned tab leaves the repository unreachable.
 describe('NewTab with no workspace', () => {
   const noWorkspace = () => catalog({ workspaces: [], activeWorkspace: null, discoveredRepos: [] })
 
-  // Every recent, not the four the full picker caps at: this screen has no search and no workspace
-  // listing, so a card that falls off this list is a repository with no way back to it.
   it('still offers the clone and lists everything that has been cloned already', () => {
     const onOpenRepo = vi.fn()
     render(<NewTab catalog={noWorkspace()} onOpenRepo={onOpenRepo} />)
@@ -95,7 +91,6 @@ describe('NewTab clone flow', () => {
     fireEvent.change(screen.getByLabelText('Repository URL'), {
       target: { value: 'https://github.com/owner/repo.git' }
     })
-    // The folder git is about to create stays readable on its own; only the parent path truncates.
     const folderSegment = screen.getByText('/repo')
     expect(folderSegment.parentElement?.textContent).toBe('/home/user/code/repo')
 
@@ -114,8 +109,6 @@ describe('NewTab clone flow', () => {
     })
   })
 
-  // Without this the clone is missing from every later new tab until a restart: recents and the
-  // workspace listing are both read once at startup.
   it('puts the clone into the live catalog, and does not on failure', async () => {
     const cloned = catalog()
     vi.mocked(window.electronAPI.cloneRepo).mockResolvedValue({

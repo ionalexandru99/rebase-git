@@ -16,8 +16,6 @@ interface BannerActions {
   continueOperation: ReturnType<typeof vi.fn>
 }
 
-// Mirrors how WorkspaceViews wires the banner: the slice renders the buttons, the app layer owns the
-// confirmation dialog and the git actions behind them.
 function Harness(props: { value: WorkingTreeStatus; actions: BannerActions }) {
   const dialogs = useDialogs()
   return (
@@ -103,8 +101,6 @@ describe('ConflictBanner — operation titles', () => {
     expect(banner()).toHaveTextContent('Cherry-picking feature/login')
   })
 
-  // The sidecar labels the incoming side of a revert "revert of <commit>", because that is what
-  // index stage :3 holds — so the title applies that label rather than reverting it a second time.
   it('names a revert with the revert being applied', () => {
     renderBanner({
       conflicted: ['a.ts'],
@@ -199,8 +195,6 @@ describe('ConflictBanner — visibility', () => {
     expect(banner()).toHaveTextContent('All conflicts are resolved')
   })
 
-  // A patch `git am` could not apply produces no unmerged entries, so "no conflicts" here would be a
-  // lie that sends the user into `am --continue` failing with "No changes".
   it('does not call an am patch series resolved when nothing is marked conflicted', () => {
     renderBanner({ conflicted: [], operation: operation({ kind: 'am' }) })
 

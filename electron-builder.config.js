@@ -5,8 +5,6 @@ export default {
     output: 'release'
   },
   files: ['out'],
-  // TODO: code-signing/notarization (mac: hardenedRuntime: true + entitlements + notarize;
-  // win: signing) is out of scope until a signed release feed exists.
   mac: {
     target: ['dmg', 'zip']
   },

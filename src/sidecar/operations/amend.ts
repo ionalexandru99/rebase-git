@@ -244,8 +244,6 @@ async function diffSummary(
   newSha: string,
   firstParent: string | undefined
 ): Promise<CommitSummary['summary']> {
-  // --no-commit-id matters for the rootless form: given a single commit, diff-tree leads with a
-  // bare SHA line that would otherwise parse as a numstat row and poison the totals with NaN.
   const args = firstParent
     ? ['diff-tree', '--numstat', '--no-commit-id', '-r', firstParent, newSha]
     : ['diff-tree', '--numstat', '--no-commit-id', '-r', '--root', newSha]

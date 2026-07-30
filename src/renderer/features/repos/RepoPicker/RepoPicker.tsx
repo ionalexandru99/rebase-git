@@ -13,8 +13,6 @@ import {
   RepoGroupList
 } from './RepoGroup'
 
-// The recent list is a shortcut, not an archive: past a handful of cards it stops being scannable
-// and pushes the workspace listing below the fold.
 export const MAX_RECENT_REPOS = 4
 
 interface RepoPickerProps {
@@ -165,10 +163,6 @@ export function RepoPicker(props: RepoPickerProps) {
           </div>
         }
       />
-      {/* Cloning works without a workspace, so this screen has to be able to show what came of it —
-          otherwise closing the cloned tab leaves no way back to the repository. It shows every
-          recent, not the four the full picker caps at: with no search and no workspace listing,
-          this list is the only route back, and a card that falls off it is a repository lost. */}
       {props.recentRepos.length > 0 && (
         <div className="scroll-host max-h-[40vh] w-full max-w-xl overflow-auto">
           <RepoGroup>

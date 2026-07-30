@@ -11,10 +11,8 @@ export interface SelectedFile {
   file: string
   renameSource?: string
   source?: 'worktree' | 'head-commit' | 'commit'
-  /** Which working-copy group the row was picked from — it decides which side of the file is diffed. */
   group?: StatusGroupKind
   range?: string
-  /** Set with `source: 'commit'` — the sha whose first-parent diff this file is read from. */
   commit?: string
 }
 
@@ -46,8 +44,6 @@ const SECTION_MARKERS: Partial<Record<FileRowGroup, { glyph: string; className: 
   staged: { glyph: '✓', className: 'text-add' }
 }
 
-// A selection made outside the lists (or before a group was known) reads as the unstaged side, which
-// is where a file with nothing staged lives.
 function selectedGroupOf(selected: SelectedFile | null): FileRowGroup | null {
   if (!selected) {
     return null

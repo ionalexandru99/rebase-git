@@ -543,7 +543,6 @@ export function createPlaywrightMcpElectronApi(
       state.onboardingComplete = complete
     },
     scanForRepos: async () => ({ _tag: 'Ok', repos: [PLAYWRIGHT_MCP_REPO_PATH] }),
-    // Walks the real progress phases, then lands on the one repo this double can open.
     cloneRepo: async (request) => {
       for (const [phase, percent] of CLONE_PHASES) {
         for (const listener of cloneListeners) {

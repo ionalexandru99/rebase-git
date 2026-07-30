@@ -29,8 +29,6 @@ function normalizeStatus(raw: string): CommitFileStatus {
   }
 }
 
-// `-z` output is a flat run of NUL-terminated fields with no per-record delimiter, so the reader
-// has to know a rename/copy record carries two paths where every other record carries one.
 export function parseCommitNameStatus(output: string): CommitNameStatusEntry[] {
   const fields = output.split(NUL)
   const entries: CommitNameStatusEntry[] = []
@@ -52,9 +50,6 @@ function countOf(field: string): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-// numstat rows are `adds TAB dels TAB path`, except for a rename where the path field is empty and
-// the source and destination follow as two separate NUL-terminated fields. `-z` leaves paths
-// unquoted, so everything past the second tab is the path — a filename may contain tabs of its own.
 export function parseCommitNumstat(output: string): CommitNumstatEntry[] {
   const fields = output.split(NUL)
   const entries: CommitNumstatEntry[] = []

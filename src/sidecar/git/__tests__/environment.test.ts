@@ -26,8 +26,6 @@ describe('applyNonInteractiveGitEnv', () => {
     ).toBe('ssh -i ~/.ssh/work -o BatchMode=yes')
   })
 
-  // Windows drops empty-valued environment variables, so an empty value must never be load-bearing:
-  // git aborts with "missing config value" when its config protocol declares a key without one.
   it('leaves no empty-valued variable behind', () => {
     const env = applyNonInteractiveGitEnv({ GIT_ASKPASS: '/usr/bin/ksshaskpass' })
 

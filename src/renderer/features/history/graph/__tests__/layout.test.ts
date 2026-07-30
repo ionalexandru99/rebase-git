@@ -125,7 +125,6 @@ describe('layoutGraph', () => {
   it('reuses a lane freed by an earlier branch tip', () => {
     const graph = graphOf([entry('a', ['c']), entry('b', ['d']), entry('c', []), entry('d', [])])
 
-    // 'a' ends in lane 0, so 'd' — opened in lane 1 — keeps its lane rather than shifting left.
     expect(lanes(graph)).toEqual([0, 1, 0, 1])
   })
 
@@ -140,8 +139,6 @@ describe('layoutGraph', () => {
     expect([...graph.layout.railLanes]).toEqual([2, 2, 2, 1])
   })
 
-  // The canvas leans on this: a row's incoming edge is always a straight drop down its own lane,
-  // because no other lane can be holding that commit.
   it('never reserves two lanes for the same commit', () => {
     const graph = graphOf([
       entry('m', ['a', 'b']),
@@ -169,8 +166,6 @@ describe('layoutGraph', () => {
   })
 })
 
-// Mirrors what the hook and the worker do together: diff the topologies, round the shared prefix
-// down to a checkpoint, and lay out only the slice from there.
 function relayout(previous: Graph, commits: GitLogEntry[]): Graph {
   const topology = topologyOf(commits)
   const carried = alignRowsToCheckpoint(sharedTopologyRows(previous.topology, topology))
@@ -185,7 +180,6 @@ function longChain(total: number, from = 0): GitLogEntry[] {
   return Array.from({ length: total }, (_unused, index) =>
     entry(
       `c${from + index}`,
-      // A side branch every 30 commits keeps several lanes alive across checkpoints.
       index % 30 === 0 && index + 3 < total
         ? [`c${from + index + 1}`, `c${from + index + 3}`]
         : index < total - 1
