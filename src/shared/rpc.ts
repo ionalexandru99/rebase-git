@@ -344,7 +344,9 @@ export const GetDiff = Rpc.make('getDiff', {
     commit: Schema.optional(RequiredString),
     renameSource: Schema.optional(OpaqueString)
   },
-  success: Schema.Struct({ diff: FileDiffSchema }),
+  // `patch` is the raw `git diff` text the structured `diff` was parsed from. The renderer parses it
+  // with @pierre/diffs; `binary` stays structured because that patch carries no binary signal.
+  success: Schema.Struct({ diff: FileDiffSchema, patch: Schema.String }),
   error: ReadError
 })
 

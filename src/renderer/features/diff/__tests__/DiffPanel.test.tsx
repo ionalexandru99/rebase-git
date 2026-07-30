@@ -10,6 +10,7 @@ const repoPath = '/home/user/project'
 
 const sampleDiff = {
   _tag: 'Ok' as const,
+  patch: '',
   diff: {
     filePath: 'src/app.ts',
     binary: false,
@@ -32,6 +33,7 @@ const sampleDiff = {
 
 const emptyDiff = {
   _tag: 'Ok' as const,
+  patch: '',
   diff: { filePath: 'src/app.ts', binary: false, hunks: [] }
 }
 
@@ -58,6 +60,7 @@ const hunkAt = (header: string, oldStart: number, newStart: number) => ({
 
 const diffWith = (hunks: ReturnType<typeof hunkAt>[]) => ({
   _tag: 'Ok' as const,
+  patch: '',
   diff: {
     filePath: 'src/app.ts',
     binary: false,
@@ -68,6 +71,7 @@ const diffWith = (hunks: ReturnType<typeof hunkAt>[]) => ({
 function mockPartiallyStagedDiff() {
   sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) => ({
     _tag: 'Ok' as const,
+    patch: '',
     diff: {
       filePath: 'src/app.ts',
       binary: false,
@@ -217,6 +221,7 @@ describe('DiffPanel', () => {
     sidecarMock.getDiff.mockImplementation(
       async (_repo: string, _file: string, staged: boolean) => ({
         _tag: 'Ok' as const,
+        patch: '',
         diff: {
           filePath: 'src/app.ts',
           binary: false,
@@ -426,6 +431,7 @@ describe('DiffPanel', () => {
         ? emptyDiff
         : {
             _tag: 'Ok' as const,
+            patch: '',
             diff: {
               filePath: 'src/app.ts',
               binary: false,
@@ -458,9 +464,10 @@ describe('DiffPanel', () => {
   it('renders plain text for files without a known language', async () => {
     sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
       staged
-        ? { _tag: 'Ok' as const, diff: { filePath: 'NOTES', binary: false, hunks: [] } }
+        ? { _tag: 'Ok' as const, patch: '', diff: { filePath: 'NOTES', binary: false, hunks: [] } }
         : {
             _tag: 'Ok' as const,
+            patch: '',
             diff: {
               filePath: 'NOTES',
               binary: false,
@@ -507,6 +514,7 @@ describe('DiffPanel', () => {
   it('renders a binary notice instead of hunks', async () => {
     sidecarMock.getDiff.mockResolvedValue({
       _tag: 'Ok',
+      patch: '',
       diff: { filePath: 'logo.png', binary: true, hunks: [] }
     })
     await renderDiffPanel({ file: 'logo.png' })
@@ -517,6 +525,7 @@ describe('DiffPanel', () => {
   it('omits the +/- totals for a binary file, which has no lines to count', async () => {
     sidecarMock.getDiff.mockResolvedValue({
       _tag: 'Ok',
+      patch: '',
       diff: { filePath: 'logo.png', binary: true, hunks: [] }
     })
     await renderDiffPanel({ file: 'logo.png' })
