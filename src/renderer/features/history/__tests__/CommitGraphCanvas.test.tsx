@@ -52,7 +52,6 @@ interface CanvasProps {
   scrollContainer: HTMLDivElement
   viewportHeight?: number
   visibleSet?: Set<string> | null
-  themeNonce?: number
   rowCount?: number
 }
 
@@ -66,7 +65,6 @@ function renderCanvas(props: CanvasProps) {
       scrollContainer={props.scrollContainer}
       viewportHeight={props.viewportHeight ?? 400}
       visibleSet={props.visibleSet ?? null}
-      themeNonce={props.themeNonce ?? 0}
       rowCount={props.rowCount ?? props.graph.layout.commitCount}
     />
   )
@@ -259,11 +257,11 @@ describe('CommitGraphCanvas', () => {
     expect(canvas).toHaveAttribute('width', '20')
   })
 
-  it('resolves CSS variables only when the theme changes, never per scroll frame', async () => {
+  it('resolves CSS variables once at setup, never per scroll frame', async () => {
     const container = scroller()
     const graph = graphOf(chain(20))
     const getComputedStyleSpy = vi.spyOn(window, 'getComputedStyle')
-    const { rerender } = render(renderCanvas({ graph, scrollContainer: container }))
+    render(renderCanvas({ graph, scrollContainer: container }))
     await vi.waitFor(() => {
       expect(dotCount).toBeGreaterThan(0)
     })
@@ -275,11 +273,6 @@ describe('CommitGraphCanvas', () => {
     await nextFrames()
 
     expect(getComputedStyleSpy.mock.calls.length).toBe(afterSetup)
-
-    rerender(renderCanvas({ graph, scrollContainer: container, themeNonce: 1 }))
-    await nextFrames()
-
-    expect(getComputedStyleSpy.mock.calls.length).toBeGreaterThan(afterSetup)
   })
 
   it('never draws past the commits it was handed, even with a stale row count', async () => {

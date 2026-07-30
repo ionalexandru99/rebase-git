@@ -2,7 +2,6 @@ import type { Schema } from 'electron-store'
 
 export interface StoreSchema {
   recentRepos: string[]
-  theme: 'dark' | 'light'
   workspaces: string[]
   activeWorkspace: string | null
   workingDirectory: string | null
@@ -18,7 +17,6 @@ const SIDEBAR_WIDTH_DEFAULT = 244
 
 export const storeDefaults: StoreSchema = {
   recentRepos: [],
-  theme: 'dark',
   workspaces: [],
   activeWorkspace: null,
   workingDirectory: null,
@@ -32,7 +30,6 @@ export const storeDefaults: StoreSchema = {
 
 export const storeSchema: Schema<StoreSchema> = {
   recentRepos: { type: 'array', items: { type: 'string' } },
-  theme: { type: 'string', enum: ['dark', 'light'] },
   workspaces: { type: 'array', items: { type: 'string' } },
   activeWorkspace: { type: ['string', 'null'] },
   workingDirectory: { type: ['string', 'null'] },

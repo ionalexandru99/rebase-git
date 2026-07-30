@@ -1,5 +1,4 @@
 import pierreDark from '@pierre/theme/pierre-dark'
-import pierreLight from '@pierre/theme/pierre-light'
 import type { DiffHunk, DiffLine } from '@shared/schemas/git'
 import {
   bundledLanguages,
@@ -11,13 +10,11 @@ import {
 
 export interface TokenSpan {
   content: string
-  lightColor: string
-  darkColor: string
+  color: string
 }
 
 export type LineTokens = TokenSpan[]
 
-const LIGHT_THEME = pierreLight.name ?? 'Pierre Light'
 const DARK_THEME = pierreDark.name ?? 'Pierre Dark'
 const MAX_HIGHLIGHT_LINE_LENGTH = 2000
 
@@ -78,7 +75,7 @@ const loadedLanguages = new Set<string>()
 
 function getHighlighter(): Promise<DiffHighlighter> {
   highlighterPromise ??= createHighlighter({
-    themes: [pierreLight, pierreDark] as unknown as ThemeRegistrationRaw[],
+    themes: [pierreDark] as unknown as ThemeRegistrationRaw[],
     langs: [],
     engine: createJavaScriptRegexEngine({ forgiving: true })
   }) as Promise<DiffHighlighter>
@@ -131,20 +128,17 @@ export async function highlightHunk(
     const code = sideLines.map((line) => line.text).join('\n')
     const { tokens } = highlighter.codeToTokens(code, {
       lang: language,
-      themes: { light: LIGHT_THEME, dark: DARK_THEME },
-      defaultColor: false
+      theme: DARK_THEME
     })
     return tokens.map((lineTokens) => {
       const spans: TokenSpan[] = []
       for (const token of lineTokens) {
-        const style = (token.htmlStyle ?? {}) as Record<string, string>
-        const lightColor = style['--shiki-light'] ?? ''
-        const darkColor = style['--shiki-dark'] ?? ''
+        const color = token.color ?? ''
         const previous = spans.at(-1)
-        if (previous && previous.lightColor === lightColor && previous.darkColor === darkColor) {
+        if (previous && previous.color === color) {
           previous.content += token.content
         } else {
-          spans.push({ content: token.content, lightColor, darkColor })
+          spans.push({ content: token.content, color })
         }
       }
       return spans

@@ -31,7 +31,7 @@ A professional Git GUI built with Electron, React, TypeScript, and TailwindCSS.
 - Commit, amend, reword, and selectively remove files or hunks from the previous commit
 - Fetch, pull, publish, push, and safely escalate force pushes with remote-loss previews
 - Surface merge conflicts with persistent resolution guidance
-- Persist window, theme, tab, sidebar, and local-pane state with responsive compact layouts
+- Persist window, tab, sidebar, and local-pane state with responsive compact layouts
 - Run Git outside the main and renderer processes through an authenticated loopback sidecar
 - Use context menus for file, commit, branch, tag, and stash actions
 

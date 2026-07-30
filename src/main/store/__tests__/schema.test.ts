@@ -76,11 +76,6 @@ describe('store schema / defaults parity', () => {
     expect(storeDefaults.persistedTabRepoPaths).toEqual([null])
   })
 
-  it('enum schema contains its default value', () => {
-    const themeEntry = storeSchema.theme as { enum?: readonly unknown[] }
-    expect(themeEntry.enum).toContain(storeDefaults.theme)
-  })
-
   it('marks nothing as required so clearInvalidConfig cannot wipe valid configs', () => {
     for (const key of schemaKeys) {
       expect(storeSchema[key]).not.toHaveProperty('required')

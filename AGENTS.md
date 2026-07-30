@@ -37,7 +37,7 @@ Four processes, hard boundary between them:
 
 - `src/main/` — Electron main. Windows, dialogs, menu, updater, `electron-store`, and the sidecar's
   lifecycle. Proxies Git IPC to the sidecar. **No Git logic.**
-  - `app/` window + app chrome (menu, theme, updater, CSP, shutdown), `ipc/` channel handlers,
+  - `app/` window + app chrome (menu, updater, CSP, shutdown), `ipc/` channel handlers,
     `sidecar/` process spawn + lifecycle + RPC + crash recovery, `repo/` filesystem watching,
     `store/` `electron-store` schema and migrations.
 - `src/sidecar/` — forked `utilityProcess` HTTP server on loopback. Owns all `simple-git` work.
