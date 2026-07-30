@@ -43,12 +43,24 @@ describe('FileRow — unstaged group', () => {
     expect(onStage).toHaveBeenCalledWith('src/app.ts')
   })
 
-  // Otherwise a double-tap on the button sends the move twice: once per click, once for the row.
-  it('keeps the row double-click from firing on top of its own button', () => {
+  // The real gesture is click, click, dblclick — the button stages on click and the row stages on
+  // dblclick, so an unguarded double-tap sends the same move three times.
+  it('stages once when its row button is double-tapped', () => {
+    const { onStage } = renderRow()
+    const button = screen.getByRole('button', { name: 'Stage src/app.ts' })
+
+    fireEvent.click(button, { detail: 1 })
+    fireEvent.click(button, { detail: 2 })
+    fireEvent.doubleClick(button)
+
+    expect(onStage).toHaveBeenCalledTimes(1)
+  })
+
+  it('still stages on a keyboard activation, which carries no click count', () => {
     const { onStage } = renderRow()
 
-    fireEvent.doubleClick(screen.getByRole('button', { name: 'Stage src/app.ts' }))
-    expect(onStage).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }), { detail: 0 })
+    expect(onStage).toHaveBeenCalledTimes(1)
   })
 
   it('stages the file from the context menu', () => {

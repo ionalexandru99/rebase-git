@@ -146,9 +146,15 @@ export function FileRow(props: FileRowProps) {
         {nameButton}
         <button
           type="button"
-          onClick={toggleStaged}
-          // The row's own double-click stages too, so a quick double-tap on the button would
-          // otherwise send the same move twice.
+          // A double-tap arrives as click, click, dblclick. The row stages on dblclick and this
+          // button on click, so the repeat click is ignored and the dblclick is kept from reaching
+          // the row — one gesture, one move. A keyboard activation carries detail 0 and still runs.
+          onClick={(event) => {
+            if (event.detail > 1) {
+              return
+            }
+            toggleStaged()
+          }}
           onDoubleClick={(event) => event.stopPropagation()}
           aria-label={actionLabel}
           title={actionLabel}
