@@ -37,15 +37,12 @@ const emptyDiff = {
   diff: { filePath: 'src/app.ts', binary: false, hunks: [] }
 }
 
-// The panel reads exactly one side of a file — route the sample to one side and leave the other
-// empty so a fetch of the wrong side shows up as an empty pane.
 function mockDiffOn(side: 'unstaged' | 'staged') {
   sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
     staged === (side === 'staged') ? sampleDiff : emptyDiff
   )
 }
 
-// Highlighted lines are split into token spans, so match on the cell's full textContent.
 const getRenderedDiffLine = (text: string) =>
   screen.getAllByText((_, element) => element?.textContent === text)[0]
 
@@ -203,8 +200,6 @@ describe('DiffPanel', () => {
     expect(screen.getByRole('checkbox', { name: 'Stage hunk' })).toBeInTheDocument()
   })
 
-  // Two sides in one pane is the view no diff library can express, and it made every hunk's line
-  // numbers a guess. A row picked from a group shows that group's side of the file, nothing else.
   it('reads only the worktree side for a file selected in the unstaged group', async () => {
     mockPartiallyStagedDiff()
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
@@ -245,8 +240,6 @@ describe('DiffPanel', () => {
     expect(stagedSides()).toEqual([false])
   })
 
-  // Applying half a patch to an unmerged path is not something git will do, so the conflict view
-  // reads rather than offering an action that always fails.
   it('offers no hunk staging for a conflicted file', async () => {
     sidecarMock.getStatus.mockResolvedValue({
       _tag: 'Ok',
@@ -307,8 +300,6 @@ describe('DiffPanel', () => {
     expect(sidecarMock.stageHunk).not.toHaveBeenCalled()
   })
 
-  // A rejected mutation already rolls the status back and banners the reason; the click must not
-  // also end as an unhandled rejection, and the hunk has to become clickable again.
   it('recovers when the hunk mutation rejects outright', async () => {
     mockPartiallyStagedDiff()
     sidecarMock.stageHunk.mockRejectedValue(new Error('sidecar is gone'))

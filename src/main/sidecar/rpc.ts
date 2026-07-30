@@ -156,7 +156,6 @@ export interface ClonePayload {
   folderName: string
 }
 
-// Resolves with the canonical path of the finished clone; the stream's last chunk carries it.
 export async function runCloneStream(
   baseUrl: string,
   token: string,

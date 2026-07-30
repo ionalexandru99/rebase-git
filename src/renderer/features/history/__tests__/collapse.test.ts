@@ -21,8 +21,6 @@ function entry(hash: string, parents: string[] = []): GitLogEntry {
   }
 }
 
-// m4 ─┬─ m3 ── m2 ── m1        (mainline, first-parent)
-//     └─ f2 ── f1 ┘           (feature side branch, merged at m4, base m2)
 const mergeHeavy: GitLogEntry[] = [
   entry('m4', ['m3', 'f2']),
   entry('m3', ['m2']),
@@ -46,9 +44,6 @@ describe('computeMainlineSet', () => {
   })
 })
 
-// octo ─┬─ a ── base       (mainline)
-//       ├─ b ── base
-//       └─ c ── base
 const octopus: GitLogEntry[] = [
   entry('octo', ['a', 'b', 'c']),
   entry('a', ['base']),
@@ -57,7 +52,6 @@ const octopus: GitLogEntry[] = [
   entry('base', [])
 ]
 
-// m3 merges m2 and m1, but m1 is already an ancestor of m2 (a back-merge).
 const backMerge: GitLogEntry[] = [entry('m3', ['m2', 'm1']), entry('m2', ['m1']), entry('m1', [])]
 
 describe('sideRange', () => {
@@ -79,9 +73,6 @@ describe('sideRange', () => {
   })
 })
 
-// M1 ─┬─ P ───────── Q ── root       (mainline)
-//     └─ M2 ─┬─ B ──┘                (M2's mainline rejoins at Q)
-//            └─ C ── D ─┘            (M2's side branch, nested)
 const nested: GitLogEntry[] = [
   entry('M1', ['P', 'M2']),
   entry('P', ['Q']),
@@ -93,9 +84,6 @@ const nested: GitLogEntry[] = [
   entry('root', [])
 ]
 
-// top ─┬─ mid ───────── base       (mainline; two merges share the `shared` commit)
-//      │    └─ y ── shared ┘
-//      └─ x ── shared ┘
 const sharedSide: GitLogEntry[] = [
   entry('top', ['mid', 'x']),
   entry('mid', ['base', 'y']),
@@ -139,7 +127,6 @@ describe('computeCollapsedView', () => {
   })
 })
 
-// m merges feature, and feature (f2) is independently a visible tip.
 const featureAlsoVisible: GitLogEntry[] = [
   entry('m', ['base', 'f2']),
   entry('f2', ['f1']),

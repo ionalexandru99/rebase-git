@@ -6,8 +6,6 @@ import { rpcGetCommitDetail } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import { useRepoSession } from '@/stores/repo-session'
 
-// A commit is immutable, so its detail is read once per tab and then served from cache — reselecting
-// a commit you already looked at costs nothing.
 const commitDetailQuery = (repoPath: string | null, sha: string | null) => ({
   queryKey: repoQueryKeys(repoPath, { idle: 'commit-detail' }).commitDetail(sha ?? 'none'),
   enabled: Boolean(repoPath && sha),

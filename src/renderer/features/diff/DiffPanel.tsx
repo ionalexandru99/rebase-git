@@ -28,7 +28,6 @@ interface DiffPanelProps {
   amendDrop?: AmendDropControls
 }
 
-/** A hunk whose stage/unstage is in flight: it stays on screen until the diff it left refetches. */
 interface PendingHunk {
   file: string
   staged: boolean
@@ -44,11 +43,8 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const source = props.selected?.source ?? 'worktree'
   const isHeadCommit = source === 'head-commit'
-  // An existing commit is a read: there is nothing to stage or drop, so every control goes away.
   const isCommit = source === 'commit'
   const isWorktree = source === 'worktree'
-  // The group the row was picked from decides which side of the file this pane reads. A conflicted
-  // file has no index side to show: its worktree diff is where git falls back to `--ours`.
   const isConflict = props.selected?.group === 'conflicts'
   const showsStagedSide = props.selected?.group === 'staged'
   const worktreeFile = isWorktree ? (props.selected?.file ?? null) : null
@@ -135,9 +131,6 @@ export function DiffPanel(props: DiffPanelProps) {
         await stageHunkOp(file, hunk.header, { fullyStagesFile: isLastOnSide })
       }
     } catch {
-      // A transport or decode failure rejects the mutation, which already rolled the status back
-      // and put the reason on the banner. Swallowing it here only keeps the click from ending as an
-      // unhandled rejection.
     } finally {
       clearPendingHunk(pending)
     }
@@ -149,8 +142,6 @@ export function DiffPanel(props: DiffPanelProps) {
         <div
           className={cn(
             'flex shrink-0 items-center gap-2.5 border-b pl-3.5 pr-2',
-            // The amend mode needs room for a checkbox; a commit's header is one line of text, and
-            // in the details panel it sits above a diff that has little height to spare.
             isCommit ? 'min-h-8 py-1' : 'min-h-[46px] py-1.5'
           )}
         >
@@ -169,8 +160,6 @@ export function DiffPanel(props: DiffPanelProps) {
           <span className="min-w-0 truncate text-sm font-semibold" title={props.selected.file}>
             {props.selected.file}
           </span>
-          {/* Binary files, pure renames and mode changes have no lines to count; the body below
-              says what they are instead of claiming nothing changed. */}
           {totals.adds > 0 || totals.dels > 0 ? (
             <span className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
               <span className="text-add">+{totals.adds}</span>
@@ -208,8 +197,6 @@ export function DiffPanel(props: DiffPanelProps) {
                 hunk={hunk}
                 filePath={props.selected?.file ?? ''}
                 queryKeys={queryKeys}
-                // While the op is in flight the hunk already belongs to the other side; showing it
-                // there is the whole point of keeping it on screen.
                 staged={pending ? !showsStagedSide : showsStagedSide}
                 pending={pending}
                 hunkActionsEnabled={isWorktree && !isConflict && (showsStagedSide || !isUntracked)}

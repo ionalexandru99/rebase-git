@@ -70,9 +70,6 @@ const remoteRefsOk = {
   }
 }
 
-// The fat store object is gone; these provider-level tests assert behavior across the concerns at
-// once, so they read every focused context and assemble one view to assert against. This is test
-// ergonomics only — each value still flows through the real per-tab provider and its contexts.
 function useAggregateGit() {
   const session = useRepoSession()
   const workingTree = useWorkingTreeStatus()
@@ -215,15 +212,11 @@ function renderGitStore(initialTabActive = true) {
   return { git, session, setTabActive, queryClient, startGitCall, startSessionCall }
 }
 
-// Advance fake timers and commit the re-render the fired flush schedules, so the captured store
-// observes it.
 const advanceTimers = (ms: number) =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(ms)
   })
 
-// A fake-timer test that fails before its own `vi.useRealTimers()` would otherwise leave fake
-// timers active and hang `waitFor` in every later test.
 afterEach(() => {
   vi.useRealTimers()
 })
@@ -396,8 +389,6 @@ describe('GitStoreProvider — parallel repo loading', () => {
     vi.useFakeTimers()
     let latestGit: AggregateGit | undefined
     let latestSession: RepoSession | undefined
-    // StrictMode mounts, unmounts, then remounts the same instance on the first render. The
-    // transient unmount queues the deferred close that the remount must cancel.
     render(
       <StrictMode>
         <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
@@ -415,7 +406,6 @@ describe('GitStoreProvider — parallel repo loading', () => {
       await latestSession?.openRepo(repoPath)
     })
 
-    // Drain the deferred-cleanup timer: if the remount failed to cancel it, closeRepo fires here.
     await advanceTimers(0)
 
     expect(latestSession?.repoPath).toBe(repoPath)
@@ -636,7 +626,6 @@ describe('GitStoreProvider — parallel repo loading', () => {
       expect(git.state.branches?.all).toEqual(['main', 'dev'])
     })
 
-    // A branch action invalidates the branch caches through the runner, forcing a refetch.
     const refresh = startGitCall((current) =>
       current.runAction('createBranch', () => Promise.resolve({ _tag: 'Ok' as const }), 'Created')
     )
@@ -688,7 +677,6 @@ describe('GitStoreProvider — parallel repo loading', () => {
       expect(git.state.currentBranch).toBe('main')
     })
 
-    // Renaming the checked-out branch refreshes branches only; status still reports the old name.
     sidecarMock.getStatus.mockResolvedValue(statusOk)
     sidecarMock.getLocalBranches.mockResolvedValue({
       _tag: 'Ok',
@@ -1126,8 +1114,6 @@ describe('GitStoreProvider — parallel repo loading', () => {
       expect(git.state.repoPath).toBe(repoPath)
     })
 
-    // The facade is a projection of the cache: writing the status key directly must surface in
-    // git.state with no separate mirror to keep in sync.
     const before = git.state
     act(() => {
       queryClient.setQueryData(repoQueryKeys(repoPath).status, {
@@ -1156,8 +1142,6 @@ describe('GitStoreProvider — parallel repo loading', () => {
       expect(git.state.repoPath).toBeNull()
     })
 
-    // The fresh fetches hang on reopen, so only the warm cache (kept past close via gcTime) can
-    // paint status and branches.
     sidecarMock.getStatus.mockImplementation(() => new Promise(() => {}))
     sidecarMock.getLocalBranches.mockImplementation(() => new Promise(() => {}))
     await git.openRepo(repoPath)
@@ -1322,7 +1306,6 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
 
     await waitFor(() => {
-      // The RPC itself rejected, so git never ran — the banner must not blame it.
       expect(git.state.error).toBe(
         'The change did not run: Rebase could not reach the Git engine — it may have restarted. Try again; the error is in the developer console.'
       )
@@ -1405,9 +1388,6 @@ describe('GitStoreProvider — parallel repo loading', () => {
       expect(git.state.repoPath).toBe(repoPath)
     })
 
-    // The subscription registered at render zero, when repoPath was null. Reading the live store
-    // through the latest ref is what lets the refs handler pass its repoPath guard and refresh
-    // branches even though the store object's identity has since changed.
     sidecarMock.getLocalBranches.mockClear()
     await act(async () => repoChanged({ repoPath, kind: 'refs' }))
 
@@ -1719,7 +1699,6 @@ describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
       expect(git.state.log?.all.map((commit) => commit.message)).toEqual(['first'])
     })
 
-    // pullNow restarts the stream, bumping the generation and clearing the log.
     await git.pullNow()
 
     act(() => {
@@ -1825,8 +1804,6 @@ describe('GitStoreProvider — runAction', () => {
     expect(sidecarMock.getStatus).not.toHaveBeenCalled()
   })
 
-  // The conflicted row changing state is the feedback; a toast per resolved file would sit on top of
-  // the commit button for seconds. Failures still have to speak up.
   it('stays silent on success for a silentSuccess action but still refreshes and still reports errors', async () => {
     const git = await openedStore()
 
@@ -1851,8 +1828,6 @@ describe('GitStoreProvider — runAction', () => {
     )
 
     expect(failed).toBe(false)
-    // The raw sidecar message has no actionable mapping, so toastGitFailure falls back to its
-    // generic description; the point pinned here is that errors still toast despite silentSuccess.
     expect(toast.error).toHaveBeenCalledWith('Resolve src/a.ts failed', {
       description: 'Git rejected the operation. The full output is in the developer console.'
     })

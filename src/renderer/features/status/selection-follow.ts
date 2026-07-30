@@ -12,7 +12,6 @@ export type SelectionFollow =
 
 interface FollowInput {
   selected: GroupedSelection | null
-  /** The list as it was before the status refreshed — the only place a vanished row's neighbours live. */
   previous: readonly StatusGroupRow[]
   next: readonly StatusGroupRow[]
 }
@@ -27,9 +26,6 @@ const select = (entry: StatusGroupRow): SelectionFollow => ({
 const find = (rows: readonly StatusGroupRow[], file: string, group: StatusGroupKind) =>
   rows.find((entry) => entry.row.file === file && entry.group === group)
 
-// Staging moves a file between lists, so the selection has to move with it rather than snapping back
-// to the top: follow the same file to its new group, and only when the file itself is gone fall back
-// to its neighbour in the group it left.
 export function followSelection(input: FollowInput): SelectionFollow {
   const { selected, previous, next } = input
   if (next.length === 0) {

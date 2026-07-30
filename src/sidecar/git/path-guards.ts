@@ -43,9 +43,6 @@ export function resolveExistingDirectory(inputPath: string): string | null {
   }
 }
 
-// Directories the renderer may point a whole-tree operation (scan, clone) at: they must exist, must
-// not reach outside the user's home, and must not canonicalise somewhere else — a symlinked
-// directory would otherwise let a request act on a tree it never named.
 export function resolveDirectoryWithinHome(inputPath: string): string | null {
   const canonical = resolveExistingDirectory(inputPath)
   if (!canonical) {

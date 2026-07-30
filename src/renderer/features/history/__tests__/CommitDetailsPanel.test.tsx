@@ -114,7 +114,6 @@ async function renderHistory() {
   })
 }
 
-// Scoped to the graph: the panel header shows the selected commit's subject too.
 const rowFor = (message: string) => {
   const rows = screen
     .getAllByTestId('commit-row')
@@ -269,7 +268,6 @@ describe('commit details panel contents', () => {
 
     expect(within(fileList).queryByTitle('alpha.ts')).not.toBeInTheDocument()
     expect(within(fileList).getByTitle('README.md')).toBeInTheDocument()
-    // The diff stays put: collapsing a directory hides rows, it does not change the selection.
     expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')).toBeInTheDocument()
 
     fireEvent.click(within(fileList).getByTestId('commit-directory-row'))
@@ -308,7 +306,6 @@ describe('commit details panel contents', () => {
     expect(rowText('logo.png')).not.toContain('+0')
     expect(rowText('moved.ts → renamed.ts')).not.toContain('+0')
     expect(rowText('moved.ts → renamed.ts')).not.toContain('−0')
-    // A file that did change lines still reports them.
     expect(rowText('edited.ts')).toContain('+4')
     expect(rowText('edited.ts')).toContain('−2')
   })
@@ -351,7 +348,6 @@ describe('commit details panel contents', () => {
     expect(within(meta).getByText('Author')).toBeInTheDocument()
     expect(within(meta).getByText('Ada Author')).toBeInTheDocument()
     expect(within(meta).getByText('ada@example.com')).toBeInTheDocument()
-    // The author line owns the date; the run-on single line it replaced did not.
     expect(within(meta).getByText('Author').nextElementSibling).toHaveTextContent(/2026/)
   })
 

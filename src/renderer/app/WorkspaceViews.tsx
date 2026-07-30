@@ -172,9 +172,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
     })
   }
 
-  // A bare reset --hard ends a merge but leaves a rebase or sequencer mid-flight, so discarding
-  // during an operation aborts it properly first — and the confirm says so instead of letting a
-  // merge die silently.
   const discardAll = () => {
     const summary = status?.operation ? summarizeOperation(status.operation) : null
     confirm({
@@ -212,8 +209,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const amendAvailable = hasHeadCommit || headAvailabilityLoading
   const conflictCount = status?.conflicted.length ?? 0
   const operation = status?.operation
-  // The conflict count falls to zero as soon as the last file is resolved, but the operation runs
-  // until Continue finishes it — and git refuses to amend for the whole of it.
   const amendDisabled = headAvailabilityLoading || conflictCount > 0 || operation !== undefined
   const operationSummary = operation ? summarizeOperation(operation) : null
   const commitBlockedReason = conflictBlockedReason(conflictCount, operationSummary)
@@ -230,8 +225,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
       : null
   }
 
-  // Staging a file moves its row to another list, so the selection follows it there instead of
-  // snapping back to the top of the pane.
   useEffect(() => {
     const previous = previousGroupRows.current
     previousGroupRows.current = groupRows
@@ -317,10 +310,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
     return <StatusPanel selected={null} onSelect={() => {}} loading={loading} />
   }
 
-  // A repository with no commits still reaches this branch mid-operation: a `git am --3way` that
-  // fails to apply in an unborn repository leaves a patch series parked with an empty porcelain
-  // status. Without the banner there is nothing to abort it with, and CleanWorkingTree points at
-  // controls "above" that were never rendered.
   if (totalChanges === 0 && !amendAvailable) {
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -471,8 +460,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
   )
 }
 
-// Committing never finishes a sequencer operation — those end with Continue — and a merge commit
-// is refused by git while any file is still conflicted.
 function conflictBlockedReason(
   conflictCount: number,
   summary: OperationSummary | null

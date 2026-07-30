@@ -18,10 +18,6 @@ export function CommitMeta(props: CommitMetaProps) {
   const detail = props.detail
 
   return (
-    // The author line comes first and never shrinks; the body is the only part that gives. So when a
-    // long message meets a short panel, the reader keeps the author line and the files/diff split
-    // below, and the body scrolls in whatever room is left. Past ~9 lines a body is scrolled either
-    // way, so the absolute cap stops a tall panel from handing it space the diff would use better.
     <div
       className="flex max-h-[min(45%,12rem)] min-h-0 shrink-0 flex-col gap-1.5 overflow-hidden border-b px-3 py-2"
       data-testid="commit-meta"

@@ -13,11 +13,6 @@ interface StashControlProps {
   busy: boolean
   onStashSelected: (files: string[]) => void
   onStashAll: () => void
-  /**
-   * Set while an operation is parked. Once its last conflict is resolved the index looks ordinary
-   * again, and a stash would carry the resolution off and drop MERGE_HEAD with it — ending the
-   * operation without ever saying so.
-   */
   blockedReason?: string
 }
 

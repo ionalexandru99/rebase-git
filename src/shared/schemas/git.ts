@@ -16,8 +16,6 @@ export const StatusFileCodeSchema = Schema.Struct({
 })
 export type StatusFileCode = typeof StatusFileCodeSchema.Type
 
-// `rebase-merge` and `rebase-apply` are git's two rebase backends; `am` shares the rebase-apply
-// directory but is a different operation with different semantics, so it gets its own kind.
 export const ConflictOperationKindSchema = Schema.Literal(
   'merge',
   'rebase-merge',
@@ -28,9 +26,6 @@ export const ConflictOperationKindSchema = Schema.Literal(
 )
 export type ConflictOperationKind = typeof ConflictOperationKindSchema.Type
 
-// oursLabel/theirsLabel are the real ref names behind index stages :2 and :3. During a rebase
-// stage 2 is the branch rebased ONTO and stage 3 is the branch being rebased — the UI must render
-// these labels, never the words "ours"/"theirs".
 export const OperationStateSchema = Schema.Struct({
   kind: ConflictOperationKindSchema,
   oursLabel: Schema.String,
@@ -165,8 +160,6 @@ export const CommitIdentitySchema = Schema.Struct({
 })
 export type CommitIdentity = typeof CommitIdentitySchema.Type
 
-// Copies collapse into 'R' and type changes into 'M': a reader cares that a file arrived from
-// somewhere else, or changed, not which of git's two flavours of it git reported.
 export const CommitFileStatusSchema = Schema.Literal('A', 'M', 'D', 'R')
 export type CommitFileStatus = typeof CommitFileStatusSchema.Type
 
@@ -200,7 +193,6 @@ export const LogChunkSchema = Schema.Struct({
 })
 export type LogChunk = typeof LogChunkSchema.Type
 
-// `path` only arrives on the final chunk — it is the canonical location of the finished clone.
 export const CloneProgressSchema = Schema.Struct({
   phase: Schema.String,
   percent: Schema.optional(NonNaNNumber),

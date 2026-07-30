@@ -55,7 +55,6 @@ test('discard all empties the working tree to the clean state', async ({ harness
 
   await expect(page.getByText('Working tree clean')).toBeVisible({ timeout: 10_000 })
   await expect(page.getByTestId('status-file-row')).toHaveCount(0)
-  // The commit panel persists on a clean tree so the last commit stays amendable (reword).
   await expect(page.getByRole('checkbox', { name: /amend last commit/i })).toBeVisible()
 
   expect(porcelainStatus(repo)).toEqual([])

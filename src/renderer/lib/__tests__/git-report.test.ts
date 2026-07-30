@@ -47,8 +47,6 @@ describe('git failure reporting', () => {
     })
   })
 
-  // A sidecar restart or a decode failure means git never ran; blaming git for it misleads, and the
-  // classifier would bucket every one of them as unrecognised anyway.
   it('keeps a failed engine call out of the git classifier', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
 

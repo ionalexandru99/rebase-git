@@ -111,9 +111,6 @@ export function FileRow(props: FileRowProps) {
   }
 
   const isStaged = props.group === 'staged'
-  // What the file is, not what the caller wired up: the safety rules below (no silent discard, stage
-  // means "mark resolved") hold for a conflicted file either way. Only the keep-a-side choices need
-  // a resolver, so only they are withheld without one.
   const isConflicted = props.kind === 'conflicted'
   const conflict =
     isConflicted && props.onResolveConflict
@@ -146,9 +143,6 @@ export function FileRow(props: FileRowProps) {
         {nameButton}
         <button
           type="button"
-          // A double-tap arrives as click, click, dblclick. The row stages on dblclick and this
-          // button on click, so the repeat click is ignored and the dblclick is kept from reaching
-          // the row — one gesture, one move. A keyboard activation carries detail 0 and still runs.
           onClick={(event) => {
             if (event.detail > 1) {
               return
@@ -185,8 +179,6 @@ export function FileRow(props: FileRowProps) {
             {isConflicted ? 'Mark as resolved' : 'Stage'}
           </ContextMenuItem>
         )}
-        {/* Discarding a conflicted file quietly resolves it to our side — the explicit Keep
-            actions above say what they do, so the misleading item is withheld here. */}
         {isConflicted ? null : (
           <ContextMenuItem variant="destructive" onSelect={() => fileAction('discard')}>
             Discard changes

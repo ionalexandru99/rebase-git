@@ -89,7 +89,6 @@ describe('sharedTopologyRows', () => {
     const previous = build([entry('a', ['b']), entry('b')])
     const next = build([entry('a', ['b']), entry('b', ['c']), entry('c')])
 
-    // 'b' gained a parent once 'c' streamed in, so only row 0 carries over.
     expect(sharedTopologyRows(previous, next)).toBe(1)
   })
 
@@ -104,8 +103,6 @@ describe('sharedTopologyRows', () => {
     const previous = build([entry('a', ['b']), entry('b'), entry('c')])
     const next = build([entry('a', ['b']), entry('x'), entry('c')])
 
-    // Replacing row 1 leaves 'a' pointing at a parent that is no longer in the log, so even row 0
-    // draws differently and nothing carries over.
     expect(sharedTopologyRows(previous, next)).toBe(0)
   })
 
@@ -113,7 +110,6 @@ describe('sharedTopologyRows', () => {
     const previous = build([entry('a'), entry('b', ['c']), entry('c')])
     const next = build([entry('z'), entry('b', ['c']), entry('c')])
 
-    // Lanes are a function of shape alone: a root commit in row 0 draws the same either way.
     expect(sharedTopologyRows(previous, next)).toBe(3)
   })
 

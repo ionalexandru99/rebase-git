@@ -2,7 +2,6 @@ import type { UnifiedFileRow } from '@/features/status/status-file-rows'
 
 export type StatusGroupKind = 'conflicts' | 'staged' | 'unstaged'
 
-/** The amend list is not a staging side, so it sits alongside the three working-copy groups. */
 export type FileRowGroup = StatusGroupKind | 'head-commit'
 
 export interface StatusGroup {
@@ -11,7 +10,6 @@ export interface StatusGroup {
   rows: UnifiedFileRow[]
 }
 
-/** A row together with the group it renders in — the pair a selection has to name. */
 export interface StatusGroupRow {
   row: UnifiedFileRow
   group: StatusGroupKind
@@ -36,7 +34,6 @@ export function buildStatusGroups(rows: readonly UnifiedFileRow[]): StatusGroup[
       members.conflicts.push(row)
       continue
     }
-    // A partially-staged file belongs to both sides: each row acts on, and diffs, its own side.
     if (row.stageState !== 'unstaged') {
       members.staged.push(row)
     }

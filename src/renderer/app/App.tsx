@@ -98,8 +98,6 @@ function TabsShell(props: TabsShellProps) {
       })
   }, [])
 
-  // Both catalogs are read once at startup, so a repository that arrives while the app is running —
-  // a clone — would otherwise be invisible to every later new tab until a restart.
   const rescanWorkspace = props.onboarding.rescanWorkingDirectory
   const refreshCatalog = useCallback(async () => {
     const [recent] = await Promise.all([

@@ -1,7 +1,6 @@
 packages:
   - "."
 
-# @pierre/diffs accepts shiki ^3 || ^4; without this it resolves its own copy and we ship two.
 overrides:
   '@pierre/diffs>shiki': '4.3.1'
 

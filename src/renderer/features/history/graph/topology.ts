@@ -1,11 +1,6 @@
 import type { GitLogEntry } from '@/types'
 
-// The lane algorithm only ever compares parents for identity, so the graph crosses into the layout
-// (and the worker) as plain integers: a parent is the row that carries it, or a negative id minted
-// for a parent that has not streamed in yet. No strings, no allocation per row, transferable as-is.
 export interface GraphTopology {
-  // Rows [firstRow, commitCount) are described here; a slice starting past 0 is what gets sent to a
-  // worker that already holds the rows before it.
   firstRow: number
   commitCount: number
   parentOffsets: Int32Array
@@ -66,8 +61,6 @@ export function parentIdsOf(topology: GraphTopology, row: number): Int32Array {
   return topology.parentIds.subarray(topology.parentOffsets[slot], topology.parentOffsets[slot + 1])
 }
 
-// Detached copies of rows [firstRow, commitCount) — copies rather than views so the buffers can be
-// transferred to the worker without detaching the topology the renderer keeps for the next diff.
 export function sliceTopology(topology: GraphTopology, firstRow: number): GraphTopology {
   const from = Math.max(firstRow, topology.firstRow) - topology.firstRow
   const parentStart = topology.parentOffsets[from]
@@ -83,8 +76,6 @@ export function sliceTopology(topology: GraphTopology, firstRow: number): GraphT
   }
 }
 
-// How many leading rows of `next` are laid out exactly as they were in `previous`. Appending to the
-// log leaves earlier rows untouched, so the layout can resume from here instead of restarting.
 export function sharedTopologyRows(previous: GraphTopology, next: GraphTopology): number {
   const limit = Math.min(previous.commitCount, next.commitCount)
   for (let row = 0; row < limit; row++) {

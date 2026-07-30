@@ -7,7 +7,6 @@ import {
   selectCommit
 } from '../commit-selection'
 
-// Newest-first, the order the timeline renders.
 const rows = ['c5', 'c4', 'c3', 'c2', 'c1']
 
 const plain = { toggle: false, range: false }

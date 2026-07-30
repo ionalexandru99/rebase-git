@@ -41,8 +41,6 @@ export function NewTab(props: NewTabProps) {
           onCloned={(repoPath) => {
             setCloning(false)
             props.onOpenRepo(repoPath)
-            // The clone is a repository the app did not know about a moment ago; without this it
-            // stays missing from every later new tab until a restart.
             void props.catalog.refresh()
           }}
           onClose={() => setCloning(false)}

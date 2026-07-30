@@ -2,12 +2,9 @@ import type { ConflictOperationKind, OperationState } from '@shared/schemas/git'
 
 export interface OperationSummary {
   kind: ConflictOperationKind
-  /** Names the operation with the real refs behind index stages :2 and :3. */
   title: string
-  /** `done/total` for sequences that report it, otherwise null. */
   progress: string | null
   noun: string
-  /** A merge is finished from the commit box, so only the other kinds get a Continue button. */
   canContinue: boolean
   continueText: string
   abortText: string
@@ -35,8 +32,6 @@ function operationTitle(operation: OperationState): string {
       return 'Applying patches'
     case 'cherry-pick':
       return `Cherry-picking ${operation.theirsLabel}`
-    // theirsLabel already reads "revert of <commit>" — it names the side being applied, not the
-    // commit being undone — so "Reverting <it>" would say the undo twice and mean neither.
     case 'revert':
       return `Applying ${operation.theirsLabel}`
   }
@@ -60,8 +55,6 @@ export function summarizeOperation(operation: OperationState): OperationSummary 
 
 export function operationGuidance(summary: OperationSummary, conflictCount: number): string {
   if (conflictCount === 0) {
-    // A patch `git am` could not apply leaves no unmerged index entries at all, so an empty conflict
-    // list here does not mean the work is done — `am --continue` would refuse with "No changes".
     if (summary.kind === 'am') {
       return `A patch that fails to apply leaves nothing marked conflicted. Edit the affected files and stage them, then continue the ${summary.noun}.`
     }

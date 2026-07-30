@@ -32,9 +32,6 @@ interface FinalizeReport {
 
 const spawnModule = pathToFileURL(path.resolve('src/sidecar/git/spawn.ts')).href
 
-// The runner drives the module-global tracked-children runtime, which can only be disposed or
-// crashed once, so each scenario needs its own process. It waits for a go file before tearing
-// anything down, which lets the parent confirm the tracked git already owns a live descendant.
 const runnerSource = `import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import {

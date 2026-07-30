@@ -66,8 +66,6 @@ describe('followSelection', () => {
     })
   })
 
-  // Staging one side of a partially-staged file leaves the other side listed, and the row the user
-  // is looking at has not moved anywhere.
   it('keeps the selected side of a file that is listed in both groups', () => {
     const previous = rowsOf(row('a.ts', 'unstaged'))
     const next = rowsOf(row('a.ts', 'partial'))

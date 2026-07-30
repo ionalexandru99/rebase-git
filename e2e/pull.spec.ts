@@ -15,9 +15,6 @@ import {
 const LOCAL_README = '# fixture\nlocal edit\n'
 const REMOTE_MESSAGE = 'teammate note'
 
-// The app pulls with `--ff-only`, but a developer whose global config sets `pull.rebase=true` makes
-// git run its rebase preconditions anyway. Pinning the repo keeps these tests measuring the app
-// instead of whatever git config the machine running them happens to carry.
 function pinFastForwardPull(repo: string): void {
   gitIn(repo)(['config', 'pull.rebase', 'false'])
 }
@@ -29,8 +26,6 @@ test('a pull that would overwrite a local edit fails without touching the file',
   harness.track(path.dirname(remote))
   pinFastForwardPull(repo)
   advanceRemote(remote, REMOTE_MESSAGE)
-  // The remote commit and the uncommitted edit touch the same file, so git refuses before it can
-  // produce a conflict to resolve.
   fs.writeFileSync(path.join(repo, 'README.md'), LOCAL_README)
   const page = await harness.openRepo(repo)
 
@@ -42,7 +37,6 @@ test('a pull that would overwrite a local edit fails without touching the file',
   )
   expect(toast.description).toMatch(/would be overwritten/i)
 
-  // Refusing is only safe if it is also inert: the edit and the branch have to be exactly as before.
   expect(fs.readFileSync(path.join(repo, 'README.md'), 'utf8')).toBe(LOCAL_README)
   expect(porcelainStatus(repo)).toEqual([' M README.md'])
   expect(commitSubjects(repo)).toEqual(['initial'])

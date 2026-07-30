@@ -19,7 +19,6 @@ function entry(hash: string, parents: string[] = []): GitLogEntry {
   }
 }
 
-// A deliberately naive replay of the whole log, kept as the oracle the walker has to match.
 function allBoundaries(layout: GraphLayout, topology: GraphTopology): number[][] {
   const walker = createLaneWalker()
   seekLanes(walker, layout, topology, 0)

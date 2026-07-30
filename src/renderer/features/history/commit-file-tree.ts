@@ -2,7 +2,6 @@ import type { CommitDetailFile } from '@shared/schemas/git'
 
 export interface CommitTreeDirectoryRow {
   kind: 'directory'
-  /** Full path of the deepest directory in a collapsed chain — stable across rebuilds. */
   key: string
   label: string
   depth: number
@@ -50,8 +49,6 @@ function fileLabel(file: CommitDetailFile): string {
   if (file.oldPath === undefined) {
     return name
   }
-  // A rename inside one directory only needs the two names; one that moved needs the old path to
-  // say where the file came from.
   const oldLabel =
     dirname(file.oldPath) === dirname(file.path) ? basename(file.oldPath) : file.oldPath
   return `${oldLabel} → ${name}`
@@ -75,8 +72,6 @@ function buildTree(files: readonly CommitDetailFile[]): DirectoryNode {
   return root
 }
 
-// A directory with no files and exactly one subdirectory adds a row that says nothing on its own, so
-// the chain reads as one row — `src/features/history` rather than three nested rows.
 function collapseChain(node: DirectoryNode): { label: string; node: DirectoryNode } {
   let label = node.name
   let current = node
@@ -129,7 +124,6 @@ export function buildCommitFileTreeRows(
   return rows
 }
 
-/** The file the panel opens on: whichever one reads first with everything expanded. */
 export function firstCommitTreeFile(
   files: readonly CommitDetailFile[]
 ): CommitDetailFile | undefined {

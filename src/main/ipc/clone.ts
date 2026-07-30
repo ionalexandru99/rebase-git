@@ -13,9 +13,6 @@ import { type CloneRegistry, createCloneRegistry } from './clone-registry'
 const registry: CloneRegistry = createCloneRegistry()
 const boundWebContents = new Set<number>()
 
-// A clone outlives the document that asked for it: a reload (including the sidecar recovery path)
-// leaves nobody to receive the progress, and the replacement document starts numbering clones from
-// one again. Both a reload and a teardown therefore retire the document's clones.
 function bindWebContentsCleanup(webContentsId: number): void {
   if (boundWebContents.has(webContentsId)) {
     return
@@ -61,10 +58,6 @@ export function register(): void {
           })
         }
       )
-      // Cloning a repository is as much an act of choosing it as opening one is, and recording it
-      // here means it survives the tab being closed before the open ever lands. Best effort: the
-      // repository is already on disk, and a recents write that cannot land — a full disk, an
-      // unwritable profile — must not dress a finished clone up as a Git failure.
       try {
         addRecentRepo(path)
       } catch {}

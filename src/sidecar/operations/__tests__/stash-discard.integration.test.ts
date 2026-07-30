@@ -74,7 +74,6 @@ describe('stash', () => {
     const afterPop = await runOp(stashList(repoDir))
     expect(afterPop.stashes).toHaveLength(0)
 
-    // restore clean state for the next test
     git('checkout', '--', 'tracked.txt')
   })
 
@@ -155,8 +154,6 @@ describe('stash', () => {
   })
 
   it('stashes and restores both paths of a selected staged rename', async () => {
-    // Glob metacharacters on both paths keep this covering literal pathspecs; `[`/`]` are the
-    // only ones Win32 permits in a filename.
     const source = 'stash old [source].txt'
     const destination = 'stash new [dest].txt'
     const unselected = 'stash new decoy.txt'

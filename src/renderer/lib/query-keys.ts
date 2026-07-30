@@ -17,8 +17,6 @@ const buildRepoQueryKeys = (root: RepoQueryRoot) => ({
     range === undefined
       ? ([...root, 'diff', file, staged] as const)
       : ([...root, 'diff', file, staged, range] as const),
-  // A commit and its diffs are immutable, so they sit outside `diffRoot` — a stage or unstage has
-  // no bearing on them and must not invalidate them.
   commitDetail: (sha: string) => [...root, 'commit-detail', sha] as const,
   commitDiff: (sha: string, file: string) => [...root, 'commit-diff', sha, file] as const,
   hunkHighlight: (file: string, hunkKey: string) =>

@@ -42,8 +42,6 @@ describe('clone registry', () => {
     expect(registry.activeCount()).toBe(1)
   })
 
-  // The reloaded document starts numbering clones from 1 again, so without a per-document
-  // generation its first clone would collide with the retired one and Cancel would miss.
   it('keeps a reused clone id from addressing the retired document’s operation', () => {
     const registry = createCloneRegistry()
     const beforeReload = registry.start(WEB_CONTENTS, 1)
@@ -58,7 +56,6 @@ describe('clone registry', () => {
     expect(registry.activeCount()).toBe(0)
   })
 
-  // A stale entry left in the map would be unreachable from Cancel forever.
   it('retires a duplicate id inside one document instead of shadowing it', () => {
     const registry = createCloneRegistry()
     const stale = registry.start(WEB_CONTENTS, 1)

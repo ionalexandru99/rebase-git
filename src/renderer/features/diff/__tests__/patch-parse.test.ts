@@ -126,7 +126,6 @@ describe('parsePatch over real git output', () => {
     ])
   })
 
-  // The parser has no binary signal at all, which is why `GetDiff` keeps carrying `binary`.
   it('yields a file with no hunks for a binary patch', () => {
     const file = parseOneFile(BINARY_PATCH, 'binary')
 
@@ -141,8 +140,6 @@ describe('parsePatch over real git output', () => {
     })
   })
 
-  // Text with no `diff --git` header is all preamble to the parser, so it yields no files rather
-  // than throwing — the same "nothing to render" outcome as an empty patch.
   it('yields no files for text that is not a patch', () => {
     expect(parsePatch('not a patch at all\n', 'garbage')).toMatchObject({
       kind: 'parsed',
@@ -163,8 +160,6 @@ describe('compactPartialHunkOffsets', () => {
     }
     const [file] = parsed.files
 
-    // Upstream leaves the second hunk at 32/33 — its position in the source file, which counts the
-    // 28 collapsed lines nobody renders.
     expect(file.hunks[0].splitLineStart).toBe(0)
     expect(file.hunks[0].unifiedLineStart).toBe(0)
     expect(file.hunks[1].splitLineStart).toBe(file.hunks[0].splitLineCount)

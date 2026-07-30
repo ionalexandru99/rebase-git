@@ -7,14 +7,6 @@ import { Effect, Stream } from 'effect'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { cloneRepo } from '../clone'
 
-// Git speaks to an SSH remote by running $GIT_SSH_COMMAND <host> <git-upload-pack 'path'> and talking
-// the pack protocol over its stdio. Pointing that at a stub that drops the host and runs the command
-// locally exercises the real ssh code path in git — URL parsing, transport selection, the lot —
-// without a server, a key, or a network.
-//
-// Windows is left out: Git for Windows re-parses GIT_SSH_COMMAND through its own shell and cmd.exe
-// does not treat the single quotes git puts around the path as quoting. The URL grammar these
-// clones depend on is covered by the platform-independent tests in shared/__tests__/clone-url.
 const describeOnPosix = process.platform === 'win32' ? describe.skip : describe
 
 let homeRoot: string
@@ -97,8 +89,6 @@ describeOnPosix('cloning over ssh', () => {
     expect(fs.existsSync(path.join(destination, 'over-ssh', '.git'))).toBe(true)
   })
 
-  // Neutralising the interactive prompts must not reach a GIT_SSH_COMMAND the user configured —
-  // that is how custom keys and per-host settings get applied.
   it('honours the caller’s GIT_SSH_COMMAND rather than overriding it', async () => {
     const chunks = await cloneOver(`ssh://git@rebase-stub-host${sourceRepo}`, 'honoured')
     expect(chunks.at(-1)?.done).toBe(true)

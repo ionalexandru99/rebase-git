@@ -17,15 +17,11 @@ export interface ConflictRowActions {
   note: string | null
 }
 
-// Without an in-progress operation (a conflicted stash pop, say) there are no ref names to show,
-// and the words "ours"/"theirs" are never put in front of a user.
 const FALLBACK_LABELS: ConflictLabels = {
   oursLabel: 'the current version',
   theirsLabel: 'the incoming version'
 }
 
-// Porcelain conflict codes are ours-status/theirs-status. In these four only one side still has a
-// blob, so keeping the file means resolving toward whichever side that is.
 const SIDE_HOLDING_THE_FILE: Record<string, ConflictSide> = {
   DU: 'theirs',
   UD: 'ours',

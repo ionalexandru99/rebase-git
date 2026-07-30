@@ -54,8 +54,6 @@ export {
   unstageHunk
 } from './working-tree'
 
-// The real gitdir/common-dir so the main-process watcher can target HEAD/refs/index without
-// running git itself: for linked worktrees and submodules `.git` is a file pointing elsewhere.
 export async function resolveGitDirs(
   key: string,
   git: SimpleGit
@@ -167,11 +165,6 @@ async function peel(git: SimpleGit, ref: string): Promise<string | undefined> {
   }
 }
 
-// git names the merge commit, MERGE_MSG and the conflict markers after the ref exactly as spelled on
-// the command line, so the qualified form needed to disambiguate a branch from a same-named tag
-// would otherwise leak everywhere as `Merge branch 'refs/heads/x'` and `>>>>>>> refs/heads/x`. The
-// short name is what the user typed nowhere but recognises everywhere, so prefer it whenever it
-// reaches the same commit; a genuine collision still falls back to the unambiguous spelling.
 async function mergeRefSpelling(
   git: SimpleGit,
   refKind: RefKind,
@@ -201,8 +194,6 @@ export function resetToCommit(
     yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
-        // Every mode moves HEAD, and moving HEAD deletes the operation's marker; --hard takes the
-        // staged resolution with it.
         yield* requireNoOperation(repoPath)
         yield* tryGit(() => git.raw(['reset', `--${mode}`, sha, '--']))
       })

@@ -58,14 +58,12 @@ function walkerAt(graph: Graph, row: number): LaneWalker {
   return walker
 }
 
-// The edge half of a frame: every segment of a row collected, then stroked in one batched pass.
 function strokeRowEdges(ctx: CanvasRenderingContext2D, graph: Graph, row: number): void {
   const batch = createEdgeBatch()
   collectRowEdges(batch, walkerAt(graph, row), graph.topology, row, 0, false, METRICS)
   strokeEdgeBatch(ctx, batch)
 }
 
-// One row of the panel's per-frame pipeline: collect edges, stroke them once, then place the dot.
 function drawRow(ctx: CanvasRenderingContext2D, graph: Graph, row: number, dim = false): void {
   const batch = createEdgeBatch()
   collectRowEdges(batch, walkerAt(graph, row), graph.topology, row, 0, dim, METRICS)
@@ -201,7 +199,6 @@ describe('collectRowEdges', () => {
 
     drawRow(ctx, graph, 0)
 
-    // p2 and p3 fan out into freshly opened lanes, each drawn as a bezier from the merge dot.
     expect(raw.bezierCurveTo.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 
@@ -240,8 +237,6 @@ describe('collectRowEdges', () => {
 
   it('emits identical edge control points for pass-through, branch-in, and diverging segments', () => {
     const { ctx, commands } = recordingCtx()
-    // Row 1 sits in lane 1 with lane 0 passing through, its first parent staying in lane 1 and its
-    // second parent diverging into a freshly opened lane 2.
     const graph = graphOf([
       commit('a', ['x', 'c']),
       commit('c', ['p1', 'p2']),

@@ -75,8 +75,6 @@ beforeEach(() => {
 
 describe('useWorkingTreeStatus — concern isolation', () => {
   it('does not re-render a status-only consumer when a commit streams into history', async () => {
-    // The status-only consumer and the history consumer are SIBLINGS under the provider, so the
-    // history consumer's re-render on a streamed chunk cannot cascade down into the status consumer.
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function OpenController() {
       openRepo = useRepoSession().openRepo

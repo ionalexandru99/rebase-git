@@ -1,10 +1,6 @@
 import { advanceLanes, createLaneState, ensureLaneCapacity, type LaneState } from './lanes'
 import type { GraphTopology } from './topology'
 
-// Where every row's dot sits (`commitLane`) and how many lanes it spans (`railLanes`), plus a
-// snapshot of the lane state every CHECKPOINT_ROWS rows. The boundaries in between are replayed on
-// demand rather than stored: keeping them all would cost rows x lanes ints, which for a wide
-// 200k-commit log is tens of megabytes to hold and to copy again on every appended page.
 export interface GraphLayout {
   commitCount: number
   commitLane: Int32Array
@@ -21,7 +17,6 @@ export interface GraphLayoutReuse {
   rows: number
 }
 
-// Layouts can only ever resume from a checkpoint, so every carry-over point is rounded down to one.
 export function alignRowsToCheckpoint(rows: number): number {
   return Math.max(0, Math.floor(rows / CHECKPOINT_ROWS) * CHECKPOINT_ROWS)
 }
@@ -36,15 +31,11 @@ export function emptyGraphLayout(): GraphLayout {
     commitLane: new Int32Array(0),
     railLanes: new Int32Array(0),
     maxLanes: 0,
-    // One empty checkpoint so seeking row 0 of an empty log reads a real, zero-length range.
     checkpointOffsets: new Int32Array(checkpointCount(0) + 1),
     checkpointLanes: new Int32Array(0)
   }
 }
 
-// Lays out rows [carried, commitCount), where `carried` is `topology.firstRow` for a topology slice
-// and otherwise as much of `reuse` as lines up with a checkpoint. A slice must therefore start on a
-// checkpoint and come with the layout holding everything before it — use `alignRowsToCheckpoint`.
 export function layoutGraph(topology: GraphTopology, reuse?: GraphLayoutReuse): GraphLayout {
   const commitCount = topology.commitCount
   if (commitCount === 0) {
@@ -119,8 +110,6 @@ function createLayoutBuilder(
 
 const INITIAL_LANES_PER_CHECKPOINT = 8
 
-// Rows before a checkpoint are identical in the previous layout, so they transfer as three memcpys;
-// the lane state entering the resume row is the checkpoint that was captured there.
 function carryPrefix(builder: LayoutBuilder, previous: GraphLayout, carriedRows: number): void {
   const checkpoints = carriedRows / CHECKPOINT_ROWS
   const carriedLanes = previous.checkpointOffsets[checkpoints]
@@ -157,7 +146,6 @@ function growCheckpointLanes(builder: LayoutBuilder, required: number): void {
   builder.checkpointLanes = grown
 }
 
-// Loads the lane state a checkpoint captured into `state`, ready to replay forward from it.
 export function loadCheckpoint(state: LaneState, layout: GraphLayout, checkpoint: number): void {
   const start = layout.checkpointOffsets[checkpoint]
   const laneCount = Math.max(0, layout.checkpointOffsets[checkpoint + 1] - start)

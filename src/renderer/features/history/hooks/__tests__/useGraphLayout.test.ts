@@ -167,7 +167,6 @@ describe('useGraphLayout with a worker', () => {
 
     rerender({ commits: [...page1.slice(0, 299), entry('c299', ['z']), entry('z')] })
 
-    // The 299 shared rows round down to the checkpoint at 256, so only the rest crosses the wire.
     expect(worker.requests[1].topology.firstRow).toBe(CHECKPOINT_ROWS * 2)
     expect(worker.requests[1].topology.commitCount).toBe(301)
   })

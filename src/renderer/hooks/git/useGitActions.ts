@@ -137,15 +137,10 @@ export function useGitActions(runner: ActionRunner) {
           (path) => rpcContinueOperation(path),
           `Continued ${operationNoun}`,
           {
-            // Deliberately does not say "continue again": a rebase --autostash can complete on this
-            // continue and conflict only while reapplying the stash, where no continue exists — the
-            // banner reflects whichever situation the refetched status shows.
             conflictDescription:
               'Resolve and stage the conflicted files, then finish from the conflict banner.'
           }
         ),
-      // No success toast: the row leaves the conflicted state on its own, and a toast for every file
-      // covers the commit box for seconds at exactly the moment the user is reaching for it.
       resolveConflict: (file: string, side: ConflictSide) =>
         runner.runAction(
           ResolveConflict._tag,

@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { type GraphMetrics, readGraphMetrics } from '@/features/history/graph/metrics'
 
-// One live source of graph geometry for the whole history panel: the virtualizer, the rows and the
-// canvas rail all read it, so a zoom or root font-size change moves them together.
 export function useGraphMetrics(): GraphMetrics {
   const [metrics, setMetrics] = useState(readGraphMetrics)
 

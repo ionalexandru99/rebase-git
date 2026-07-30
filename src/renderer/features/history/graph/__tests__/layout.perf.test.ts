@@ -26,10 +26,6 @@ function buildLinearCommits(total: number): GitLogEntry[] {
   )
 }
 
-// Newest-first log of `branchCount` interleaved chains: commit i belongs to branch i % branchCount
-// and its first parent is the next commit on that branch (i + branchCount), so all branchCount lanes
-// stay alive across the whole scan. Every 50th commit also merges in a neighbouring branch. This
-// exercises the O(commits x lanes) lane scans that a single linear chain (1 lane) never touches.
 function buildFanOutCommits(total: number, branchCount: number): GitLogEntry[] {
   const commits: GitLogEntry[] = []
   for (let index = 0; index < total; index++) {
@@ -72,7 +68,6 @@ describe('graph layout performance', () => {
     })
 
     expect(layout.commitCount).toBe(10_000)
-    // Guards the wide O(commits x lanes) path, not just the linear chain.
     expect(layout.maxLanes).toBeGreaterThan(100)
     expect(elapsed).toBeLessThan(120)
   })
@@ -98,7 +93,6 @@ describe('graph layout performance', () => {
       bytesOf(layout.checkpointOffsets)
 
     expect(layout.commitCount).toBe(50_000)
-    // A lane table for every row would be 50k x 64 ints; checkpoints keep it near the row arrays.
     expect(bytes).toBeLessThan(1_000_000)
   })
 
@@ -124,8 +118,6 @@ describe('graph layout performance', () => {
     })
 
     expect(carried).toBe(alignRowsToCheckpoint(50_000))
-    // Appending a page must stay near the cost of the page itself. Storing a lane table per row
-    // instead of per checkpoint put this at ~50ms, because every append copied the whole thing.
     expect(extendElapsed).toBeLessThan(10)
   })
 })

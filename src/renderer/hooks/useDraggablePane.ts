@@ -10,11 +10,6 @@ interface PaneState {
 
 type PaneAxis = 'horizontal' | 'vertical'
 
-/**
- * Which edge of the pane the drag handle sits on. A pane handled on its `end` edge (a left sidebar's
- * right edge, a top row's bottom edge) grows as the pointer moves away from the origin; one handled
- * on its `start` edge (a bottom panel's top edge) grows as the pointer moves back towards it.
- */
 type PaneHandle = 'start' | 'end'
 
 interface UseDraggablePaneOptions {

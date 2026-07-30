@@ -83,8 +83,9 @@ React and the cache is a single source of truth, so Effect lands on clean ground
   100-col lines, `useImportType` as error, **`useBlockStatements` as error** (always brace
   `if`/`else`/`for`/`while`, even one-liners). Run `pnpm check:fix` before committing.
 - **Names:** descriptive. No `r`/`g`/`c`/`ps`/`vh`. Loop `i`/`j`, event `e`, unused `_` are fine.
-- **Comments:** default to none. Only when the *why* is non-obvious (hidden constraint, invariant,
-  bug workaround). Never reference the task/PR.
+- **Comments:** none. Never write one — not WHAT, not WHY, not JSDoc, not a `TODO`. Put the meaning
+  in names, types, and structure, or in the PR description. The only exception is a directive the
+  tooling reads (`biome-ignore`, `@ts-expect-error`, `@vitest-environment`).
 - **Styling:** Tailwind only — never edit `shell.css`. One sans-serif system font everywhere (no
   selective `font-mono` on hashes/paths/filenames).
 - **Tests are required** for every behavior change. Pick the layer (see §0.5).

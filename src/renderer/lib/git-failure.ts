@@ -23,10 +23,6 @@ export type GitFailureKind =
 
 export interface GitFailure {
   kind: GitFailureKind
-  /**
-   * One short sentence: what went wrong and what to do about it. Never carries git's own output —
-   * that goes to the developer console, where a stack of paths or a wall of stderr belongs.
-   */
   message: string
 }
 
@@ -35,8 +31,6 @@ type Transport = 'ssh' | 'https' | 'unknown'
 const UNREPORTED = 'Git failed without reporting a reason.'
 const UNRECOGNISED = 'Git rejected the operation. The full output is in the developer console.'
 
-// A refusal can name every file in the way, and an unstaged tree can hold hundreds. Past a couple of
-// names the count carries the same information in a fraction of the space.
 const NAMED_PATH_LIMIT = 2
 
 function remoteHost(raw: string): string | null {
@@ -76,7 +70,6 @@ function transportOf(raw: string, lowered: string): Transport {
   return 'unknown'
 }
 
-// "the remote" reads badly in a sentence that already names a host, so callers pick one or the other.
 function hostPhrase(raw: string): string {
   return remoteHost(raw) ?? 'the remote'
 }
@@ -88,8 +81,6 @@ function describePaths(paths: readonly string[], noun: string): string {
   return paths.join(' and ')
 }
 
-// git lists the blocking files on their own indented lines under each header, and a single refusal
-// can carry both lists — tracked edits first, then untracked files — so each is read from its own.
 function pathsUnder(raw: string, header: RegExp): string[] {
   const lines = raw.split('\n')
   const headerIndex = lines.findIndex((line) => header.test(line))
@@ -195,11 +186,6 @@ function hookRejected(raw: string): GitFailure {
   }
 }
 
-/**
- * Turns raw git stderr into a message that names the failure and the fix. An unrecognised failure is
- * reported as such rather than paraphrased: the raw output goes to the developer console, so nothing
- * is lost and the toast stays readable.
- */
 export function classifyGitFailure(rawMessage: string): GitFailure {
   const raw = rawMessage.trim()
   if (raw.length === 0) {
@@ -236,8 +222,6 @@ export function classifyGitFailure(rawMessage: string): GitFailure {
       message: `${hostPhrase(raw)} isn't a known SSH host on this machine, and Rebase can't answer the trust prompt. Verify the fingerprint your Git host publishes and add it to ~/.ssh/known_hosts.`
     }
   }
-  // git appends "Could not read from remote repository… correct access rights" to every transport
-  // failure, missing remotes included, so it only means auth when the message is otherwise about SSH.
   const missingTarget = raw.match(/'([^']+)' does not appear to be a git repository/)
   if (missingTarget) {
     const target = missingTarget[1]

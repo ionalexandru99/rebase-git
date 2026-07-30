@@ -79,9 +79,13 @@ Biome enforces the mechanics — run `pnpm check:fix` before committing. Beyond 
 - **Always brace** `if`/`else`/`for`/`while`/`do`, even one-liners.
 - **Descriptive names.** No `r`, `g`, `ps`, `vh` — write `result`, `git`, `parents`,
   `viewportHeight`. Short names are fine for loop indices, event params, and unused bindings.
-- **Default to no comments.** Write one only when the WHY is non-obvious: a hidden constraint, a
-  subtle invariant, a workaround. Never explain WHAT the code does, and never reference the current
-  task, fix, or PR — that rots.
+- **Never write comments.** Not to explain WHAT, not to explain WHY, not as a JSDoc/TSDoc block, not
+  as a section divider, not as a `TODO`. This codebase has none and gains none. Carry the meaning in
+  the code instead: name things descriptively, split the function, encode the constraint in a type,
+  or say it in the PR description. If a line seems to need a comment to be understood, rewrite the
+  line. The only exception is a directive the compiler or linter actually reads — `biome-ignore`,
+  `@ts-expect-error`, `@vitest-environment` — which must carry the terse reason those tools require
+  and nothing more.
 - shadcn components live in `src/renderer/components/ui/`.
 
 ## Pull requests

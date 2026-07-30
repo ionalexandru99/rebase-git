@@ -34,8 +34,6 @@ function emptyStatus(overrides: Partial<GitStatus> = {}): GitStatus {
   }
 }
 
-// StatusPanel now reads status and the staging mutations from the working-tree-status context, so
-// each test injects them through the provider instead of through props.
 function provideStatus(status: GitStatus | null, overrides: Partial<WorkingTreeStatus>) {
   const value: WorkingTreeStatus = {
     status,
@@ -196,9 +194,6 @@ describe('StatusPanel', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
-  // The pairing intuition gets backwards, and StatusPanel is the only place the operation reaches
-  // the rows: mid-rebase, index stage :2 ("ours") holds the branch being rebased ONTO. So the menu
-  // item naming the onto-branch must dispatch side 'ours', end to end through the panel.
   it('resolves a rebase conflict toward the onto-branch with the ours side', async () => {
     const onResolveConflict = vi.fn()
     renderPanel({
@@ -234,8 +229,6 @@ describe('StatusPanel', () => {
     expect(onResolveConflict).toHaveBeenCalledWith('src/conflict.ts', 'theirs')
   })
 
-  // A conflicted stash apply/pop is the one conflict git leaves with no operation behind it, so
-  // there are no branch names to put on the menu items — the rows still have to offer both sides.
   it('names both sides generically when no operation supplies branch labels', async () => {
     const onResolveConflict = vi.fn()
     renderPanel({

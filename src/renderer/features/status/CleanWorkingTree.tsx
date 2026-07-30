@@ -2,9 +2,6 @@ import type { OperationState } from '@shared/schemas/git'
 import { CheckIcon } from 'lucide-react'
 import { summarizeOperation } from '@/features/status/operation-summary'
 
-// Resolving every conflict toward "ours" leaves a working tree identical to HEAD while a merge,
-// rebase or cherry-pick is still parked mid-flight — "nothing to commit" would flatly contradict the
-// banner above telling the user to finish it.
 export function CleanWorkingTree(props: { operation?: OperationState }) {
   const summary = props.operation ? summarizeOperation(props.operation) : null
 

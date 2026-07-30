@@ -2,9 +2,6 @@ import { advanceLanes, createLaneState, ensureLaneCapacity, type LaneState } fro
 import { CHECKPOINT_ROWS, type GraphLayout, loadCheckpoint } from './layout'
 import type { GraphTopology } from './topology'
 
-// Replays lane boundaries from the nearest checkpoint. `lanes` is the state entering `row`;
-// `incoming` keeps the state of the row just stepped over, so a caller drawing row r has both sides
-// of it at once. One walker is reused across frames — seeking never allocates.
 export interface LaneWalker extends LaneState {
   row: number
   incoming: Int32Array

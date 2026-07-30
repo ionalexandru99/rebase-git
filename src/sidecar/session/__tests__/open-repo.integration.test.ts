@@ -17,8 +17,6 @@ interface RecordedWrite {
 
 const commitGraphWrites: RecordedWrite[] = []
 
-// A session keeps its commit-graph process private, so the only way to name the pid the test has to
-// watch is to record what the production code spawned.
 vi.mock('../../git/spawn', async (importOriginal) => {
   const spawn = await importOriginal<typeof import('../../git/spawn')>()
   return {
@@ -33,8 +31,6 @@ vi.mock('../../git/spawn', async (importOriginal) => {
   }
 })
 
-// The product picks the command, so history size is the only lever that keeps its commit-graph write
-// observably in flight: half a million commits takes git well over a second to walk.
 const IN_FLIGHT_WRITE_COMMITS = 500_000
 
 let baseDir: string
@@ -86,8 +82,6 @@ beforeEach(() => {
 
 afterEach(async () => {
   await runOp(closeRepo(repoDir))
-  // A commit-graph write that has only just been let go still holds its files on Windows, and a
-  // bare unlink loses that race: use the retrying removal the other fixtures share.
   removeRepoDir(baseDir)
 })
 

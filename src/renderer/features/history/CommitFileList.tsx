@@ -89,7 +89,6 @@ export function CommitFileList(props: CommitFileListProps) {
   )
 }
 
-// No display utility here: each row type sets its own, so the two never race in the stylesheet.
 const ROW_CLASS =
   'h-8 w-full items-center gap-2 rounded-[var(--r-sm)] pr-2 text-left transition-colors'
 
@@ -131,15 +130,12 @@ function FileRow(props: { row: CommitTreeFileRow; isSelected: boolean; onSelect:
         'grid grid-cols-[18px_minmax(0,1fr)_auto]',
         props.isSelected ? 'bg-[var(--brand-soft)]' : 'hover:bg-muted'
       )}
-      // Files line up past the chevron column, which is a directory-only affordance.
       style={{ paddingLeft: `${8 + props.row.depth * INDENT_PX + CHEVRON_COLUMN_PX}px` }}
     >
       <StatusBadge kind={BADGE_KIND[file.status]} />
       <span className="min-w-0 truncate text-sm" title={props.row.label}>
         {props.row.label}
       </span>
-      {/* A pure rename or a mode change touches no lines, and a binary file has none to count — the
-          status badge already says what happened, so a bare "+0 −0" would only add noise. */}
       {file.binary ? (
         <span className="shrink-0 text-xs text-muted-foreground">binary</span>
       ) : file.additions > 0 || file.deletions > 0 ? (

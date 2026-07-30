@@ -4,9 +4,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createFixtureRepo, expect, gitIn, test } from './fixtures'
 
-// Auth is system-only and Rebase never prompts, so the failure a misconfigured machine actually hits
-// is a remote that asks for credentials nobody answers. A 401 with a Basic challenge reproduces it
-// exactly: git looks for a helper, finds none, and gives up with prompts disabled.
 async function startChallengingRemote(): Promise<{ url: string; close: () => Promise<void> }> {
   const server = http.createServer((_request, response) => {
     response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Git"' })
@@ -20,8 +17,6 @@ async function startChallengingRemote(): Promise<{ url: string; close: () => Pro
   }
 }
 
-// The machine running the test may have a credential helper of its own; an empty repo-local helper
-// clears the inherited chain so the repo behaves like an unconfigured machine.
 function withRemote(repo: string, url: string): void {
   const git = gitIn(repo)
   git(['remote', 'add', 'origin', url])
@@ -56,7 +51,6 @@ test('a remote that asks for credentials names what is missing', async ({ harnes
   }
 })
 
-// One surface per failure: the fetch that fails must not also leave a banner behind the toast.
 test('a fetch that cannot authenticate reports through the toast alone', async ({ harness }) => {
   const remote = await startChallengingRemote()
   try {
@@ -84,7 +78,6 @@ test('an unreachable remote is reported as a network failure, not a silent no-op
   harness
 }) => {
   const repo = createFixtureRepo()
-  // Port 9 (discard) is reserved and closed everywhere, so the connection is refused immediately.
   withRemote(repo, 'http://127.0.0.1:9/fixture.git')
   const page = await harness.openRepo(repo)
   await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({ timeout: 10_000 })
@@ -132,7 +125,6 @@ test('a checkout blocked by uncommitted work names the files in the way', async 
   git(['add', '.'])
   git(['commit', '-m', 'feature edits'])
   git(['checkout', 'main'])
-  // Uncommitted edits to the same files main and feature disagree on: a checkout would overwrite them.
   fs.writeFileSync(path.join(repo, 'README.md'), '# local work in progress\n')
   fs.writeFileSync(path.join(repo, 'notes.md'), 'local notes\n')
 

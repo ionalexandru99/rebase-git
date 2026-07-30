@@ -1,6 +1,3 @@
-// Real `git diff --no-color --no-ext-diff --unified=3` output, captured from a scratch repository —
-// the exact bytes `getDiff` hands the renderer.
-
 export const MODIFY_PATCH = `diff --git a/simple.txt b/simple.txt
 index a92d664..80a6513 100644
 --- a/simple.txt
@@ -33,7 +30,6 @@ index bab081f..5fd74b9 100644
  line 39
 `
 
-// `git diff --no-index -- /dev/null <file>`, how an untracked file reaches the renderer.
 export const UNTRACKED_PATCH = `diff --git a/untracked.txt b/untracked.txt
 new file mode 100644
 index 0000000..fbbee86
@@ -58,7 +54,6 @@ index de98044..7be73ce 100644
  c
 `
 
-// `git show --find-renames` for a commit that only moved the file.
 export const PURE_RENAME_PATCH = `diff --git a/renamed-dst.txt b/renamed-final.txt
 similarity index 100%
 rename from renamed-dst.txt
@@ -96,8 +91,6 @@ export const CRLF_PATCH =
   '+Y\r\n' +
   ' z\r\n'
 
-// File content that looks like patch syntax. The parser anchors on line prefixes, so the ` `-prefixed
-// `diff --git` and `@@ ` lines below are content, not structure.
 export const PATCH_LOOKALIKE_CONTENT_PATCH = `diff --git a/tricky.txt b/tricky.txt
 index 78f07e5..6022fa0 100644
 --- a/tricky.txt
@@ -114,8 +107,6 @@ index eaf36c1..52b403a 100644
 Binary files a/blob.bin and b/blob.bin differ
 `
 
-// What the sidecar falls back to for a conflicted file: `git diff --ours`, whose `* Unmerged path`
-// preamble the parser keeps as patch metadata.
 export const CONFLICT_OURS_PATCH = `* Unmerged path conflict.txt
 diff --git a/conflict.txt b/conflict.txt
 index ba2906d..58487cf 100644
@@ -129,8 +120,6 @@ index ba2906d..58487cf 100644
 +>>>>>>> side
 `
 
-// A combined diff — what plain `git diff` emits for a conflicted file. The sidecar guards against
-// ever shipping this, because the parser silently mis-reads it in non-throwing mode.
 export const COMBINED_DIFF_PATCH = `diff --cc conflict.txt
 index ba2906d,2299c37..0000000
 --- a/conflict.txt

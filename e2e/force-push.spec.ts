@@ -6,10 +6,6 @@ import { advanceRemote, createFixtureRepoWithRemote, expect, gitIn, test } from 
 const revParse = (repo: string, ref: string): string =>
   execFileSync('git', ['rev-parse', ref], { cwd: repo, encoding: 'utf8' }).trim()
 
-// diverge (amend a published commit) → Force push (with lease); when the remote has moved out from
-// under the lease, the app fetches, previews the loss, and the deliberate Overwrite remote anyway
-// republishes the rewritten history. Exercises the split button, both dialog tiers, and the full
-// renderer → main → sidecar → real-git glue against a local bare remote.
 test('force-push republishes a Diverged branch, escalating to a pinned overwrite when refused', async ({
   harness
 }) => {
@@ -22,11 +18,9 @@ test('force-push republishes a Diverged branch, escalating to a pinned overwrite
   git(['commit', '-m', 'feature work'])
   git(['push'])
 
-  // Rewrite the published tip so the branch Diverges from its upstream.
   fs.writeFileSync(path.join(repo, 'work.txt'), 'v2\n')
   git(['commit', '-a', '--amend', '-m', 'feature work (amended)'])
 
-  // A teammate publishes after our last view of the remote, so the lease must refuse the first force.
   advanceRemote(remote, 'teammate work')
 
   const page = await harness.openRepo(repo)

@@ -30,11 +30,6 @@ function isTextEntry(target: EventTarget | null): boolean {
   )
 }
 
-/**
- * Selection and panel visibility for the commit-details panel. This is view state, not repo state:
- * it lives with the panel so it resets when the tab or view goes away, and never reaches the git
- * store. `orderedShas` is the displayed timeline, newest first — it defines what a range covers.
- */
 export function useCommitDetailsView(
   repoPath: string | null | undefined,
   orderedShas: readonly string[]
@@ -43,7 +38,6 @@ export function useCommitDetailsView(
   const [selection, setSelection] = useState<CommitSelection>(EMPTY_COMMIT_SELECTION)
   const [lastRepoPath, setLastRepoPath] = useState(repoPath)
 
-  // Opening a different repo in this tab keeps the panel mounted, so the reset has to be explicit.
   if (lastRepoPath !== repoPath) {
     setLastRepoPath(repoPath)
     setDetailsOpen(false)
@@ -76,8 +70,6 @@ export function useCommitDetailsView(
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [detailsOpen, selection])
 
-  // Stable identities: these go to memoised commit rows, and `orderedShas` changes on every streamed
-  // page — a fresh closure per render would re-render every visible row for nothing.
   const select = useStableCallback((sha: string, modifiers: SelectionModifiers) => {
     setSelection((current) => selectCommit(current, sha, modifiers, orderedShas))
   })

@@ -15,8 +15,6 @@ import type { CommitSelection } from './commit-selection'
 import { useCommitDetail, useCommitDetails } from './hooks/useCommitDetail'
 import { RefBadge } from './RefBadge'
 
-// Reading every selected commit costs one git call each, so a shift-click over hundreds of rows
-// summarises the leading run rather than stampeding the sidecar. The panel says so when it does.
 const SUMMARY_STAT_LIMIT = 50
 
 interface CommitDetailsPanelProps {
@@ -124,8 +122,6 @@ function SingleCommitDetails(props: {
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const files = detail?.files ?? []
 
-  // Content shows up without an extra click, on whichever file reads first in the tree. Re-runs when
-  // the commit changes, since the previously selected path is rarely in the new commit.
   useEffect(() => {
     setSelectedPath((current) =>
       current !== null && files.some((file) => file.path === current)

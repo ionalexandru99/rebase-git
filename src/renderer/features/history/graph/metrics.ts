@@ -26,9 +26,6 @@ function buildGraphMetrics(rootPx: number): GraphMetrics {
   }
 }
 
-// The canvas rail and the DOM rows must agree on row pitch to the pixel, so both read metrics from
-// here. Memoising by root size also keeps identity stable, which lets metrics be an effect or memo
-// dependency without retriggering work on every read.
 let cachedMetrics = buildGraphMetrics(FALLBACK_ROOT_PX)
 
 export function graphMetricsFor(rootPx: number): GraphMetrics {

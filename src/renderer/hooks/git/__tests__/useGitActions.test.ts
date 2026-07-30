@@ -48,9 +48,6 @@ vi.mock('@/lib/rpc-client', () => ({
   rpcStashDrop: vi.fn()
 }))
 
-// The action runner is faked here to invoke the handed-off call and report Ok-ness, so wiring tests
-// can assert which operation tag, call, and label each action routes through it. The runner's own
-// invalidation/conflict/toast behavior is covered in the store harness.
 const runAction = vi.fn(
   async (
     _operation: string,
@@ -137,8 +134,6 @@ describe('useGitActions conflictable ops route through the runner', () => {
     expect(ok).toBe(false)
   })
 
-  // Continue lands on the next conflict of a sequence, and the commit box is disabled for the whole
-  // run — the generic "commit or abort" would point at the one control that cannot finish it.
   it('routes continueOperation with guidance that names Continue, not a commit', async () => {
     vi.mocked(rpcContinueOperation).mockResolvedValue(conflictable({ _tag: 'Conflict' }))
 

@@ -17,8 +17,6 @@ let server: ReturnType<typeof createSidecarServer>
 let homeRoot: string
 let sourceRepo: string
 let destination: string
-// Accepts the connection and answers nothing, so a clone stays in the handshake until it is torn
-// down. The error handler matters on Windows, where killing git resets the socket.
 let stalledServer: net.Server
 let stalledPort: number
 
@@ -64,8 +62,6 @@ beforeAll(async () => {
     socket.on('data', () => {})
     socket.on('error', () => {})
   })
-  // Reject a bind failure instead of hanging on a listen callback that will never fire; once
-  // bound, later resets from killed clones are the point of this server.
   await new Promise<void>((resolve, reject) => {
     stalledServer.once('error', reject)
     stalledServer.listen(0, '127.0.0.1', () => {
@@ -122,9 +118,6 @@ describe('cloneRepo RPC over the /rpc transport', () => {
   })
 })
 
-// The renderer cancels, and main aborts the request signal — everything past that point happens over
-// the wire. This is the seam between the in-process interrupt test and the E2E reload test: it proves
-// the abort reaches the server fiber, so git dies and the destination is handed back.
 describe('cancelling a cloneRepo stream over the transport', () => {
   it('tears the clone down server-side and frees the destination', async () => {
     const controller = new AbortController()
@@ -138,7 +131,6 @@ describe('cancelling a cloneRepo stream over the transport', () => {
       Effect.gen(function* () {
         const client = yield* RpcClient.make(SidecarRpcs)
         yield* Stream.runForEach(client.cloneRepo(payload), () =>
-          // The first chunk means the request is live server-side; cancel from there.
           Effect.sync(() => controller.abort())
         )
       }).pipe(Effect.scoped, Effect.provide(protocolLayer())),
@@ -146,8 +138,6 @@ describe('cancelling a cloneRepo stream over the transport', () => {
     )
     await cancelled
 
-    // Freeing the claim is the observable proof that the server-side scope closed: it is released by
-    // the same teardown that kills git and sweeps its staging directory.
     await expect
       .poll(
         async () => {

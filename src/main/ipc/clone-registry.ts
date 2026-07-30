@@ -1,8 +1,3 @@
-// Clone ids are minted by the renderer and restart at 1 with every fresh document, so the id alone
-// cannot identify an operation across a reload. The registry keys by document instead: a reload
-// retires the previous document's clones, which is both what stops an abandoned clone from writing
-// on unattended and what keeps a reused id from ever addressing the wrong operation.
-
 interface RegisteredClone {
   controller: AbortController
   webContentsId: number
@@ -35,8 +30,6 @@ export function createCloneRegistry(): CloneRegistry {
     start: (webContentsId, cloneId) => {
       const generation = generationOf(webContentsId)
       const entryKey = key(webContentsId, cloneId, generation)
-      // One document cannot legitimately run two clones under the same id; if it happens the older
-      // one is stale, and leaving it in the map would make it unreachable from Cancel.
       const existing = clones.get(entryKey)
       if (existing) {
         abortEntry(entryKey, existing)

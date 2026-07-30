@@ -41,9 +41,6 @@ export interface RepoSession {
   repoPath: string | null
   opening: boolean
   openGeneration: number
-  // Bumped whenever the provider tears its session down and re-arms it, which React does on every
-  // mount in dev. Callers key their open request on it: an in-flight open is invalidated by the
-  // teardown, so without a fresh request the session would sit in `opening` forever.
   resetEpoch: number
   error: string | null
   openRepo: (requestedPath: string) => Promise<string | null>

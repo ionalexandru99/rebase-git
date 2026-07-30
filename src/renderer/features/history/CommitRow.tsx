@@ -21,7 +21,6 @@ import type { MergeGlyph } from './selectors'
 interface CommitRowProps {
   commit: GitLogEntry
   lane: number
-  // Lanes this row spans, straight from the layout — the row's text starts after them.
   railLanes: number
   metrics: GraphMetrics
   top: number
@@ -40,7 +39,6 @@ interface CommitRowProps {
 
 const MERGE_TOGGLE_HIT = 18
 
-// The graph rail is aria-hidden canvas, so the only topology a screen reader gets is this row hint.
 export function commitTopologyLabel(parentCount: number, offBranch: boolean): string {
   const base =
     parentCount === 0
@@ -79,7 +77,6 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
           })
         }
         onDoubleClick={() => props.onOpenDetails?.(commit.hash)}
-        // Rows are selectable with Shift-click, so they must not also start a native text selection.
         className="group/row absolute inset-x-0 z-10 select-none border-b"
         style={{
           top: `${props.top}px`,

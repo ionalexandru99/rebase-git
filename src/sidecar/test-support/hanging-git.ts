@@ -27,13 +27,6 @@ function initRepo(target: string): void {
   execFileSync('git', ['-C', target, 'commit', '--allow-empty', '-m', 'base'], { stdio: 'ignore' })
 }
 
-// A real remote whose upload-pack blocks forever, so process-tree teardown stays observable without
-// a PATH shim — Win32 cannot execute an extensionless script by bare name, and Node refuses to spawn
-// .cmd/.bat without a shell. git runs the upload-pack command through a shell on every platform and
-// then waits on it, and node is the one interpreter guaranteed present and hanging identically
-// everywhere. The fake upload-pack records its own pid so tests can assert the descendant died with
-// its parent. A pager would not work: --paginate only engages when stdout is a terminal, which it
-// never is under the spawn helpers.
 export function createHangingRemote(prefix: string): HangingRemote {
   const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)))
   const remoteDir = path.join(dir, 'remote')
@@ -69,7 +62,6 @@ export function createHangingRemote(prefix: string): HangingRemote {
   }
 }
 
-// Blocks a real `git` invocation indefinitely against a hanging remote.
 export function createHangingGit(prefix: string): HangingGit {
   const remote = createHangingRemote(prefix)
   const repoDir = path.join(remote.dir, 'repo')

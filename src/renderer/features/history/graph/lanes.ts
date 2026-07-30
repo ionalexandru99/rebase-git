@@ -1,8 +1,5 @@
 import { EMPTY_LANE, type GraphTopology } from './topology'
 
-// The lane state between two rows: `lanes[lane]` holds the id of the commit that lane is waiting
-// for, or EMPTY_LANE. One row of the graph is one `advanceLanes` call, shared by the layout pass and
-// by the on-demand replay the canvas uses, so the two can never disagree.
 export interface LaneState {
   lanes: Int32Array
   laneCount: number

@@ -1,6 +1,3 @@
-// Records one walkthrough video per conflict-resolution scenario against the built app in out/.
-// Run `pnpm build` first, then `node scripts/capture-conflict-demos.mjs [scenario|all]`.
-// Output: /tmp/rebase-conflict-demo/scenarios/<name>/<name>.webm and <name>.png
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -102,18 +99,12 @@ function gitRunner(repo, tolerateFailure = false) {
       if (!tolerateFailure) {
         throw error
       }
-      // The tolerated failures are the ones the scenario is built around (a merge that conflicts),
-      // but an unrelated one would otherwise surface half a minute later as an opaque waitFor
-      // timeout on a step that never had a chance to happen.
       const stderr = error.stderr?.toString().trim()
       console.warn(`  git ${args.join(' ')} failed (tolerated)${stderr ? `: ${stderr}` : ''}`)
     }
   }
 }
 
-// Everything the recording machine's global git config could otherwise change or break: a signing
-// key the recorder cannot reach, a hooks path that rejects the commit, a diff3 conflict style that
-// puts a third section in every screenshot, or a pull.rebase that hides the app's own `--ff-only`.
 function pinDemoConfig(git) {
   git(['config', 'user.email', 'demo@example.com'])
   git(['config', 'user.name', 'Demo'])
@@ -138,7 +129,6 @@ const write = (repo, file, content) => {
   fs.writeFileSync(path.join(repo, file), content)
 }
 
-// --- fixtures ---------------------------------------------------------------
 
 function conflictingMergeRepo() {
   const { repo, git } = makeRepo('merge')
@@ -175,8 +165,6 @@ function stashConflictRepo() {
   return { repo, paths: [repo] }
 }
 
-// Two stops, and a first commit that also adds a file — so taking main's side of the conflict still
-// leaves something to commit and the rebase can carry on instead of dying on an empty pick.
 function twoStopRepo(sideBranch) {
   const { repo, git } = makeRepo(sideBranch)
   write(repo, 'README.md', BASE_README)
@@ -245,7 +233,6 @@ function pullRepo() {
   git(['remote', 'add', 'origin', remote])
   git(['push', '-u', 'origin', 'main'])
 
-  // A teammate publishes a README change while the local checkout holds an uncommitted one.
   const teammate = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-demo-teammate-'))
   execFileSync('git', ['clone', remote, teammate], { stdio: 'ignore' })
   const teammateGit = gitRunner(teammate)
@@ -262,7 +249,6 @@ function pullRepo() {
   return { repo, paths: [repo, remoteBase] }
 }
 
-// --- page helpers -----------------------------------------------------------
 
 const refTree = (page) => page.getByTestId('ref-tree-scroll')
 const statusRow = (page, file) => page.getByTestId('status-file-row').filter({ hasText: file })
@@ -300,7 +286,6 @@ async function takeSide(page, file, choice, { shot } = {}) {
   await beat(page, 1600)
 }
 
-// --- scenarios --------------------------------------------------------------
 
 const scenarios = [
   {
@@ -368,8 +353,6 @@ const scenarios = [
       await beat(page, 1800)
 
       await openLocalChanges(page)
-      // No git-dir state file to name, so this is the plain "N merge conflicts" banner: nothing to
-      // abort, nothing to continue, and sides that cannot be labelled with branch names.
       await banner(page, 'merge conflict').waitFor({ timeout: 30_000 })
       await beat(page, 2200)
 
@@ -386,7 +369,6 @@ const scenarios = [
       await page.getByText('Working tree clean').waitFor({ timeout: 30_000 })
       await beat(page, 2000)
 
-      // Started outside the app entirely: everything after this is the git-dir watcher at work.
       git(['rebase', 'main'])
 
       const rebaseBanner = banner(page, 'Rebasing feature onto main')
@@ -419,7 +401,6 @@ const scenarios = [
       await openLocalChanges(page)
       await beat(page, 1800)
 
-      // A range picks more than one commit, which is what makes git record a sequence to report.
       git(['cherry-pick', 'hotfix~2..hotfix'])
 
       const pickBanner = banner(page, 'Cherry-picking')
@@ -454,8 +435,6 @@ const scenarios = [
       await conflictBanner.waitFor({ timeout: 30_000 })
       await beat(page, 1400)
 
-      // One side deleted the file, so there is no incoming blob to keep — the choice is the file's
-      // existence, and the menu says so instead of naming branches.
       await takeSide(page, 'legacy-cookie.ts', 'Keep the file', { shot })
 
       await conflictBanner.getByText('All conflicts are resolved').waitFor({ timeout: 30_000 })
@@ -482,11 +461,9 @@ const scenarios = [
       await shot()
       await beat(page, 3600)
 
-      // The refusal has to be inert: the edit is still sitting in the working tree afterwards.
       await statusRow(page, 'README.md').click()
       await beat(page, 2400)
 
-      // Move the local edit onto a file the incoming commit does not touch.
       write(repo, 'README.md', BASE_README)
       write(repo, 'CHANGELOG.md', LOCAL_CHANGELOG)
       await statusRow(page, 'CHANGELOG.md').waitFor({ timeout: 30_000 })
@@ -513,7 +490,6 @@ const scenarios = [
       await shot()
       await beat(page, 2000)
 
-      // Nobody touches the app: the merge ends in a terminal and the banner has to notice.
       git(['merge', '--abort'])
 
       await page.getByText('Working tree clean').waitFor({ timeout: 30_000 })
@@ -522,7 +498,6 @@ const scenarios = [
   }
 ]
 
-// --- runner -----------------------------------------------------------------
 
 async function openRepoInApp(app, page, repo) {
   await app.evaluate(
@@ -552,7 +527,6 @@ async function runScenario(scenario) {
   fs.mkdirSync(scenarioDir, { recursive: true })
 
   const { repo, paths } = scenario.setup()
-  // The main process only installs its E2E control for a temp dir with this exact prefix.
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
 
   const env = { ...process.env, NODE_ENV: 'test' }
@@ -568,9 +542,6 @@ async function runScenario(scenario) {
   let app
   let page
   let failure
-  // A throw anywhere from here on — launching, opening the repo, or driving the scenario — must
-  // still bring the Electron process down and take the temp directories with it, or a failed run
-  // leaves an orphaned window holding a user-data dir and every fixture repo behind.
   try {
     app = await electron.launch({
       args: [
@@ -616,7 +587,6 @@ async function runScenario(scenario) {
   } catch (error) {
     failure ??= error
   } finally {
-    // The webm only finalizes once the window and the app are both down.
     const video = page && !page.isClosed() ? page.video() : null
     await page?.close().catch(() => {})
     await app?.close().catch(() => {})

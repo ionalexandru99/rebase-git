@@ -56,8 +56,6 @@ export function checkoutRef(
     return yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
-        // git cancels a parked cherry-pick or revert to move HEAD — it says so in a warning nobody
-        // sees and deletes CHERRY_PICK_HEAD, taking the resolution waiting on Continue with it.
         yield* requireNoOperation(repoPath)
         if (refKind === 'remote') {
           yield* Effect.tryPromise({
@@ -118,7 +116,6 @@ export function createBranch(
     yield* withRepoLock(
       repoPath,
       Effect.gen(function* () {
-        // Creating a branch leaves HEAD alone; checking one out is the same HEAD move as any other.
         if (checkout) {
           yield* requireNoOperation(repoPath)
         }

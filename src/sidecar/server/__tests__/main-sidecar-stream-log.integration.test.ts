@@ -12,8 +12,6 @@ import { createSidecarServer } from '../http'
 
 const startedGitProcesses: RunningGitProcess[] = []
 
-// The sidecar keeps the log process behind the RPC boundary, so recording what production spawned
-// is the only way to name the pid that has to be dead once the transport aborts.
 vi.mock('../../git/spawn', async (importOriginal) => {
   const spawn = await importOriginal<typeof import('../../git/spawn')>()
   return {
@@ -36,8 +34,6 @@ let server: ReturnType<typeof createSidecarServer>
 beforeAll(async () => {
   repoPath = makeRepo(['init', 'second', 'third'])
   bigRepoPath = makeBigRepo(4000)
-  // Cancellation needs a history long enough that git is still walking it when the abort lands:
-  // git logs 4000 commits faster than the first chunk reaches the main side.
   abortRepoPath = makeBigRepo(50_000)
   server = createSidecarServer(TOKEN)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -145,7 +141,6 @@ describe('runStreamLog (main → sidecar streaming RPC adapter)', () => {
     await waitUntil(() => !processAlive(gitPid), 10_000, 'sidecar git log process exit')
 
     expect(processAlive(gitPid)).toBe(false)
-    // A zero exit would mean git walked the whole history instead of being torn down mid-stream.
     const { code } = await streamed[0].result
     expect(code).not.toBe(0)
     expect(chunks.some((chunk) => chunk.done)).toBe(false)

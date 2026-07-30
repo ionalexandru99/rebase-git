@@ -20,8 +20,6 @@ function Toaster(props: ToasterProps) {
         loading: <Loader2Icon className="size-4 animate-spin" />
       }}
       style={{
-        // Wider than sonner's 356px default: an actionable failure pairs a sentence or two with an
-        // action button, which at the default width leaves the text a narrow column.
         '--width': '440px',
         '--normal-bg': 'var(--popover)',
         '--normal-text': 'var(--popover-foreground)',

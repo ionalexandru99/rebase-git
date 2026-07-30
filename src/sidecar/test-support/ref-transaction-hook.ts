@@ -59,12 +59,6 @@ const HOOK_SOURCE = [
 const toPosixPath = (value: string) => value.replace(/\\/g, '/')
 const toShellPath = (value: string) => `"${toPosixPath(value)}"`
 
-// Sabotages a repo from inside git's own `reference-transaction` hook, which is the only point
-// between the amend's compare-and-swap and its index install that a test can reach. The hook body
-// is `exec node <script>` because git resolves a `#!/bin/sh` shebang through its bundled shell on
-// every platform (that is how git's own shell-script subcommands run on Win32), while Node cannot
-// spawn an extensionless script by bare name. Making the index a directory is likewise the one way
-// to fail an index install everywhere: renaming onto a read-only file still succeeds on POSIX.
 export function installRefTransactionHook(
   repoDir: string,
   steps: RefTransactionStep[]

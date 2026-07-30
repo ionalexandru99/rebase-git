@@ -64,8 +64,6 @@ function runGitStdout(key: string, args: string[]): Promise<string | null> {
   )
 }
 
-// git emits a NUL via the %x00 placeholder; we split the output on the real NUL. A NUL cannot be put
-// in the argv directly (Node's spawn rejects it), so the format string carries the literal placeholder.
 const LOSS_FORMAT = '%h%x00%s'
 const NUL = '\x00'
 
@@ -83,9 +81,6 @@ async function resolveRemoteTrackingRef(key: string): Promise<string | null> {
   return branch ? `origin/${branch}` : null
 }
 
-// After a lease refusal the remote-tracking ref is stale by definition, so fetch first, then read the
-// refreshed remote tip and the commits it carries that HEAD lacks — exactly what the user would lose
-// and the sha a deliberate overwrite must be pinned to.
 async function fetchAndPreviewLoss(
   key: string,
   upstream: Upstream
@@ -138,8 +133,6 @@ export type PushForce = 'with-lease' | 'overwrite'
 
 type RejectionReason = 'non-fast-forward' | 'lease-stale' | 'remote-moved'
 
-// git stamps the rejected ref line with the reason in parentheses; map only the fast-forward/lease
-// ones. Anything else (auth, network, permission) is left to surface as a generic GitError.
 function classifyRejection(stderr: string): RejectionReason | null {
   if (stderr.includes('(stale info)')) {
     return 'lease-stale'
@@ -159,9 +152,6 @@ interface Upstream {
   hasUpstream: boolean
 }
 
-// The remote + remote-side branch the current branch publishes to, read from its tracking config so a
-// differently-named upstream (local `feature` → `origin/trunk`) targets the right ref. With no
-// upstream configured we fall back to origin + the branch's own name, matching today's plain push.
 async function resolveUpstream(key: string): Promise<Upstream | null> {
   const branch = await runGitStdout(key, ['symbolic-ref', '--short', 'HEAD'])
   if (branch === null) {
@@ -181,8 +171,6 @@ function buildPushArgs(
   expectedRemoteSha: string | undefined
 ): string[] {
   const remoteRef = `refs/heads/${upstream.remoteRef}`
-  // Tier 2: a lease pinned to the exact tip the user was shown — no --force-if-includes, since the
-  // whole point is to discard a remote commit the user deliberately did not integrate.
   if (force === 'overwrite') {
     const args = [
       'push',
@@ -257,12 +245,6 @@ export function pullRepo(
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
-    // `git pull` fetches, so it must hold the fetch semaphore that standalone fetchRepo uses —
-    // otherwise a concurrent fetch and this pull race to write FETCH_HEAD/remote refs and one
-    // dies on a git lock. withPermits waits for an in-flight fetch instead of skipping.
-    // The app's pull is fast-forward-only by design; a user-level pull.rebase=true would otherwise
-    // make git run rebase preconditions and refuse any dirty tree with an error naming an
-    // operation the app never requested.
     yield* withRepoLock(
       key,
       Effect.promise(() =>

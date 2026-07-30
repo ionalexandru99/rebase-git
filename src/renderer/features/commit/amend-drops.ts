@@ -1,6 +1,3 @@
-// The pending drop selection for an amend, keyed by file. A file absent from the map is fully kept;
-// 'all' drops the whole file; a Set drops just those hunk headers. Nothing mutates the repo until the
-// amend lands — this is the renderer's source of truth, so it owns the file⇄hunk consistency itself.
 export type FileDrops = ReadonlyMap<string, 'all' | ReadonlySet<string>>
 
 export type HeadDropState = 'kept' | 'partial' | 'dropped'
@@ -31,9 +28,6 @@ export function toggleFileDrop(drops: FileDrops, file: string): FileDrops {
   return next
 }
 
-// Toggling a hunk needs the file's full hunk list so it can normalize: dropping the last kept hunk
-// collapses to a whole-file drop, un-dropping the last one clears the file, and toggling a hunk of an
-// already-whole-dropped file expands it back into the explicit per-hunk set.
 export function toggleHunkDrop(
   drops: FileDrops,
   file: string,

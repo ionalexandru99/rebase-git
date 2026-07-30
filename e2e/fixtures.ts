@@ -47,9 +47,6 @@ export function unmergedPaths(repo: string): string[] {
   return paths === '' ? [] : paths.split('\n')
 }
 
-// `git rebase`/`cherry-pick` exit non-zero when they stop on a conflict, which is the whole point of
-// running one from a terminal while the app watches. A non-zero exit that left nothing unmerged is a
-// broken fixture, though, so it still has to blow up.
 export function gitStoppingOnConflict(repo: string): Git {
   return (args) => {
     try {
@@ -76,8 +73,6 @@ export function commitParents(repo: string, ref = 'HEAD'): string[] {
   return parents.slice(1)
 }
 
-// Trimming the whole output would eat the leading space of an unstaged-only entry (` M file`) and
-// silently turn it into the staged-modification code, so only the line breaks go.
 export function porcelainStatus(repo: string): string[] {
   const status = execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' })
   return status.split('\n').filter((line) => line.length > 0)
@@ -102,12 +97,6 @@ export function stashEntries(repo: string): string[] {
   return list === '' ? [] : list.split('\n')
 }
 
-// Everything the machine running the suite could otherwise change or break, pinned the same way the
-// demo capture script pins it: a signing key or a hooks path would hang or divert the fixture's own
-// commits, a different conflict style would rewrite the markers the specs read, and Windows runners
-// default core.autocrlf to true — which rewrites LF to CRLF on every checkout, including the one
-// that resolving a conflict performs, so a spec comparing a file against the bytes it wrote fails on
-// that platform alone.
 function configureFixtureRepo(git: (args: string[]) => void): void {
   git(['config', 'user.email', 'test@example.com'])
   git(['config', 'user.name', 'Test'])
@@ -136,8 +125,6 @@ export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
   return repo
 }
 
-// A clone wired to a local bare remote with `main` already published, so a test can rewrite the local
-// tip (amend) to produce a Diverged branch and exercise the force-push flow against a real remote.
 export function createFixtureRepoWithRemote(): { repo: string; remote: string } {
   const remoteBase = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-remote-'))
   const remote = path.join(remoteBase, 'remote.git')
@@ -154,8 +141,6 @@ export function createFixtureRepoWithRemote(): { repo: string; remote: string } 
   return { repo, remote }
 }
 
-// Push a new commit onto the remote's main from a throwaway clone — stands in for a teammate (or
-// another machine) publishing while the local branch holds a stale view of the remote.
 export function advanceRemote(remote: string, message: string): void {
   const other = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-teammate-'))
   execFileSync('git', ['clone', remote, other], { stdio: 'ignore' })
@@ -210,8 +195,6 @@ export interface AppHarness {
   track(repo: string): void
   stubFolderDialog(dir: string | null): Promise<void>
   toasts(): Promise<RecordedToast[]>
-  // Asserts a toast was raised AND marks it expected, so the end-of-test guard stops treating it as
-  // an unexplained failure. Every error/warning toast a test provokes must go through here.
   expectToast(
     expected: ExpectedToast,
     trigger: () => Promise<unknown> | unknown
@@ -329,8 +312,6 @@ const forbiddenShutdownLogs = [
 
 const TOAST_RECORD_KEY = '__REBASE_E2E_TOASTS__'
 
-// Toasts auto-dismiss, so polling the DOM from the test side races them away. Record every toast as
-// it mounts instead, and assert against the recording.
 async function installToastRecorder(page: Page): Promise<void> {
   await page.addInitScript((key: string) => {
     const recorded: Array<{ type: string; title: string; description: string }> = []
@@ -840,7 +821,6 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
         },
         {
           beforeCloseRepos: [
-            // Must run before the teardown reload, which resets the per-document toast recording.
             async () => {
               const recorded = await readRecordedToasts(sharedApp.page)
               const unexplained = findUnexplainedFailureToasts(recorded, expectedToasts)
@@ -879,9 +859,6 @@ export const refTree = (page: Page) => page.getByTestId('ref-tree-scroll')
 
 export type FileListGroup = 'conflicts' | 'staged' | 'unstaged' | 'head-commit'
 
-// Which group a row sits in is how staged state reads now — there is no per-row checkbox to poll.
-// A renamed row reads `old.ts → new.ts`, so the row carries its path as an attribute rather than
-// leaving the helpers to match on rendered text.
 const cssAttributeValue = (value: string) => value.replace(/["\\]/g, '\\$&')
 export const fileRow = (page: Page, file: string, group?: FileListGroup) => {
   const groupFilter = group ? `[data-group="${group}"]` : ''
@@ -890,8 +867,6 @@ export const fileRow = (page: Page, file: string, group?: FileListGroup) => {
 }
 export const stagedFileRow = (page: Page, file: string) => fileRow(page, file, 'staged')
 export const unstagedFileRow = (page: Page, file: string) => fileRow(page, file, 'unstaged')
-// The app runs one git mutation at a time and drops a click that lands while one is in flight — a
-// driver clicking faster than the refresh silently loses the move, so wait for the badge to clear.
 export const waitForStagingIdle = (page: Page) =>
   expect(page.getByText('Loading', { exact: true })).toHaveCount(0, { timeout: 15_000 })
 export const stageFileFromRow = async (page: Page, file: string) => {

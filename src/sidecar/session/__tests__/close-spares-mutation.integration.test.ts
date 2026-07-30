@@ -35,10 +35,6 @@ async function prepareStagedRepo(): Promise<SimpleGit> {
   return git
 }
 
-// Drives a commit that holds the repo lock through `withRepoLock` — mirroring the real `commit`
-// op's capture-git-then-lock shape — and runs `whileHeld` after the lock is held but before the
-// commit finishes, so the race with whatever `whileHeld` does (close, reopen, fetch-kill) is
-// deterministic rather than timing-dependent.
 function withSparedCommit<E, R>(
   git: SimpleGit,
   key: string,
@@ -78,8 +74,6 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  // Closing kills the session's commit-graph write mid-flight, and Windows keeps a killed process's
-  // files undeletable for a moment after it exits — long enough to outlast every retry.
   removeRepoDir(baseDir)
 })
 

@@ -7,8 +7,6 @@ import { LogContinuations, LogContinuationsLive } from '../log-stream'
 
 const startedGitProcesses: RunningGitProcess[] = []
 
-// The registry keeps its paging process private, so the only way to name the pid the test has to
-// watch die is to record what the production code spawned.
 vi.mock('../../git/spawn', async (importOriginal) => {
   const spawn = await importOriginal<typeof import('../../git/spawn')>()
   return {

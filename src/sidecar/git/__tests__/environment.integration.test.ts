@@ -5,11 +5,6 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyNonInteractiveGitEnv } from '../environment'
 
-// What the environment contains is covered next door in environment.test.ts. This is the behaviour
-// those variables exist for, against a real git: with a desktop askpass helper exported — KDE and
-// GNOME both do it — a clone that needs credentials used to open an OS password window from the
-// sidecar and wait on it forever. A clone left waiting on that window shows up here as a timeout
-// kill rather than an exit, which is why the assertion is about how git ended and not what it said.
 describe('a clone that needs credentials', () => {
   it('exits instead of waiting on an askpass window', () => {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-askpass-'))
@@ -17,7 +12,6 @@ describe('a clone that needs credentials', () => {
       const result = spawnSync(
         'git',
         [
-          // The same command line the sidecar's spawn helper builds.
           '-c',
           'core.askpass=',
           'clone',

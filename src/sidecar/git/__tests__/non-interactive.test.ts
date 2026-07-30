@@ -11,8 +11,6 @@ function repoWithAskpass(): string {
 }
 
 describe('non-interactive git', () => {
-  // The desktop askpass helper is the third way git can decide to wait on a human, and the only one
-  // that lives in config rather than the environment. Emptying it has to reach every invocation.
   it('empties core.askpass on every command it spawns', async () => {
     const repo = repoWithAskpass()
     try {

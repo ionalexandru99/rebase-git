@@ -253,9 +253,6 @@ describe('LocalChangesView compact mode', () => {
   })
 })
 
-// amendCommit refuses every in-progress operation with OperationInProgress, so an enabled toggle
-// would offer nothing but a guaranteed failure — and the conflict count drops to zero the moment
-// the last file is resolved, long before the operation itself is finished.
 describe('amend during an in-progress operation', () => {
   const cherryPick = {
     kind: 'cherry-pick' as const,
@@ -293,9 +290,6 @@ describe('amend during an in-progress operation', () => {
   })
 })
 
-// A `git am --3way` that fails to apply in a repository with no commits parks a patch series behind
-// an empty porcelain status, and nothing there is amendable — the one path where the app has to
-// carry the abort control on its own or leave the operation unreachable.
 describe('an in-progress operation with no commits to amend', () => {
   const patchSeries = {
     kind: 'am' as const,

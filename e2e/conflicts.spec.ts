@@ -16,8 +16,6 @@ import {
 const MAIN_SIDE = 'main-side\n'
 const FEATURE_SIDE = 'feature-side\n'
 
-// Both branches edit a file that already exists on their merge base, so the merge stops on a real
-// UU conflict — the shape the resolution UI is built around.
 function createConflictingRepo(): string {
   const repo = createFixtureRepo()
   const git = gitIn(repo)
@@ -72,8 +70,6 @@ test('resolving a conflicted merge in the app finishes it as a merge commit', as
 
   await expect(banner).toContainText('All conflicts are resolved — commit below to finish the merge.')
 
-  // Taking our side leaves a working tree identical to HEAD, so the file list empties while the merge
-  // is still parked. The empty state must not contradict the banner right above it.
   await expect(page.getByText(/the merge is still in progress/)).toBeVisible()
   await expect(page.getByText('Nothing to commit — every change is on a branch.')).toHaveCount(0)
 
@@ -93,8 +89,6 @@ test('resolving a conflicted merge in the app finishes it as a merge commit', as
   expect(fs.readFileSync(path.join(repo, 'conflict.txt'), 'utf8')).toBe(MAIN_SIDE)
 })
 
-// A modify/delete conflict has no incoming blob to check out, so resolving it toward the deleting
-// side removes the file instead — a different code path from taking a side of a both-modified file.
 test('resolving a modify/delete conflict toward the deletion drops the file', async ({
   harness
 }) => {
@@ -166,8 +160,6 @@ test('aborting a conflicted merge restores the pre-merge state', async ({ harnes
   expect(fs.readFileSync(path.join(repo, 'conflict.txt'), 'utf8')).toBe(MAIN_SIDE)
 })
 
-// The banner is driven by the git-dir state files, not by what the app remembers doing — so a merge
-// ended from a terminal has to clear it with no click on this side.
 test('a merge aborted from outside the app clears the banner unprompted', async ({ harness }) => {
   const repo = createConflictingRepo()
   const page = await harness.openRepo(repo)

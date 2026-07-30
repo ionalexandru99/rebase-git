@@ -160,8 +160,6 @@ describe('cloneRepo', () => {
     expect(error.message).toBe('invalid destination folder')
   })
 
-  // The tight timeout is the point: git rejects this URL almost immediately, so a clone whose
-  // outcome was wired up after the process could already have exited would hang here instead.
   it('reports a git that exits immediately, leaving no partial folder behind', async () => {
     const error = await collectError({
       url: fileUrl(path.join(homeRoot, 'not-a-repo')),

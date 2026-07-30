@@ -28,8 +28,6 @@ export interface UseGraphLayoutOptions {
 export interface GraphLayoutHandle {
   layout: GraphLayout
   topology: GraphTopology
-  // Rows whose lanes are known to match the current commit list. While a relayout is in flight this
-  // is the surviving prefix, so appending never blanks the graph and a reshape never draws stale lanes.
   validRows: number
   pending: boolean
 }
@@ -160,8 +158,6 @@ export function useGraphLayout(options: UseGraphLayoutOptions): GraphLayoutHandl
 
     const topology = buildGraphTopology(commits, { rowOf, isHiddenParent })
 
-    // Measured against the topology already in flight (or applied, when nothing is pending): a new
-    // commits array that describes the same graph needs no work at all.
     const inFlight = requestedTopology.current
     const sharedWithInFlight = sharedTopologyRows(inFlight, topology)
     if (

@@ -70,10 +70,6 @@ export function repoSemaphoreSize(): number {
   return repoSemaphores.size
 }
 
-// Drop a repo's cached semaphore on close so the map doesn't grow unbounded over the process
-// lifetime. A mutation spared by close (ADR-0002) may still hold the lock; deleting its live
-// semaphore would hand a concurrent acquirer a fresh one and break mutual exclusion, so reclamation
-// is deferred — armed here and completed by unmarkHeld on the lock's release-on-completion path.
 export function releaseRepoSemaphore(repoPath: string): boolean {
   if (heldLocks.has(repoPath)) {
     pendingReclaim.add(repoPath)
@@ -83,10 +79,6 @@ export function releaseRepoSemaphore(repoPath: string): boolean {
   return repoSemaphores.delete(repoPath)
 }
 
-// A reopened session re-takes ownership of the repo's semaphore: cancel any reclaim a previous
-// close deferred onto an in-flight mutation, so settling that mutation doesn't delete the live
-// session's semaphore and hand a concurrent acquirer a fresh one. The new session reclaims it on
-// its own close instead.
 export function retainRepoSemaphore(repoPath: string): void {
   pendingReclaim.delete(repoPath)
 }

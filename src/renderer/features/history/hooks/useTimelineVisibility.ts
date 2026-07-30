@@ -23,8 +23,6 @@ import type { GitLogEntry } from '@/types'
 
 export interface TimelineVisibility {
   visibleRefs: ReadonlySet<string>
-  // The loaded log as the graph sees it: one coalesced snapshot shared by every derived view, so
-  // nothing downstream can drift a tick behind the commits being laid out.
   graphCommits: GitLogEntry[]
   timelineTips: readonly string[]
   filteredCommits: GitLogEntry[]
@@ -138,8 +136,6 @@ export function useTimelineVisibility(enabled = true): TimelineVisibility {
     [enabled, deferredFilter, commits]
   )
 
-  // Auto-reveal merges hide nothing the user chose to collapse: search expands a derived union, the
-  // manual `expandedMerges` state stays untouched, so clearing the query restores it exactly.
   const effectiveExpandedMerges = useMemo(() => {
     if (!visibleSet || tips.length === 0) {
       return expandedMerges
@@ -212,8 +208,6 @@ export function useTimelineVisibility(enabled = true): TimelineVisibility {
     [visibleRefs]
   )
 
-  // Memoised as a whole: these values feed memoised rows, so a fresh object every render would cost
-  // the history panel its render skipping.
   return useMemo(
     () => ({
       visibleRefs,

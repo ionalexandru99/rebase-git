@@ -1,6 +1,3 @@
-// git accepts a wide grammar of remote URLs; we take the four transports a desktop user actually
-// clones with, plus scp-style `git@host:owner/repo`. Anything else is rejected before it reaches
-// argv, which also keeps a leading `-` from being read as a flag.
 const SCHEME_URL = /^(?:https?|ssh|git|file):\/\/\S+$/i
 const SCP_LIKE = /^[A-Za-z0-9_.+-]+@[A-Za-z0-9_.-]+:\S+$/
 
@@ -22,7 +19,6 @@ export function isSafeCloneFolderName(name: string): boolean {
   return !/[/\\\0]/.test(name)
 }
 
-// `https://github.com/owner/repo.git` → `repo`, matching what `git clone` itself would create.
 export function deriveCloneFolderName(url: string): string | null {
   const trimmed = url.trim().replace(/[/\\]+$/, '')
   if (trimmed.length === 0) {
