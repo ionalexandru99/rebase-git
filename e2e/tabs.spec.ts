@@ -3,7 +3,8 @@ import path from 'node:path'
 import {
   createFixtureRepo,
   expect,
-  fileRowCheckbox,
+  stageFileFromRow,
+  stagedFileRow,
   gitIn,
   openHistory,
   openLocalChanges,
@@ -39,8 +40,8 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
   await expect(tabB).toHaveAttribute('aria-selected', 'false')
 
   await openLocalChanges(page)
-  await fileRowCheckbox(page, 'extra.txt').click()
-  await expect(fileRowCheckbox(page, 'extra.txt')).toBeChecked({ timeout: 10_000 })
+  await stageFileFromRow(page, 'extra.txt')
+  await expect(stagedFileRow(page, 'extra.txt')).toBeVisible({ timeout: 10_000 })
   await page.getByRole('textbox', { name: 'Commit message' }).fill('alpha commit')
   await page.getByRole('button', { name: /Commit \d+ file/ }).click()
 

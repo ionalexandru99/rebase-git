@@ -876,12 +876,35 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
 })
 
 export const refTree = (page: Page) => page.getByTestId('ref-tree-scroll')
-export const fileRowCheckbox = (page: Page, file: string) => {
-  const escapedFile = file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return page
-    .getByTestId('status-file-row')
-    .filter({ hasText: file })
-    .getByRole('checkbox', { name: new RegExp(`^(Stage|Unstage) ${escapedFile}$`) })
+
+export type FileListGroup = 'conflicts' | 'staged' | 'unstaged' | 'head-commit'
+
+// Which group a row sits in is how staged state reads now — there is no per-row checkbox to poll.
+// A renamed row reads `old.ts → new.ts`, so the row carries its path as an attribute rather than
+// leaving the helpers to match on rendered text.
+const cssAttributeValue = (value: string) => value.replace(/["\\]/g, '\\$&')
+export const fileRow = (page: Page, file: string, group?: FileListGroup) => {
+  const groupFilter = group ? `[data-group="${group}"]` : ''
+  const path = cssAttributeValue(file)
+  return page.locator(`[data-testid="status-file-row"]${groupFilter}[data-file="${path}"]`)
+}
+export const stagedFileRow = (page: Page, file: string) => fileRow(page, file, 'staged')
+export const unstagedFileRow = (page: Page, file: string) => fileRow(page, file, 'unstaged')
+// The app runs one git mutation at a time and drops a click that lands while one is in flight — a
+// driver clicking faster than the refresh silently loses the move, so wait for the badge to clear.
+export const waitForStagingIdle = (page: Page) =>
+  expect(page.getByText('Loading', { exact: true })).toHaveCount(0, { timeout: 15_000 })
+export const stageFileFromRow = async (page: Page, file: string) => {
+  await waitForStagingIdle(page)
+  await fileRow(page, file, 'unstaged')
+    .getByRole('button', { name: `Stage ${file}`, exact: true })
+    .click()
+}
+export const unstageFileFromRow = async (page: Page, file: string) => {
+  await waitForStagingIdle(page)
+  await fileRow(page, file, 'staged')
+    .getByRole('button', { name: `Unstage ${file}`, exact: true })
+    .click()
 }
 export const openLocalChanges = (page: Page) =>
   page.getByRole('button', { name: 'Local changes', exact: true }).filter({ visible: true }).click()

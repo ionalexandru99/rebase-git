@@ -3,7 +3,7 @@ import path from 'node:path'
 import {
   createFixtureRepo,
   expect,
-  fileRowCheckbox,
+  stagedFileRow,
   gitIn,
   openLocalChanges,
   porcelainStatus,
@@ -72,7 +72,7 @@ test('a conflicted stash apply resolves through the legacy banner and neutral si
   await expect(page.getByRole('status').filter({ hasText: 'merge conflict' })).toHaveCount(0, {
     timeout: 10_000
   })
-  await expect(fileRowCheckbox(page, 'contested.txt')).toBeChecked({ timeout: 10_000 })
+  await expect(stagedFileRow(page, 'contested.txt')).toBeVisible({ timeout: 10_000 })
 
   expect(fs.readFileSync(path.join(repo, 'contested.txt'), 'utf8')).toBe(STASHED_SIDE)
   expect(porcelainStatus(repo)).toEqual(['M  contested.txt'])

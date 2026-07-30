@@ -4,7 +4,7 @@ import {
   commitSubjects,
   createFixtureRepo,
   expect,
-  fileRowCheckbox,
+  stagedFileRow,
   gitIn,
   openLocalChanges,
   porcelainStatus,
@@ -65,7 +65,7 @@ test('resets the branch to an earlier commit via the history context menu', asyn
   await expect(page.getByText(/\b1 commit\b/)).toBeVisible({ timeout: 10_000 })
 
   await openLocalChanges(page)
-  await expect(fileRowCheckbox(page, 'a.txt')).toBeChecked({ timeout: 10_000 })
+  await expect(stagedFileRow(page, 'a.txt')).toBeVisible({ timeout: 10_000 })
 
   expect(commitSubjects(repo)).toEqual(['initial'])
   expect(porcelainStatus(repo)).toEqual(['A  a.txt'])

@@ -1,4 +1,4 @@
-import { type ComponentType, type ReactElement, useEffect, useMemo, useState } from 'react'
+import { type ComponentType, type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   assembleDrops,
@@ -19,7 +19,14 @@ import type { ConflictSide } from '../features/status/conflict-resolution'
 import { type OperationSummary, summarizeOperation } from '../features/status/operation-summary'
 import { StashControl } from '../features/status/StashControl'
 import { type SelectedFile, StatusPanel } from '../features/status/StatusPanel'
+import { followSelection } from '../features/status/selection-follow'
 import { buildHeadCommitRows, buildStagedFilePaths } from '../features/status/status-file-rows'
+import {
+  buildStatusGroups,
+  type FileRowGroup,
+  flattenStatusGroups,
+  type StatusGroupRow
+} from '../features/status/status-groups'
 import { useDraggablePane } from '../hooks/useDraggablePane'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { COMPACT_MEDIA_QUERY } from '../lib/breakpoints'
@@ -211,23 +218,40 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const operationSummary = operation ? summarizeOperation(operation) : null
   const commitBlockedReason = conflictBlockedReason(conflictCount, operationSummary)
 
-  const fileEntries = useMemo<SelectedFile[]>(
-    () => rows.map((row) => ({ file: row.file, renameSource: row.renameSource })),
-    [rows]
-  )
+  const groupRows = useMemo(() => flattenStatusGroups(buildStatusGroups(rows)), [rows])
+  const previousGroupRows = useRef<StatusGroupRow[]>(groupRows)
 
   const stagedFiles = useMemo(() => buildStagedFilePaths(rows), [rows])
 
+  const firstSelection = (): SelectedFile | null => {
+    const first = groupRows[0]
+    return first
+      ? { file: first.row.file, renameSource: first.row.renameSource, group: first.group }
+      : null
+  }
+
+  // Staging a file moves its row to another list, so the selection follows it there instead of
+  // snapping back to the top of the pane.
   useEffect(() => {
-    const current = selected
-    if (current?.source === 'head-commit') {
+    const previous = previousGroupRows.current
+    previousGroupRows.current = groupRows
+    if (selected?.source === 'head-commit') {
       return
     }
-    const stillExists = current && fileEntries.some((entry) => entry.file === current.file)
-    if (!stillExists) {
-      setSelected(fileEntries[0] ?? null)
+    const follow = followSelection({
+      selected: selected ? { file: selected.file, group: selected.group ?? 'unstaged' } : null,
+      previous,
+      next: groupRows
+    })
+    if (follow.kind === 'keep') {
+      return
     }
-  }, [fileEntries, selected])
+    setSelected(
+      follow.kind === 'clear'
+        ? null
+        : { file: follow.file, renameSource: follow.renameSource, group: follow.group }
+    )
+  }, [groupRows, selected])
 
   useEffect(() => {
     if (!compact) {
@@ -239,9 +263,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
     setAmendActive(active)
     if (!active) {
       setDrops(new Map())
-      setSelected((current) =>
-        current?.source === 'head-commit' ? (fileEntries[0] ?? null) : current
-      )
+      setSelected((current) => (current?.source === 'head-commit' ? firstSelection() : current))
     }
   }
 
@@ -269,8 +291,12 @@ function LocalChangesView(props: WorkspaceViewProps) {
     }
   }
 
-  const selectWorktreeFile = (file: string, renameSource?: string) => {
-    setSelected({ file, renameSource })
+  const selectWorktreeFile = (
+    file: string,
+    group: Exclude<FileRowGroup, 'head-commit'>,
+    renameSource?: string
+  ) => {
+    setSelected({ file, renameSource, group })
     if (compact) {
       setCompactPane('diff')
     }
@@ -359,10 +385,10 @@ function LocalChangesView(props: WorkspaceViewProps) {
               <div className="min-h-0 flex-1 overflow-hidden">
                 <StatusPanel
                   selected={selected}
-                  onSelect={(file, source, renameSource) =>
-                    source === 'head-commit'
+                  onSelect={(file, group, renameSource) =>
+                    group === 'head-commit'
                       ? selectHeadFile(file, renameSource)
-                      : selectWorktreeFile(file, renameSource)
+                      : selectWorktreeFile(file, group, renameSource)
                   }
                   onToggleDrop={toggleHeadFileDrop}
                   amendRows={amendRows}

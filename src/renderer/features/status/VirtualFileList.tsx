@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { ConflictLabels, ConflictSide } from '@/features/status/conflict-resolution'
-import type { FileRowSource, UnifiedFileRow } from '@/features/status/status-file-rows'
+import type { UnifiedFileRow } from '@/features/status/status-file-rows'
+import type { FileRowGroup, StatusGroupKind } from '@/features/status/status-groups'
 import type { FileAction } from '@/lib/git-actions'
 import { STATUS_FILE_OVERSCAN, STATUS_FILE_ROW_HEIGHT } from '@/lib/virtual-config'
 import { useFixedVirtualizer } from '../../hooks/useFixedVirtualizer'
@@ -10,24 +11,24 @@ export interface SelectedFile {
   file: string
   renameSource?: string
   source?: 'worktree' | 'head-commit' | 'commit'
+  /** Which working-copy group the row was picked from — it decides which side of the file is diffed. */
+  group?: StatusGroupKind
   range?: string
   /** Set with `source: 'commit'` — the sha whose first-parent diff this file is read from. */
   commit?: string
 }
 
 export interface FileListSection {
+  key: FileRowGroup
   label: string
   rows: UnifiedFileRow[]
+  action?: { label: string; onAction: () => void }
 }
 
-export type FileListInput =
-  | { kind: 'flat'; rows: UnifiedFileRow[] }
-  | { kind: 'sections'; sections: FileListSection[] }
-
 interface VirtualFileListProps {
-  input: FileListInput
+  sections: FileListSection[]
   selected: SelectedFile | null
-  onSelect: (file: string, source: FileRowSource, renameSource?: string) => void
+  onSelect: (file: string, group: FileRowGroup, renameSource?: string) => void
   onStage: (file: string) => void
   onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
@@ -37,29 +38,44 @@ interface VirtualFileListProps {
 }
 
 type StatusListItem =
-  | { kind: 'section'; key: string; label: string; count: number }
-  | { kind: 'file'; key: string; row: UnifiedFileRow }
+  | { kind: 'section'; key: string; section: FileListSection }
+  | { kind: 'file'; key: string; group: FileRowGroup; row: UnifiedFileRow }
+
+const SECTION_MARKERS: Partial<Record<FileRowGroup, { glyph: string; className: string }>> = {
+  conflicts: { glyph: '!', className: 'text-orange' },
+  staged: { glyph: '✓', className: 'text-add' }
+}
+
+// A selection made outside the lists (or before a group was known) reads as the unstaged side, which
+// is where a file with nothing staged lives.
+function selectedGroupOf(selected: SelectedFile | null): FileRowGroup | null {
+  if (!selected) {
+    return null
+  }
+  if (selected.source === 'head-commit') {
+    return 'head-commit'
+  }
+  return selected.group ?? 'unstaged'
+}
 
 function StatusVirtualRow(props: {
   row: UnifiedFileRow
+  group: FileRowGroup
   top: number
-  selected: SelectedFile | null
-  onSelect: (file: string, source: FileRowSource, renameSource?: string) => void
+  isSelected: boolean
+  onSelect: (file: string, group: FileRowGroup, renameSource?: string) => void
   onStage: (file: string) => void
   onUnstage: (file: string, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
   conflictLabels?: ConflictLabels
   onResolveConflict?: (file: string, side: ConflictSide) => void
-  showSource: boolean
 }) {
   const rowStyle = {
     top: '0',
     height: `${STATUS_FILE_ROW_HEIGHT}px`,
     transform: `translateY(${props.top}px)`
   }
-  const selectedSource = props.selected?.source ?? 'worktree'
-  const isSelected = props.selected?.file === props.row.file && selectedSource === props.row.source
 
   return (
     <li className="absolute inset-x-0 list-none" style={rowStyle}>
@@ -68,16 +84,15 @@ function StatusVirtualRow(props: {
         renameSource={props.row.renameSource}
         display={props.row.display}
         kind={props.row.fileKind}
-        stageState={props.row.stageState}
-        source={props.row.source}
+        group={props.group}
         dropState={props.row.dropState}
-        isSelected={isSelected}
+        isSelected={props.isSelected}
         onSelect={(file, renameSource) => {
           if (renameSource) {
-            props.onSelect(file, props.row.source, renameSource)
+            props.onSelect(file, props.group, renameSource)
             return
           }
-          props.onSelect(file, props.row.source)
+          props.onSelect(file, props.group)
         }}
         onStage={props.onStage}
         onUnstage={props.onUnstage}
@@ -86,42 +101,64 @@ function StatusVirtualRow(props: {
         conflictCode={props.row.conflictCode}
         conflictLabels={props.conflictLabels}
         onResolveConflict={props.onResolveConflict}
-        showSource={props.showSource}
       />
     </li>
   )
 }
 
+function SectionHeading(props: { section: FileListSection; top: number }) {
+  const marker = SECTION_MARKERS[props.section.key]
+  return (
+    <li
+      className="absolute inset-x-0 flex list-none items-center gap-2 bg-card-2 px-2 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground"
+      style={{
+        height: `${STATUS_FILE_ROW_HEIGHT}px`,
+        transform: `translateY(${props.top}px)`
+      }}
+    >
+      {marker ? (
+        <span aria-hidden="true" className={`font-bold ${marker.className}`}>
+          {marker.glyph}
+        </span>
+      ) : null}
+      <h3 className="m-0 text-xs font-semibold">{props.section.label}</h3>
+      <span className="tabular-nums">{props.section.rows.length}</span>
+      <div className="flex-1" />
+      {props.section.action ? (
+        <button
+          type="button"
+          onClick={props.section.action.onAction}
+          className="h-6 shrink-0 rounded-[var(--r-sm)] border bg-card px-2 text-[11px] font-medium normal-case tracking-normal text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
+        >
+          {props.section.action.label}
+        </button>
+      ) : null}
+    </li>
+  )
+}
+
 export function VirtualFileList(props: VirtualFileListProps) {
-  const input = props.input
-  const items = useMemo<StatusListItem[]>(() => {
-    if (input.kind === 'flat') {
-      return input.rows.map((row) => ({
-        kind: 'file',
-        key: `${row.source}:${row.file}`,
-        row
-      }))
-    }
-    return input.sections.flatMap((section) => [
-      {
-        kind: 'section' as const,
-        key: `section:${section.label}`,
-        label: section.label,
-        count: section.rows.length
-      },
-      ...section.rows.map((row) => ({
-        kind: 'file' as const,
-        key: `${row.source}:${row.file}`,
-        row
-      }))
-    ])
-  }, [input])
+  const sections = props.sections
+  const items = useMemo<StatusListItem[]>(
+    () =>
+      sections.flatMap((section) => [
+        { kind: 'section' as const, key: `section:${section.key}`, section },
+        ...section.rows.map((row) => ({
+          kind: 'file' as const,
+          key: `${section.key}:${row.file}`,
+          group: section.key,
+          row
+        }))
+      ]),
+    [sections]
+  )
   const { setScrollRef, onScroll, virtualItems, totalHeight } = useFixedVirtualizer({
     count: items.length,
     rowHeight: STATUS_FILE_ROW_HEIGHT,
     overscan: STATUS_FILE_OVERSCAN,
     initialViewportHeight: 480
   })
+  const selectedGroup = selectedGroupOf(props.selected)
 
   return (
     <div
@@ -137,26 +174,15 @@ export function VirtualFileList(props: VirtualFileListProps) {
             return null
           }
           if (item.kind === 'section') {
-            return (
-              <li
-                key={item.key}
-                className="absolute inset-x-0 flex list-none items-center justify-between bg-card-2 px-2 text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground"
-                style={{
-                  height: `${STATUS_FILE_ROW_HEIGHT}px`,
-                  transform: `translateY(${virtualItem.start}px)`
-                }}
-              >
-                <h3 className="m-0 text-xs font-semibold">{item.label}</h3>
-                <span className="tabular-nums">{item.count}</span>
-              </li>
-            )
+            return <SectionHeading key={item.key} section={item.section} top={virtualItem.start} />
           }
           return (
             <StatusVirtualRow
               key={item.key}
               row={item.row}
+              group={item.group}
               top={virtualItem.start}
-              selected={props.selected}
+              isSelected={props.selected?.file === item.row.file && selectedGroup === item.group}
               onSelect={props.onSelect}
               onStage={props.onStage}
               onUnstage={props.onUnstage}
@@ -164,7 +190,6 @@ export function VirtualFileList(props: VirtualFileListProps) {
               onFileAction={props.onFileAction}
               conflictLabels={props.conflictLabels}
               onResolveConflict={props.onResolveConflict}
-              showSource={input.kind === 'flat' && item.row.source === 'head-commit'}
             />
           )
         })}

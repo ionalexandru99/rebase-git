@@ -1,10 +1,11 @@
+import { MinusIcon, PlusIcon } from 'lucide-react'
 import type { HeadDropState } from '@/features/commit/amend-drops'
 import {
   type ConflictLabels,
   type ConflictSide,
   conflictRowActions
 } from '@/features/status/conflict-resolution'
-import type { FileRowSource, FileStageState } from '@/features/status/status-file-rows'
+import type { FileRowGroup } from '@/features/status/status-groups'
 import type { FileAction } from '@/lib/git-actions'
 import { cn } from '@/lib/utils'
 import { Checkbox } from '../../components/ui/checkbox'
@@ -23,8 +24,7 @@ interface FileRowProps {
   renameSource?: string
   display?: string
   kind: StatusKind
-  stageState: FileStageState
-  source?: FileRowSource
+  group: FileRowGroup
   dropState?: HeadDropState
   isSelected: boolean
   onSelect: (file: string, renameSource?: string) => void
@@ -35,11 +35,10 @@ interface FileRowProps {
   conflictCode?: string
   conflictLabels?: ConflictLabels
   onResolveConflict?: (file: string, side: ConflictSide) => void
-  showSource?: boolean
 }
 
 const ROW_GRID =
-  'grid h-8 grid-cols-[15px_18px_minmax(0,1fr)] items-center gap-2 rounded-[var(--r-sm)] px-2 transition-colors'
+  'group/file-row grid h-8 grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-sm)] px-2 transition-colors'
 
 export function FileRow(props: FileRowProps) {
   const label = props.display ?? props.file
@@ -66,8 +65,6 @@ export function FileRow(props: FileRowProps) {
     props.onFileAction?.(action, props.file)
   }
 
-  const showSourceBadge = props.showSource ?? props.source === 'head-commit'
-
   const nameButton = (
     <button
       type="button"
@@ -77,20 +74,20 @@ export function FileRow(props: FileRowProps) {
       <span className="min-w-0 truncate text-sm" title={label}>
         {label}
       </span>
-      {showSourceBadge ? (
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          {props.source === 'head-commit' ? 'Last commit' : 'Working tree'}
-        </span>
-      ) : null}
     </button>
   )
 
-  if (props.source === 'head-commit') {
+  if (props.group === 'head-commit') {
     const dropState = props.dropState ?? 'kept'
     const kept = dropState === 'kept'
     return (
       <ContextMenu>
-        <ContextMenuTriggerArea className={rowClass} data-testid="status-file-row">
+        <ContextMenuTriggerArea
+          className={rowClass}
+          data-testid="status-file-row"
+          data-group={props.group}
+          data-file={props.file}
+        >
           <Checkbox
             checked={kept}
             indeterminate={dropState === 'partial'}
@@ -113,7 +110,7 @@ export function FileRow(props: FileRowProps) {
     )
   }
 
-  const isStaged = props.stageState === 'staged'
+  const isStaged = props.group === 'staged'
   // What the file is, not what the caller wired up: the safety rules below (no silent discard, stage
   // means "mark resolved") hold for a conflicted file either way. Only the keep-a-side choices need
   // a resolver, so only they are withheld without one.
@@ -130,18 +127,41 @@ export function FileRow(props: FileRowProps) {
     }
     props.onStage?.(props.file)
   }
+  const actionLabel = isStaged
+    ? `Unstage ${label}`
+    : isConflicted
+      ? `Mark ${label} as resolved`
+      : `Stage ${label}`
 
   return (
     <ContextMenu>
-      <ContextMenuTriggerArea className={rowClass} data-testid="status-file-row">
-        <Checkbox
-          checked={isStaged}
-          indeterminate={props.stageState === 'partial'}
-          aria-label={isStaged ? `Unstage ${label}` : `Stage ${label}`}
-          onChange={() => toggleStaged()}
-        />
+      <ContextMenuTriggerArea
+        className={rowClass}
+        data-testid="status-file-row"
+        data-group={props.group}
+        data-file={props.file}
+        onDoubleClick={toggleStaged}
+      >
         <StatusBadge kind={props.kind} />
         {nameButton}
+        <button
+          type="button"
+          // A double-tap arrives as click, click, dblclick. The row stages on dblclick and this
+          // button on click, so the repeat click is ignored and the dblclick is kept from reaching
+          // the row — one gesture, one move. A keyboard activation carries detail 0 and still runs.
+          onClick={(event) => {
+            if (event.detail > 1) {
+              return
+            }
+            toggleStaged()
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+          aria-label={actionLabel}
+          title={actionLabel}
+          className="grid size-5 shrink-0 place-content-center rounded-[var(--r-xs)] text-muted-foreground opacity-0 transition-opacity hover:bg-card-2 hover:text-foreground focus-visible:opacity-100 group-hover/file-row:opacity-100"
+        >
+          {isStaged ? <MinusIcon className="size-3.5" /> : <PlusIcon className="size-3.5" />}
+        </button>
       </ContextMenuTriggerArea>
       <ContextMenuContent>
         {conflict ? (

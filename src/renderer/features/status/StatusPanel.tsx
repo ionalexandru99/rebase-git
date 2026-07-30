@@ -1,17 +1,22 @@
 import { type ReactNode, useMemo } from 'react'
 import type { ConflictSide } from '@/features/status/conflict-resolution'
-import type { FileRowSource, UnifiedFileRow } from '@/features/status/status-file-rows'
+import type { UnifiedFileRow } from '@/features/status/status-file-rows'
+import {
+  buildStatusGroups,
+  type FileRowGroup,
+  type StatusGroup
+} from '@/features/status/status-groups'
 import type { FileAction } from '@/lib/git-actions'
 import { useWorkingTreeStatus } from '@/stores/git'
 import { LoadingBadge } from '../../components/ui/loading-badge'
 import { StatusPanelSkeleton } from './Skeleton'
-import { type FileListInput, type SelectedFile, VirtualFileList } from './VirtualFileList'
+import { type FileListSection, type SelectedFile, VirtualFileList } from './VirtualFileList'
 
 export type { SelectedFile } from './VirtualFileList'
 
 interface StatusPanelProps {
   selected: SelectedFile | null
-  onSelect: (file: string, source: FileRowSource, renameSource?: string) => void
+  onSelect: (file: string, group: FileRowGroup, renameSource?: string) => void
   onToggleDrop?: (file: string) => void
   amendRows?: UnifiedFileRow[]
   onFileAction?: (action: FileAction, file: string, renameSource?: string) => void
@@ -20,15 +25,23 @@ interface StatusPanelProps {
   loading: boolean
 }
 
-function bySourceWithinFile(left: UnifiedFileRow, right: UnifiedFileRow): number {
-  const byName = left.file.localeCompare(right.file)
-  if (byName !== 0) {
-    return byName
+const bothRenamePaths = (rows: readonly UnifiedFileRow[]): string[] =>
+  rows.flatMap((row) => (row.renameSource ? [row.renameSource, row.file] : [row.file]))
+
+function groupAction(
+  group: StatusGroup,
+  stageAll: (files: string[]) => unknown,
+  unstageAll: (files: string[]) => unknown
+): FileListSection['action'] {
+  if (group.kind === 'staged') {
+    return { label: 'Unstage all', onAction: () => unstageAll(bothRenamePaths(group.rows)) }
   }
-  if (left.source === right.source) {
-    return 0
+  if (group.kind === 'unstaged') {
+    return { label: 'Stage all', onAction: () => stageAll(group.rows.map((row) => row.file)) }
   }
-  return left.source === 'worktree' ? -1 : 1
+  // Staging a whole conflict group would mark every file resolved in one click — the one bulk
+  // action worth making the user take file by file.
+  return undefined
 }
 
 export function StatusPanel(props: StatusPanelProps) {
@@ -43,47 +56,24 @@ export function StatusPanel(props: StatusPanelProps) {
     unstageAll
   } = useWorkingTreeStatus()
   const loading = props.loading || statusLoading
-  const sortedWorktreeRows = useMemo(
-    () => [...worktreeRows].sort(bySourceWithinFile),
-    [worktreeRows]
-  )
-  const sortedAmendRows = useMemo(
-    () => [...(props.amendRows ?? [])].sort(bySourceWithinFile),
-    [props.amendRows]
-  )
-  const rows = useMemo(
-    () => [...sortedWorktreeRows, ...sortedAmendRows],
-    [sortedWorktreeRows, sortedAmendRows]
-  )
-  const stageable = useMemo(
-    () => rows.filter((row) => row.source === 'worktree' && !row.isConflicted),
-    [rows]
-  )
+  const amendRows = props.amendRows ?? []
+  const groups = useMemo(() => buildStatusGroups(worktreeRows), [worktreeRows])
+  const stageable = useMemo(() => worktreeRows.filter((row) => !row.isConflicted), [worktreeRows])
   const stagedCount = stageable.filter((row) => row.stageState !== 'unstaged').length
-  const allStaged = stageable.length > 0 && stageable.every((row) => row.stageState === 'staged')
-  const subtitle = `${rows.length} files · ${stagedCount} staged`
-  const listInput = useMemo<FileListInput>(() => {
-    if (sortedAmendRows.length === 0) {
-      return { kind: 'flat', rows: sortedWorktreeRows }
-    }
-    return {
-      kind: 'sections',
-      sections: [
-        { label: 'Working tree', rows: sortedWorktreeRows },
-        { label: 'Last commit', rows: sortedAmendRows }
-      ].filter((section) => section.rows.length > 0)
-    }
-  }, [sortedAmendRows, sortedWorktreeRows])
+  const subtitle = `${worktreeRows.length + amendRows.length} files · ${stagedCount} staged`
 
-  const toggleAll = () => {
-    if (allStaged) {
-      void unstageAll(
-        stageable.flatMap((row) => (row.renameSource ? [row.renameSource, row.file] : [row.file]))
-      )
-      return
+  const sections = useMemo<FileListSection[]>(() => {
+    const working = groups.map((group) => ({
+      key: group.kind,
+      label: group.label,
+      rows: group.rows,
+      action: groupAction(group, stageAll, unstageAll)
+    }))
+    if (amendRows.length === 0) {
+      return working
     }
-    void stageAll(stageable.filter((row) => row.stageState !== 'staged').map((row) => row.file))
-  }
+    return [...working, { key: 'head-commit' as const, label: 'Last commit', rows: amendRows }]
+  }, [groups, amendRows, stageAll, unstageAll])
 
   if (!status) {
     if (statusState === 'error') {
@@ -107,24 +97,15 @@ export function StatusPanel(props: StatusPanelProps) {
           <div className="flex-1" />
           {loading ? <LoadingBadge /> : null}
         </div>
-        {props.headerActions || stageable.length > 0 ? (
+        {props.headerActions ? (
           <div className="scroll-host flex items-center justify-end gap-2 overflow-x-auto px-3 pb-2">
             {props.headerActions}
-            {stageable.length > 0 ? (
-              <button
-                type="button"
-                onClick={toggleAll}
-                className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2.5 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
-              >
-                {allStaged ? 'Unstage all' : 'Stage all'}
-              </button>
-            ) : null}
           </div>
         ) : null}
       </div>
 
       <VirtualFileList
-        input={listInput}
+        sections={sections}
         selected={props.selected}
         onSelect={props.onSelect}
         onStage={stageFile}
