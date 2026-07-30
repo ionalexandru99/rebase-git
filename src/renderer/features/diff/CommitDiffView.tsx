@@ -4,7 +4,6 @@ import { type ReactNode, useMemo } from 'react'
 import { DIFF_UNSAFE_CSS, diffThemeStyle } from '@/features/diff/diff-theme'
 import { parsePatch } from '@/features/diff/patch-parse'
 import { type DiffStyle, useDiffStyle } from '@/features/diff/useDiffStyle'
-import { useThemeNonce } from '@/hooks/useThemeNonce'
 import { cn } from '@/lib/utils'
 import { useCommitFileDiff } from '@/stores/git'
 import { EmptyState } from '../../components/ui/empty-state'
@@ -29,10 +28,6 @@ export function CommitDiffView(props: CommitDiffViewProps) {
     selected?.renameSource
   )
   const [diffStyle, setDiffStyle] = useDiffStyle()
-  useThemeNonce()
-  const themeType: 'light' | 'dark' = document.documentElement.classList.contains('dark')
-    ? 'dark'
-    : 'light'
 
   const patch = diffQuery.data?.patch
   const parsed = useMemo(() => {
@@ -45,7 +40,7 @@ export function CommitDiffView(props: CommitDiffViewProps) {
   const options = useMemo(
     () => ({
       diffStyle,
-      themeType,
+      themeType: 'dark' as const,
       preferredHighlighter: 'shiki-js' as const,
       lineDiffType: 'word-alt' as const,
       maxLineDiffLength: 1000,
@@ -53,7 +48,7 @@ export function CommitDiffView(props: CommitDiffViewProps) {
       unsafeCSS: DIFF_UNSAFE_CSS,
       disableFileHeader: true
     }),
-    [diffStyle, themeType]
+    [diffStyle]
   )
 
   const hunks = diffQuery.data?.diff.hunks ?? []

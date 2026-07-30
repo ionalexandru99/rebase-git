@@ -1,41 +1,12 @@
-import { useWorkerPool, WorkerPoolContextProvider } from '@pierre/diffs/react'
-import { type ReactNode, useEffect, useRef } from 'react'
-import { useThemeNonce } from '@/hooks/useThemeNonce'
-
-const DIFF_THEME_NAMES = {
-  light: 'pierre-light',
-  dark: 'pierre-dark'
-} as const
-
-type DiffThemeType = keyof typeof DIFF_THEME_NAMES
+import { WorkerPoolContextProvider } from '@pierre/diffs/react'
+import type { ReactNode } from 'react'
 
 export function diffWorkerPoolSize(hardwareConcurrency: number): number {
   return Math.min(6, Math.max(2, Math.floor(hardwareConcurrency / 2)))
 }
 
-function currentThemeType(): DiffThemeType {
-  return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-}
-
 function createDiffWorker(): Worker {
   return new Worker(new URL('@pierre/diffs/worker/worker.js', import.meta.url), { type: 'module' })
-}
-
-function DiffWorkerPoolThemeSync(): null {
-  const poolManager = useWorkerPool()
-  useThemeNonce()
-  const themeType = currentThemeType()
-  const appliedThemeType = useRef(themeType)
-
-  useEffect(() => {
-    if (poolManager == null || appliedThemeType.current === themeType) {
-      return
-    }
-    appliedThemeType.current = themeType
-    void poolManager.setRenderOptions({ theme: DIFF_THEME_NAMES[themeType] })
-  }, [poolManager, themeType])
-
-  return null
 }
 
 export function DiffWorkerPoolProvider({ children }: { children: ReactNode }): ReactNode {
@@ -52,10 +23,9 @@ export function DiffWorkerPoolProvider({ children }: { children: ReactNode }): R
       }}
       highlighterOptions={{
         preferredHighlighter: 'shiki-js',
-        theme: DIFF_THEME_NAMES[currentThemeType()]
+        theme: 'pierre-dark'
       }}
     >
-      <DiffWorkerPoolThemeSync />
       {children}
     </WorkerPoolContextProvider>
   )
