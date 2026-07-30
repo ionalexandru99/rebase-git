@@ -1,5 +1,6 @@
-# Review-noise controls. Incremental reviews are on, so every push to an open PR gets reviewed —
-# each one files fresh threads for what that push changed.
+# Review-noise controls. Incremental reviews are on and the auto-pause is off, so every push to an
+# open PR gets reviewed — each one files fresh threads for what that push changed. Left at its
+# default of 5, the pause would stop reviewing a branch after its fifth reviewed commit.
 language: en-US
 tone_instructions: >-
   Follow AGENTS.md. Prioritise correctness, data-loss risk, security, and cross-platform or
@@ -15,5 +16,6 @@ reviews:
     enabled: true
     drafts: false
     auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 0
   path_filters:
     - "!scripts/**"
