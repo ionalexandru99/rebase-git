@@ -18,3 +18,21 @@ export const diffScrollHost = (page: Page) => diffBody(page).locator('.scroll-ho
 
 export const styleButton = (page: Page, name: 'Unified' | 'Split') =>
   detailsPanel(page).getByRole('button', { name, exact: true })
+
+export const worktreeDiffBody = (page: Page) => page.getByTestId('diff-body')
+
+export const worktreeDiffLine = (page: Page, text: string | RegExp) =>
+  worktreeDiffBody(page).locator('[data-line]').filter({ hasText: text })
+
+export type HunkActionName =
+  | 'Stage hunk'
+  | 'Unstage hunk'
+  | 'Discard hunk'
+  | 'Drop hunk'
+  | 'Keep hunk'
+
+export async function clickHunkAction(page: Page, lineText: string | RegExp, action: HunkActionName) {
+  const line = worktreeDiffLine(page, lineText).first()
+  await line.hover()
+  await page.getByRole('button', { name: action, exact: true }).click()
+}

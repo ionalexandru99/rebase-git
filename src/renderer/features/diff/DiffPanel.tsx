@@ -1,7 +1,14 @@
 import { diffAcceptRejectHunk } from '@pierre/diffs'
 import { FileDiff, Virtualizer } from '@pierre/diffs/react'
 import type { DiffHunk } from '@shared/schemas/git'
-import { FileDiffIcon } from 'lucide-react'
+import {
+  FileDiffIcon,
+  type LucideIcon,
+  MinusIcon,
+  PlusIcon,
+  Trash2Icon,
+  Undo2Icon
+} from 'lucide-react'
 import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { useWorkspaceContext } from '@/app/WorkspaceContext'
 import { DIFF_UNSAFE_CSS, diffThemeStyle } from '@/features/diff/diff-theme'
@@ -205,38 +212,42 @@ export function DiffPanel(props: DiffPanelProps) {
       }
       if (amendDrop) {
         return (
-          <div className="flex items-center gap-1 pr-1">
+          <GutterActionRow>
             <GutterActionButton
               label={hoveredDropped ? 'Keep hunk' : 'Drop hunk'}
+              icon={hoveredDropped ? Undo2Icon : MinusIcon}
               onClick={actOnHovered(toggleHunkDrop)}
             />
-          </div>
+          </GutterActionRow>
         )
       }
       if (!hunkActionsEnabled) {
         return null
       }
       return (
-        <div className="flex items-center gap-1 pr-1">
+        <GutterActionRow>
           {showsStagedSide ? (
             <GutterActionButton
               label="Unstage hunk"
+              icon={MinusIcon}
               onClick={actOnHovered((hunk) => requestHunkAction('unstage', hunk))}
             />
           ) : (
             <>
               <GutterActionButton
                 label="Stage hunk"
+                icon={PlusIcon}
                 onClick={actOnHovered((hunk) => requestHunkAction('stage', hunk))}
               />
               <GutterActionButton
                 label="Discard hunk"
+                icon={Trash2Icon}
                 destructive={true}
                 onClick={actOnHovered((hunk) => requestHunkAction('discard', hunk))}
               />
             </>
           )}
-        </div>
+        </GutterActionRow>
       )
     },
     [
@@ -294,7 +305,11 @@ export function DiffPanel(props: DiffPanelProps) {
       return (
         <div className="flex items-center gap-2 border-b border-t bg-card-2 px-2.5 py-1 text-xs text-muted-foreground">
           <span>Dropped from last commit</span>
-          <GutterActionButton label="Keep hunk" onClick={() => toggleHunkDrop(hunk)} />
+          <GutterActionButton
+            label="Keep hunk"
+            icon={Undo2Icon}
+            onClick={() => toggleHunkDrop(hunk)}
+          />
         </div>
       )
     },
@@ -412,20 +427,35 @@ function StateNotice(props: { className?: string; children: ReactNode }) {
   )
 }
 
-function GutterActionButton(props: { label: string; destructive?: boolean; onClick: () => void }) {
+function GutterActionRow(props: { children: ReactNode }) {
+  return (
+    <div className="absolute left-1 top-1/2 flex -translate-y-1/2 items-center gap-1">
+      {props.children}
+    </div>
+  )
+}
+
+function GutterActionButton(props: {
+  label: string
+  icon: LucideIcon
+  destructive?: boolean
+  onClick: () => void
+}) {
+  const Icon = props.icon
   return (
     <button
       type="button"
       aria-label={props.label}
+      title={props.label}
       onClick={props.onClick}
       className={cn(
-        'rounded-[var(--r-sm)] border bg-card px-1.5 py-0.5 text-[11px] leading-4 shadow-sm transition-colors',
+        'grid size-[22px] place-content-center rounded-[var(--r-sm)] border bg-card shadow-sm transition-colors',
         props.destructive
           ? 'text-destructive hover:bg-destructive hover:text-white'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
       )}
     >
-      {props.label.split(' ')[0]}
+      <Icon className="size-3.5" />
     </button>
   )
 }
