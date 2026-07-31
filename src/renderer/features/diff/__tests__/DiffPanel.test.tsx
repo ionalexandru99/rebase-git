@@ -8,7 +8,7 @@ import { DiffPanel } from '@/features/diff/DiffPanel'
 import type { SelectedFile } from '@/features/status/StatusPanel'
 import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
 import { renderWithQuery } from '../../../../test/render-app'
-import { setupLogStream, sidecarMock } from '../../../../test/setup'
+import { setupLogStream, setupRepoChanged, sidecarMock } from '../../../../test/setup'
 
 interface HoveredLine {
   lineNumber: number
@@ -619,6 +619,59 @@ describe('DiffPanel line selection', () => {
       ])
     })
     expect(sidecarMock.stageLines).not.toHaveBeenCalled()
+  })
+
+  it('keeps the selection when the diff refetches with unchanged content', async () => {
+    const repoChanged = setupRepoChanged()
+    pierreControl.selectedRows = [{ line: 1, type: 'change-addition', index: '1,0' }]
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    await endLineSelection({ start: 1, end: 1 })
+    expect(screen.getByRole('button', { name: 'Stage 1 selected line' })).toBeInTheDocument()
+
+    const diffCallsBefore = sidecarMock.getDiff.mock.calls.length
+    repoChanged.fire({ repoPath, kind: 'workingTree' })
+    await waitFor(() => {
+      expect(sidecarMock.getDiff.mock.calls.length).toBeGreaterThan(diffCallsBefore)
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    })
+
+    expect(screen.getByRole('button', { name: 'Stage 1 selected line' })).toBeInTheDocument()
+  })
+
+  it('waits for selection marks that the library paints frames after selection end', async () => {
+    pierreControl.selectedRows = []
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+    await screen.findByTestId('pierre-file-diff')
+
+    const latest = pierreControl.captured[pierreControl.captured.length - 1]
+    const options = latest?.options as
+      | { onLineSelectionEnd?: (range: { start: number; end: number } | null) => void }
+      | undefined
+    await act(async () => {
+      options?.onLineSelectionEnd?.({ start: 1, end: 1 })
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)))
+      })
+      const diffNodes = screen.getAllByTestId('pierre-file-diff')
+      const host = diffNodes[diffNodes.length - 1].querySelector('diffs-container')
+      if (!host) {
+        throw new Error('diffs host missing')
+      }
+      const row = document.createElement('div')
+      row.setAttribute('data-selected-line', '')
+      row.setAttribute('data-line', '1')
+      row.setAttribute('data-line-type', 'change-addition')
+      row.setAttribute('data-line-index', '1,0')
+      host.appendChild(row)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Stage 1 selected line' })).toBeInTheDocument()
+    })
   })
 
   it('restores the hunk hover actions when the selection is cleared', async () => {
