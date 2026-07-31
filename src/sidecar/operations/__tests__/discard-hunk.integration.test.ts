@@ -108,8 +108,8 @@ describe('discardHunk against a real repository', () => {
 
   it('rejects a discard on a file owned by an in-progress merge with OperationInProgress', async () => {
     const fixture = makeConflictedRepo('merge')
-    await runOp(openRepo(fixture.path))
     try {
+      await runOp(openRepo(fixture.path))
       const conflicted = conflictedPaths(fixture.path)[0]
       const result = await runOp(
         Effect.either(discardHunk(fixture.path, conflicted, '@@ -1,1 +1,1 @@'))
@@ -119,7 +119,7 @@ describe('discardHunk against a real repository', () => {
         expect(result.left._tag).toBe('OperationInProgress')
       }
     } finally {
-      await runOp(closeRepo(fixture.path))
+      await runOp(Effect.ignore(closeRepo(fixture.path)))
       removeRepoDir(fixture.path)
     }
   })
