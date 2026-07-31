@@ -1,5 +1,6 @@
 import type { CommitDetail } from '@shared/schemas/git'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { type CSSProperties, type ReactNode, useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { refFilterKey } from '@/features/history/selectors'
 import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
@@ -7,6 +8,26 @@ import type { GitLog, GitLogEntry } from '@/types'
 import { renderWithQuery } from '../../../../test/render-app'
 import { setupLogStream, sidecarMock } from '../../../../test/setup'
 import { HistoryPanel } from '..'
+
+vi.mock('@/features/diff/diff-theme', () => ({
+  diffThemeStyle: () => ({}),
+  DIFF_UNSAFE_CSS: 'mock-unsafe-css'
+}))
+
+vi.mock('@pierre/diffs/react', () => ({
+  Virtualizer: (props: { children?: ReactNode; className?: string; style?: CSSProperties }) => (
+    <div data-testid="pierre-virtualizer" className={props.className} style={props.style}>
+      {props.children}
+    </div>
+  ),
+  FileDiff: (props: { fileDiff: { name: string }; options?: Record<string, unknown> }) => (
+    <div
+      data-testid="pierre-file-diff"
+      data-file={props.fileDiff.name}
+      data-options={JSON.stringify(props.options)}
+    />
+  )
+}))
 
 const repoPath = '/home/user/project'
 
@@ -51,9 +72,20 @@ function detailFor(sha: string, overrides: Partial<CommitDetail> = {}): CommitDe
   }
 }
 
+const patchFor = (file: string) => `diff --git a/${file} b/${file}
+index a92d664..80a6513 100644
+--- a/${file}
++++ b/${file}
+@@ -1,3 +1,3 @@
+ line 1
+-line 2
++changed ${file}
+ line 3
+`
+
 const diffFor = (file: string) => ({
   _tag: 'Ok' as const,
-  patch: '',
+  patch: patchFor(file),
   diff: {
     filePath: file,
     binary: false,
@@ -70,6 +102,13 @@ const diffFor = (file: string) => ({
   }
 })
 
+const diffShownFor = async (file: string) => {
+  await waitFor(() => {
+    const nodes = screen.getAllByTestId('pierre-file-diff')
+    expect(nodes.some((node) => node.getAttribute('data-file') === file)).toBe(true)
+  })
+}
+
 function Harness(props: { onSession: (session: RepoSession) => void }) {
   return (
     <GitStoreProvider tabId="commit-details-tab" tabActive={true}>
@@ -79,7 +118,11 @@ function Harness(props: { onSession: (session: RepoSession) => void }) {
 }
 
 function Probe(props: { onSession: (session: RepoSession) => void }) {
-  props.onSession(useRepoSession())
+  const session = useRepoSession()
+  const onSession = props.onSession
+  useEffect(() => {
+    onSession(session)
+  }, [session, onSession])
   const visibleBranchRefs = new Set([refFilterKey('local', 'main')])
   return (
     <HistoryPanel
@@ -223,9 +266,7 @@ describe('commit details panel contents', () => {
 
     fireEvent.doubleClick(rowFor('newest change'))
 
-    await waitFor(() =>
-      expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')).toBeInTheDocument()
-    )
+    await diffShownFor('src/deep/alpha.ts')
     expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/deep/alpha.ts', false, {
       range: undefined,
       commit: 'aaaaaaa1',
@@ -261,14 +302,14 @@ describe('commit details panel contents', () => {
   it('collapses a directory to hide its files and expands it again', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
-    await screen.findByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')
+    await diffShownFor('src/deep/alpha.ts')
     const fileList = within(panel()).getByTestId('commit-file-scroll')
 
     fireEvent.click(within(fileList).getByTestId('commit-directory-row'))
 
     expect(within(fileList).queryByTitle('alpha.ts')).not.toBeInTheDocument()
     expect(within(fileList).getByTitle('README.md')).toBeInTheDocument()
-    expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')).toBeInTheDocument()
+    expect(screen.getByTestId('pierre-file-diff')).toHaveAttribute('data-file', 'src/deep/alpha.ts')
 
     fireEvent.click(within(fileList).getByTestId('commit-directory-row'))
 
@@ -330,13 +371,11 @@ describe('commit details panel contents', () => {
   it('shows the clicked file’s diff for that commit', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
-    await screen.findByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')
+    await diffShownFor('src/deep/alpha.ts')
 
     fireEvent.click(within(panel()).getByText('beta.ts'))
 
-    await waitFor(() =>
-      expect(within(panel()).getByText('@@ -1,2 +1,3 @@ src/deep/beta.ts')).toBeInTheDocument()
-    )
+    await diffShownFor('src/deep/beta.ts')
   })
 
   it('labels the author, the date and the parent so each is findable at a glance', async () => {
@@ -390,7 +429,7 @@ describe('commit details panel contents', () => {
   it('follows the selection to another commit while open', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
-    await screen.findByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')
+    await diffShownFor('src/deep/alpha.ts')
 
     fireEvent.click(rowFor('middle change'))
 
@@ -403,7 +442,7 @@ describe('commit multi-selection', () => {
   it('summarises several selected commits instead of guessing a merged diff', async () => {
     await renderHistory()
     fireEvent.doubleClick(rowFor('newest change'))
-    await screen.findByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')
+    await diffShownFor('src/deep/alpha.ts')
 
     fireEvent.click(rowFor('oldest change'), { metaKey: true })
 
@@ -413,7 +452,7 @@ describe('commit multi-selection', () => {
     expect(summary).toHaveTextContent('newest change')
     expect(summary).toHaveTextContent('ccccccc')
     expect(summary).toHaveTextContent('oldest change')
-    expect(within(panel()).queryByText('@@ -1,2 +1,3 @@ src/deep/alpha.ts')).not.toBeInTheDocument()
+    expect(within(panel()).queryByTestId('pierre-file-diff')).not.toBeInTheDocument()
   })
 
   it('selects a contiguous range on shift-click', async () => {

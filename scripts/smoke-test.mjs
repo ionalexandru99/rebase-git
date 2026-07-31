@@ -58,7 +58,7 @@ async function runSmokeTest() {
       const fatalPatterns = [
         'Cannot find module',
         'MODULE_NOT_FOUND',
-        'Refused to execute',
+        'Refused to',
         'Uncaught Error',
         'Uncaught TypeError',
         'Uncaught ReferenceError',

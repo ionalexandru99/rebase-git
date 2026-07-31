@@ -48,6 +48,9 @@ export default defineConfig(({ mode }) => ({
   },
   renderer: {
     plugins: [packagedCspPlugin(), tailwindcss(), react()],
+    worker: {
+      format: 'es'
+    },
     server:
       mode === 'playwright-mcp'
         ? {

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './app/App'
 import { QueryProvider } from './app/QueryProvider'
+import { DiffWorkerPoolProvider } from './features/diff/DiffWorkerPool'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {
@@ -20,7 +21,9 @@ async function start(container: HTMLElement): Promise<void> {
 
   const app = (
     <QueryProvider>
-      <App />
+      <DiffWorkerPoolProvider>
+        <App />
+      </DiffWorkerPoolProvider>
     </QueryProvider>
   )
   createRoot(container).render(playwrightMcpMode ? app : <StrictMode>{app}</StrictMode>)
