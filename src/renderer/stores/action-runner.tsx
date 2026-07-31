@@ -15,6 +15,7 @@ import { formatCause } from '@/lib/format-cause'
 import { toastEngineFailure, toastGitFailure } from '@/lib/git-report'
 import { cachesForOperation, type MappedOperation, type RepoCache } from '@/lib/operation-caches'
 import {
+  type PullStrategy,
   type PushForce,
   rpcAmendCommit,
   rpcCommit,
@@ -33,6 +34,12 @@ export type PushOutcome =
       lostCommits: readonly LostCommit[]
       remoteSha?: string
     }
+  | { kind: 'error'; message: string }
+
+export type PullOutcome =
+  | { kind: 'ok' }
+  | { kind: 'diverged' }
+  | { kind: 'conflict' }
   | { kind: 'error'; message: string }
 
 export interface RunActionOptions {
@@ -60,6 +67,7 @@ export interface ActionRunner {
   loadHeadMessage: () => Promise<string | null>
   pushNow: () => Promise<boolean>
   push: (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
+  pull: (strategy?: PullStrategy) => Promise<PullOutcome>
   pullNow: () => Promise<boolean>
   committing: boolean
   amending: boolean
@@ -244,6 +252,50 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
     }
   }
 
+  const runPull = async (strategy?: PullStrategy): Promise<PullOutcome> => {
+    const repoPath = liveRepoPath.current
+    if (!repoPath) {
+      toast.error('Repository is not open')
+      return { kind: 'error', message: 'Repository is not open' }
+    }
+    const generation = openGenerationRef.current
+    try {
+      const response = await rpcPull(repoPath, strategy)
+      if (!isCurrentRepo(generation, repoPath)) {
+        return { kind: 'error', message: 'Repository changed' }
+      }
+      if (response._tag === 'Ok' || response._tag === 'Conflict') {
+        await refreshCaches(repoPath, cachesForOperation(Pull._tag))
+      }
+      if (response._tag === 'Ok') {
+        toast.success('Pulled')
+        return { kind: 'ok' }
+      }
+      if (response._tag === 'PullDiverged') {
+        return { kind: 'diverged' }
+      }
+      if (response._tag === 'Conflict') {
+        toast.warning('Pull hit conflicts', {
+          description: 'Resolve the conflicted files, then continue or abort.'
+        })
+        return { kind: 'conflict' }
+      }
+      if (response._tag === 'RepoNotOpen') {
+        toast.error('Repository is not open')
+        return { kind: 'error', message: 'Repository is not open' }
+      }
+      toastGitFailure('Pull failed', response.message)
+      return { kind: 'error', message: response.message }
+    } catch (error) {
+      const message = formatCause(error)
+      if (!isCurrentRepo(generation, repoPath)) {
+        return { kind: 'error', message }
+      }
+      toastEngineFailure('Pull failed', message)
+      return { kind: 'error', message }
+    }
+  }
+
   const runAmend = async (
     message: string,
     droppedHeadPaths: string[],
@@ -348,10 +400,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       runPush(variables.force, variables.expectedRemoteSha)
   })
   const pullMutation = useMutation({
-    mutationFn: () =>
-      runActionAttempt(Pull._tag, (repoPath) => rpcPull(repoPath), 'Pulled', {
-        failureLabel: 'Pull'
-      })
+    mutationFn: (variables: { strategy?: PullStrategy }) => runPull(variables.strategy)
   })
 
   const push = (force?: PushForce, expectedRemoteSha?: string) =>
@@ -359,6 +408,14 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       Push._tag,
       { kind: 'error', message: 'Another repository action is in progress' },
       () => pushMutation.mutateAsync({ force, expectedRemoteSha }),
+      notifyBusy
+    )
+
+  const pull = (strategy?: PullStrategy) =>
+    mutationCoordinator.run<PullOutcome>(
+      Pull._tag,
+      { kind: 'error', message: 'Another repository action is in progress' },
+      () => pullMutation.mutateAsync({ strategy }),
       notifyBusy
     )
 
@@ -387,8 +444,8 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
     loadHeadMessage,
     push,
     pushNow: () => push().then((outcome) => outcome.kind === 'ok'),
-    pullNow: () =>
-      mutationCoordinator.run(Pull._tag, false, () => pullMutation.mutateAsync(), notifyBusy),
+    pull,
+    pullNow: () => pull().then((outcome) => outcome.kind === 'ok'),
     committing: mutationCoordinator.activeOperation === Commit._tag,
     amending: mutationCoordinator.activeOperation === AmendCommit._tag,
     pushing: mutationCoordinator.activeOperation === Push._tag,

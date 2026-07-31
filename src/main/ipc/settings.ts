@@ -2,6 +2,7 @@ import { parseOrThrow } from '@shared/codec'
 import {
   Channel,
   PersistedTabsSchema,
+  PullDivergedStrategySchema,
   RefTreeTogglesSchema,
   SidebarPrefsSchema
 } from '@shared/schemas/ipc'
@@ -10,9 +11,11 @@ import { sidecarRpcCall } from '../sidecar/process'
 import { isRendererRpcOp } from '../sidecar/rpc'
 import {
   getPersistedTabs,
+  getPullDivergedStrategy,
   getRefTreeToggles,
   getSidebarPrefs,
   setPersistedTabs,
+  setPullDivergedStrategy,
   setRefTreeToggles,
   setSidebarPrefs
 } from '../store/index'
@@ -44,6 +47,14 @@ export function register(): void {
   ipcMain.handle(Channel.setRefTreeToggles, (_, payload: unknown) => {
     const decoded = parseOrThrow(RefTreeTogglesSchema, payload)
     setRefTreeToggles([...decoded])
+  })
+
+  ipcMain.handle(Channel.getPullDivergedStrategy, () =>
+    parseOrThrow(PullDivergedStrategySchema, getPullDivergedStrategy())
+  )
+  ipcMain.handle(Channel.setPullDivergedStrategy, (_, payload: unknown) => {
+    const decoded = parseOrThrow(PullDivergedStrategySchema, payload)
+    setPullDivergedStrategy(decoded)
   })
 
   ipcMain.handle(Channel.getPersistedTabs, () =>

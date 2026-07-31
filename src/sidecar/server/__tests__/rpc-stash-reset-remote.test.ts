@@ -188,6 +188,13 @@ describe('stash / reset / remote RPC payload schemas', () => {
       expect(Either.isLeft(decode(schema, {}))).toBe(true)
     }
   })
+
+  it('accepts an optional pull strategy and rejects unknown strategies', () => {
+    const schema = Pull.payloadSchema
+    expect(Either.isRight(decode(schema, { repoPath: '/repo', strategy: 'rebase' }))).toBe(true)
+    expect(Either.isRight(decode(schema, { repoPath: '/repo', strategy: 'merge' }))).toBe(true)
+    expect(Either.isLeft(decode(schema, { repoPath: '/repo', strategy: 'ff-only' }))).toBe(true)
+  })
 })
 
 describe('reset RPC handler', () => {

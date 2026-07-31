@@ -53,6 +53,9 @@ export const SidebarPrefsSchema = Schema.Struct({
 })
 export type SidebarPrefs = typeof SidebarPrefsSchema.Type
 
+export const PullDivergedStrategySchema = Schema.NullOr(Schema.Literal('rebase', 'merge'))
+export type PullDivergedStrategy = typeof PullDivergedStrategySchema.Type
+
 export const RefTreeTogglesSchema = mutableArray(Schema.String)
 export type RefTreeToggles = typeof RefTreeTogglesSchema.Type
 

@@ -6,6 +6,7 @@ import {
   HunkNotFound,
   NotARepo,
   OperationInProgress,
+  PullDiverged,
   PushRejected,
   RepoNotOpen
 } from '@shared/git-rpc-errors'
@@ -30,6 +31,7 @@ const ExpectedErrorSchema = Schema.Union(
   HunkNotFound,
   Conflict,
   FetchSkipped,
+  PullDiverged,
   PushRejected,
   AmendRejected,
   OperationInProgress

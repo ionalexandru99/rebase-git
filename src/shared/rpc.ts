@@ -9,6 +9,7 @@ import {
   HunkNotFound,
   NotARepo,
   OperationInProgress,
+  PullDiverged,
   PushRejected,
   RepoNotOpen
 } from './git-rpc-errors'
@@ -34,6 +35,7 @@ export {
   HunkNotFound,
   NotARepo,
   OperationInProgress,
+  PullDiverged,
   PushRejected,
   RepoNotOpen
 } from './git-rpc-errors'
@@ -310,10 +312,13 @@ export const Push = Rpc.make('push', {
   error: Schema.Union(RepoNotOpen, GitError, PushRejected)
 })
 
+export const PullStrategySchema = Schema.Literal('rebase', 'merge')
+export type PullStrategy = typeof PullStrategySchema.Type
+
 export const Pull = Rpc.make('pull', {
-  payload: { repoPath: OpaqueString },
+  payload: { repoPath: OpaqueString, strategy: Schema.optional(PullStrategySchema) },
   success: Schema.Void,
-  error: RefWriteError
+  error: Schema.Union(RepoNotOpen, GitError, PullDiverged, Conflict)
 })
 
 export const AbortOperation = Rpc.make('abortOperation', {

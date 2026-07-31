@@ -111,6 +111,7 @@ function useAggregateGit() {
     fetchNow: refs.fetchNow,
     pushNow: actions.pushNow,
     pullNow: actions.pullNow,
+    pull: actions.pull,
     runAction: actions.runAction,
     loadMoreHistory: history.loadMoreHistory
   }
@@ -1633,6 +1634,50 @@ describe('GitStoreProvider — push and pull', () => {
     expect(toast.success).toHaveBeenCalledWith('Pulled')
     expect(git.state.pulling).toBe(false)
     expect(git.state.error).toBeNull()
+  })
+
+  it('pull reports divergence silently so the caller can offer a strategy', async () => {
+    sidecarMock.pullRepo.mockResolvedValue({ _tag: 'PullDiverged' })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    sidecarMock.getStatus.mockClear()
+    const outcome = await git.pull()
+
+    expect(outcome).toEqual({ kind: 'diverged' })
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.warning).not.toHaveBeenCalled()
+    expect(sidecarMock.getStatus).not.toHaveBeenCalled()
+  })
+
+  it('pull forwards the chosen strategy to the sidecar and toasts success', async () => {
+    sidecarMock.pullRepo.mockResolvedValue({ _tag: 'Ok' })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    const outcome = await git.pull('rebase')
+
+    expect(sidecarMock.pullRepo).toHaveBeenCalledWith(repoPath, 'rebase')
+    expect(outcome).toEqual({ kind: 'ok' })
+    expect(toast.success).toHaveBeenCalledWith('Pulled')
+  })
+
+  it('pull lands a conflicted strategy pull in the conflict flow with fresh caches', async () => {
+    sidecarMock.pullRepo.mockResolvedValue({ _tag: 'Conflict', message: 'CONFLICT in a.txt' })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    sidecarMock.getStatus.mockClear()
+    const outcome = await git.pull('merge')
+
+    expect(outcome).toEqual({ kind: 'conflict' })
+    expect(toast.warning).toHaveBeenCalledWith('Pull hit conflicts', {
+      description: 'Resolve the conflicted files, then continue or abort.'
+    })
+    expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
   })
 
   it('pullNow toasts a GitError without touching session error', async () => {

@@ -8,6 +8,8 @@ import type {
   GetRemoteRefs,
   GetStatus,
   HunkLineSelection,
+  Pull,
+  PullStrategy,
   StageFile,
   StageHunk,
   StashList,
@@ -48,6 +50,7 @@ type StashListResponse = RpcEncodedResult<
   typeof StashList.errorSchema
 >
 type VoidWriteWire = StageResponse
+type PullWire = RpcEncodedResult<typeof Pull.successSchema, typeof Pull.errorSchema>
 type FetchWire = RpcEncodedResult<typeof Fetch.successSchema, typeof Fetch.errorSchema>
 
 const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown | Promise<unknown>>()
@@ -65,7 +68,7 @@ export const sidecarMock = {
   commit: vi.fn<(repoPath: string, message: string) => Promise<CommitResponse>>(),
   fetchRepo: vi.fn<(repoPath: string) => Promise<FetchWire>>(),
   pushRepo: vi.fn<(repoPath: string) => Promise<VoidWriteWire>>(),
-  pullRepo: vi.fn<(repoPath: string) => Promise<VoidWriteWire>>(),
+  pullRepo: vi.fn<(repoPath: string, strategy?: PullStrategy) => Promise<PullWire>>(),
   getDiff:
     vi.fn<
       (
@@ -183,6 +186,8 @@ const mockElectronAPI = {
   setRefTreeToggles: vi.fn(),
   getPersistedTabs: vi.fn(),
   setPersistedTabs: vi.fn(),
+  getPullDivergedStrategy: vi.fn(),
+  setPullDivergedStrategy: vi.fn(),
   getWorkspaces: vi.fn(),
   addWorkspace: vi.fn(),
   removeWorkspace: vi.fn(),
@@ -308,6 +313,8 @@ beforeEach(() => {
     activeIndex: 0
   })
   vi.mocked(window.electronAPI.setPersistedTabs).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.getPullDivergedStrategy).mockResolvedValue(null)
+  vi.mocked(window.electronAPI.setPullDivergedStrategy).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.sidecarRequest).mockImplementation(async (op, body) => {
     const repoPath = body.repoPath as string
     switch (op) {
@@ -360,7 +367,9 @@ beforeEach(() => {
       case 'push':
         return sidecarMock.pushRepo(repoPath)
       case 'pull':
-        return sidecarMock.pullRepo(repoPath)
+        return typeof body.strategy === 'string'
+          ? sidecarMock.pullRepo(repoPath, body.strategy as PullStrategy)
+          : sidecarMock.pullRepo(repoPath)
       default: {
         const handler = opHandlers.get(op)
         if (handler) {

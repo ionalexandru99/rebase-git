@@ -37,6 +37,7 @@ interface ManualState {
   onboardingComplete: boolean
   nextObjectId: number
   persistedTabs: { tabs: Array<string | null>; activeIndex: number }
+  pullDivergedStrategy: 'rebase' | 'merge' | null
   recentRepos: string[]
   refTreeToggles: string[]
   sidebarPrefs: { open: boolean; width: number }
@@ -168,6 +169,7 @@ function createState(options: PlaywrightMcpElectronApiOptions): ManualState {
       tabs: [null],
       activeIndex: 0
     },
+    pullDivergedStrategy: null,
     recentRepos: [PLAYWRIGHT_MCP_REPO_PATH],
     refTreeToggles: [],
     sidebarPrefs: { open: true, width: 244 },
@@ -502,6 +504,10 @@ export function createPlaywrightMcpElectronApi(
         tabs: [...persistedTabs.tabs],
         activeIndex: persistedTabs.activeIndex
       }
+    },
+    getPullDivergedStrategy: async () => state.pullDivergedStrategy,
+    setPullDivergedStrategy: async (strategy) => {
+      state.pullDivergedStrategy = strategy
     },
     getWorkspaces: async () => [...state.workspaces],
     addWorkspace: async (workspacePath) => {

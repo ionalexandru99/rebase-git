@@ -5,7 +5,7 @@ import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { describe, expect, it } from 'vitest'
 import { runOp } from '../../test-support/run-op'
-import { closeRepo, getStatus, openRepo, pullRepo } from '../index'
+import { abortOperation, closeRepo, getStatus, openRepo, pullRepo } from '../index'
 
 interface PullFixture {
   path: string
@@ -114,7 +114,7 @@ describe('pullRepo with local changes in the way', () => {
     })
   })
 
-  it('refuses a diverged branch without leaving a merge behind to clean up', async () => {
+  it('rejects a diverged branch as PullDiverged without leaving a merge behind to clean up', async () => {
     await withPullFixture(async (fixture) => {
       writeFile(fixture.path, 'a.txt', 'a mine\n')
       run(fixture.path, ['commit', '-am', 'local work'])
@@ -122,12 +122,87 @@ describe('pullRepo with local changes in the way', () => {
 
       const error = await pullFailure(fixture.path)
 
-      expect(error._tag).toBe('GitError')
-      expect(error.message).toMatch(/fast-forward/i)
+      expect(error._tag).toBe('PullDiverged')
       expect(sha(fixture.path, 'HEAD')).toBe(headBefore)
       const { status } = await runOp(getStatus(fixture.path))
       expect(status.operation).toBeUndefined()
       expect(status.conflicted).toEqual([])
+    })
+  })
+
+  it('rebases local commits onto upstream when told to rebase', async () => {
+    await withPullFixture(async (fixture) => {
+      writeFile(fixture.path, 'b.txt', 'b mine\n')
+      run(fixture.path, ['commit', '-am', 'local work'])
+
+      await runOp(pullRepo(fixture.path, 'rebase'))
+
+      expect(sha(fixture.path, 'HEAD~1')).toBe(fixture.remoteTip)
+      expect(readFile(fixture.path, 'a.txt')).toBe('a upstream\n')
+      expect(readFile(fixture.path, 'b.txt')).toBe('b mine\n')
+      const { status } = await runOp(getStatus(fixture.path))
+      expect(status.operation).toBeUndefined()
+      expect(status.conflicted).toEqual([])
+    })
+  })
+
+  it('merges upstream into the local branch when told to merge', async () => {
+    await withPullFixture(async (fixture) => {
+      writeFile(fixture.path, 'b.txt', 'b mine\n')
+      run(fixture.path, ['commit', '-am', 'local work'])
+      const localTip = sha(fixture.path, 'HEAD')
+
+      await runOp(pullRepo(fixture.path, 'merge'))
+
+      expect(sha(fixture.path, 'HEAD^1')).toBe(localTip)
+      expect(sha(fixture.path, 'HEAD^2')).toBe(fixture.remoteTip)
+      expect(readFile(fixture.path, 'a.txt')).toBe('a upstream\n')
+      expect(readFile(fixture.path, 'b.txt')).toBe('b mine\n')
+      const { status } = await runOp(getStatus(fixture.path))
+      expect(status.operation).toBeUndefined()
+      expect(status.conflicted).toEqual([])
+    })
+  })
+
+  it('stops a conflicting rebase pull in the conflict flow, and abort restores the branch', async () => {
+    await withPullFixture(async (fixture) => {
+      writeFile(fixture.path, 'a.txt', 'a mine\n')
+      run(fixture.path, ['commit', '-am', 'local work'])
+      const localTip = sha(fixture.path, 'HEAD')
+
+      const result = await runOp(Effect.either(pullRepo(fixture.path, 'rebase')))
+      if (Either.isRight(result)) {
+        throw new Error('expected the rebase pull to stop on conflicts')
+      }
+
+      expect(result.left._tag).toBe('Conflict')
+      const { status } = await runOp(getStatus(fixture.path))
+      expect(status.operation?.kind).toBe('rebase-merge')
+      expect(status.conflicted).toEqual(['a.txt'])
+
+      await runOp(abortOperation(fixture.path))
+
+      expect(sha(fixture.path, 'HEAD')).toBe(localTip)
+      const after = await runOp(getStatus(fixture.path))
+      expect(after.status.operation).toBeUndefined()
+      expect(after.status.conflicted).toEqual([])
+    })
+  })
+
+  it('stops a conflicting merge pull in the conflict flow with the merge in progress', async () => {
+    await withPullFixture(async (fixture) => {
+      writeFile(fixture.path, 'a.txt', 'a mine\n')
+      run(fixture.path, ['commit', '-am', 'local work'])
+
+      const result = await runOp(Effect.either(pullRepo(fixture.path, 'merge')))
+      if (Either.isRight(result)) {
+        throw new Error('expected the merge pull to stop on conflicts')
+      }
+
+      expect(result.left._tag).toBe('Conflict')
+      const { status } = await runOp(getStatus(fixture.path))
+      expect(status.operation?.kind).toBe('merge')
+      expect(status.conflicted).toEqual(['a.txt'])
     })
   })
 

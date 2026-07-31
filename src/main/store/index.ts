@@ -106,6 +106,14 @@ export function setSidebarPrefs(prefs: SidebarPrefs): void {
   store.set('sidebarWidth', prefs.width)
 }
 
+export function getPullDivergedStrategy(): StoreSchema['pullDivergedStrategy'] {
+  return store.get('pullDivergedStrategy')
+}
+
+export function setPullDivergedStrategy(strategy: StoreSchema['pullDivergedStrategy']): void {
+  store.set('pullDivergedStrategy', strategy)
+}
+
 export function getRefTreeToggles(): string[] {
   return filterPersistedRefTreeToggles(store.get('sidebarRefTreeToggles'))
 }
