@@ -1,6 +1,6 @@
 import type { CommitDetail } from '@shared/schemas/git'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import type { CSSProperties, ReactNode } from 'react'
+import { type CSSProperties, type ReactNode, useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { refFilterKey } from '@/features/history/selectors'
 import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
@@ -118,7 +118,11 @@ function Harness(props: { onSession: (session: RepoSession) => void }) {
 }
 
 function Probe(props: { onSession: (session: RepoSession) => void }) {
-  props.onSession(useRepoSession())
+  const session = useRepoSession()
+  const onSession = props.onSession
+  useEffect(() => {
+    onSession(session)
+  }, [session, onSession])
   const visibleBranchRefs = new Set([refFilterKey('local', 'main')])
   return (
     <HistoryPanel

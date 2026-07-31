@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
-import type { CSSProperties, ReactNode } from 'react'
+import { type CSSProperties, type ReactNode, useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CommitDiffSelection, CommitDiffView } from '@/features/diff/CommitDiffView'
 import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
@@ -67,7 +67,11 @@ function Probe(props: {
   selected: CommitDiffSelection | null
   onSession: (session: RepoSession) => void
 }) {
-  props.onSession(useRepoSession())
+  const session = useRepoSession()
+  const onSession = props.onSession
+  useEffect(() => {
+    onSession(session)
+  }, [session, onSession])
   return <CommitDiffView selected={props.selected} />
 }
 
