@@ -1,6 +1,6 @@
 import { diffAcceptRejectHunk, type SelectedLineRange } from '@pierre/diffs'
 import { FileDiff, Virtualizer } from '@pierre/diffs/react'
-import type { DiffHunk } from '@shared/schemas/git'
+import { type ParsedHunk, parseUnifiedDiff } from '@shared/unified-diff'
 import {
   FileDiffIcon,
   type LucideIcon,
@@ -98,10 +98,9 @@ export function DiffPanel(props: DiffPanelProps) {
   const activeQuery = isHeadCommit ? rangeQuery : worktreeQuery
 
   const data = props.selected ? (activeQuery.data ?? null) : null
-  const diff = data?.diff ?? null
   const patch = data?.patch
-  const hunks = useMemo(() => diff?.hunks ?? [], [diff])
-  const isBinary = Boolean(diff?.binary)
+  const hunks = useMemo(() => (patch === undefined ? [] : parseUnifiedDiff(patch).hunks), [patch])
+  const isBinary = Boolean(data?.binary)
 
   const [pending, setPending] = useState<PendingHunkRemoval | null>(null)
   const [hoveredLine, setHoveredLine] = useState<HoveredLine | null>(null)
@@ -153,7 +152,7 @@ export function DiffPanel(props: DiffPanelProps) {
   }, [parsedFiles, activePending, hunks])
 
   const runHunkAction = useCallback(
-    async (action: HunkAction, hunk: DiffHunk) => {
+    async (action: HunkAction, hunk: ParsedHunk) => {
       if (!selectedFile) {
         return
       }
@@ -189,7 +188,7 @@ export function DiffPanel(props: DiffPanelProps) {
   )
 
   const requestHunkAction = useCallback(
-    (action: HunkAction, hunk: DiffHunk) => {
+    (action: HunkAction, hunk: ParsedHunk) => {
       if (action === 'discard') {
         confirm({
           title: `Discard hunk in ${selectedFile}?`,
@@ -206,7 +205,7 @@ export function DiffPanel(props: DiffPanelProps) {
   )
 
   const toggleHunkDrop = useCallback(
-    (hunk: DiffHunk) => {
+    (hunk: ParsedHunk) => {
       amendDrop?.onToggleHunk(
         hunk.header,
         hunks.map((entry) => entry.header)
@@ -270,7 +269,7 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const renderGutterUtility = useCallback(
     (getHoveredLine: () => HoveredLine | undefined): ReactNode => {
-      const actOnHovered = (run: (hunk: DiffHunk) => void) => () => {
+      const actOnHovered = (run: (hunk: ParsedHunk) => void) => () => {
         const hovered = getHoveredLine()
         if (!hovered) {
           return

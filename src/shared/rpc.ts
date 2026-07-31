@@ -17,7 +17,6 @@ import {
   CloneProgressSchema,
   CommitDetailSchema,
   CommitSummarySchema,
-  FileDiffSchema,
   GitStatusSchema,
   HeadCommitSchema,
   LocalBranchesSchema,
@@ -366,7 +365,7 @@ export const GetDiff = Rpc.make('getDiff', {
     commit: Schema.optional(RequiredString),
     renameSource: Schema.optional(OpaqueString)
   },
-  success: Schema.Struct({ diff: FileDiffSchema, patch: Schema.String }),
+  success: Schema.Struct({ patch: Schema.String, binary: Schema.Boolean }),
   error: ReadError
 })
 

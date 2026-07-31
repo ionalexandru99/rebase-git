@@ -2,11 +2,13 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { removeRepoDir } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, getDiff, getStatus, openRepo, stageHunk, unstageHunk } from '../index'
 
+const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 let repoDir: string
 
 function git(...args: string[]): string {
@@ -44,9 +46,9 @@ describe('hunk staging on files git does not track yet', () => {
     write('brand-new.txt', ['alpha', 'beta', 'gamma'])
 
     const unstaged = await runOp(getDiff(repoDir, 'brand-new.txt', false))
-    expect(unstaged.diff.hunks).toHaveLength(1)
+    expect(hunksOf(unstaged)).toHaveLength(1)
 
-    await runOp(stageHunk(repoDir, 'brand-new.txt', unstaged.diff.hunks[0].header))
+    await runOp(stageHunk(repoDir, 'brand-new.txt', hunksOf(unstaged)[0].header))
 
     expect(git('show', ':brand-new.txt')).toBe('alpha\nbeta\ngamma\n')
     expect(statusFor('brand-new.txt')).toBe('A ')
@@ -59,9 +61,9 @@ describe('hunk staging on files git does not track yet', () => {
     write('nested/deep/brand-new.txt', ['one', 'two'])
 
     const unstaged = await runOp(getDiff(repoDir, 'nested/deep/brand-new.txt', false))
-    expect(unstaged.diff.hunks).toHaveLength(1)
+    expect(hunksOf(unstaged)).toHaveLength(1)
 
-    await runOp(stageHunk(repoDir, 'nested/deep/brand-new.txt', unstaged.diff.hunks[0].header))
+    await runOp(stageHunk(repoDir, 'nested/deep/brand-new.txt', hunksOf(unstaged)[0].header))
 
     expect(git('show', ':nested/deep/brand-new.txt')).toBe('one\ntwo\n')
   })
@@ -77,9 +79,9 @@ describe('hunk staging on files git does not track yet', () => {
     await runOp(openRepo(repoDir))
 
     const unstaged = await runOp(getDiff(repoDir, 'first.txt', false))
-    expect(unstaged.diff.hunks).toHaveLength(1)
+    expect(hunksOf(unstaged)).toHaveLength(1)
 
-    await runOp(stageHunk(repoDir, 'first.txt', unstaged.diff.hunks[0].header))
+    await runOp(stageHunk(repoDir, 'first.txt', hunksOf(unstaged)[0].header))
 
     expect(git('show', ':first.txt')).toBe('hello\n')
     expect(statusFor('first.txt')).toBe('A ')
@@ -89,7 +91,7 @@ describe('hunk staging on files git does not track yet', () => {
     const lines = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`)
     write('multi.txt', lines)
     const initial = await runOp(getDiff(repoDir, 'multi.txt', false))
-    await runOp(stageHunk(repoDir, 'multi.txt', initial.diff.hunks[0].header))
+    await runOp(stageHunk(repoDir, 'multi.txt', hunksOf(initial)[0].header))
 
     const edited = [...lines]
     edited[0] = 'line 1 EDITED'
@@ -97,16 +99,16 @@ describe('hunk staging on files git does not track yet', () => {
     write('multi.txt', edited)
 
     const unstaged = await runOp(getDiff(repoDir, 'multi.txt', false))
-    expect(unstaged.diff.hunks).toHaveLength(2)
+    expect(hunksOf(unstaged)).toHaveLength(2)
 
-    await runOp(stageHunk(repoDir, 'multi.txt', unstaged.diff.hunks[0].header))
+    await runOp(stageHunk(repoDir, 'multi.txt', hunksOf(unstaged)[0].header))
 
     expect(git('show', ':multi.txt')).toContain('line 1 EDITED')
     expect(git('show', ':multi.txt')).not.toContain('line 36 EDITED')
 
     const remaining = await runOp(getDiff(repoDir, 'multi.txt', false))
-    expect(remaining.diff.hunks).toHaveLength(1)
-    expect(remaining.diff.hunks[0].lines.some((line) => line.text === 'line 36 EDITED')).toBe(true)
+    expect(hunksOf(remaining)).toHaveLength(1)
+    expect(hunksOf(remaining)[0].lines.some((line) => line.text === 'line 36 EDITED')).toBe(true)
   })
 
   it('ships the untracked fallback text as the patch, matching the hunks beside it', async () => {
@@ -116,7 +118,7 @@ describe('hunk staging on files git does not track yet', () => {
 
     expect(result.patch).toContain('new file mode')
     expect(result.patch).toContain('@@ -0,0 +1,2 @@')
-    for (const hunk of result.diff.hunks) {
+    for (const hunk of hunksOf(result)) {
       expect(result.patch).toContain(hunk.header)
     }
     expect(result.patch).toContain('+alpha')
@@ -127,9 +129,9 @@ describe('hunk staging on files git does not track yet', () => {
     git('add', '--', 'staged-new.txt')
 
     const staged = await runOp(getDiff(repoDir, 'staged-new.txt', true))
-    expect(staged.diff.hunks).toHaveLength(1)
+    expect(hunksOf(staged)).toHaveLength(1)
 
-    await runOp(unstageHunk(repoDir, 'staged-new.txt', staged.diff.hunks[0].header))
+    await runOp(unstageHunk(repoDir, 'staged-new.txt', hunksOf(staged)[0].header))
 
     expect(statusFor('staged-new.txt')).toBe('??')
     expect(fs.readFileSync(path.join(repoDir, 'staged-new.txt'), 'utf8')).toBe('alpha\nbeta\n')

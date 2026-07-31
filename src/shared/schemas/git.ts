@@ -103,31 +103,6 @@ export const RepoOpenSuccessSchema = Schema.Struct({
 })
 export type RepoOpenSuccess = typeof RepoOpenSuccessSchema.Type
 
-export const DiffLineSchema = Schema.Struct({
-  kind: Schema.Literal('context', 'add', 'del', 'meta'),
-  text: Schema.String,
-  oldLine: Schema.NullOr(NonNaNNumber),
-  newLine: Schema.NullOr(NonNaNNumber)
-})
-export type DiffLine = typeof DiffLineSchema.Type
-
-export const DiffHunkSchema = Schema.Struct({
-  header: Schema.String,
-  oldStart: NonNaNNumber,
-  oldCount: NonNaNNumber,
-  newStart: NonNaNNumber,
-  newCount: NonNaNNumber,
-  lines: mutableArray(DiffLineSchema)
-})
-export type DiffHunk = typeof DiffHunkSchema.Type
-
-export const FileDiffSchema = Schema.Struct({
-  filePath: Schema.String,
-  binary: Schema.Boolean,
-  hunks: mutableArray(DiffHunkSchema)
-})
-export type FileDiff = typeof FileDiffSchema.Type
-
 export const CommitSummarySchema = Schema.Struct({
   commit: Schema.String,
   branch: Schema.String,

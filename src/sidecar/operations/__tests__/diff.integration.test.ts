@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runOp } from '../../test-support/run-op'
@@ -15,6 +16,7 @@ import {
   unstageHunk
 } from '../index'
 
+const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 let repoDir: string
 
 function git(...args: string[]): string {
@@ -52,42 +54,42 @@ describe('diff operations against a real repository', () => {
     writeLines('sample.txt', edited)
 
     const unstaged = await runOp(getDiff(repoDir, 'sample.txt', false))
-    expect(unstaged.diff.hunks).toHaveLength(2)
+    expect(hunksOf(unstaged)).toHaveLength(2)
 
-    const firstHeader = unstaged.diff.hunks[0].header
+    const firstHeader = hunksOf(unstaged)[0].header
     await runOp(stageHunk(repoDir, 'sample.txt', firstHeader))
 
     const stagedAfter = await runOp(getDiff(repoDir, 'sample.txt', true))
-    expect(stagedAfter.diff.hunks).toHaveLength(1)
-    expect(stagedAfter.diff.hunks[0].lines.some((line) => line.text === 'line 1 EDITED')).toBe(true)
+    expect(hunksOf(stagedAfter)).toHaveLength(1)
+    expect(hunksOf(stagedAfter)[0].lines.some((line) => line.text === 'line 1 EDITED')).toBe(true)
 
     const unstagedAfter = await runOp(getDiff(repoDir, 'sample.txt', false))
-    expect(unstagedAfter.diff.hunks).toHaveLength(1)
-    expect(unstagedAfter.diff.hunks[0].lines.some((line) => line.text === 'line 36 EDITED')).toBe(
+    expect(hunksOf(unstagedAfter)).toHaveLength(1)
+    expect(hunksOf(unstagedAfter)[0].lines.some((line) => line.text === 'line 36 EDITED')).toBe(
       true
     )
   })
 
   it('unstages a staged hunk back to the working tree', async () => {
     const staged = await runOp(getDiff(repoDir, 'sample.txt', true))
-    expect(staged.diff.hunks).toHaveLength(1)
+    expect(hunksOf(staged)).toHaveLength(1)
 
-    await runOp(unstageHunk(repoDir, 'sample.txt', staged.diff.hunks[0].header))
+    await runOp(unstageHunk(repoDir, 'sample.txt', hunksOf(staged)[0].header))
 
     const stagedAfter = await runOp(getDiff(repoDir, 'sample.txt', true))
-    expect(stagedAfter.diff.hunks).toHaveLength(0)
+    expect(hunksOf(stagedAfter)).toHaveLength(0)
 
     const unstagedAfter = await runOp(getDiff(repoDir, 'sample.txt', false))
-    expect(unstagedAfter.diff.hunks).toHaveLength(2)
+    expect(hunksOf(unstagedAfter)).toHaveLength(2)
   })
 
   it('reports a fully staged file once every hunk is staged individually', async () => {
     const unstaged = await runOp(getDiff(repoDir, 'sample.txt', false))
-    expect(unstaged.diff.hunks).toHaveLength(2)
+    expect(hunksOf(unstaged)).toHaveLength(2)
 
-    for (const hunk of unstaged.diff.hunks) {
+    for (const hunk of hunksOf(unstaged)) {
       const refreshed = await runOp(getDiff(repoDir, 'sample.txt', false))
-      const liveHunk = refreshed.diff.hunks.find((candidate) =>
+      const liveHunk = hunksOf(refreshed).find((candidate) =>
         candidate.lines.some((line) => hunk.lines.some((other) => other.text === line.text))
       )
       expect(liveHunk).toBeDefined()
@@ -118,18 +120,18 @@ describe('diff operations against a real repository', () => {
     writeLines('brand-new.txt', ['alpha', 'beta'])
 
     const diff = await runOp(getDiff(repoDir, 'brand-new.txt', false))
-    expect(diff.diff.hunks).toHaveLength(1)
-    expect(diff.diff.hunks[0].lines.map((line) => line.text)).toEqual(['alpha', 'beta'])
-    expect(diff.diff.hunks[0].lines.every((line) => line.kind === 'add')).toBe(true)
+    expect(hunksOf(diff)).toHaveLength(1)
+    expect(hunksOf(diff)[0].lines.map((line) => line.text)).toEqual(['alpha', 'beta'])
+    expect(hunksOf(diff)[0].lines.every((line) => line.kind === 'add')).toBe(true)
   })
 
   it('produces a synthetic diff for an untracked unicode-named file', async () => {
     writeLines('café.txt', ['gamma', 'delta'])
 
     const diff = await runOp(getDiff(repoDir, 'café.txt', false))
-    expect(diff.diff.hunks).toHaveLength(1)
-    expect(diff.diff.hunks[0].lines.map((line) => line.text)).toEqual(['gamma', 'delta'])
-    expect(diff.diff.hunks[0].lines.every((line) => line.kind === 'add')).toBe(true)
+    expect(hunksOf(diff)).toHaveLength(1)
+    expect(hunksOf(diff)[0].lines.map((line) => line.text)).toEqual(['gamma', 'delta'])
+    expect(hunksOf(diff)[0].lines.every((line) => line.kind === 'add')).toBe(true)
   })
 
   it('returns an empty diff for a clean tracked file', async () => {
@@ -138,7 +140,7 @@ describe('diff operations against a real repository', () => {
     git('checkout', '--', 'sample.txt')
 
     const diff = await runOp(getDiff(repoDir, 'sample.txt', false))
-    expect(diff.diff.hunks).toHaveLength(0)
+    expect(hunksOf(diff)).toHaveLength(0)
   })
 
   it('unstages an option-like filename as a path, never as a flag', async () => {
@@ -175,8 +177,8 @@ describe('diff operations against a real repository', () => {
 
     try {
       const diff = await runOp(getDiff(repoDir, 'conflict.txt', false))
-      expect(diff.diff.hunks.length).toBeGreaterThan(0)
-      expect(diff.diff.hunks.flatMap((hunk) => hunk.lines).length).toBeGreaterThan(0)
+      expect(hunksOf(diff).length).toBeGreaterThan(0)
+      expect(hunksOf(diff).flatMap((hunk) => hunk.lines).length).toBeGreaterThan(0)
     } finally {
       git('merge', '--abort')
     }

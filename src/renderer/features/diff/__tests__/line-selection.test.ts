@@ -1,6 +1,6 @@
 import { DIFFS_TAG_NAME } from '@pierre/diffs'
 import { fingerprintHunk } from '@shared/hunk-fingerprint'
-import type { DiffHunk } from '@shared/schemas/git'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { describe, expect, it } from 'vitest'
 import {
   mapSelectionToHunkSelections,
@@ -143,30 +143,6 @@ function fixturePatch(file: string, hunks: FixtureHunk[]): string {
   ].join('\n')}\n`
 }
 
-function fixtureHunks(hunks: FixtureHunk[]): DiffHunk[] {
-  return hunks.map((hunk) => {
-    let oldLine = hunk.oldStart
-    let newLine = hunk.newStart
-    return {
-      header: fixtureHeader(hunk),
-      oldStart: hunk.oldStart,
-      oldCount: hunk.oldCount,
-      newStart: hunk.newStart,
-      newCount: hunk.newCount,
-      lines: hunk.body.map((raw) => {
-        const text = raw.slice(1)
-        if (raw.startsWith('+')) {
-          return { kind: 'add' as const, text, oldLine: null, newLine: newLine++ }
-        }
-        if (raw.startsWith('-')) {
-          return { kind: 'del' as const, text, oldLine: oldLine++, newLine: null }
-        }
-        return { kind: 'context' as const, text, oldLine: oldLine++, newLine: newLine++ }
-      })
-    }
-  })
-}
-
 const firstFixture: FixtureHunk = {
   oldStart: 1,
   oldCount: 3,
@@ -185,7 +161,7 @@ const tailFixture: FixtureHunk = {
 }
 
 const patch = fixturePatch('src/app.ts', [firstFixture, tailFixture])
-const hunks = fixtureHunks([firstFixture, tailFixture])
+const hunks = parseUnifiedDiff(patch).hunks
 const firstHeader = fixtureHeader(firstFixture)
 const tailHeader = fixtureHeader(tailFixture)
 

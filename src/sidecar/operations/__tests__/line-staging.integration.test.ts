@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fingerprintHunk } from '@shared/hunk-fingerprint'
-import type { DiffLine } from '@shared/schemas/git'
+import type { DiffLine } from '@shared/unified-diff'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { makeGit } from '../../test-support/git-cli'
@@ -14,6 +15,7 @@ import {
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, getDiff, openRepo, stageLines, unstageLines } from '../index'
 
+const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 let repoDir: string
 let git: ReturnType<typeof makeGit>
 
@@ -40,8 +42,8 @@ async function selectLines(
   staged: boolean,
   pick: (line: DiffLine, index: number, hunkIndex: number) => boolean
 ) {
-  const { diff, patch } = await runOp(getDiff(repoDir, file, staged))
-  return diff.hunks.flatMap((hunk, hunkIndex) => {
+  const { patch } = await runOp(getDiff(repoDir, file, staged))
+  return parseUnifiedDiff(patch).hunks.flatMap((hunk, hunkIndex) => {
     const lineIndexes = hunk.lines
       .map((line, index) => (pick(line, index, hunkIndex) ? index : -1))
       .filter((index) => index !== -1)
@@ -89,9 +91,9 @@ describe('stageLines', () => {
     )
 
     const remaining = await runOp(getDiff(repoDir, 'file.txt', false))
-    expect(remaining.diff.hunks).toHaveLength(1)
-    const addedTexts = remaining.diff.hunks[0].lines
-      .filter((line) => line.kind === 'add')
+    expect(hunksOf(remaining)).toHaveLength(1)
+    const addedTexts = hunksOf(remaining)[0]
+      .lines.filter((line) => line.kind === 'add')
       .map((line) => line.text)
     expect(addedTexts).toEqual(['added-2'])
   })
@@ -147,8 +149,8 @@ describe('stageLines', () => {
     expect(indexBlob('file.txt')).toBe(`${expected.join('\n')}\n`)
 
     const remaining = await runOp(getDiff(repoDir, 'file.txt', false))
-    expect(remaining.diff.hunks).toHaveLength(1)
-    expect(remaining.diff.hunks[0].lines.some((line) => line.text === 'L15-edited')).toBe(true)
+    expect(hunksOf(remaining)).toHaveLength(1)
+    expect(hunksOf(remaining)[0].lines.some((line) => line.text === 'L15-edited')).toBe(true)
   })
 
   it('unstages one of two staged added lines', async () => {

@@ -13,7 +13,8 @@ const hunk = (
   oldCount,
   newStart,
   newCount,
-  lines: []
+  lines: [],
+  raw: ''
 })
 
 const first = hunk('@@ -1,3 +1,4 @@', 1, 3, 1, 4)

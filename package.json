@@ -26,6 +26,7 @@
     "lint:fix": "biome lint --write .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
+    "check:shiki": "node scripts/assert-single-shiki.mjs",
     "test": "vitest run",
     "test:renderer": "vitest run --config vitest.config.ts",
     "test:main": "vitest run --config vitest.main.config.ts",

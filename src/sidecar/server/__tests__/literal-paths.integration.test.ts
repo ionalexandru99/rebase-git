@@ -5,12 +5,14 @@ import path from 'node:path'
 import { RpcTest } from '@effect/rpc'
 import { GitError } from '@shared/git-rpc-errors'
 import { SidecarRpcs } from '@shared/rpc'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { amendCommit, checkoutRef, closeRepo, openRepo, stashPush } from '../../operations/index'
 import { runOp } from '../../test-support/run-op'
 import { handlersLayer } from '../handlers'
 
+const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 interface TestRepo {
   dir: string
   git: (...args: string[]) => string
@@ -175,7 +177,7 @@ describe.skipIf(process.platform === 'win32')('glob-named files are matched lite
     const result = await rpcGetDiff({ repoPath: repo.dir, file: '*.txt' })
     expect(Either.isRight(result)).toBe(true)
     if (Either.isRight(result)) {
-      expect(result.right.diff.hunks).toHaveLength(0)
+      expect(hunksOf(result.right)).toHaveLength(0)
     }
   })
 
@@ -276,7 +278,7 @@ describe('bracket-globbed files are matched literally', () => {
     const result = await rpcGetDiff({ repoPath: repo.dir, file: '[abc].txt' })
     expect(Either.isRight(result)).toBe(true)
     if (Either.isRight(result)) {
-      expect(result.right.diff.hunks).toHaveLength(0)
+      expect(hunksOf(result.right)).toHaveLength(0)
     }
   })
 
@@ -356,7 +358,7 @@ describe('dash-named files are file arguments, not options', () => {
     const result = await rpcGetDiff({ repoPath: repo.dir, file: '-w' })
     expect(Either.isRight(result)).toBe(true)
     if (Either.isRight(result)) {
-      expect(result.right.diff.hunks.length).toBeGreaterThan(0)
+      expect(hunksOf(result.right).length).toBeGreaterThan(0)
     }
   })
 })

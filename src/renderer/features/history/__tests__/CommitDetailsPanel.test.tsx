@@ -86,20 +86,7 @@ index a92d664..80a6513 100644
 const diffFor = (file: string) => ({
   _tag: 'Ok' as const,
   patch: patchFor(file),
-  diff: {
-    filePath: file,
-    binary: false,
-    hunks: [
-      {
-        header: `@@ -1,2 +1,3 @@ ${file}`,
-        oldStart: 1,
-        oldCount: 2,
-        newStart: 1,
-        newCount: 3,
-        lines: [{ kind: 'add' as const, text: `changed ${file}`, oldLine: null, newLine: 2 }]
-      }
-    ]
-  }
+  binary: false
 })
 
 const diffShownFor = async (file: string) => {

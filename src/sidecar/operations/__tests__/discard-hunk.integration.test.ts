@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
@@ -12,6 +13,7 @@ import {
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, discardHunk, getDiff, openRepo } from '../index'
 
+const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 let repoDir: string
 
 function git(...args: string[]): string {
@@ -53,8 +55,8 @@ describe('discardHunk against a real repository', () => {
     writeLines('sample.txt', edited)
 
     const unstaged = await runOp(getDiff(repoDir, 'sample.txt', false))
-    expect(unstaged.diff.hunks).toHaveLength(3)
-    const middleHeader = unstaged.diff.hunks[1].header
+    expect(hunksOf(unstaged)).toHaveLength(3)
+    const middleHeader = hunksOf(unstaged)[1].header
 
     await runOp(discardHunk(repoDir, 'sample.txt', middleHeader))
 
@@ -64,7 +66,7 @@ describe('discardHunk against a real repository', () => {
     expect(worktree[39]).toBe('line 40 EDITED')
 
     const unstagedAfter = await runOp(getDiff(repoDir, 'sample.txt', false))
-    expect(unstagedAfter.diff.hunks).toHaveLength(2)
+    expect(hunksOf(unstagedAfter)).toHaveLength(2)
 
     expect(git('diff', '--cached', '--name-only')).toBe('')
   })
@@ -80,9 +82,9 @@ describe('discardHunk against a real repository', () => {
     writeLines('sample.txt', worktreeEdit)
 
     const unstaged = await runOp(getDiff(repoDir, 'sample.txt', false))
-    expect(unstaged.diff.hunks).toHaveLength(1)
+    expect(hunksOf(unstaged)).toHaveLength(1)
 
-    await runOp(discardHunk(repoDir, 'sample.txt', unstaged.diff.hunks[0].header))
+    await runOp(discardHunk(repoDir, 'sample.txt', hunksOf(unstaged)[0].header))
 
     const worktree = readLines('sample.txt')
     expect(worktree[0]).toBe('line 1 STAGED')

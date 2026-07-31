@@ -2,10 +2,14 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, getCommitDetail, getDiff, openRepo } from '../index'
+
+const getParsedDiff = (...args: Parameters<typeof getDiff>) =>
+  getDiff(...args).pipe(Effect.map((result) => ({ diff: parseUnifiedDiff(result.patch) })))
 
 let repoDir: string
 const sha: Record<string, string> = {}
@@ -140,7 +144,7 @@ describe('getCommitDetail', () => {
 
 describe('getDiff for a commit', () => {
   it("returns a file's hunks for the commit versus its first parent", async () => {
-    const { diff } = await runOp(getDiff(repoDir, 'one.txt', false, { commit: sha.second }))
+    const { diff } = await runOp(getParsedDiff(repoDir, 'one.txt', false, { commit: sha.second }))
 
     expect(diff.binary).toBe(false)
     expect(diff.hunks).toHaveLength(1)
@@ -153,20 +157,22 @@ describe('getDiff for a commit', () => {
   })
 
   it('shows a root commit file as all additions', async () => {
-    const { diff } = await runOp(getDiff(repoDir, 'one.txt', false, { commit: sha.root }))
+    const { diff } = await runOp(getParsedDiff(repoDir, 'one.txt', false, { commit: sha.root }))
 
     expect(diff.hunks).toHaveLength(1)
     expect(diff.hunks[0].lines.map((line) => line.kind)).toEqual(['add', 'add', 'add'])
   })
 
   it('shows a deleted file as removals', async () => {
-    const { diff } = await runOp(getDiff(repoDir, 'doomed.txt', false, { commit: sha.second }))
+    const { diff } = await runOp(
+      getParsedDiff(repoDir, 'doomed.txt', false, { commit: sha.second })
+    )
 
     expect(diff.hunks[0].lines.map((line) => [line.kind, line.text])).toEqual([['del', 'gone']])
   })
 
   it("diffs a merge against its first parent, so the side branch's file reads as added", async () => {
-    const { diff } = await runOp(getDiff(repoDir, 'side.txt', false, { commit: sha.merge }))
+    const { diff } = await runOp(getParsedDiff(repoDir, 'side.txt', false, { commit: sha.merge }))
 
     expect(diff.hunks).toHaveLength(1)
     expect(diff.hunks[0].lines.map((line) => [line.kind, line.text])).toEqual([
@@ -176,7 +182,7 @@ describe('getDiff for a commit', () => {
 
   it('returns no hunks for a pure rename, which carries no content change', async () => {
     const { diff } = await runOp(
-      getDiff(repoDir, 'assets/logo.png', false, {
+      getParsedDiff(repoDir, 'assets/logo.png', false, {
         commit: sha.second,
         renameSource: 'logo.png'
       })
@@ -190,7 +196,9 @@ describe('getDiff for a commit', () => {
     git('add', '-A')
     const binarySha = commit('touch up the logo')
 
-    const { diff } = await runOp(getDiff(repoDir, 'assets/logo.png', false, { commit: binarySha }))
+    const { diff } = await runOp(
+      getParsedDiff(repoDir, 'assets/logo.png', false, { commit: binarySha })
+    )
 
     expect(diff.binary).toBe(true)
     expect(diff.hunks).toEqual([])
@@ -203,7 +211,7 @@ describe('getDiff for a commit', () => {
     const renameSha = commit('rename and edit')
 
     const { diff } = await runOp(
-      getDiff(repoDir, 'renamed.txt', false, { commit: renameSha, renameSource: 'one.txt' })
+      getParsedDiff(repoDir, 'renamed.txt', false, { commit: renameSha, renameSource: 'one.txt' })
     )
 
     expect(diff.hunks).toHaveLength(1)

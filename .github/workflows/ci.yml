@@ -42,6 +42,9 @@ jobs:
       - name: Lint & format check
         run: pnpm check
 
+      - name: Assert a single shiki resolves
+        run: pnpm check:shiki
+
   test-unit:
     name: Unit tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

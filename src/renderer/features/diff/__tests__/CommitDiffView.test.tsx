@@ -32,24 +32,7 @@ const repoPath = '/home/user/project'
 const diffEnvelope = (patch: string, overrides: { binary?: boolean } = {}) => ({
   _tag: 'Ok' as const,
   patch,
-  diff: {
-    filePath: 'simple.txt',
-    binary: overrides.binary ?? false,
-    hunks: [
-      {
-        header: '@@ -1,3 +1,3 @@',
-        oldStart: 1,
-        oldCount: 3,
-        newStart: 1,
-        newCount: 3,
-        lines: [
-          { kind: 'context' as const, text: 'line 1', oldLine: 1, newLine: 1 },
-          { kind: 'del' as const, text: 'line 2', oldLine: 2, newLine: null },
-          { kind: 'add' as const, text: 'line 2 EDITED', oldLine: null, newLine: 2 }
-        ]
-      }
-    ]
-  }
+  binary: overrides.binary ?? false
 })
 
 function Harness(props: {
@@ -248,7 +231,7 @@ describe('CommitDiffView', () => {
     sidecarMock.getDiff.mockResolvedValue({
       _tag: 'Ok' as const,
       patch: COMBINED_DIFF_PATCH,
-      diff: { filePath: 'conflict.txt', binary: false, hunks: [] }
+      binary: false
     })
 
     await renderView({ ...selection, file: 'conflict.txt' })

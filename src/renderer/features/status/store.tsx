@@ -1,5 +1,5 @@
 import type { HunkLineSelection } from '@shared/rpc'
-import type { FileDiff, HeadCommit } from '@shared/schemas/git'
+import type { HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/features/status/status-file-rows'
@@ -457,12 +457,12 @@ export function useFileDiff(file: string | null, staged: boolean, range?: string
   return useQuery({
     queryKey: file ? queryKeys.diff(file, staged, range) : queryKeys.diff('none', staged, range),
     enabled: Boolean(repoPath && file),
-    queryFn: async (): Promise<{ diff: FileDiff; patch: string }> => {
+    queryFn: async (): Promise<{ patch: string; binary: boolean }> => {
       if (!repoPath || !file) {
         throw new Error('No file selected')
       }
       const response = unwrapOk(await rpcGetDiff(repoPath, file, staged, { range }))
-      return { diff: response.diff, patch: response.patch }
+      return { patch: response.patch, binary: response.binary }
     }
   })
 }
@@ -475,14 +475,14 @@ export function useCommitFileDiff(sha: string | null, file: string | null, renam
     enabled: Boolean(repoPath && sha && file),
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: async (): Promise<{ diff: FileDiff; patch: string }> => {
+    queryFn: async (): Promise<{ patch: string; binary: boolean }> => {
       if (!repoPath || !sha || !file) {
         throw new Error('No commit file selected')
       }
       const response = unwrapOk(
         await rpcGetDiff(repoPath, file, false, { commit: sha, renameSource })
       )
-      return { diff: response.diff, patch: response.patch }
+      return { patch: response.patch, binary: response.binary }
     }
   })
 }
