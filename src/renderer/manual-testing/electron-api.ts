@@ -390,37 +390,19 @@ function deleteRef(state: ManualState, refName: string): void {
   )
 }
 
-function makeDiff(file: string) {
-  return {
-    filePath: file,
-    binary: false,
-    hunks: [
-      {
-        header: '@@ -18,3 +18,4 @@ export default function App() {',
-        oldStart: 18,
-        oldCount: 3,
-        newStart: 18,
-        newCount: 4,
-        lines: [
-          { kind: 'context' as const, text: '   return (', oldLine: 18, newLine: 18 },
-          { kind: 'del' as const, text: '-    <TabsShell />', oldLine: 19, newLine: null },
-          {
-            kind: 'add' as const,
-            text: '+    <TabsShell persisted={persistedTabs} />',
-            oldLine: null,
-            newLine: 19
-          },
-          {
-            kind: 'add' as const,
-            text: '+    <Toaster position="bottom-right" />',
-            oldLine: null,
-            newLine: 20
-          },
-          { kind: 'context' as const, text: '   )', oldLine: 20, newLine: 21 }
-        ]
-      }
-    ]
-  }
+function makeDiff(file: string): string {
+  return `${[
+    `diff --git a/${file} b/${file}`,
+    'index 1111111..2222222 100644',
+    `--- a/${file}`,
+    `+++ b/${file}`,
+    '@@ -18,3 +18,4 @@ export default function App() {',
+    '   return (',
+    '-    <TabsShell />',
+    '+    <TabsShell persisted={persistedTabs} />',
+    '+    <Toaster position="bottom-right" />',
+    '   )'
+  ].join('\n')}\n`
 }
 
 function updateFileCodesAfterCommit(file: StatusFileCode): StatusFileCode | null {
@@ -584,7 +566,7 @@ export function createPlaywrightMcpElectronApi(
             }
           }
         case 'getDiff':
-          return { ...ok, diff: makeDiff(bodyString(body, 'file')) }
+          return { ...ok, patch: makeDiff(bodyString(body, 'file')), binary: false }
         case 'getHeadCommit': {
           const head = state.commits[findRefCommitIndex(state, undefined)]
           return {

@@ -119,7 +119,9 @@ describe('staging through the RPC group against a real repo', () => {
 
     try {
       const { patch } = await runOp(getDiff(repoDir, 'tracked.txt', false))
-      const hunk = parseUnifiedDiff(patch).hunks[0]
+      const hunks = parseUnifiedDiff(patch).hunks
+      expect(hunks).toHaveLength(1)
+      const hunk = hunks[0]
       const lineIndexes = hunk.lines.flatMap((line, index) =>
         line.kind === 'add' && line.text === 'first-added' ? [index] : []
       )
