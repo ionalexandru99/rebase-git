@@ -153,7 +153,7 @@ export const UnstageHunk = Rpc.make('unstageHunk', {
 export const DiscardHunk = Rpc.make('discardHunk', {
   payload: { repoPath: OpaqueString, file: OpaqueString, hunkHeader: OpaqueHunkHeaderString },
   success: Schema.Void,
-  error: HunkError
+  error: GuardedHunkError
 })
 
 export const HunkLineSelectionSchema = Schema.Struct({

@@ -541,6 +541,116 @@ describe('DiffPanel hunk hover actions', () => {
   })
 })
 
+describe('DiffPanel keyboard access', () => {
+  it('offers focusable per-hunk annotation buttons on the unstaged side', async () => {
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.getAllByTestId('pierre-annotation')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Stage hunk 1 of 2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Discard hunk 1 of 2' })).toBeInTheDocument()
+
+    const stageSecond = screen.getByRole('button', { name: 'Stage hunk 2 of 2' })
+    stageSecond.focus()
+    fireEvent.click(stageSecond)
+
+    await waitFor(() => {
+      expect(sidecarMock.stageHunk).toHaveBeenCalledWith(
+        repoPath,
+        'src/app.ts',
+        '@@ -28,3 +28,3 @@ function tail() {'
+      )
+    })
+  })
+
+  it('offers a focusable unstage button per hunk on the staged side', async () => {
+    mockDiffOn('staged')
+    await renderDiffPanel({ file: 'src/app.ts', group: 'staged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    const unstageFirst = screen.getByRole('button', { name: 'Unstage hunk 1 of 2' })
+    unstageFirst.focus()
+    fireEvent.click(unstageFirst)
+
+    await waitFor(() => {
+      expect(sidecarMock.unstageHunk).toHaveBeenCalledWith(
+        repoPath,
+        'src/app.ts',
+        '@@ -1,3 +1,3 @@'
+      )
+    })
+  })
+
+  it('confirms before a keyboard-initiated discard', async () => {
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    fireEvent.click(screen.getByRole('button', { name: 'Discard hunk 2 of 2' }))
+
+    expect(sidecarMock.discardHunk).not.toHaveBeenCalled()
+    expect(confirmRequests).toHaveLength(1)
+
+    await act(async () => {
+      confirmRequests[0].onConfirm()
+    })
+    await waitFor(() => {
+      expect(sidecarMock.discardHunk).toHaveBeenCalledWith(
+        repoPath,
+        'src/app.ts',
+        '@@ -28,3 +28,3 @@ function tail() {'
+      )
+    })
+  })
+
+  it('offers focusable drop and keep buttons per hunk on the amend surface', async () => {
+    const onToggleHunk = vi.fn()
+    const droppedHeader = '@@ -1,3 +1,3 @@'
+    await renderDiffPanel(
+      { file: 'src/app.ts', source: 'head-commit', range: 'HEAD~1..HEAD' },
+      {
+        dropState: 'partial',
+        isHunkDropped: (header) => header === droppedHeader,
+        onToggleFile: vi.fn(),
+        onToggleHunk
+      }
+    )
+
+    await screen.findByTestId('pierre-file-diff')
+    fireEvent.click(screen.getByRole('button', { name: 'Drop hunk 2 of 2' }))
+    expect(onToggleHunk).toHaveBeenCalledWith('@@ -28,3 +28,3 @@ function tail() {', [
+      '@@ -1,3 +1,3 @@',
+      '@@ -28,3 +28,3 @@ function tail() {'
+    ])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep hunk 1 of 2' }))
+    expect(onToggleHunk).toHaveBeenCalledWith(droppedHeader, [
+      '@@ -1,3 +1,3 @@',
+      '@@ -28,3 +28,3 @@ function tail() {'
+    ])
+  })
+
+  it('offers no annotation buttons for a conflicted file', async () => {
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: ['src/app.ts'],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
+      }
+    })
+    await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.queryAllByTestId('pierre-annotation')).toHaveLength(0)
+  })
+})
+
 describe('DiffPanel amend surface', () => {
   const headSelection: SelectedFile = {
     file: 'src/app.ts',
@@ -581,18 +691,21 @@ describe('DiffPanel amend surface', () => {
     })
 
     await screen.findByTestId('pierre-file-diff')
-    const annotation = screen.getByTestId('pierre-annotation')
-    expect(annotation).toHaveAttribute('data-line', '1')
-    expect(annotation).toHaveTextContent('Dropped from last commit')
+    const annotations = screen.getAllByTestId('pierre-annotation')
+    const droppedAnnotation = annotations.find((node) => node.getAttribute('data-line') === '1')
+    expect(droppedAnnotation).toBeDefined()
+    expect(droppedAnnotation).toHaveTextContent('Dropped from last commit')
 
-    fireEvent.click(within(annotation).getByRole('button', { name: 'Keep hunk' }))
+    fireEvent.click(
+      within(droppedAnnotation as HTMLElement).getByRole('button', { name: 'Keep hunk 1 of 2' })
+    )
     expect(onToggleHunk).toHaveBeenCalledWith(droppedHeader, [
       '@@ -1,3 +1,3 @@',
       '@@ -28,3 +28,3 @@ function tail() {'
     ])
 
     hoverLine(1, 'additions')
-    expect(screen.getAllByRole('button', { name: 'Keep hunk' }).length).toBeGreaterThan(1)
+    expect(screen.getByRole('button', { name: 'Keep hunk' })).toBeInTheDocument()
   })
 
   it('renders a tri-state file drop checkbox for a head-commit file', async () => {

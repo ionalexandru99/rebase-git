@@ -31,8 +31,26 @@ export type HunkActionName =
   | 'Drop hunk'
   | 'Keep hunk'
 
-export async function clickHunkAction(page: Page, lineText: string | RegExp, action: HunkActionName) {
+export async function clickHunkAction(
+  page: Page,
+  lineText: string | RegExp,
+  action: HunkActionName
+) {
   const line = worktreeDiffLine(page, lineText).first()
-  await line.hover()
-  await page.getByRole('button', { name: action, exact: true }).click()
+  const button = page.getByRole('button', { name: action, exact: true })
+  await line.waitFor({ timeout: 10_000 })
+  let lastError: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const box = await line.boundingBox()
+    await line.hover(
+      box ? { position: { x: Math.min(160, box.width / 4), y: box.height / 2 } } : {}
+    )
+    try {
+      await button.click({ timeout: 4000 })
+      return
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
 }

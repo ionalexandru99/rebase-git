@@ -4,6 +4,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import {
+  conflictedPaths,
+  makeConflictedRepo,
+  removeRepoDir
+} from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, discardHunk, getDiff, openRepo } from '../index'
 
@@ -99,5 +104,23 @@ describe('discardHunk against a real repository', () => {
       expect(result.left._tag).toBe('HunkNotFound')
     }
     expect(readLines('sample.txt')[0]).toBe('line 1 EDITED')
+  })
+
+  it('rejects a discard on a file owned by an in-progress merge with OperationInProgress', async () => {
+    const fixture = makeConflictedRepo('merge')
+    await runOp(openRepo(fixture.path))
+    try {
+      const conflicted = conflictedPaths(fixture.path)[0]
+      const result = await runOp(
+        Effect.either(discardHunk(fixture.path, conflicted, '@@ -1,1 +1,1 @@'))
+      )
+      expect(Either.isLeft(result)).toBe(true)
+      if (Either.isLeft(result)) {
+        expect(result.left._tag).toBe('OperationInProgress')
+      }
+    } finally {
+      await runOp(closeRepo(fixture.path))
+      removeRepoDir(fixture.path)
+    }
   })
 })

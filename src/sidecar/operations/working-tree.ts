@@ -263,8 +263,14 @@ export function discardHunk(
   repoPath: string,
   file: string,
   hunkHeader: string
-): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound, RepoSessions> {
-  return applyHunk(repoPath, file, hunkHeader, 'discard')
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | OperationInProgress, RepoSessions> {
+  return applyHunk(
+    repoPath,
+    file,
+    hunkHeader,
+    'discard',
+    requireNoOperationForPaths(repoPath, [file])
+  )
 }
 
 function applyLines<GuardError = never>(

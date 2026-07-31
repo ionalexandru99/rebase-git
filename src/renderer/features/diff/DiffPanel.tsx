@@ -281,39 +281,75 @@ export function DiffPanel(props: DiffPanelProps) {
     [gutterEnabled, onLineEnter]
   )
 
-  const droppedAnnotations = useMemo(() => {
-    if (!amendDrop) {
+  const hunkAnnotations = useMemo(() => {
+    if (!gutterEnabled || hunks.length === 0) {
       return undefined
     }
-    const dropped = hunks.filter((hunk) => amendDrop.isHunkDropped(hunk.header))
-    if (dropped.length === 0) {
-      return undefined
-    }
-    return dropped.map((hunk) => ({
+    return hunks.map((hunk) => ({
       side: (hunk.newCount > 0 ? 'additions' : 'deletions') as DiffSide,
       lineNumber: hunk.newCount > 0 ? hunk.newStart : hunk.oldStart,
       metadata: { header: hunk.header }
     }))
-  }, [amendDrop, hunks])
+  }, [gutterEnabled, hunks])
 
   const renderAnnotation = useCallback(
     (annotation: { metadata: { header: string } }): ReactNode => {
-      const hunk = hunks.find((entry) => entry.header === annotation.metadata.header)
-      if (!hunk) {
+      const hunkIndex = hunks.findIndex((entry) => entry.header === annotation.metadata.header)
+      if (hunkIndex === -1) {
         return null
       }
+      const hunk = hunks[hunkIndex]
+      const position = `${hunkIndex + 1} of ${hunks.length}`
+      if (amendDrop) {
+        if (amendDrop.isHunkDropped(hunk.header)) {
+          return (
+            <div className="flex items-center gap-2 border-b border-t bg-card-2 px-2.5 py-1 text-xs text-muted-foreground">
+              <span>Dropped from last commit</span>
+              <GutterActionButton
+                label={`Keep hunk ${position}`}
+                icon={Undo2Icon}
+                onClick={() => toggleHunkDrop(hunk)}
+              />
+            </div>
+          )
+        }
+        return (
+          <FocusRevealRow>
+            <GutterActionButton
+              label={`Drop hunk ${position}`}
+              icon={MinusIcon}
+              onClick={() => toggleHunkDrop(hunk)}
+            />
+          </FocusRevealRow>
+        )
+      }
       return (
-        <div className="flex items-center gap-2 border-b border-t bg-card-2 px-2.5 py-1 text-xs text-muted-foreground">
-          <span>Dropped from last commit</span>
-          <GutterActionButton
-            label="Keep hunk"
-            icon={Undo2Icon}
-            onClick={() => toggleHunkDrop(hunk)}
-          />
-        </div>
+        <FocusRevealRow>
+          {showsStagedSide ? (
+            <GutterActionButton
+              label={`Unstage hunk ${position}`}
+              icon={MinusIcon}
+              onClick={() => requestHunkAction('unstage', hunk)}
+            />
+          ) : (
+            <>
+              <GutterActionButton
+                label={`Stage hunk ${position}`}
+                icon={PlusIcon}
+                onClick={() => requestHunkAction('stage', hunk)}
+              />
+              <GutterActionButton
+                label={`Discard hunk ${position}`}
+                icon={Trash2Icon}
+                destructive={true}
+                onClick={() => requestHunkAction('discard', hunk)}
+              />
+            </>
+          )}
+        </FocusRevealRow>
       )
     },
-    [hunks, toggleHunkDrop]
+    [hunks, amendDrop, toggleHunkDrop, showsStagedSide, requestHunkAction]
   )
 
   const totals = useMemo(() => {
@@ -406,8 +442,8 @@ export function DiffPanel(props: DiffPanelProps) {
                 fileDiff={file}
                 options={options}
                 renderGutterUtility={gutterEnabled ? renderGutterUtility : undefined}
-                lineAnnotations={droppedAnnotations}
-                renderAnnotation={droppedAnnotations ? renderAnnotation : undefined}
+                lineAnnotations={hunkAnnotations}
+                renderAnnotation={hunkAnnotations ? renderAnnotation : undefined}
               />
             ))}
           </Virtualizer>
@@ -423,6 +459,14 @@ function StateNotice(props: { className?: string; children: ReactNode }) {
       <div className={cn('px-2 py-4 text-sm text-muted-foreground', props.className)}>
         {props.children}
       </div>
+    </div>
+  )
+}
+
+function FocusRevealRow(props: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-1 px-2.5 py-0.5 not-focus-within:sr-only">
+      {props.children}
     </div>
   )
 }

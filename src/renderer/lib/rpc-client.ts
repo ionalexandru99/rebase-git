@@ -221,7 +221,7 @@ export async function rpcDiscardHunk(
   repoPath: string,
   file: string,
   hunkHeader: string
-): Promise<HunkResult> {
+): Promise<GuardedHunkResult> {
   return callSidecarRpc(DiscardHunk, {
     repoPath,
     file,
