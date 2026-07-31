@@ -366,10 +366,15 @@ beforeEach(() => {
         return sidecarMock.fetchRepo(repoPath)
       case 'push':
         return sidecarMock.pushRepo(repoPath)
-      case 'pull':
-        return typeof body.strategy === 'string'
-          ? sidecarMock.pullRepo(repoPath, body.strategy as PullStrategy)
-          : sidecarMock.pullRepo(repoPath)
+      case 'pull': {
+        if (body.strategy === undefined) {
+          return sidecarMock.pullRepo(repoPath)
+        }
+        if (body.strategy !== 'rebase' && body.strategy !== 'merge') {
+          throw new Error(`invalid pull strategy: ${String(body.strategy)}`)
+        }
+        return sidecarMock.pullRepo(repoPath, body.strategy)
+      }
       default: {
         const handler = opHandlers.get(op)
         if (handler) {

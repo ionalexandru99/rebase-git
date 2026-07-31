@@ -1680,6 +1680,20 @@ describe('GitStoreProvider — push and pull', () => {
     expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
   })
 
+  it('pull warns and reports an error when another operation is already in progress', async () => {
+    sidecarMock.pullRepo.mockResolvedValue({ _tag: 'OperationInProgress', operation: 'merge' })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    const outcome = await git.pull('rebase')
+
+    expect(outcome.kind).toBe('error')
+    expect(toast.warning).toHaveBeenCalledWith('Another Git operation is in progress', {
+      description: 'Finish or abort the in-progress merge first.'
+    })
+  })
+
   it('pullNow toasts a GitError without touching session error', async () => {
     sidecarMock.pullRepo.mockResolvedValue({
       _tag: 'GitError',

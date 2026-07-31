@@ -223,12 +223,36 @@ describe('pullRepo with local changes in the way', () => {
 
       const error = await pullFailure(fixture.path)
 
-      expect(error._tag).toBe('GitError')
-      expect(error.message).toMatch(/unmerged files/i)
+      expect(error._tag).toBe('OperationInProgress')
       expect(sha(fixture.path, 'HEAD')).toBe(headBefore)
       expect(readFile(fixture.path, 'b.txt')).toBe(conflictedContents)
       const { status } = await runOp(getStatus(fixture.path))
       expect(status.conflicted).toEqual(['b.txt'])
+      expect(status.operation?.kind).toBe('merge')
+    })
+  })
+
+  it('refuses a strategy pull while a merge is in progress instead of reporting a conflict', async () => {
+    await withPullFixture(async (fixture) => {
+      run(fixture.path, ['checkout', '--quiet', '-b', 'feature'])
+      writeFile(fixture.path, 'b.txt', 'b feature\n')
+      run(fixture.path, ['commit', '-am', 'feature edits b'])
+      run(fixture.path, ['checkout', '--quiet', 'main'])
+      writeFile(fixture.path, 'b.txt', 'b main\n')
+      run(fixture.path, ['commit', '-am', 'main edits b'])
+      const headBefore = sha(fixture.path, 'HEAD')
+      try {
+        run(fixture.path, ['merge', '--no-edit', 'feature'])
+      } catch {}
+
+      const result = await runOp(Effect.either(pullRepo(fixture.path, 'rebase')))
+      if (Either.isRight(result)) {
+        throw new Error('expected the strategy pull to be refused')
+      }
+
+      expect(result.left._tag).toBe('OperationInProgress')
+      expect(sha(fixture.path, 'HEAD')).toBe(headBefore)
+      const { status } = await runOp(getStatus(fixture.path))
       expect(status.operation?.kind).toBe('merge')
     })
   })

@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useDialogs } from '@/components/ui/prompt-dialog'
 import { useTimelineVisibility } from '@/features/history/hooks/useTimelineVisibility'
@@ -65,26 +65,11 @@ export function Workspace(props: WorkspaceProps) {
   const stashList = useStashes(repoPath)
   const { prompt, confirm, dialogs } = useDialogs()
 
-  const [rememberedPullStrategy, setRememberedPullStrategy] = useState<PullStrategy | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    void window.electronAPI.getPullDivergedStrategy().then((strategy) => {
-      if (!cancelled) {
-        setRememberedPullStrategy(strategy)
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-  const rememberPullStrategy = useStableCallback((strategy: PullStrategy) => {
-    setRememberedPullStrategy(strategy)
-    void window.electronAPI.setPullDivergedStrategy(strategy)
-  })
   const pullFlow = usePullFlow({
     pull: actionRunner.pull,
-    rememberedStrategy: rememberedPullStrategy,
-    rememberStrategy: rememberPullStrategy
+    loadRememberedStrategy: () => window.electronAPI.getPullDivergedStrategy(),
+    rememberStrategy: (strategy: PullStrategy) =>
+      void window.electronAPI.setPullDivergedStrategy(strategy)
   })
 
   const handleStashAction = (action: StashAction, index: number, expectedOid: string) => {

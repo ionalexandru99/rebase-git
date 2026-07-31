@@ -318,7 +318,7 @@ export type PullStrategy = typeof PullStrategySchema.Type
 export const Pull = Rpc.make('pull', {
   payload: { repoPath: OpaqueString, strategy: Schema.optional(PullStrategySchema) },
   success: Schema.Void,
-  error: Schema.Union(RepoNotOpen, GitError, PullDiverged, Conflict)
+  error: Schema.Union(RepoNotOpen, GitError, PullDiverged, Conflict, OperationInProgress)
 })
 
 export const AbortOperation = Rpc.make('abortOperation', {

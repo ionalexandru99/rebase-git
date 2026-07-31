@@ -7,7 +7,7 @@ import { usePortalContainer } from '../../components/ui/portal-container'
 
 export interface PullFlowDeps {
   pull: (strategy?: PullStrategy) => Promise<PullOutcome>
-  rememberedStrategy: PullStrategy | null
+  loadRememberedStrategy: () => Promise<PullStrategy | null>
   rememberStrategy: (strategy: PullStrategy) => void
 }
 
@@ -23,23 +23,24 @@ function DivergedDialog(props: {
 }) {
   const portalContainer = usePortalContainer()
   const [remember, setRemember] = useState(false)
+  const { pending, onDismiss } = props
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        props.onDismiss()
+      if (event.key === 'Escape' && pending === null) {
+        onDismiss()
       }
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
-  }, [props.onDismiss])
+  }, [pending, onDismiss])
   const choiceButtonClass =
     'inline-flex h-8 items-center gap-1.5 rounded-[var(--r-sm)] bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50'
   return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
       onPointerDown={(event) => {
-        if (event.target === event.currentTarget) {
-          props.onDismiss()
+        if (event.target === event.currentTarget && pending === null) {
+          onDismiss()
         }
       }}
     >
@@ -66,27 +67,28 @@ function DivergedDialog(props: {
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
-            onClick={props.onDismiss}
-            className="h-8 rounded-[var(--r-sm)] border bg-card px-3 text-sm text-muted-foreground hover:text-foreground"
+            disabled={pending !== null}
+            onClick={onDismiss}
+            className="h-8 rounded-[var(--r-sm)] border bg-card px-3 text-sm text-muted-foreground hover:text-foreground disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
-            disabled={props.pending !== null}
+            disabled={pending !== null}
             onClick={() => props.onChoose('merge', remember)}
             className={choiceButtonClass}
           >
-            {props.pending === 'merge' ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
+            {pending === 'merge' ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
             Merge upstream
           </button>
           <button
             type="button"
-            disabled={props.pending !== null}
+            disabled={pending !== null}
             onClick={() => props.onChoose('rebase', remember)}
             className={choiceButtonClass}
           >
-            {props.pending === 'rebase' ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
+            {pending === 'rebase' ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
             Rebase onto upstream
           </button>
         </div>
@@ -115,8 +117,9 @@ export function usePullFlow(deps: PullFlowDeps): PullFlow {
     if (outcome.kind !== 'diverged') {
       return
     }
-    if (deps.rememberedStrategy !== null) {
-      await pullWithStrategy(deps.rememberedStrategy)
+    const remembered = await deps.loadRememberedStrategy().catch(() => null)
+    if (remembered !== null) {
+      await pullWithStrategy(remembered)
       return
     }
     setChoosing(true)
@@ -129,8 +132,12 @@ export function usePullFlow(deps: PullFlowDeps): PullFlow {
     void pullWithStrategy(strategy)
   }
 
+  const dismiss = () => {
+    setChoosing(false)
+  }
+
   const divergedDialog = choosing ? (
-    <DivergedDialog pending={pending} onChoose={choose} onDismiss={() => setChoosing(false)} />
+    <DivergedDialog pending={pending} onChoose={choose} onDismiss={dismiss} />
   ) : null
 
   return { requestPull, divergedDialog }

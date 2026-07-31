@@ -280,6 +280,12 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         })
         return { kind: 'conflict' }
       }
+      if (response._tag === 'OperationInProgress') {
+        toast.warning('Another Git operation is in progress', {
+          description: `Finish or abort the in-progress ${response.operation} first.`
+        })
+        return { kind: 'error', message: `A ${response.operation} is already in progress` }
+      }
       if (response._tag === 'RepoNotOpen') {
         toast.error('Repository is not open')
         return { kind: 'error', message: 'Repository is not open' }

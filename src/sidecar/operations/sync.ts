@@ -4,6 +4,7 @@ import {
   Conflict,
   FetchSkipped,
   GitError,
+  type OperationInProgress,
   PullDiverged,
   PushRejected,
   type RepoNotOpen
@@ -14,7 +15,7 @@ import { fetchSemaphoreFor } from '../session/fetch-semaphore'
 import { withRepoLock } from '../session/lock'
 import { type RepoSessions, RepoSessionsLive, withSessionScope } from '../session/sessions'
 import { requireOpen, tryGit } from './helpers'
-import { detectInProgressOperation } from './in-progress'
+import { detectInProgressOperation, requireNoOperation } from './in-progress'
 
 type GitCmdResult = { ok: true } | { ok: false; message: string }
 
@@ -266,13 +267,18 @@ function pullArgsFor(strategy: PullStrategy | undefined): string[] {
 export function pullRepo(
   repoPath: string,
   strategy?: PullStrategy
-): Effect.Effect<void, RepoNotOpen | GitError | PullDiverged | Conflict, RepoSessions> {
+): Effect.Effect<
+  void,
+  RepoNotOpen | GitError | PullDiverged | Conflict | OperationInProgress,
+  RepoSessions
+> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
     yield* withRepoLock(
       key,
       Effect.gen(function* () {
+        yield* requireNoOperation(key)
         const result = yield* Effect.promise(() =>
           fetchSemaphoreFor(key).withPermits(() => runGitCommand(key, pullArgsFor(strategy)))
         )
@@ -285,8 +291,8 @@ export function pullRepo(
           }
           return yield* Effect.fail(new GitError({ message: result.message }))
         }
-        const inProgress = yield* tryGit(() => detectInProgressOperation(key))
-        if (inProgress !== undefined) {
+        const startedOperation = yield* tryGit(() => detectInProgressOperation(key))
+        if (startedOperation !== undefined) {
           return yield* Effect.fail(new Conflict({ message: result.message }))
         }
         return yield* Effect.fail(new GitError({ message: result.message }))

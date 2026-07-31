@@ -11,16 +11,18 @@ vi.mock('sonner', () => ({
 const ok: PullOutcome = { kind: 'ok' }
 const diverged: PullOutcome = { kind: 'diverged' }
 
+type PullFn = (strategy?: PullStrategy) => Promise<PullOutcome>
+
 interface HarnessProps {
-  pull: (strategy?: PullStrategy) => Promise<PullOutcome>
-  rememberedStrategy?: PullStrategy | null
+  pull: PullFn
+  loadRememberedStrategy?: () => Promise<PullStrategy | null>
   rememberStrategy?: (strategy: PullStrategy) => void
 }
 
 function Harness(props: HarnessProps) {
   const flow = usePullFlow({
     pull: props.pull,
-    rememberedStrategy: props.rememberedStrategy ?? null,
+    loadRememberedStrategy: props.loadRememberedStrategy ?? (async () => null),
     rememberStrategy: props.rememberStrategy ?? (() => {})
   })
   return (
@@ -34,12 +36,12 @@ function Harness(props: HarnessProps) {
 }
 
 function renderFlow(overrides: Partial<HarnessProps> = {}) {
-  const pull = overrides.pull ?? vi.fn(async () => ok)
+  const pull = overrides.pull ?? vi.fn<PullFn>(async () => ok)
   const rememberStrategy = overrides.rememberStrategy ?? vi.fn()
   render(
     <Harness
       pull={pull}
-      rememberedStrategy={overrides.rememberedStrategy ?? null}
+      loadRememberedStrategy={overrides.loadRememberedStrategy}
       rememberStrategy={rememberStrategy}
     />
   )
@@ -50,6 +52,19 @@ async function pullUntilDiverged(pull: ReturnType<typeof vi.fn>) {
   fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
   await waitFor(() => expect(pull).toHaveBeenCalledTimes(1))
   return screen.findByRole('dialog')
+}
+
+function deferredPull() {
+  let resolvePull = (_outcome: PullOutcome) => {}
+  const pull = vi.fn<PullFn>(async (strategy?: PullStrategy) => {
+    if (strategy === undefined) {
+      return diverged
+    }
+    return new Promise<PullOutcome>((resolve) => {
+      resolvePull = resolve
+    })
+  })
+  return { pull, resolve: (outcome: PullOutcome) => resolvePull(outcome) }
 }
 
 describe('usePullFlow', () => {
@@ -68,7 +83,7 @@ describe('usePullFlow', () => {
   })
 
   it('offers rebase or merge when the pull reports divergence', async () => {
-    const pull = vi.fn<(strategy?: PullStrategy) => Promise<PullOutcome>>(async () => diverged)
+    const pull = vi.fn<PullFn>(async () => diverged)
     renderFlow({ pull })
 
     await pullUntilDiverged(pull)
@@ -78,7 +93,7 @@ describe('usePullFlow', () => {
   })
 
   it('re-pulls with rebase when that choice is made', async () => {
-    const pull = vi.fn<(strategy?: PullStrategy) => Promise<PullOutcome>>(async () => diverged)
+    const pull = vi.fn<PullFn>(async () => diverged)
     renderFlow({ pull })
     await pullUntilDiverged(pull)
 
@@ -91,7 +106,7 @@ describe('usePullFlow', () => {
   })
 
   it('does not remember the choice unless asked to', async () => {
-    const pull = vi.fn<(strategy?: PullStrategy) => Promise<PullOutcome>>(async () => diverged)
+    const pull = vi.fn<PullFn>(async () => diverged)
     const rememberStrategy = vi.fn()
     renderFlow({ pull, rememberStrategy })
     await pullUntilDiverged(pull)
@@ -104,7 +119,7 @@ describe('usePullFlow', () => {
   })
 
   it('remembers the choice when the checkbox is ticked', async () => {
-    const pull = vi.fn<(strategy?: PullStrategy) => Promise<PullOutcome>>(async () => diverged)
+    const pull = vi.fn<PullFn>(async () => diverged)
     const rememberStrategy = vi.fn()
     renderFlow({ pull, rememberStrategy })
     await pullUntilDiverged(pull)
@@ -117,8 +132,8 @@ describe('usePullFlow', () => {
   })
 
   it('skips the dialog and re-pulls with the remembered strategy', async () => {
-    const pull = vi.fn(async (strategy?: PullStrategy) => (strategy ? ok : diverged))
-    renderFlow({ pull, rememberedStrategy: 'rebase' })
+    const pull = vi.fn<PullFn>(async (strategy?: PullStrategy) => (strategy ? ok : diverged))
+    renderFlow({ pull, loadRememberedStrategy: async () => 'rebase' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
 
@@ -127,8 +142,23 @@ describe('usePullFlow', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('applies a persisted strategy that loads slowly instead of opening the dialog', async () => {
+    const pull = vi.fn<PullFn>(async (strategy?: PullStrategy) => (strategy ? ok : diverged))
+    const loadRememberedStrategy = () =>
+      new Promise<PullStrategy | null>((resolve) => {
+        setTimeout(() => resolve('merge'), 50)
+      })
+    renderFlow({ pull, loadRememberedStrategy })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
+
+    await waitFor(() => expect(pull).toHaveBeenCalledTimes(2))
+    expect(pull).toHaveBeenLastCalledWith('merge')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('cancelling the dialog pulls nothing further', async () => {
-    const pull = vi.fn<(strategy?: PullStrategy) => Promise<PullOutcome>>(async () => diverged)
+    const pull = vi.fn<PullFn>(async () => diverged)
     renderFlow({ pull })
     await pullUntilDiverged(pull)
 
@@ -136,5 +166,50 @@ describe('usePullFlow', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(pull).toHaveBeenCalledTimes(1)
+  })
+
+  it('dismisses on Escape without pulling again', async () => {
+    const pull = vi.fn<PullFn>(async () => diverged)
+    renderFlow({ pull })
+    await pullUntilDiverged(pull)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(pull).toHaveBeenCalledTimes(1)
+  })
+
+  it('dismisses on a backdrop click without pulling again', async () => {
+    const pull = vi.fn<PullFn>(async () => diverged)
+    renderFlow({ pull })
+    const dialog = await pullUntilDiverged(pull)
+    const backdrop = dialog.parentElement as HTMLElement
+
+    fireEvent.pointerDown(backdrop)
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(pull).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables every button and ignores dismissal while the chosen pull is running', async () => {
+    const { pull, resolve } = deferredPull()
+    renderFlow({ pull })
+    await pullUntilDiverged(pull)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rebase onto upstream' }))
+    await waitFor(() => expect(pull).toHaveBeenCalledTimes(2))
+
+    expect(screen.getByRole('button', { name: 'Rebase onto upstream' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Merge upstream' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    const backdrop = screen.getByRole('dialog').parentElement as HTMLElement
+    fireEvent.pointerDown(backdrop)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    resolve(ok)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(pull).toHaveBeenCalledTimes(2)
   })
 })
