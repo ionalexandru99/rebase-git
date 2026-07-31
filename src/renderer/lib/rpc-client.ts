@@ -12,6 +12,7 @@ import {
   DeleteTag,
   DiscardAll,
   DiscardChanges,
+  DiscardHunk,
   Fetch,
   GetCommitDetail,
   GetDiff,
@@ -210,6 +211,18 @@ export async function rpcUnstageHunk(
   hunkHeader: string
 ): Promise<GuardedHunkResult> {
   return callSidecarRpc(UnstageHunk, {
+    repoPath,
+    file,
+    hunkHeader
+  })
+}
+
+export async function rpcDiscardHunk(
+  repoPath: string,
+  file: string,
+  hunkHeader: string
+): Promise<HunkResult> {
+  return callSidecarRpc(DiscardHunk, {
     repoPath,
     file,
     hunkHeader

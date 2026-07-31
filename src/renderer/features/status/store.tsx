@@ -7,6 +7,7 @@ import { engineFailureBannerText, gitFailureBannerText } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
+  rpcDiscardHunk,
   rpcGetDiff,
   rpcGetHeadCommit,
   rpcGetStatus,
@@ -92,7 +93,7 @@ const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
 })
 
 interface HunkMutationVars {
-  op: 'stage' | 'unstage'
+  op: 'stage' | 'unstage' | 'discard'
   file: string
   hunkHeader: string
   options: HunkStageOptions
@@ -120,6 +121,7 @@ export interface WorkingTreeStatus {
   unstageAll: (files: string[]) => Promise<StatusMutationResult | null>
   stageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) => Promise<boolean>
   unstageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) => Promise<boolean>
+  discardHunk: (file: string, hunkHeader: string) => Promise<boolean>
 }
 
 export interface WorkingTreeStatusController {
@@ -276,7 +278,9 @@ export function useWorkingTreeStatusController(
       (path, vars) =>
         vars.op === 'stage'
           ? rpcStageHunk(path, vars.file, vars.hunkHeader)
-          : rpcUnstageHunk(path, vars.file, vars.hunkHeader)
+          : vars.op === 'unstage'
+            ? rpcUnstageHunk(path, vars.file, vars.hunkHeader)
+            : rpcDiscardHunk(path, vars.file, vars.hunkHeader)
     )
   )
 
@@ -335,6 +339,16 @@ export function useWorkingTreeStatusController(
     [runMutation]
   )
 
+  const discardHunk = useCallback(
+    (file: string, hunkHeader: string) =>
+      runMutation('discard', false, () =>
+        mutations.current.hunk
+          .mutateAsync({ op: 'discard', file, hunkHeader, options: {} })
+          .then((response) => response?._tag === 'Ok')
+      ),
+    [runMutation]
+  )
+
   const status = statusQuery.data ?? null
   const rows = useMemo(() => (status ? buildUnifiedFileRows(status) : []), [status])
   const statusState = status ? 'ready' : statusQuery.isError ? 'error' : 'loading'
@@ -351,7 +365,8 @@ export function useWorkingTreeStatusController(
       stageAll,
       unstageAll,
       stageHunk,
-      unstageHunk
+      unstageHunk,
+      discardHunk
     }),
     [
       status,
@@ -363,7 +378,8 @@ export function useWorkingTreeStatusController(
       stageAll,
       unstageAll,
       stageHunk,
-      unstageHunk
+      unstageHunk,
+      discardHunk
     ]
   )
 
@@ -388,11 +404,12 @@ export function useFileDiff(file: string | null, staged: boolean, range?: string
   return useQuery({
     queryKey: file ? queryKeys.diff(file, staged, range) : queryKeys.diff('none', staged, range),
     enabled: Boolean(repoPath && file),
-    queryFn: async (): Promise<FileDiff> => {
+    queryFn: async (): Promise<{ diff: FileDiff; patch: string }> => {
       if (!repoPath || !file) {
         throw new Error('No file selected')
       }
-      return unwrapOk(await rpcGetDiff(repoPath, file, staged, { range })).diff
+      const response = unwrapOk(await rpcGetDiff(repoPath, file, staged, { range }))
+      return { diff: response.diff, patch: response.patch }
     }
   })
 }

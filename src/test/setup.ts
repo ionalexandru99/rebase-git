@@ -74,6 +74,8 @@ export const sidecarMock = {
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
   unstageHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
+  discardHunk:
+    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
   stashList: vi.fn<(repoPath: string) => Promise<StashListResponse>>(),
   checkout:
     vi.fn<(repoPath: string, refKind: string, fullPath: string) => Promise<CheckoutResult>>()
@@ -315,6 +317,8 @@ beforeEach(() => {
         return sidecarMock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
       case 'unstageHunk':
         return sidecarMock.unstageHunk(repoPath, body.file as string, body.hunkHeader as string)
+      case 'discardHunk':
+        return sidecarMock.discardHunk(repoPath, body.file as string, body.hunkHeader as string)
       case 'checkout':
         return sidecarMock.checkout(repoPath, body.refKind as string, body.fullPath as string)
       case 'fetch':

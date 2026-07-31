@@ -1,104 +1,204 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import type { CSSProperties, ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { type WorkspaceContextValue, WorkspaceProvider } from '@/app/WorkspaceContext'
+import type { ConfirmRequest } from '@/components/ui/prompt-dialog'
 import { DiffPanel } from '@/features/diff/DiffPanel'
 import type { SelectedFile } from '@/features/status/StatusPanel'
 import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
 import { renderWithQuery } from '../../../../test/render-app'
 import { setupLogStream, sidecarMock } from '../../../../test/setup'
 
+interface HoveredLine {
+  lineNumber: number
+  side: 'additions' | 'deletions'
+}
+
+const pierreControl = vi.hoisted(() => ({
+  hovered: undefined as HoveredLine | undefined,
+  captured: [] as Array<Record<string, unknown>>
+}))
+
+vi.mock('@pierre/diffs/react', () => ({
+  Virtualizer: (props: { children?: ReactNode; className?: string; style?: CSSProperties }) => (
+    <div data-testid="pierre-virtualizer">{props.children}</div>
+  ),
+  FileDiff: (props: Record<string, unknown>) => {
+    pierreControl.captured.push(props)
+    const fileDiff = props.fileDiff as {
+      name: string
+      hunks: Array<{ hunkContent: Array<{ type: string }> }>
+    }
+    const options = { ...(props.options as Record<string, unknown>) }
+    delete options.onLineEnter
+    delete options.onLineLeave
+    const renderGutterUtility = props.renderGutterUtility as
+      | ((getHoveredLine: () => HoveredLine | undefined) => ReactNode)
+      | undefined
+    const renderAnnotation = props.renderAnnotation as
+      | ((annotation: { lineNumber: number; side: string }) => ReactNode)
+      | undefined
+    const lineAnnotations = (props.lineAnnotations ?? []) as Array<{
+      lineNumber: number
+      side: string
+    }>
+    return (
+      <div
+        data-testid="pierre-file-diff"
+        data-file={fileDiff.name}
+        data-options={JSON.stringify(options)}
+        data-change-counts={JSON.stringify(
+          fileDiff.hunks.map(
+            (hunk) => hunk.hunkContent.filter((content) => content.type === 'change').length
+          )
+        )}
+      >
+        <div data-testid="pierre-gutter">{renderGutterUtility?.(() => pierreControl.hovered)}</div>
+        {lineAnnotations.map((annotation) => (
+          <div
+            key={`${annotation.side}:${annotation.lineNumber}`}
+            data-testid="pierre-annotation"
+            data-line={annotation.lineNumber}
+            data-side={annotation.side}
+          >
+            {renderAnnotation?.(annotation)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+}))
+
 const repoPath = '/home/user/project'
 
-const sampleDiff = {
-  _tag: 'Ok' as const,
-  patch: '',
-  diff: {
-    filePath: 'src/app.ts',
-    binary: false,
-    hunks: [
-      {
-        header: '@@ -1,3 +1,4 @@',
-        oldStart: 1,
-        oldCount: 3,
-        newStart: 1,
-        newCount: 4,
-        lines: [
-          { kind: 'context' as const, text: 'line one', oldLine: 1, newLine: 1 },
-          { kind: 'add' as const, text: 'line two added', oldLine: null, newLine: 2 },
-          { kind: 'del' as const, text: 'line removed', oldLine: 2, newLine: null }
-        ]
-      }
-    ]
-  }
+interface FixtureHunk {
+  oldStart: number
+  oldCount: number
+  newStart: number
+  newCount: number
+  context?: string
+  body: string[]
 }
 
-const emptyDiff = {
-  _tag: 'Ok' as const,
-  patch: '',
-  diff: { filePath: 'src/app.ts', binary: false, hunks: [] }
+function fixtureHeader(hunk: FixtureHunk): string {
+  const suffix = hunk.context ? ` ${hunk.context}` : ''
+  return `@@ -${hunk.oldStart},${hunk.oldCount} +${hunk.newStart},${hunk.newCount} @@${suffix}`
 }
 
-function mockDiffOn(side: 'unstaged' | 'staged') {
-  sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
-    staged === (side === 'staged') ? sampleDiff : emptyDiff
-  )
-}
-
-const getRenderedDiffLine = (text: string) =>
-  screen.getAllByText((_, element) => element?.textContent === text)[0]
-
-const hunkAt = (header: string, oldStart: number, newStart: number) => ({
-  header,
-  oldStart,
-  oldCount: 2,
-  newStart,
-  newCount: 2,
-  lines: [{ kind: 'context' as const, text: `at ${header}`, oldLine: oldStart, newLine: newStart }]
-})
-
-const diffWith = (hunks: ReturnType<typeof hunkAt>[]) => ({
-  _tag: 'Ok' as const,
-  patch: '',
-  diff: {
-    filePath: 'src/app.ts',
-    binary: false,
-    hunks
-  }
-})
-
-function mockPartiallyStagedDiff() {
-  sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) => ({
+function fixtureDiff(file: string, hunks: FixtureHunk[]) {
+  const patch = `${[
+    `diff --git a/${file} b/${file}`,
+    'index 1111111..2222222 100644',
+    `--- a/${file}`,
+    `+++ b/${file}`,
+    ...hunks.flatMap((hunk) => [fixtureHeader(hunk), ...hunk.body])
+  ].join('\n')}\n`
+  return {
     _tag: 'Ok' as const,
-    patch: '',
+    patch,
     diff: {
-      filePath: 'src/app.ts',
+      filePath: file,
       binary: false,
-      hunks: staged
-        ? [hunkAt('@@ -1,2 +1,2 @@ staged-first', 1, 1)]
-        : [hunkAt('@@ -30,2 +30,2 @@ unstaged-second', 30, 30)]
+      hunks: hunks.map((hunk) => {
+        let oldLine = hunk.oldStart
+        let newLine = hunk.newStart
+        return {
+          header: fixtureHeader(hunk),
+          oldStart: hunk.oldStart,
+          oldCount: hunk.oldCount,
+          newStart: hunk.newStart,
+          newCount: hunk.newCount,
+          lines: hunk.body.map((raw) => {
+            const text = raw.slice(1)
+            if (raw.startsWith('+')) {
+              return { kind: 'add' as const, text, oldLine: null, newLine: newLine++ }
+            }
+            if (raw.startsWith('-')) {
+              return { kind: 'del' as const, text, oldLine: oldLine++, newLine: null }
+            }
+            return { kind: 'context' as const, text, oldLine: oldLine++, newLine: newLine++ }
+          })
+        }
+      })
     }
-  }))
+  }
+}
+
+const firstHunk: FixtureHunk = {
+  oldStart: 1,
+  oldCount: 3,
+  newStart: 1,
+  newCount: 3,
+  body: ['-const first = 1', '+const first = 2', ' const second = 3', ' const third = 4']
+}
+
+const tailHunk: FixtureHunk = {
+  oldStart: 28,
+  oldCount: 3,
+  newStart: 28,
+  newCount: 3,
+  context: 'function tail() {',
+  body: [' const a = 5', '-const removed = 6', '+const added = 7', ' const b = 8']
+}
+
+const twoHunkDiff = fixtureDiff('src/app.ts', [firstHunk, tailHunk])
+const emptyDiff = fixtureDiff('src/app.ts', [])
+
+function mockDiffOn(side: 'unstaged' | 'staged', diff = twoHunkDiff) {
+  sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
+    staged === (side === 'staged') ? diff : emptyDiff
+  )
 }
 
 const stagedSides = () =>
   sidecarMock.getDiff.mock.calls.map((call: unknown[]) => call[2] as boolean)
 
+const lastFileDiffOptions = () => {
+  const nodes = screen.getAllByTestId('pierre-file-diff')
+  return JSON.parse(nodes[nodes.length - 1].getAttribute('data-options') ?? '{}')
+}
+
+const lastChangeCounts = () => {
+  const nodes = screen.getAllByTestId('pierre-file-diff')
+  return JSON.parse(nodes[nodes.length - 1].getAttribute('data-change-counts') ?? '[]')
+}
+
+function hoverLine(lineNumber: number, side: 'additions' | 'deletions') {
+  pierreControl.hovered = { lineNumber, side }
+  const latest = pierreControl.captured[pierreControl.captured.length - 1]
+  const options = latest?.options as
+    | { onLineEnter?: (props: { lineNumber: number; annotationSide: string }) => void }
+    | undefined
+  act(() => {
+    options?.onLineEnter?.({ lineNumber, annotationSide: side })
+  })
+}
+
 type AmendDrop = Parameters<typeof DiffPanel>[0]['amendDrop']
 
 interface HarnessProps {
-  tabActive: boolean
   selected: SelectedFile | null
   amendDrop?: AmendDrop
+  confirm: (request: ConfirmRequest) => void
   onSession: (session: RepoSession) => void
 }
 
 function DiffPanelHarness(props: HarnessProps) {
+  const workspace = {
+    actions: {},
+    stashList: {},
+    prompt: () => {},
+    confirm: props.confirm
+  } as unknown as WorkspaceContextValue
   return (
-    <GitStoreProvider tabId="diff-test-tab" tabActive={props.tabActive}>
-      <DiffPanelProbe
-        selected={props.selected}
-        amendDrop={props.amendDrop}
-        onSession={props.onSession}
-      />
+    <GitStoreProvider tabId="diff-test-tab" tabActive={true}>
+      <WorkspaceProvider value={workspace}>
+        <DiffPanelProbe
+          selected={props.selected}
+          amendDrop={props.amendDrop}
+          onSession={props.onSession}
+        />
+      </WorkspaceProvider>
     </GitStoreProvider>
   )
 }
@@ -109,13 +209,15 @@ function DiffPanelProbe(props: Pick<HarnessProps, 'selected' | 'amendDrop' | 'on
   return <DiffPanel selected={props.selected} amendDrop={props.amendDrop} />
 }
 
+const confirmRequests: ConfirmRequest[] = []
+
 async function renderDiffPanel(selected: SelectedFile | null, amendDrop?: AmendDrop) {
   let session: RepoSession | undefined
   renderWithQuery(() => (
     <DiffPanelHarness
-      tabActive={true}
       selected={selected}
       amendDrop={amendDrop}
+      confirm={(request) => confirmRequests.push(request)}
       onSession={(value) => {
         session = value
       }}
@@ -132,6 +234,9 @@ async function renderDiffPanel(selected: SelectedFile | null, amendDrop?: AmendD
 }
 
 beforeEach(() => {
+  pierreControl.hovered = undefined
+  pierreControl.captured = []
+  confirmRequests.length = 0
   vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
     _tag: 'Ok',
     result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
@@ -166,159 +271,169 @@ beforeEach(() => {
   mockDiffOn('unstaged')
   sidecarMock.stageHunk.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.unstageHunk.mockResolvedValue({ _tag: 'Ok' })
+  sidecarMock.discardHunk.mockResolvedValue({ _tag: 'Ok' })
 })
 
-describe('DiffPanel', () => {
+describe('DiffPanel rendering', () => {
   it('shows an empty state when no file is selected', async () => {
     await renderDiffPanel(null)
     expect(screen.getByText('No file selected')).toBeInTheDocument()
   })
 
-  it('loads and renders hunks with line numbers and +/- totals', async () => {
+  it('renders the worktree diff through the @pierre/diffs renderer with interactive options', async () => {
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
-    await waitFor(() => {
-      expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/app.ts', false, {
-        range: undefined,
-        commit: undefined,
-        renameSource: undefined
-      })
-      expect(screen.getByText('@@ -1,3 +1,4 @@')).toBeInTheDocument()
-    })
-    expect(getRenderedDiffLine('line two added')).toBeInTheDocument()
-    expect(getRenderedDiffLine('line removed')).toBeInTheDocument()
-    expect(screen.getByText('+1')).toBeInTheDocument()
-    expect(screen.getByText('−1')).toBeInTheDocument()
+    const fileDiff = await screen.findByTestId('pierre-file-diff')
+    expect(fileDiff).toHaveAttribute('data-file', 'src/app.ts')
+    expect(screen.getByTestId('pierre-virtualizer')).toBeInTheDocument()
+    const options = lastFileDiffOptions()
+    expect(options.themeType).toBe('dark')
+    expect(options.diffStyle).toBe('unified')
+    expect(options.disableFileHeader).toBe(true)
+    expect(options.enableGutterUtility).toBe(true)
   })
 
-  it('renders no per-hunk buttons, only checkboxes', async () => {
+  it('shows the file name and +/- totals in the header', async () => {
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
-    await screen.findByText('@@ -1,3 +1,4 @@')
-    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Unstage hunk' })).not.toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Stage hunk' })).toBeInTheDocument()
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.getByText('src/app.ts')).toBeInTheDocument()
+    expect(screen.getByText('+2')).toBeInTheDocument()
+    expect(screen.getByText('−2')).toBeInTheDocument()
   })
 
   it('reads only the worktree side for a file selected in the unstaged group', async () => {
-    mockPartiallyStagedDiff()
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
-    await screen.findByText('@@ -30,2 +30,2 @@ unstaged-second')
-    expect(screen.queryByText('@@ -1,2 +1,2 @@ staged-first')).not.toBeInTheDocument()
+    await screen.findByTestId('pierre-file-diff')
     expect(stagedSides()).toEqual([false])
-    expect(screen.getAllByTestId('diff-hunk')).toHaveLength(1)
   })
 
   it('reads only the index side for a file selected in the staged group', async () => {
-    mockPartiallyStagedDiff()
+    mockDiffOn('staged')
     await renderDiffPanel({ file: 'src/app.ts', group: 'staged' })
 
-    await screen.findByText('@@ -1,2 +1,2 @@ staged-first')
-    expect(screen.queryByText('@@ -30,2 +30,2 @@ unstaged-second')).not.toBeInTheDocument()
+    await screen.findByTestId('pierre-file-diff')
     expect(stagedSides()).toEqual([true])
   })
 
-  it('shows the worktree side of a conflicted file, where git falls back to --ours', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
+  it('renders a binary notice instead of a diff', async () => {
+    sidecarMock.getDiff.mockResolvedValue({
       _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: ['src/app.ts'],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
-      }
+      patch: '',
+      diff: { filePath: 'logo.png', binary: true, hunks: [] }
     })
-    await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
+    await renderDiffPanel({ file: 'logo.png', group: 'unstaged' })
 
-    await screen.findByText('@@ -1,3 +1,4 @@')
-    expect(stagedSides()).toEqual([false])
+    expect(await screen.findByText(/Binary file/)).toBeInTheDocument()
+    expect(screen.queryByText('+0')).not.toBeInTheDocument()
   })
 
-  it('offers no hunk staging for a conflicted file', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: ['src/app.ts'],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
-      }
-    })
-    await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
-
-    await screen.findByText('@@ -1,3 +1,4 @@')
-    expect(screen.queryAllByRole('checkbox')).toEqual([])
-  })
-
-  it('renders the header without a file-level staging checkbox, which the lists now own', async () => {
-    mockPartiallyStagedDiff()
+  it('reports a failed diff read', async () => {
+    sidecarMock.getDiff.mockResolvedValue({ _tag: 'GitError', message: 'bad object' })
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
-    await screen.findByText('@@ -30,2 +30,2 @@ unstaged-second')
-    expect(screen.getByText('src/app.ts')).toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: /^(Stage|Unstage) src\/app\.ts$/ })).toBeNull()
+    expect(await screen.findByText(/Failed to load diff/)).toBeInTheDocument()
   })
 
-  it('stages a hunk from the unstaged side', async () => {
-    mockPartiallyStagedDiff()
+  it('shows no-changes text when the diff has no hunks', async () => {
+    sidecarMock.getDiff.mockResolvedValue(emptyDiff)
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Stage hunk' }))
+    expect(await screen.findByText('No changes to show.')).toBeInTheDocument()
+  })
+})
+
+describe('DiffPanel hunk hover actions', () => {
+  it('stages the hovered hunk with its exact header, resolved from an additions-side line', async () => {
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    hoverLine(29, 'additions')
+    fireEvent.click(screen.getByRole('button', { name: 'Stage hunk' }))
+
     await waitFor(() => {
       expect(sidecarMock.stageHunk).toHaveBeenCalledWith(
         repoPath,
         'src/app.ts',
-        '@@ -30,2 +30,2 @@ unstaged-second'
+        '@@ -28,3 +28,3 @@ function tail() {'
       )
     })
     expect(sidecarMock.unstageHunk).not.toHaveBeenCalled()
+    expect(sidecarMock.discardHunk).not.toHaveBeenCalled()
   })
 
-  it('unstages a hunk from the staged side', async () => {
-    mockPartiallyStagedDiff()
+  it('offers a working affordance for a hunk starting at line 1', async () => {
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    hoverLine(1, 'additions')
+    fireEvent.click(screen.getByRole('button', { name: 'Stage hunk' }))
+
+    await waitFor(() => {
+      expect(sidecarMock.stageHunk).toHaveBeenCalledWith(repoPath, 'src/app.ts', '@@ -1,3 +1,3 @@')
+    })
+  })
+
+  it('unstages the hovered hunk on the staged side', async () => {
+    mockDiffOn('staged')
     await renderDiffPanel({ file: 'src/app.ts', group: 'staged' })
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Unstage hunk' }))
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Discard hunk' })).not.toBeInTheDocument()
+    hoverLine(1, 'deletions')
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage hunk' }))
+
     await waitFor(() => {
       expect(sidecarMock.unstageHunk).toHaveBeenCalledWith(
         repoPath,
         'src/app.ts',
-        '@@ -1,2 +1,2 @@ staged-first'
+        '@@ -1,3 +1,3 @@'
       )
     })
-    expect(sidecarMock.stageHunk).not.toHaveBeenCalled()
   })
 
-  it('recovers when the hunk mutation rejects outright', async () => {
-    mockPartiallyStagedDiff()
-    sidecarMock.stageHunk.mockRejectedValue(new Error('sidecar is gone'))
+  it('ignores a click when nothing is hovered', async () => {
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Stage hunk' }))
+    await screen.findByTestId('pierre-file-diff')
+    pierreControl.hovered = undefined
+    fireEvent.click(screen.getByRole('button', { name: 'Stage hunk' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('checkbox', { name: 'Stage hunk' })).not.toBeDisabled()
+      expect(sidecarMock.stageHunk).not.toHaveBeenCalled()
     })
-    expect(screen.getAllByTestId('diff-hunk')).toHaveLength(1)
   })
 
-  it('keeps a staged hunk on screen until its refetch lands, then lets it leave the side', async () => {
-    const lastHunk = hunkAt('@@ -30,2 +30,2 @@ last', 30, 30)
+  it('asks for confirmation before discarding a hunk, then discards on confirm', async () => {
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    hoverLine(28, 'additions')
+    fireEvent.click(screen.getByRole('button', { name: 'Discard hunk' }))
+
+    expect(sidecarMock.discardHunk).not.toHaveBeenCalled()
+    expect(confirmRequests).toHaveLength(1)
+    expect(confirmRequests[0].title).toBe('Discard hunk in src/app.ts?')
+    expect(confirmRequests[0].destructive).toBe(true)
+
+    await act(async () => {
+      confirmRequests[0].onConfirm()
+    })
+    await waitFor(() => {
+      expect(sidecarMock.discardHunk).toHaveBeenCalledWith(
+        repoPath,
+        'src/app.ts',
+        '@@ -28,3 +28,3 @@ function tail() {'
+      )
+    })
+  })
+
+  it('removes the staged hunk optimistically until the refetch lands', async () => {
     let unstagedCalls = 0
     let resolveStageHunk: () => void = () => {}
-    let resolveUnstagedRefetch: () => void = () => {}
-
+    let resolveRefetch: () => void = () => {}
     sidecarMock.getDiff.mockImplementation(
       async (_repo: string, _file: string, staged: boolean) => {
         if (staged) {
@@ -326,10 +441,10 @@ describe('DiffPanel', () => {
         }
         unstagedCalls++
         if (unstagedCalls === 1) {
-          return diffWith([lastHunk])
+          return twoHunkDiff
         }
         return new Promise((resolve) => {
-          resolveUnstagedRefetch = () => resolve(emptyDiff)
+          resolveRefetch = () => resolve(fixtureDiff('src/app.ts', [firstHunk]))
         })
       }
     )
@@ -341,142 +456,66 @@ describe('DiffPanel', () => {
     )
 
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+    await screen.findByTestId('pierre-file-diff')
+    expect(lastChangeCounts()).toEqual([1, 1])
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Stage hunk' }))
+    hoverLine(29, 'additions')
+    fireEvent.click(screen.getByRole('button', { name: 'Stage hunk' }))
 
-    const pendingCheckbox = await screen.findByRole('checkbox', { name: 'Unstage hunk' })
-    expect(pendingCheckbox).toBeDisabled()
-    expect(screen.getAllByTestId('diff-hunk')).toHaveLength(1)
+    await waitFor(() => {
+      expect(lastChangeCounts()).toEqual([1, 0])
+    })
 
     resolveStageHunk()
-
     await waitFor(() => {
       expect(unstagedCalls).toBeGreaterThan(1)
     })
-    expect(screen.getAllByTestId('diff-hunk')).toHaveLength(1)
+    expect(lastChangeCounts()).toEqual([1, 0])
 
-    resolveUnstagedRefetch()
-
+    resolveRefetch()
     await waitFor(() => {
-      expect(screen.getByText('No changes to show.')).toBeInTheDocument()
+      expect(lastChangeCounts()).toEqual([1])
     })
   })
 
-  it('syntax-highlights diff lines for known languages', async () => {
-    sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
-      staged
-        ? emptyDiff
-        : {
-            _tag: 'Ok' as const,
-            patch: '',
-            diff: {
-              filePath: 'src/app.ts',
-              binary: false,
-              hunks: [
-                {
-                  header: '@@ -1,1 +1,2 @@',
-                  oldStart: 1,
-                  oldCount: 1,
-                  newStart: 1,
-                  newCount: 2,
-                  lines: [
-                    { kind: 'context' as const, text: 'const base = 1', oldLine: 1, newLine: 1 },
-                    { kind: 'add' as const, text: 'const added = 2', oldLine: null, newLine: 2 }
-                  ]
-                }
-              ]
-            }
-          }
-    )
+  it('restores the hunk when the mutation rejects outright', async () => {
+    sidecarMock.stageHunk.mockRejectedValue(new Error('sidecar is gone'))
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
+    await screen.findByTestId('pierre-file-diff')
+    hoverLine(1, 'additions')
+    fireEvent.click(screen.getByRole('button', { name: 'Stage hunk' }))
+
     await waitFor(() => {
-      const keywords = screen
-        .getAllByText('const')
-        .filter((element) => element.getAttribute('style')?.includes('color'))
-      expect(keywords).toHaveLength(2)
+      expect(sidecarMock.stageHunk).toHaveBeenCalled()
+    })
+    await waitFor(() => {
+      expect(lastChangeCounts()).toEqual([1, 1])
     })
   })
 
-  it('renders plain text for files without a known language', async () => {
-    sidecarMock.getDiff.mockImplementation(async (_repo: string, _file: string, staged: boolean) =>
-      staged
-        ? { _tag: 'Ok' as const, patch: '', diff: { filePath: 'NOTES', binary: false, hunks: [] } }
-        : {
-            _tag: 'Ok' as const,
-            patch: '',
-            diff: {
-              filePath: 'NOTES',
-              binary: false,
-              hunks: [
-                {
-                  header: '@@ -1,1 +1,1 @@',
-                  oldStart: 1,
-                  oldCount: 1,
-                  newStart: 1,
-                  newCount: 1,
-                  lines: [
-                    {
-                      kind: 'add' as const,
-                      text: 'const looks like code',
-                      oldLine: null,
-                      newLine: 1
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-    )
+  it('offers no hunk actions for a conflicted file', async () => {
     sidecarMock.getStatus.mockResolvedValue({
       _tag: 'Ok',
       status: {
         current: 'main',
-        modified: ['NOTES'],
+        modified: [],
         staged: [],
         not_added: [],
-        conflicted: [],
+        conflicted: ['src/app.ts'],
         deleted: [],
         created: [],
         renamed: [],
-        files: []
+        files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
       }
     })
-    await renderDiffPanel({ file: 'NOTES', group: 'unstaged' })
+    await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
 
-    const plainLine = await screen.findByText('const looks like code')
-    expect(plainLine.querySelector('span')).toBeNull()
-  })
-
-  it('renders a binary notice instead of hunks', async () => {
-    sidecarMock.getDiff.mockResolvedValue({
-      _tag: 'Ok',
-      patch: '',
-      diff: { filePath: 'logo.png', binary: true, hunks: [] }
-    })
-    await renderDiffPanel({ file: 'logo.png', group: 'unstaged' })
-
-    expect(await screen.findByText(/Binary file/)).toBeInTheDocument()
-  })
-
-  it('omits the +/- totals for a binary file, which has no lines to count', async () => {
-    sidecarMock.getDiff.mockResolvedValue({
-      _tag: 'Ok',
-      patch: '',
-      diff: { filePath: 'logo.png', binary: true, hunks: [] }
-    })
-    await renderDiffPanel({ file: 'logo.png', group: 'unstaged' })
-
-    await screen.findByText(/Binary file/)
-    expect(screen.queryByText('+0')).not.toBeInTheDocument()
-    expect(screen.queryByText('−0')).not.toBeInTheDocument()
-  })
-
-  it('reports a failed diff read', async () => {
-    sidecarMock.getDiff.mockResolvedValue({ _tag: 'GitError', message: 'bad object' })
-    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
-
-    expect(await screen.findByText(/Failed to load diff/)).toBeInTheDocument()
+    await screen.findByTestId('pierre-file-diff')
+    expect(stagedSides()).toEqual([false])
+    expect(lastFileDiffOptions().enableGutterUtility).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Discard hunk' })).not.toBeInTheDocument()
   })
 
   it('hides hunk actions for untracked files', async () => {
@@ -496,32 +535,74 @@ describe('DiffPanel', () => {
     })
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
-    await screen.findByText('@@ -1,3 +1,4 @@')
-    expect(screen.queryByRole('checkbox', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    await screen.findByTestId('pierre-file-diff')
+    expect(lastFileDiffOptions().enableGutterUtility).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+  })
+})
+
+describe('DiffPanel amend surface', () => {
+  const headSelection: SelectedFile = {
+    file: 'src/app.ts',
+    source: 'head-commit',
+    range: 'HEAD~1..HEAD'
+  }
+
+  it('drops the hovered hunk and reports the full header list', async () => {
+    const onToggleHunk = vi.fn()
+    await renderDiffPanel(headSelection, {
+      dropState: 'kept',
+      isHunkDropped: () => false,
+      onToggleFile: vi.fn(),
+      onToggleHunk
+    })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Discard hunk' })).not.toBeInTheDocument()
+
+    hoverLine(29, 'additions')
+    fireEvent.click(screen.getByRole('button', { name: 'Drop hunk' }))
+
+    expect(onToggleHunk).toHaveBeenCalledWith('@@ -28,3 +28,3 @@ function tail() {', [
+      '@@ -1,3 +1,3 @@',
+      '@@ -28,3 +28,3 @@ function tail() {'
+    ])
   })
 
-  it('renders a drop checkbox per hunk for a head-commit file and reports a hunk drop on toggle', async () => {
+  it('offers Keep on a dropped hunk, both on hover and as a persistent annotation', async () => {
     const onToggleHunk = vi.fn()
-    await renderDiffPanel(
-      { file: 'src/app.ts', source: 'head-commit', range: 'HEAD~1..HEAD' },
-      { dropState: 'kept', isHunkDropped: () => false, onToggleFile: vi.fn(), onToggleHunk }
-    )
+    const droppedHeader = '@@ -1,3 +1,3 @@'
+    await renderDiffPanel(headSelection, {
+      dropState: 'partial',
+      isHunkDropped: (header) => header === droppedHeader,
+      onToggleFile: vi.fn(),
+      onToggleHunk
+    })
 
-    await screen.findByText('@@ -1,3 +1,4 @@')
-    const checkbox = screen.getByRole('checkbox', { name: 'Drop hunk' })
-    expect(checkbox).toBeChecked()
-    expect(screen.queryByRole('checkbox', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    await screen.findByTestId('pierre-file-diff')
+    const annotation = screen.getByTestId('pierre-annotation')
+    expect(annotation).toHaveAttribute('data-line', '1')
+    expect(annotation).toHaveTextContent('Dropped from last commit')
 
-    fireEvent.click(checkbox)
-    expect(onToggleHunk).toHaveBeenCalledWith('@@ -1,3 +1,4 @@', ['@@ -1,3 +1,4 @@'])
+    fireEvent.click(within(annotation).getByRole('button', { name: 'Keep hunk' }))
+    expect(onToggleHunk).toHaveBeenCalledWith(droppedHeader, [
+      '@@ -1,3 +1,3 @@',
+      '@@ -28,3 +28,3 @@ function tail() {'
+    ])
+
+    hoverLine(1, 'additions')
+    expect(screen.getAllByRole('button', { name: 'Keep hunk' }).length).toBeGreaterThan(1)
   })
 
   it('renders a tri-state file drop checkbox for a head-commit file', async () => {
     const onToggleFile = vi.fn()
-    await renderDiffPanel(
-      { file: 'src/app.ts', source: 'head-commit', range: 'HEAD~1..HEAD' },
-      { dropState: 'partial', isHunkDropped: () => false, onToggleFile, onToggleHunk: vi.fn() }
-    )
+    await renderDiffPanel(headSelection, {
+      dropState: 'partial',
+      isHunkDropped: () => false,
+      onToggleFile,
+      onToggleHunk: vi.fn()
+    })
 
     const fileCheckbox = await screen.findByRole('checkbox', {
       name: 'Keep src/app.ts in last commit'
@@ -530,5 +611,21 @@ describe('DiffPanel', () => {
 
     fireEvent.click(fileCheckbox)
     expect(onToggleFile).toHaveBeenCalled()
+  })
+
+  it('reads the head-commit range, not the worktree', async () => {
+    await renderDiffPanel(headSelection, {
+      dropState: 'kept',
+      isHunkDropped: () => false,
+      onToggleFile: vi.fn(),
+      onToggleHunk: vi.fn()
+    })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(sidecarMock.getDiff).toHaveBeenCalledWith(repoPath, 'src/app.ts', false, {
+      range: 'HEAD~1..HEAD',
+      commit: undefined,
+      renameSource: undefined
+    })
   })
 })
