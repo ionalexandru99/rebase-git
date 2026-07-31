@@ -145,16 +145,9 @@ test('offers no line-staging affordance on a conflicted file', async ({ harness 
     .click()
   await expect(worktreeDiffLine(page, 'feature-side').first()).toBeVisible({ timeout: 10_000 })
 
-  const conflictNumber = gutterNumber(page, 2)
-  await conflictNumber.waitFor({ timeout: 10_000 })
-  const box = await conflictNumber.boundingBox()
-  if (!box) {
-    throw new Error('conflict gutter number is not visible')
-  }
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-  await page.mouse.down()
-  await page.mouse.up()
+  await dragSelectGutterNumbers(page, 2, 2)
 
+  await page.waitForTimeout(300)
   await expect(page.getByRole('button', { name: /selected line/ })).toHaveCount(0)
   expect(porcelainStatus(repo)).toContain('UU conflict.txt')
 })

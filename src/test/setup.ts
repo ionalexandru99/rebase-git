@@ -10,7 +10,8 @@ import type {
   HunkLineSelection,
   StageFile,
   StageHunk,
-  StashList
+  StashList,
+  UnstageHunk
 } from '@shared/rpc'
 import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { GitBranches } from '@shared/schemas/git'
@@ -37,6 +38,10 @@ type CommitDetailResponse = RpcEncodedResult<
 type StageHunkResponse = RpcEncodedResult<
   typeof StageHunk.successSchema,
   typeof StageHunk.errorSchema
+>
+type GuardedHunkResponse = RpcEncodedResult<
+  typeof UnstageHunk.successSchema,
+  typeof UnstageHunk.errorSchema
 >
 type StashListResponse = RpcEncodedResult<
   typeof StashList.successSchema,
@@ -74,9 +79,9 @@ export const sidecarMock = {
   stageHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
   unstageHunk:
-    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
+    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<GuardedHunkResponse>>(),
   discardHunk:
-    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
+    vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<GuardedHunkResponse>>(),
   stageLines:
     vi.fn<
       (
@@ -91,7 +96,7 @@ export const sidecarMock = {
         repoPath: string,
         file: string,
         selections: readonly HunkLineSelection[]
-      ) => Promise<StageHunkResponse>
+      ) => Promise<GuardedHunkResponse>
     >(),
   stashList: vi.fn<(repoPath: string) => Promise<StashListResponse>>(),
   checkout:

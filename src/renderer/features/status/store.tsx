@@ -237,6 +237,12 @@ export function useWorkingTreeStatusController(
       if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
         setError('mutation', gitFailureBannerText('Git rejected the change', response.message))
       }
+      if (response._tag === 'HunkNotFound' && isCurrentRepo(context.generation, context.path)) {
+        setError(
+          'mutation',
+          'The diff changed since this view loaded — it was refreshed. Try again.'
+        )
+      }
       if (
         response._tag === 'OperationInProgress' &&
         isCurrentRepo(context.generation, context.path)

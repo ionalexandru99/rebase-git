@@ -11,6 +11,7 @@ export interface SelectedChangeLine {
 
 export function sweepSelectedChangeLines(root: ParentNode): SelectedChangeLine[] {
   const lines: SelectedChangeLine[] = []
+  const seen = new Set<string>()
   for (const host of root.querySelectorAll(DIFFS_TAG_NAME)) {
     const scopes: ParentNode[] = host.shadowRoot ? [host.shadowRoot, host] : [host]
     for (const row of scopes.flatMap((scope) =>
@@ -25,11 +26,13 @@ export function sweepSelectedChangeLines(root: ParentNode): SelectedChangeLine[]
       if (!Number.isInteger(lineNumber) || !Number.isInteger(unifiedIndex)) {
         continue
       }
-      lines.push({
-        kind: lineType === 'change-addition' ? 'add' : 'del',
-        lineNumber,
-        unifiedIndex
-      })
+      const kind = lineType === 'change-addition' ? 'add' : 'del'
+      const key = `${kind}:${lineNumber}`
+      if (seen.has(key)) {
+        continue
+      }
+      seen.add(key)
+      lines.push({ kind, lineNumber, unifiedIndex })
     }
   }
   return lines.sort((first, second) => first.unifiedIndex - second.unifiedIndex)

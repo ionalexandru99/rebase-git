@@ -1,3 +1,4 @@
+import { DIFFS_TAG_NAME } from '@pierre/diffs'
 import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import type { DiffHunk } from '@shared/schemas/git'
 import { describe, expect, it } from 'vitest'
@@ -33,7 +34,7 @@ function appendRows(target: ParentNode & Node, rows: RowSpec[]): void {
 
 function shadowHost(rows: RowSpec[]): HTMLElement {
   const container = document.createElement('div')
-  const host = document.createElement('diffs-container')
+  const host = document.createElement(DIFFS_TAG_NAME)
   appendRows(host.shadowRoot ?? host.attachShadow({ mode: 'open' }), rows)
   container.appendChild(host)
   return container
@@ -41,7 +42,7 @@ function shadowHost(rows: RowSpec[]): HTMLElement {
 
 function lightHost(rows: RowSpec[]): HTMLElement {
   const container = document.createElement('div')
-  const host = document.createElement('diffs-container')
+  const host = document.createElement(DIFFS_TAG_NAME)
   appendRows(host, rows)
   container.appendChild(host)
   return container
@@ -69,6 +70,19 @@ describe('sweepSelectedChangeLines', () => {
       { line: 11, altLine: 10, type: 'context', index: '2,1' },
       { line: 10, type: 'change-deletion', index: '0,0' },
       { line: 10, altLine: 11, type: 'context', index: '2,1' }
+    ])
+
+    expect(sweepSelectedChangeLines(container)).toEqual([
+      { kind: 'del', lineNumber: 10, unifiedIndex: 0 },
+      { kind: 'add', lineNumber: 10, unifiedIndex: 1 }
+    ])
+  })
+
+  it('dedupes a change line marked in both columns', () => {
+    const container = shadowHost([
+      { line: 10, type: 'change-deletion', index: '0,0' },
+      { line: 10, type: 'change-deletion', index: '0,0' },
+      { line: 10, type: 'change-addition', index: '1,0' }
     ])
 
     expect(sweepSelectedChangeLines(container)).toEqual([
