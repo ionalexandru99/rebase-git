@@ -48,6 +48,14 @@ const stageHunkThroughGroup = (payload: { repoPath: string; file: string; hunkHe
     }).pipe(Effect.scoped, Effect.provide(handlersLayer))
   )
 
+const discardHunkThroughGroup = (payload: { repoPath: string; file: string; hunkHeader: string }) =>
+  runOp(
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(SidecarRpcs)
+      return yield* Effect.either(client.discardHunk(payload))
+    }).pipe(Effect.scoped, Effect.provide(handlersLayer))
+  )
+
 const unstageFileThroughGroup = (payload: {
   repoPath: string
   file: string
@@ -158,6 +166,29 @@ describe('staging through the RPC group against a real repo', () => {
     expect(Either.isLeft(result)).toBe(true)
     if (Either.isLeft(result)) {
       expect(result.left).toBeInstanceOf(HunkNotFound)
+    }
+  })
+
+  it('discards a worktree hunk through the RPC group and restores the committed content', async () => {
+    git('reset', '--hard', 'HEAD')
+    git('clean', '-fd')
+    write('tracked.txt', 'changed\n')
+
+    try {
+      const { diff } = await runOp(getDiff(repoDir, 'tracked.txt', false))
+      expect(diff.hunks).toHaveLength(1)
+
+      const result = await discardHunkThroughGroup({
+        repoPath: repoDir,
+        file: 'tracked.txt',
+        hunkHeader: diff.hunks[0].header
+      })
+
+      expect(Either.isRight(result)).toBe(true)
+      expect(fs.readFileSync(path.join(repoDir, 'tracked.txt'), 'utf8')).toBe('base\n')
+    } finally {
+      git('reset', '--hard', 'HEAD')
+      git('clean', '-fd')
     }
   })
 
