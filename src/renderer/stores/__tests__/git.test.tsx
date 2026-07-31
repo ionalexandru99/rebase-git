@@ -105,6 +105,7 @@ function useAggregateGit() {
     unstageAll: workingTree.unstageAll,
     stageHunk: workingTree.stageHunk,
     unstageHunk: workingTree.unstageHunk,
+    stageLines: workingTree.stageLines,
     commit: actions.commit,
     amend: actions.amend,
     fetchNow: refs.fetchNow,
@@ -1104,6 +1105,29 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
     expect(git.state.error).toBe(
       `Git rejected the change: Git rejected the operation. The full output is in the developer console.`
+    )
+  })
+
+  it('maps a stale line selection (HunkNotFound) to a stale-view banner and re-syncs', async () => {
+    sidecarMock.stageLines.mockResolvedValue({ _tag: 'HunkNotFound' })
+
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => {
+      expect(git.state.status).not.toBeNull()
+    })
+
+    sidecarMock.getStatus.mockClear()
+    const ok = await git.stageLines('a.ts', [
+      { hunkHeader: '@@ -1,1 +1,1 @@', lineIndexes: [0], fingerprint: 'deadbeef' }
+    ])
+
+    expect(ok).toBe(false)
+    await waitFor(() => {
+      expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+    })
+    expect(git.state.error).toBe(
+      'The diff changed since this view loaded — it was refreshed. Try again.'
     )
   })
 

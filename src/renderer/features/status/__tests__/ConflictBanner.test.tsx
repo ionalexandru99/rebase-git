@@ -62,7 +62,9 @@ function renderBanner(options: BannerOptions = {}) {
     unstageAll: vi.fn(),
     stageHunk: vi.fn(),
     unstageHunk: vi.fn(),
-    discardHunk: vi.fn()
+    discardHunk: vi.fn(),
+    stageLines: vi.fn(),
+    unstageLines: vi.fn()
   }
   const actions: BannerActions = {
     abortOperation: vi.fn().mockResolvedValue(true),

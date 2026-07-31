@@ -47,6 +47,8 @@ function provideStatus(status: GitStatus | null, overrides: Partial<WorkingTreeS
     stageHunk: vi.fn(),
     unstageHunk: vi.fn(),
     discardHunk: vi.fn(),
+    stageLines: vi.fn(),
+    unstageLines: vi.fn(),
     ...overrides
   }
   return (children: ReactNode) => (
