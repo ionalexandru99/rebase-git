@@ -7,6 +7,7 @@ import type {
   GetLocalBranches,
   GetRemoteRefs,
   GetStatus,
+  HunkLineSelection,
   StageFile,
   StageHunk,
   StashList
@@ -76,6 +77,22 @@ export const sidecarMock = {
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
   discardHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
+  stageLines:
+    vi.fn<
+      (
+        repoPath: string,
+        file: string,
+        selections: readonly HunkLineSelection[]
+      ) => Promise<StageHunkResponse>
+    >(),
+  unstageLines:
+    vi.fn<
+      (
+        repoPath: string,
+        file: string,
+        selections: readonly HunkLineSelection[]
+      ) => Promise<StageHunkResponse>
+    >(),
   stashList: vi.fn<(repoPath: string) => Promise<StashListResponse>>(),
   checkout:
     vi.fn<(repoPath: string, refKind: string, fullPath: string) => Promise<CheckoutResult>>()
@@ -319,6 +336,18 @@ beforeEach(() => {
         return sidecarMock.unstageHunk(repoPath, body.file as string, body.hunkHeader as string)
       case 'discardHunk':
         return sidecarMock.discardHunk(repoPath, body.file as string, body.hunkHeader as string)
+      case 'stageLines':
+        return sidecarMock.stageLines(
+          repoPath,
+          body.file as string,
+          body.selections as HunkLineSelection[]
+        )
+      case 'unstageLines':
+        return sidecarMock.unstageLines(
+          repoPath,
+          body.file as string,
+          body.selections as HunkLineSelection[]
+        )
       case 'checkout':
         return sidecarMock.checkout(repoPath, body.refKind as string, body.fullPath as string)
       case 'fetch':

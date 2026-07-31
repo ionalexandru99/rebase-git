@@ -1,3 +1,4 @@
+import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { CSSProperties, ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,10 +15,19 @@ interface HoveredLine {
   side: 'additions' | 'deletions'
 }
 
+interface SelectedRowSpec {
+  line: number
+  type: 'change-addition' | 'change-deletion' | 'context'
+  index: string
+}
+
 const pierreControl = vi.hoisted(() => ({
   hovered: undefined as HoveredLine | undefined,
-  captured: [] as Array<Record<string, unknown>>
+  captured: [] as Array<Record<string, unknown>>,
+  selectedRows: [] as SelectedRowSpec[]
 }))
+
+const DiffsHost = vi.hoisted(() => 'diffs-container' as unknown as 'div')
 
 vi.mock('@pierre/diffs/react', () => ({
   Virtualizer: (props: { children?: ReactNode; className?: string; style?: CSSProperties }) => (
@@ -32,6 +42,7 @@ vi.mock('@pierre/diffs/react', () => ({
     const options = { ...(props.options as Record<string, unknown>) }
     delete options.onLineEnter
     delete options.onLineLeave
+    delete options.onLineSelectionEnd
     const renderGutterUtility = props.renderGutterUtility as
       | ((getHoveredLine: () => HoveredLine | undefined) => ReactNode)
       | undefined
@@ -54,6 +65,17 @@ vi.mock('@pierre/diffs/react', () => ({
         )}
       >
         <div data-testid="pierre-gutter">{renderGutterUtility?.(() => pierreControl.hovered)}</div>
+        <DiffsHost>
+          {pierreControl.selectedRows.map((row) => (
+            <div
+              key={`${row.type}:${row.index}`}
+              data-selected-line=""
+              data-line={row.line}
+              data-line-type={row.type}
+              data-line-index={row.index}
+            />
+          ))}
+        </DiffsHost>
         {lineAnnotations.map((annotation) => (
           <div
             key={`${annotation.side}:${annotation.lineNumber}`}
@@ -174,6 +196,19 @@ function hoverLine(lineNumber: number, side: 'additions' | 'deletions') {
   })
 }
 
+async function endLineSelection(range: { start: number; end: number } | null) {
+  const latest = pierreControl.captured[pierreControl.captured.length - 1]
+  const options = latest?.options as
+    | { onLineSelectionEnd?: (range: { start: number; end: number } | null) => void }
+    | undefined
+  await act(async () => {
+    options?.onLineSelectionEnd?.(range)
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => resolve(undefined))
+    })
+  })
+}
+
 type AmendDrop = Parameters<typeof DiffPanel>[0]['amendDrop']
 
 interface HarnessProps {
@@ -236,6 +271,7 @@ async function renderDiffPanel(selected: SelectedFile | null, amendDrop?: AmendD
 beforeEach(() => {
   pierreControl.hovered = undefined
   pierreControl.captured = []
+  pierreControl.selectedRows = []
   confirmRequests.length = 0
   vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
     _tag: 'Ok',
@@ -272,6 +308,8 @@ beforeEach(() => {
   sidecarMock.stageHunk.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.unstageHunk.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.discardHunk.mockResolvedValue({ _tag: 'Ok' })
+  sidecarMock.stageLines.mockResolvedValue({ _tag: 'Ok' })
+  sidecarMock.unstageLines.mockResolvedValue({ _tag: 'Ok' })
 })
 
 describe('DiffPanel rendering', () => {
@@ -538,6 +576,163 @@ describe('DiffPanel hunk hover actions', () => {
     await screen.findByTestId('pierre-file-diff')
     expect(lastFileDiffOptions().enableGutterUtility).toBe(false)
     expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+  })
+})
+
+describe('DiffPanel line selection', () => {
+  const firstHeader = '@@ -1,3 +1,3 @@'
+  const tailHeader = '@@ -28,3 +28,3 @@ function tail() {'
+
+  it('enables line selection on the worktree surface', async () => {
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(lastFileDiffOptions().enableLineSelection).toBe(true)
+  })
+
+  it('stages the selected lines grouped by hunk and clears the selection', async () => {
+    pierreControl.selectedRows = [
+      { line: 1, type: 'change-addition', index: '1,0' },
+      { line: 2, type: 'context', index: '2,1' },
+      { line: 29, type: 'change-addition', index: '6,4' }
+    ]
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    await endLineSelection({ start: 1, end: 29 })
+
+    const stageButton = screen.getByRole('button', { name: 'Stage 2 selected lines' })
+    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    fireEvent.click(stageButton)
+
+    await waitFor(() => {
+      expect(sidecarMock.stageLines).toHaveBeenCalledWith(repoPath, 'src/app.ts', [
+        {
+          hunkHeader: firstHeader,
+          lineIndexes: [1],
+          fingerprint: fingerprintHunk(twoHunkDiff.patch, firstHeader)
+        },
+        {
+          hunkHeader: tailHeader,
+          lineIndexes: [2],
+          fingerprint: fingerprintHunk(twoHunkDiff.patch, tailHeader)
+        }
+      ])
+    })
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: 'Stage 2 selected lines' })
+      ).not.toBeInTheDocument()
+    })
+    expect(sidecarMock.unstageLines).not.toHaveBeenCalled()
+  })
+
+  it('unstages the selected lines on the staged side', async () => {
+    mockDiffOn('staged')
+    pierreControl.selectedRows = [{ line: 1, type: 'change-deletion', index: '0,0' }]
+    await renderDiffPanel({ file: 'src/app.ts', group: 'staged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    await endLineSelection({ start: 1, end: 1 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage 1 selected line' }))
+
+    await waitFor(() => {
+      expect(sidecarMock.unstageLines).toHaveBeenCalledWith(repoPath, 'src/app.ts', [
+        {
+          hunkHeader: firstHeader,
+          lineIndexes: [0],
+          fingerprint: fingerprintHunk(twoHunkDiff.patch, firstHeader)
+        }
+      ])
+    })
+    expect(sidecarMock.stageLines).not.toHaveBeenCalled()
+  })
+
+  it('restores the hunk hover actions when the selection is cleared', async () => {
+    pierreControl.selectedRows = [{ line: 1, type: 'change-addition', index: '1,0' }]
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    await endLineSelection({ start: 1, end: 1 })
+    expect(screen.getByRole('button', { name: 'Stage 1 selected line' })).toBeInTheDocument()
+
+    await endLineSelection(null)
+
+    expect(screen.queryByRole('button', { name: 'Stage 1 selected line' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stage hunk' })).toBeInTheDocument()
+    expect(sidecarMock.stageLines).not.toHaveBeenCalled()
+  })
+
+  it('offers no line action for a context-only selection', async () => {
+    pierreControl.selectedRows = [
+      { line: 2, type: 'context', index: '2,1' },
+      { line: 3, type: 'context', index: '3,2' }
+    ]
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    await endLineSelection({ start: 2, end: 3 })
+
+    expect(screen.queryByRole('button', { name: /selected line/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stage hunk' })).toBeInTheDocument()
+  })
+
+  it('disables line selection for conflicted files', async () => {
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: ['src/app.ts'],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
+      }
+    })
+    await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(lastFileDiffOptions().enableLineSelection).toBe(false)
+  })
+
+  it('disables line selection for untracked files', async () => {
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: ['src/app.ts'],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: []
+      }
+    })
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(lastFileDiffOptions().enableLineSelection).toBe(false)
+  })
+
+  it('disables line selection on the amend surface', async () => {
+    await renderDiffPanel(
+      { file: 'src/app.ts', source: 'head-commit', range: 'HEAD~1..HEAD' },
+      {
+        dropState: 'kept',
+        isHunkDropped: () => false,
+        onToggleFile: vi.fn(),
+        onToggleHunk: vi.fn()
+      }
+    )
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(lastFileDiffOptions().enableLineSelection).toBe(false)
   })
 })
 

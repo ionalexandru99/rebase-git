@@ -1,4 +1,4 @@
-import { diffAcceptRejectHunk } from '@pierre/diffs'
+import { diffAcceptRejectHunk, type SelectedLineRange } from '@pierre/diffs'
 import { FileDiff, Virtualizer } from '@pierre/diffs/react'
 import type { DiffHunk } from '@shared/schemas/git'
 import {
@@ -9,10 +9,15 @@ import {
   Trash2Icon,
   Undo2Icon
 } from 'lucide-react'
-import { type ReactNode, useCallback, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { useWorkspaceContext } from '@/app/WorkspaceContext'
 import { DIFF_UNSAFE_CSS, diffThemeStyle } from '@/features/diff/diff-theme'
 import { type DiffSide, hunkAtLine } from '@/features/diff/hunk-at-line'
+import {
+  mapSelectionToHunkSelections,
+  type SelectedChangeLine,
+  sweepSelectedChangeLines
+} from '@/features/diff/line-selection'
 import { parsePatch } from '@/features/diff/patch-parse'
 import { cn } from '@/lib/utils'
 import { useFileDiff, useWorkingTreeStatus } from '@/stores/git'
@@ -46,6 +51,13 @@ interface PendingHunkRemoval {
   dataUpdatedAt: number
 }
 
+interface PendingLineSelection {
+  file: string
+  staged: boolean
+  dataUpdatedAt: number
+  lines: SelectedChangeLine[]
+}
+
 type HunkAction = 'stage' | 'unstage' | 'discard'
 
 function patchHash(patch: string): string {
@@ -61,7 +73,9 @@ export function DiffPanel(props: DiffPanelProps) {
     status,
     stageHunk: stageHunkOp,
     unstageHunk: unstageHunkOp,
-    discardHunk: discardHunkOp
+    discardHunk: discardHunkOp,
+    stageLines: stageLinesOp,
+    unstageLines: unstageLinesOp
   } = useWorkingTreeStatus()
   const { confirm } = useWorkspaceContext()
 
@@ -91,6 +105,8 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const [pending, setPending] = useState<PendingHunkRemoval | null>(null)
   const [hoveredLine, setHoveredLine] = useState<HoveredLine | null>(null)
+  const [lineSelection, setLineSelection] = useState<PendingLineSelection | null>(null)
+  const diffBodyRef = useRef<HTMLDivElement | null>(null)
 
   const activePending =
     pending &&
@@ -98,6 +114,14 @@ export function DiffPanel(props: DiffPanelProps) {
     pending.staged === showsStagedSide &&
     pending.dataUpdatedAt === activeQuery.dataUpdatedAt
       ? pending
+      : null
+
+  const activeLineSelection =
+    lineSelection &&
+    lineSelection.file === selectedFile &&
+    lineSelection.staged === showsStagedSide &&
+    lineSelection.dataUpdatedAt === activeQuery.dataUpdatedAt
+      ? lineSelection
       : null
 
   const amendDrop = isHeadCommit ? props.amendDrop : undefined
@@ -191,6 +215,52 @@ export function DiffPanel(props: DiffPanelProps) {
     [amendDrop, hunks]
   )
 
+  const onLineSelectionEnd = useCallback(
+    (range: SelectedLineRange | null) => {
+      if (!range || !selectedFile) {
+        setLineSelection(null)
+        return
+      }
+      const file = selectedFile
+      const staged = showsStagedSide
+      const dataUpdatedAt = activeQuery.dataUpdatedAt
+      requestAnimationFrame(() => {
+        if (!diffBodyRef.current) {
+          setLineSelection(null)
+          return
+        }
+        const lines = sweepSelectedChangeLines(diffBodyRef.current)
+        setLineSelection(lines.length === 0 ? null : { file, staged, dataUpdatedAt, lines })
+      })
+    },
+    [selectedFile, showsStagedSide, activeQuery.dataUpdatedAt]
+  )
+
+  const runLineAction = useCallback(async () => {
+    if (!selectedFile || !activeLineSelection || patch === undefined) {
+      return
+    }
+    const selections = mapSelectionToHunkSelections(hunks, patch, activeLineSelection.lines)
+    if (selections.length === 0) {
+      setLineSelection(null)
+      return
+    }
+    const applied = showsStagedSide
+      ? await unstageLinesOp(selectedFile, selections)
+      : await stageLinesOp(selectedFile, selections)
+    if (applied) {
+      setLineSelection(null)
+    }
+  }, [
+    selectedFile,
+    activeLineSelection,
+    patch,
+    hunks,
+    showsStagedSide,
+    stageLinesOp,
+    unstageLinesOp
+  ])
+
   const hoveredHunk = hoveredLine
     ? hunkAtLine(hunks, hoveredLine.side, hoveredLine.lineNumber)
     : null
@@ -224,6 +294,23 @@ export function DiffPanel(props: DiffPanelProps) {
       if (!hunkActionsEnabled) {
         return null
       }
+      if (activeLineSelection) {
+        const count = activeLineSelection.lines.length
+        const noun = count === 1 ? 'line' : 'lines'
+        return (
+          <GutterActionRow>
+            <GutterActionButton
+              label={
+                showsStagedSide
+                  ? `Unstage ${count} selected ${noun}`
+                  : `Stage ${count} selected ${noun}`
+              }
+              icon={showsStagedSide ? MinusIcon : PlusIcon}
+              onClick={() => void runLineAction()}
+            />
+          </GutterActionRow>
+        )
+      }
       return (
         <GutterActionRow>
           {showsStagedSide ? (
@@ -255,6 +342,8 @@ export function DiffPanel(props: DiffPanelProps) {
       hoveredDropped,
       toggleHunkDrop,
       hunkActionsEnabled,
+      activeLineSelection,
+      runLineAction,
       showsStagedSide,
       requestHunkAction,
       hunks
@@ -276,9 +365,11 @@ export function DiffPanel(props: DiffPanelProps) {
       unsafeCSS: DIFF_UNSAFE_CSS,
       disableFileHeader: true,
       enableGutterUtility: gutterEnabled,
-      onLineEnter
+      enableLineSelection: hunkActionsEnabled,
+      onLineEnter,
+      onLineSelectionEnd
     }),
-    [gutterEnabled, onLineEnter]
+    [gutterEnabled, hunkActionsEnabled, onLineEnter, onLineSelectionEnd]
   )
 
   const hunkAnnotations = useMemo(() => {
@@ -431,7 +522,7 @@ export function DiffPanel(props: DiffPanelProps) {
       ) : !hasAnyHunks || !hasParsedContent ? (
         <StateNotice>No changes to show.</StateNotice>
       ) : (
-        <div className="min-h-0 overflow-hidden" data-testid="diff-body">
+        <div className="min-h-0 overflow-hidden" data-testid="diff-body" ref={diffBodyRef}>
           <Virtualizer
             className="scroll-host h-full min-h-0 overflow-y-auto"
             style={diffThemeStyle()}

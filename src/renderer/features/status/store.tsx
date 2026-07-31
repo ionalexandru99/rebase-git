@@ -1,3 +1,4 @@
+import type { HunkLineSelection } from '@shared/rpc'
 import type { FileDiff, HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
@@ -14,9 +15,11 @@ import {
   rpcStageAll,
   rpcStageFile,
   rpcStageHunk,
+  rpcStageLines,
   rpcUnstageAll,
   rpcUnstageFile,
-  rpcUnstageHunk
+  rpcUnstageHunk,
+  rpcUnstageLines
 } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import type { GitStatus } from '@/types'
@@ -99,6 +102,12 @@ interface HunkMutationVars {
   options: HunkStageOptions
 }
 
+interface LineMutationVars {
+  op: 'stage' | 'unstage'
+  file: string
+  selections: readonly HunkLineSelection[]
+}
+
 export interface WorkingTreeStatusDeps {
   repoPath: string | null
   tabId: string
@@ -122,6 +131,8 @@ export interface WorkingTreeStatus {
   stageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) => Promise<boolean>
   unstageHunk: (file: string, hunkHeader: string, options?: HunkStageOptions) => Promise<boolean>
   discardHunk: (file: string, hunkHeader: string) => Promise<boolean>
+  stageLines: (file: string, selections: readonly HunkLineSelection[]) => Promise<boolean>
+  unstageLines: (file: string, selections: readonly HunkLineSelection[]) => Promise<boolean>
 }
 
 export interface WorkingTreeStatusController {
@@ -284,19 +295,31 @@ export function useWorkingTreeStatusController(
     )
   )
 
+  const linesMutation = useMutation(
+    statusMutationOptions<LineMutationVars>(
+      () => null,
+      (path, vars) =>
+        vars.op === 'stage'
+          ? rpcStageLines(path, vars.file, vars.selections)
+          : rpcUnstageLines(path, vars.file, vars.selections)
+    )
+  )
+
   const mutations = useRef({
     stage: stageMutation,
     unstage: unstageMutation,
     stageAll: stageAllMutation,
     unstageAll: unstageAllMutation,
-    hunk: hunkMutation
+    hunk: hunkMutation,
+    lines: linesMutation
   })
   mutations.current = {
     stage: stageMutation,
     unstage: unstageMutation,
     stageAll: stageAllMutation,
     unstageAll: unstageAllMutation,
-    hunk: hunkMutation
+    hunk: hunkMutation,
+    lines: linesMutation
   }
 
   const stageFile = useCallback(
@@ -349,6 +372,26 @@ export function useWorkingTreeStatusController(
     [runMutation]
   )
 
+  const stageLines = useCallback(
+    (file: string, selections: readonly HunkLineSelection[]) =>
+      runMutation('stage', false, () =>
+        mutations.current.lines
+          .mutateAsync({ op: 'stage', file, selections })
+          .then((response) => response?._tag === 'Ok')
+      ),
+    [runMutation]
+  )
+
+  const unstageLines = useCallback(
+    (file: string, selections: readonly HunkLineSelection[]) =>
+      runMutation('unstage', false, () =>
+        mutations.current.lines
+          .mutateAsync({ op: 'unstage', file, selections })
+          .then((response) => response?._tag === 'Ok')
+      ),
+    [runMutation]
+  )
+
   const status = statusQuery.data ?? null
   const rows = useMemo(() => (status ? buildUnifiedFileRows(status) : []), [status])
   const statusState = status ? 'ready' : statusQuery.isError ? 'error' : 'loading'
@@ -366,7 +409,9 @@ export function useWorkingTreeStatusController(
       unstageAll,
       stageHunk,
       unstageHunk,
-      discardHunk
+      discardHunk,
+      stageLines,
+      unstageLines
     }),
     [
       status,
@@ -379,7 +424,9 @@ export function useWorkingTreeStatusController(
       unstageAll,
       stageHunk,
       unstageHunk,
-      discardHunk
+      discardHunk,
+      stageLines,
+      unstageLines
     ]
   )
 

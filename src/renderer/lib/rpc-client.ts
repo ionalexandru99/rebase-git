@@ -20,6 +20,7 @@ import {
   GetLocalBranches,
   GetRemoteRefs,
   GetStatus,
+  type HunkLineSelection,
   MergeBranch,
   OpenRepo,
   Pull,
@@ -32,6 +33,7 @@ import {
   StageAll,
   StageFile,
   StageHunk,
+  StageLines,
   StashApply,
   StashDrop,
   StashList,
@@ -39,7 +41,8 @@ import {
   StashPush,
   UnstageAll,
   UnstageFile,
-  UnstageHunk
+  UnstageHunk,
+  UnstageLines
 } from '@shared/rpc'
 import { type RpcContract, type RpcResult, rpcResultSchema } from '@shared/rpc-result'
 import type { RefKind, ResetMode } from '@shared/schemas/ipc'
@@ -227,6 +230,22 @@ export async function rpcDiscardHunk(
     file,
     hunkHeader
   })
+}
+
+export async function rpcStageLines(
+  repoPath: string,
+  file: string,
+  selections: readonly HunkLineSelection[]
+): Promise<HunkResult> {
+  return callSidecarRpc(StageLines, { repoPath, file, selections })
+}
+
+export async function rpcUnstageLines(
+  repoPath: string,
+  file: string,
+  selections: readonly HunkLineSelection[]
+): Promise<GuardedHunkResult> {
+  return callSidecarRpc(UnstageLines, { repoPath, file, selections })
 }
 
 export async function rpcDiscardChanges(
