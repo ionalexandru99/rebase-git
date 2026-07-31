@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { clickHunkAction, worktreeDiffBody, worktreeDiffLine } from './diff-locators'
 import {
   commitSubjects,
   createFixtureRepo,
@@ -141,7 +142,7 @@ test('Stage all / Unstage all move whole groups and gate the Commit button', asy
   await expect(commitButton).toBeDisabled()
 })
 
-test('selecting a modified file renders diff hunks and staging its hunk carries the file over', async ({
+test('selecting a modified file renders the diff and staging its hovered hunk carries the file over', async ({
   harness
 }) => {
   const repo = createFixtureRepo()
@@ -160,19 +161,17 @@ test('selecting a modified file renders diff hunks and staging its hunk carries 
   await expect(fileButton).toBeVisible({ timeout: 10_000 })
   await fileButton.click()
 
-  const diffBody = page.getByTestId('diff-body')
-  await expect(diffBody).toBeVisible({ timeout: 10_000 })
-  await expect(diffBody.getByTestId('diff-hunk').first()).toBeVisible({ timeout: 10_000 })
-  expect(await diffBody.getByTestId('diff-hunk').count()).toBeGreaterThanOrEqual(1)
+  await expect(worktreeDiffBody(page)).toBeVisible({ timeout: 10_000 })
+  await expect(worktreeDiffLine(page, 'line three').first()).toBeVisible({ timeout: 10_000 })
 
-  const stageHunk = diffBody.getByRole('checkbox', { name: 'Stage hunk' }).first()
-  await expect(stageHunk).toBeVisible({ timeout: 10_000 })
-  await stageHunk.click()
+  await clickHunkAction(page, 'line three', 'Stage hunk')
 
   await expect(stagedFileRow(page, 'README.md')).toBeVisible({ timeout: 10_000 })
-  await expect(diffBody.getByRole('checkbox', { name: 'Unstage hunk' }).first()).toBeVisible({
-    timeout: 10_000
-  })
+  await expect
+    .poll(() => porcelainStatus(repo).some((entry) => entry.includes('README.md')), {
+      timeout: 10_000
+    })
+    .toBe(true)
 })
 
 test('lists a partially staged file in both groups, each row showing only its side', async ({
@@ -193,25 +192,60 @@ test('lists a partially staged file in both groups, each row showing only its si
   await openLocalChanges(page)
   await unstagedFileRow(page, 'long.txt').getByRole('button', { name: 'long.txt', exact: true }).click()
 
-  const diffBody = page.getByTestId('diff-body')
-  await expect(diffBody.getByTestId('diff-hunk')).toHaveCount(2, { timeout: 10_000 })
+  await expect(worktreeDiffLine(page, 'line 2 edited').first()).toBeVisible({ timeout: 10_000 })
 
-  await diffBody.getByRole('checkbox', { name: 'Stage hunk' }).first().click()
+  await clickHunkAction(page, 'line 2 edited', 'Stage hunk')
 
   await expect(stagedFileRow(page, 'long.txt')).toBeVisible({ timeout: 10_000 })
   await expect(unstagedFileRow(page, 'long.txt')).toBeVisible()
   await expect.poll(() => porcelainStatus(repo), { timeout: 10_000 }).toEqual(['MM long.txt'])
 
-  await expect(diffBody.getByTestId('diff-hunk')).toHaveCount(1)
-  await expect(diffBody.getByText('line 36 edited')).toBeVisible()
-  await expect(diffBody.getByText('line 2 edited')).toHaveCount(0)
+  await expect(worktreeDiffLine(page, 'line 36 edited').first()).toBeVisible({ timeout: 10_000 })
+  await expect(worktreeDiffLine(page, 'line 2 edited')).toHaveCount(0)
 
   await stagedFileRow(page, 'long.txt').getByRole('button', { name: 'long.txt', exact: true }).click()
 
-  await expect(diffBody.getByTestId('diff-hunk')).toHaveCount(1, { timeout: 10_000 })
-  await expect(diffBody.getByText('line 2 edited')).toBeVisible()
-  await expect(diffBody.getByText('line 36 edited')).toHaveCount(0)
-  await expect(diffBody.getByRole('checkbox', { name: 'Unstage hunk' })).toBeVisible()
+  await expect(worktreeDiffLine(page, 'line 2 edited').first()).toBeVisible({ timeout: 10_000 })
+  await expect(worktreeDiffLine(page, 'line 36 edited')).toHaveCount(0)
+
+  await clickHunkAction(page, 'line 2 edited', 'Unstage hunk')
+
+  await expect.poll(() => porcelainStatus(repo), { timeout: 10_000 }).toEqual([' M long.txt'])
+})
+
+test('discards a hunk from the worktree after confirming, leaving other edits alone', async ({
+  harness
+}) => {
+  const repo = createFixtureRepo()
+  const git = gitIn(repo)
+  const base = `${Array.from({ length: 40 }, (_unused, index) => `line ${index}`).join('\n')}\n`
+  fs.writeFileSync(path.join(repo, 'long.txt'), base)
+  git(['add', '.'])
+  git(['commit', '-m', 'add long file'])
+  fs.writeFileSync(
+    path.join(repo, 'long.txt'),
+    base.replace('line 2\n', 'line 2 edited\n').replace('line 36\n', 'line 36 edited\n')
+  )
+  const page = await harness.openRepo(repo)
+
+  await openLocalChanges(page)
+  await unstagedFileRow(page, 'long.txt').getByRole('button', { name: 'long.txt', exact: true }).click()
+
+  await expect(worktreeDiffLine(page, 'line 2 edited').first()).toBeVisible({ timeout: 10_000 })
+
+  await clickHunkAction(page, 'line 2 edited', 'Discard hunk')
+
+  const confirmDialog = page.getByRole('dialog')
+  await expect(confirmDialog).toBeVisible()
+  await confirmDialog.getByRole('button', { name: 'Discard' }).click()
+
+  await expect
+    .poll(() => fs.readFileSync(path.join(repo, 'long.txt'), 'utf8').includes('line 2 edited'), {
+      timeout: 10_000
+    })
+    .toBe(false)
+  expect(fs.readFileSync(path.join(repo, 'long.txt'), 'utf8')).toContain('line 36 edited')
+  await expect(worktreeDiffLine(page, 'line 36 edited').first()).toBeVisible({ timeout: 10_000 })
 })
 
 test('scrolls a long working-tree diff instead of clipping it', async ({ harness }) => {
@@ -221,16 +255,16 @@ test('scrolls a long working-tree diff instead of clipping it', async ({ harness
   const page = await harness.openRepo(repo)
 
   await openLocalChanges(page)
-  const diffBody = page.getByTestId('diff-body')
-  await expect(diffBody.getByTestId('diff-hunk').first()).toBeVisible({ timeout: 10_000 })
+  await expect(worktreeDiffLine(page, 'line 0').first()).toBeVisible({ timeout: 10_000 })
 
-  const overflows = await diffBody.evaluate(
-    (element) => element.scrollHeight > element.clientHeight + 1
-  )
+  const overflows = await worktreeDiffBody(page)
+    .locator('.scroll-host')
+    .evaluate((element) => element.scrollHeight > element.clientHeight + 1)
   expect(overflows).toBe(true)
 
-  await diffBody.evaluate((element) => {
+  const scrollHost = worktreeDiffBody(page).locator('.scroll-host')
+  await scrollHost.evaluate((element) => {
     element.scrollTop = 400
   })
-  expect(await diffBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  expect(await scrollHost.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
 })

@@ -207,7 +207,7 @@ function applyHunk<GuardError = never>(
   repoPath: string,
   file: string,
   hunkHeader: string,
-  direction: 'stage' | 'unstage',
+  direction: 'stage' | 'unstage' | 'discard',
   guard?: Effect.Effect<void, GuardError>
 ): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | GuardError, RepoSessions> {
   return Effect.gen(function* () {
@@ -223,8 +223,11 @@ function applyHunk<GuardError = never>(
         if (!patch) {
           return yield* Effect.fail(new HunkNotFound())
         }
-        const applyArgs = ['-C', repoPath, 'apply', '--cached', '--whitespace=nowarn']
-        if (direction === 'unstage') {
+        const applyArgs = ['-C', repoPath, 'apply', '--whitespace=nowarn']
+        if (direction !== 'discard') {
+          applyArgs.push('--cached')
+        }
+        if (direction !== 'stage') {
           applyArgs.push('-R')
         }
         applyArgs.push('-')
@@ -252,6 +255,20 @@ export function unstageHunk(
     file,
     hunkHeader,
     'unstage',
+    requireNoOperationForPaths(repoPath, [file])
+  )
+}
+
+export function discardHunk(
+  repoPath: string,
+  file: string,
+  hunkHeader: string
+): Effect.Effect<void, RepoNotOpen | GitError | HunkNotFound | OperationInProgress, RepoSessions> {
+  return applyHunk(
+    repoPath,
+    file,
+    hunkHeader,
+    'discard',
     requireNoOperationForPaths(repoPath, [file])
   )
 }

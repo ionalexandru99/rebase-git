@@ -44,6 +44,7 @@ export { fetchRepo, pullRepo, pushRepo } from './sync'
 export {
   discardAll,
   discardChanges,
+  discardHunk,
   getDiff,
   getStatus,
   stageAll,

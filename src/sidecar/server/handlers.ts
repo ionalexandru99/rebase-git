@@ -200,6 +200,10 @@ export const handlersLayer = SidecarRpcs.toLayer({
         operations.unstageLines(repo, relative, selections)
       )
     ),
+  discardHunk: ({ repoPath, file, hunkHeader }) =>
+    withResolvedRepo(repoPath, (repo) =>
+      withResolvedFile(repo, file, (relative) => operations.discardHunk(repo, relative, hunkHeader))
+    ),
   discardChanges: ({ repoPath, files }) =>
     withResolvedRepo(repoPath, (repo) =>
       withResolvedFiles(repo, files, (relatives) => operations.discardChanges(repo, relatives))

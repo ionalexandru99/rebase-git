@@ -26,6 +26,7 @@ const OPERATION_CACHES = {
   unstageHunk: null,
   stageLines: null,
   unstageLines: null,
+  discardHunk: null,
   discardChanges: ['status', 'diff', 'stash'],
   discardAll: ['status', 'diff', 'stash'],
   mergeBranch: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],

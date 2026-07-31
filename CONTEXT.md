@@ -36,6 +36,10 @@ _Avoid_: fixup, squash (those fold one commit into another; Amend rewrites a sin
 The message-only case of [[Amend]] — nothing staged, HEAD's tree unchanged, only its message replaced. Not a separate operation; the same Amend with an empty stage.
 _Avoid_: edit, rename
 
+**Hunk header identity**:
+A hunk's identity across processes is its raw `@@ -a,b +c,d @@ context` header string, byte for byte. The renderer resolves a hovered diff line to the sidecar's hunk list, and the sidecar re-reads the diff under the repo lock and matches the header exactly before staging, unstaging, or discarding — a stale header is a typed `HunkNotFound`, never a wrong hunk. The `@pierre/diffs` parser exposes the same string as `hunkSpecs` (trailing newline aside), which is what lets both renderers agree without translation.
+_Avoid_: hunk id, hunk index (indexes shift as the diff changes; the header is re-verified against fresh state)
+
 **System auth**:
 Rebase carries no credentials of its own: every remote operation authenticates through the machine's
 own Git setup (SSH agent, `known_hosts`, credential helper). Git runs with prompts suppressed, so a

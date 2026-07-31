@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { clickHunkAction, worktreeDiffLine } from './diff-locators'
 import {
   commitSubjects,
   createFixtureRepo,
@@ -108,9 +109,9 @@ test('drops a single hunk of a last-commit file while amending, keeping the rest
   await amendToggle.click()
 
   await page.getByText('multi.txt').click()
-  const firstHunkDrop = page.getByRole('checkbox', { name: 'Drop hunk' }).first()
-  await expect(firstHunkDrop).toBeVisible({ timeout: 10_000 })
-  await firstHunkDrop.click()
+  await expect(worktreeDiffLine(page, 'A1').first()).toBeVisible({ timeout: 10_000 })
+  await clickHunkAction(page, 'A1', 'Drop hunk')
+  await expect(page.getByText('Dropped from last commit')).toBeVisible({ timeout: 10_000 })
 
   const amendButton = page.getByRole('button', { name: 'Amend', exact: true })
   await expect(amendButton).toBeEnabled()

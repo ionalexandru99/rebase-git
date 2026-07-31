@@ -23,7 +23,7 @@ describe('repoQueryKeys', () => {
     expect(keys.stash).toEqual(repoQueryKeys('/repos/example').stash)
   })
 
-  it('builds diff and hunk-highlight keys inside the repo namespace', () => {
+  it('builds diff keys inside the repo namespace', () => {
     const keys = repoQueryKeys('/repos/example')
 
     expect(keys.diffRoot).toEqual(['repo', '/repos/example', 'diff'])
@@ -36,16 +36,6 @@ describe('repoQueryKeys', () => {
     ])
     expect(keys.diff('src/App.tsx', false)).toEqual(
       repoQueryKeys('/repos/example').diff('src/App.tsx', false)
-    )
-    expect(keys.hunkHighlight('src/App.tsx', '@@ -1,2 +1,2 @@')).toEqual([
-      'repo',
-      '/repos/example',
-      'hunk-highlight',
-      'src/App.tsx',
-      '@@ -1,2 +1,2 @@'
-    ])
-    expect(keys.hunkHighlight('src/App.tsx', '@@ -1,2 +1,2 @@')).toEqual(
-      repoQueryKeys('/repos/example').hunkHighlight('src/App.tsx', '@@ -1,2 +1,2 @@')
     )
   })
 

@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { RpcTest } from '@effect/rpc'
 import { GitError, HunkNotFound, RepoNotOpen } from '@shared/git-rpc-errors'
-import { SidecarRpcs, StageHunk, StageLines } from '@shared/rpc'
+import { DiscardHunk, SidecarRpcs, StageHunk, StageLines } from '@shared/rpc'
 import { Effect, Either, Schema } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { handlersLayer } from '../handlers'
@@ -14,6 +14,21 @@ const decode = <A, I>(schema: Schema.Schema<A, I>, value: unknown) =>
 describe('StageHunk RPC payload schema', () => {
   it('rejects a payload that is missing its hunkHeader', () => {
     const schema = StageHunk.payloadSchema
+    expect(
+      Either.isRight(
+        decode(schema, { repoPath: '/repo', file: 'a.txt', hunkHeader: '@@ -1 +1 @@' })
+      )
+    ).toBe(true)
+    expect(Either.isLeft(decode(schema, { repoPath: '/repo', file: 'a.txt' }))).toBe(true)
+    expect(
+      Either.isLeft(decode(schema, { repoPath: '/repo', file: 'a.txt', hunkHeader: '   ' }))
+    ).toBe(true)
+  })
+})
+
+describe('DiscardHunk RPC payload schema', () => {
+  it('rejects a payload that is missing its hunkHeader', () => {
+    const schema = DiscardHunk.payloadSchema
     expect(
       Either.isRight(
         decode(schema, { repoPath: '/repo', file: 'a.txt', hunkHeader: '@@ -1 +1 @@' })
@@ -143,6 +158,14 @@ describe('staging RPC handlers', () => {
       }).pipe(Effect.scoped, Effect.provide(handlersLayer))
     )
 
+  const discardHunk = (payload: { repoPath: string; file: string; hunkHeader: string }) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const client = yield* RpcTest.makeClient(SidecarRpcs)
+        return yield* Effect.either(client.discardHunk(payload))
+      }).pipe(Effect.scoped, Effect.provide(handlersLayer))
+    )
+
   const discardChanges = (payload: { repoPath: string; files: string[] }) =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -168,6 +191,7 @@ describe('staging RPC handlers', () => {
       unstageAll({ repoPath: missing, files: ['a.txt'] }),
       stageHunk({ repoPath: missing, file: 'a.txt', hunkHeader: '@@ -1 +1 @@' }),
       unstageHunk({ repoPath: missing, file: 'a.txt', hunkHeader: '@@ -1 +1 @@' }),
+      discardHunk({ repoPath: missing, file: 'a.txt', hunkHeader: '@@ -1 +1 @@' }),
       discardChanges({ repoPath: missing, files: ['a.txt'] }),
       discardAll({ repoPath: missing })
     ])
@@ -188,6 +212,7 @@ describe('staging RPC handlers', () => {
       unstageAll({ repoPath: existingDir, files: ['a.txt'] }),
       stageHunk({ repoPath: existingDir, file: 'a.txt', hunkHeader: '@@ -1 +1 @@' }),
       unstageHunk({ repoPath: existingDir, file: 'a.txt', hunkHeader: '@@ -1 +1 @@' }),
+      discardHunk({ repoPath: existingDir, file: 'a.txt', hunkHeader: '@@ -1 +1 @@' }),
       discardChanges({ repoPath: existingDir, files: ['a.txt'] }),
       discardAll({ repoPath: existingDir })
     ])
@@ -204,6 +229,7 @@ describe('staging RPC handlers', () => {
       stageFile({ repoPath: existingDir, file: '../escape' }),
       stageAll({ repoPath: existingDir, files: ['../escape'] }),
       stageHunk({ repoPath: existingDir, file: '../escape', hunkHeader: '@@ -1 +1 @@' }),
+      discardHunk({ repoPath: existingDir, file: '../escape', hunkHeader: '@@ -1 +1 @@' }),
       discardChanges({ repoPath: existingDir, files: ['../escape'] })
     ])
     for (const result of results) {

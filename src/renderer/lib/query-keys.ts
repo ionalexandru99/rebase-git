@@ -18,9 +18,7 @@ const buildRepoQueryKeys = (root: RepoQueryRoot) => ({
       ? ([...root, 'diff', file, staged] as const)
       : ([...root, 'diff', file, staged, range] as const),
   commitDetail: (sha: string) => [...root, 'commit-detail', sha] as const,
-  commitDiff: (sha: string, file: string) => [...root, 'commit-diff', sha, file] as const,
-  hunkHighlight: (file: string, hunkKey: string) =>
-    [...root, 'hunk-highlight', file, hunkKey] as const
+  commitDiff: (sha: string, file: string) => [...root, 'commit-diff', sha, file] as const
 })
 
 export type RepoQueryKeys = ReturnType<typeof buildRepoQueryKeys>
