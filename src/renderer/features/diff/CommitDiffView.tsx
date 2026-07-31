@@ -1,4 +1,5 @@
 import { FileDiff, Virtualizer } from '@pierre/diffs/react'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { FileDiffIcon } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import { DIFF_UNSAFE_CSS, diffThemeStyle } from '@/features/diff/diff-theme'
@@ -51,11 +52,10 @@ export function CommitDiffView(props: CommitDiffViewProps) {
     [diffStyle]
   )
 
-  const hunks = diffQuery.data?.diff.hunks ?? []
   const totals = useMemo(() => {
     let adds = 0
     let dels = 0
-    for (const hunk of hunks) {
+    for (const hunk of patch === undefined ? [] : parseUnifiedDiff(patch).hunks) {
       for (const line of hunk.lines) {
         if (line.kind === 'add') {
           adds++
@@ -65,7 +65,7 @@ export function CommitDiffView(props: CommitDiffViewProps) {
       }
     }
     return { adds, dels }
-  }, [hunks])
+  }, [patch])
 
   const parsedFiles = parsed?.kind === 'parsed' ? parsed.files : []
   const hasParsedContent = parsedFiles.some((file) => file.hunks.length > 0)

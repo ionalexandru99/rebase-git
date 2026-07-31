@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, getDiff, openRepo } from '../index'
@@ -49,12 +50,12 @@ describe('getDiff raw patch text', () => {
   it('returns the raw patch for a working-tree change', async () => {
     write('sample.txt', 'alpha\nBRAVO\nCHARLIE\n')
 
-    const { patch, diff } = await runOp(getDiff(repoDir, 'sample.txt', false))
+    const { patch } = await runOp(getDiff(repoDir, 'sample.txt', false))
 
     expect(patch).toContain('diff --git a/sample.txt b/sample.txt')
     expect(patch).toContain('@@ ')
     expect(patch).toContain('+CHARLIE')
-    expect(diff.hunks).toHaveLength(1)
+    expect(parseUnifiedDiff(patch).hunks).toHaveLength(1)
 
     git('checkout', '--', 'sample.txt')
   })
@@ -92,19 +93,19 @@ describe('getDiff raw patch text', () => {
   })
 
   it('returns an empty patch for a clean file', async () => {
-    const { patch, diff } = await runOp(getDiff(repoDir, 'sample.txt', false))
+    const { patch } = await runOp(getDiff(repoDir, 'sample.txt', false))
 
     expect(patch).toBe('')
-    expect(diff.hunks).toEqual([])
+    expect(parseUnifiedDiff(patch).hunks).toEqual([])
   })
 
   it('keeps the binary flag as the only binary signal, with the patch alongside it', async () => {
     fs.writeFileSync(path.join(repoDir, 'logo.png'), Buffer.from([9, 8, 7, 0, 6]))
 
-    const { patch, diff } = await runOp(getDiff(repoDir, 'logo.png', false))
+    const { patch, binary } = await runOp(getDiff(repoDir, 'logo.png', false))
 
-    expect(diff.binary).toBe(true)
-    expect(diff.hunks).toEqual([])
+    expect(binary).toBe(true)
+    expect(parseUnifiedDiff(patch).hunks).toEqual([])
     expect(patch).toContain('Binary files ')
 
     git('checkout', '--', 'logo.png')

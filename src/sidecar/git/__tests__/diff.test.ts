@@ -1,6 +1,6 @@
 import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import { describe, expect, it } from 'vitest'
-import { buildHunkPatch, buildSelectedLinesPatch, parseUnifiedDiff, toFileDiff } from '../diff'
+import { buildHunkPatch, buildSelectedLinesPatch, parseUnifiedDiff } from '../diff'
 
 const MODIFIED_DIFF = `diff --git a/src/app.ts b/src/app.ts
 index 1111111..2222222 100644
@@ -144,18 +144,6 @@ describe('buildHunkPatch', () => {
 
   it('returns null when the diff is empty', () => {
     expect(buildHunkPatch(parseUnifiedDiff(''), '@@ -1,1 +1,1 @@')).toBeNull()
-  })
-})
-
-describe('toFileDiff', () => {
-  it('strips raw hunk text and carries file metadata', () => {
-    const parsed = parseUnifiedDiff(MODIFIED_DIFF)
-    const fileDiff = toFileDiff('src/app.ts', parsed)
-
-    expect(fileDiff.filePath).toBe('src/app.ts')
-    expect(fileDiff.binary).toBe(false)
-    expect(fileDiff.hunks).toHaveLength(2)
-    expect('raw' in fileDiff.hunks[0]).toBe(false)
   })
 })
 

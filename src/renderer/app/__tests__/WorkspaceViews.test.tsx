@@ -156,11 +156,7 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
   setupLogStream()
   mockStatus()
-  sidecarMock.getDiff.mockResolvedValue({
-    _tag: 'Ok',
-    patch: '',
-    diff: { filePath: 'a.ts', binary: false, hunks: [] }
-  })
+  sidecarMock.getDiff.mockResolvedValue({ _tag: 'Ok', patch: '', binary: false })
 })
 
 afterEach(() => {

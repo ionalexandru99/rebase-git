@@ -1,12 +1,12 @@
-import type { DiffHunk } from '@shared/schemas/git'
+import type { ParsedHunk } from '@shared/unified-diff'
 
 export type DiffSide = 'additions' | 'deletions'
 
 export function hunkAtLine(
-  hunks: readonly DiffHunk[],
+  hunks: readonly ParsedHunk[],
   side: DiffSide,
   lineNumber: number
-): DiffHunk | null {
+): ParsedHunk | null {
   for (const hunk of hunks) {
     const start = side === 'additions' ? hunk.newStart : hunk.oldStart
     const count = side === 'additions' ? hunk.newCount : hunk.oldCount

@@ -1,7 +1,7 @@
 import { Either, Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
 import { NonNaNNumber } from '../codec'
-import { CommitSummarySchema, DiffHunkSchema, GitLogSchema } from '../schemas/git'
+import { CommitSummarySchema, GitLogSchema } from '../schemas/git'
 import { PersistedTabsSchema, SidebarPrefsSchema, StashEntrySchema } from '../schemas/ipc'
 
 const rejects = <A, I>(schema: Schema.Schema<A, I>, value: unknown): boolean =>
@@ -46,18 +46,6 @@ describe('wire numeric fields reject NaN', () => {
     expect(accepts(GitLogSchema, { all: [], loadedCount: 0 })).toBe(true)
     expect(rejects(GitLogSchema, { all: [], loadedCount: NaN })).toBe(true)
     expect(rejects(GitLogSchema, { all: [], total: 0 })).toBe(true)
-  })
-
-  it('DiffHunkSchema counts', () => {
-    const hunk = {
-      header: '@@ -1 +1 @@',
-      oldStart: 1,
-      oldCount: NaN,
-      newStart: 1,
-      newCount: 1,
-      lines: []
-    }
-    expect(rejects(DiffHunkSchema, hunk)).toBe(true)
   })
 
   it('CommitSummarySchema summary counts', () => {

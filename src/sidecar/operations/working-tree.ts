@@ -1,12 +1,11 @@
 import type { HunkLineSelection } from '@shared/rpc'
-import type { FileDiff, GitStatus } from '@shared/schemas/git'
+import type { GitStatus } from '@shared/schemas/git'
 import { Effect, Either } from 'effect'
 import {
   buildHunkPatch,
   buildSelectedLinesPatch,
   type ParsedFileDiff,
-  parseUnifiedDiff,
-  toFileDiff
+  parseUnifiedDiff
 } from '../git/diff'
 import { GitError, HunkNotFound, type OperationInProgress, type RepoNotOpen } from '../git/errors'
 import { isValidPathArg, literalPathspec, literalPathspecs } from '../git/pathspec'
@@ -189,7 +188,7 @@ export function getDiff(
   file: string,
   staged: boolean,
   scope?: DiffScope
-): Effect.Effect<{ diff: FileDiff; patch: string }, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<{ patch: string; binary: boolean }, RepoNotOpen | GitError, RepoSessions> {
   return Effect.gen(function* () {
     yield* requireOpen(repoPath)
     if (scope?.range !== undefined && !isSafeRefArg(scope.range)) {
@@ -199,7 +198,7 @@ export function getDiff(
       return yield* Effect.fail(new GitError({ message: `unsafe diff commit: ${scope.commit}` }))
     }
     const { raw, parsed } = yield* tryGit(() => readDiff(repoPath, file, staged, scope))
-    return { diff: toFileDiff(file, parsed), patch: raw }
+    return { patch: raw, binary: parsed.binary }
   })
 }
 

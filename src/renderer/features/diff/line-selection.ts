@@ -1,7 +1,7 @@
 import { DIFFS_TAG_NAME } from '@pierre/diffs'
 import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import type { HunkLineSelection } from '@shared/rpc'
-import type { DiffHunk } from '@shared/schemas/git'
+import type { ParsedHunk } from '@shared/unified-diff'
 
 export interface SelectedChangeLine {
   kind: 'add' | 'del'
@@ -39,7 +39,7 @@ export function sweepSelectedChangeLines(root: ParentNode): SelectedChangeLine[]
 }
 
 export function mapSelectionToHunkSelections(
-  hunks: readonly DiffHunk[],
+  hunks: readonly ParsedHunk[],
   patch: string,
   lines: readonly SelectedChangeLine[]
 ): HunkLineSelection[] {

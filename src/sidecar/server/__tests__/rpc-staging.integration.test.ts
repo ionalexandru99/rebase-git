@@ -6,6 +6,7 @@ import { RpcTest } from '@effect/rpc'
 import { HunkNotFound } from '@shared/git-rpc-errors'
 import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import { SidecarRpcs } from '@shared/rpc'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -117,8 +118,10 @@ describe('staging through the RPC group against a real repo', () => {
     write('tracked.txt', 'base\nfirst-added\nsecond-added\n')
 
     try {
-      const { diff, patch } = await runOp(getDiff(repoDir, 'tracked.txt', false))
-      const hunk = diff.hunks[0]
+      const { patch } = await runOp(getDiff(repoDir, 'tracked.txt', false))
+      const hunks = parseUnifiedDiff(patch).hunks
+      expect(hunks).toHaveLength(1)
+      const hunk = hunks[0]
       const lineIndexes = hunk.lines.flatMap((line, index) =>
         line.kind === 'add' && line.text === 'first-added' ? [index] : []
       )
@@ -175,13 +178,14 @@ describe('staging through the RPC group against a real repo', () => {
     write('tracked.txt', 'changed\n')
 
     try {
-      const { diff } = await runOp(getDiff(repoDir, 'tracked.txt', false))
-      expect(diff.hunks).toHaveLength(1)
+      const { patch } = await runOp(getDiff(repoDir, 'tracked.txt', false))
+      const hunks = parseUnifiedDiff(patch).hunks
+      expect(hunks).toHaveLength(1)
 
       const result = await discardHunkThroughGroup({
         repoPath: repoDir,
         file: 'tracked.txt',
-        hunkHeader: diff.hunks[0].header
+        hunkHeader: hunks[0].header
       })
 
       expect(Either.isRight(result)).toBe(true)

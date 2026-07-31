@@ -3,11 +3,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { GIT_EMPTY_TREE_OID } from '@shared/git-constants'
+import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, getDiff, openRepo } from '../index'
 
+const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 let repoDir: string
 
 function git(...args: string[]): string {
@@ -48,8 +50,8 @@ describe('getDiff with a commit range', () => {
   it("shows a committed file's change across HEAD~1..HEAD", async () => {
     const diff = await runOp(getDiff(repoDir, 'sample.txt', false, { range: 'HEAD~1..HEAD' }))
 
-    expect(diff.diff.hunks).toHaveLength(1)
-    expect(diff.diff.hunks[0].lines.some((line) => line.text === 'line 1 EDITED')).toBe(true)
+    expect(hunksOf(diff)).toHaveLength(1)
+    expect(hunksOf(diff)[0].lines.some((line) => line.text === 'line 1 EDITED')).toBe(true)
   })
 
   it('lists a root commit as all additions against the empty tree', async () => {
@@ -57,8 +59,8 @@ describe('getDiff with a commit range', () => {
       getDiff(repoDir, 'sample.txt', false, { range: `${GIT_EMPTY_TREE_OID}..HEAD~1` })
     )
 
-    expect(diff.diff.hunks).toHaveLength(1)
-    const added = diff.diff.hunks[0].lines.filter((line) => line.kind === 'add')
+    expect(hunksOf(diff)).toHaveLength(1)
+    const added = hunksOf(diff)[0].lines.filter((line) => line.kind === 'add')
     expect(added.map((line) => line.text)).toEqual(baseLines)
   })
 
@@ -67,9 +69,9 @@ describe('getDiff with a commit range', () => {
 
     const diff = await runOp(getDiff(repoDir, 'fresh.txt', false))
 
-    expect(diff.diff.hunks).toHaveLength(1)
-    expect(diff.diff.hunks[0].lines.map((line) => line.text)).toEqual(['alpha', 'beta'])
-    expect(diff.diff.hunks[0].lines.every((line) => line.kind === 'add')).toBe(true)
+    expect(hunksOf(diff)).toHaveLength(1)
+    expect(hunksOf(diff)[0].lines.map((line) => line.text)).toEqual(['alpha', 'beta'])
+    expect(hunksOf(diff)[0].lines.every((line) => line.kind === 'add')).toBe(true)
 
     fs.rmSync(path.join(repoDir, 'fresh.txt'))
   })

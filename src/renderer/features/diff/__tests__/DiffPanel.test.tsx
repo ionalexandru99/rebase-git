@@ -115,35 +115,7 @@ function fixtureDiff(file: string, hunks: FixtureHunk[]) {
     `+++ b/${file}`,
     ...hunks.flatMap((hunk) => [fixtureHeader(hunk), ...hunk.body])
   ].join('\n')}\n`
-  return {
-    _tag: 'Ok' as const,
-    patch,
-    diff: {
-      filePath: file,
-      binary: false,
-      hunks: hunks.map((hunk) => {
-        let oldLine = hunk.oldStart
-        let newLine = hunk.newStart
-        return {
-          header: fixtureHeader(hunk),
-          oldStart: hunk.oldStart,
-          oldCount: hunk.oldCount,
-          newStart: hunk.newStart,
-          newCount: hunk.newCount,
-          lines: hunk.body.map((raw) => {
-            const text = raw.slice(1)
-            if (raw.startsWith('+')) {
-              return { kind: 'add' as const, text, oldLine: null, newLine: newLine++ }
-            }
-            if (raw.startsWith('-')) {
-              return { kind: 'del' as const, text, oldLine: oldLine++, newLine: null }
-            }
-            return { kind: 'context' as const, text, oldLine: oldLine++, newLine: newLine++ }
-          })
-        }
-      })
-    }
-  }
+  return { _tag: 'Ok' as const, patch, binary: false }
 }
 
 const firstHunk: FixtureHunk = {
@@ -358,8 +330,8 @@ describe('DiffPanel rendering', () => {
   it('renders a binary notice instead of a diff', async () => {
     sidecarMock.getDiff.mockResolvedValue({
       _tag: 'Ok',
-      patch: '',
-      diff: { filePath: 'logo.png', binary: true, hunks: [] }
+      patch: 'Binary files a/logo.png and b/logo.png differ\n',
+      binary: true
     })
     await renderDiffPanel({ file: 'logo.png', group: 'unstaged' })
 
