@@ -42,6 +42,36 @@ describe('useDraggablePane persistence', () => {
     await waitFor(() => expect(undersized.result.current.size).toBe(200))
   })
 
+  it('keeps an in-flight drag instead of applying a late-arriving persisted size', async () => {
+    let resolveLoad: (state: { open: boolean; size: number }) => void = () => {}
+    const load = () =>
+      new Promise<{ open: boolean; size: number }>((resolve) => {
+        resolveLoad = resolve
+      })
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load })
+    )
+
+    act(() => {
+      result.current.onResizeStart(new MouseEvent('mousedown', { clientX: 0 }))
+    })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 100 }))
+    })
+    await act(async () => {
+      resolveLoad({ open: true, size: 300 })
+      await Promise.resolve()
+    })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mouseup'))
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.size).toBe(356)
+  })
+
   it('reports a failed load and keeps the default size', async () => {
     const failure = new Error('prefs unavailable')
     const load = async () => {

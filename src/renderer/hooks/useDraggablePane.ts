@@ -47,6 +47,7 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
   const [size, setSize] = useState(defaultSize)
   const dragSize = useRef(defaultSize)
   const dragTeardown = useRef<(() => void) | null>(null)
+  const userAdjusted = useRef(false)
 
   useEffect(() => {
     if (!load) {
@@ -55,7 +56,7 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
     let cancelled = false
     load()
       .then((loaded) => {
-        if (cancelled) {
+        if (cancelled || userAdjusted.current) {
           return
         }
         const clamped = Math.max(min, Math.min(max, loaded.size))
@@ -89,11 +90,13 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
   }, [])
 
   const setOpen = (next: boolean) => {
+    userAdjusted.current = true
     setIsOpen(next)
     persist(next, dragSize.current)
   }
 
   const reset = useCallback(() => {
+    userAdjusted.current = true
     dragSize.current = defaultSize
     setSize(defaultSize)
     setIsOpen(true)
@@ -107,6 +110,7 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
 
   const onResizeStart = (event: MouseEvent) => {
     event.preventDefault()
+    userAdjusted.current = true
     const vertical = axis === 'vertical'
     const startPosition = vertical ? event.clientY : event.clientX
     const startSize = size
