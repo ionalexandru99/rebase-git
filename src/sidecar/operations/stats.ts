@@ -6,7 +6,7 @@ import { Effect } from 'effect'
 import { GitError, type RepoNotOpen } from '../git/errors'
 import { normalizeRepoPath } from '../git/instances'
 import { isSafeRefArg } from '../git/ref-args'
-import { runGit } from '../git/spawn'
+import { type RunGitOptions, startGit } from '../git/spawn'
 import { type RepoSessions, withSessionScope } from '../session/sessions'
 import { requireOpen, tryGit } from './helpers'
 
@@ -40,6 +40,23 @@ function sumNumstat(lines: string[]): WorkingTreeStats {
 
 const BINARY_SNIFF_BYTES = 8_000
 const FILE_READ_BUFFER_BYTES = 64 * 1_024
+
+function runSessionGit(args: string[], options?: RunGitOptions) {
+  return Effect.gen(function* () {
+    const running = yield* Effect.acquireRelease(
+      Effect.sync(() => startGit(args, options)),
+      (process) => Effect.promise(() => process.terminate()).pipe(Effect.orDie)
+    )
+    const result = yield* tryGit(() => running.result)
+    const okExitCodes = options?.okExitCodes ?? [0]
+    if (result.code !== null && okExitCodes.includes(result.code)) {
+      return result.stdout
+    }
+    return yield* Effect.fail(
+      new GitError({ message: result.stderr.trim() || `git exited with code ${result.code}` })
+    )
+  })
+}
 
 function countTextFileLines(filePath: string) {
   return Effect.gen(function* () {
@@ -125,8 +142,8 @@ export function getCommitStats(
   repoPath: string,
   shas: readonly string[]
 ): Effect.Effect<{ stats: CommitStats }, RepoNotOpen | GitError, RepoSessions> {
+  const key = normalizeRepoPath(repoPath)
   return Effect.gen(function* () {
-    const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
     if (shas.length > MAX_COMMIT_STATS_BATCH) {
       return yield* Effect.fail(
@@ -140,10 +157,15 @@ export function getCommitStats(
     if (shas.length === 0) {
       return { stats: [] }
     }
-    const output = yield* tryGit(() =>
-      runGit(['-C', key, ...BATCH_ARGS], { stdin: `${shas.join('\n')}\n` })
+    return yield* withSessionScope(
+      key,
+      Effect.gen(function* () {
+        const output = yield* runSessionGit(['-C', key, ...BATCH_ARGS], {
+          stdin: `${shas.join('\n')}\n`
+        })
+        return { stats: parseCommitStats(output) }
+      })
     )
-    return { stats: parseCommitStats(output) }
   })
 }
 
@@ -156,25 +178,23 @@ export function getWorkingTreeStats(
     return yield* withSessionScope(
       key,
       Effect.gen(function* () {
-        const head = yield* tryGit(() =>
-          runGit(['-C', key, 'rev-parse', '--verify', '--quiet', 'HEAD'], { okExitCodes: [0, 1] })
-        )
+        const head = yield* runSessionGit(['-C', key, 'rev-parse', '--verify', '--quiet', 'HEAD'], {
+          okExitCodes: [0, 1]
+        })
         const hasHead = head.trim().length > 0
         const trackedOutput = hasHead
-          ? yield* tryGit(() => runGit(['-C', key, 'diff', '--numstat', 'HEAD', '--']))
+          ? yield* runSessionGit(['-C', key, 'diff', '--numstat', 'HEAD', '--'])
           : ''
-        const listedFiles = yield* tryGit(() =>
-          runGit([
-            '-C',
-            key,
-            'ls-files',
-            '-z',
-            ...(hasHead ? [] : ['--cached']),
-            '--others',
-            '--exclude-standard',
-            '--'
-          ])
-        )
+        const listedFiles = yield* runSessionGit([
+          '-C',
+          key,
+          'ls-files',
+          '-z',
+          ...(hasHead ? [] : ['--cached']),
+          '--others',
+          '--exclude-standard',
+          '--'
+        ])
         const worktreeAdditions = yield* countWorktreeFileLines(
           key,
           listedFiles.split('\0').filter(Boolean)
