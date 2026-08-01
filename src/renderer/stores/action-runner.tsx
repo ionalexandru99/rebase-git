@@ -1,3 +1,4 @@
+import { PULL_REAPPLY_CONFLICTS_MESSAGE } from '@shared/git-constants'
 import type { LostCommit } from '@shared/git-rpc-errors'
 import { AmendCommit, Commit, Pull, Push } from '@shared/rpc'
 import { useMutation } from '@tanstack/react-query'
@@ -275,9 +276,16 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
         return { kind: 'diverged' }
       }
       if (response._tag === 'Conflict') {
-        toast.warning('Pull hit conflicts', {
-          description: 'Resolve the conflicted files, then continue or abort.'
-        })
+        if (response.message === PULL_REAPPLY_CONFLICTS_MESSAGE) {
+          toast.warning('Pulled, but your uncommitted changes conflicted', {
+            description:
+              'Resolve the conflicted files, then drop the kept stash — your original changes are safe in it.'
+          })
+        } else {
+          toast.warning('Pull hit conflicts', {
+            description: 'Resolve the conflicted files, then continue or abort.'
+          })
+        }
         return { kind: 'conflict' }
       }
       if (response._tag === 'OperationInProgress') {

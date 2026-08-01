@@ -1,3 +1,4 @@
+import { PULL_REAPPLY_CONFLICTS_MESSAGE } from '@shared/git-constants'
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import { act, render, waitFor } from '@testing-library/react'
 import { StrictMode, useState } from 'react'
@@ -1676,6 +1677,26 @@ describe('GitStoreProvider — push and pull', () => {
     expect(outcome).toEqual({ kind: 'conflict' })
     expect(toast.warning).toHaveBeenCalledWith('Pull hit conflicts', {
       description: 'Resolve the conflicted files, then continue or abort.'
+    })
+    expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
+  })
+
+  it('pull explains the kept stash when reapplying uncommitted changes conflicted', async () => {
+    sidecarMock.pullRepo.mockResolvedValue({
+      _tag: 'Conflict',
+      message: PULL_REAPPLY_CONFLICTS_MESSAGE
+    })
+    const { git } = renderGitStore()
+    await git.openRepo(repoPath)
+    await waitFor(() => expect(git.state.repoPath).toBe(repoPath))
+
+    sidecarMock.getStatus.mockClear()
+    const outcome = await git.pull()
+
+    expect(outcome).toEqual({ kind: 'conflict' })
+    expect(toast.warning).toHaveBeenCalledWith('Pulled, but your uncommitted changes conflicted', {
+      description:
+        'Resolve the conflicted files, then drop the kept stash — your original changes are safe in it.'
     })
     expect(sidecarMock.getStatus).toHaveBeenCalledWith(repoPath)
   })

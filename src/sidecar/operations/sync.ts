@@ -1,3 +1,4 @@
+import { PULL_REAPPLY_CONFLICTS_MESSAGE } from '@shared/git-constants'
 import { Effect } from 'effect'
 import { applyNonInteractiveGitEnv } from '../git/environment'
 import {
@@ -256,12 +257,18 @@ export type PullStrategy = 'rebase' | 'merge'
 
 function pullArgsFor(strategy: PullStrategy | undefined): string[] {
   if (strategy === 'rebase') {
-    return ['pull', '--rebase']
+    return ['pull', '--rebase', '--autostash']
   }
   if (strategy === 'merge') {
-    return ['-c', 'pull.rebase=false', 'pull', '--no-rebase', '--no-edit']
+    return ['-c', 'pull.rebase=false', 'pull', '--no-rebase', '--no-edit', '--autostash']
   }
-  return ['-c', 'pull.rebase=false', 'pull', '--ff-only']
+  return ['-c', 'pull.rebase=false', 'pull', '--ff-only', '--autostash']
+}
+
+function hasUnmergedFiles(key: string): Promise<boolean> {
+  return runGitStdout(key, ['diff', '--name-only', '--diff-filter=U']).then(
+    (output) => output !== null && output.length > 0
+  )
 }
 
 export function pullRepo(
@@ -283,6 +290,10 @@ export function pullRepo(
           fetchSemaphoreFor(key).withPermits(() => runGitCommand(key, pullArgsFor(strategy)))
         )
         if (result.ok) {
+          const reapplyConflicted = yield* Effect.promise(() => hasUnmergedFiles(key))
+          if (reapplyConflicted) {
+            return yield* Effect.fail(new Conflict({ message: PULL_REAPPLY_CONFLICTS_MESSAGE }))
+          }
           return
         }
         if (strategy === undefined) {

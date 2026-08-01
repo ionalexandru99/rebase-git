@@ -86,17 +86,38 @@ async function pullFailure(repoPath: string): Promise<{ _tag: string; message: s
 }
 
 describe('pullRepo with local changes in the way', () => {
-  it('refuses to overwrite an uncommitted edit to a file the remote also changed', async () => {
+  it('autostashes an uncommitted edit the remote also changed, surfacing the reapply conflict', async () => {
     await withPullFixture(async (fixture) => {
       writeFile(fixture.path, 'a.txt', 'a mine\n')
 
       const error = await pullFailure(fixture.path)
 
-      expect(error._tag).toBe('GitError')
-      expect(error.message).toMatch(/would be overwritten/i)
-      expect(error.message).toContain('a.txt')
-      expect(readFile(fixture.path, 'a.txt')).toBe('a mine\n')
-      expect(sha(fixture.path, 'HEAD')).toBe(fixture.base)
+      expect(error._tag).toBe('Conflict')
+      expect(sha(fixture.path, 'HEAD')).toBe(fixture.remoteTip)
+      const { status } = await runOp(getStatus(fixture.path))
+      expect(status.conflicted).toEqual(['a.txt'])
+      expect(status.operation).toBeUndefined()
+      expect(readFile(fixture.path, 'a.txt')).toContain('a mine')
+      expect(readFile(fixture.path, 'a.txt')).toContain('a upstream')
+      expect(run(fixture.path, ['stash', 'list'])).toContain('autostash')
+    })
+  })
+
+  it('autostashes and reapplies an unrelated uncommitted edit across a rebase pull', async () => {
+    await withPullFixture(async (fixture) => {
+      writeFile(fixture.path, 'b.txt', 'b mine\n')
+      run(fixture.path, ['commit', '-am', 'local work'])
+      writeFile(fixture.path, 'b.txt', 'b dirty\n')
+
+      await runOp(pullRepo(fixture.path, 'rebase'))
+
+      expect(sha(fixture.path, 'HEAD~1')).toBe(fixture.remoteTip)
+      expect(readFile(fixture.path, 'a.txt')).toBe('a upstream\n')
+      expect(readFile(fixture.path, 'b.txt')).toBe('b dirty\n')
+      const { status } = await runOp(getStatus(fixture.path))
+      expect(status.modified).toEqual(['b.txt'])
+      expect(status.conflicted).toEqual([])
+      expect(status.operation).toBeUndefined()
     })
   })
 
