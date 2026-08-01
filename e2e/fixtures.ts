@@ -531,6 +531,25 @@ export function removeFixturePaths(
   }
 }
 
+interface TestFixturePathCleanup {
+  remove: (paths: string[]) => void
+  release: (paths: string[]) => void
+  defer: (paths: string[]) => void
+}
+
+export function finalizeTestFixturePaths(
+  paths: string[],
+  cleanup: TestFixturePathCleanup,
+  platform: NodeJS.Platform = process.platform
+): void {
+  if (platform === 'win32') {
+    cleanup.defer(paths)
+    return
+  }
+  cleanup.remove(paths)
+  cleanup.release(paths)
+}
+
 export async function verifyReposClosed(
   page: Page,
   repos: string[],
@@ -924,8 +943,11 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           ],
           closeRepos: () => verifyReposClosed(sharedApp.page, trackedRepos),
           removeFixturePaths: () => {
-            removeFixturePaths(trackedRepos)
-            sharedApp.untrackRepos(trackedRepos)
+            finalizeTestFixturePaths(trackedRepos, {
+              remove: removeFixturePaths,
+              release: sharedApp.untrackRepos,
+              defer: sharedApp.deferRepoCleanup
+            })
           }
         }
       )

@@ -3,6 +3,7 @@ import {
   createFixtureRepo,
   createFixturePathRegistry,
   expect,
+  finalizeTestFixturePaths,
   findUnexplainedFailureToasts,
   findToastMatch,
   removeFixturePaths,
@@ -42,6 +43,38 @@ test('failed test repos defer removal without cascading into worker closure chec
 
   expect(registry.pathsToClose()).toEqual([])
   expect(registry.pathsToRemove()).toEqual(['failed'])
+})
+
+test('Windows defers test repo deletion until the worker app has closed', () => {
+  const calls: string[] = []
+
+  finalizeTestFixturePaths(
+    ['repo'],
+    {
+      remove: () => calls.push('remove'),
+      release: () => calls.push('release'),
+      defer: () => calls.push('defer')
+    },
+    'win32'
+  )
+
+  expect(calls).toEqual(['defer'])
+})
+
+test('non-Windows test repos are removed and released immediately', () => {
+  const calls: string[] = []
+
+  finalizeTestFixturePaths(
+    ['repo'],
+    {
+      remove: () => calls.push('remove'),
+      release: () => calls.push('release'),
+      defer: () => calls.push('defer')
+    },
+    'linux'
+  )
+
+  expect(calls).toEqual(['remove', 'release'])
 })
 
 test('toast matching resets stateful regular expressions', () => {
