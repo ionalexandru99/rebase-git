@@ -226,6 +226,7 @@ export function DiffPanel(props: DiffPanelProps) {
         setLineSelection(null)
         return
       }
+      setLineSelection(null)
       const file = selectedFile
       const staged = showsStagedSide
       const patchKey = currentPatchKey

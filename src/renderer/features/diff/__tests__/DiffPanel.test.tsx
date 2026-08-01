@@ -642,6 +642,42 @@ describe('DiffPanel line selection', () => {
     expect(screen.getByRole('button', { name: 'Stage 1 selected line' })).toBeInTheDocument()
   })
 
+  it('drops the previous selection as soon as a new sweep starts', async () => {
+    pierreControl.selectedRows = [{ line: 1, type: 'change-addition', index: '1,0' }]
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+    await screen.findByTestId('pierre-file-diff')
+    await endLineSelection({ start: 1, end: 1 })
+    expect(screen.getByRole('button', { name: 'Stage 1 selected line' })).toBeInTheDocument()
+
+    const latest = pierreControl.captured[pierreControl.captured.length - 1]
+    const options = latest?.options as
+      | { onLineSelectionEnd?: (range: { start: number; end: number } | null) => void }
+      | undefined
+    const diffNodes = screen.getAllByTestId('pierre-file-diff')
+    const host = diffNodes[diffNodes.length - 1].querySelector('diffs-container')
+    if (!host) {
+      throw new Error('diffs host missing')
+    }
+    act(() => {
+      host.querySelector('[data-selected-line]')?.remove()
+      options?.onLineSelectionEnd?.({ start: 29, end: 29 })
+    })
+
+    expect(screen.queryByRole('button', { name: 'Stage 1 selected line' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      const row = document.createElement('div')
+      row.setAttribute('data-selected-line', '')
+      row.setAttribute('data-line', '29')
+      row.setAttribute('data-line-type', 'change-addition')
+      row.setAttribute('data-line-index', '6,4')
+      host.appendChild(row)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Stage 1 selected line' })).toBeInTheDocument()
+    })
+  })
+
   it('waits for selection marks that the library paints frames after selection end', async () => {
     pierreControl.selectedRows = []
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
