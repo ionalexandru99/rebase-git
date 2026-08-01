@@ -21,7 +21,7 @@ jobs:
           node-version-file: package.json
 
       - name: Enable pnpm
-        run: npm install --global pnpm@11.2.2
+        run: corepack enable pnpm
 
       - name: Resolve pnpm store
         id: pnpm-store
@@ -58,7 +58,7 @@ jobs:
           node-version-file: package.json
 
       - name: Enable pnpm
-        run: npm install --global pnpm@11.2.2
+        run: corepack enable pnpm
 
       - name: Resolve pnpm store
         id: pnpm-store
@@ -83,6 +83,38 @@ jobs:
       - name: Main-process integration tests
         run: pnpm test:main:integration
 
+  test-sidecar:
+    name: Sidecar tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Resolve pnpm store
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Sidecar and integration tests
         run: pnpm test:sidecar
 
@@ -103,7 +135,7 @@ jobs:
           package-manager-cache: false
 
       - name: Enable pnpm
-        run: npm install --global pnpm@11.2.2
+        run: corepack enable pnpm
 
       - name: Resolve pnpm store
         id: pnpm-store
@@ -139,13 +171,9 @@ jobs:
           test -n "$preload" || { echo "Preload bundle not found"; exit 1; }
           grep -q "electronAPI" "$preload" || { echo "electronAPI missing from preload"; exit 1; }
 
-      - name: Install Playwright browser (Linux)
+      - name: Install Playwright system dependencies
         if: runner.os == 'Linux'
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Install Playwright browser
-        if: runner.os != 'Linux'
-        run: pnpm exec playwright install chromium
+        run: pnpm exec playwright install-deps chromium
 
       - name: End-to-end tests (Linux)
         if: runner.os == 'Linux'

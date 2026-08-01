@@ -1,15 +1,48 @@
 import fs from 'node:fs'
 import {
   createFixtureRepo,
+  createFixturePathRegistry,
   expect,
   findUnexplainedFailureToasts,
   findToastMatch,
+  removeFixturePaths,
   runWithFailureSafeCleanup,
   runWithFailureSafeFixtureTeardown,
   test,
   type RecordedToast,
   verifyReposClosed
 } from './fixtures'
+
+test('fixture cleanup retries transient filesystem failures', () => {
+  const removals: Array<{ fixturePath: string; options: fs.RmOptions }> = []
+
+  removeFixturePaths(['first', 'first', 'second'], (fixturePath, options) => {
+    removals.push({ fixturePath, options })
+  })
+
+  expect(removals).toEqual([
+    {
+      fixturePath: 'first',
+      options: { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }
+    },
+    {
+      fixturePath: 'second',
+      options: { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }
+    }
+  ])
+})
+
+test('failed test repos defer removal without cascading into worker closure checks', () => {
+  const registry = createFixturePathRegistry()
+  registry.track('completed')
+  registry.track('failed')
+
+  registry.release(['completed'])
+  registry.deferRemoval(['failed'])
+
+  expect(registry.pathsToClose()).toEqual([])
+  expect(registry.pathsToRemove()).toEqual(['failed'])
+})
 
 test('toast matching resets stateful regular expressions', () => {
   const title = /permission denied/g

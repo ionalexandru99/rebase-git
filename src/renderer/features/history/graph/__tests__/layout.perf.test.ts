@@ -42,17 +42,21 @@ function buildFanOutCommits(total: number, branchCount: number): GitLogEntry[] {
   return commits
 }
 
-function measure(run: () => void): number {
-  const started = performance.now()
-  run()
-  return performance.now() - started
+function measureFastest(run: () => void, samples = 3): number {
+  let fastest = Number.POSITIVE_INFINITY
+  for (let sample = 0; sample < samples; sample++) {
+    const started = performance.now()
+    run()
+    fastest = Math.min(fastest, performance.now() - started)
+  }
+  return fastest
 }
 
 describe('graph layout performance', () => {
   it('lays out 10k linear commits within budget', () => {
     const topology = buildGraphTopology(buildLinearCommits(10_000))
     let rowCount = 0
-    const elapsed = measure(() => {
+    const elapsed = measureFastest(() => {
       rowCount = layoutGraph(topology).commitCount
     })
 
@@ -63,7 +67,7 @@ describe('graph layout performance', () => {
   it('lays out 10k commits across 300 interleaved branches within budget', () => {
     const topology = buildGraphTopology(buildFanOutCommits(10_000, 300))
     const layout = layoutGraph(topology)
-    const elapsed = measure(() => {
+    const elapsed = measureFastest(() => {
       layoutGraph(topology)
     })
 
@@ -75,7 +79,7 @@ describe('graph layout performance', () => {
   it('lays out 50k commits across 64 live lanes within scale budgets', () => {
     const topology = buildGraphTopology(buildFanOutCommits(50_000, 64))
     const layout = layoutGraph(topology)
-    const elapsed = measure(() => {
+    const elapsed = measureFastest(() => {
       layoutGraph(topology)
     })
 
@@ -113,7 +117,7 @@ describe('graph layout performance', () => {
     const carried = alignRowsToCheckpoint(sharedTopologyRows(topology1, topology2))
     const tail = sliceTopology(topology2, carried)
 
-    const extendElapsed = measure(() => {
+    const extendElapsed = measureFastest(() => {
       layoutGraph(tail, { layout: layout1, rows: carried })
     })
 

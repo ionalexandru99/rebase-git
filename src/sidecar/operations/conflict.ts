@@ -1,7 +1,7 @@
 import { Effect } from 'effect'
 import { Conflict, GitError, type OperationInProgress } from '../git/errors'
 import { withRepoLock } from '../session/lock'
-import { errorMessage, tryGit } from './helpers'
+import { errorMessage, retryIndexLock, tryGit } from './helpers'
 import { requireNoOperation } from './in-progress'
 
 export type RawGit = { raw: (args: string[]) => Promise<string> }
@@ -31,7 +31,7 @@ export function runWithConflictDetection(
         yield* tryGit(before)
       }
       const failure = yield* Effect.promise(() =>
-        git.raw(args).then(
+        retryIndexLock(() => git.raw(args)).then(
           () => null as string | null,
           (error) => errorMessage(error)
         )

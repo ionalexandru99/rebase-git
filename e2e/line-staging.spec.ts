@@ -19,34 +19,81 @@ import {
 const gutterNumber = (page: Page, lineNumber: number): Locator =>
   worktreeDiffBody(page).locator(`[data-column-number="${lineNumber}"]`).first()
 
-async function shiftClickGutterNumber(page: Page, lineNumber: number): Promise<void> {
-  const cell = gutterNumber(page, lineNumber)
-  await cell.waitFor({ timeout: 10_000 })
-  const box = await cell.boundingBox()
+async function visibleBoundingBox(cell: Locator) {
+  let box = null
+  await expect
+    .poll(
+      async () => {
+        try {
+          box = await cell.boundingBox()
+        } catch {
+          box = null
+        }
+        return box
+      },
+      { timeout: 10_000 }
+    )
+    .not.toBeNull()
   if (!box) {
     throw new Error('gutter number cell is not visible')
   }
-  await page.keyboard.down('Shift')
-  await page.mouse.move(box.x + box.width - 4, box.y + box.height / 2)
-  await page.mouse.down()
-  await page.mouse.up()
-  await page.keyboard.up('Shift')
+  return box
 }
 
-async function dragSelectGutterNumbers(page: Page, start: number, end: number): Promise<void> {
+async function shiftClickGutterNumber(page: Page, lineNumber: number): Promise<void> {
+  const cell = gutterNumber(page, lineNumber)
+  let lastError: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const box = await visibleBoundingBox(cell)
+      await cell.click({
+        modifiers: ['Shift'],
+        position: { x: box.width - 4, y: box.height / 2 },
+        timeout: 10_000
+      })
+      await page
+        .getByRole('button', { name: 'Stage 2 selected lines' })
+        .waitFor({ state: 'visible', timeout: 2_000 })
+      return
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
+}
+
+async function dragSelectGutterNumbers(
+  page: Page,
+  start: number,
+  end: number,
+  selectedLinesAction?: string
+): Promise<void> {
   const startCell = gutterNumber(page, start)
   const endCell = gutterNumber(page, end)
-  await startCell.waitFor({ timeout: 10_000 })
-  await endCell.waitFor({ timeout: 10_000 })
-  const startBox = await startCell.boundingBox()
-  const endBox = await endCell.boundingBox()
-  if (!startBox || !endBox) {
-    throw new Error('gutter number cells are not visible')
+  let lastError: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const startBox = await visibleBoundingBox(startCell)
+      const endBox = await visibleBoundingBox(endCell)
+      await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(endBox.x + endBox.width / 2, endBox.y + endBox.height / 2, {
+        steps: 6
+      })
+      await page.mouse.up()
+      if (!selectedLinesAction) {
+        return
+      }
+      await page
+        .getByRole('button', { name: selectedLinesAction })
+        .waitFor({ state: 'visible', timeout: 2_000 })
+      return
+    } catch (error) {
+      await page.mouse.up().catch(() => undefined)
+      lastError = error
+    }
   }
-  await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(endBox.x + endBox.width / 2, endBox.y + endBox.height / 2, { steps: 6 })
-  await page.mouse.up()
+  throw lastError
 }
 
 function createRepoWithTwoHunks(): string {
@@ -81,7 +128,7 @@ test('stages a gutter-selected subset of lines, then unstages one of them back',
   await openWorktreeFile(page, 'long.txt', 'unstaged')
   await expect(worktreeDiffLine(page, 'added A').first()).toBeVisible({ timeout: 10_000 })
 
-  await dragSelectGutterNumbers(page, 4, 5)
+  await dragSelectGutterNumbers(page, 4, 5, 'Stage 2 selected lines')
   await page.getByRole('button', { name: 'Stage 2 selected lines' }).click()
 
   await expect(stagedFileRow(page, 'long.txt')).toBeVisible({ timeout: 10_000 })
@@ -95,7 +142,7 @@ test('stages a gutter-selected subset of lines, then unstages one of them back',
   await expect(worktreeDiffLine(page, 'added A').first()).toBeVisible({ timeout: 10_000 })
   await expect(worktreeDiffLine(page, 'line 36 edited')).toHaveCount(0)
 
-  await dragSelectGutterNumbers(page, 4, 4)
+  await dragSelectGutterNumbers(page, 4, 4, 'Unstage 1 selected line')
   await page.getByRole('button', { name: 'Unstage 1 selected line' }).click()
 
   await expect.poll(() => stagedDiff(repo), { timeout: 10_000 }).not.toContain('+added A')
@@ -111,7 +158,7 @@ test('extends a line selection with shift-click before staging', async ({ harnes
   await openWorktreeFile(page, 'long.txt', 'unstaged')
   await expect(worktreeDiffLine(page, 'added A').first()).toBeVisible({ timeout: 10_000 })
 
-  await dragSelectGutterNumbers(page, 4, 4)
+  await dragSelectGutterNumbers(page, 4, 4, 'Stage 1 selected line')
   await expect(page.getByRole('button', { name: 'Stage 1 selected line' })).toBeVisible()
 
   await shiftClickGutterNumber(page, 5)

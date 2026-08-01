@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, type SpawnOptions } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -12,7 +12,13 @@ import {
   processAlive,
   waitUntil
 } from '../../test-support/hanging-git'
-import { getOrCreateGit, lookupGit, normalizeRepoPath } from '../instances'
+import { createGit, getOrCreateGit, lookupGit, normalizeRepoPath } from '../instances'
+
+interface SimpleGitPluginHost {
+  _plugins: {
+    add(plugin: unknown): () => void
+  }
+}
 
 describe('normalizeRepoPath', () => {
   it('strips trailing slashes', () => {
@@ -82,6 +88,26 @@ describe('getOrCreateGit + lookupGit', () => {
   it('lookupGit returns undefined for repos not in the map', () => {
     const map = new Map<string, SimpleGit>()
     expect(lookupGit(map, tmpDir)).toBeUndefined()
+  })
+
+  it('disables optional locks for background Git commands', async () => {
+    const git = createGit(tmpDir)
+    let spawnedEnvironment: NodeJS.ProcessEnv | undefined
+    const removePlugin = (git as unknown as SimpleGitPluginHost)._plugins.add({
+      type: 'spawn.options',
+      action: (options: SpawnOptions) => {
+        spawnedEnvironment = options.env
+        return options
+      }
+    })
+
+    try {
+      await git.raw(['--version'])
+    } finally {
+      removePlugin()
+    }
+
+    expect(spawnedEnvironment?.GIT_OPTIONAL_LOCKS).toBe('0')
   })
 
   it('cancels a SimpleGit process on lock timeout before admitting the next owner', async () => {

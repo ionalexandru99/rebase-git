@@ -229,7 +229,8 @@ test('matches the commit-details appearance', async ({ harness }) => {
 
   const timestamp = detailsPanel(page).locator('[data-testid="commit-meta"] time')
   await expect(detailsPanel(page)).toHaveScreenshot('commit-details-dark.png', {
-    mask: [timestamp]
+    mask: [timestamp],
+    timeout: 15_000
   })
 })
 

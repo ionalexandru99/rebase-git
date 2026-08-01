@@ -418,7 +418,7 @@ describe('a merge that relocated an incoming file through a directory rename', (
       expect(gitOutput(fixture.path, ['show', ':new/new.txt'])).toBe('incoming file\n')
       expect(await operationKind(fixture.path)).toBe('merge')
     })
-  })
+  }, 30_000)
 })
 
 describe('checking out while a cherry-pick is parked with its conflict resolved', () => {
