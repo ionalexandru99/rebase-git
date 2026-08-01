@@ -10,7 +10,8 @@ import {
   gitIn,
   openHistory,
   openLocalChanges,
-  test
+  test,
+  waitForRepoSurface
 } from './fixtures'
 
 test('two repos in tabs stay isolated: committing in one leaves the other untouched', async ({
@@ -40,6 +41,11 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
   await expect(tabB).toBeVisible()
   await expect(tabA).toHaveAttribute('aria-selected', 'true')
   await expect(tabB).toHaveAttribute('aria-selected', 'false')
+
+  await tabB.click()
+  await waitForRepoSurface(page, repoB)
+  await tabA.click()
+  await waitForRepoSurface(page, repoA)
 
   await openLocalChanges(page)
   await stageFileFromRow(page, 'extra.txt')

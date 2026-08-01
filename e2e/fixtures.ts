@@ -44,15 +44,14 @@ const waitBeforeFixtureGitRetry: WaitBeforeRetry = (milliseconds) => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
 }
 
-export function initializeFixtureGitRepository(
-  initialize: () => void,
+export function retryFixtureGitOperation<T>(
+  operation: () => T,
   waitBeforeRetry: WaitBeforeRetry = waitBeforeFixtureGitRetry
-): void {
+): T {
   let lastError: unknown
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      initialize()
-      return
+      return operation()
     } catch (error) {
       lastError = error
       if (attempt < 3) {
@@ -68,7 +67,9 @@ export function gitIn(repo: string): Git {
 }
 
 export function gitOut(repo: string, args: string[]): string {
-  return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
+  return retryFixtureGitOperation(() =>
+    execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
+  )
 }
 
 export function unmergedPaths(repo: string): string[] {
@@ -103,7 +104,9 @@ export function commitParents(repo: string, ref = 'HEAD'): string[] {
 }
 
 export function porcelainStatus(repo: string): string[] {
-  const status = execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' })
+  const status = retryFixtureGitOperation(() =>
+    execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' })
+  )
   return status.split('\n').filter((line) => line.length > 0)
 }
 
@@ -143,7 +146,7 @@ export interface FixtureRepoOptions {
 export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
   const git = gitIn(repo)
-  initializeFixtureGitRepository(() => git(['init', '-b', 'main']))
+  retryFixtureGitOperation(() => git(['init', '-b', 'main']))
   configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
@@ -157,12 +160,12 @@ export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
 export function createFixtureRepoWithRemote(): { repo: string; remote: string } {
   const remoteBase = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-remote-'))
   const remote = path.join(remoteBase, 'remote.git')
-  initializeFixtureGitRepository(() =>
+  retryFixtureGitOperation(() =>
     execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
   )
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
   const git = gitIn(repo)
-  initializeFixtureGitRepository(() => git(['init', '-b', 'main']))
+  retryFixtureGitOperation(() => git(['init', '-b', 'main']))
   configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
@@ -633,8 +636,8 @@ export async function waitForRepoSurface(
       { message: `expected ${repoPath} to finish opening`, timeout }
     )
     .toBe('Ok')
-  await expect(page.getByTestId('repo-shell')).toBeVisible({ timeout })
-  await expect(workingCopyRow(page)).toBeVisible({ timeout })
+  await expect(page.getByTestId('repo-shell').filter({ visible: true })).toHaveCount(1, { timeout })
+  await expect(workingCopyRow(page).filter({ visible: true })).toHaveCount(1, { timeout })
 }
 
 export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp }>({
@@ -1057,13 +1060,16 @@ export const listDivider = (page: Page) =>
   page.getByRole('button', { name: 'Resize commit list', exact: true })
 
 export async function openLocalChanges(page: Page): Promise<void> {
-  const header = page.getByTestId('working-copy-header')
-  await expect(workingCopyRow(page)).toBeVisible({ timeout: 15_000 })
+  const visibleWorkingCopyRow = workingCopyRow(page).filter({ visible: true })
+  const visibleHeader = page.getByTestId('working-copy-header').filter({ visible: true })
+  await expect(visibleWorkingCopyRow).toHaveCount(1, { timeout: 15_000 })
   await expect(async () => {
-    await workingCopyRow(page).click()
-    await expect(header).toBeVisible({ timeout: 2_000 })
+    await visibleWorkingCopyRow.click()
+    await expect(visibleHeader).toHaveCount(1, { timeout: 2_000 })
   }).toPass({ timeout: 15_000 })
-  await expect(page.getByTestId('commit-bar')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('commit-bar').filter({ visible: true })).toHaveCount(1, {
+    timeout: 10_000
+  })
 }
 
 export async function openHistory(page: Page): Promise<void> {
