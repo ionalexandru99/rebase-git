@@ -72,6 +72,41 @@ describe('useDraggablePane persistence', () => {
     expect(result.current.size).toBe(356)
   })
 
+  it('reports itself unloaded until the persisted size arrives', async () => {
+    let resolveLoad: (state: { open: boolean; size: number }) => void = () => {}
+    const load = () =>
+      new Promise<{ open: boolean; size: number }>((resolve) => {
+        resolveLoad = resolve
+      })
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load })
+    )
+
+    expect(result.current.loaded).toBe(false)
+    await act(async () => {
+      resolveLoad({ open: true, size: 300 })
+      await Promise.resolve()
+    })
+    expect(result.current.loaded).toBe(true)
+  })
+
+  it('reports itself loaded immediately when there is nothing to load', () => {
+    const { result } = renderHook(() => useDraggablePane({ min: 200, max: 520, defaultSize: 256 }))
+
+    expect(result.current.loaded).toBe(true)
+  })
+
+  it('reports itself loaded after a failed load, so the pane stays usable', async () => {
+    const load = async () => {
+      throw new Error('prefs unavailable')
+    }
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load, onLoadError: vi.fn() })
+    )
+
+    await waitFor(() => expect(result.current.loaded).toBe(true))
+  })
+
   it('reports a failed load and keeps the default size', async () => {
     const failure = new Error('prefs unavailable')
     const load = async () => {

@@ -27,6 +27,7 @@ interface UseDraggablePaneOptions {
 interface UseDraggablePaneResult {
   size: number
   isOpen: boolean
+  loaded: boolean
   setOpen: (next: boolean) => void
   reset: () => void
   onResizeStart: (event: MouseEvent) => void
@@ -45,6 +46,7 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
 
   const [isOpen, setIsOpen] = useState(true)
   const [size, setSize] = useState(defaultSize)
+  const [loaded, setLoaded] = useState(!load)
   const dragSize = useRef(defaultSize)
   const dragTeardown = useRef<(() => void) | null>(null)
   const userAdjusted = useRef(false)
@@ -55,20 +57,26 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
     }
     let cancelled = false
     load()
-      .then((loaded) => {
-        if (cancelled || userAdjusted.current) {
+      .then((loadedState) => {
+        if (cancelled) {
           return
         }
-        const clamped = Math.max(min, Math.min(max, loaded.size))
-        setIsOpen(loaded.open)
+        if (userAdjusted.current) {
+          setLoaded(true)
+          return
+        }
+        const clamped = Math.max(min, Math.min(max, loadedState.size))
+        setIsOpen(loadedState.open)
         setSize(clamped)
         dragSize.current = clamped
+        setLoaded(true)
       })
       .catch((error: unknown) => {
         if (cancelled) {
           return
         }
         onLoadError?.(error)
+        setLoaded(true)
       })
     return () => {
       cancelled = true
@@ -161,5 +169,5 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
     window.addEventListener('mouseup', finalize)
   }
 
-  return { size, isOpen, setOpen, reset, onResizeStart }
+  return { size, isOpen, loaded, setOpen, reset, onResizeStart }
 }

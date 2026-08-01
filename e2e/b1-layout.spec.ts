@@ -111,12 +111,19 @@ test('shows refs, commits, detail and the status dock at once, with the working 
   await expect(pinnedRow).toBeVisible()
   const firstCommitRow = page.getByTestId('commit-row').first()
   await expect(firstCommitRow).toBeVisible({ timeout: 10_000 })
-  const pinnedBox = await pinnedRow.boundingBox()
-  const firstCommitBox = await firstCommitRow.boundingBox()
-  if (!pinnedBox || !firstCommitBox) {
-    throw new Error('expected bounding boxes for the pinned row and the first commit row')
-  }
-  expect(pinnedBox.y).toBeLessThan(firstCommitBox.y)
+  await expect
+    .poll(
+      async () => {
+        const pinnedBox = await pinnedRow.boundingBox()
+        const firstCommitBox = await firstCommitRow.boundingBox()
+        if (!pinnedBox || !firstCommitBox) {
+          return null
+        }
+        return firstCommitBox.y - pinnedBox.y
+      },
+      { timeout: 10_000 }
+    )
+    .toBeGreaterThan(0)
 
   await page.getByTestId('commit-row').filter({ hasText: 'initial' }).click()
   const pane = commitDetailPane(page)

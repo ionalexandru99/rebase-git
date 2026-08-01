@@ -72,8 +72,28 @@ describe('Shell four-column layout', () => {
     expect(screen.getByRole('region', { name: 'Details' })).toBeInTheDocument()
     expect(screen.getByText('detail pane')).toBeInTheDocument()
     expect(screen.getByText('status dock')).toBeInTheDocument()
-    expect(divider()).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Resize commit list' })).toBeInTheDocument()
     await waitFor(() => expect(window.electronAPI.getListPaneWidth).toHaveBeenCalledWith(repoPath))
+  })
+
+  it('withholds the dividers until their persisted widths have loaded', async () => {
+    let resolveWidth: (width: number) => void = () => {}
+    vi.mocked(window.electronAPI.getListPaneWidth).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveWidth = resolve
+        })
+    )
+    renderShell()
+
+    expect(screen.queryByRole('button', { name: 'Resize commit list' })).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveWidth(LIST_PANE_DEFAULT_WIDTH)
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('button', { name: 'Resize commit list' })).toBeInTheDocument()
   })
 
   it('threads branch freshness through to the refs sidebar rows', async () => {

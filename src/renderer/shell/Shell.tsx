@@ -85,6 +85,7 @@ export function Shell(props: ShellProps) {
 
   const {
     size: listWidth,
+    loaded: listWidthLoaded,
     reset: resetListWidth,
     onResizeStart
   } = useDraggablePane({
@@ -99,6 +100,7 @@ export function Shell(props: ShellProps) {
 
   const {
     size: refsWidth,
+    loaded: refsWidthLoaded,
     reset: resetRefsWidth,
     onResizeStart: onRefsResizeStart
   } = useDraggablePane({
@@ -156,16 +158,18 @@ export function Shell(props: ShellProps) {
         />
 
         <div className="relative">
-          <button
-            type="button"
-            aria-label="Resize branches panel"
-            title={`Branches panel width: ${refsWidth}px — double-click to reset`}
-            onMouseDown={(event) => startRefsResize(event.nativeEvent)}
-            onDoubleClick={resetRefsWidth}
-            className="group/refs-resize flex h-full w-full cursor-col-resize items-stretch justify-center bg-chrome"
-          >
-            <span className="w-px bg-border-strong/40 transition-colors group-hover/refs-resize:bg-primary/70" />
-          </button>
+          {refsWidthLoaded ? (
+            <button
+              type="button"
+              aria-label="Resize branches panel"
+              title={`Branches panel width: ${refsWidth}px — double-click to reset`}
+              onMouseDown={(event) => startRefsResize(event.nativeEvent)}
+              onDoubleClick={resetRefsWidth}
+              className="group/refs-resize flex h-full w-full cursor-col-resize items-stretch justify-center bg-chrome"
+            >
+              <span className="w-px bg-border-strong/40 transition-colors group-hover/refs-resize:bg-primary/70" />
+            </button>
+          ) : null}
           {refsDragging ? (
             <span
               data-testid="refs-width-tooltip"
@@ -191,16 +195,18 @@ export function Shell(props: ShellProps) {
         </section>
 
         <div className="relative">
-          <button
-            type="button"
-            aria-label="Resize commit list"
-            title={`Commit list width: ${listWidth}px — double-click to reset`}
-            onMouseDown={(event) => startResize(event.nativeEvent)}
-            onDoubleClick={resetListWidth}
-            className="group/list-resize flex h-full w-full cursor-col-resize items-stretch justify-center bg-chrome"
-          >
-            <span className="w-px bg-border-strong/40 transition-colors group-hover/list-resize:bg-primary/70" />
-          </button>
+          {listWidthLoaded ? (
+            <button
+              type="button"
+              aria-label="Resize commit list"
+              title={`Commit list width: ${listWidth}px — double-click to reset`}
+              onMouseDown={(event) => startResize(event.nativeEvent)}
+              onDoubleClick={resetListWidth}
+              className="group/list-resize flex h-full w-full cursor-col-resize items-stretch justify-center bg-chrome"
+            >
+              <span className="w-px bg-border-strong/40 transition-colors group-hover/list-resize:bg-primary/70" />
+            </button>
+          ) : null}
           {dragging ? (
             <span
               data-testid="list-pane-width-tooltip"
