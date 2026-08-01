@@ -38,6 +38,31 @@ export async function setWindowSize(
 
 export type Git = (args: string[]) => void
 
+type WaitBeforeRetry = (milliseconds: number) => void
+
+const waitBeforeFixtureGitRetry: WaitBeforeRetry = (milliseconds) => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
+}
+
+export function initializeFixtureGitRepository(
+  initialize: () => void,
+  waitBeforeRetry: WaitBeforeRetry = waitBeforeFixtureGitRetry
+): void {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      initialize()
+      return
+    } catch (error) {
+      lastError = error
+      if (attempt < 3) {
+        waitBeforeRetry(attempt * 200)
+      }
+    }
+  }
+  throw lastError
+}
+
 export function gitIn(repo: string): Git {
   return (args) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
 }
@@ -118,7 +143,7 @@ export interface FixtureRepoOptions {
 export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
   const git = gitIn(repo)
-  git(['init', '-b', 'main'])
+  initializeFixtureGitRepository(() => git(['init', '-b', 'main']))
   configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
@@ -132,10 +157,12 @@ export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
 export function createFixtureRepoWithRemote(): { repo: string; remote: string } {
   const remoteBase = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-remote-'))
   const remote = path.join(remoteBase, 'remote.git')
-  execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
+  initializeFixtureGitRepository(() =>
+    execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
+  )
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
   const git = gitIn(repo)
-  git(['init', '-b', 'main'])
+  initializeFixtureGitRepository(() => git(['init', '-b', 'main']))
   configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
@@ -1017,17 +1044,45 @@ export async function dragListDivider(
   options: { release?: boolean } = {}
 ): Promise<void> {
   const divider = listDivider(page)
-  const box = await divider.boundingBox()
-  if (!box) {
-    throw new Error('the commit list divider has no bounding box')
-  }
-  const startX = box.x + box.width / 2
-  const startY = box.y + box.height / 2
-  await page.mouse.move(startX, startY)
-  await page.mouse.down()
-  await page.mouse.move(startX + deltaX, startY, { steps: 12 })
-  if (options.release === false) {
-    return
-  }
-  await page.mouse.up()
+  await expect(divider).toBeVisible({ timeout: 10_000 })
+  await divider.evaluate(
+    (element, input) => {
+      const box = element.getBoundingClientRect()
+      const startX = box.left + box.width / 2
+      const startY = box.top + box.height / 2
+      element.dispatchEvent(
+        new MouseEvent('mousedown', {
+          bubbles: true,
+          buttons: 1,
+          clientX: startX,
+          clientY: startY
+        })
+      )
+      window.dispatchEvent(
+        new MouseEvent('mousemove', {
+          bubbles: true,
+          buttons: 1,
+          clientX: startX + input.deltaX,
+          clientY: startY
+        })
+      )
+      if (input.release) {
+        window.dispatchEvent(
+          new MouseEvent('mouseup', {
+            bubbles: true,
+            clientX: startX + input.deltaX,
+            clientY: startY
+          })
+        )
+      }
+    },
+    { deltaX, release: options.release !== false }
+  )
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+}
+
+export async function releaseListDividerDrag(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+  })
 }

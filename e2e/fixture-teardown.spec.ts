@@ -6,6 +6,7 @@ import {
   finalizeTestFixturePaths,
   findUnexplainedFailureToasts,
   findToastMatch,
+  initializeFixtureGitRepository,
   removeFixturePaths,
   runWithFailureSafeCleanup,
   runWithFailureSafeFixtureTeardown,
@@ -31,6 +32,24 @@ test('fixture cleanup retries transient filesystem failures', () => {
       options: { recursive: true, force: true, maxRetries: 20, retryDelay: 300 }
     }
   ])
+})
+
+test('fixture repository initialization retries transient Git failures', () => {
+  const attempts: number[] = []
+  const waits: number[] = []
+
+  initializeFixtureGitRepository(
+    () => {
+      attempts.push(attempts.length + 1)
+      if (attempts.length < 3) {
+        throw new Error('transient Git initialization failure')
+      }
+    },
+    (milliseconds) => waits.push(milliseconds)
+  )
+
+  expect(attempts).toEqual([1, 2, 3])
+  expect(waits).toEqual([200, 400])
 })
 
 test('failed test repos defer removal without cascading into worker closure checks', () => {

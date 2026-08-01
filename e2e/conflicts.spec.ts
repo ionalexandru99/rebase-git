@@ -36,15 +36,18 @@ function createConflictingRepo(): string {
 
 const mergeFeatureIntoMain = async (harness: AppHarness): Promise<void> => {
   const page = harness.page
-  await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({ timeout: 10_000 })
-  await refTree(page).getByTitle('feature', { exact: true }).click({ button: 'right' })
+  const featureBranch = refTree(page).getByTitle('feature', { exact: true })
+  await expect(featureBranch).toBeVisible({ timeout: 15_000 })
+  await featureBranch.click({ button: 'right' })
+  const mergeAction = page.getByRole('menuitem', { name: 'Merge into main' })
+  await expect(mergeAction).toBeVisible({ timeout: 10_000 })
   await harness.expectToast(
     {
       type: 'warning',
       title: 'Merged feature hit conflicts',
       description: 'Resolve the conflicted files, then commit or abort.'
     },
-    () => page.getByRole('menuitem', { name: /Merge into main/ }).click()
+    () => mergeAction.click()
   )
   await openLocalChanges(page)
 }

@@ -9,6 +9,7 @@ import {
   expect,
   gitIn,
   listDivider,
+  releaseListDividerDrag,
   test,
   workingCopyRow
 } from './fixtures'
@@ -41,7 +42,7 @@ test('drags the commit-list divider within its bounds and resets on double-click
   await expect(tooltip).toBeVisible()
   await expect(tooltip).toHaveText(/^\d+px$/)
   await expect(tooltip).toHaveText(`${await commitListWidth(page)}px`)
-  await page.mouse.up()
+  await releaseListDividerDrag(page)
 
   await expect(tooltip).toHaveCount(0)
   await expect.poll(() => commitListWidth(page)).toBe(LIST_PANE_DEFAULT_WIDTH + 160)
