@@ -63,7 +63,8 @@ export function retryFixtureGitOperation<T>(
 }
 
 export function gitIn(repo: string): Git {
-  return (args) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
+  return (args) =>
+    retryFixtureGitOperation(() => execFileSync('git', args, { cwd: repo, stdio: 'ignore' }))
 }
 
 export function gitOut(repo: string, args: string[]): string {
