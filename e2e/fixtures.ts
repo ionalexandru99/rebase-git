@@ -30,7 +30,7 @@ export async function setWindowSize(
 ): Promise<void> {
   await app.evaluate(
     ({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0]?.setSize(size.width, size.height)
+      BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height)
     },
     { width, height }
   )
@@ -516,8 +516,8 @@ export function removeFixturePaths(
       removeFixturePath(fixturePath, {
         recursive: true,
         force: true,
-        maxRetries: 10,
-        retryDelay: 100
+        maxRetries: 20,
+        retryDelay: 300
       })
     } catch (error) {
       if (!failed) {

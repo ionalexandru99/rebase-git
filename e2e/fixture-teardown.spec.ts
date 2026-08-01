@@ -23,11 +23,11 @@ test('fixture cleanup retries transient filesystem failures', () => {
   expect(removals).toEqual([
     {
       fixturePath: 'first',
-      options: { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }
+      options: { recursive: true, force: true, maxRetries: 20, retryDelay: 300 }
     },
     {
       fixturePath: 'second',
-      options: { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }
+      options: { recursive: true, force: true, maxRetries: 20, retryDelay: 300 }
     }
   ])
 })
