@@ -7,7 +7,7 @@ import { GitError, type RepoNotOpen } from '../git/errors'
 import { normalizeRepoPath } from '../git/instances'
 import { isSafeRefArg } from '../git/ref-args'
 import { runGit } from '../git/spawn'
-import type { RepoSessions } from '../session/sessions'
+import { type RepoSessions, withSessionScope } from '../session/sessions'
 import { requireOpen, tryGit } from './helpers'
 
 const RECORD_SEPARATOR = '\x00'
@@ -41,16 +41,19 @@ function sumNumstat(lines: string[]): WorkingTreeStats {
 const BINARY_SNIFF_BYTES = 8_000
 const FILE_READ_BUFFER_BYTES = 64 * 1_024
 
-async function countTextFileLines(filePath: string): Promise<number> {
-  const file = await open(filePath, 'r')
-  const buffer = Buffer.allocUnsafe(FILE_READ_BUFFER_BYTES)
-  let totalBytes = 0
-  let lineFeeds = 0
-  let lastByte = -1
-  let binary = false
-  try {
+function countTextFileLines(filePath: string) {
+  return Effect.gen(function* () {
+    const file = yield* Effect.acquireRelease(
+      tryGit(() => open(filePath, 'r')),
+      (handle) => Effect.promise(() => handle.close()).pipe(Effect.orDie)
+    )
+    const buffer = Buffer.allocUnsafe(FILE_READ_BUFFER_BYTES)
+    let totalBytes = 0
+    let lineFeeds = 0
+    let lastByte = -1
+    let binary = false
     while (true) {
-      const { bytesRead } = await file.read(buffer, 0, buffer.length, null)
+      const { bytesRead } = yield* tryGit(() => file.read(buffer, 0, buffer.length, null))
       if (bytesRead === 0) {
         break
       }
@@ -72,35 +75,37 @@ async function countTextFileLines(filePath: string): Promise<number> {
       totalBytes += bytesRead
       lastByte = buffer[bytesRead - 1]
     }
-  } finally {
-    await file.close()
-  }
-  if (binary || totalBytes === 0) {
-    return 0
-  }
-  return lineFeeds + (lastByte === 10 ? 0 : 1)
+    if (binary || totalBytes === 0) {
+      return 0
+    }
+    return lineFeeds + (lastByte === 10 ? 0 : 1)
+  })
 }
 
-async function countWorktreeFileLines(repoPath: string, relativePaths: readonly string[]) {
-  let additions = 0
-  for (const relativePath of new Set(relativePaths)) {
-    const filePath = path.join(repoPath, relativePath)
-    const stats = await lstat(filePath).catch((error: unknown) => {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        return null
+function countWorktreeFileLines(repoPath: string, relativePaths: readonly string[]) {
+  return Effect.gen(function* () {
+    let additions = 0
+    for (const relativePath of new Set(relativePaths)) {
+      const filePath = path.join(repoPath, relativePath)
+      const stats = yield* tryGit(() =>
+        lstat(filePath).catch((error: unknown) => {
+          if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+            return null
+          }
+          throw error
+        })
+      )
+      if (stats === null) {
+        continue
       }
-      throw error
-    })
-    if (stats === null) {
-      continue
+      if (stats.isSymbolicLink()) {
+        additions += 1
+      } else if (stats.isFile()) {
+        additions += yield* countTextFileLines(filePath)
+      }
     }
-    if (stats.isSymbolicLink()) {
-      additions += 1
-    } else if (stats.isFile()) {
-      additions += await countTextFileLines(filePath)
-    }
-  }
-  return additions
+    return additions
+  })
 }
 
 function parseCommitStats(output: string): CommitStats {
@@ -145,32 +150,38 @@ export function getCommitStats(
 export function getWorkingTreeStats(
   repoPath: string
 ): Effect.Effect<WorkingTreeStats, RepoNotOpen | GitError, RepoSessions> {
+  const key = normalizeRepoPath(repoPath)
   return Effect.gen(function* () {
-    const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
-    const head = yield* tryGit(() =>
-      runGit(['-C', key, 'rev-parse', '--verify', '--quiet', 'HEAD'], { okExitCodes: [0, 1] })
+    return yield* withSessionScope(
+      key,
+      Effect.gen(function* () {
+        const head = yield* tryGit(() =>
+          runGit(['-C', key, 'rev-parse', '--verify', '--quiet', 'HEAD'], { okExitCodes: [0, 1] })
+        )
+        const hasHead = head.trim().length > 0
+        const trackedOutput = hasHead
+          ? yield* tryGit(() => runGit(['-C', key, 'diff', '--numstat', 'HEAD', '--']))
+          : ''
+        const listedFiles = yield* tryGit(() =>
+          runGit([
+            '-C',
+            key,
+            'ls-files',
+            '-z',
+            ...(hasHead ? [] : ['--cached']),
+            '--others',
+            '--exclude-standard',
+            '--'
+          ])
+        )
+        const worktreeAdditions = yield* countWorktreeFileLines(
+          key,
+          listedFiles.split('\0').filter(Boolean)
+        )
+        const tracked = sumNumstat(trackedOutput.split('\n'))
+        return { additions: tracked.additions + worktreeAdditions, deletions: tracked.deletions }
+      })
     )
-    const hasHead = head.trim().length > 0
-    const trackedOutput = hasHead
-      ? yield* tryGit(() => runGit(['-C', key, 'diff', '--numstat', 'HEAD', '--']))
-      : ''
-    const listedFiles = yield* tryGit(() =>
-      runGit([
-        '-C',
-        key,
-        'ls-files',
-        '-z',
-        ...(hasHead ? [] : ['--cached']),
-        '--others',
-        '--exclude-standard',
-        '--'
-      ])
-    )
-    const worktreeAdditions = yield* tryGit(() =>
-      countWorktreeFileLines(key, listedFiles.split('\0').filter(Boolean))
-    )
-    const tracked = sumNumstat(trackedOutput.split('\n'))
-    return { additions: tracked.additions + worktreeAdditions, deletions: tracked.deletions }
   })
 }
