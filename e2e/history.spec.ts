@@ -154,13 +154,7 @@ test('opens the row context menu when right-clicking over the pinned metadata', 
 
   const dateCell = mergeRow.locator('time')
   await expect(dateCell).toBeVisible({ timeout: 10_000 })
-  const dateBox = await dateCell.boundingBox()
-  if (!dateBox) {
-    throw new Error('expected a bounding box for the date cell')
-  }
-  await page.mouse.click(dateBox.x + dateBox.width / 2, dateBox.y + dateBox.height / 2, {
-    button: 'right'
-  })
+  await dateCell.click({ button: 'right' })
 
   await expect(page.getByRole('menuitem', { name: 'Copy SHA' })).toBeVisible({ timeout: 10_000 })
 })
