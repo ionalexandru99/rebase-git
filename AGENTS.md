@@ -29,6 +29,10 @@ pnpm test:ci              # renderer + main + sidecar + e2e
 Single test: `pnpm vitest run <file>` (add `--config vitest.main.config.ts` or
 `vitest.sidecar.config.ts` for those layers), `pnpm playwright test <file>` for e2e.
 
+Demo recording for PR bodies: `REBASE_DEMO=1 pnpm playwright test <file>` runs any e2e spec
+slowed down with video capture on, writing `.webm` files to `test-results/demos/`. Record demos
+by driving the feature's own e2e spec — don't add bespoke capture scripts.
+
 A `pre-push` hook runs `pnpm typecheck` and `pnpm check`; `pnpm install` wires it up.
 
 ## Architecture
