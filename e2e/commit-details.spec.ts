@@ -221,9 +221,11 @@ test('keeps every region of the details panel usable at any window size', async 
       await setWindowSize(harness.app(), size.width, size.height)
       await page.reload()
 
-      await expect(page.getByText('feat: a wordy commit')).toBeVisible({ timeout: 15_000 })
-      await commitRow(page, 'a wordy commit').dblclick()
-      await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
+      const wordyCommit = commitRow(page, 'a wordy commit')
+      await expect(wordyCommit).toBeVisible({ timeout: 15_000 })
+      await wordyCommit.dblclick()
+      await expect(detailsPanel(page)).toBeVisible({ timeout: 10_000 })
+      await expect(diffLines(page).first()).toBeVisible({ timeout: 20_000 })
 
       const layout = await page.evaluate(() => {
         const find = (selector: string) => document.querySelector(selector) as HTMLElement | null

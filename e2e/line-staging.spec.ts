@@ -44,13 +44,13 @@ async function shiftClickGutterNumber(page: Page, lineNumber: number): Promise<v
   const cell = gutterNumber(page, lineNumber)
   let lastError: unknown
   for (let attempt = 0; attempt < 3; attempt++) {
-    const box = await visibleBoundingBox(cell)
-    await cell.click({
-      modifiers: ['Shift'],
-      position: { x: box.width - 4, y: box.height / 2 },
-      timeout: 10_000
-    })
     try {
+      const box = await visibleBoundingBox(cell)
+      await cell.click({
+        modifiers: ['Shift'],
+        position: { x: box.width - 4, y: box.height / 2 },
+        timeout: 10_000
+      })
       await page
         .getByRole('button', { name: 'Stage 2 selected lines' })
         .waitFor({ state: 'visible', timeout: 2_000 })
@@ -72,21 +72,24 @@ async function dragSelectGutterNumbers(
   const endCell = gutterNumber(page, end)
   let lastError: unknown
   for (let attempt = 0; attempt < 3; attempt++) {
-    const startBox = await visibleBoundingBox(startCell)
-    const endBox = await visibleBoundingBox(endCell)
-    await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(endBox.x + endBox.width / 2, endBox.y + endBox.height / 2, { steps: 6 })
-    await page.mouse.up()
-    if (!selectedLinesAction) {
-      return
-    }
     try {
+      const startBox = await visibleBoundingBox(startCell)
+      const endBox = await visibleBoundingBox(endCell)
+      await page.mouse.move(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(endBox.x + endBox.width / 2, endBox.y + endBox.height / 2, {
+        steps: 6
+      })
+      await page.mouse.up()
+      if (!selectedLinesAction) {
+        return
+      }
       await page
         .getByRole('button', { name: selectedLinesAction })
         .waitFor({ state: 'visible', timeout: 2_000 })
       return
     } catch (error) {
+      await page.mouse.up().catch(() => undefined)
       lastError = error
     }
   }

@@ -222,6 +222,30 @@ describe('mergeBranch RPC handler', () => {
     expect(fs.existsSync(path.join(repoDir, 'clean.txt'))).toBe(true)
   })
 
+  it('retries transient index.lock contention before merging', async () => {
+    git('checkout', 'main')
+    git('checkout', '-b', 'merge/retry')
+    commitFile('retry.txt', 'retry\n', 'add retry file')
+    git('checkout', 'main')
+    const indexLock = path.join(repoDir, '.git', 'index.lock')
+    fs.writeFileSync(indexLock, 'busy')
+    const release = setTimeout(() => fs.rmSync(indexLock, { force: true }), 40)
+
+    try {
+      const result = await mergeThroughGroup({
+        repoPath: repoDir,
+        refKind: 'local',
+        fullPath: 'merge/retry'
+      })
+
+      expect(Either.isRight(result)).toBe(true)
+      expect(fs.existsSync(path.join(repoDir, 'retry.txt'))).toBe(true)
+    } finally {
+      clearTimeout(release)
+      fs.rmSync(indexLock, { force: true })
+    }
+  })
+
   it('surfaces a typed Conflict when a merge leaves the tree conflicted', async () => {
     git('checkout', 'main')
     commitFile('merge-conflict.txt', 'main-base\n', 'main base for merge conflict')
