@@ -4,12 +4,14 @@ import { type BranchBrowser, COLUMN_HEADER_HEIGHT } from './Shell'
 interface AppSidebarProps {
   branchBrowser: BranchBrowser
   currentBranch: string
+  width?: number
 }
 
 export function AppSidebar(props: AppSidebarProps) {
   return (
     <aside
       aria-label="Branches"
+      style={props.width === undefined ? undefined : { width: `${props.width}px` }}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-r bg-card-2"
     >
       <div

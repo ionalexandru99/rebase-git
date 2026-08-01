@@ -139,6 +139,7 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
             yTop + rowHeight / 2,
             glyph,
             laneColor(lane),
+            backgroundColor,
             metrics
           )
         }

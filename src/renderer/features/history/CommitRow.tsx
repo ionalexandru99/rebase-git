@@ -1,6 +1,6 @@
 import { GitMergeIcon } from 'lucide-react'
 import { memo, useMemo } from 'react'
-import { laneColor, laneX } from '@/features/history/graph/canvas'
+import { laneX } from '@/features/history/graph/canvas'
 import type { GraphMetrics } from '@/features/history/graph/metrics'
 import { parseRefs } from '@/features/history/graph/refs'
 import { formatCommitAge, initials } from '@/lib/format'
@@ -17,7 +17,8 @@ import {
 import type { SelectionModifiers } from './commit-selection'
 import type { CommitStat } from './hooks/useCommitStats'
 import { type HistoryListMode, modeIsSingleLine, modeShowsAuthorName } from './list-modes'
-import { RefBadge } from './RefBadge'
+import { RefBadge, refBadgeName } from './RefBadge'
+import { assignRefBadgeColors } from './ref-colors'
 import { singleLineGridTemplate } from './row-layout'
 import type { MergeGlyph } from './selectors'
 
@@ -59,7 +60,7 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
     () => parseRefs(commit.refs, props.remoteNames),
     [commit.refs, props.remoteNames]
   )
-  const laneHex = laneColor(props.lane)
+  const badgeColors = useMemo(() => assignRefBadgeColors(refs.map(refBadgeName)), [refs])
   const rowOpacity = props.dim ? 0.35 : props.offBranch ? 0.6 : 1
   const subjectClass = props.offBranch ? 'text-muted-foreground' : 'text-foreground'
   const gridTemplate = singleLineGridTemplate(props.mode)
@@ -71,11 +72,11 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
   const subject = (
     <span className="flex min-w-0 items-center gap-1 text-sm">
       {isMerge ? <GitMergeIcon aria-hidden="true" className="size-3 shrink-0 text-green" /> : null}
-      {refs.map((parsedRef) => (
+      {refs.map((parsedRef, refIndex) => (
         <RefBadge
           key={`${parsedRef.kind}:${parsedRef.label}`}
           parsedRef={parsedRef}
-          laneHex={laneHex}
+          badgeHex={badgeColors[refIndex]}
           remotes={props.remotes}
         />
       ))}

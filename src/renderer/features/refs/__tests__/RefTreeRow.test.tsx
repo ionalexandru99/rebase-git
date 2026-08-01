@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { refFilterKey } from '@/features/history/selectors'
 import type { RefKind, RefLeafRow, RefStashRow } from '@/features/refs/ref-tree'
-import { formatCommitAge } from '@/lib/format'
+import { formatCommitAgeShort } from '@/lib/format'
 import { RefTreeRow } from '../RefTreeRow'
 
 function leaf(overrides: Partial<RefLeafRow> = {}): RefLeafRow {
@@ -199,12 +199,22 @@ describe('RefTreeRow freshness', () => {
   })
 
   it.each<[RefKind, string, string, string]>([
-    ['local', 'main', '2026-07-30T12:00:00.000Z', '2d ago'],
-    ['remote', 'origin/main', '2026-07-31T12:00:00.000Z', '1d ago'],
-    ['tag', 'v1.0.0', '2026-06-01T12:00:00.000Z', formatCommitAge('2026-06-01T12:00:00.000Z', NOW)]
+    ['local', 'main', '2026-07-30T12:00:00.000Z', '2d'],
+    ['remote', 'origin/main', '2026-07-31T12:00:00.000Z', '1d'],
+    [
+      'tag',
+      'v1.0.0',
+      '2026-06-01T12:00:00.000Z',
+      formatCommitAgeShort('2026-06-01T12:00:00.000Z', NOW)
+    ]
   ])('renders the %s row freshness label', (refKind, fullPath, lastCommitAt, expected) => {
     renderRow(leaf({ refKind, fullPath, name: fullPath, lastCommitAt }))
-    expect(screen.getByTestId('ref-freshness')).toHaveTextContent(expected)
+    expect(screen.getByTestId('ref-freshness').textContent).toBe(expected)
+  })
+
+  it('explains the freshness label with a full sentence tooltip', () => {
+    renderRow(leaf({ lastCommitAt: '2026-07-30T12:00:00.000Z' }))
+    expect(screen.getByTestId('ref-freshness')).toHaveAttribute('title', 'Last commit 2d ago')
   })
 
   it('renders nothing when a leaf row has no known date', () => {
@@ -230,7 +240,7 @@ describe('RefTreeRow freshness', () => {
         onToggleCollapsed={() => {}}
       />
     )
-    expect(screen.getByTestId('ref-freshness')).toHaveTextContent('1d ago')
+    expect(screen.getByTestId('ref-freshness').textContent).toBe('1d')
   })
 
   it('renders nothing when a stash row has no known date', () => {

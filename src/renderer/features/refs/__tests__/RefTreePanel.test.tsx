@@ -200,20 +200,20 @@ describe('RefTreePanel freshness', () => {
   }
 
   it.each<[string, string, string]>([
-    ['local branch', 'main', '2d ago'],
-    ['remote branch', 'origin/main', '1d ago'],
-    ['tag', 'v1.0.0', '10d ago']
+    ['local branch', 'main', '2d'],
+    ['remote branch', 'origin/main', '1d'],
+    ['tag', 'v1.0.0', '10d']
   ])('labels the %s row with its age', async (_kind, title, expected) => {
     await renderFreshPanel()
     const row = screen.getByTitle(title).closest('[data-testid="ref-tree-leaf-row"]')
     expect(row).not.toBeNull()
-    expect(within(row as HTMLElement).getByTestId('ref-freshness')).toHaveTextContent(expected)
+    expect(within(row as HTMLElement).getByTestId('ref-freshness').textContent).toBe(expected)
   })
 
   it('labels the stash row with its age', async () => {
     await renderFreshPanel()
     const row = screen.getByTestId('ref-tree-stash-row')
-    expect(within(row).getByTestId('ref-freshness')).toHaveTextContent('1d ago')
+    expect(within(row).getByTestId('ref-freshness').textContent).toBe('1d')
   })
 
   it('renders no label on rows without a known date', async () => {

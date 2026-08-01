@@ -97,8 +97,71 @@ describe('Shell four-column layout', () => {
       />
     )
 
-    await waitFor(() => expect(screen.getByTestId('ref-freshness')).toHaveTextContent('2h ago'))
+    await waitFor(() => expect(screen.getByTestId('ref-freshness').textContent).toBe('2h'))
     vi.useRealTimers()
+  })
+
+  it('applies the persisted branches panel width', async () => {
+    vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 300 })
+    renderShell()
+
+    await waitFor(() =>
+      expect(screen.getByRole('complementary', { name: 'Branches' })).toHaveStyle({
+        width: '300px'
+      })
+    )
+  })
+
+  it('clamps a branches panel drag at both ends and saves the width when the drag ends', async () => {
+    renderShell()
+    await waitFor(() =>
+      expect(screen.getByRole('complementary', { name: 'Branches' })).toHaveStyle({
+        width: '256px'
+      })
+    )
+    const handle = screen.getByRole('button', { name: 'Resize branches panel' })
+
+    fireEvent.mouseDown(handle, { clientX: 0 })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 800 }))
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('complementary', { name: 'Branches' })).toHaveStyle({
+        width: '420px'
+      })
+    )
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: -800 }))
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('complementary', { name: 'Branches' })).toHaveStyle({
+        width: '180px'
+      })
+    )
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mouseup'))
+    })
+    await waitFor(() =>
+      expect(window.electronAPI.setSidebarPrefs).toHaveBeenCalledWith({ open: true, width: 180 })
+    )
+  })
+
+  it('returns the branches panel to its default width on a double-click of its divider', async () => {
+    vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 350 })
+    renderShell()
+    await waitFor(() =>
+      expect(screen.getByRole('complementary', { name: 'Branches' })).toHaveStyle({
+        width: '350px'
+      })
+    )
+
+    fireEvent.doubleClick(screen.getByRole('button', { name: 'Resize branches panel' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('complementary', { name: 'Branches' })).toHaveStyle({
+        width: '214px'
+      })
+    )
   })
 
   it('offers no view switcher, because both surfaces are on screen', () => {

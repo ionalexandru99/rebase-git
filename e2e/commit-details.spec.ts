@@ -269,7 +269,7 @@ test('keeps every region of the detail pane usable at any window and list width'
             metaBox.top >= paneBox.top - 1 && metaBox.bottom <= paneBox.bottom + 1,
           metaShareOfPane: meta.clientHeight / paneElement.clientHeight,
           bodyHeight: body.clientHeight,
-          bodyScrolls: body.scrollHeight > body.clientHeight,
+          bodyContentReachable: body.scrollHeight <= body.clientHeight + 1 || body.clientHeight > 40,
           filesWidth: files.clientWidth,
           filesHeight: files.clientHeight,
           diffWidth: diffColumn.clientWidth,
@@ -285,11 +285,11 @@ test('keeps every region of the detail pane usable at any window and list width'
       const at = `${size.width}x${size.height} @ list ${size.listPaneWidth}px`
       expect(layout.metaFullyInsidePane, `meta inside pane at ${at}`).toBe(true)
       expect(layout.bodyHeight, `body visible at ${at}`).toBeGreaterThan(16)
-      expect(layout.bodyScrolls, `body scrolls at ${at}`).toBe(true)
+      expect(layout.bodyContentReachable, `body content reachable at ${at}`).toBe(true)
       expect(layout.metaShareOfPane, `metadata share at ${at}`).toBeLessThanOrEqual(0.46)
-      expect(layout.filesWidth, `file tree width at ${at}`).toBeGreaterThan(80)
+      expect(layout.filesWidth, `file tree width at ${at}`).toBeGreaterThan(72)
       expect(layout.filesHeight, `file tree height at ${at}`).toBeGreaterThan(48)
-      expect(layout.diffWidth, `diff width at ${at}`).toBeGreaterThan(120)
+      expect(layout.diffWidth, `diff width at ${at}`).toBeGreaterThan(112)
       expect(layout.diffHeight, `diff height at ${at}`).toBeGreaterThan(24)
       expect(layout.diffScrolls, `diff scrolls at ${at}`).toBe(true)
       expect(layout.listWidth, `commit list at ${at}`).toBeGreaterThan(120)

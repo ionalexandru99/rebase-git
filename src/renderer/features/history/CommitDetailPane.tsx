@@ -1,8 +1,13 @@
 import type { CommitDetail, CommitDetailFile } from '@shared/schemas/git'
 import { GitCommitHorizontalIcon, MoreHorizontalIcon } from 'lucide-react'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
 import { type CommitDiffSelection, CommitDiffView } from '@/features/diff/CommitDiffView'
-import { laneColor } from '@/features/history/graph/canvas'
 import type { CommitAction } from '@/lib/git-actions'
 import type { GitLogEntry } from '@/types'
 import {
@@ -14,6 +19,7 @@ import {
 } from '../../components/ui/dropdown-menu'
 import { EmptyState } from '../../components/ui/empty-state'
 import { LoadingBadge } from '../../components/ui/loading-badge'
+import { useDraggablePane } from '../../hooks/useDraggablePane'
 import { CommitFileList } from './CommitFileList'
 import { CommitMeta } from './CommitMeta'
 import { firstCommitTreeFile } from './commit-file-tree'
@@ -21,7 +27,22 @@ import { useCommitDetail, useCommitDetails } from './hooks/useCommitDetail'
 
 const SUMMARY_STAT_LIMIT = 50
 const DETAIL_FILE_LIST_WIDTH = 232
+const DETAIL_FILE_LIST_MIN_WIDTH = 160
+const DETAIL_FILE_LIST_MAX_WIDTH = 480
 const DETAIL_FILE_LIST_MAX_SHARE = '40%'
+const DETAIL_FILE_LIST_WIDTH_KEY = 'rebase:commit-files-width'
+
+const loadDetailFileListWidth = async () => {
+  const stored = Number(window.localStorage.getItem(DETAIL_FILE_LIST_WIDTH_KEY))
+  return {
+    open: true,
+    size: Number.isFinite(stored) && stored > 0 ? stored : DETAIL_FILE_LIST_WIDTH
+  }
+}
+
+const saveDetailFileListWidth = (state: { size: number }) => {
+  window.localStorage.setItem(DETAIL_FILE_LIST_WIDTH_KEY, String(state.size))
+}
 
 type CommitActionHandler = (action: CommitAction, sha: string, message: string) => void
 
@@ -100,6 +121,21 @@ function SingleCommitDetail(props: {
   onCommitAction?: CommitActionHandler
 }) {
   const detailQuery = useCommitDetail(props.sha)
+  const {
+    size: fileListWidth,
+    reset: resetFileListWidth,
+    onResizeStart: onFileListResizeStart
+  } = useDraggablePane({
+    min: DETAIL_FILE_LIST_MIN_WIDTH,
+    max: DETAIL_FILE_LIST_MAX_WIDTH,
+    defaultSize: DETAIL_FILE_LIST_WIDTH,
+    handle: 'end',
+    load: loadDetailFileListWidth,
+    save: saveDetailFileListWidth
+  })
+  const startFileListResize = (event: ReactMouseEvent) => {
+    onFileListResizeStart(event.nativeEvent)
+  }
   const detail = detailQuery.data
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const files = detail?.files ?? []
@@ -197,7 +233,6 @@ function SingleCommitDetail(props: {
             entry={props.entry}
             remotes={props.remotes}
             remoteNames={props.remoteNames}
-            laneHex={laneColor(0)}
           />
           {files.length === 0 ? (
             <EmptyState
@@ -211,15 +246,25 @@ function SingleCommitDetail(props: {
               data-testid="commit-detail-split"
               className="grid min-h-0 flex-1 overflow-hidden"
               style={{
-                gridTemplateColumns: `min(${DETAIL_FILE_LIST_WIDTH}px, ${DETAIL_FILE_LIST_MAX_SHARE}) minmax(0, 1fr)`
+                gridTemplateColumns: `min(${fileListWidth}px, ${DETAIL_FILE_LIST_MAX_SHARE}) minmax(0, 1fr)`
               }}
             >
-              <div className="flex min-h-0 min-w-0 flex-col border-r">
+              <div className="relative flex min-h-0 min-w-0 flex-col border-r">
                 <CommitFileList
                   files={files}
                   selectedPath={selectedPath}
                   onSelect={(file) => setSelectedPath(file.path)}
                 />
+                <button
+                  type="button"
+                  aria-label="Resize changed files list"
+                  title={`Changed files width: ${fileListWidth}px — double-click to reset`}
+                  onMouseDown={startFileListResize}
+                  onDoubleClick={resetFileListWidth}
+                  className="group/files-resize absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize"
+                >
+                  <span className="mx-auto block h-full w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/70" />
+                </button>
               </div>
               <div className="min-h-0 min-w-0 overflow-hidden">
                 <CommitDiffView selected={selected} />

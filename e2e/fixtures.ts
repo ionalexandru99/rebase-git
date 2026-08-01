@@ -886,7 +886,6 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           await sharedApp.restoreFolderDialog()
           await sharedApp.replaceStore()
           await clearRendererState(sharedApp.page)
-          await sharedApp.reload()
           await use(harness)
         },
         {

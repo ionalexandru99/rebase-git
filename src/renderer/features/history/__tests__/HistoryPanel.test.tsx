@@ -4,6 +4,7 @@ import { type ReactElement, useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
 import { parseRefs } from '@/features/history/graph/refs'
+import { refBadgeColor } from '@/features/history/ref-colors'
 import {
   collectTimelineTips,
   computeBranchFilterSet,
@@ -339,19 +340,23 @@ describe('HistoryPanel', () => {
     expect(screen.getByText('v1.0')).toBeInTheDocument()
   })
 
-  it('uses the graph lane color for visible refs and their commit badges', () => {
+  it('tints every ref badge by its own branch name, so co-located refs stay distinct', () => {
     renderPanel({
       all: [
         entry({
           hash: 'aaa',
           message: 'tip commit',
-          refs: `HEAD -> main${GIT_LOG_REF_SEPARATOR}origin/main`
+          refs: `HEAD -> main${GIT_LOG_REF_SEPARATOR}feature/streaming`
         })
       ],
       loadedCount: 1
     })
 
-    expect(screen.getByTitle('main')).toHaveStyle({ color: '#7c8cff' })
+    const mainColor = refBadgeColor('main')
+    const streamingColor = refBadgeColor('feature/streaming', [mainColor])
+    expect(screen.getByTitle('main')).toHaveStyle({ color: mainColor })
+    expect(screen.getByTitle('feature/streaming')).toHaveStyle({ color: streamingColor })
+    expect(mainColor).not.toBe(streamingColor)
   })
 
   it('sheds row detail as its container narrows, one mode at a time', () => {

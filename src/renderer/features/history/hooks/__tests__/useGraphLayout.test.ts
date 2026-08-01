@@ -210,6 +210,44 @@ describe('useGraphLayout with a worker', () => {
     expect(result.current.validRows).toBe(0)
   })
 
+  it('never reports rows the in-flight graph would lay out on another lane', () => {
+    const workers = useWorkers()
+    const collapsed = [entry('m', ['p', 's']), entry('p', ['q']), entry('q', ['r'])]
+    const expanded = [
+      entry('m', ['p', 's']),
+      entry('s', ['p']),
+      entry('p', ['q']),
+      entry('q', ['r'])
+    ]
+    const streamed = [...expanded, entry('r')]
+    const { result, rerender } = renderHook(
+      ({ commits, hidden }: { commits: GitLogEntry[]; hidden: string[] }) =>
+        useGraphLayout({
+          commits,
+          enabled: true,
+          isHiddenParent: (hash) => hidden.includes(hash)
+        }),
+      { initialProps: { commits: collapsed, hidden: ['s'] } }
+    )
+    const worker = workers[0]
+    worker.reply({
+      status: 'ready',
+      generation: worker.requests[0].generation,
+      layout: detachLayout(
+        layoutGraph(buildGraphTopology(collapsed, { isHiddenParent: (hash) => hash === 's' }))
+      )
+    })
+
+    rerender({ commits: expanded, hidden: [] })
+    rerender({ commits: streamed, hidden: [] })
+
+    const fresh = layoutGraph(buildGraphTopology(streamed))
+    const reported = Array.from(
+      result.current.layout.commitLane.subarray(0, result.current.validRows)
+    )
+    expect(reported).toEqual(Array.from(fresh.commitLane.subarray(0, result.current.validRows)))
+  })
+
   it('ignores a reply that a newer request has superseded', () => {
     const workers = useWorkers()
     const { result, rerender } = renderHook(

@@ -296,13 +296,50 @@ describe('collectRowEdges', () => {
 describe('drawMergeGlyph', () => {
   it('draws a plus glyph (horizontal + vertical arm) for a collapsed merge', () => {
     const { ctx, commands } = recordingCtx()
-    drawMergeGlyph(ctx, 12, 24, 'collapsed', '#ffffff', METRICS)
+    drawMergeGlyph(ctx, 12, 24, 'collapsed', '#ffffff', '#16181d', METRICS)
     expect(commands.filter((command) => command.op === 'lineTo').length).toBe(2)
   })
 
   it('draws a minus glyph (single horizontal arm) for an expanded merge', () => {
     const { ctx, commands } = recordingCtx()
-    drawMergeGlyph(ctx, 12, 24, 'expanded', '#ffffff', METRICS)
+    drawMergeGlyph(ctx, 12, 24, 'expanded', '#ffffff', '#16181d', METRICS)
     expect(commands.filter((command) => command.op === 'lineTo').length).toBe(1)
+  })
+
+  it('sits the glyph on a filled button disc larger than a plain merge ring', () => {
+    const { ctx } = recordingCtx()
+    drawMergeGlyph(ctx, 12, 24, 'collapsed', '#ffffff', '#16181d', METRICS)
+
+    expect(ctx.arc).toHaveBeenCalledWith(12, 24, METRICS.mergeGlyphRadius, 0, Math.PI * 2)
+    expect(ctx.fill).toHaveBeenCalledTimes(1)
+    expect(METRICS.mergeGlyphRadius).toBeGreaterThan(METRICS.mergeDotRadius)
+  })
+
+  it('rounds the arm caps while drawing and restores the cap afterwards', () => {
+    const { ctx } = recordingCtx()
+    const caps: string[] = []
+    Object.defineProperty(ctx, 'lineCap', {
+      set(value: string) {
+        caps.push(value)
+      }
+    })
+
+    drawMergeGlyph(ctx, 12, 24, 'collapsed', '#ffffff', '#16181d', METRICS)
+
+    expect(caps).toEqual(['round', 'butt'])
+  })
+
+  it('keeps the arms centred inside the disc', () => {
+    const { ctx, commands } = recordingCtx()
+    drawMergeGlyph(ctx, 12, 24, 'collapsed', '#ffffff', '#16181d', METRICS)
+
+    const arm = METRICS.mergeGlyphArm
+    expect(commands).toEqual([
+      { op: 'moveTo', args: [12 - arm, 24] },
+      { op: 'lineTo', args: [12 + arm, 24] },
+      { op: 'moveTo', args: [12, 24 - arm] },
+      { op: 'lineTo', args: [12, 24 + arm] }
+    ])
+    expect(arm).toBeLessThan(METRICS.mergeGlyphRadius)
   })
 })

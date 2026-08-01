@@ -112,7 +112,13 @@ function Probe(props: { shas: readonly string[]; onSession: (session: RepoSessio
   )
 }
 
-async function renderPane(shas: readonly string[]) {
+async function renderPane(shas: readonly string[], detailOverrides?: Partial<CommitDetail>) {
+  if (detailOverrides) {
+    sidecarMock.getCommitDetail.mockImplementation(async (_repo: string, sha: string) => ({
+      _tag: 'Ok' as const,
+      detail: detailFor(sha, detailOverrides)
+    }))
+  }
   let session: RepoSession | undefined
   renderWithQuery(() => (
     <GitStoreProvider tabId="commit-detail-tab" tabActive={true}>
@@ -259,11 +265,76 @@ describe('CommitDetailPane commit head', () => {
     )
   })
 
+  it('lets the commit body use the whole pane width', async () => {
+    await renderPane(['aaaaaaa1'])
+
+    const body = await within(pane()).findByTestId('commit-body')
+    expect(body.className).not.toMatch(/max-w-/)
+  })
+
+  it('reflows a hard-wrapped commit body so lines run to the pane edge', async () => {
+    await renderPane(['aaaaaaa1'], {
+      body: 'A first line the author wrapped at the conventional seventy-two columns\nso the sentence continues here.'
+    })
+
+    const body = await within(pane()).findByTestId('commit-body')
+    expect(body.textContent).toBe(
+      'A first line the author wrapped at the conventional seventy-two columns so the sentence continues here.'
+    )
+  })
+
   it('shows the refs decorating the commit', async () => {
     await renderPane(['aaaaaaa1'])
 
     const meta = await within(pane()).findByTestId('commit-meta')
     expect(within(meta).getByTitle('main')).toBeInTheDocument()
+  })
+})
+
+describe('CommitDetailPane changed-files column', () => {
+  beforeEach(() => {
+    localStorage.removeItem('rebase:commit-files-width')
+  })
+
+  it('applies a persisted column width', async () => {
+    localStorage.setItem('rebase:commit-files-width', '300')
+    await renderPane(['aaaaaaa1'])
+
+    const split = await within(pane()).findByTestId('commit-detail-split')
+    await waitFor(() => expect(split.style.gridTemplateColumns).toContain('min(300px, 40%)'))
+  })
+
+  it('resizes by dragging its divider and remembers the width', async () => {
+    await renderPane(['aaaaaaa1'])
+    const handle = await within(pane()).findByRole('button', { name: 'Resize changed files list' })
+    await waitFor(() =>
+      expect(within(pane()).getByTestId('commit-detail-split').style.gridTemplateColumns).toContain(
+        'min(232px, 40%)'
+      )
+    )
+
+    fireEvent.mouseDown(handle, { clientX: 0 })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 60 }))
+    })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mouseup'))
+    })
+
+    const split = within(pane()).getByTestId('commit-detail-split')
+    await waitFor(() => expect(split.style.gridTemplateColumns).toContain('min(292px, 40%)'))
+    expect(localStorage.getItem('rebase:commit-files-width')).toBe('292')
+  })
+
+  it('returns to the default width on a double-click of its divider', async () => {
+    localStorage.setItem('rebase:commit-files-width', '320')
+    await renderPane(['aaaaaaa1'])
+    const split = await within(pane()).findByTestId('commit-detail-split')
+    await waitFor(() => expect(split.style.gridTemplateColumns).toContain('min(320px, 40%)'))
+
+    fireEvent.doubleClick(within(pane()).getByRole('button', { name: 'Resize changed files list' }))
+
+    await waitFor(() => expect(split.style.gridTemplateColumns).toContain('min(232px, 40%)'))
   })
 })
 

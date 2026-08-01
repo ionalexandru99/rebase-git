@@ -12,6 +12,8 @@ import { AppSidebar } from './Sidebar'
 
 export const COLUMN_HEADER_HEIGHT = 34
 export const REFS_COLUMN_WIDTH = 214
+export const REFS_COLUMN_MIN_WIDTH = 180
+export const REFS_COLUMN_MAX_WIDTH = 420
 export const STATUS_DOCK_HEIGHT = 26
 const DIVIDER_WIDTH = 6
 
@@ -49,6 +51,19 @@ const logListPaneWidthError = (error: unknown) => {
   console.warn('[Shell] failed to load the commit list width', error)
 }
 
+const logSidebarWidthError = (error: unknown) => {
+  console.warn('[Shell] failed to load the branches panel width', error)
+}
+
+const loadSidebarWidth = async () => {
+  const prefs = await window.electronAPI.getSidebarPrefs()
+  return { open: true, size: prefs.width }
+}
+
+const saveSidebarWidth = (state: { size: number }) => {
+  return window.electronAPI.setSidebarPrefs({ open: true, width: state.size })
+}
+
 export function Shell(props: ShellProps) {
   const repoPath = props.repoPath
   const load = useCallback(async () => {
@@ -82,20 +97,43 @@ export function Shell(props: ShellProps) {
     onLoadError: logListPaneWidthError
   })
 
+  const {
+    size: refsWidth,
+    reset: resetRefsWidth,
+    onResizeStart: onRefsResizeStart
+  } = useDraggablePane({
+    min: REFS_COLUMN_MIN_WIDTH,
+    max: REFS_COLUMN_MAX_WIDTH,
+    defaultSize: REFS_COLUMN_WIDTH,
+    handle: 'end',
+    load: loadSidebarWidth,
+    save: saveSidebarWidth,
+    onLoadError: logSidebarWidthError
+  })
+
   const [dragging, setDragging] = useState(false)
+  const [refsDragging, setRefsDragging] = useState(false)
 
   useEffect(() => {
-    if (!dragging) {
+    if (!dragging && !refsDragging) {
       return
     }
-    const stop = () => setDragging(false)
+    const stop = () => {
+      setDragging(false)
+      setRefsDragging(false)
+    }
     window.addEventListener('mouseup', stop)
     return () => window.removeEventListener('mouseup', stop)
-  }, [dragging])
+  }, [dragging, refsDragging])
 
   const startResize = (event: MouseEvent) => {
     setDragging(true)
     onResizeStart(event)
+  }
+
+  const startRefsResize = (event: MouseEvent) => {
+    setRefsDragging(true)
+    onRefsResizeStart(event)
   }
 
   return (
@@ -108,10 +146,35 @@ export function Shell(props: ShellProps) {
       <div
         className="grid min-h-0 min-w-0 overflow-hidden"
         style={{
-          gridTemplateColumns: `${REFS_COLUMN_WIDTH}px ${listWidth}px ${DIVIDER_WIDTH}px minmax(0, 1fr)`
+          gridTemplateColumns: `${refsWidth}px ${DIVIDER_WIDTH}px ${listWidth}px ${DIVIDER_WIDTH}px minmax(0, 1fr)`
         }}
       >
-        <AppSidebar branchBrowser={props.branchBrowser} currentBranch={props.currentBranch} />
+        <AppSidebar
+          branchBrowser={props.branchBrowser}
+          currentBranch={props.currentBranch}
+          width={refsWidth}
+        />
+
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="Resize branches panel"
+            title={`Branches panel width: ${refsWidth}px — double-click to reset`}
+            onMouseDown={(event) => startRefsResize(event.nativeEvent)}
+            onDoubleClick={resetRefsWidth}
+            className="group/refs-resize flex h-full w-full cursor-col-resize items-stretch justify-center bg-chrome"
+          >
+            <span className="w-px bg-border-strong/40 transition-colors group-hover/refs-resize:bg-primary/70" />
+          </button>
+          {refsDragging ? (
+            <span
+              data-testid="refs-width-tooltip"
+              className="pointer-events-none absolute left-3 top-2 z-50 whitespace-nowrap rounded-[var(--r-xs)] border bg-popover px-1.5 py-0.5 text-xs tabular-nums text-popover-foreground shadow-[var(--shadow)]"
+            >
+              {refsWidth}px
+            </span>
+          ) : null}
+        </div>
 
         <section
           aria-label="Commits"

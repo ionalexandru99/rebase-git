@@ -6,6 +6,7 @@ export interface GraphMetrics {
   dotRadius: number
   mergeDotRadius: number
   mergeStroke: number
+  mergeGlyphRadius: number
   mergeGlyphArm: number
   mergeGlyphStroke: number
 }
@@ -21,8 +22,9 @@ function buildGraphMetrics(rootPx: number): GraphMetrics {
     dotRadius: rootPx * 0.3125,
     mergeDotRadius: rootPx * 0.25,
     mergeStroke: Math.max(1, rootPx * 0.1),
-    mergeGlyphArm: rootPx * 0.2,
-    mergeGlyphStroke: Math.max(1, rootPx * 0.09)
+    mergeGlyphRadius: rootPx * 0.4,
+    mergeGlyphArm: rootPx * 0.175,
+    mergeGlyphStroke: Math.max(1.25, rootPx * 0.1)
   }
 }
 

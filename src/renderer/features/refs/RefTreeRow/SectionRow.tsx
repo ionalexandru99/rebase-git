@@ -19,7 +19,7 @@ export function SectionRow(props: SectionRowProps) {
       style={props.style}
     >
       <Chevron expanded={props.row.expanded} />
-      <span>{props.row.label}</span>
+      <span className="min-w-0 truncate whitespace-nowrap">{props.row.label}</span>
       {props.loading ? (
         <Skeleton className="h-2 w-4 rounded-sm" />
       ) : (

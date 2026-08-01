@@ -41,6 +41,14 @@ export function formatCommitAge(date: string, now: number): string {
   return formatRelativeTime(timestamp, now)
 }
 
+export function formatCommitAgeShort(date: string, now: number): string {
+  const long = formatCommitAge(date, now)
+  if (long === 'just now') {
+    return 'now'
+  }
+  return long.replace(/ ago$/, '')
+}
+
 export function initials(name: string): string {
   return name
     .split(/\s+/)

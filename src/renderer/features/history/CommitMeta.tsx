@@ -4,7 +4,9 @@ import { parseRefs } from '@/features/history/graph/refs'
 import { avatarColor } from '@/features/repos/repo-avatar'
 import { initials } from '@/lib/format'
 import type { GitLogEntry } from '@/types'
-import { RefBadge } from './RefBadge'
+import { reflowCommitBody } from './commit-body'
+import { RefBadge, refBadgeName } from './RefBadge'
+import { assignRefBadgeColors } from './ref-colors'
 
 const TIMESTAMP_FORMATTER = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -21,7 +23,6 @@ interface CommitMetaProps {
   entry?: GitLogEntry
   remotes: Record<string, string>
   remoteNames: Set<string>
-  laneHex: string
 }
 
 export function CommitMeta(props: CommitMetaProps) {
@@ -31,6 +32,7 @@ export function CommitMeta(props: CommitMetaProps) {
     () => (entry ? parseRefs(entry.refs, props.remoteNames) : []),
     [entry, props.remoteNames]
   )
+  const badgeColors = useMemo(() => assignRefBadgeColors(refs.map(refBadgeName)), [refs])
   const parents = entry?.parents ?? []
 
   return (
@@ -66,11 +68,11 @@ export function CommitMeta(props: CommitMetaProps) {
         ) : null}
         {refs.length > 0 ? (
           <span className="flex shrink-0 items-center gap-1">
-            {refs.map((parsedRef) => (
+            {refs.map((parsedRef, refIndex) => (
               <RefBadge
                 key={`${parsedRef.kind}:${parsedRef.label}`}
                 parsedRef={parsedRef}
-                laneHex={props.laneHex}
+                badgeHex={badgeColors[refIndex]}
                 remotes={props.remotes}
               />
             ))}
@@ -80,10 +82,10 @@ export function CommitMeta(props: CommitMetaProps) {
 
       {detail.body ? (
         <p
-          className="scroll-host m-0 min-h-0 max-w-[80ch] flex-1 overflow-auto whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground/90"
+          className="scroll-host m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground/90"
           data-testid="commit-body"
         >
-          {detail.body}
+          {reflowCommitBody(detail.body)}
         </p>
       ) : null}
     </div>
