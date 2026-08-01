@@ -1,10 +1,20 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { type ChildProcess, execFile, spawn, spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
 import { Context, Effect, Layer, ManagedRuntime } from 'effect'
 
 export const MAX_STDERR_BYTES = 4096
 const FORCE_KILL_DELAY_MS = 2_000
 const PROCESS_EXIT_POLL_MS = 10
+
+function processRepoKey(repoPath: string): string {
+  try {
+    return fs.realpathSync.native(repoPath)
+  } catch {
+    return path.resolve(repoPath)
+  }
+}
 
 interface TrackedChild {
   child: ChildProcess
@@ -169,7 +179,9 @@ async function awaitChildren(registry: ChildRegistry): Promise<void> {
 export interface TrackedChildrenService {
   runRequest<A>(signal: AbortSignal, use: () => Promise<A>): Promise<A>
   beginRepoOperation(repoPath: string): RepoOperation
+  openRepoReads(repoPath: string): void
   registerRepoChild(repoPath: string, child: ChildProcess): void
+  cancelRepoReads(repoPath: string): Promise<void>
   attachRequestChild(child: ChildProcess): void
   detachRequestChild(child: ChildProcess): void
   cancelRepoOperation(operation: RepoOperation): Promise<void>
@@ -184,6 +196,7 @@ interface ManagedTrackedChildren extends TrackedChildrenService {
 
 function makeTrackedChildren(): ManagedTrackedChildren {
   const repoOperations = new Map<string, RepoOperation>()
+  const repoReadRegistries = new Map<string, ChildRegistry>()
   const repoOperationOwners = new WeakMap<RepoOperation, ChildRegistry | undefined>()
   const operationRegistries = new WeakMap<RepoOperation, ChildRegistry>()
   const requestRegistry = new AsyncLocalStorage<ChildRegistry>()
@@ -273,19 +286,40 @@ function makeTrackedChildren(): ManagedTrackedChildren {
       })
     },
     beginRepoOperation: (repoPath) => {
-      const operation: RepoOperation = { repoPath }
-      repoOperations.set(repoPath, operation)
+      const key = processRepoKey(repoPath)
+      const operation: RepoOperation = { repoPath: key }
+      repoOperations.set(key, operation)
       operationRegistries.set(operation, { children: new Set(), cancelling: false })
       repoOperationOwners.set(operation, requestRegistry.getStore())
       return operation
+    },
+    openRepoReads: (repoPath) => {
+      repoReadRegistries.set(processRepoKey(repoPath), {
+        children: new Set(),
+        cancelling: false
+      })
     },
     registerRepoChild: (repoPath, child) => {
       trackProcess(child)
       const request = requestRegistry.getStore()
       registerChild(request, child)
-      const operation = repoOperations.get(repoPath)
+      const key = processRepoKey(repoPath)
+      const operation = repoOperations.get(key)
       if (operation && repoOperationOwners.get(operation) === request) {
         registerChild(operationRegistries.get(operation), child)
+        return
+      }
+      let reads = repoReadRegistries.get(key)
+      if (!reads) {
+        reads = { children: new Set(), cancelling: false }
+        repoReadRegistries.set(key, reads)
+      }
+      registerChild(reads, child)
+    },
+    cancelRepoReads: async (repoPath) => {
+      const registry = repoReadRegistries.get(processRepoKey(repoPath))
+      if (registry) {
+        await cancelChildren(registry)
       }
     },
     attachRequestChild: (child) => registerChild(requestRegistry.getStore(), child),
@@ -358,8 +392,16 @@ export function beginRepoOperation(repoPath: string): RepoOperation {
   return withTrackedChildren((registry) => registry.beginRepoOperation(repoPath))
 }
 
+export function openRepoReads(repoPath: string): void {
+  withTrackedChildren((registry) => registry.openRepoReads(repoPath))
+}
+
 export function registerRepoChild(repoPath: string, child: ChildProcess): void {
   withTrackedChildren((registry) => registry.registerRepoChild(repoPath, child))
+}
+
+export function cancelRepoReads(repoPath: string): Promise<void> {
+  return withTrackedChildrenPromise((registry) => registry.cancelRepoReads(repoPath))
 }
 
 export function attachRequestChild(child: ChildProcess): void {
