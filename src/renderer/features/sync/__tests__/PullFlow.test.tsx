@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PullStrategy } from '@/lib/rpc-client'
 import type { PullOutcome } from '@/stores/action-runner'
@@ -25,11 +26,18 @@ function Harness(props: HarnessProps) {
     loadRememberedStrategy: props.loadRememberedStrategy ?? (async () => null),
     rememberStrategy: props.rememberStrategy ?? (() => {})
   })
+  const [result, setResult] = useState<string | null>(null)
   return (
     <>
-      <button type="button" onClick={() => void flow.requestPull()}>
+      <button
+        type="button"
+        onClick={() =>
+          void flow.requestPull().then((success) => setResult(success ? 'success' : 'stopped'))
+        }
+      >
         Pull
       </button>
+      {result ? <output>{result}</output> : null}
       {flow.divergedDialog}
     </>
   )
@@ -103,6 +111,7 @@ describe('usePullFlow', () => {
     await waitFor(() => expect(pull).toHaveBeenCalledTimes(2))
     expect(pull).toHaveBeenLastCalledWith('rebase')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByText('success')).toBeInTheDocument()
   })
 
   it('does not remember the choice unless asked to', async () => {
@@ -166,6 +175,7 @@ describe('usePullFlow', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(pull).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('stopped')).toBeInTheDocument()
   })
 
   it('dismisses on Escape without pulling again', async () => {

@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { MAX_COMMIT_STATS_BATCH } from '@shared/git-constants'
 import type { CommitStats, WorkingTreeStats } from '@shared/schemas/git'
 import { Effect } from 'effect'
@@ -84,10 +87,31 @@ export function getWorkingTreeStats(
     const head = yield* tryGit(() =>
       runGit(['-C', key, 'rev-parse', '--verify', '--quiet', 'HEAD'], { okExitCodes: [0, 1] })
     )
-    if (head.trim().length === 0) {
-      return { additions: 0, deletions: 0 }
-    }
-    const output = yield* tryGit(() => runGit(['-C', key, 'diff', '--numstat', 'HEAD', '--']))
+    const output = yield* tryGit(async () => {
+      const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'rebase-working-tree-stats-'))
+      const env = { ...process.env, GIT_INDEX_FILE: path.join(temporaryDirectory, 'index') }
+      try {
+        await runGit(
+          ['-C', key, 'read-tree', ...(head.trim().length > 0 ? ['HEAD'] : ['--empty'])],
+          { env }
+        )
+        await runGit(['-C', key, 'add', '-A', '--'], { env })
+        return await runGit(
+          [
+            '-C',
+            key,
+            'diff',
+            '--cached',
+            '--numstat',
+            ...(head.trim().length > 0 ? ['HEAD'] : []),
+            '--'
+          ],
+          { env }
+        )
+      } finally {
+        await rm(temporaryDirectory, { recursive: true, force: true })
+      }
+    })
     return sumNumstat(output.split('\n'))
   })
 }

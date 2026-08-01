@@ -16,6 +16,7 @@ export interface PushFlowDeps {
 
 export interface PushFlow {
   requestPush: () => Promise<void>
+  requestPushAfterPull: () => Promise<void>
   openForceConfirm: () => void
   dialogs: ReactNode
 }
@@ -114,15 +115,19 @@ export function usePushFlow(deps: PushFlowDeps): PushFlow {
     setMode('idle')
   }
 
+  const requestPushAfterPull = async () => {
+    const outcome = await deps.push()
+    if (outcome.kind === 'rejected' && outcome.reason === 'non-fast-forward') {
+      openTier1()
+    }
+  }
+
   const requestPush = async () => {
     if (isDiverged) {
       openTier1()
       return
     }
-    const outcome = await deps.push()
-    if (outcome.kind === 'rejected' && outcome.reason === 'non-fast-forward') {
-      openTier1()
-    }
+    await requestPushAfterPull()
   }
 
   const onConfirmTier1 = async () => {
@@ -247,5 +252,5 @@ export function usePushFlow(deps: PushFlowDeps): PushFlow {
     </>
   )
 
-  return { requestPush, openForceConfirm: openTier1, dialogs }
+  return { requestPush, requestPushAfterPull, openForceConfirm: openTier1, dialogs }
 }

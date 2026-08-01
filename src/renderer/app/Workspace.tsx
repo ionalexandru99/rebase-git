@@ -59,6 +59,7 @@ const EMPTY_BRANCH_NAMES: string[] = []
 const NO_SHAS: readonly string[] = []
 
 export function Workspace(props: WorkspaceProps) {
+  const tabActive = props.tabActive ?? true
   const refs = useRefs()
   const actionRunner = useActionRunner()
   const { status, rows } = useWorkingTreeStatus()
@@ -78,7 +79,7 @@ export function Workspace(props: WorkspaceProps) {
   const localBranches = refs.branches?.all ?? EMPTY_BRANCH_NAMES
   const remoteBranches = refs.branches?.remotes ?? EMPTY_BRANCH_NAMES
 
-  const timeline = useTimelineVisibility(props.tabActive ?? true)
+  const timeline = useTimelineVisibility(tabActive)
 
   const remoteNames = useMemo(() => new Set(Object.keys(refs.remotes)), [refs.remotes])
   const commitsByHash = useMemo(
@@ -90,8 +91,8 @@ export function Workspace(props: WorkspaceProps) {
     [timeline.filteredCommits]
   )
   const headSha = useMemo(
-    () => getRefTipIndex(timeline.filteredCommits, remoteNames).headTip,
-    [timeline.filteredCommits, remoteNames]
+    () => getRefTipIndex(timeline.graphCommits, remoteNames).headTip,
+    [timeline.graphCommits, remoteNames]
   )
   const visibleBranchCount = useMemo(
     () => countVisibleBranchRefs(timeline.visibleRefs, remoteBranches, remoteNames),
@@ -100,8 +101,21 @@ export function Workspace(props: WorkspaceProps) {
 
   const pruneToCommits = selection.pruneToCommits
   useEffect(() => {
+    const loadedCommits = history.log?.all
+    const timelineSnapshotPending =
+      history.logLoading || (loadedCommits !== undefined && timeline.graphCommits !== loadedCommits)
+    if (!tabActive || timelineSnapshotPending) {
+      return
+    }
     pruneToCommits(orderedShas)
-  }, [orderedShas, pruneToCommits])
+  }, [
+    history.log,
+    history.logLoading,
+    orderedShas,
+    pruneToCommits,
+    tabActive,
+    timeline.graphCommits
+  ])
 
   const selectCommitInTimeline = useStableCallback(
     (sha: string, modifiers: { toggle: boolean; range: boolean }) => {

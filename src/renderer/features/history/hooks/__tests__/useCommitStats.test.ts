@@ -19,11 +19,18 @@ describe('commitStatsBlocks', () => {
     expect(blocks[1].shas[0]).toBe(`sha-${COMMIT_STATS_BLOCK_SIZE}`)
   })
 
-  it('keys a block by its first sha so scrolling back is a cache hit', () => {
+  it('keeps the same key for repeated views of the same block', () => {
     const first = commitStatsBlocks(shas, 0, 1)
     const again = commitStatsBlocks(shas, 2, 3)
 
-    expect(again[0].key).toBe(first[0].key)
+    expect(again[0].key).toEqual(first[0].key)
+  })
+
+  it('changes the key when commits are inserted into a block', () => {
+    const first = commitStatsBlocks(shas, 0, 1)
+    const changed = commitStatsBlocks([shas[0], 'inserted', ...shas.slice(1)], 0, 1)
+
+    expect(changed[0].key).not.toEqual(first[0].key)
   })
 
   it('clamps the tail block to the commits that exist', () => {

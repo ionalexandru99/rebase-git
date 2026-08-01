@@ -18,6 +18,9 @@ function Harness(props: PushFlowDeps) {
       <button type="button" onClick={() => void flow.requestPush()}>
         Push
       </button>
+      <button type="button" onClick={() => void flow.requestPushAfterPull()}>
+        Push after pull
+      </button>
       <button type="button" onClick={flow.openForceConfirm}>
         Ask to force push
       </button>
@@ -65,6 +68,15 @@ describe('usePushFlow', () => {
     expect(dialog).toHaveTextContent(/without destroying remote work you haven't seen/i)
     expect(screen.getByRole('button', { name: /force push \(with lease\)/i })).toBeInTheDocument()
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('plain-pushes after a successful pull even when the rendered counts were diverged', async () => {
+    const { push } = renderFlow({ ahead: 2, behind: 3 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push after pull' }))
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('escalates to the Tier 1 confirm when a plain push is refused as non-fast-forward', async () => {

@@ -430,7 +430,7 @@ describe('sidecar server', () => {
 
     expect(Either.isRight(stats)).toBe(true)
     if (Either.isRight(stats)) {
-      expect(stats.right).toEqual({ additions: 0, deletions: 0 })
+      expect(stats.right).toEqual({ additions: 2, deletions: 0 })
     }
   })
 

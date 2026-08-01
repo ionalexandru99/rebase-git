@@ -49,6 +49,9 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
 
   await openHistory(page)
   await expect(page.getByText('alpha commit').first()).toBeVisible({ timeout: 10_000 })
+  const selectedCommit = page.getByTestId('commit-row').filter({ hasText: 'alpha only' })
+  await selectedCommit.click()
+  await expect(selectedCommit).toHaveAttribute('data-selected', 'true')
 
   await tabB.click()
   await expect(tabB).toHaveAttribute('aria-selected', 'true')
@@ -60,6 +63,10 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
   await expect(tabA).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText('alpha commit').first()).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('beta only').first()).toBeHidden()
+  await expect(selectedCommit).toHaveAttribute('data-selected', 'true')
+  await expect(page.getByTestId('commit-detail-pane').filter({ visible: true })).toContainText(
+    'alpha only'
+  )
 })
 
 test('a destructive dialog from an inactive repo is hidden and cannot be activated', async ({

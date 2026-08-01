@@ -42,14 +42,14 @@ describe('getWorkingTreeStats', () => {
     expect(stats).toEqual({ additions: 0, deletions: 0 })
   })
 
-  it('totals tracked changes against HEAD and ignores untracked files', async () => {
+  it('totals tracked and untracked changes against HEAD', async () => {
     write('one.txt', 'a\nB\nc\nd\ne\n')
     write('two.txt', 'x\n')
     write('untracked.txt', 'p\nq\nr\n')
 
     const stats = await runOp(getWorkingTreeStats(repoDir))
 
-    expect(stats).toEqual({ additions: 3, deletions: 2 })
+    expect(stats).toEqual({ additions: 6, deletions: 2 })
   })
 
   it('keeps the same totals once part of the change is staged', async () => {
@@ -57,10 +57,10 @@ describe('getWorkingTreeStats', () => {
 
     const stats = await runOp(getWorkingTreeStats(repoDir))
 
-    expect(stats).toEqual({ additions: 3, deletions: 2 })
+    expect(stats).toEqual({ additions: 6, deletions: 2 })
   })
 
-  it('reports zeros while HEAD is still unborn', async () => {
+  it('counts staged files against the empty tree while HEAD is still unborn', async () => {
     const unbornDir = fs.realpathSync.native(
       fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-worktree-stats-unborn-'))
     )
@@ -72,7 +72,7 @@ describe('getWorkingTreeStats', () => {
     try {
       const stats = await runOp(getWorkingTreeStats(unbornDir))
 
-      expect(stats).toEqual({ additions: 0, deletions: 0 })
+      expect(stats).toEqual({ additions: 2, deletions: 0 })
     } finally {
       await runOp(closeRepo(unbornDir))
       fs.rmSync(unbornDir, { recursive: true, force: true })

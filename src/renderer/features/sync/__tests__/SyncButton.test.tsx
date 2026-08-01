@@ -88,22 +88,17 @@ describe('SyncButton', () => {
 
     fireEvent.click(syncButton())
 
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
-    expect(calls).toEqual(['pull'])
-    expect(screen.getByRole('dialog')).toHaveTextContent('2 ahead and 3 behind')
+    await waitFor(() => expect(calls).toEqual(['pull', 'push']))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('never force-pushes a diverged branch without an explicit confirmation', async () => {
-    const { calls } = renderSync({ ahead: 2, behind: 3, onPull: vi.fn(async () => true) })
+  it('does not push when a diverged pull is cancelled or fails', async () => {
+    const { calls } = renderSync({ ahead: 2, behind: 3, onPull: vi.fn(async () => false) })
 
     fireEvent.click(syncButton())
 
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(calls).toEqual([])
-
-    fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
-
-    await waitFor(() => expect(calls).toEqual(['push']))
   })
 
   it('stays out of the way while a sync is already running', () => {

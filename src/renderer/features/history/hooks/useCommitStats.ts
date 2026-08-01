@@ -10,7 +10,7 @@ export interface CommitStat {
 }
 
 export interface CommitStatsBlock {
-  key: string
+  key: readonly string[]
   shas: string[]
 }
 
@@ -35,7 +35,7 @@ export function commitStatsBlocks(
     if (blockShas.length === 0) {
       continue
     }
-    blocks.push({ key: blockShas[0], shas: blockShas })
+    blocks.push({ key: blockShas, shas: blockShas })
   }
   return blocks
 }
@@ -66,7 +66,7 @@ export function useCommitStats(
       queryKey: [
         ...repoQueryKeys(repoPath, { idle: 'commit-stats' }).root,
         'commit-stats',
-        block.key
+        ...block.key
       ],
       staleTime: Number.POSITIVE_INFINITY,
       gcTime: WARM_REOPEN_GC_TIME_MS,

@@ -43,7 +43,7 @@ export function SyncButton(props: SyncButtonProps) {
       return
     }
     if (props.ahead > 0) {
-      await pushFlow.requestPush()
+      await pushFlow.requestPushAfterPull()
     }
   }
 

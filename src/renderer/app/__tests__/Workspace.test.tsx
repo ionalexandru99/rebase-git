@@ -122,6 +122,61 @@ describe('Workspace selection drives the detail pane', () => {
     )
   })
 
+  it('shows the checked-out HEAD when the timeline defaults to another branch', async () => {
+    const featureCommits = [
+      {
+        hash: 'feature1',
+        message: 'feature tip',
+        author_name: 'Ada Author',
+        date: '2026-07-22T09:42:00.000Z',
+        parents: ['base0001'],
+        refs: 'HEAD -> feature'
+      },
+      {
+        hash: 'main0001',
+        message: 'main tip',
+        author_name: 'Ada Author',
+        date: '2026-07-21T09:42:00.000Z',
+        parents: ['base0001'],
+        refs: 'main'
+      },
+      {
+        hash: 'base0001',
+        message: 'shared base',
+        author_name: 'Ada Author',
+        date: '2026-07-20T09:42:00.000Z',
+        parents: [],
+        refs: ''
+      }
+    ]
+    mockBranchResponses({ current: 'feature', all: ['main', 'feature'], remotes: [], tags: [] })
+    sidecarMock.getCommitDetail.mockImplementation(async (_repo: string, sha: string) => ({
+      _tag: 'Ok' as const,
+      detail: {
+        sha,
+        author: { name: 'Ada Author', email: 'ada@example.com' },
+        authorDate: '2026-07-22T09:42:00.000Z',
+        subject: featureCommits.find((commit) => commit.hash === sha)?.message ?? 'unknown',
+        body: '',
+        files: []
+      }
+    }))
+    const stream = setupLogStream()
+
+    renderApp()
+    fireEvent.click(await screen.findByText(repoPath))
+    await screen.findByRole('region', { name: 'Commits' })
+    await waitFor(() => expect(window.electronAPI.startLogStream).toHaveBeenCalled())
+    stream.fire({ repoPath, commits: featureCommits })
+    stream.fireDone(repoPath, false)
+
+    await waitFor(() =>
+      expect(within(detailPane()).getByTestId('commit-detail-sha')).toHaveTextContent('feature')
+    )
+    expect(within(detailPane()).getByRole('heading', { level: 1 })).toHaveTextContent('feature tip')
+    expect(screen.queryByText('No commit selected')).not.toBeInTheDocument()
+  })
+
   it('follows a single click on a commit row', async () => {
     await openRepo()
 
