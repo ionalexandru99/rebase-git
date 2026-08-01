@@ -88,26 +88,22 @@ test('collapses a merge by default and expands/collapses its side branch from th
   await expect(sideRow).toHaveCount(0)
 
   const canvas = page.getByTestId('commit-graph-canvas')
-  const baseBox = await canvas.boundingBox()
-  if (!baseBox) {
-    throw new Error('expected a bounding box for the graph canvas')
-  }
+  const canvasWidth = () =>
+    canvas.evaluate((element) => Math.round(element.getBoundingClientRect().width))
+  await expect.poll(canvasWidth, { timeout: 10_000 }).toBeGreaterThan(0)
+  const baseWidth = await canvasWidth()
 
   const expandControl = page.getByRole('button', { name: 'Expand merge side branch' })
   await expect(expandControl).toBeVisible()
   await expandControl.click()
 
   await expect(sideRow).toBeVisible({ timeout: 10_000 })
-  await expect
-    .poll(async () => (await canvas.boundingBox())?.width ?? 0, { timeout: 10_000 })
-    .toBeGreaterThan(baseBox.width)
+  await expect.poll(canvasWidth, { timeout: 10_000 }).toBeGreaterThan(baseWidth)
 
   await page.getByRole('button', { name: 'Collapse merge side branch' }).click()
 
   await expect(sideRow).toHaveCount(0)
-  await expect
-    .poll(async () => Math.round((await canvas.boundingBox())?.width ?? 0), { timeout: 10_000 })
-    .toBe(Math.round(baseBox.width))
+  await expect.poll(canvasWidth, { timeout: 10_000 }).toBe(baseWidth)
 })
 
 test('keeps the author, sha and date legible on a wide graph while scrolling', async ({
