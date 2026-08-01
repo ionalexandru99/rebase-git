@@ -53,7 +53,7 @@ test('creating a branch from a leaf context menu checks it out', async ({ harnes
   await page.getByRole('menuitem', { name: 'New branch from here' }).click()
 
   await page.getByLabel('Branch name').fill('wip')
-  await page.getByRole('button', { name: 'Create' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click()
 
   await expect(page.getByRole('button', { name: 'wip current' })).toBeVisible({ timeout: 10_000 })
   await expect(tree.getByTitle('wip', { exact: true })).toBeVisible({ timeout: 10_000 })

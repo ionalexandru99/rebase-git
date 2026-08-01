@@ -1,15 +1,17 @@
 import { Skeleton } from '../../components/ui/skeleton'
+import type { HistoryListMode } from './list-modes'
+import { singleLineGridTemplate } from './row-layout'
 
 interface SkeletonRowsProps {
   graphRailWidth: number
-  gridTail: string
+  mode: HistoryListMode
   rowHeight: number
   viewportHeight: number
 }
 
 export function SkeletonRows(props: SkeletonRowsProps) {
   const count = Math.max(12, Math.ceil(props.viewportHeight / props.rowHeight) + 2)
-  const gridTemplate = `${props.graphRailWidth}px minmax(0,1fr) ${props.gridTail}`
+  const gridTemplate = `${props.graphRailWidth}px ${singleLineGridTemplate(props.mode)}`
   const rows = Array.from({ length: count }, (_, position) => ({
     key: `skeleton-row-${position}`,
     width: 55 + ((position * 13) % 35)

@@ -156,6 +156,24 @@ function rpcGetRemoteRefs(repoPath: string) {
   )
 }
 
+function rpcGetCommitStats(repoPath: string, shas: string[]) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.getCommitStats({ repoPath, shas }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
+function rpcGetWorkingTreeStats(repoPath: string) {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* RpcClient.make(SidecarRpcs)
+      return yield* Effect.either(client.getWorkingTreeStats({ repoPath }))
+    }).pipe(Effect.scoped, Effect.provide(rpcProtocolLayer()))
+  )
+}
+
 async function rpcOpenRepo(repoPath: string): Promise<void> {
   const result = await Effect.runPromise(
     Effect.gen(function* () {
@@ -390,6 +408,29 @@ describe('sidecar server', () => {
     if (Either.isRight(branches)) {
       expect(branches.right.branches.current).toBe('main')
       expect(branches.right.branches.all).toContain('main')
+    }
+  })
+
+  it('serves batched commit stats', async () => {
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repoPath,
+      encoding: 'utf8'
+    }).trim()
+
+    const stats = await rpcGetCommitStats(repoPath, [head])
+
+    expect(Either.isRight(stats)).toBe(true)
+    if (Either.isRight(stats)) {
+      expect(stats.right.stats).toEqual([{ sha: head, additions: 1, deletions: 0 }])
+    }
+  })
+
+  it('serves working tree stats', async () => {
+    const stats = await rpcGetWorkingTreeStats(repoPath)
+
+    expect(Either.isRight(stats)).toBe(true)
+    if (Either.isRight(stats)) {
+      expect(stats.right).toEqual({ additions: 0, deletions: 0 })
     }
   })
 

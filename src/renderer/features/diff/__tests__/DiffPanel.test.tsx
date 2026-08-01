@@ -277,6 +277,8 @@ beforeEach(() => {
     refs: { remotes: [], tags: [] }
   })
   mockDiffOn('unstaged')
+  sidecarMock.stageFile.mockResolvedValue({ _tag: 'Ok' })
+  sidecarMock.unstageFile.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.stageHunk.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.unstageHunk.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.discardHunk.mockResolvedValue({ _tag: 'Ok' })
@@ -351,6 +353,120 @@ describe('DiffPanel rendering', () => {
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
     expect(await screen.findByText('No changes to show.')).toBeInTheDocument()
+  })
+})
+
+describe('DiffPanel file staging', () => {
+  it('stages the whole worktree file from the diff header, keeping the totals', async () => {
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.getByText('+2')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stage file' }))
+
+    await waitFor(() => {
+      expect(sidecarMock.stageFile).toHaveBeenCalledWith(repoPath, 'src/app.ts')
+    })
+    expect(sidecarMock.unstageFile).not.toHaveBeenCalled()
+  })
+
+  it('unstages the whole file from the staged side', async () => {
+    mockDiffOn('staged')
+    await renderDiffPanel({ file: 'src/app.ts', group: 'staged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.queryByRole('button', { name: 'Stage file' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage file' }))
+
+    await waitFor(() => {
+      expect(sidecarMock.unstageFile).toHaveBeenCalledWith(repoPath, 'src/app.ts')
+    })
+  })
+
+  it('carries the rename source when unstaging a renamed file', async () => {
+    mockDiffOn('staged')
+    await renderDiffPanel({ file: 'src/app.ts', renameSource: 'src/old.ts', group: 'staged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage file' }))
+
+    await waitFor(() => {
+      expect(sidecarMock.unstageFile).toHaveBeenCalledWith(repoPath, 'src/app.ts', 'src/old.ts')
+    })
+  })
+
+  it('still stages an untracked file whole, even though it has no hunk actions', async () => {
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: ['src/app.ts'],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: []
+      }
+    })
+    await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.queryByRole('button', { name: 'Stage hunk' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stage file' }))
+
+    await waitFor(() => {
+      expect(sidecarMock.stageFile).toHaveBeenCalledWith(repoPath, 'src/app.ts')
+    })
+  })
+
+  it('offers no file staging for a conflicted file', async () => {
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: ['src/app.ts'],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
+      }
+    })
+    await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.queryByRole('button', { name: /^(Stage|Unstage) file$/ })).not.toBeInTheDocument()
+  })
+
+  it('offers no file staging for a binary file', async () => {
+    sidecarMock.getDiff.mockResolvedValue({
+      _tag: 'Ok',
+      patch: 'Binary files a/logo.png and b/logo.png differ\n',
+      binary: true
+    })
+    await renderDiffPanel({ file: 'logo.png', group: 'unstaged' })
+
+    await screen.findByText(/Binary file/)
+    expect(screen.queryByRole('button', { name: /^(Stage|Unstage) file$/ })).not.toBeInTheDocument()
+  })
+
+  it('offers no file staging on the amend surface', async () => {
+    await renderDiffPanel(
+      { file: 'src/app.ts', source: 'head-commit', range: 'HEAD~1..HEAD' },
+      {
+        dropState: 'kept',
+        isHunkDropped: () => false,
+        onToggleFile: vi.fn(),
+        onToggleHunk: vi.fn()
+      }
+    )
+
+    await screen.findByTestId('pierre-file-diff')
+    expect(screen.queryByRole('button', { name: /^(Stage|Unstage) file$/ })).not.toBeInTheDocument()
   })
 })
 

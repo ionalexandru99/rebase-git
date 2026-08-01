@@ -11,6 +11,7 @@ import {
   ContextMenuTrigger
 } from '../../../components/ui/context-menu'
 import { AheadBehindBadge } from './AheadBehindBadge'
+import { RefFreshnessLabel } from './RefFreshnessLabel'
 
 interface LeafRowProps {
   row: RefLeafRow
@@ -125,6 +126,7 @@ export function LeafRow(props: LeafRowProps) {
             </span>
           ) : null}
           <AheadBehindBadge ahead={props.row.ahead} behind={props.row.behind} />
+          <RefFreshnessLabel lastCommitAt={props.row.lastCommitAt} />
         </ContextMenuTrigger>
 
         {showTimelineEye ? (

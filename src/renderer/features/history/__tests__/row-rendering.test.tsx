@@ -1,8 +1,9 @@
 import { render } from '@testing-library/react'
 import { memo, useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
 import { HistoryPanel } from '@/features/history/HistoryPanel'
-import { computeCollapsedView, refFilterKey } from '@/features/history/selectors'
+import { computeCollapsedView } from '@/features/history/selectors'
 import type { GitLog, GitLogEntry } from '@/types'
 
 const commitRowRender = vi.hoisted(() => vi.fn())
@@ -39,7 +40,7 @@ const log: GitLog = {
   loadedCount: 4
 }
 
-const VISIBLE_REFS = new Set([refFilterKey('local', 'main')])
+const queryClient = createQueryClient({ gcTime: Number.POSITIVE_INFINITY })
 
 function Harness({ nudge }: { nudge: number }) {
   const [tips] = useState(() => ['c1'])
@@ -48,19 +49,17 @@ function Harness({ nudge }: { nudge: number }) {
   const [displayedCommitSet] = useState(() => displayed)
 
   return (
-    <>
+    <QueryProvider client={queryClient}>
       <span data-testid="nudge">{nudge}</span>
       <HistoryPanel
         log={log}
         loading={false}
-        remoteBranches={[]}
-        visibleBranchRefs={VISIBLE_REFS}
         graphCommits={log.all}
         timelineTips={tips}
         filteredCommits={filteredCommits}
         displayedCommitSet={displayedCommitSet}
       />
-    </>
+    </QueryProvider>
   )
 }
 

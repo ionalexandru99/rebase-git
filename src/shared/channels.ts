@@ -23,6 +23,8 @@ export const Channel = {
   setRefTreeToggles: 'set-ref-tree-toggles',
   getPersistedTabs: 'get-persisted-tabs',
   setPersistedTabs: 'set-persisted-tabs',
+  getListPaneWidth: 'get-list-pane-width',
+  setListPaneWidth: 'set-list-pane-width',
   getPullDivergedStrategy: 'get-pull-diverged-strategy',
   setPullDivergedStrategy: 'set-pull-diverged-strategy',
   sidecarRequest: 'sidecar-request',

@@ -89,10 +89,41 @@ test('renders the commit graph rail for a branchy history', async ({ harness }) 
   await expect.poll(() => paintedPixels(page)).toBeGreaterThan(500)
 })
 
+function paintedLaneColumns(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('[data-testid="commit-graph-canvas"]')
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) {
+      return 0
+    }
+    return new Promise<number>((resolve) => {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
+          let columns = 0
+          for (let x = 0; x < canvas.width; x++) {
+            for (let y = 0; y < canvas.height; y++) {
+              if ((pixels[(y * canvas.width + x) * 4 + 3] ?? 0) > 0) {
+                columns++
+                break
+              }
+            }
+          }
+          resolve(columns)
+        })
+      )
+    })
+  })
+}
+
 test('renders side-branch lanes when a merge is expanded', async ({ harness }) => {
   const repo = createBranchyRepo()
   const page = await harness.openRepo(repo)
   await expect(page.getByTestId('commit-row').first()).toBeVisible()
+  await expect(page.getByText('feature 3 commit 2')).toHaveCount(0)
+
+  const collapsedColumns = await paintedLaneColumns(page)
+  expect(collapsedColumns).toBeGreaterThan(0)
 
   for (let merge = 0; merge < 2; merge++) {
     await page.getByRole('button', { name: 'Expand merge side branch' }).first().click()
@@ -100,12 +131,9 @@ test('renders side-branch lanes when a merge is expanded', async ({ harness }) =
 
   await expect(page.getByText('feature 3 commit 2')).toBeVisible()
 
-  const railOffsets = await page.evaluate(() => {
-    const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="commit-row"]')]
-    return rows.map((row) => row.querySelector<HTMLElement>('span[style*="left"]')?.style.left)
-  })
-
-  expect(new Set(railOffsets.filter(Boolean)).size).toBeGreaterThan(1)
+  await expect.poll(() => paintedLaneColumns(page), { timeout: 10_000 }).toBeGreaterThan(
+    collapsedColumns
+  )
 })
 
 test('keeps drawing the rail after a fast scroll to the middle of the log', async ({ harness }) => {

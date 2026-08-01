@@ -35,6 +35,13 @@ export function graphMetricsFor(rootPx: number): GraphMetrics {
   return cachedMetrics
 }
 
+export function graphMetricsWithRowHeight(metrics: GraphMetrics, rowHeight: number): GraphMetrics {
+  if (metrics.rowHeight === rowHeight) {
+    return metrics
+  }
+  return { ...metrics, rowHeight }
+}
+
 export function readRootFontSize(): number {
   if (typeof document === 'undefined') {
     return FALLBACK_ROOT_PX

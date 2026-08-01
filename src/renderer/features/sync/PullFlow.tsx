@@ -12,7 +12,7 @@ export interface PullFlowDeps {
 }
 
 export interface PullFlow {
-  requestPull: () => Promise<void>
+  requestPull: () => Promise<boolean>
   divergedDialog: ReactNode
 }
 
@@ -102,27 +102,28 @@ export function usePullFlow(deps: PullFlowDeps): PullFlow {
   const [choosing, setChoosing] = useState(false)
   const [pending, setPending] = useState<PullStrategy | null>(null)
 
-  const pullWithStrategy = async (strategy: PullStrategy) => {
+  const pullWithStrategy = async (strategy: PullStrategy): Promise<boolean> => {
     setPending(strategy)
     try {
-      await deps.pull(strategy)
+      const outcome = await deps.pull(strategy)
+      return outcome.kind === 'ok'
     } finally {
       setPending(null)
       setChoosing(false)
     }
   }
 
-  const requestPull = async () => {
+  const requestPull = async (): Promise<boolean> => {
     const outcome = await deps.pull()
     if (outcome.kind !== 'diverged') {
-      return
+      return outcome.kind === 'ok'
     }
     const remembered = await deps.loadRememberedStrategy().catch(() => null)
     if (remembered !== null) {
-      await pullWithStrategy(remembered)
-      return
+      return pullWithStrategy(remembered)
     }
     setChoosing(true)
+    return false
   }
 
   const choose = (strategy: PullStrategy, remember: boolean) => {

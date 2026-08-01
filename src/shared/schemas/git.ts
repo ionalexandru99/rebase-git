@@ -72,25 +72,34 @@ export const BranchTrackingSchema = Schema.Struct({
 })
 export type BranchTracking = typeof BranchTrackingSchema.Type
 
+export const RefFreshnessSchema = Schema.Record({ key: Schema.String, value: Schema.String })
+export type RefFreshness = typeof RefFreshnessSchema.Type
+
 export const GitBranchesSchema = Schema.Struct({
   current: Schema.String,
   all: mutableArray(Schema.String),
   remotes: mutableArray(Schema.String),
   tags: mutableArray(Schema.String),
-  tracking: Schema.optional(Schema.Record({ key: Schema.String, value: BranchTrackingSchema }))
+  tracking: Schema.optional(Schema.Record({ key: Schema.String, value: BranchTrackingSchema })),
+  lastCommitAt: Schema.optional(RefFreshnessSchema),
+  remoteLastCommitAt: Schema.optional(RefFreshnessSchema),
+  tagLastCommitAt: Schema.optional(RefFreshnessSchema)
 })
 export type GitBranches = typeof GitBranchesSchema.Type
 
 export const LocalBranchesSchema = Schema.Struct({
   current: Schema.String,
   all: mutableArray(Schema.String),
-  tracking: Schema.optional(Schema.Record({ key: Schema.String, value: BranchTrackingSchema }))
+  tracking: Schema.optional(Schema.Record({ key: Schema.String, value: BranchTrackingSchema })),
+  lastCommitAt: Schema.optional(RefFreshnessSchema)
 })
 export type LocalBranches = typeof LocalBranchesSchema.Type
 
 export const RemoteRefsSchema = Schema.Struct({
   remotes: mutableArray(Schema.String),
-  tags: mutableArray(Schema.String)
+  tags: mutableArray(Schema.String),
+  remoteLastCommitAt: Schema.optional(RefFreshnessSchema),
+  tagLastCommitAt: Schema.optional(RefFreshnessSchema)
 })
 export type RemoteRefs = typeof RemoteRefsSchema.Type
 
@@ -157,6 +166,22 @@ export const CommitDetailSchema = Schema.Struct({
   files: mutableArray(CommitDetailFileSchema)
 })
 export type CommitDetail = typeof CommitDetailSchema.Type
+
+export const CommitStatSchema = Schema.Struct({
+  sha: Schema.String,
+  additions: NonNaNNumber,
+  deletions: NonNaNNumber
+})
+export type CommitStat = typeof CommitStatSchema.Type
+
+export const CommitStatsSchema = mutableArray(CommitStatSchema)
+export type CommitStats = typeof CommitStatsSchema.Type
+
+export const WorkingTreeStatsSchema = Schema.Struct({
+  additions: NonNaNNumber,
+  deletions: NonNaNNumber
+})
+export type WorkingTreeStats = typeof WorkingTreeStatsSchema.Type
 
 export const LogChunkSchema = Schema.Struct({
   repoPath: Schema.String,

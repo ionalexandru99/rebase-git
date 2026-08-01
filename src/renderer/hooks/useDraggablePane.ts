@@ -28,6 +28,7 @@ interface UseDraggablePaneResult {
   size: number
   isOpen: boolean
   setOpen: (next: boolean) => void
+  reset: () => void
   onResizeStart: (event: MouseEvent) => void
 }
 
@@ -92,16 +93,17 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
     persist(next, dragSize.current)
   }
 
+  const reset = useCallback(() => {
+    dragSize.current = defaultSize
+    setSize(defaultSize)
+    setIsOpen(true)
+    persist(true, defaultSize)
+  }, [defaultSize, persist])
+
   useEffect(() => {
-    const reset = () => {
-      dragSize.current = defaultSize
-      setSize(defaultSize)
-      setIsOpen(true)
-      persist(true, defaultSize)
-    }
     window.addEventListener(LAYOUT_RESET_EVENT, reset)
     return () => window.removeEventListener(LAYOUT_RESET_EVENT, reset)
-  }, [defaultSize, persist])
+  }, [reset])
 
   const onResizeStart = (event: MouseEvent) => {
     event.preventDefault()
@@ -155,5 +157,5 @@ export function useDraggablePane(options: UseDraggablePaneOptions): UseDraggable
     window.addEventListener('mouseup', finalize)
   }
 
-  return { size, isOpen, setOpen, onResizeStart }
+  return { size, isOpen, setOpen, reset, onResizeStart }
 }

@@ -1,115 +1,198 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  LIST_PANE_DEFAULT_WIDTH,
+  LIST_PANE_MAX_WIDTH,
+  LIST_PANE_MIN_WIDTH
+} from '@shared/list-layout'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { COMPACT_MEDIA_QUERY } from '@/lib/breakpoints'
+import { LAYOUT_RESET_EVENT } from '@/lib/layout'
 import { Shell } from '../Shell'
 
-function installViewport(compact: boolean) {
-  const compactQuery = {
-    matches: compact,
-    media: COMPACT_MEDIA_QUERY,
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn()
-  } as MediaQueryList
-  const otherQuery = { ...compactQuery, matches: false } as MediaQueryList
-  vi.spyOn(window, 'matchMedia').mockImplementation((query) =>
-    query === COMPACT_MEDIA_QUERY ? compactQuery : otherQuery
-  )
-}
+const repoPath = '/home/user/acme'
 
 function renderShell() {
-  render(
+  return render(
     <Shell
-      repo={{ repoName: 'acme', repoPath: '/home/user/acme', branch: 'main', changes: 0 }}
+      repoPath={repoPath}
+      currentBranch="main"
       branchBrowser={{
-        repoPath: '/home/user/acme',
+        repoPath,
         localBranches: ['main'],
         remoteBranches: [],
         tags: []
       }}
-      navigation={{ activeView: 'history', onSelectView: vi.fn() }}
-    >
-      <div>workspace</div>
-    </Shell>
+      listHeader={<div>list header</div>}
+      listBody={<div>commit list</div>}
+      detailPane={<div>detail pane</div>}
+      statusDock={<div>status dock</div>}
+    />
   )
 }
 
-async function openCompactOverlay(): Promise<HTMLElement> {
-  renderShell()
-  fireEvent.click(await screen.findByRole('button', { name: 'Show branches' }))
-  await screen.findByRole('searchbox', { name: 'Filter refs' })
-  return screen.getByRole('dialog', { name: 'Branches' })
+function divider() {
+  return screen.getByRole('button', { name: 'Resize commit list' })
 }
 
-function backdropOf(overlay: HTMLElement): HTMLElement {
-  const backdrop = overlay.previousElementSibling
-  if (!(backdrop instanceof HTMLElement)) {
-    throw new Error('expected a backdrop element before the overlay')
-  }
-  return backdrop
+function listColumn() {
+  return screen.getByRole('region', { name: 'Commits' })
+}
+
+async function drag(to: number, expectedWidth: number) {
+  fireEvent.mouseDown(divider(), { clientX: 0 })
+  act(() => {
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: to }))
+  })
+  await waitFor(() => expect(listColumn()).toHaveStyle({ width: `${expectedWidth}px` }))
+}
+
+function endDrag() {
+  act(() => {
+    window.dispatchEvent(new MouseEvent('mouseup'))
+  })
 }
 
 beforeEach(() => {
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
+  vi.mocked(window.electronAPI.getListPaneWidth).mockResolvedValue(LIST_PANE_DEFAULT_WIDTH)
+  vi.mocked(window.electronAPI.setListPaneWidth).mockResolvedValue(undefined)
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Shell compact sidebar overlay', () => {
-  it('opens the branches overlay from the toolbar and closes it from the overlay', async () => {
-    installViewport(true)
-    renderShell()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Show branches' }))
-
-    const overlay = screen.getByRole('dialog', { name: 'Branches' })
-    expect(overlay).toHaveAttribute('aria-modal', 'true')
-    expect(await screen.findByRole('searchbox', { name: 'Filter refs' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close branches' }))
-
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Show branches' })).toBeInTheDocument()
-  })
-
-  it('closes the overlay when Escape is pressed and restores focus to the toggle', async () => {
-    installViewport(true)
-    await openCompactOverlay()
-
-    fireEvent.keyDown(window, { key: 'Escape' })
-
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    })
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Show branches' }))
-  })
-
-  it('dismisses the overlay through a backdrop that is hidden from assistive tech', async () => {
-    installViewport(true)
-    const backdrop = backdropOf(await openCompactOverlay())
-
-    expect(backdrop.tagName).toBe('DIV')
-    expect(backdrop).toHaveAttribute('aria-hidden', 'true')
-    expect(backdrop).not.toHaveAttribute('tabindex')
-
-    fireEvent.click(backdrop)
-
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
-  it('docks the sidebar without an overlay above the compact width', async () => {
-    installViewport(false)
+describe('Shell four-column layout', () => {
+  it('shows the refs, commit list, and detail columns at once with a status dock underneath', async () => {
     renderShell()
 
-    expect(await screen.findByRole('button', { name: 'Hide branches' })).toBeInTheDocument()
     expect(screen.getByRole('complementary', { name: 'Branches' })).toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Close branches' })).not.toBeInTheDocument()
+    expect(listColumn()).toBeInTheDocument()
+    expect(screen.getByText('list header')).toBeInTheDocument()
+    expect(screen.getByText('commit list')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Details' })).toBeInTheDocument()
+    expect(screen.getByText('detail pane')).toBeInTheDocument()
+    expect(screen.getByText('status dock')).toBeInTheDocument()
+    expect(divider()).toBeInTheDocument()
+    await waitFor(() => expect(window.electronAPI.getListPaneWidth).toHaveBeenCalledWith(repoPath))
+  })
+
+  it('threads branch freshness through to the refs sidebar rows', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'))
+    render(
+      <Shell
+        repoPath={repoPath}
+        currentBranch="main"
+        branchBrowser={{
+          repoPath,
+          localBranches: ['main'],
+          remoteBranches: [],
+          tags: [],
+          lastCommitAt: { main: '2026-08-01T10:00:00Z' }
+        }}
+        listHeader={<div>list header</div>}
+        listBody={<div>commit list</div>}
+        detailPane={<div>detail pane</div>}
+        statusDock={<div>status dock</div>}
+      />
+    )
+
+    await waitFor(() => expect(screen.getByTestId('ref-freshness')).toHaveTextContent('2h ago'))
+    vi.useRealTimers()
+  })
+
+  it('offers no view switcher, because both surfaces are on screen', () => {
+    renderShell()
+
+    expect(screen.queryByRole('button', { name: 'History' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Local changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show branches' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Hide branches' })).not.toBeInTheDocument()
+  })
+
+  it('applies the persisted commit-list width', async () => {
+    vi.mocked(window.electronAPI.getListPaneWidth).mockResolvedValue(520)
+    renderShell()
+
+    await waitFor(() => expect(listColumn()).toHaveStyle({ width: '520px' }))
+  })
+
+  it('clamps a persisted width that falls outside the allowed range', async () => {
+    vi.mocked(window.electronAPI.getListPaneWidth).mockResolvedValue(9000)
+    const wide = renderShell()
+    await waitFor(() => expect(listColumn()).toHaveStyle({ width: `${LIST_PANE_MAX_WIDTH}px` }))
+    wide.unmount()
+
+    vi.mocked(window.electronAPI.getListPaneWidth).mockResolvedValue(10)
+    renderShell()
+
+    await waitFor(() => expect(listColumn()).toHaveStyle({ width: `${LIST_PANE_MIN_WIDTH}px` }))
+  })
+
+  it('clamps the drag at both ends and saves the clamped width when the drag ends', async () => {
+    renderShell()
+    await waitFor(() => expect(listColumn()).toHaveStyle({ width: '400px' }))
+
+    await drag(9000, LIST_PANE_MAX_WIDTH)
+    endDrag()
+
+    await waitFor(() =>
+      expect(window.electronAPI.setListPaneWidth).toHaveBeenLastCalledWith(
+        repoPath,
+        LIST_PANE_MAX_WIDTH
+      )
+    )
+
+    await drag(-9000, LIST_PANE_MIN_WIDTH)
+    endDrag()
+
+    await waitFor(() =>
+      expect(window.electronAPI.setListPaneWidth).toHaveBeenLastCalledWith(
+        repoPath,
+        LIST_PANE_MIN_WIDTH
+      )
+    )
+  })
+
+  it('shows the live width beside the handle only while the divider is being dragged', async () => {
+    renderShell()
+    await waitFor(() => expect(listColumn()).toHaveStyle({ width: '400px' }))
+    expect(screen.queryByTestId('list-pane-width-tooltip')).not.toBeInTheDocument()
+
+    await drag(120, 520)
+
+    expect(screen.getByTestId('list-pane-width-tooltip')).toHaveTextContent('520px')
+
+    endDrag()
+
+    expect(screen.queryByTestId('list-pane-width-tooltip')).not.toBeInTheDocument()
+  })
+
+  it('returns the commit list to its default width on a double-click of the divider', async () => {
+    vi.mocked(window.electronAPI.getListPaneWidth).mockResolvedValue(700)
+    renderShell()
+    await waitFor(() => expect(listColumn()).toHaveStyle({ width: '700px' }))
+
+    fireEvent.doubleClick(divider())
+
+    expect(listColumn()).toHaveStyle({ width: `${LIST_PANE_DEFAULT_WIDTH}px` })
+    await waitFor(() =>
+      expect(window.electronAPI.setListPaneWidth).toHaveBeenLastCalledWith(
+        repoPath,
+        LIST_PANE_DEFAULT_WIDTH
+      )
+    )
+  })
+
+  it('returns the commit list to its default width when the layout is reset', async () => {
+    vi.mocked(window.electronAPI.getListPaneWidth).mockResolvedValue(700)
+    renderShell()
+    await waitFor(() => expect(listColumn()).toHaveStyle({ width: '700px' }))
+
+    act(() => {
+      window.dispatchEvent(new Event(LAYOUT_RESET_EVENT))
+    })
+
+    expect(listColumn()).toHaveStyle({ width: `${LIST_PANE_DEFAULT_WIDTH}px` })
   })
 })

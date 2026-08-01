@@ -10,11 +10,6 @@ export interface SelectionModifiers {
   readonly range: boolean
 }
 
-export interface CommitDetailsState {
-  readonly panelOpen: boolean
-  readonly selection: CommitSelection
-}
-
 function inTimelineOrder(shas: Iterable<string>, orderedShas: readonly string[]): string[] {
   const wanted = new Set(shas)
   return orderedShas.filter((sha) => wanted.has(sha))
@@ -61,14 +56,4 @@ export function pruneCommitSelection(
     return current
   }
   return { shas, anchor }
-}
-
-export function escapeCommitDetails(state: CommitDetailsState): CommitDetailsState | null {
-  if (state.panelOpen) {
-    return { panelOpen: false, selection: state.selection }
-  }
-  if (state.selection.shas.length > 0 || state.selection.anchor !== null) {
-    return { panelOpen: false, selection: EMPTY_COMMIT_SELECTION }
-  }
-  return null
 }

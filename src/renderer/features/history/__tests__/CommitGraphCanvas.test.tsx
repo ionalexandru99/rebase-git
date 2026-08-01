@@ -53,6 +53,8 @@ interface CanvasProps {
   viewportHeight?: number
   visibleSet?: Set<string> | null
   rowCount?: number
+  paddingStart?: number
+  headRow?: number
 }
 
 function renderCanvas(props: CanvasProps) {
@@ -66,6 +68,8 @@ function renderCanvas(props: CanvasProps) {
       viewportHeight={props.viewportHeight ?? 400}
       visibleSet={props.visibleSet ?? null}
       rowCount={props.rowCount ?? props.graph.layout.commitCount}
+      paddingStart={props.paddingStart}
+      headRow={props.headRow}
     />
   )
 }
@@ -75,12 +79,14 @@ describe('CommitGraphCanvas', () => {
   let dotCount = 0
   let arcRadii: number[] = []
   let arcCenters: Array<{ x: number; y: number }> = []
+  let dashPatterns: number[][] = []
 
   beforeEach(() => {
     strokeCount = 0
     dotCount = 0
     arcRadii = []
     arcCenters = []
+    dashPatterns = []
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       setTransform: vi.fn(),
       clearRect: vi.fn(),
@@ -97,6 +103,9 @@ describe('CommitGraphCanvas', () => {
       }),
       fill: vi.fn(() => {
         dotCount++
+      }),
+      setLineDash: vi.fn((pattern: number[]) => {
+        dashPatterns.push(pattern)
       })
     } as unknown as CanvasRenderingContext2D)
   })
@@ -114,6 +123,53 @@ describe('CommitGraphCanvas', () => {
       expect(dotCount).toBeGreaterThan(0)
     })
     expect(dotCount).toBeLessThanOrEqual(7)
+  })
+
+  it('drops every row by the height of the pinned working-copy row', async () => {
+    const paddingStart = 44
+    render(
+      renderCanvas({
+        graph: graphOf(chain(5)),
+        scrollContainer: scroller(),
+        viewportHeight: METRICS.rowHeight * 5,
+        paddingStart
+      })
+    )
+
+    await vi.waitFor(() => {
+      expect(arcCenters.length).toBeGreaterThan(0)
+    })
+    expect(Math.min(...arcCenters.map((center) => center.y))).toBeCloseTo(
+      paddingStart + METRICS.rowHeight / 2,
+      5
+    )
+  })
+
+  it('runs a dashed stub from the pinned row into the HEAD dot', async () => {
+    render(
+      renderCanvas({
+        graph: graphOf(chain(5)),
+        scrollContainer: scroller(),
+        viewportHeight: METRICS.rowHeight * 5,
+        paddingStart: 44,
+        headRow: 1
+      })
+    )
+
+    await vi.waitFor(() => {
+      expect(dashPatterns.length).toBeGreaterThan(0)
+    })
+    expect(dashPatterns.some((pattern) => pattern.length > 0)).toBe(true)
+    expect(dashPatterns.at(-1)).toEqual([])
+  })
+
+  it('leaves the graph solid when nothing is pinned above it', async () => {
+    render(renderCanvas({ graph: graphOf(chain(5)), scrollContainer: scroller() }))
+
+    await vi.waitFor(() => {
+      expect(dotCount).toBeGreaterThan(0)
+    })
+    expect(dashPatterns).toEqual([])
   })
 
   it('draws the rows a live scroll reveals, without waiting for a re-render', async () => {

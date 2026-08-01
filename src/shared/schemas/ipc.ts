@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { mutableArray, NonNaNNumber } from '../codec'
+import { mutableArray, NonNaNNumber, RequiredString } from '../codec'
 
 export { Channel } from '../channels'
 
@@ -43,7 +43,8 @@ export const StashEntrySchema = Schema.Struct({
   ref: Schema.String,
   oid: Schema.String,
   message: Schema.String,
-  branch: Schema.String
+  branch: Schema.String,
+  lastCommitAt: Schema.optional(Schema.String)
 })
 export type StashEntry = typeof StashEntrySchema.Type
 
@@ -52,6 +53,17 @@ export const SidebarPrefsSchema = Schema.Struct({
   width: NonNaNNumber
 })
 export type SidebarPrefs = typeof SidebarPrefsSchema.Type
+
+export const ListPaneWidthQuerySchema = Schema.Struct({
+  repoPath: RequiredString
+})
+export type ListPaneWidthQuery = typeof ListPaneWidthQuerySchema.Type
+
+export const ListPaneWidthSchema = Schema.Struct({
+  repoPath: RequiredString,
+  width: NonNaNNumber
+})
+export type ListPaneWidth = typeof ListPaneWidthSchema.Type
 
 export const PullDivergedStrategySchema = Schema.NullOr(Schema.Literal('rebase', 'merge'))
 export type PullDivergedStrategy = typeof PullDivergedStrategySchema.Type

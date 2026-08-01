@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
-import { commitRow, detailsPanel, diffBody, diffLine, diffLines, diffScrollHost } from './diff-locators'
+import { commitRow, detailsPanel, diffLine, diffLines, diffScrollHost } from './diff-locators'
 import { createFixtureRepo, expect, gitIn, revParse, setWindowSize, test } from './fixtures'
 
 function createDetailRepo(): string {
@@ -34,26 +34,28 @@ function createDetailRepo(): string {
 const fileRow = (page: Page, name: string) =>
   detailsPanel(page).getByTestId('commit-file-row').filter({ hasText: name })
 
-test('shows a commit’s message, identity, files and diff in the details panel', async ({
+test('shows a commit’s message, identity, files and diff in the detail pane', async ({
   harness
 }) => {
   const repo = createDetailRepo()
   const sha = revParse(repo, 'HEAD')
+  const parentSha = revParse(repo, 'HEAD^')
   const page = await harness.openRepo(repo)
-
-  await expect(page.getByText('reshape the files')).toBeVisible({ timeout: 10_000 })
-  await expect(detailsPanel(page)).toBeHidden()
-
-  await commitRow(page, 'reshape the files').dblclick()
 
   const panel = detailsPanel(page)
   await expect(panel).toBeVisible({ timeout: 10_000 })
-  await expect(panel.getByText('The body explains the rationale.')).toBeVisible()
+  await expect(panel.getByTestId('commit-meta')).toContainText('reshape the files', {
+    timeout: 15_000
+  })
+
+  await commitRow(page, 'reshape the files').click()
+
+  await expect(panel.getByTestId('commit-body')).toContainText('The body explains the rationale.')
   const meta = panel.getByTestId('commit-meta')
-  await expect(meta.getByText('Author', { exact: true })).toBeVisible()
-  await expect(meta.getByText('Parent')).toHaveCount(0)
   await expect(meta.getByText('Ada Author')).toBeVisible()
   await expect(meta.getByText('ada@example.com')).toBeVisible()
+  await expect(meta.getByTestId('commit-detail-sha')).toHaveText(sha.slice(0, 7))
+  await expect(meta.getByTestId('commit-detail-parents')).toContainText(parentSha.slice(0, 7))
   await expect(panel.getByTestId('commit-stats')).toContainText('4 files')
   await expect(panel.getByRole('button', { name: `Copy full SHA ${sha}` })).toBeVisible()
 
@@ -83,8 +85,8 @@ test('collapses a directory in the changed-files tree without changing the diff'
   const repo = createDetailRepo()
   const page = await harness.openRepo(repo)
 
-  await expect(page.getByText('reshape the files')).toBeVisible({ timeout: 10_000 })
-  await commitRow(page, 'reshape the files').dblclick()
+  await expect(commitRow(page, 'reshape the files')).toBeVisible({ timeout: 10_000 })
+  await commitRow(page, 'reshape the files').click()
 
   const panel = detailsPanel(page)
   await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
@@ -100,7 +102,7 @@ test('collapses a directory in the changed-files tree without changing the diff'
   await expect(fileRow(page, 'nested.txt')).toBeVisible()
 })
 
-test('scrolls a long commit diff inside the panel', async ({ harness }) => {
+test('scrolls a long commit diff inside the pane', async ({ harness }) => {
   const repo = createFixtureRepo()
   const git = gitIn(repo)
   const lines = Array.from({ length: 400 }, (_unused, index) => `line ${index}`).join('\n')
@@ -109,8 +111,8 @@ test('scrolls a long commit diff inside the panel', async ({ harness }) => {
   git(['commit', '-m', 'add a long file'])
   const page = await harness.openRepo(repo)
 
-  await expect(page.getByText('add a long file')).toBeVisible({ timeout: 10_000 })
-  await commitRow(page, 'add a long file').dblclick()
+  await expect(commitRow(page, 'add a long file')).toBeVisible({ timeout: 10_000 })
+  await commitRow(page, 'add a long file').click()
 
   await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
 
@@ -132,9 +134,9 @@ test('selects several commits and summarises them instead of guessing a merged d
   const repo = createDetailRepo()
   const page = await harness.openRepo(repo)
 
-  await expect(page.getByText('reshape the files')).toBeVisible({ timeout: 10_000 })
+  await expect(commitRow(page, 'reshape the files')).toBeVisible({ timeout: 10_000 })
 
-  await commitRow(page, 'reshape the files').dblclick()
+  await commitRow(page, 'reshape the files').click()
   await expect(diffLines(page).first()).toBeVisible({ timeout: 10_000 })
 
   await commitRow(page, 'initial').click({ modifiers: ['Shift'] })
@@ -148,34 +150,38 @@ test('selects several commits and summarises them instead of guessing a merged d
   await expect(diffLines(page)).toHaveCount(0)
 
   await page.keyboard.press('Escape')
-  await expect(panel).toBeHidden()
-  await expect(commitRow(page, 'reshape the files')).toHaveAttribute('data-selected', 'true')
 
-  await page.keyboard.press('Escape')
+  await expect(summary).toHaveCount(0)
+  await expect(panel.getByTestId('commit-stats')).toContainText('4 files', { timeout: 10_000 })
   await expect(commitRow(page, 'reshape the files')).not.toHaveAttribute('data-selected', 'true')
+  await expect(commitRow(page, 'initial')).not.toHaveAttribute('data-selected', 'true')
 })
 
-test('follows a plain click while open, and closes from the panel button', async ({ harness }) => {
+test('follows a single click and returns to HEAD on Escape', async ({ harness }) => {
   const repo = createDetailRepo()
   const page = await harness.openRepo(repo)
 
-  await expect(page.getByText('reshape the files')).toBeVisible({ timeout: 10_000 })
-  await commitRow(page, 'reshape the files').dblclick()
-
   const panel = detailsPanel(page)
-  await expect(panel).toBeVisible({ timeout: 10_000 })
+  await expect(panel.getByTestId('commit-stats')).toContainText('4 files', { timeout: 15_000 })
 
   await commitRow(page, 'add files').click()
   await expect(panel.getByTestId('commit-stats')).toContainText('3 files', { timeout: 10_000 })
   await expect(panel.getByTestId('commit-file-row').first()).toContainText('nested.txt')
   await expect(diffLine(page, 'nested one').first()).toBeVisible()
+  await expect(commitRow(page, 'add files')).toHaveAttribute('data-selected', 'true')
 
   await fileRow(page, 'keep.txt').click()
   await expect(diffLine(page, /^three$/).first()).toBeVisible()
 
-  await panel.getByRole('button', { name: 'Close commit details' }).click()
-  await expect(panel).toBeHidden()
+  await commitRow(page, 'add files').dblclick()
   await expect(commitRow(page, 'add files')).toHaveAttribute('data-selected', 'true')
+  await expect(panel.getByTestId('commit-stats')).toContainText('3 files')
+
+  await page.keyboard.press('Escape')
+
+  await expect(commitRow(page, 'add files')).not.toHaveAttribute('data-selected', 'true')
+  await expect(panel.getByTestId('commit-stats')).toContainText('4 files', { timeout: 10_000 })
+  await expect(panel.getByTestId('commit-meta')).toContainText('reshape the files')
 })
 
 const LONG_BODY = Array.from(
@@ -198,72 +204,98 @@ function createWordyRepo(): string {
   return repo
 }
 
-const PANEL_LAYOUT_CASES = [
-  { width: 1600, height: 1000, storedHeight: 900 },
-  { width: 1200, height: 800, storedHeight: 360 },
-  { width: 1000, height: 700, storedHeight: 360 },
-  { width: 800, height: 560, storedHeight: 260 },
-  { width: 800, height: 560, storedHeight: 900 }
+const PANE_LAYOUT_CASES = [
+  { width: 1600, height: 1000, listPaneWidth: 820 },
+  { width: 1600, height: 1000, listPaneWidth: 300 },
+  { width: 1200, height: 800, listPaneWidth: 400 },
+  { width: 1000, height: 700, listPaneWidth: 300 },
+  { width: 800, height: 600, listPaneWidth: 300 }
 ]
 
 const LAUNCH_WINDOW = { width: 1200, height: 800 }
 
-test('keeps every region of the details panel usable at any window size', async ({ harness }) => {
+test('keeps every region of the detail pane usable at any window and list width', async ({
+  harness
+}) => {
+  test.setTimeout(120_000)
   const repo = createWordyRepo()
-  const page = await harness.openRepo(repo)
 
   try {
-    for (const size of PANEL_LAYOUT_CASES) {
-      await page.evaluate(
-        (value) => localStorage.setItem('rebase:commit-details-height', String(value)),
-        size.storedHeight
-      )
+    for (const size of PANE_LAYOUT_CASES) {
       await setWindowSize(harness.app(), size.width, size.height)
-      await page.reload()
+      const page = await harness.openRepo(repo, {
+        listPaneWidths: { [repo]: size.listPaneWidth }
+      })
 
       const wordyCommit = commitRow(page, 'a wordy commit')
       await expect(wordyCommit).toBeVisible({ timeout: 15_000 })
-      await wordyCommit.dblclick()
+      await wordyCommit.click()
       await expect(detailsPanel(page)).toBeVisible({ timeout: 10_000 })
       await expect(diffLines(page).first()).toBeVisible({ timeout: 20_000 })
 
       const layout = await page.evaluate(() => {
         const find = (selector: string) => document.querySelector(selector) as HTMLElement | null
-        const panelElement = find('[data-testid="commit-details-panel"]')
+        const paneElement = find('[data-testid="commit-detail-pane"]')
         const meta = find('[data-testid="commit-meta"]')
         const body = find('[data-testid="commit-body"]')
-        const rows = meta?.querySelector('dl') as HTMLElement | null
         const files = find('[data-testid="commit-file-scroll"]')
-        const diff = find('[data-testid="commit-details-panel"] [data-testid="diff-body"]')
+        const split = find('[data-testid="commit-detail-split"]')
+        const diff = find('[data-testid="commit-detail-pane"] [data-testid="diff-body"]')
         const diffHost = diff?.firstElementChild as HTMLElement | null
-        const graph = find('[data-testid="history-scroll"]')
-        if (!panelElement || !meta || !body || !rows || !files || !diff || !diffHost || !graph) {
-          throw new Error('details panel regions missing')
+        const diffColumn = split?.lastElementChild as HTMLElement | null
+        const list = find('[data-testid="history-scroll"]')
+        const dock = find('[data-testid="status-dock"]')
+        const shell = find('[data-testid="repo-shell"]')
+        if (
+          !paneElement ||
+          !meta ||
+          !body ||
+          !files ||
+          !split ||
+          !diff ||
+          !diffHost ||
+          !diffColumn ||
+          !list ||
+          !dock ||
+          !shell
+        ) {
+          throw new Error('detail pane regions missing')
         }
-        const panelBox = panelElement.getBoundingClientRect()
-        const rowsBox = rows.getBoundingClientRect()
+        const paneBox = paneElement.getBoundingClientRect()
+        const metaBox = meta.getBoundingClientRect()
+        const shellBox = shell.getBoundingClientRect()
         return {
-          rowsFullyInsidePanel:
-            rowsBox.top >= panelBox.top - 1 && rowsBox.bottom <= panelBox.bottom + 1,
-          metaShareOfPanel: meta.clientHeight / panelElement.clientHeight,
+          metaFullyInsidePane:
+            metaBox.top >= paneBox.top - 1 && metaBox.bottom <= paneBox.bottom + 1,
+          metaShareOfPane: meta.clientHeight / paneElement.clientHeight,
           bodyHeight: body.clientHeight,
           bodyScrolls: body.scrollHeight > body.clientHeight,
+          filesWidth: files.clientWidth,
           filesHeight: files.clientHeight,
+          diffWidth: diffColumn.clientWidth,
           diffHeight: diffHost.clientHeight,
           diffScrolls: diffHost.scrollHeight > diffHost.clientHeight,
-          graphHeight: graph.clientHeight
+          listWidth: list.clientWidth,
+          listHeight: list.clientHeight,
+          dockHeight: dock.clientHeight,
+          paneInsideShell: paneBox.right <= shellBox.right + 1
         }
       })
 
-      const at = `${size.width}x${size.height} @ ${size.storedHeight}px`
-      expect(layout.rowsFullyInsidePanel, `rows inside panel at ${at}`).toBe(true)
+      const at = `${size.width}x${size.height} @ list ${size.listPaneWidth}px`
+      expect(layout.metaFullyInsidePane, `meta inside pane at ${at}`).toBe(true)
       expect(layout.bodyHeight, `body visible at ${at}`).toBeGreaterThan(16)
       expect(layout.bodyScrolls, `body scrolls at ${at}`).toBe(true)
-      expect(layout.metaShareOfPanel, `metadata share at ${at}`).toBeLessThanOrEqual(0.46)
-      expect(layout.filesHeight, `file tree at ${at}`).toBeGreaterThan(48)
-      expect(layout.diffHeight, `diff at ${at}`).toBeGreaterThan(24)
+      expect(layout.metaShareOfPane, `metadata share at ${at}`).toBeLessThanOrEqual(0.46)
+      expect(layout.filesWidth, `file tree width at ${at}`).toBeGreaterThan(80)
+      expect(layout.filesHeight, `file tree height at ${at}`).toBeGreaterThan(48)
+      expect(layout.diffWidth, `diff width at ${at}`).toBeGreaterThan(120)
+      expect(layout.diffHeight, `diff height at ${at}`).toBeGreaterThan(24)
       expect(layout.diffScrolls, `diff scrolls at ${at}`).toBe(true)
-      expect(layout.graphHeight, `graph at ${at}`).toBeGreaterThan(64)
+      expect(layout.listWidth, `commit list at ${at}`).toBeGreaterThan(120)
+      expect(layout.listHeight, `commit list height at ${at}`).toBeGreaterThan(64)
+      expect(layout.dockHeight, `status dock at ${at}`).toBeGreaterThan(0)
+      expect(layout.paneInsideShell, `detail pane inside the shell at ${at}`).toBe(true)
     }
   } finally {
     await setWindowSize(harness.app(), LAUNCH_WINDOW.width, LAUNCH_WINDOW.height)

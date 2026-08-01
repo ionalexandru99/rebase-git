@@ -1,6 +1,7 @@
 import { Rpc, RpcGroup } from '@effect/rpc'
 import { Schema } from 'effect'
 import { NonNaNNumber, OpaqueHunkHeaderString, OpaqueString, RequiredString } from './codec'
+import { MAX_COMMIT_STATS_BATCH } from './git-constants'
 import {
   AmendRejected,
   Conflict,
@@ -17,13 +18,15 @@ import type { RpcResult } from './rpc-result'
 import {
   CloneProgressSchema,
   CommitDetailSchema,
+  CommitStatsSchema,
   CommitSummarySchema,
   GitStatusSchema,
   HeadCommitSchema,
   LocalBranchesSchema,
   LogChunkSchema,
   RemoteRefsSchema,
-  RepoOpenSuccessSchema
+  RepoOpenSuccessSchema,
+  WorkingTreeStatsSchema
 } from './schemas/git'
 import { RefKindSchema, ResetModeSchema, StashEntrySchema } from './schemas/ipc'
 
@@ -380,6 +383,21 @@ export const GetCommitDetail = Rpc.make('getCommitDetail', {
   error: ReadError
 })
 
+export const GetCommitStats = Rpc.make('getCommitStats', {
+  payload: {
+    repoPath: OpaqueString,
+    shas: Schema.Array(RequiredString).pipe(Schema.maxItems(MAX_COMMIT_STATS_BATCH))
+  },
+  success: Schema.Struct({ stats: CommitStatsSchema }),
+  error: ReadError
+})
+
+export const GetWorkingTreeStats = Rpc.make('getWorkingTreeStats', {
+  payload: { repoPath: OpaqueString },
+  success: WorkingTreeStatsSchema,
+  error: ReadError
+})
+
 export const StashList = Rpc.make('stashList', {
   payload: { repoPath: OpaqueString },
   success: Schema.Struct({ stashes: Schema.Array(StashEntrySchema) }),
@@ -442,6 +460,8 @@ export const SidecarRpcs = RpcGroup.make(
   GetRemoteRefs,
   GetDiff,
   GetCommitDetail,
+  GetCommitStats,
+  GetWorkingTreeStats,
   StashList,
   StreamLog
 )

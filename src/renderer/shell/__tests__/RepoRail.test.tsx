@@ -26,6 +26,29 @@ describe('RepoRail', () => {
     expect(screen.getByRole('button', { name: /Open new tab/i })).toBeInTheDocument()
   })
 
+  it('fits its avatars inside a 44px rail', () => {
+    render(
+      <RepoRail
+        tabs={baseTabs}
+        activeTabId="a"
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        onNew={vi.fn()}
+      />
+    )
+
+    expect(screen.getByRole('navigation', { name: 'Open repositories' })).toHaveStyle({
+      width: '44px'
+    })
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab).toHaveStyle({ width: '34px', height: '34px' })
+    }
+    expect(screen.getByRole('button', { name: /Open new tab/i })).toHaveStyle({
+      width: '34px',
+      height: '34px'
+    })
+  })
+
   it('marks the active tab with aria-selected', () => {
     render(
       <RepoRail

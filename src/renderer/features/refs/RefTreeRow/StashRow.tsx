@@ -9,6 +9,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from '../../../components/ui/context-menu'
+import { RefFreshnessLabel } from './RefFreshnessLabel'
 
 interface StashRowProps {
   row: RefStashRow
@@ -36,6 +37,7 @@ export function StashRow(props: StashRowProps) {
         >
           <Archive className="size-3.5 shrink-0 text-amber-500" />
           <span className="min-w-0 truncate text-left">{props.row.message}</span>
+          <RefFreshnessLabel lastCommitAt={props.row.lastCommitAt} />
         </ContextMenuTrigger>
       </div>
       <ContextMenuContent>

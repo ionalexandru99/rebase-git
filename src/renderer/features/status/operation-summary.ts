@@ -53,17 +53,22 @@ export function summarizeOperation(operation: OperationState): OperationSummary 
   }
 }
 
-export function operationGuidance(summary: OperationSummary, conflictCount: number): string {
-  if (conflictCount === 0) {
-    if (summary.kind === 'am') {
-      return `A patch that fails to apply leaves nothing marked conflicted. Edit the affected files and stage them, then continue the ${summary.noun}.`
-    }
-    return summary.canContinue
-      ? `All conflicts are resolved — continue to finish the ${summary.noun}.`
-      : 'All conflicts are resolved — commit below to finish the merge.'
+export function resolvedOperationGuidance(summary: OperationSummary): string {
+  if (summary.kind === 'am') {
+    return `A patch that fails to apply leaves nothing marked conflicted. Edit the affected files and stage them, then continue the ${summary.noun}.`
   }
-  const files = `${conflictCount} conflicted file${conflictCount === 1 ? '' : 's'} left`
   return summary.canContinue
-    ? `${files}. Resolve and stage every file before you continue.`
-    : `${files}. Resolve and stage every file, then commit below to finish the merge.`
+    ? `All conflicts are resolved — continue to finish the ${summary.noun}.`
+    : 'All conflicts are resolved — commit below to finish the merge.'
+}
+
+export function conflictBarGuidance(
+  conflictCount: number,
+  firstConflictedFile: string | undefined
+): string {
+  const count = `${conflictCount} merge conflict${conflictCount === 1 ? '' : 's'}`
+  if (!firstConflictedFile) {
+    return `${count} — resolve them, then stage them to continue.`
+  }
+  return `${count} — resolve ${firstConflictedFile}, then stage it to continue.`
 }

@@ -145,6 +145,15 @@ export function createFixtureRepoWithRemote(): { repo: string; remote: string } 
   return { repo, remote }
 }
 
+export function makeBranchAheadOfOrigin(repo: string, message = 'work to publish'): void {
+  const git = gitIn(repo)
+  git(['update-ref', 'refs/remotes/origin/main', 'HEAD'])
+  git(['config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'])
+  git(['config', 'branch.main.remote', 'origin'])
+  git(['config', 'branch.main.merge', 'refs/heads/main'])
+  git(['commit', '--allow-empty', '-m', message])
+}
+
 export function advanceRemote(remote: string, message: string): void {
   const other = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-teammate-'))
   execFileSync('git', ['clone', remote, other], { stdio: 'ignore' })
@@ -164,6 +173,7 @@ export interface SeedState {
   onboardingComplete?: boolean
   tabs?: Array<string | null>
   activeIndex?: number
+  listPaneWidths?: Record<string, number>
 }
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
@@ -194,7 +204,10 @@ export interface AppHarness {
   reload(): Promise<Page>
   restart(): Promise<Page>
   seed(state: SeedState): Promise<void>
-  openRepo(repo: string, options?: { recentRepos?: string[] }): Promise<Page>
+  openRepo(
+    repo: string,
+    options?: { recentRepos?: string[]; listPaneWidths?: Record<string, number> }
+  ): Promise<Page>
   openTabs(repos: Array<string | null>, options?: { activeIndex?: number }): Promise<Page>
   track(repo: string): void
   stubFolderDialog(dir: string | null): Promise<void>
@@ -298,6 +311,7 @@ interface StoreOverrides {
   onboardingComplete?: boolean
   persistedTabRepoPaths?: Array<string | null>
   persistedActiveTabIndex?: number
+  listPaneWidths?: Record<string, number>
 }
 
 export interface LifecycleSnapshot {
@@ -830,7 +844,8 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           workingDirectory: activeWorkspace,
           onboardingComplete: state.onboardingComplete ?? false,
           persistedTabRepoPaths: state.tabs ?? [null],
-          persistedActiveTabIndex: state.activeIndex ?? 0
+          persistedActiveTabIndex: state.activeIndex ?? 0,
+          listPaneWidths: state.listPaneWidths ?? {}
         })
       },
       openRepo: async (repo: string, options) => {
@@ -840,7 +855,8 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           recentRepos: options?.recentRepos,
           onboardingComplete: true,
           tabs: [repo],
-          activeIndex: 0
+          activeIndex: 0,
+          listPaneWidths: options?.listPaneWidths
         })
         return harness.reload()
       },
@@ -936,7 +952,48 @@ export const unstageFileFromRow = async (page: Page, file: string) => {
     .getByRole('button', { name: `Unstage ${file}`, exact: true })
     .click()
 }
-export const openLocalChanges = (page: Page) =>
-  page.getByRole('button', { name: 'Local changes', exact: true }).filter({ visible: true }).click()
-export const openHistory = (page: Page) =>
-  page.getByRole('button', { name: 'History', exact: true }).filter({ visible: true }).click()
+export const syncButton = (page: Page) => page.getByTestId('sync-button')
+export const workingCopyRow = (page: Page) => page.getByTestId('working-copy-row')
+export const commitListRegion = (page: Page) => page.getByRole('region', { name: 'Commits' })
+export const commitDetailPane = (page: Page) => page.getByTestId('commit-detail-pane')
+export const listDivider = (page: Page) =>
+  page.getByRole('button', { name: 'Resize commit list', exact: true })
+
+export async function openLocalChanges(page: Page): Promise<void> {
+  await workingCopyRow(page).click()
+  await expect(page.getByTestId('working-copy-header')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('commit-bar')).toBeVisible({ timeout: 10_000 })
+}
+
+export async function openHistory(page: Page): Promise<void> {
+  await expect(commitListRegion(page)).toBeVisible({ timeout: 10_000 })
+}
+
+export async function commitListWidth(page: Page): Promise<number> {
+  const box = await commitListRegion(page).boundingBox()
+  if (!box) {
+    throw new Error('the commit list has no bounding box')
+  }
+  return Math.round(box.width)
+}
+
+export async function dragListDivider(
+  page: Page,
+  deltaX: number,
+  options: { release?: boolean } = {}
+): Promise<void> {
+  const divider = listDivider(page)
+  const box = await divider.boundingBox()
+  if (!box) {
+    throw new Error('the commit list divider has no bounding box')
+  }
+  const startX = box.x + box.width / 2
+  const startY = box.y + box.height / 2
+  await page.mouse.move(startX, startY)
+  await page.mouse.down()
+  await page.mouse.move(startX + deltaX, startY, { steps: 12 })
+  if (options.release === false) {
+    return
+  }
+  await page.mouse.up()
+}

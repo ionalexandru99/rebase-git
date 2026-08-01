@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   type CommitSelection,
   EMPTY_COMMIT_SELECTION,
-  escapeCommitDetails,
   pruneCommitSelection,
   selectCommit
 } from '../commit-selection'
@@ -132,36 +131,5 @@ describe('pruneCommitSelection', () => {
     const current = { shas: ['c5', 'c4'], anchor: 'c5' }
 
     expect(pruneCommitSelection(current, rows)).toBe(current)
-  })
-})
-
-describe('escapeCommitDetails', () => {
-  it('closes the panel first and keeps the selection', () => {
-    const selection = { shas: ['c5', 'c4'], anchor: 'c5' }
-
-    expect(escapeCommitDetails({ panelOpen: true, selection })).toEqual({
-      panelOpen: false,
-      selection
-    })
-  })
-
-  it('clears the selection on a second press, once the panel is closed', () => {
-    const selection = { shas: ['c5', 'c4'], anchor: 'c5' }
-
-    expect(escapeCommitDetails({ panelOpen: false, selection })).toEqual({
-      panelOpen: false,
-      selection: EMPTY_COMMIT_SELECTION
-    })
-  })
-
-  it('reports nothing to dismiss when the panel is closed and nothing is selected', () => {
-    expect(escapeCommitDetails({ panelOpen: false, selection: EMPTY_COMMIT_SELECTION })).toBeNull()
-  })
-
-  it('still closes an open panel that has no selection', () => {
-    expect(escapeCommitDetails({ panelOpen: true, selection: EMPTY_COMMIT_SELECTION })).toEqual({
-      panelOpen: false,
-      selection: EMPTY_COMMIT_SELECTION
-    })
   })
 })

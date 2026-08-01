@@ -7,6 +7,7 @@ interface UseFixedVirtualizerOptions {
   count: number
   rowHeight: number
   overscan: number
+  paddingStart?: number
   initialViewportHeight?: number
   onScrollFrame?: () => void
 }
@@ -15,6 +16,7 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
   const [viewportHeight, setViewportHeight] = useState(
     options.initialViewportHeight ?? (typeof window !== 'undefined' ? window.innerHeight : 800)
   )
+  const [viewportWidth, setViewportWidth] = useState(0)
   const scrollElement = useRef<HTMLDivElement | null>(null)
   const resizeObserver = useRef<ResizeObserver | null>(null)
   const resizeFrame = useRef<number | null>(null)
@@ -25,7 +27,10 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
     },
     getScrollElement: () => scrollElement.current,
     estimateSize: () => options.rowHeight,
-    overscan: options.overscan
+    overscan: options.overscan,
+    get paddingStart() {
+      return options.paddingStart ?? 0
+    }
   })
   const virtualizerRef = useRef(virtualizer)
   virtualizerRef.current = virtualizer
@@ -65,7 +70,14 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
       if (element.clientHeight > 0) {
         setViewportHeight(element.clientHeight)
       }
-      resizeObserver.current = new ResizeObserver(() => {
+      if (element.clientWidth > 0) {
+        setViewportWidth(element.clientWidth)
+      }
+      resizeObserver.current = new ResizeObserver((entries) => {
+        const measuredWidth = entries.at(-1)?.contentRect.width ?? 0
+        if (measuredWidth > 0) {
+          setViewportWidth(measuredWidth)
+        }
         scheduleMeasure()
       })
       resizeObserver.current.observe(element)
@@ -96,9 +108,13 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
     }
   }, [])
 
+  const paddingStart = options.paddingStart ?? 0
   const measuredItems = virtualizer.getVirtualItems()
   const scrollTop = virtualizer.scrollOffset ?? scrollElement.current?.scrollTop ?? 0
-  const start = Math.max(0, Math.floor(scrollTop / options.rowHeight) - options.overscan)
+  const start = Math.max(
+    0,
+    Math.floor((scrollTop - paddingStart) / options.rowHeight) - options.overscan
+  )
   const visibleCount = Math.ceil(viewportHeight / options.rowHeight) + options.overscan * 2
   const end = Math.min(options.count, start + visibleCount)
   const virtualItems =
@@ -108,8 +124,8 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
           const index = start + itemOffset
           return {
             index,
-            start: index * options.rowHeight,
-            end: (index + 1) * options.rowHeight,
+            start: paddingStart + index * options.rowHeight,
+            end: paddingStart + (index + 1) * options.rowHeight,
             size: options.rowHeight,
             key: index,
             lane: 0
@@ -124,6 +140,7 @@ export function useFixedVirtualizer(options: UseFixedVirtualizerOptions) {
     setScrollRef,
     onScroll,
     viewportHeight,
+    viewportWidth,
     virtualizer,
     virtualItems,
     startIndex,

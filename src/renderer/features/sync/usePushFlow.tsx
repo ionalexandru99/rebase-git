@@ -1,30 +1,23 @@
 import type { LostCommit } from '@shared/git-rpc-errors'
-import { ChevronDownIcon, Loader2Icon } from 'lucide-react'
+import { Loader2Icon } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import type { PushForce } from '@/lib/rpc-client'
 import type { PushOutcome } from '@/stores/action-runner'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '../../components/ui/dropdown-menu'
 import { usePortalContainer } from '../../components/ui/portal-container'
 
-const primaryButtonClass =
-  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-l-[var(--r-sm)] bg-muted px-2.5 transition-colors hover:bg-border-strong disabled:cursor-default disabled:opacity-50'
-const caretButtonClass =
-  'inline-flex h-8 shrink-0 items-center rounded-r-[var(--r-sm)] border-l border-border bg-muted px-1 transition-colors hover:bg-border-strong disabled:cursor-default disabled:opacity-50'
-interface PushControlProps {
+export interface PushFlowDeps {
   branchName: string
   ahead: number
   behind: number
-  detached: boolean
-  pushing: boolean
-  disabled?: boolean
   push: (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
+}
+
+export interface PushFlow {
+  requestPush: () => Promise<void>
+  openForceConfirm: () => void
+  dialogs: ReactNode
 }
 
 function Modal(props: { onDismiss: () => void; children: ReactNode }) {
@@ -82,13 +75,13 @@ function forceConfirmDescription(branchName: string, ahead: number, behind: numb
   return `${branchName} already matches its upstream — a leased force would republish the same commits and change nothing.`
 }
 
-export function PushControl(props: PushControlProps) {
+export function usePushFlow(deps: PushFlowDeps): PushFlow {
   const [mode, setMode] = useState<Mode>('idle')
   const [loss, setLoss] = useState<LossPreview | null>(null)
   const [flowPending, setFlowPending] = useState(false)
   const flowGeneration = useRef(0)
   const pendingGeneration = useRef<number | null>(null)
-  const isDiverged = props.ahead > 0 && props.behind > 0
+  const isDiverged = deps.ahead > 0 && deps.behind > 0
 
   const dismissFlow = () => {
     flowGeneration.current += 1
@@ -121,12 +114,12 @@ export function PushControl(props: PushControlProps) {
     setMode('idle')
   }
 
-  const onPrimary = async () => {
+  const requestPush = async () => {
     if (isDiverged) {
       openTier1()
       return
     }
-    const outcome = await props.push()
+    const outcome = await deps.push()
     if (outcome.kind === 'rejected' && outcome.reason === 'non-fast-forward') {
       openTier1()
     }
@@ -140,7 +133,7 @@ export function PushControl(props: PushControlProps) {
     pendingGeneration.current = generation
     setFlowPending(true)
     try {
-      const outcome = await props.push('with-lease')
+      const outcome = await deps.push('with-lease')
       if (generation === flowGeneration.current) {
         handleForceOutcome(outcome)
       }
@@ -160,7 +153,7 @@ export function PushControl(props: PushControlProps) {
     pendingGeneration.current = generation
     setFlowPending(true)
     try {
-      const outcome = await props.push('overwrite', loss?.remoteSha)
+      const outcome = await deps.push('overwrite', loss?.remoteSha)
       if (generation === flowGeneration.current) {
         handleForceOutcome(outcome)
       }
@@ -172,45 +165,13 @@ export function PushControl(props: PushControlProps) {
     }
   }
 
-  const openForceConfirm = () => {
-    openTier1()
-  }
-
-  return (
+  const dialogs = (
     <>
-      <DropdownMenu className="inline-flex">
-        <button
-          type="button"
-          onClick={() => void onPrimary()}
-          disabled={props.disabled || props.pushing || props.detached}
-          className={primaryButtonClass}
-        >
-          {props.pushing ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-          Push
-        </button>
-        <DropdownMenuTrigger
-          aria-label="Push options"
-          disabled={props.disabled || props.pushing}
-          className={caretButtonClass}
-        >
-          <ChevronDownIcon className="size-3.5" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="rounded-[var(--r-sm)] shadow-lg">
-          <DropdownMenuItem
-            disabled={props.detached}
-            onSelect={openForceConfirm}
-            className="whitespace-nowrap rounded-[var(--r-xs)] px-2.5 transition-colors hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
-          >
-            Force push (with lease)
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
       {mode === 'tier1' ? (
         <Modal onDismiss={dismissFlow}>
-          <h2 className="text-sm font-semibold">Force push {props.branchName}?</h2>
+          <h2 className="text-sm font-semibold">Force push {deps.branchName}?</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            {forceConfirmDescription(props.branchName, props.ahead, props.behind)}
+            {forceConfirmDescription(deps.branchName, deps.ahead, deps.behind)}
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <button
@@ -241,7 +202,7 @@ export function PushControl(props: PushControlProps) {
 
       {mode === 'tier2' && loss ? (
         <Modal onDismiss={dismissFlow}>
-          <h2 className="text-sm font-semibold">Overwrite {props.branchName} on the remote?</h2>
+          <h2 className="text-sm font-semibold">Overwrite {deps.branchName} on the remote?</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             The remote has commits you don't have. Overwriting will permanently discard{' '}
             {loss.lostCommits.length === 1
@@ -285,4 +246,6 @@ export function PushControl(props: PushControlProps) {
       ) : null}
     </>
   )
+
+  return { requestPush, openForceConfirm: openTier1, dialogs }
 }

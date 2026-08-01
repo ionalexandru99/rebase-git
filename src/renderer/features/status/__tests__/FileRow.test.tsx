@@ -21,10 +21,22 @@ describe('FileRow — unstaged group', () => {
     return { onStage, onUnstage }
   }
 
-  it('renders no staging checkbox', () => {
+  it('indicates the unstaged state with an empty box, not a form checkbox', () => {
     renderRow()
 
+    const indicator = screen.getByTestId('file-stage-indicator')
+    expect(indicator).toHaveAttribute('data-state', 'unstaged')
+    expect(indicator).toHaveAttribute('aria-label', 'Stage src/app.ts')
+    expect(indicator).toBeEmptyDOMElement()
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('leads the row with the state indicator', () => {
+    renderRow()
+
+    expect(screen.getByTestId('status-file-row').firstElementChild).toBe(
+      screen.getByTestId('file-stage-indicator')
+    )
   })
 
   it('stages the file through its row button', () => {
@@ -99,6 +111,15 @@ describe('FileRow — staged group', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Unstage src/app.ts' }))
     expect(onUnstage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('indicates the staged state with a tick', () => {
+    renderRow()
+
+    const indicator = screen.getByTestId('file-stage-indicator')
+    expect(indicator).toHaveAttribute('data-state', 'staged')
+    expect(indicator).toHaveTextContent('✓')
+    expect(indicator).toHaveAttribute('aria-label', 'Unstage src/app.ts')
   })
 
   it('unstages the file on double-click', () => {
@@ -244,6 +265,32 @@ describe('FileRow — conflicted', () => {
 
     fireEvent.contextMenu(screen.getByText('src/app.ts'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Mark as resolved' }))
+    expect(onStage).toHaveBeenCalledWith('src/app.ts')
+  })
+
+  it('indicates the conflicted state with a warning glyph', () => {
+    const onStage = vi.fn()
+    render(
+      <FileRow
+        file="src/app.ts"
+        kind="conflicted"
+        group="conflicts"
+        conflictCode="UU"
+        conflictLabels={labels}
+        isSelected={false}
+        onSelect={vi.fn()}
+        onStage={onStage}
+        onUnstage={vi.fn()}
+        onResolveConflict={vi.fn()}
+      />
+    )
+
+    const indicator = screen.getByTestId('file-stage-indicator')
+    expect(indicator).toHaveAttribute('data-state', 'conflicted')
+    expect(indicator).toHaveTextContent('!')
+    expect(indicator).toHaveAttribute('aria-label', 'Mark src/app.ts as resolved')
+
+    fireEvent.click(indicator)
     expect(onStage).toHaveBeenCalledWith('src/app.ts')
   })
 

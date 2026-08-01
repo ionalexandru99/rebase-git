@@ -1,7 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
+  commitListWidth,
   createFixtureRepo,
+  dragListDivider,
   expect,
   stageFileFromRow,
   stagedFileRow,
@@ -157,13 +159,19 @@ test('closing tabs activates the survivor; closing the last resets to a blank pi
   })
 })
 
-test('persisted tabs survive a second relaunch without re-seeding', async ({ harness }) => {
+test('persisted tabs and their commit-list width survive a second relaunch without re-seeding', async ({
+  harness
+}) => {
   const repoA = createFixtureRepo()
   const page = await harness.openRepo(repoA)
 
   await expect(page.getByRole('tab', { name: path.basename(repoA) })).toBeVisible({
     timeout: 10_000
   })
+  await expect.poll(() => commitListWidth(page), { timeout: 10_000 }).toBe(400)
+
+  await dragListDivider(page, 180)
+  await expect.poll(() => commitListWidth(page), { timeout: 10_000 }).toBe(580)
 
   const mainProcessId = await harness.mainProcessId()
   const relaunched = await harness.restart()
@@ -173,6 +181,7 @@ test('persisted tabs survive a second relaunch without re-seeding', async ({ har
   await expect(relaunched.getByRole('tab', { name: path.basename(repoA) })).toBeVisible({
     timeout: 10_000
   })
+  await expect.poll(() => commitListWidth(relaunched), { timeout: 15_000 }).toBe(580)
   await expect.poll(() => harness.inspectLifecycle()).toMatchObject({
     sidecarProcessCount: 1,
     sidecarRespawnCount: 0

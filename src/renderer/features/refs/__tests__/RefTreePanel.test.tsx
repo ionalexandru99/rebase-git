@@ -1,7 +1,9 @@
+import { REF_TREE_REMOTE_SECTION_KEY, REF_TREE_TAG_SECTION_KEY } from '@shared/ref-tree-toggles'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { StrictMode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RefTreePanel } from '../RefTreePanel'
+import { folderKey } from '../ref-tree'
 
 function renderPanel(overrides: Partial<Parameters<typeof RefTreePanel>[0]> = {}) {
   return render(
@@ -150,5 +152,81 @@ describe('RefTreePanel filter input', () => {
       'repo:%2Frepo-a:folder:local:feature',
       'repo:%2Frepo-b:folder:local:feature'
     ])
+  })
+})
+
+describe('RefTreePanel freshness', () => {
+  const NOW = Date.parse('2026-08-01T12:00:00.000Z')
+
+  beforeEach(() => {
+    vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue(
+      [REF_TREE_REMOTE_SECTION_KEY, REF_TREE_TAG_SECTION_KEY, folderKey('remote', 'origin')].map(
+        (key) => `repo:%2Frepo-a:${key}`
+      )
+    )
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function renderFreshPanel() {
+    const result = render(
+      <RefTreePanel
+        repoPath="/repo-a"
+        localBranches={['main']}
+        remoteBranches={['origin/main']}
+        tags={['v1.0.0']}
+        currentBranch="main"
+        lastCommitAt={{ main: '2026-07-30T12:00:00.000Z' }}
+        remoteLastCommitAt={{ 'origin/main': '2026-07-31T12:00:00.000Z' }}
+        tagLastCommitAt={{ 'v1.0.0': '2026-07-22T12:00:00.000Z' }}
+        stashes={[
+          {
+            index: 0,
+            ref: 'stash@{0}',
+            oid: 'stash-oid-0',
+            message: 'WIP: polish palette',
+            branch: 'main',
+            lastCommitAt: '2026-07-31T12:00:00.000Z'
+          }
+        ]}
+      />
+    )
+    await waitFor(() => expect(screen.getByTitle('origin/main')).toBeInTheDocument())
+    return result
+  }
+
+  it.each<[string, string, string]>([
+    ['local branch', 'main', '2d ago'],
+    ['remote branch', 'origin/main', '1d ago'],
+    ['tag', 'v1.0.0', '10d ago']
+  ])('labels the %s row with its age', async (_kind, title, expected) => {
+    await renderFreshPanel()
+    const row = screen.getByTitle(title).closest('[data-testid="ref-tree-leaf-row"]')
+    expect(row).not.toBeNull()
+    expect(within(row as HTMLElement).getByTestId('ref-freshness')).toHaveTextContent(expected)
+  })
+
+  it('labels the stash row with its age', async () => {
+    await renderFreshPanel()
+    const row = screen.getByTestId('ref-tree-stash-row')
+    expect(within(row).getByTestId('ref-freshness')).toHaveTextContent('1d ago')
+  })
+
+  it('renders no label on rows without a known date', async () => {
+    render(
+      <RefTreePanel
+        repoPath="/repo-a"
+        localBranches={['main']}
+        remoteBranches={[]}
+        tags={[]}
+        currentBranch="main"
+      />
+    )
+    const row = (await screen.findByTitle('main')).closest('[data-testid="ref-tree-leaf-row"]')
+    expect(within(row as HTMLElement).queryByTestId('ref-freshness')).not.toBeInTheDocument()
   })
 })

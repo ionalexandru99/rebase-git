@@ -34,7 +34,10 @@ const combineBranches = (
     all: local?.all ?? [],
     remotes: remote?.remotes ?? [],
     tags: remote?.tags ?? [],
-    tracking: local?.tracking
+    tracking: local?.tracking,
+    lastCommitAt: local?.lastCommitAt,
+    remoteLastCommitAt: remote?.remoteLastCommitAt,
+    tagLastCommitAt: remote?.tagLastCommitAt
   }
 }
 

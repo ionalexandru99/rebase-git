@@ -1,99 +1,81 @@
 import type { CommitDetail, CommitDetailFile } from '@shared/schemas/git'
-import { CopyIcon, GitCommitHorizontalIcon, XIcon } from 'lucide-react'
+import { GitCommitHorizontalIcon, MoreHorizontalIcon } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { type CommitDiffSelection, CommitDiffView } from '@/features/diff/CommitDiffView'
-import { parseRefs } from '@/features/history/graph/refs'
+import { laneColor } from '@/features/history/graph/canvas'
 import type { CommitAction } from '@/lib/git-actions'
 import type { GitLogEntry } from '@/types'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '../../components/ui/dropdown-menu'
 import { EmptyState } from '../../components/ui/empty-state'
 import { LoadingBadge } from '../../components/ui/loading-badge'
 import { CommitFileList } from './CommitFileList'
 import { CommitMeta } from './CommitMeta'
 import { firstCommitTreeFile } from './commit-file-tree'
-import type { CommitSelection } from './commit-selection'
 import { useCommitDetail, useCommitDetails } from './hooks/useCommitDetail'
-import { RefBadge } from './RefBadge'
 
 const SUMMARY_STAT_LIMIT = 50
+const DETAIL_FILE_LIST_WIDTH = 232
+const DETAIL_FILE_LIST_MAX_SHARE = '40%'
 
-interface CommitDetailsPanelProps {
-  selection: CommitSelection
+type CommitActionHandler = (action: CommitAction, sha: string, message: string) => void
+
+interface CommitDetailPaneProps {
+  shas: readonly string[]
   commitsByHash: ReadonlyMap<string, GitLogEntry>
   remotes: Record<string, string>
   remoteNames: Set<string>
-  laneHex: string
-  height: number
-  onResizeStart: (event: MouseEvent) => void
-  onClose: () => void
-  onCommitAction?: (action: CommitAction, sha: string, message: string) => void
+  onCommitAction?: CommitActionHandler
 }
 
-export function CommitDetailsPanel(props: CommitDetailsPanelProps) {
-  const shas = props.selection.shas
-  const singleSha = shas.length === 1 ? shas[0] : null
+export const COMMIT_DETAIL_HEADER_HEIGHT = 34
 
+function PaneHeader(props: { title: string; children?: ReactNode }) {
   return (
-    <>
-      <span
-        onMouseDown={(event) => props.onResizeStart(event.nativeEvent)}
-        aria-hidden="true"
-        className="group/details-resize z-30 flex h-1.5 shrink-0 cursor-row-resize items-center justify-stretch"
-      >
-        <span className="h-px w-full bg-border-strong/50 transition-colors group-hover/details-resize:bg-primary/70" />
-      </span>
-      <section
-        data-testid="commit-details-panel"
-        aria-label="Commit details"
-        className="flex max-h-[70%] shrink-0 flex-col overflow-hidden border-t bg-card"
-        style={{ height: `${props.height}px` }}
-      >
-        {singleSha !== null ? (
-          <SingleCommitDetails
-            sha={singleSha}
-            entry={props.commitsByHash.get(singleSha)}
-            remotes={props.remotes}
-            remoteNames={props.remoteNames}
-            laneHex={props.laneHex}
-            onClose={props.onClose}
-            onCommitAction={props.onCommitAction}
-          />
-        ) : shas.length > 1 ? (
-          <MultiCommitSummary
-            shas={shas}
-            commitsByHash={props.commitsByHash}
-            onClose={props.onClose}
-          />
-        ) : (
-          <>
-            <DetailsHeader title="Commit details" onClose={props.onClose} />
-            <EmptyState
-              size="sm"
-              icon={GitCommitHorizontalIcon}
-              title="No commit selected"
-              description="Select a commit in the timeline to see its details."
-            />
-          </>
-        )}
-      </section>
-    </>
+    <header
+      style={{ height: `${COMMIT_DETAIL_HEADER_HEIGHT}px` }}
+      className="flex shrink-0 items-center gap-2 border-b px-3"
+    >
+      <span className="shrink-0 text-[13px] font-semibold">{props.title}</span>
+      {props.children}
+    </header>
   )
 }
 
-function DetailsHeader(props: { title: string; onClose: () => void; children?: ReactNode }) {
+export function CommitDetailPane(props: CommitDetailPaneProps) {
+  const shas = props.shas
+
+  if (shas.length === 1) {
+    return (
+      <SingleCommitDetail
+        sha={shas[0]}
+        entry={props.commitsByHash.get(shas[0])}
+        remotes={props.remotes}
+        remoteNames={props.remoteNames}
+        onCommitAction={props.onCommitAction}
+      />
+    )
+  }
+
+  if (shas.length > 1) {
+    return <MultiCommitSummary shas={shas} commitsByHash={props.commitsByHash} />
+  }
+
   return (
-    <header className="flex min-h-9 shrink-0 items-center gap-2 border-b px-3 py-1">
-      <span className="min-w-0 truncate text-[13px] font-semibold">{props.title}</span>
-      {props.children}
-      <div className="flex-1" />
-      <button
-        type="button"
-        onClick={props.onClose}
-        aria-label="Close commit details"
-        className="flex size-6 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      >
-        <XIcon className="size-4" />
-      </button>
-    </header>
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="commit-detail-pane">
+      <PaneHeader title="Commit" />
+      <EmptyState
+        size="sm"
+        icon={GitCommitHorizontalIcon}
+        title="No commit selected"
+        description="Select a commit in the timeline to see its details."
+      />
+    </div>
   )
 }
 
@@ -107,14 +89,15 @@ function totalsOf(files: readonly CommitDetailFile[]) {
   return { additions, deletions }
 }
 
-function SingleCommitDetails(props: {
+const headerButtonClass =
+  'inline-flex h-6 shrink-0 items-center rounded-[var(--r-sm)] bg-muted px-2 text-xs transition-colors hover:bg-border-strong'
+
+function SingleCommitDetail(props: {
   sha: string
   entry: GitLogEntry | undefined
   remotes: Record<string, string>
   remoteNames: Set<string>
-  laneHex: string
-  onClose: () => void
-  onCommitAction?: (action: CommitAction, sha: string, message: string) => void
+  onCommitAction?: CommitActionHandler
 }) {
   const detailQuery = useCommitDetail(props.sha)
   const detail = detailQuery.data
@@ -143,26 +126,22 @@ function SingleCommitDetails(props: {
     [selectedFile, props.sha]
   )
 
-  const refs = useMemo(
-    () => (props.entry ? parseRefs(props.entry.refs, props.remoteNames) : []),
-    [props.entry, props.remoteNames]
-  )
   const subject = detail?.subject ?? props.entry?.message ?? ''
   const totals = totalsOf(files)
+  const act = (action: CommitAction) => props.onCommitAction?.(action, props.sha, subject)
 
   return (
-    <>
-      <DetailsHeader title={subject} onClose={props.onClose}>
-        <span className="flex shrink-0 items-center gap-1">
-          {refs.map((parsedRef) => (
-            <RefBadge
-              key={`${parsedRef.kind}:${parsedRef.label}`}
-              parsedRef={parsedRef}
-              laneHex={props.laneHex}
-              remotes={props.remotes}
-            />
-          ))}
-        </span>
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="commit-detail-pane">
+      <PaneHeader title="Commit">
+        <button
+          type="button"
+          onClick={() => act('copy-sha')}
+          aria-label={`Copy full SHA ${props.sha}`}
+          title={props.sha}
+          className="shrink-0 rounded-[var(--r-sm)] px-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {props.sha.slice(0, 7)}
+        </button>
         {detail ? (
           <span
             className="flex shrink-0 items-center gap-1.5 text-xs tabular-nums text-muted-foreground"
@@ -179,18 +158,32 @@ function SingleCommitDetails(props: {
             ) : null}
           </span>
         ) : null}
-        <button
-          type="button"
-          onClick={() => props.onCommitAction?.('copy-sha', props.sha, subject)}
-          aria-label={`Copy full SHA ${props.sha}`}
-          title={props.sha}
-          className="flex shrink-0 items-center gap-1 rounded-[var(--r-sm)] px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          {props.sha.slice(0, 7)}
-          <CopyIcon className="size-3" aria-hidden="true" />
-        </button>
         {detailQuery.isFetching ? <LoadingBadge /> : null}
-      </DetailsHeader>
+        <div className="flex-1" />
+        <button type="button" onClick={() => act('revert')} className={headerButtonClass}>
+          Revert
+        </button>
+        <button type="button" onClick={() => act('cherry-pick')} className={headerButtonClass}>
+          Cherry-pick
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Commit actions"
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-[var(--r-sm)] bg-muted transition-colors hover:bg-border-strong"
+          >
+            <MoreHorizontalIcon className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent portal className="min-w-44">
+            <DropdownMenuItem onSelect={() => act('copy-sha')}>Copy SHA</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => act('copy-message')}>Copy message</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => act('branch-here')}>
+              Create branch here
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => act('tag-here')}>Create tag here</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </PaneHeader>
 
       {detailQuery.isError ? (
         <div className="px-3 py-4 text-sm text-destructive">
@@ -199,7 +192,13 @@ function SingleCommitDetails(props: {
         </div>
       ) : detail ? (
         <>
-          <CommitMeta detail={detail} />
+          <CommitMeta
+            detail={detail}
+            entry={props.entry}
+            remotes={props.remotes}
+            remoteNames={props.remoteNames}
+            laneHex={laneColor(0)}
+          />
           {files.length === 0 ? (
             <EmptyState
               size="sm"
@@ -208,7 +207,13 @@ function SingleCommitDetails(props: {
               description="This commit does not touch any files."
             />
           ) : (
-            <div className="grid min-h-0 flex-1 grid-cols-[minmax(200px,280px)_minmax(0,1fr)] overflow-hidden">
+            <div
+              data-testid="commit-detail-split"
+              className="grid min-h-0 flex-1 overflow-hidden"
+              style={{
+                gridTemplateColumns: `min(${DETAIL_FILE_LIST_WIDTH}px, ${DETAIL_FILE_LIST_MAX_SHARE}) minmax(0, 1fr)`
+              }}
+            >
               <div className="flex min-h-0 min-w-0 flex-col border-r">
                 <CommitFileList
                   files={files}
@@ -225,14 +230,13 @@ function SingleCommitDetails(props: {
       ) : (
         <div className="px-3 py-4 text-sm text-muted-foreground">Loading commit details…</div>
       )}
-    </>
+    </div>
   )
 }
 
 function MultiCommitSummary(props: {
   shas: readonly string[]
   commitsByHash: ReadonlyMap<string, GitLogEntry>
-  onClose: () => void
 }) {
   const counted = props.shas.slice(0, SUMMARY_STAT_LIMIT)
   const detailQueries = useCommitDetails(counted)
@@ -245,10 +249,10 @@ function MultiCommitSummary(props: {
   const truncated = props.shas.length > counted.length
 
   return (
-    <>
-      <DetailsHeader title={`${props.shas.length} commits selected`} onClose={props.onClose}>
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="commit-detail-pane">
+      <PaneHeader title={`${props.shas.length} commits selected`}>
         {pending ? <LoadingBadge /> : null}
-      </DetailsHeader>
+      </PaneHeader>
       <div className="shrink-0 border-b px-3 py-2 text-[13px] text-muted-foreground">
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
           <span>
@@ -280,6 +284,6 @@ function MultiCommitSummary(props: {
           </li>
         ))}
       </ol>
-    </>
+    </div>
   )
 }

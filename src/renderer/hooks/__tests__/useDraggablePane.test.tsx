@@ -96,6 +96,20 @@ describe('useDraggablePane', () => {
     expect(save).toHaveBeenLastCalledWith({ open: true, size: 256 })
   })
 
+  it('restores and persists the default size when a caller resets the pane directly', () => {
+    const save = vi.fn()
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 100, max: 600, defaultSize: 300, save })
+    )
+    drag(result.current.onResizeStart, { clientX: 300, clientY: 0 }, { clientX: 500, clientY: 0 })
+    expect(result.current.size).toBe(500)
+
+    act(() => result.current.reset())
+
+    expect(result.current.size).toBe(300)
+    expect(save).toHaveBeenLastCalledWith({ open: true, size: 300 })
+  })
+
   it('keeps one reset listener when every render passes a new save identity', () => {
     const addEventListener = vi.spyOn(window, 'addEventListener')
     const removeEventListener = vi.spyOn(window, 'removeEventListener')

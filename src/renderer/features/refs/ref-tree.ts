@@ -11,11 +11,18 @@ export interface StashRowData {
   oid: string
   message: string
   branch: string
+  lastCommitAt?: string
 }
 
 export interface BranchTracking {
   ahead: number
   behind: number
+}
+
+export interface RefFreshness {
+  local?: Record<string, string>
+  remote?: Record<string, string>
+  tag?: Record<string, string>
 }
 
 export interface RefLeafRow {
@@ -27,6 +34,7 @@ export interface RefLeafRow {
   isCurrent: boolean
   ahead?: number
   behind?: number
+  lastCommitAt?: string
 }
 
 export interface RefFolderRow {
@@ -47,6 +55,7 @@ export interface RefStashRow {
   oid: string
   message: string
   branch: string
+  lastCommitAt?: string
 }
 
 export interface RefSectionRow {
@@ -132,6 +141,11 @@ export function rowKey(row: RefRow): string {
   return `${row.refKind}:${row.kind}:${row.fullPath}`
 }
 
+interface LeafDecorations {
+  tracking?: Record<string, BranchTracking>
+  freshness?: RefFreshness
+}
+
 interface BuildRowsOptions {
   localBranches: string[]
   remoteBranches: string[]
@@ -140,6 +154,7 @@ interface BuildRowsOptions {
   currentBranch: string
   localLoading: boolean
   tracking?: Record<string, BranchTracking>
+  freshness?: RefFreshness
   stashes?: StashRowData[]
   query?: string
 }
@@ -152,6 +167,7 @@ export function buildRefTreeRows({
   currentBranch,
   localLoading,
   tracking,
+  freshness,
   stashes,
   query
 }: BuildRowsOptions): RefRow[] {
@@ -161,6 +177,7 @@ export function buildRefTreeRows({
   const remotePaths = filtering ? fuzzyFilter(query ?? '', remoteBranches) : remoteBranches
   const tagPaths = filtering ? fuzzyFilter(query ?? '', tags) : tags
   const stashRows = filterStashes(stashes ?? [], filtering ? (query ?? '') : '')
+  const decorations: LeafDecorations = { tracking, freshness }
   const noLocalData = localBranches.length === 0
   if (localLoading && noLocalData) {
     pushSkeletonSection(out, 'local', 'Local branches', toggles, 4)
@@ -173,11 +190,20 @@ export function buildRefTreeRows({
       toggles,
       currentBranch,
       filtering,
-      tracking
+      decorations
     )
   }
-  buildSection(out, 'remote', 'Remote branches', remotePaths, toggles, currentBranch, filtering)
-  buildSection(out, 'tag', 'Tags', tagPaths, toggles, currentBranch, filtering)
+  buildSection(
+    out,
+    'remote',
+    'Remote branches',
+    remotePaths,
+    toggles,
+    currentBranch,
+    filtering,
+    decorations
+  )
+  buildSection(out, 'tag', 'Tags', tagPaths, toggles, currentBranch, filtering, decorations)
   buildStashSection(out, stashRows, toggles, filtering)
   if (filtering && out.length === 0) {
     out.push({ kind: 'empty', refKind: 'local', label: 'No matching refs' })
@@ -218,7 +244,8 @@ function buildStashSection(
       ref: stash.ref,
       oid: stash.oid,
       message: stash.message,
-      branch: stash.branch
+      branch: stash.branch,
+      lastCommitAt: stash.lastCommitAt
     })
   }
 }
@@ -250,7 +277,7 @@ function buildSection(
   toggles: Set<string>,
   currentBranch: string,
   filtering: boolean,
-  tracking?: Record<string, BranchTracking>
+  decorations: LeafDecorations
 ): void {
   if (filtering && paths.length === 0) {
     return
@@ -300,7 +327,18 @@ function buildSection(
     }
   }
 
-  walkTree(out, root, refKind, 1, '', toggles, currentBranch, filtering, tracking)
+  walkTree(out, root, refKind, 1, '', toggles, currentBranch, filtering, decorations)
+}
+
+function leafFreshness(
+  freshness: RefFreshness | undefined,
+  refKind: RefKind,
+  fullPath: string
+): string | undefined {
+  if (refKind === 'stash') {
+    return undefined
+  }
+  return freshness?.[refKind]?.[fullPath]
 }
 
 function walkTree(
@@ -312,7 +350,7 @@ function walkTree(
   toggles: Set<string>,
   currentBranch: string,
   filtering: boolean,
-  tracking?: Record<string, BranchTracking>
+  decorations: LeafDecorations
 ): void {
   const entries = [...node.entries()].sort((a, b) => {
     const aIsFolder = a[1] instanceof Map
@@ -346,11 +384,11 @@ function walkTree(
           toggles,
           currentBranch,
           filtering,
-          tracking
+          decorations
         )
       }
     } else {
-      const trackingEntry = refKind === 'local' ? tracking?.[value] : undefined
+      const trackingEntry = refKind === 'local' ? decorations.tracking?.[value] : undefined
       out.push({
         kind: 'leaf',
         refKind,
@@ -359,7 +397,8 @@ function walkTree(
         depth,
         isCurrent: refKind === 'local' && value === currentBranch,
         ahead: trackingEntry?.ahead,
-        behind: trackingEntry?.behind
+        behind: trackingEntry?.behind,
+        lastCommitAt: leafFreshness(decorations.freshness, refKind, value)
       })
     }
   }

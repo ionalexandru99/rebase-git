@@ -804,7 +804,7 @@ describe('App — workspace (repo open)', () => {
       )
     })
 
-    await screen.findByText('Timeline')
+    await screen.findByRole('region', { name: 'Commits' })
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/my-app', {
         skip: 0,
@@ -961,18 +961,25 @@ describe('App — workspace (repo open)', () => {
     expect(stashApplyBody).toMatchObject({ index: 0, expectedOid: 'stash-oid-0' })
   })
 
-  it('defaults to the history view and swaps to the local-changes view from the topbar', async () => {
+  it('keeps the timeline and the detail pane on screen at once, with no view switcher', async () => {
     await renderWithRepo()
 
-    expect(await screen.findByText('Timeline')).toBeVisible()
     expect(await screen.findByText('Initial commit')).toBeVisible()
-    expect(screen.queryByText(/files · /)).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Commits' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Details' })).toBeInTheDocument()
+    expect(screen.getByTestId('status-dock')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'History' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Local changes' })).not.toBeInTheDocument()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
+  it('swaps the detail pane to the staging surface when the working copy is picked', async () => {
+    await renderWithRepo()
+    await screen.findByText('Initial commit')
+
+    fireEvent.click(screen.getByTestId('working-copy-row'))
 
     expect(await screen.findByText('4 files · 2 staged')).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Commit message' })).toBeVisible()
-    expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
   })
 
   it('does not expose a Close repository control — closing the tab is the only exit', async () => {
@@ -1016,7 +1023,7 @@ describe('App — workspace (repo open)', () => {
     })
     stream.fireDone('/workspace/repo', false)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Local changes/i }))
+    fireEvent.click(await screen.findByTestId('working-copy-row'))
     await waitFor(() => {
       expect(screen.getByText('Working tree clean')).toBeInTheDocument()
     })
@@ -1057,7 +1064,7 @@ describe('App — workspace (repo open)', () => {
 
     renderApp()
     fireEvent.click(await screen.findByText('/workspace/repo'))
-    fireEvent.click(await screen.findByRole('button', { name: /Local changes/i }))
+    fireEvent.click(await screen.findByTestId('working-copy-row'))
 
     const amend = await screen.findByRole('checkbox', { name: 'Amend last commit' })
     expect(amend).toBeDisabled()

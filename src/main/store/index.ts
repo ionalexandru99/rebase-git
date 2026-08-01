@@ -1,5 +1,6 @@
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
 import Store from 'electron-store'
+import { readListPaneWidth, writeListPaneWidth } from './list-pane-widths'
 import { planLegacyWorkspaceMigration } from './migration'
 import type { StoreSchema } from './schema'
 import { storeDefaults, storeSchema } from './schema'
@@ -104,6 +105,14 @@ export function getSidebarPrefs(): SidebarPrefs {
 export function setSidebarPrefs(prefs: SidebarPrefs): void {
   store.set('sidebarOpen', prefs.open)
   store.set('sidebarWidth', prefs.width)
+}
+
+export function getListPaneWidth(repoPath: string): number {
+  return readListPaneWidth(store.get('listPaneWidths'), repoPath)
+}
+
+export function setListPaneWidth(repoPath: string, width: number): void {
+  store.set('listPaneWidths', writeListPaneWidth(store.get('listPaneWidths'), repoPath, width))
 }
 
 export function getPullDivergedStrategy(): StoreSchema['pullDivergedStrategy'] {

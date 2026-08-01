@@ -22,6 +22,7 @@ import {
   useRepoSession,
   useRepoSessionController
 } from './repo-session'
+import { DetailSelectionProvider } from './selection'
 
 export { useCommitHistory } from '../features/history/store'
 export { useRefs } from '../features/refs/store'
@@ -230,7 +231,11 @@ export function GitStoreProvider(props: GitStoreProviderProps) {
       <WorkingTreeStatusProvider value={workingTreeStatus}>
         <CommitHistoryProvider value={commitHistory}>
           <RefsProvider value={refs}>
-            <ActionRunnerProvider value={actionRunner}>{props.children}</ActionRunnerProvider>
+            <ActionRunnerProvider value={actionRunner}>
+              <DetailSelectionProvider repoPath={session.repoPath}>
+                {props.children}
+              </DetailSelectionProvider>
+            </ActionRunnerProvider>
           </RefsProvider>
         </CommitHistoryProvider>
       </WorkingTreeStatusProvider>

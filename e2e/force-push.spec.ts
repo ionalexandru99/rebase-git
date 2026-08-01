@@ -26,9 +26,10 @@ test('force-push republishes a Diverged branch, escalating to a pinned overwrite
   const page = await harness.openRepo(repo)
   await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({ timeout: 10_000 })
 
-  const pushButton = page.getByRole('button', { name: 'Push', exact: true })
-  await expect(pushButton).toBeVisible({ timeout: 10_000 })
-  await pushButton.click()
+  const syncOptions = page.getByRole('button', { name: 'Sync options', exact: true })
+  await expect(syncOptions).toBeVisible({ timeout: 10_000 })
+  await syncOptions.click()
+  await page.getByRole('menuitem', { name: /force push \(with lease\)/i }).click()
 
   const tier1 = page.getByRole('button', { name: /force push \(with lease\)/i })
   await expect(tier1).toBeVisible({ timeout: 10_000 })

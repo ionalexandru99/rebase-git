@@ -1,5 +1,6 @@
-import { type ComponentType, type ReactElement, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { useWorkspaceContext } from '@/app/WorkspaceContext'
 import {
   assembleDrops,
   dropStateOf,
@@ -7,41 +8,33 @@ import {
   hunkDropped,
   toggleFileDrop,
   toggleHunkDrop
-} from '../features/commit/amend-drops'
-import { CommitPanel } from '../features/commit/CommitPanel'
-import { DiffPanel } from '../features/diff/DiffPanel'
-import { HistoryPanel } from '../features/history'
-import { buildHeadCommitRange } from '../features/history/head-commit-range'
-import type { RefKind } from '../features/refs/ref-tree'
-import { CleanWorkingTree } from '../features/status/CleanWorkingTree'
-import { ConflictBanner } from '../features/status/ConflictBanner'
-import type { ConflictSide } from '../features/status/conflict-resolution'
-import { type OperationSummary, summarizeOperation } from '../features/status/operation-summary'
-import { StashControl } from '../features/status/StashControl'
-import { type SelectedFile, StatusPanel } from '../features/status/StatusPanel'
-import { followSelection } from '../features/status/selection-follow'
-import { buildHeadCommitRows, buildStagedFilePaths } from '../features/status/status-file-rows'
-import {
-  buildStatusGroups,
-  type FileRowGroup,
-  flattenStatusGroups,
-  type StatusGroupRow
-} from '../features/status/status-groups'
-import { useDraggablePane } from '../hooks/useDraggablePane'
-import { useMediaQuery } from '../hooks/useMediaQuery'
-import { COMPACT_MEDIA_QUERY } from '../lib/breakpoints'
-import type { CommitAction, FileAction } from '../lib/git-actions'
-import { cn } from '../lib/utils'
-import type { WorkspaceView } from '../shell/Topbar'
+} from '@/features/commit/amend-drops'
+import { CommitPanel } from '@/features/commit/CommitPanel'
+import { DiffPanel } from '@/features/diff/DiffPanel'
+import { buildHeadCommitRange } from '@/features/history/head-commit-range'
+import type { FileAction } from '@/lib/git-actions'
 import {
   useActionRunner,
   useCommitHistory,
   useHeadCommit,
   useRepoSession,
   useWorkingTreeStatus
-} from '../stores/git'
-import type { GitLogEntry } from '../types'
-import { useWorkspaceContext } from './WorkspaceContext'
+} from '@/stores/git'
+import { useDraggablePane } from '../../hooks/useDraggablePane'
+import { CleanWorkingTree } from './CleanWorkingTree'
+import { ConflictBanner } from './ConflictBanner'
+import type { ConflictSide } from './conflict-resolution'
+import { type OperationSummary, summarizeOperation } from './operation-summary'
+import { StashControl } from './StashControl'
+import { type SelectedFile, StatusPanel } from './StatusPanel'
+import { followSelection } from './selection-follow'
+import { buildHeadCommitRows, buildStagedFilePaths } from './status-file-rows'
+import {
+  buildStatusGroups,
+  type FileRowGroup,
+  flattenStatusGroups,
+  type StatusGroupRow
+} from './status-groups'
 
 const FILES_PANEL_WIDTH_MIN = 240
 const FILES_PANEL_WIDTH_MAX = 620
@@ -62,27 +55,24 @@ const saveFilesPanelWidth = (state: { size: number }) => {
   } catch {}
 }
 
-interface WorkspaceViewProps {
-  repoPath: string | null
-  remotes: Record<string, string>
-  currentBranch: string
-  remoteBranches: string[]
-  visibleBranchRefs: ReadonlySet<string>
-  filteredCommits: GitLogEntry[]
-  displayedCommitSet: ReadonlySet<string>
-  expandedMerges: ReadonlySet<string>
-  filter: string
-  onFilterChange: (value: string) => void
-  visibleSet: Set<string> | null
-  graphCommits?: GitLogEntry[]
-  timelineTips?: readonly string[]
-  onToggleMergeExpansion?: (mergeHash: string) => void
-  onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
-  onCommitAction?: (action: CommitAction, sha: string, message: string) => void
-  tabActive: boolean
+function conflictBlockedReason(
+  conflictCount: number,
+  summary: OperationSummary | null
+): string | undefined {
+  if (conflictCount > 0) {
+    return 'Resolve and stage every conflicted file before committing.'
+  }
+  if (summary?.canContinue) {
+    return `Finish this ${summary.noun} with Continue above, not a commit.`
+  }
+  return undefined
 }
 
-function LocalChangesView(props: WorkspaceViewProps) {
+interface LocalChangesPaneProps {
+  currentBranch: string
+}
+
+export function LocalChangesPane(props: LocalChangesPaneProps) {
   const { status, rows, statusState, stageFile, unstageFile } = useWorkingTreeStatus()
   const { commit, amend, loadHeadMessage, busy } = useActionRunner()
   const { opening } = useRepoSession()
@@ -91,8 +81,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
   const { actions, prompt, confirm } = useWorkspaceContext()
   const [selected, setSelected] = useState<SelectedFile | null>(null)
   const [amendActive, setAmendActive] = useState(false)
-  const [compactPane, setCompactPane] = useState<'files' | 'diff'>('files')
-  const compact = useMediaQuery(COMPACT_MEDIA_QUERY)
   const [drops, setDrops] = useState<FileDrops>(() => new Map())
   const headCommit = useHeadCommit(amendActive)
   const headFiles = headCommit.data?.files ?? []
@@ -194,6 +182,7 @@ function LocalChangesView(props: WorkspaceViewProps) {
       }
     })
   }
+
   const { size: filesWidth, onResizeStart } = useDraggablePane({
     min: FILES_PANEL_WIDTH_MIN,
     max: FILES_PANEL_WIDTH_MAX,
@@ -246,12 +235,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
     )
   }, [groupRows, selected])
 
-  useEffect(() => {
-    if (!compact) {
-      setCompactPane('files')
-    }
-  }, [compact])
-
   const handleAmendChange = (active: boolean) => {
     setAmendActive(active)
     if (!active) {
@@ -279,9 +262,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
       source: 'head-commit',
       range: buildHeadCommitRange(headParentCount, headSha)
     })
-    if (compact) {
-      setCompactPane('diff')
-    }
   }
 
   const selectWorktreeFile = (
@@ -290,9 +270,6 @@ function LocalChangesView(props: WorkspaceViewProps) {
     renameSource?: string
   ) => {
     setSelected({ file, renameSource, group })
-    if (compact) {
-      setCompactPane('diff')
-    }
   }
 
   const amendDrop =
@@ -333,44 +310,12 @@ function LocalChangesView(props: WorkspaceViewProps) {
         />
         {totalChanges > 0 || amendActive ? (
           <div
-            className={cn(
-              'grid min-h-0 flex-1 overflow-hidden',
-              compact && 'grid-rows-[38px_minmax(0,1fr)]'
-            )}
-            style={
-              compact
-                ? undefined
-                : {
-                    gridTemplateColumns: `min(${filesWidth}px, calc(100% - 300px)) minmax(300px, 1fr)`
-                  }
-            }
+            className="grid min-h-0 flex-1 overflow-hidden"
+            style={{
+              gridTemplateColumns: `min(${filesWidth}px, calc(100% - 300px)) minmax(300px, 1fr)`
+            }}
           >
-            {compact ? (
-              <div className="flex items-center gap-1 border-b bg-card-2 px-2">
-                {(['files', 'diff'] as const).map((pane) => (
-                  <button
-                    key={pane}
-                    type="button"
-                    aria-pressed={compactPane === pane}
-                    onClick={() => setCompactPane(pane)}
-                    className={cn(
-                      'h-7 rounded-[var(--r-sm)] px-3 text-xs font-medium transition-colors',
-                      compactPane === pane
-                        ? 'bg-muted text-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {pane === 'files' ? 'Files' : 'Diff'}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            <div
-              className={cn(
-                'relative min-h-0 min-w-0 flex-col border-r',
-                compact && compactPane !== 'files' ? 'hidden' : 'flex'
-              )}
-            >
+            <div className="relative flex min-h-0 min-w-0 flex-col border-r">
               <div className="min-h-0 flex-1 overflow-hidden">
                 <StatusPanel
                   selected={selected}
@@ -412,22 +357,15 @@ function LocalChangesView(props: WorkspaceViewProps) {
                   loading={loading}
                 />
               </div>
-              {!compact ? (
-                <span
-                  onMouseDown={(event) => onResizeStart(event.nativeEvent)}
-                  aria-hidden="true"
-                  className="group/files-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
-                >
-                  <span className="w-px bg-border-strong/50 transition-colors group-hover/files-resize:bg-primary/70" />
-                </span>
-              ) : null}
+              <span
+                onMouseDown={(event) => onResizeStart(event.nativeEvent)}
+                aria-hidden="true"
+                className="group/files-resize absolute -right-1 top-0 z-30 flex h-full w-2 cursor-col-resize items-stretch justify-center"
+              >
+                <span className="w-px bg-border-strong/50 transition-colors group-hover/files-resize:bg-primary/70" />
+              </span>
             </div>
-            <div
-              className={cn(
-                'min-h-0 min-w-0 overflow-hidden',
-                compact && compactPane !== 'diff' ? 'hidden' : 'block'
-              )}
-            >
+            <div className="min-h-0 min-w-0 overflow-hidden">
               <DiffPanel selected={selected} amendDrop={amendDrop} />
             </div>
           </div>
@@ -458,63 +396,4 @@ function LocalChangesView(props: WorkspaceViewProps) {
       />
     </div>
   )
-}
-
-function conflictBlockedReason(
-  conflictCount: number,
-  summary: OperationSummary | null
-): string | undefined {
-  if (conflictCount > 0) {
-    return 'Resolve and stage every conflicted file before committing.'
-  }
-  if (summary?.canContinue) {
-    return `Finish this ${summary.noun} with Continue above, not a commit.`
-  }
-  return undefined
-}
-
-function HistoryView(props: WorkspaceViewProps) {
-  const history = useCommitHistory()
-
-  return props.tabActive ? (
-    <div className="min-h-0 flex-1 overflow-hidden">
-      <HistoryPanel
-        log={history.log}
-        loading={history.logLoading}
-        loadingMore={history.logLoadingMore}
-        hasMore={history.logHasMore}
-        onLoadMore={() => void history.loadMoreHistory()}
-        repoPath={props.repoPath}
-        remotes={props.remotes}
-        currentBranch={props.currentBranch}
-        remoteBranches={props.remoteBranches}
-        visibleBranchRefs={props.visibleBranchRefs}
-        filteredCommits={props.filteredCommits}
-        displayedCommitSet={props.displayedCommitSet}
-        expandedMerges={props.expandedMerges}
-        filter={props.filter}
-        onFilterChange={props.onFilterChange}
-        visibleSet={props.visibleSet}
-        graphCommits={props.graphCommits}
-        timelineTips={props.timelineTips}
-        onToggleMergeExpansion={props.onToggleMergeExpansion}
-        onToggleTimelineVisibility={props.onToggleTimelineVisibility}
-        onCommitAction={props.onCommitAction}
-      />
-    </div>
-  ) : null
-}
-
-const workspaceViewComponents = {
-  history: HistoryView,
-  'local-changes': LocalChangesView
-} satisfies Record<WorkspaceView, ComponentType<WorkspaceViewProps>>
-
-interface WorkspaceViewRendererProps extends WorkspaceViewProps {
-  activeView: WorkspaceView
-}
-
-export function WorkspaceViewRenderer(props: WorkspaceViewRendererProps): ReactElement {
-  const View = workspaceViewComponents[props.activeView]
-  return <View {...props} />
 }

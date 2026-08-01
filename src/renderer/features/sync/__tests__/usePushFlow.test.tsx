@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PushForce } from '@/lib/rpc-client'
 import type { PushOutcome } from '@/stores/action-runner'
-import { PushControl } from '../PushControl'
+import { type PushFlowDeps, usePushFlow } from '../usePushFlow'
 
 const ok: PushOutcome = { kind: 'ok' }
 
@@ -11,28 +11,41 @@ vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() }
 }))
 
-function renderControl(overrides: Partial<Parameters<typeof PushControl>[0]> = {}) {
+function Harness(props: PushFlowDeps) {
+  const flow = usePushFlow(props)
+  return (
+    <>
+      <button type="button" onClick={() => void flow.requestPush()}>
+        Push
+      </button>
+      <button type="button" onClick={flow.openForceConfirm}>
+        Ask to force push
+      </button>
+      {flow.dialogs}
+    </>
+  )
+}
+
+function renderFlow(overrides: Partial<PushFlowDeps> = {}) {
   const push = overrides.push ?? vi.fn(async () => ok)
   render(
-    <PushControl
+    <Harness
       branchName={overrides.branchName ?? 'feature/x'}
       ahead={overrides.ahead ?? 1}
       behind={overrides.behind ?? 0}
-      detached={overrides.detached ?? false}
-      pushing={overrides.pushing ?? false}
       push={push}
     />
   )
   return { push }
 }
 
-describe('PushControl', () => {
+describe('usePushFlow', () => {
   beforeEach(() => {
     vi.resetAllMocks()
   })
 
   it('pushes plainly when the branch is fast-forwardable', async () => {
-    const { push } = renderControl({ ahead: 2, behind: 0 })
+    const { push } = renderFlow({ ahead: 2, behind: 0 })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
 
@@ -40,8 +53,8 @@ describe('PushControl', () => {
     expect(push).toHaveBeenCalledWith()
   })
 
-  it('opens the Tier 1 confirm instead of pushing when the branch is Diverged', async () => {
-    const { push } = renderControl({ branchName: 'feature/x', ahead: 2, behind: 3 })
+  it('opens the Tier 1 confirm instead of pushing when the branch is Diverged', () => {
+    const { push } = renderFlow({ branchName: 'feature/x', ahead: 2, behind: 3 })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
 
@@ -54,8 +67,23 @@ describe('PushControl', () => {
     expect(push).not.toHaveBeenCalled()
   })
 
+  it('escalates to the Tier 1 confirm when a plain push is refused as non-fast-forward', async () => {
+    const push = vi.fn(
+      async (): Promise<PushOutcome> => ({
+        kind: 'rejected',
+        reason: 'non-fast-forward',
+        lostCommits: []
+      })
+    )
+    renderFlow({ ahead: 2, behind: 0, push })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
   it('issues a leased force when the Tier 1 confirm is accepted', async () => {
-    const { push } = renderControl({ ahead: 2, behind: 3 })
+    const { push } = renderFlow({ ahead: 2, behind: 3 })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
@@ -75,7 +103,7 @@ describe('PushControl', () => {
       }
       return ok
     })
-    renderControl({ ahead: 2, behind: 3, push })
+    renderFlow({ ahead: 2, behind: 3, push })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
@@ -98,7 +126,7 @@ describe('PushControl', () => {
       }
       return ok
     })
-    renderControl({ ahead: 2, behind: 3, push })
+    renderFlow({ ahead: 2, behind: 3, push })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
@@ -134,7 +162,7 @@ describe('PushControl', () => {
       }
       return ok
     })
-    renderControl({ ahead: 2, behind: 3, push })
+    renderFlow({ ahead: 2, behind: 3, push })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
@@ -153,7 +181,7 @@ describe('PushControl', () => {
       }
       return ok
     })
-    renderControl({ ahead: 2, behind: 3, push })
+    renderFlow({ ahead: 2, behind: 3, push })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
@@ -165,22 +193,20 @@ describe('PushControl', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('reveals a Force push option behind the caret that opens the Tier 1 confirm', async () => {
-    const { push } = renderControl({ ahead: 1, behind: 0 })
+  it('opens the Tier 1 confirm when a caller asks for a force push directly', () => {
+    const { push } = renderFlow({ ahead: 1, behind: 0 })
 
-    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask to force push' }))
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /force push \(with lease\)/i })).toBeInTheDocument()
     expect(push).not.toHaveBeenCalled()
   })
 
-  it('does not call an ahead-only branch diverged in a manual force confirmation', async () => {
-    renderControl({ branchName: 'feature/x', ahead: 1, behind: 0 })
+  it('does not call an ahead-only branch diverged in a manual force confirmation', () => {
+    renderFlow({ branchName: 'feature/x', ahead: 1, behind: 0 })
 
-    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask to force push' }))
 
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveTextContent('feature/x')
@@ -190,11 +216,10 @@ describe('PushControl', () => {
     expect(dialog).toHaveTextContent(/without destroying remote work you haven't seen/i)
   })
 
-  it('does not claim a behind-only branch has remote work to preserve', async () => {
-    renderControl({ branchName: 'feature/x', ahead: 0, behind: 2 })
+  it('does not claim a behind-only branch has remote work to preserve', () => {
+    renderFlow({ branchName: 'feature/x', ahead: 0, behind: 2 })
 
-    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask to force push' }))
 
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveTextContent('feature/x is 2 behind its upstream')
@@ -203,39 +228,15 @@ describe('PushControl', () => {
     expect(dialog).not.toHaveTextContent('0 ahead')
   })
 
-  it('does not report zero counts for a branch level with its upstream', async () => {
-    renderControl({ branchName: 'feature/x', ahead: 0, behind: 0 })
+  it('does not report zero counts for a branch level with its upstream', () => {
+    renderFlow({ branchName: 'feature/x', ahead: 0, behind: 0 })
 
-    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /force push \(with lease\)/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask to force push' }))
 
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveTextContent('feature/x already matches its upstream')
     expect(dialog).not.toHaveTextContent('0 ahead')
     expect(dialog).not.toHaveTextContent('0 behind')
-  })
-
-  it('disables the force option in detached HEAD', () => {
-    renderControl({ detached: true, ahead: 0, behind: 0 })
-
-    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
-
-    expect(screen.getByRole('menuitem', { name: /force push \(with lease\)/i })).toBeDisabled()
-  })
-
-  it('disables the primary push action in detached HEAD', () => {
-    renderControl({ detached: true })
-
-    expect(screen.getByRole('button', { name: 'Push' })).toBeDisabled()
-  })
-
-  it('dismisses the push menu with Escape', () => {
-    renderControl()
-    fireEvent.click(screen.getByRole('button', { name: /push options/i }))
-
-    fireEvent.keyDown(document, { key: 'Escape' })
-
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
   it('does not reopen escalation after a pending force push dialog is cancelled', async () => {
@@ -248,7 +249,7 @@ describe('PushControl', () => {
       }
       return Promise.resolve(ok)
     })
-    renderControl({ ahead: 2, behind: 3, push })
+    renderFlow({ ahead: 2, behind: 3, push })
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -272,7 +273,7 @@ describe('PushControl', () => {
         lostCommits: []
       })
     )
-    renderControl({ ahead: 2, behind: 3, push })
+    renderFlow({ ahead: 2, behind: 3, push })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
@@ -292,7 +293,7 @@ describe('PushControl', () => {
           resolveForce = resolve
         })
     )
-    renderControl({ ahead: 2, behind: 3, push })
+    renderFlow({ ahead: 2, behind: 3, push })
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     const confirm = screen.getByRole('button', { name: /force push \(with lease\)/i })
 

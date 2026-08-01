@@ -1,29 +1,19 @@
-import { parseOrThrow } from '@shared/codec'
-import { SidebarPrefsSchema } from '@shared/schemas/ipc'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import {
+  clampListPaneWidth,
+  LIST_PANE_DEFAULT_WIDTH,
+  LIST_PANE_MAX_WIDTH,
+  LIST_PANE_MIN_WIDTH
+} from '@shared/list-layout'
+import { type ReactNode, useCallback, useEffect, useState } from 'react'
 import type { BranchTracking, RefKind, StashRowData } from '@/features/refs/ref-tree'
-import { COMPACT_MEDIA_QUERY, MIN_CONTENT_WIDTH } from '@/lib/breakpoints'
 import type { BranchAction, StashAction } from '@/lib/git-actions'
-import { LAYOUT_RESET_EVENT } from '@/lib/layout'
-import type { PushForce } from '@/lib/rpc-client'
-import type { PushOutcome } from '@/stores/action-runner'
 import { useDraggablePane } from '../hooks/useDraggablePane'
-import { useMediaQuery } from '../hooks/useMediaQuery'
 import { AppSidebar } from './Sidebar'
-import { Topbar, type WorkspaceView } from './Topbar'
 
-type TopbarPush = (force?: PushForce, expectedRemoteSha?: string) => Promise<PushOutcome>
-
-const SIDEBAR_WIDTH_MIN = 200
-const SIDEBAR_WIDTH_MAX = 520
-const SIDEBAR_WIDTH_DEFAULT = 256
-
-export interface RepoChrome {
-  repoName: string
-  repoPath: string | null
-  branch: string
-  changes: number
-}
+export const COLUMN_HEADER_HEIGHT = 34
+export const REFS_COLUMN_WIDTH = 214
+export const STATUS_DOCK_HEIGHT = 26
+const DIVIDER_WIDTH = 6
 
 export interface BranchBrowser {
   repoPath: string | null
@@ -33,6 +23,9 @@ export interface BranchBrowser {
   stashes?: StashRowData[]
   branchesLoading?: boolean
   tracking?: Record<string, BranchTracking>
+  lastCommitAt?: Record<string, string>
+  remoteLastCommitAt?: Record<string, string>
+  tagLastCommitAt?: Record<string, string>
   visibleTimelineRefs?: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
@@ -40,163 +33,134 @@ export interface BranchBrowser {
   onStashAction?: (action: StashAction, index: number, expectedOid: string) => void
 }
 
-export interface WorkspaceNavigation {
-  activeView: WorkspaceView
-  onSelectView: (view: WorkspaceView) => void
-}
-
 interface ShellProps {
-  repo: RepoChrome
+  repoPath: string | null
+  currentBranch: string
   branchBrowser: BranchBrowser
-  navigation: WorkspaceNavigation
-  lastFetchedAt?: number | null
-  onFetch?: () => void
-  onPull?: () => void
-  push?: TopbarPush
-  ahead?: number
-  behind?: number
-  detached?: boolean
-  pulling?: boolean
-  pushing?: boolean
-  busy?: boolean
-  children: ReactNode
+  banner?: ReactNode
+  listHeader: ReactNode
+  listBody: ReactNode
+  detailPane: ReactNode
+  statusDock: ReactNode
+  children?: ReactNode
 }
 
-const loadSidebarPrefs = async () => {
-  const prefs = parseOrThrow(SidebarPrefsSchema, await window.electronAPI.getSidebarPrefs())
-  return { open: prefs.open, size: prefs.width }
-}
-const saveSidebarPrefs = (state: { open: boolean; size: number }) =>
-  window.electronAPI.setSidebarPrefs({ open: state.open, width: state.size })
-const logSidebarPrefsError = (err: unknown) => {
-  console.warn('[Shell] failed to load sidebar prefs', err)
+const logListPaneWidthError = (error: unknown) => {
+  console.warn('[Shell] failed to load the commit list width', error)
 }
 
 export function Shell(props: ShellProps) {
+  const repoPath = props.repoPath
+  const load = useCallback(async () => {
+    const stored = repoPath ? await window.electronAPI.getListPaneWidth(repoPath) : null
+    return {
+      open: true,
+      size: clampListPaneWidth(stored ?? LIST_PANE_DEFAULT_WIDTH)
+    }
+  }, [repoPath])
+  const save = useCallback(
+    (state: { size: number }) => {
+      if (!repoPath) {
+        return
+      }
+      return window.electronAPI.setListPaneWidth(repoPath, clampListPaneWidth(state.size))
+    },
+    [repoPath]
+  )
+
   const {
-    size: width,
-    isOpen,
-    setOpen,
+    size: listWidth,
+    reset: resetListWidth,
     onResizeStart
   } = useDraggablePane({
-    min: SIDEBAR_WIDTH_MIN,
-    max: SIDEBAR_WIDTH_MAX,
-    defaultSize: SIDEBAR_WIDTH_DEFAULT,
-    load: loadSidebarPrefs,
-    save: saveSidebarPrefs,
-    onLoadError: logSidebarPrefsError
+    min: LIST_PANE_MIN_WIDTH,
+    max: LIST_PANE_MAX_WIDTH,
+    defaultSize: LIST_PANE_DEFAULT_WIDTH,
+    handle: 'end',
+    load,
+    save,
+    onLoadError: logListPaneWidthError
   })
-  const compact = useMediaQuery(COMPACT_MEDIA_QUERY)
-  const [compactSidebarOpen, setCompactSidebarOpen] = useState(false)
-  const overlayRef = useRef<HTMLDivElement>(null)
-  const sidebarToggleRef = useRef<HTMLButtonElement>(null)
+
+  const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
-    if (compact) {
-      setCompactSidebarOpen(false)
-    }
-  }, [compact])
-
-  useEffect(() => {
-    if (!compact || !compactSidebarOpen) {
+    if (!dragging) {
       return
     }
-    const toggleButton = sidebarToggleRef.current
-    overlayRef.current?.focus()
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setCompactSidebarOpen(false)
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      toggleButton?.focus()
-    }
-  }, [compact, compactSidebarOpen])
+    const stop = () => setDragging(false)
+    window.addEventListener('mouseup', stop)
+    return () => window.removeEventListener('mouseup', stop)
+  }, [dragging])
 
-  const sidebarOpen = compact ? compactSidebarOpen : isOpen
-  const toggleSidebar = () => {
-    if (compact) {
-      setCompactSidebarOpen((open) => !open)
-      return
-    }
-    setOpen(!isOpen)
+  const startResize = (event: MouseEvent) => {
+    setDragging(true)
+    onResizeStart(event)
   }
-  const resetLayout = () => {
-    window.dispatchEvent(new Event(LAYOUT_RESET_EVENT))
-    setCompactSidebarOpen(false)
-  }
-
-  const sidebar = (
-    <AppSidebar
-      branchBrowser={props.branchBrowser}
-      currentBranch={props.repo.branch}
-      onClose={compact ? () => setCompactSidebarOpen(false) : undefined}
-      onResizeStart={compact ? undefined : (event) => onResizeStart(event.nativeEvent)}
-    />
-  )
 
   return (
     <div
-      className="relative grid h-full min-h-0 gap-1.5 bg-chrome p-1.5"
-      style={{
-        gridTemplateColumns:
-          sidebarOpen && !compact
-            ? `min(${width}px, calc(100% - ${MIN_CONTENT_WIDTH}px)) minmax(0, 1fr)`
-            : 'minmax(0, 1fr)'
-      }}
+      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-chrome"
+      data-testid="repo-shell"
     >
-      {sidebarOpen && compact ? (
-        <>
-          <div
-            aria-hidden="true"
-            onClick={() => setCompactSidebarOpen(false)}
-            className="absolute inset-0 z-40 bg-black/40"
-          />
-          <div
-            ref={overlayRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Branches"
-            tabIndex={-1}
-            className="absolute inset-y-1.5 left-1.5 z-50 outline-none"
-            style={{ width: `min(${width}px, calc(100vw - 4rem))` }}
-          >
-            {sidebar}
-          </div>
-        </>
-      ) : null}
-      {sidebarOpen && !compact ? <div className="min-h-0 min-w-0">{sidebar}</div> : null}
+      {props.banner}
 
-      <section
-        inert={compact && sidebarOpen}
-        className="relative z-[1] grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[var(--r-sm)] border bg-card shadow-[var(--shadow)]"
+      <div
+        className="grid min-h-0 min-w-0 overflow-hidden"
+        style={{
+          gridTemplateColumns: `${REFS_COLUMN_WIDTH}px ${listWidth}px ${DIVIDER_WIDTH}px minmax(0, 1fr)`
+        }}
       >
-        <Topbar
-          repoName={props.repo.repoName}
-          repoPath={props.repo.repoPath}
-          activeView={props.navigation.activeView}
-          onSelectView={props.navigation.onSelectView}
-          lastFetchedAt={props.lastFetchedAt}
-          onFetch={props.onFetch}
-          onPull={props.onPull}
-          push={props.push}
-          branch={props.repo.branch}
-          ahead={props.ahead}
-          behind={props.behind}
-          detached={props.detached}
-          pulling={props.pulling}
-          pushing={props.pushing}
-          busy={props.busy}
-          compact={compact}
-          sidebarOpen={sidebarOpen}
-          sidebarToggleRef={sidebarToggleRef}
-          onToggleSidebar={toggleSidebar}
-          onResetLayout={resetLayout}
-        />
-        <div className="flex min-h-0 flex-col overflow-hidden">{props.children}</div>
-      </section>
+        <AppSidebar branchBrowser={props.branchBrowser} currentBranch={props.currentBranch} />
+
+        <section
+          aria-label="Commits"
+          style={{ width: `${listWidth}px` }}
+          className="flex min-h-0 min-w-0 flex-col overflow-hidden border-r bg-card"
+        >
+          <div
+            style={{ height: `${COLUMN_HEADER_HEIGHT}px` }}
+            className="flex shrink-0 items-center gap-1.5 border-b px-1.5"
+          >
+            {props.listHeader}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{props.listBody}</div>
+        </section>
+
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="Resize commit list"
+            title={`Commit list width: ${listWidth}px — double-click to reset`}
+            onMouseDown={(event) => startResize(event.nativeEvent)}
+            onDoubleClick={resetListWidth}
+            className="group/list-resize flex h-full w-full cursor-col-resize items-stretch justify-center bg-chrome"
+          >
+            <span className="w-px bg-border-strong/40 transition-colors group-hover/list-resize:bg-primary/70" />
+          </button>
+          {dragging ? (
+            <span
+              data-testid="list-pane-width-tooltip"
+              className="pointer-events-none absolute left-3 top-2 z-50 whitespace-nowrap rounded-[var(--r-xs)] border bg-popover px-1.5 py-0.5 text-xs tabular-nums text-popover-foreground shadow-[var(--shadow)]"
+            >
+              {listWidth}px
+            </span>
+          ) : null}
+        </div>
+
+        <section
+          aria-label="Details"
+          className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-card"
+        >
+          {props.detailPane}
+        </section>
+      </div>
+
+      <div style={{ height: `${STATUS_DOCK_HEIGHT}px` }} className="min-w-0 shrink-0 border-t">
+        {props.statusDock}
+      </div>
+
+      {props.children}
     </div>
   )
 }

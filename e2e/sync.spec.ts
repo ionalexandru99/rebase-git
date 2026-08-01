@@ -1,8 +1,17 @@
 import path from 'node:path'
-import { commitSubjects, createFixtureRepo, expect, revParse, test } from './fixtures'
+import {
+  commitSubjects,
+  createFixtureRepo,
+  expect,
+  makeBranchAheadOfOrigin,
+  revParse,
+  syncButton,
+  test
+} from './fixtures'
 
-test('a Push on a repo with no remote surfaces an error toast', async ({ harness }) => {
+test('a Sync that pushes a repo with no remote surfaces an error toast', async ({ harness }) => {
   const repo = createFixtureRepo()
+  makeBranchAheadOfOrigin(repo)
   const page = await harness.openRepo(repo)
 
   await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({ timeout: 10_000 })
@@ -10,14 +19,13 @@ test('a Push on a repo with no remote surfaces an error toast', async ({ harness
 
   const headBefore = revParse(repo, 'HEAD')
 
-  const pushButton = page.getByRole('button', { name: 'Push', exact: true })
-  await expect(pushButton).toBeVisible({ timeout: 10_000 })
-  const toast = await harness.expectToast(
-    { type: 'error', title: 'Pushed failed' },
-    () => pushButton.click()
+  const sync = syncButton(page)
+  await expect(sync).toContainText('↑1', { timeout: 10_000 })
+  const toast = await harness.expectToast({ type: 'error', title: 'Pushed failed' }, () =>
+    sync.click()
   )
   expect(toast.description).not.toBe('')
 
   expect(revParse(repo, 'HEAD')).toBe(headBefore)
-  expect(commitSubjects(repo)).toEqual(['initial'])
+  expect(commitSubjects(repo)).toEqual(['work to publish', 'initial'])
 })
