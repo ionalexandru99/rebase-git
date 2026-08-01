@@ -476,12 +476,22 @@ export async function runWithFailureSafeFixtureTeardown(
   ])
 }
 
-function removeFixturePaths(paths: string[]): void {
+type RemoveFixturePath = (fixturePath: string, options: fs.RmOptions) => void
+
+export function removeFixturePaths(
+  paths: string[],
+  removeFixturePath: RemoveFixturePath = fs.rmSync
+): void {
   let firstError: unknown
   let failed = false
   for (const fixturePath of uniquePaths(paths)) {
     try {
-      fs.rmSync(fixturePath, { recursive: true, force: true })
+      removeFixturePath(fixturePath, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100
+      })
     } catch (error) {
       if (!failed) {
         firstError = error
@@ -734,7 +744,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           },
           removeFixturePaths: () => removeFixturePaths(fixturePaths.pathsToRemove()),
           afterRemoveFixturePaths: [
-            () => fs.rmSync(userDataDir, { recursive: true, force: true }),
+            () => removeFixturePaths([userDataDir]),
             () => {
               if (maximumLiveApps !== 1) {
                 throw new Error(
