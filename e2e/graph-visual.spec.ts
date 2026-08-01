@@ -122,8 +122,8 @@ test('renders side-branch lanes when a merge is expanded', async ({ harness }) =
   await expect(page.getByTestId('commit-row').first()).toBeVisible()
   await expect(page.getByText('feature 3 commit 2')).toHaveCount(0)
 
+  await expect.poll(() => paintedLaneColumns(page), { timeout: 10_000 }).toBeGreaterThan(0)
   const collapsedColumns = await paintedLaneColumns(page)
-  expect(collapsedColumns).toBeGreaterThan(0)
 
   for (let merge = 0; merge < 2; merge++) {
     await page.getByRole('button', { name: 'Expand merge side branch' }).first().click()

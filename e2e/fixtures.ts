@@ -411,6 +411,19 @@ async function waitForPage(page: Page): Promise<Page> {
   return page
 }
 
+function canonicalListPaneWidths(
+  widths: Record<string, number> | undefined
+): Record<string, number> {
+  if (!widths) {
+    return {}
+  }
+  const canonical: Record<string, number> = {}
+  for (const [repoPath, width] of Object.entries(widths)) {
+    canonical[fs.realpathSync.native(repoPath)] = width
+  }
+  return canonical
+}
+
 async function clearRendererState(page: Page): Promise<void> {
   await page.evaluate(() => localStorage.clear())
 }
@@ -845,7 +858,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           onboardingComplete: state.onboardingComplete ?? false,
           persistedTabRepoPaths: state.tabs ?? [null],
           persistedActiveTabIndex: state.activeIndex ?? 0,
-          listPaneWidths: state.listPaneWidths ?? {}
+          listPaneWidths: canonicalListPaneWidths(state.listPaneWidths)
         })
       },
       openRepo: async (repo: string, options) => {
