@@ -22,7 +22,8 @@ export function createGit(repoPath: string): SimpleGit {
     type: 'spawn.options',
     action: (options: SpawnOptions) => ({
       ...options,
-      detached: process.platform !== 'win32'
+      detached: process.platform !== 'win32',
+      env: { ...process.env, ...options.env, GIT_OPTIONAL_LOCKS: '0' }
     })
   })
   plugins.add({
