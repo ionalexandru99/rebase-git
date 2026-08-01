@@ -609,6 +609,34 @@ export async function verifyReposClosed(
     .toEqual(repoPaths.map((repoPath) => ({ repoPath, tag: 'RepoNotOpen' })))
 }
 
+export async function waitForRepoSurface(
+  page: Page,
+  repoPath: string,
+  timeout = 15_000
+): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async (path) => {
+          const api = (
+            window as unknown as {
+              electronAPI: {
+                sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
+              }
+            }
+          ).electronAPI
+          const response = (await api.sidecarRequest('getStatus', { repoPath: path })) as {
+            _tag: string
+          }
+          return response._tag
+        }, repoPath),
+      { message: `expected ${repoPath} to finish opening`, timeout }
+    )
+    .toBe('Ok')
+  await expect(page.getByTestId('repo-shell')).toBeVisible({ timeout })
+  await expect(workingCopyRow(page)).toBeVisible({ timeout })
+}
+
 export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp }>({
   sharedApp: [
     async ({}, use) => {
@@ -917,7 +945,9 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           activeIndex: 0,
           listPaneWidths: options?.listPaneWidths
         })
-        return harness.reload()
+        const page = await harness.reload()
+        await waitForRepoSurface(page, repo)
+        return page
       },
       openTabs: async (repos: Array<string | null>, options) => {
         for (const repo of repos) {
@@ -928,13 +958,19 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
         const workspaces = uniquePaths(
           repos.filter((repo): repo is string => Boolean(repo)).map((repo) => path.dirname(repo))
         )
+        const activeIndex = options?.activeIndex ?? 0
         await harness.seed({
           workspaces,
           onboardingComplete: true,
           tabs: repos,
-          activeIndex: options?.activeIndex ?? 0
+          activeIndex
         })
-        return harness.reload()
+        const page = await harness.reload()
+        const activeRepo = repos[activeIndex]
+        if (activeRepo) {
+          await waitForRepoSurface(page, activeRepo)
+        }
+        return page
       },
       stubFolderDialog: (dir: string | null) => sharedApp.stubFolderDialog(dir)
     }
@@ -1021,8 +1057,12 @@ export const listDivider = (page: Page) =>
   page.getByRole('button', { name: 'Resize commit list', exact: true })
 
 export async function openLocalChanges(page: Page): Promise<void> {
-  await workingCopyRow(page).click()
-  await expect(page.getByTestId('working-copy-header')).toBeVisible({ timeout: 10_000 })
+  const header = page.getByTestId('working-copy-header')
+  await expect(workingCopyRow(page)).toBeVisible({ timeout: 15_000 })
+  await expect(async () => {
+    await workingCopyRow(page).click()
+    await expect(header).toBeVisible({ timeout: 2_000 })
+  }).toPass({ timeout: 15_000 })
   await expect(page.getByTestId('commit-bar')).toBeVisible({ timeout: 10_000 })
 }
 
