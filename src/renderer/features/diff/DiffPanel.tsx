@@ -54,9 +54,11 @@ interface PendingHunkRemoval {
 interface PendingLineSelection {
   file: string
   staged: boolean
-  dataUpdatedAt: number
+  patchKey: string
   lines: SelectedChangeLine[]
 }
+
+const SELECTION_SWEEP_MAX_FRAMES = 12
 
 type HunkAction = 'stage' | 'unstage' | 'discard'
 
@@ -106,6 +108,7 @@ export function DiffPanel(props: DiffPanelProps) {
   const [hoveredLine, setHoveredLine] = useState<HoveredLine | null>(null)
   const [lineSelection, setLineSelection] = useState<PendingLineSelection | null>(null)
   const diffBodyRef = useRef<HTMLDivElement | null>(null)
+  const selectionSweepGeneration = useRef(0)
 
   const activePending =
     pending &&
@@ -115,11 +118,13 @@ export function DiffPanel(props: DiffPanelProps) {
       ? pending
       : null
 
+  const currentPatchKey = useMemo(() => (patch === undefined ? null : patchHash(patch)), [patch])
+
   const activeLineSelection =
     lineSelection &&
     lineSelection.file === selectedFile &&
     lineSelection.staged === showsStagedSide &&
-    lineSelection.dataUpdatedAt === activeQuery.dataUpdatedAt
+    lineSelection.patchKey === currentPatchKey
       ? lineSelection
       : null
 
@@ -216,23 +221,42 @@ export function DiffPanel(props: DiffPanelProps) {
 
   const onLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
-      if (!range || !selectedFile) {
+      const generation = ++selectionSweepGeneration.current
+      if (!range || !selectedFile || currentPatchKey === null) {
         setLineSelection(null)
         return
       }
+      setLineSelection(null)
       const file = selectedFile
       const staged = showsStagedSide
-      const dataUpdatedAt = activeQuery.dataUpdatedAt
-      requestAnimationFrame(() => {
+      const patchKey = currentPatchKey
+      let previousSignature: string | null = null
+      let framesLeft = SELECTION_SWEEP_MAX_FRAMES
+      const sweep = () => {
+        if (generation !== selectionSweepGeneration.current) {
+          return
+        }
         if (!diffBodyRef.current) {
           setLineSelection(null)
           return
         }
         const lines = sweepSelectedChangeLines(diffBodyRef.current)
-        setLineSelection(lines.length === 0 ? null : { file, staged, dataUpdatedAt, lines })
-      })
+        const signature = lines.map((line) => `${line.kind}:${line.lineNumber}`).join('|')
+        if (lines.length > 0 && signature === previousSignature) {
+          setLineSelection({ file, staged, patchKey, lines })
+          return
+        }
+        framesLeft -= 1
+        if (framesLeft <= 0) {
+          setLineSelection(lines.length === 0 ? null : { file, staged, patchKey, lines })
+          return
+        }
+        previousSignature = signature
+        requestAnimationFrame(sweep)
+      }
+      requestAnimationFrame(sweep)
     },
-    [selectedFile, showsStagedSide, activeQuery.dataUpdatedAt]
+    [selectedFile, showsStagedSide, currentPatchKey]
   )
 
   const runLineAction = useCallback(async () => {

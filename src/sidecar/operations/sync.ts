@@ -1,12 +1,22 @@
+import { PULL_REAPPLY_CONFLICTS_MESSAGE } from '@shared/git-constants'
 import { Effect } from 'effect'
 import { applyNonInteractiveGitEnv } from '../git/environment'
-import { FetchSkipped, GitError, PushRejected, type RepoNotOpen } from '../git/errors'
+import {
+  Conflict,
+  FetchSkipped,
+  GitError,
+  type OperationInProgress,
+  PullDiverged,
+  PushRejected,
+  type RepoNotOpen
+} from '../git/errors'
 import { normalizeRepoPath } from '../git/instances'
 import { runGit, spawnGit, startGit } from '../git/spawn'
 import { fetchSemaphoreFor } from '../session/fetch-semaphore'
 import { withRepoLock } from '../session/lock'
 import { type RepoSessions, RepoSessionsLive, withSessionScope } from '../session/sessions'
-import { requireOpen } from './helpers'
+import { requireOpen, tryGit } from './helpers'
+import { detectInProgressOperation, requireNoOperation } from './in-progress'
 
 type GitCmdResult = { ok: true } | { ok: false; message: string }
 
@@ -239,23 +249,65 @@ export function pushRepo(
   })
 }
 
+function isDivergedRejection(message: string): boolean {
+  return /not possible to fast-forward/i.test(message) || /divergent branches/i.test(message)
+}
+
+export type PullStrategy = 'rebase' | 'merge'
+
+function pullArgsFor(strategy: PullStrategy | undefined): string[] {
+  if (strategy === 'rebase') {
+    return ['pull', '--rebase', '--autostash']
+  }
+  if (strategy === 'merge') {
+    return ['-c', 'pull.rebase=false', 'pull', '--no-rebase', '--no-edit', '--autostash']
+  }
+  return ['-c', 'pull.rebase=false', 'pull', '--ff-only', '--autostash']
+}
+
+function hasUnmergedFiles(key: string): Promise<boolean> {
+  return runGitStdout(key, ['diff', '--name-only', '--diff-filter=U']).then(
+    (output) => output !== null && output.length > 0
+  )
+}
+
 export function pullRepo(
-  repoPath: string
-): Effect.Effect<void, RepoNotOpen | GitError, RepoSessions> {
+  repoPath: string,
+  strategy?: PullStrategy
+): Effect.Effect<
+  void,
+  RepoNotOpen | GitError | PullDiverged | Conflict | OperationInProgress,
+  RepoSessions
+> {
   return Effect.gen(function* () {
     const key = normalizeRepoPath(repoPath)
     yield* requireOpen(key)
     yield* withRepoLock(
       key,
-      Effect.promise(() =>
-        fetchSemaphoreFor(key).withPermits(() =>
-          runGitCommand(key, ['-c', 'pull.rebase=false', 'pull', '--ff-only'])
+      Effect.gen(function* () {
+        yield* requireNoOperation(key)
+        const result = yield* Effect.promise(() =>
+          fetchSemaphoreFor(key).withPermits(() => runGitCommand(key, pullArgsFor(strategy)))
         )
-      ).pipe(
-        Effect.flatMap((result) =>
-          result.ok ? Effect.void : Effect.fail(new GitError({ message: result.message }))
-        )
-      )
+        if (result.ok) {
+          const reapplyConflicted = yield* Effect.promise(() => hasUnmergedFiles(key))
+          if (reapplyConflicted) {
+            return yield* Effect.fail(new Conflict({ message: PULL_REAPPLY_CONFLICTS_MESSAGE }))
+          }
+          return
+        }
+        if (strategy === undefined) {
+          if (isDivergedRejection(result.message)) {
+            return yield* Effect.fail(new PullDiverged())
+          }
+          return yield* Effect.fail(new GitError({ message: result.message }))
+        }
+        const startedOperation = yield* tryGit(() => detectInProgressOperation(key))
+        if (startedOperation !== undefined) {
+          return yield* Effect.fail(new Conflict({ message: result.message }))
+        }
+        return yield* Effect.fail(new GitError({ message: result.message }))
+      })
     )
   })
 }

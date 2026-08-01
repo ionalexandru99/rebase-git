@@ -2,6 +2,7 @@ import { type ReactNode, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useDialogs } from '@/components/ui/prompt-dialog'
 import { useTimelineVisibility } from '@/features/history/hooks/useTimelineVisibility'
+import { usePullFlow } from '@/features/sync/PullFlow'
 import { useStableCallback } from '@/hooks/useStableCallback'
 import {
   type BranchAction,
@@ -9,6 +10,7 @@ import {
   RESET_MODE_BY_ACTION,
   type StashAction
 } from '@/lib/git-actions'
+import type { PullStrategy } from '@/lib/rpc-client'
 import { type RefKind, shortRefName } from '../features/refs/ref-tree'
 import { repoDisplayName } from '../features/repos/repo-display-name'
 import { useCheckoutRef } from '../hooks/git/useCheckoutRef'
@@ -62,6 +64,13 @@ export function Workspace(props: WorkspaceProps) {
   const actions = useGitActions(actionRunner)
   const stashList = useStashes(repoPath)
   const { prompt, confirm, dialogs } = useDialogs()
+
+  const pullFlow = usePullFlow({
+    pull: actionRunner.pull,
+    loadRememberedStrategy: () => window.electronAPI.getPullDivergedStrategy(),
+    rememberStrategy: (strategy: PullStrategy) =>
+      void window.electronAPI.setPullDivergedStrategy(strategy)
+  })
 
   const handleStashAction = (action: StashAction, index: number, expectedOid: string) => {
     switch (action) {
@@ -222,7 +231,7 @@ export function Workspace(props: WorkspaceProps) {
       }}
       lastFetchedAt={refs.lastFetchedAt}
       onFetch={refs.fetchNow}
-      onPull={actionRunner.pullNow}
+      onPull={() => void pullFlow.requestPull()}
       push={actionRunner.push}
       ahead={currentTracking?.ahead ?? 0}
       behind={currentTracking?.behind ?? 0}
@@ -261,6 +270,7 @@ export function Workspace(props: WorkspaceProps) {
         {totalChanges} changed files, {stagedCount} staged
       </span>
       {dialogs}
+      {pullFlow.divergedDialog}
     </Shell>
   )
 }

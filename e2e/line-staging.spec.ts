@@ -37,6 +37,7 @@ async function dragSelectGutterNumbers(page: Page, start: number, end: number): 
   const startCell = gutterNumber(page, start)
   const endCell = gutterNumber(page, end)
   await startCell.waitFor({ timeout: 10_000 })
+  await endCell.waitFor({ timeout: 10_000 })
   const startBox = await startCell.boundingBox()
   const endBox = await endCell.boundingBox()
   if (!startBox || !endBox) {

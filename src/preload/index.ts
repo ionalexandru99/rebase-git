@@ -8,6 +8,7 @@ import type {
   CloneRepoResponse,
   CloneRequest,
   PersistedTabs,
+  PullDivergedStrategy,
   RefTreeToggles,
   SidebarPrefs,
   StartLogStreamResponse
@@ -42,6 +43,8 @@ export interface IElectronAPI {
   setRefTreeToggles: (toggles: RefTreeToggles) => Promise<void>
   getPersistedTabs: () => Promise<PersistedTabs>
   setPersistedTabs: (state: PersistedTabs) => Promise<void>
+  getPullDivergedStrategy: () => Promise<PullDivergedStrategy>
+  setPullDivergedStrategy: (strategy: PullDivergedStrategy) => Promise<void>
   getWorkspaces: () => Promise<string[]>
   addWorkspace: (path: string) => Promise<string[]>
   removeWorkspace: (path: string) => Promise<string[]>
@@ -89,6 +92,9 @@ const api: IElectronAPI = {
     ipcRenderer.invoke(Channel.setRefTreeToggles, toggles),
   getPersistedTabs: () => ipcRenderer.invoke(Channel.getPersistedTabs),
   setPersistedTabs: (state: PersistedTabs) => ipcRenderer.invoke(Channel.setPersistedTabs, state),
+  getPullDivergedStrategy: () => ipcRenderer.invoke(Channel.getPullDivergedStrategy),
+  setPullDivergedStrategy: (strategy: PullDivergedStrategy) =>
+    ipcRenderer.invoke(Channel.setPullDivergedStrategy, strategy),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),
   addWorkspace: (path: string) => ipcRenderer.invoke('add-workspace', path),
   removeWorkspace: (path: string) => ipcRenderer.invoke('remove-workspace', path),

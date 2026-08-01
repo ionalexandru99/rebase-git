@@ -19,6 +19,10 @@ const mainEntry = path.join(currentDir, '..', 'out', 'main', 'index.js')
 const launchWindowWidth = 1200
 const launchWindowHeight = 800
 
+const demoRecordingEnabled = process.env.REBASE_DEMO === '1'
+const demoVideoDirectory = path.join(currentDir, '..', 'test-results', 'demos')
+const demoSlowMoMilliseconds = 300
+
 export async function setWindowSize(
   app: ElectronApplication,
   width: number,
@@ -519,7 +523,16 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
         ]
         electronApp = await electron.launch({
           args: electronArgs,
-          env: electronEnv
+          env: electronEnv,
+          ...(demoRecordingEnabled
+            ? {
+                slowMo: demoSlowMoMilliseconds,
+                recordVideo: {
+                  dir: demoVideoDirectory,
+                  size: { width: launchWindowWidth, height: launchWindowHeight }
+                }
+              }
+            : {})
         })
         liveApps += 1
         maximumLiveApps = Math.max(maximumLiveApps, liveApps)

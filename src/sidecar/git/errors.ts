@@ -8,6 +8,7 @@ export {
   HunkNotFound,
   NotARepo,
   OperationInProgress,
+  PullDiverged,
   PushRejected,
   RepoNotOpen
 } from '@shared/git-rpc-errors'
@@ -19,6 +20,7 @@ import type {
   HunkNotFound,
   NotARepo,
   OperationInProgress,
+  PullDiverged,
   PushRejected,
   RepoNotOpen
 } from '@shared/git-rpc-errors'
@@ -30,6 +32,7 @@ export type GitOpError =
   | Conflict
   | HunkNotFound
   | FetchSkipped
+  | PullDiverged
   | PushRejected
   | AmendRejected
   | OperationInProgress

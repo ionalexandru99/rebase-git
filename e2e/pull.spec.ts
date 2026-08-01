@@ -9,6 +9,7 @@ import {
   openHistory,
   openLocalChanges,
   porcelainStatus,
+  stashEntries,
   test
 } from './fixtures'
 
@@ -19,7 +20,7 @@ function pinFastForwardPull(repo: string): void {
   gitIn(repo)(['config', 'pull.rebase', 'false'])
 }
 
-test('a pull that would overwrite a local edit fails without touching the file', async ({
+test('a pull autostashes an overlapping local edit and surfaces the reapply conflict', async ({
   harness
 }) => {
   const { repo, remote } = createFixtureRepoWithRemote()
@@ -32,18 +33,23 @@ test('a pull that would overwrite a local edit fails without touching the file',
   await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({ timeout: 10_000 })
   await openLocalChanges(page)
 
-  const toast = await harness.expectToast({ type: 'error', title: 'Pull failed' }, () =>
-    page.getByRole('button', { name: 'Pull', exact: true }).click()
+  const toast = await harness.expectToast(
+    { type: 'warning', title: 'Pulled, but your uncommitted changes conflicted' },
+    () => page.getByRole('button', { name: 'Pull', exact: true }).click()
   )
-  expect(toast.description).toMatch(/would be overwritten/i)
+  expect(toast.description).toMatch(/kept stash/i)
 
-  expect(fs.readFileSync(path.join(repo, 'README.md'), 'utf8')).toBe(LOCAL_README)
-  expect(porcelainStatus(repo)).toEqual([' M README.md'])
-  expect(commitSubjects(repo)).toEqual(['initial'])
+  expect(commitSubjects(repo)).toEqual([REMOTE_MESSAGE, 'initial'])
+  expect(porcelainStatus(repo)).toEqual(['UU README.md'])
+  const conflictedReadme = fs.readFileSync(path.join(repo, 'README.md'), 'utf8')
+  expect(conflictedReadme).toContain('local edit')
+  expect(conflictedReadme).toContain(REMOTE_MESSAGE)
+  expect(stashEntries(repo)).toHaveLength(1)
+  expect(stashEntries(repo)[0]).toContain('autostash')
 
   await expect(page.getByRole('status').filter({ hasText: 'Merging' })).toHaveCount(0)
   const conflictBadge = page.getByTestId('status-file-row').getByRole('img', { name: 'conflicted' })
-  await expect(conflictBadge).toHaveCount(0)
+  await expect(conflictBadge).toHaveCount(1)
 })
 
 test('a pull succeeds while an unrelated local edit is in the tree', async ({ harness }) => {

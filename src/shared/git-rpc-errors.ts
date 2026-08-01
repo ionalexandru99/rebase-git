@@ -20,6 +20,8 @@ export class PushRejected extends Schema.TaggedError<PushRejected>()('PushReject
   remoteSha: Schema.optional(Schema.String)
 }) {}
 
+export class PullDiverged extends Schema.TaggedError<PullDiverged>()('PullDiverged', {}) {}
+
 export class AmendRejected extends Schema.TaggedError<AmendRejected>()('AmendRejected', {
   reason: Schema.Literal('head-moved')
 }) {}
