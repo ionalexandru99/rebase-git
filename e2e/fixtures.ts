@@ -257,6 +257,39 @@ const describeToast = (toast: RecordedToast): string =>
 
 const uniquePaths = (values: string[]): string[] => Array.from(new Set(values))
 
+export interface FixturePathRegistry {
+  pathsToClose(): string[]
+  pathsToRemove(): string[]
+  track(path: string): void
+  release(paths: string[]): void
+  deferRemoval(paths: string[]): void
+}
+
+export function createFixturePathRegistry(): FixturePathRegistry {
+  const pathsToClose = new Set<string>()
+  const pathsToRemove = new Set<string>()
+
+  return {
+    pathsToClose: () => Array.from(pathsToClose),
+    pathsToRemove: () => Array.from(pathsToRemove),
+    track: (path) => {
+      pathsToClose.add(path)
+      pathsToRemove.add(path)
+    },
+    release: (paths) => {
+      for (const path of paths) {
+        pathsToClose.delete(path)
+        pathsToRemove.delete(path)
+      }
+    },
+    deferRemoval: (paths) => {
+      for (const path of paths) {
+        pathsToClose.delete(path)
+      }
+    }
+  }
+}
+
 interface StoreOverrides {
   recentRepos?: string[]
   workspaces?: string[]
@@ -293,6 +326,7 @@ interface SharedApp {
   stubFolderDialog(dir: string | null): Promise<void>
   trackRepo(repo: string): void
   untrackRepos(repos: string[]): void
+  deferRepoCleanup(repos: string[]): void
 }
 
 type CleanupStep = () => Promise<void> | void
@@ -496,7 +530,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
   sharedApp: [
     async ({}, use) => {
       const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
-      const trackedRepos = new Set<string>()
+      const fixturePaths = createFixturePathRegistry()
       let electronApp: ElectronApplication | undefined
       let page: Page | undefined
       let launches = 0
@@ -629,12 +663,9 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
             }
           }, DIALOG_ORIGINAL_KEY)
         },
-        trackRepo: (repo: string) => trackedRepos.add(repo),
-        untrackRepos: (repos: string[]) => {
-          for (const repo of repos) {
-            trackedRepos.delete(repo)
-          }
-        }
+        trackRepo: (repo: string) => fixturePaths.track(repo),
+        untrackRepos: (repos: string[]) => fixturePaths.release(repos),
+        deferRepoCleanup: (repos: string[]) => fixturePaths.deferRemoval(repos)
       }
 
       await runWithFailureSafeFixtureTeardown(
@@ -663,7 +694,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
             },
             async () => {
               if (page && !page.isClosed()) {
-                await closeRepoTabs(page, Array.from(trackedRepos))
+                await closeRepoTabs(page, fixturePaths.pathsToClose())
               }
             },
             async () => {
@@ -683,7 +714,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
             }
           ],
           closeRepos: async () => {
-            const repos = Array.from(trackedRepos)
+            const repos = fixturePaths.pathsToClose()
             if (repos.length === 0) {
               return
             }
@@ -701,7 +732,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
             page = undefined
             liveApps -= 1
           },
-          removeFixturePaths: () => removeFixturePaths(Array.from(trackedRepos)),
+          removeFixturePaths: () => removeFixturePaths(fixturePaths.pathsToRemove()),
           afterRemoveFixturePaths: [
             () => fs.rmSync(userDataDir, { recursive: true, force: true }),
             () => {
@@ -864,6 +895,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
       if (testInfo.status === testInfo.expectedStatus) {
         throw error
       }
+      sharedApp.deferRepoCleanup(trackedRepos)
     }
   }
 })

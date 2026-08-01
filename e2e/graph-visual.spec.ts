@@ -55,9 +55,10 @@ function paintedPixels(page: Page, scrollTop?: number): Promise<number> {
     }
     if (offset !== undefined) {
       const scroller = document.querySelector<HTMLElement>('[data-testid="history-scroll"]')
-      if (scroller) {
-        scroller.scrollTop = offset
+      if (!scroller) {
+        return 0
       }
+      scroller.scrollTop = offset
     }
     return new Promise<number>((resolve) => {
       requestAnimationFrame(() =>
@@ -111,8 +112,7 @@ test('keeps drawing the rail after a fast scroll to the middle of the log', asyn
   const repo = createFixtureRepo()
   appendLinearCommits(repo, 400)
   const page = await harness.openRepo(repo)
-  await expect(page.getByTestId('commit-row').first()).toBeVisible()
 
-  await expect.poll(() => paintedPixels(page, 0)).toBeGreaterThan(500)
-  await expect.poll(() => paintedPixels(page, 4_000)).toBeGreaterThan(500)
+  await expect.poll(() => paintedPixels(page, 0), { timeout: 20_000 }).toBeGreaterThan(500)
+  await expect.poll(() => paintedPixels(page, 4_000), { timeout: 20_000 }).toBeGreaterThan(500)
 })

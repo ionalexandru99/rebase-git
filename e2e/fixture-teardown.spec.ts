@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import {
   createFixtureRepo,
+  createFixturePathRegistry,
   expect,
   findUnexplainedFailureToasts,
   findToastMatch,
@@ -10,6 +11,18 @@ import {
   type RecordedToast,
   verifyReposClosed
 } from './fixtures'
+
+test('failed test repos defer removal without cascading into worker closure checks', () => {
+  const registry = createFixturePathRegistry()
+  registry.track('completed')
+  registry.track('failed')
+
+  registry.release(['completed'])
+  registry.deferRemoval(['failed'])
+
+  expect(registry.pathsToClose()).toEqual([])
+  expect(registry.pathsToRemove()).toEqual(['failed'])
+})
 
 test('toast matching resets stateful regular expressions', () => {
   const title = /permission denied/g
