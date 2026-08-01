@@ -1,5 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import os from 'node:os'
+import { lstat, open } from 'node:fs/promises'
 import path from 'node:path'
 import { MAX_COMMIT_STATS_BATCH } from '@shared/git-constants'
 import type { CommitStats, WorkingTreeStats } from '@shared/schemas/git'
@@ -37,6 +36,71 @@ function sumNumstat(lines: string[]): WorkingTreeStats {
     deletions += Number.parseInt(removed, 10) || 0
   }
   return { additions, deletions }
+}
+
+const BINARY_SNIFF_BYTES = 8_000
+const FILE_READ_BUFFER_BYTES = 64 * 1_024
+
+async function countTextFileLines(filePath: string): Promise<number> {
+  const file = await open(filePath, 'r')
+  const buffer = Buffer.allocUnsafe(FILE_READ_BUFFER_BYTES)
+  let totalBytes = 0
+  let lineFeeds = 0
+  let lastByte = -1
+  let binary = false
+  try {
+    while (true) {
+      const { bytesRead } = await file.read(buffer, 0, buffer.length, null)
+      if (bytesRead === 0) {
+        break
+      }
+      const sniffBytes = Math.min(bytesRead, Math.max(0, BINARY_SNIFF_BYTES - totalBytes))
+      for (let index = 0; index < sniffBytes; index += 1) {
+        if (buffer[index] === 0) {
+          binary = true
+          break
+        }
+      }
+      if (binary) {
+        break
+      }
+      for (let index = 0; index < bytesRead; index += 1) {
+        if (buffer[index] === 10) {
+          lineFeeds += 1
+        }
+      }
+      totalBytes += bytesRead
+      lastByte = buffer[bytesRead - 1]
+    }
+  } finally {
+    await file.close()
+  }
+  if (binary || totalBytes === 0) {
+    return 0
+  }
+  return lineFeeds + (lastByte === 10 ? 0 : 1)
+}
+
+async function countWorktreeFileLines(repoPath: string, relativePaths: readonly string[]) {
+  let additions = 0
+  for (const relativePath of new Set(relativePaths)) {
+    const filePath = path.join(repoPath, relativePath)
+    const stats = await lstat(filePath).catch((error: unknown) => {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        return null
+      }
+      throw error
+    })
+    if (stats === null) {
+      continue
+    }
+    if (stats.isSymbolicLink()) {
+      additions += 1
+    } else if (stats.isFile()) {
+      additions += await countTextFileLines(filePath)
+    }
+  }
+  return additions
 }
 
 function parseCommitStats(output: string): CommitStats {
@@ -87,31 +151,26 @@ export function getWorkingTreeStats(
     const head = yield* tryGit(() =>
       runGit(['-C', key, 'rev-parse', '--verify', '--quiet', 'HEAD'], { okExitCodes: [0, 1] })
     )
-    const output = yield* tryGit(async () => {
-      const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), 'rebase-working-tree-stats-'))
-      const env = { ...process.env, GIT_INDEX_FILE: path.join(temporaryDirectory, 'index') }
-      try {
-        await runGit(
-          ['-C', key, 'read-tree', ...(head.trim().length > 0 ? ['HEAD'] : ['--empty'])],
-          { env }
-        )
-        await runGit(['-C', key, 'add', '-A', '--'], { env })
-        return await runGit(
-          [
-            '-C',
-            key,
-            'diff',
-            '--cached',
-            '--numstat',
-            ...(head.trim().length > 0 ? ['HEAD'] : []),
-            '--'
-          ],
-          { env }
-        )
-      } finally {
-        await rm(temporaryDirectory, { recursive: true, force: true })
-      }
-    })
-    return sumNumstat(output.split('\n'))
+    const hasHead = head.trim().length > 0
+    const trackedOutput = hasHead
+      ? yield* tryGit(() => runGit(['-C', key, 'diff', '--numstat', 'HEAD', '--']))
+      : ''
+    const listedFiles = yield* tryGit(() =>
+      runGit([
+        '-C',
+        key,
+        'ls-files',
+        '-z',
+        ...(hasHead ? [] : ['--cached']),
+        '--others',
+        '--exclude-standard',
+        '--'
+      ])
+    )
+    const worktreeAdditions = yield* tryGit(() =>
+      countWorktreeFileLines(key, listedFiles.split('\0').filter(Boolean))
+    )
+    const tracked = sumNumstat(trackedOutput.split('\n'))
+    return { additions: tracked.additions + worktreeAdditions, deletions: tracked.deletions }
   })
 }
