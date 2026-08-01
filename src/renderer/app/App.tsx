@@ -207,6 +207,8 @@ function TabOwner(props: { active: boolean; children: ReactNode }) {
   return (
     <div
       ref={setContainer}
+      data-testid="tab-owner"
+      data-active={props.active}
       className={
         props.active
           ? 'flex h-full min-h-0 flex-col'

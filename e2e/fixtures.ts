@@ -23,6 +23,12 @@ const demoRecordingEnabled = process.env.REBASE_DEMO === '1'
 const demoVideoDirectory = path.join(currentDir, '..', 'test-results', 'demos')
 const demoSlowMoMilliseconds = 300
 
+let activeFixtureRoot: string | undefined
+
+function fixturePath(prefix: string): string {
+  return path.join(activeFixtureRoot ?? os.tmpdir(), prefix)
+}
+
 export async function setWindowSize(
   app: ElectronApplication,
   width: number,
@@ -38,39 +44,12 @@ export async function setWindowSize(
 
 export type Git = (args: string[]) => void
 
-type WaitBeforeRetry = (milliseconds: number) => void
-
-const waitBeforeFixtureGitRetry: WaitBeforeRetry = (milliseconds) => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
-}
-
-export function retryFixtureGitOperation<T>(
-  operation: () => T,
-  waitBeforeRetry: WaitBeforeRetry = waitBeforeFixtureGitRetry
-): T {
-  let lastError: unknown
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      return operation()
-    } catch (error) {
-      lastError = error
-      if (attempt < 3) {
-        waitBeforeRetry(attempt * 200)
-      }
-    }
-  }
-  throw lastError
-}
-
 export function gitIn(repo: string): Git {
-  return (args) =>
-    retryFixtureGitOperation(() => execFileSync('git', args, { cwd: repo, stdio: 'ignore' }))
+  return (args) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' })
 }
 
 export function gitOut(repo: string, args: string[]): string {
-  return retryFixtureGitOperation(() =>
-    execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
-  )
+  return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
 }
 
 export function unmergedPaths(repo: string): string[] {
@@ -105,9 +84,7 @@ export function commitParents(repo: string, ref = 'HEAD'): string[] {
 }
 
 export function porcelainStatus(repo: string): string[] {
-  const status = retryFixtureGitOperation(() =>
-    execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' })
-  )
+  const status = execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' })
   return status.split('\n').filter((line) => line.length > 0)
 }
 
@@ -145,9 +122,9 @@ export interface FixtureRepoOptions {
 }
 
 export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
+  const repo = fs.mkdtempSync(fixturePath('repo-'))
   const git = gitIn(repo)
-  retryFixtureGitOperation(() => git(['init', '-b', 'main']))
+  git(['init', '-b', 'main'])
   configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
@@ -159,14 +136,12 @@ export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
 }
 
 export function createFixtureRepoWithRemote(): { repo: string; remote: string } {
-  const remoteBase = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-remote-'))
+  const remoteBase = fs.mkdtempSync(fixturePath('remote-'))
   const remote = path.join(remoteBase, 'remote.git')
-  retryFixtureGitOperation(() =>
-    execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
-  )
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-repo-'))
+  execFileSync('git', ['init', '--bare', '-b', 'main', remote], { stdio: 'ignore' })
+  const repo = fs.mkdtempSync(fixturePath('repo-'))
   const git = gitIn(repo)
-  retryFixtureGitOperation(() => git(['init', '-b', 'main']))
+  git(['init', '-b', 'main'])
   configureFixtureRepo(git)
   fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n')
   git(['add', '.'])
@@ -186,7 +161,7 @@ export function makeBranchAheadOfOrigin(repo: string, message = 'work to publish
 }
 
 export function advanceRemote(remote: string, message: string): void {
-  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-teammate-'))
+  const other = fs.mkdtempSync(fixturePath('teammate-'))
   execFileSync('git', ['clone', remote, other], { stdio: 'ignore' })
   const git = gitIn(other)
   git(['config', 'user.email', 'teammate@example.com'])
@@ -221,14 +196,17 @@ export interface ExpectedToast {
   description?: string | RegExp
 }
 
-export interface ExpectedToastMatch {
-  expected: ExpectedToast
-  recordedIndex: number
+export interface LifecycleSnapshot {
+  mainPid: number
+  sidecarPids: number[]
+  sidecarProcessCount: number
+  sidecarRespawnCount: number
 }
 
 export interface AppHarness {
   readonly page: Page
   app(): ElectronApplication
+  close(): Promise<void>
   launchCount(): number
   mainProcessId(): Promise<number>
   inspectLifecycle(): Promise<LifecycleSnapshot>
@@ -240,7 +218,7 @@ export interface AppHarness {
     options?: { recentRepos?: string[]; listPaneWidths?: Record<string, number> }
   ): Promise<Page>
   openTabs(repos: Array<string | null>, options?: { activeIndex?: number }): Promise<Page>
-  track(repo: string): void
+  track(fixturePath: string): void
   stubFolderDialog(dir: string | null): Promise<void>
   toasts(): Promise<RecordedToast[]>
   expectToast(
@@ -248,6 +226,28 @@ export interface AppHarness {
     trigger: () => Promise<unknown> | unknown
   ): Promise<RecordedToast>
 }
+
+interface StoreOverrides {
+  recentRepos?: string[]
+  workspaces?: string[]
+  activeWorkspace?: string | null
+  workingDirectory?: string | null
+  onboardingComplete?: boolean
+  persistedTabRepoPaths?: Array<string | null>
+  persistedActiveTabIndex?: number
+  listPaneWidths?: Record<string, number>
+}
+
+interface MainControl {
+  replaceStore: (overrides?: StoreOverrides) => unknown
+  inspectLifecycle: () => LifecycleSnapshot
+}
+
+const E2E_CONTROL_KEY = '__REBASE_E2E_CONTROL__'
+const DIALOG_ORIGINAL_KEY = '__REBASE_E2E_DIALOG_ORIGINAL__'
+const TOAST_RECORD_KEY = '__REBASE_E2E_TOASTS__'
+
+const uniquePaths = (values: string[]): string[] => Array.from(new Set(values))
 
 const matchesText = (value: string, matcher: string | RegExp): boolean => {
   if (typeof matcher === 'string') {
@@ -266,167 +266,54 @@ const matchesToast = (toast: RecordedToast, expected: ExpectedToast): boolean =>
     : matchesText(toast.description, expected.description)
 }
 
-export function findToastMatch(
+function findToast(
   recorded: RecordedToast[],
   expected: ExpectedToast,
   startIndex: number
-): { toast: RecordedToast; recordedIndex: number } | undefined {
-  for (let recordedIndex = startIndex; recordedIndex < recorded.length; recordedIndex++) {
-    const toast = recorded[recordedIndex]
-    if (toast && matchesToast(toast, expected)) {
-      return { toast, recordedIndex }
-    }
-  }
-  return undefined
-}
-
-export function findUnexplainedFailureToasts(
-  recorded: RecordedToast[],
-  expectedToasts: ExpectedToastMatch[]
-): RecordedToast[] {
-  const expectedByIndex = new Map(
-    expectedToasts.map((match) => [match.recordedIndex, match.expected] as const)
-  )
-  return recorded.filter((toast, recordedIndex) => {
-    if (toast.type !== 'error' && toast.type !== 'warning') {
-      return false
-    }
-    const expected = expectedByIndex.get(recordedIndex)
-    return !expected || !matchesToast(toast, expected)
-  })
+): RecordedToast | undefined {
+  return recorded.slice(startIndex).find((toast) => matchesToast(toast, expected))
 }
 
 const describeToast = (toast: RecordedToast): string =>
-  `${toast.type}: ${toast.title}${toast.description ? ` — ${toast.description}` : ''}`
-
-const uniquePaths = (values: string[]): string[] => Array.from(new Set(values))
-
-export interface FixturePathRegistry {
-  pathsToClose(): string[]
-  pathsToRemove(): string[]
-  track(path: string): void
-  release(paths: string[]): void
-  deferRemoval(paths: string[]): void
-}
-
-export function createFixturePathRegistry(): FixturePathRegistry {
-  const pathsToClose = new Set<string>()
-  const pathsToRemove = new Set<string>()
-
-  return {
-    pathsToClose: () => Array.from(pathsToClose),
-    pathsToRemove: () => Array.from(pathsToRemove),
-    track: (path) => {
-      pathsToClose.add(path)
-      pathsToRemove.add(path)
-    },
-    release: (paths) => {
-      for (const path of paths) {
-        pathsToClose.delete(path)
-        pathsToRemove.delete(path)
-      }
-    },
-    deferRemoval: (paths) => {
-      for (const path of paths) {
-        pathsToClose.delete(path)
-      }
-    }
-  }
-}
-
-interface StoreOverrides {
-  recentRepos?: string[]
-  workspaces?: string[]
-  activeWorkspace?: string | null
-  workingDirectory?: string | null
-  onboardingComplete?: boolean
-  persistedTabRepoPaths?: Array<string | null>
-  persistedActiveTabIndex?: number
-  listPaneWidths?: Record<string, number>
-}
-
-export interface LifecycleSnapshot {
-  mainPid: number
-  sidecarPids: number[]
-  sidecarProcessCount: number
-  sidecarRespawnCount: number
-}
-
-interface MainControl {
-  replaceStore: (overrides?: StoreOverrides) => unknown
-  inspectLifecycle: () => LifecycleSnapshot
-}
-
-interface SharedApp {
-  readonly page: Page
-  app(): ElectronApplication
-  inspectLifecycle(): Promise<LifecycleSnapshot>
-  launchCount(): number
-  reload(): Promise<Page>
-  restart(): Promise<Page>
-  replaceStore(overrides?: StoreOverrides): Promise<void>
-  restoreWindowSize(): Promise<void>
-  readStderr(): string[]
-  restoreFolderDialog(): Promise<void>
-  stubFolderDialog(dir: string | null): Promise<void>
-  trackRepo(repo: string): void
-  untrackRepos(repos: string[]): void
-  deferRepoCleanup(repos: string[]): void
-}
-
-type CleanupStep = () => Promise<void> | void
-
-interface FixtureTeardownOptions {
-  beforeCloseRepos?: CleanupStep[]
-  closeRepos: CleanupStep
-  afterCloseRepos?: CleanupStep[]
-  closeApp?: CleanupStep
-  removeFixturePaths: CleanupStep
-  afterRemoveFixturePaths?: CleanupStep[]
-}
-
-const E2E_CONTROL_KEY = '__REBASE_E2E_CONTROL__'
-const DIALOG_ORIGINAL_KEY = '__REBASE_E2E_DIALOG_ORIGINAL__'
-const forbiddenShutdownLogs = [
-  'sidecar is shutting down',
-  'sidecar respawn failed',
-  'child process gone'
-]
-
-const TOAST_RECORD_KEY = '__REBASE_E2E_TOASTS__'
+  toast.type +
+  ': ' +
+  toast.title +
+  (toast.description.length > 0 ? ' — ' + toast.description : '')
 
 async function installToastRecorder(page: Page): Promise<void> {
-  await page.addInitScript((key: string) => {
-    const recorded: Array<{ type: string; title: string; description: string }> = []
-    ;(window as unknown as Record<string, unknown>)[key] = recorded
-    const seen = new WeakSet<Element>()
-    const readToast = (node: Element) => {
-      if (seen.has(node)) {
-        return
-      }
-      seen.add(node)
-      recorded.push({
-        type: node.getAttribute('data-type') ?? 'unknown',
-        title: node.querySelector('[data-title]')?.textContent?.trim() ?? '',
-        description: node.querySelector('[data-description]')?.textContent?.trim() ?? ''
-      })
+  const install = (key: string) => {
+    const target = window as unknown as Record<string, unknown>
+    if (target[key]) {
+      return
     }
+    const recorded: Array<{ type: string; title: string; description: string }> = []
+    target[key] = recorded
+    const seen = new WeakSet<Element>()
     const scan = () => {
       for (const node of document.querySelectorAll('[data-sonner-toast]')) {
-        readToast(node)
+        if (seen.has(node)) {
+          continue
+        }
+        seen.add(node)
+        recorded.push({
+          type: node.getAttribute('data-type') ?? 'unknown',
+          title: node.querySelector('[data-title]')?.textContent?.trim() ?? '',
+          description: node.querySelector('[data-description]')?.textContent?.trim() ?? ''
+        })
       }
     }
-    const observer = new MutationObserver(() => requestAnimationFrame(scan))
     const start = () => {
-      observer.observe(document.body, { childList: true, subtree: true })
+      new MutationObserver(scan).observe(document.body, { childList: true, subtree: true })
       scan()
     }
     if (document.body) {
       start()
-      return
+    } else {
+      document.addEventListener('DOMContentLoaded', start, { once: true })
     }
-    document.addEventListener('DOMContentLoaded', start)
-  }, TOAST_RECORD_KEY)
+  }
+  await page.addInitScript(install, TOAST_RECORD_KEY)
+  await page.evaluate(install, TOAST_RECORD_KEY)
 }
 
 async function readRecordedToasts(page: Page): Promise<RecordedToast[]> {
@@ -455,162 +342,15 @@ function canonicalListPaneWidths(
   return canonical
 }
 
-async function clearRendererState(page: Page): Promise<void> {
-  await page.evaluate(() => localStorage.clear())
-}
-
-async function closeRepoTabs(page: Page, repos: string[]): Promise<void> {
-  const closeButtons = page.getByRole('button', { name: /^Close tab / })
-  while ((await closeButtons.count()) > 0) {
-    await closeButtons.first().click({ force: true })
+function removePaths(paths: string[]): void {
+  for (const fixturePath of uniquePaths(paths).sort((left, right) => right.length - left.length)) {
+    fs.rmSync(fixturePath, {
+      recursive: true,
+      force: true,
+      maxRetries: process.platform === 'win32' ? 10 : 0,
+      retryDelay: 100
+    })
   }
-  await verifyReposClosed(page, repos)
-}
-
-export async function runWithFailureSafeCleanup(
-  operation: () => Promise<void>,
-  cleanupSteps: CleanupStep[]
-): Promise<void> {
-  let operationError: unknown
-  let operationFailed = false
-  let cleanupError: unknown
-  let cleanupFailed = false
-
-  try {
-    await operation()
-  } catch (error) {
-    operationError = error
-    operationFailed = true
-  } finally {
-    for (const cleanupStep of cleanupSteps) {
-      try {
-        await cleanupStep()
-      } catch (error) {
-        if (!cleanupFailed) {
-          cleanupError = error
-          cleanupFailed = true
-        }
-      }
-    }
-  }
-
-  if (operationFailed) {
-    throw operationError
-  }
-  if (cleanupFailed) {
-    throw cleanupError
-  }
-}
-
-export async function runWithFailureSafeFixtureTeardown(
-  operation: () => Promise<void>,
-  options: FixtureTeardownOptions
-): Promise<void> {
-  let reposClosed = false
-  let appClosed = false
-  const closeApp = options.closeApp
-
-  await runWithFailureSafeCleanup(operation, [
-    ...(options.beforeCloseRepos ?? []),
-    async () => {
-      await options.closeRepos()
-      reposClosed = true
-    },
-    ...(options.afterCloseRepos ?? []),
-    ...(closeApp
-      ? [
-          async () => {
-            await closeApp()
-            appClosed = true
-          }
-        ]
-      : []),
-    async () => {
-      if (reposClosed || appClosed) {
-        await options.removeFixturePaths()
-      }
-    },
-    ...(options.afterRemoveFixturePaths ?? [])
-  ])
-}
-
-type RemoveFixturePath = (fixturePath: string, options: fs.RmOptions) => void
-
-export function removeFixturePaths(
-  paths: string[],
-  removeFixturePath: RemoveFixturePath = fs.rmSync
-): void {
-  let firstError: unknown
-  let failed = false
-  for (const fixturePath of uniquePaths(paths)) {
-    try {
-      removeFixturePath(fixturePath, {
-        recursive: true,
-        force: true,
-        maxRetries: 20,
-        retryDelay: 300
-      })
-    } catch (error) {
-      if (!failed) {
-        firstError = error
-        failed = true
-      }
-    }
-  }
-  if (failed) {
-    throw firstError
-  }
-}
-
-interface TestFixturePathCleanup {
-  remove: (paths: string[]) => void
-  release: (paths: string[]) => void
-  defer: (paths: string[]) => void
-}
-
-export function finalizeTestFixturePaths(
-  paths: string[],
-  cleanup: TestFixturePathCleanup,
-  platform: NodeJS.Platform = process.platform
-): void {
-  if (platform === 'win32') {
-    cleanup.defer(paths)
-    return
-  }
-  cleanup.remove(paths)
-  cleanup.release(paths)
-}
-
-export async function verifyReposClosed(
-  page: Page,
-  repos: string[],
-  timeout = 10_000
-): Promise<void> {
-  const repoPaths = uniquePaths(repos)
-  await expect
-    .poll(
-      () =>
-        page.evaluate(async (paths) => {
-          const api = (
-            window as unknown as {
-              electronAPI: {
-                sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
-              }
-            }
-          ).electronAPI
-
-          return Promise.all(
-            paths.map(async (repoPath) => {
-              const response = (await api.sidecarRequest('getStatus', { repoPath })) as {
-                _tag: string
-              }
-              return { repoPath, tag: response._tag }
-            })
-          )
-        }, repoPaths),
-      { message: 'expected every tracked E2E repository to be closed', timeout }
-    )
-    .toEqual(repoPaths.map((repoPath) => ({ repoPath, tag: 'RepoNotOpen' })))
 }
 
 export async function waitForRepoSurface(
@@ -618,317 +358,149 @@ export async function waitForRepoSurface(
   repoPath: string,
   timeout = 15_000
 ): Promise<void> {
-  await expect
-    .poll(
-      () =>
-        page.evaluate(async (path) => {
-          const api = (
-            window as unknown as {
-              electronAPI: {
-                sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
-              }
-            }
-          ).electronAPI
-          const response = (await api.sidecarRequest('getStatus', { repoPath: path })) as {
-            _tag: string
-          }
-          return response._tag
-        }, repoPath),
-      { message: `expected ${repoPath} to finish opening`, timeout }
-    )
-    .toBe('Ok')
-  await expect(page.getByTestId('repo-shell').filter({ visible: true })).toHaveCount(1, { timeout })
-  await expect(workingCopyRow(page).filter({ visible: true })).toHaveCount(1, { timeout })
+  await expect(page.getByRole('tab', { name: path.basename(repoPath) })).toHaveAttribute(
+    'aria-selected',
+    'true',
+    { timeout }
+  )
+  await expect(activeTab(page).getByTestId('repo-shell')).toBeVisible({ timeout })
+  await expect(workingCopyRow(page)).toBeVisible({ timeout })
 }
 
-export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp }>({
-  sharedApp: [
-    async ({}, use) => {
-      const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-user-data-'))
-      const fixturePaths = createFixturePathRegistry()
-      let electronApp: ElectronApplication | undefined
-      let page: Page | undefined
-      let launches = 0
-      let liveApps = 0
-      let maximumLiveApps = 0
-      let restarts = 0
-      const stderr: string[] = []
+export const test = base.extend<{ harness: AppHarness }>({
+  harness: async ({}, use, testInfo) => {
+    const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-'))
+    const userDataDir = fs.mkdtempSync(path.join(fixtureRoot, 'rebase-e2e-user-data-'))
+    activeFixtureRoot = fixtureRoot
+    const externalFixturePaths = new Set<string>()
+    let electronApp: ElectronApplication | undefined
+    let page: Page | undefined
+    let launches = 0
 
-      const launch = async (): Promise<Page> => {
-        if (liveApps !== 0) {
-          throw new Error('refusing to launch a second live Electron application')
-        }
-        launches += 1
-        const electronEnv = { ...process.env, NODE_ENV: 'test' }
-        delete electronEnv.ELECTRON_RUN_AS_NODE
-        if (process.platform === 'linux') {
-          electronEnv.ELECTRON_OZONE_PLATFORM_HINT = 'x11'
-        }
-        const electronArgs = [
+    const launch = async (): Promise<Page> => {
+      launches += 1
+      const electronEnv = { ...process.env, NODE_ENV: 'test' }
+      delete electronEnv.ELECTRON_RUN_AS_NODE
+      if (process.platform === 'linux') {
+        electronEnv.ELECTRON_OZONE_PLATFORM_HINT = 'x11'
+      }
+      electronApp = await electron.launch({
+        args: [
           mainEntry,
-          `--user-data-dir=${userDataDir}`,
+          '--user-data-dir=' + userDataDir,
           '--e2e',
           ...(process.platform === 'linux' ? ['--ozone-platform=x11'] : [])
-        ]
-        electronApp = await electron.launch({
-          args: electronArgs,
-          env: electronEnv,
-          ...(demoRecordingEnabled
-            ? {
-                slowMo: demoSlowMoMilliseconds,
-                recordVideo: {
-                  dir: demoVideoDirectory,
-                  size: { width: launchWindowWidth, height: launchWindowHeight }
-                }
+        ],
+        env: electronEnv,
+        ...(demoRecordingEnabled
+          ? {
+              slowMo: demoSlowMoMilliseconds,
+              recordVideo: {
+                dir: demoVideoDirectory,
+                size: { width: launchWindowWidth, height: launchWindowHeight }
               }
-            : {})
-        })
-        liveApps += 1
-        maximumLiveApps = Math.max(maximumLiveApps, liveApps)
-        electronApp.process().stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()))
-        page = await electronApp.firstWindow()
-        await installToastRecorder(page)
-        await setWindowSize(electronApp, launchWindowWidth, launchWindowHeight)
-        return waitForPage(page)
-      }
-
-      const currentApp = (): ElectronApplication => {
-        if (!electronApp) {
-          throw new Error('Electron application is unavailable')
-        }
-        return electronApp
-      }
-
-      const currentPage = (): Page => {
-        if (!page) {
-          throw new Error('Electron page is unavailable')
-        }
-        return page
-      }
-
-      const sharedApp: SharedApp = {
-        get page() {
-          return currentPage()
-        },
-        app: currentApp,
-        launchCount: () => launches,
-        inspectLifecycle: () =>
-          currentApp().evaluate((_, key): LifecycleSnapshot => {
-            const control = (globalThis as Record<string, unknown>)[key] as MainControl | undefined
-            if (!control) {
-              throw new Error('main E2E control is unavailable; launch the app with --e2e')
             }
-            return control.inspectLifecycle()
-          }, E2E_CONTROL_KEY),
-        reload: async () => {
-          const activePage = currentPage()
-          await activePage.reload()
-          return waitForPage(activePage)
-        },
-        replaceStore: async (overrides = {}) => {
-          await currentApp().evaluate(
-            (_, input): void => {
-              const control = (globalThis as Record<string, unknown>)[input.key] as
-                | MainControl
-                | undefined
-              if (!control) {
-                throw new Error('main E2E control is unavailable; launch the app with --e2e')
-              }
-              control.replaceStore(input.overrides)
-            },
-            { key: E2E_CONTROL_KEY, overrides }
-          )
-        },
-        restart: async () => {
-          if (restarts !== 0) {
-            throw new Error('only one intentional Electron restart is allowed per E2E run')
+          : {})
+      })
+      page = await electronApp.firstWindow()
+      await installToastRecorder(page)
+      await setWindowSize(electronApp, launchWindowWidth, launchWindowHeight)
+      return waitForPage(page)
+    }
+
+    const currentApp = (): ElectronApplication => {
+      if (!electronApp) {
+        throw new Error('Electron application is unavailable')
+      }
+      return electronApp
+    }
+
+    const currentPage = (): Page => {
+      if (!page) {
+        throw new Error('Electron page is unavailable')
+      }
+      return page
+    }
+
+    const replaceStore = async (overrides: StoreOverrides = {}): Promise<void> => {
+      await currentApp().evaluate(
+        (_, input): void => {
+          const control = (globalThis as Record<string, unknown>)[input.key] as
+            | MainControl
+            | undefined
+          if (!control) {
+            throw new Error('main E2E control is unavailable; launch the app with --e2e')
           }
-          restarts += 1
-          await currentPage().close()
-          await currentApp().close()
-          liveApps -= 1
-          electronApp = undefined
-          page = undefined
-          return launch()
+          control.replaceStore(input.overrides)
         },
-        restoreWindowSize: async () => {
-          await setWindowSize(currentApp(), launchWindowWidth, launchWindowHeight)
-        },
-        readStderr: () => [...stderr],
-        stubFolderDialog: async (dir: string | null) => {
-          await currentApp().evaluate(
-            ({ dialog }, input: { chosen: string | null; key: string }) => {
-              const target = globalThis as Record<string, unknown>
-              target[input.key] ??= dialog.showOpenDialog
-              dialog.showOpenDialog = (async () =>
-                input.chosen
-                  ? { canceled: false, filePaths: [input.chosen] }
-                  : { canceled: true, filePaths: [] }) as typeof dialog.showOpenDialog
-            },
-            { chosen: dir, key: DIALOG_ORIGINAL_KEY }
-          )
-        },
-        restoreFolderDialog: async () => {
-          await currentApp().evaluate(({ dialog }, key: string) => {
-            const target = globalThis as Record<string, unknown>
-            const original = target[key] as typeof dialog.showOpenDialog | undefined
-            if (original) {
-              dialog.showOpenDialog = original
-              delete target[key]
-            }
-          }, DIALOG_ORIGINAL_KEY)
-        },
-        trackRepo: (repo: string) => fixturePaths.track(repo),
-        untrackRepos: (repos: string[]) => fixturePaths.release(repos),
-        deferRepoCleanup: (repos: string[]) => fixturePaths.deferRemoval(repos)
-      }
-
-      await runWithFailureSafeFixtureTeardown(
-        async () => {
-          await launch()
-          await use(sharedApp)
-        },
-        {
-          beforeCloseRepos: [
-            async () => {
-              if (!electronApp) {
-                return
-              }
-              const finalLifecycle = await sharedApp.inspectLifecycle()
-              if (
-                finalLifecycle.sidecarProcessCount !== 1 ||
-                finalLifecycle.sidecarRespawnCount !== 0
-              ) {
-                throw new Error(`unexpected final lifecycle: ${JSON.stringify(finalLifecycle)}`)
-              }
-            },
-            async () => {
-              if (electronApp) {
-                await sharedApp.restoreFolderDialog()
-              }
-            },
-            async () => {
-              if (page && !page.isClosed()) {
-                await closeRepoTabs(page, fixturePaths.pathsToClose())
-              }
-            },
-            async () => {
-              if (electronApp) {
-                await sharedApp.replaceStore()
-              }
-            },
-            async () => {
-              if (page && !page.isClosed()) {
-                await clearRendererState(page)
-              }
-            },
-            async () => {
-              if (page && !page.isClosed()) {
-                await sharedApp.reload()
-              }
-            }
-          ],
-          closeRepos: async () => {
-            const repos = fixturePaths.pathsToClose()
-            if (repos.length === 0) {
-              return
-            }
-            if (!page || page.isClosed()) {
-              throw new Error('cannot close E2E repositories without a live renderer')
-            }
-            await verifyReposClosed(page, repos)
-          },
-          closeApp: async () => {
-            if (!electronApp) {
-              return
-            }
-            await electronApp.close()
-            electronApp = undefined
-            page = undefined
-            liveApps -= 1
-          },
-          removeFixturePaths: () => removeFixturePaths(fixturePaths.pathsToRemove()),
-          afterRemoveFixturePaths: [
-            () => removeFixturePaths([userDataDir]),
-            () => {
-              if (maximumLiveApps !== 1) {
-                throw new Error(
-                  `expected one live Electron application, observed ${maximumLiveApps}`
-                )
-              }
-            },
-            () => {
-              if (launches > 2) {
-                throw new Error(`expected at most two Electron launches, observed ${launches}`)
-              }
-            },
-            () => {
-              const forbiddenLog = forbiddenShutdownLogs.find((message) =>
-                stderr.join('\n').toLowerCase().includes(message)
-              )
-              if (forbiddenLog) {
-                const matchingLines = stderr
-                  .join('\n')
-                  .split('\n')
-                  .filter((line) => line.toLowerCase().includes(forbiddenLog))
-                throw new Error(
-                  `intentional lifecycle emitted forbidden stderr:\n${matchingLines.join('\n')}`
-                )
-              }
-            }
-          ]
-        }
+        { key: E2E_CONTROL_KEY, overrides }
       )
-    },
-    { scope: 'worker' }
-  ],
-  harness: async ({ sharedApp }, use, testInfo) => {
-    const trackedRepos: string[] = []
-    const expectedToasts: ExpectedToastMatch[] = []
-    const stderrOffset = sharedApp.readStderr().length
+    }
+
+    const inspectLifecycle = (): Promise<LifecycleSnapshot> =>
+      currentApp().evaluate((_, key): LifecycleSnapshot => {
+        const control = (globalThis as Record<string, unknown>)[key] as MainControl | undefined
+        if (!control) {
+          throw new Error('main E2E control is unavailable; launch the app with --e2e')
+        }
+        return control.inspectLifecycle()
+      }, E2E_CONTROL_KEY)
+
+    const restoreFolderDialog = async (): Promise<void> => {
+      if (!electronApp) {
+        return
+      }
+      await currentApp().evaluate(({ dialog }, key: string) => {
+        const target = globalThis as Record<string, unknown>
+        const original = target[key] as typeof dialog.showOpenDialog | undefined
+        if (original) {
+          dialog.showOpenDialog = original
+          delete target[key]
+        }
+      }, DIALOG_ORIGINAL_KEY)
+    }
+
+    const closeApp = async (): Promise<void> => {
+      if (!electronApp) {
+        return
+      }
+      const app = electronApp
+      electronApp = undefined
+      page = undefined
+      await app.close()
+    }
+
+    await launch()
 
     const harness: AppHarness = {
-      toasts: () => readRecordedToasts(sharedApp.page),
-      expectToast: async (expected, trigger) => {
-        const startIndex = (await readRecordedToasts(sharedApp.page)).length
-        await trigger()
-        let matched: ReturnType<typeof findToastMatch>
-        await expect
-          .poll(
-            async () => {
-              const recorded = await readRecordedToasts(sharedApp.page)
-              matched = findToastMatch(recorded, expected, startIndex)
-              if (matched) {
-                return 'matched'
-              }
-              return recorded.length === 0
-                ? '<no toasts raised>'
-                : recorded.map(describeToast).join(' | ')
-            },
-            { timeout: 10_000 }
-          )
-          .toBe('matched')
-        const match = matched as NonNullable<typeof matched>
-        expectedToasts.push({ expected, recordedIndex: match.recordedIndex })
-        return match.toast
-      },
       get page() {
-        return sharedApp.page
+        return currentPage()
       },
-      app: () => sharedApp.app(),
-      launchCount: () => sharedApp.launchCount(),
-      mainProcessId: async () => (await sharedApp.inspectLifecycle()).mainPid,
-      inspectLifecycle: () => sharedApp.inspectLifecycle(),
-      reload: () => sharedApp.reload(),
-      restart: () => sharedApp.restart(),
-      track: (repo: string) => {
-        trackedRepos.push(repo)
-        sharedApp.trackRepo(repo)
+      app: currentApp,
+      close: closeApp,
+      launchCount: () => launches,
+      mainProcessId: async () => (await inspectLifecycle()).mainPid,
+      inspectLifecycle,
+      reload: async () => {
+        await currentPage().reload()
+        return waitForPage(currentPage())
       },
-      seed: async (state: SeedState) => {
+      restart: async () => {
+        await closeApp()
+        return launch()
+      },
+      track: (trackedPath) => {
+        if (
+          trackedPath !== fixtureRoot &&
+          !trackedPath.startsWith(fixtureRoot + path.sep)
+        ) {
+          externalFixturePaths.add(trackedPath)
+        }
+      },
+      seed: async (state) => {
         const workspaces = state.workspaces ?? []
-        const activeWorkspace = workspaces[workspaces.length - 1] ?? null
-        await sharedApp.replaceStore({
+        const activeWorkspace = workspaces.at(-1) ?? null
+        await replaceStore({
           workspaces,
           recentRepos: state.recentRepos ?? [],
           activeWorkspace,
@@ -939,7 +511,7 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           listPaneWidths: canonicalListPaneWidths(state.listPaneWidths)
         })
       },
-      openRepo: async (repo: string, options) => {
+      openRepo: async (repo, options) => {
         harness.track(repo)
         await harness.seed({
           workspaces: [path.dirname(repo)],
@@ -949,11 +521,11 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           activeIndex: 0,
           listPaneWidths: options?.listPaneWidths
         })
-        const page = await harness.reload()
-        await waitForRepoSurface(page, repo)
-        return page
+        const activePage = await harness.reload()
+        await waitForRepoSurface(activePage, repo)
+        return activePage
       },
-      openTabs: async (repos: Array<string | null>, options) => {
+      openTabs: async (repos, options) => {
         for (const repo of repos) {
           if (repo) {
             harness.track(repo)
@@ -969,65 +541,82 @@ export const test = base.extend<{ harness: AppHarness }, { sharedApp: SharedApp 
           tabs: repos,
           activeIndex
         })
-        const page = await harness.reload()
+        const activePage = await harness.reload()
         const activeRepo = repos[activeIndex]
         if (activeRepo) {
-          await waitForRepoSurface(page, activeRepo)
+          await waitForRepoSurface(activePage, activeRepo)
         }
-        return page
+        return activePage
       },
-      stubFolderDialog: (dir: string | null) => sharedApp.stubFolderDialog(dir)
+      stubFolderDialog: async (dir) => {
+        await currentApp().evaluate(
+          ({ dialog }, input: { chosen: string | null; key: string }) => {
+            const target = globalThis as Record<string, unknown>
+            target[input.key] ??= dialog.showOpenDialog
+            dialog.showOpenDialog = (async () =>
+              input.chosen
+                ? { canceled: false, filePaths: [input.chosen] }
+                : { canceled: true, filePaths: [] }) as typeof dialog.showOpenDialog
+          },
+          { chosen: dir, key: DIALOG_ORIGINAL_KEY }
+        )
+      },
+      toasts: () => readRecordedToasts(currentPage()),
+      expectToast: async (expected, trigger) => {
+        const startIndex = (await readRecordedToasts(currentPage())).length
+        await trigger()
+        let matched: RecordedToast | undefined
+        await expect
+          .poll(
+            async () => {
+              const recorded = await readRecordedToasts(currentPage())
+              matched = findToast(recorded, expected, startIndex)
+              if (matched) {
+                return 'matched'
+              }
+              return recorded.length === 0
+                ? '<no toasts raised>'
+                : recorded.map(describeToast).join(' | ')
+            },
+            { timeout: 10_000 }
+          )
+          .toBe('matched')
+        return matched as RecordedToast
+      }
     }
 
     try {
-      await runWithFailureSafeFixtureTeardown(
-        async () => {
-          await sharedApp.restoreFolderDialog()
-          await sharedApp.replaceStore()
-          await clearRendererState(sharedApp.page)
-          await use(harness)
-        },
-        {
-          beforeCloseRepos: [
-            async () => {
-              const recorded = await readRecordedToasts(sharedApp.page)
-              const unexplained = findUnexplainedFailureToasts(recorded, expectedToasts)
-              if (unexplained.length > 0) {
-                const appStderr = sharedApp.readStderr().slice(stderrOffset).join('').trim()
-                throw new Error(
-                  `unexplained ${unexplained.length > 1 ? 'toasts' : 'toast'} raised during the test:\n` +
-                    `${unexplained.map((toast) => `  ${describeToast(toast)}`).join('\n')}` +
-                    (appStderr ? `\napplication stderr:\n${appStderr}` : '')
-                )
-              }
-            },
-            () => sharedApp.restoreWindowSize(),
-            () => sharedApp.restoreFolderDialog(),
-            () => closeRepoTabs(sharedApp.page, trackedRepos),
-            () => sharedApp.replaceStore(),
-            () => clearRendererState(sharedApp.page),
-            () => sharedApp.reload().then(() => undefined)
-          ],
-          closeRepos: () => verifyReposClosed(sharedApp.page, trackedRepos),
-          removeFixturePaths: () => {
-            finalizeTestFixturePaths(trackedRepos, {
-              remove: removeFixturePaths,
-              release: sharedApp.untrackRepos,
-              defer: sharedApp.deferRepoCleanup
-            })
-          }
-        }
-      )
-    } catch (error) {
-      if (testInfo.status === testInfo.expectedStatus) {
-        throw error
+      await use(harness)
+    } finally {
+      let cleanupError: unknown
+      try {
+        await restoreFolderDialog()
+      } catch (error) {
+        cleanupError = error
       }
-      sharedApp.deferRepoCleanup(trackedRepos)
+      try {
+        await closeApp()
+      } catch (error) {
+        cleanupError ??= error
+      }
+      try {
+        removePaths([...externalFixturePaths, fixtureRoot])
+      } catch (error) {
+        cleanupError ??= error
+      }
+      if (activeFixtureRoot === fixtureRoot) {
+        activeFixtureRoot = undefined
+      }
+      if (cleanupError && testInfo.status === testInfo.expectedStatus) {
+        throw cleanupError
+      }
     }
   }
 })
+export const activeTab = (page: Page) =>
+  page.locator('[data-testid="tab-owner"][data-active="true"]')
 
-export const refTree = (page: Page) => page.getByTestId('ref-tree-scroll')
+export const refTree = (page: Page) => activeTab(page).getByTestId('ref-tree-scroll')
 
 export type FileListGroup = 'conflicts' | 'staged' | 'unstaged' | 'head-commit'
 
@@ -1035,7 +624,9 @@ const cssAttributeValue = (value: string) => value.replace(/["\\]/g, '\\$&')
 export const fileRow = (page: Page, file: string, group?: FileListGroup) => {
   const groupFilter = group ? `[data-group="${group}"]` : ''
   const path = cssAttributeValue(file)
-  return page.locator(`[data-testid="status-file-row"]${groupFilter}[data-file="${path}"]`)
+  return activeTab(page).locator(
+    `[data-testid="status-file-row"]${groupFilter}[data-file="${path}"]`
+  )
 }
 export const stagedFileRow = (page: Page, file: string) => fileRow(page, file, 'staged')
 export const unstagedFileRow = (page: Page, file: string) => fileRow(page, file, 'unstaged')
@@ -1053,24 +644,19 @@ export const unstageFileFromRow = async (page: Page, file: string) => {
     .getByRole('button', { name: `Unstage ${file}`, exact: true })
     .click()
 }
-export const syncButton = (page: Page) => page.getByTestId('sync-button')
-export const workingCopyRow = (page: Page) => page.getByTestId('working-copy-row')
-export const commitListRegion = (page: Page) => page.getByRole('region', { name: 'Commits' })
-export const commitDetailPane = (page: Page) => page.getByTestId('commit-detail-pane')
+export const syncButton = (page: Page) => activeTab(page).getByTestId('sync-button')
+export const workingCopyRow = (page: Page) => activeTab(page).getByTestId('working-copy-row')
+export const commitListRegion = (page: Page) =>
+  activeTab(page).getByRole('region', { name: 'Commits' })
+export const commitDetailPane = (page: Page) =>
+  activeTab(page).getByTestId('commit-detail-pane')
 export const listDivider = (page: Page) =>
-  page.getByRole('button', { name: 'Resize commit list', exact: true })
+  activeTab(page).getByRole('button', { name: 'Resize commit list', exact: true })
 
 export async function openLocalChanges(page: Page): Promise<void> {
-  const visibleWorkingCopyRow = workingCopyRow(page).filter({ visible: true })
-  const visibleHeader = page.getByTestId('working-copy-header').filter({ visible: true })
-  await expect(visibleWorkingCopyRow).toHaveCount(1, { timeout: 15_000 })
-  await expect(async () => {
-    await visibleWorkingCopyRow.click()
-    await expect(visibleHeader).toHaveCount(1, { timeout: 2_000 })
-  }).toPass({ timeout: 15_000 })
-  await expect(page.getByTestId('commit-bar').filter({ visible: true })).toHaveCount(1, {
-    timeout: 10_000
-  })
+  await workingCopyRow(page).click()
+  await expect(activeTab(page).getByTestId('working-copy-header')).toBeVisible({ timeout: 10_000 })
+  await expect(activeTab(page).getByTestId('commit-bar')).toBeVisible({ timeout: 10_000 })
 }
 
 export async function openHistory(page: Page): Promise<void> {
