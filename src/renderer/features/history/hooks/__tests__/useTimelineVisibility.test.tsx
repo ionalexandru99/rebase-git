@@ -101,6 +101,8 @@ interface Harness {
 
 let harness: Harness
 let disabledFilteredHashes: string[]
+let enabledTimelineHashes: string[][]
+let setTimelineEnabled: (enabled: boolean) => void
 
 function TimelineProbe({ setFixture }: { setFixture: (next: TimelineFixture) => void }) {
   const timeline = useTimelineVisibility()
@@ -126,6 +128,14 @@ function TimelineHarness({ initial }: { initial: TimelineFixture }) {
 
 function DisabledTimelineProbe() {
   disabledFilteredHashes = useTimelineVisibility(false).filteredCommits.map((commit) => commit.hash)
+  return null
+}
+
+function ToggleableTimelineProbe() {
+  const [enabled, setEnabled] = useState(true)
+  const timeline = useTimelineVisibility(enabled)
+  setTimelineEnabled = setEnabled
+  enabledTimelineHashes.push(timeline.filteredCommits.map((commit) => commit.hash))
   return null
 }
 
@@ -198,6 +208,18 @@ describe('useTimelineVisibility', () => {
     render(fixtureProviders(baseFixture, <DisabledTimelineProbe />))
 
     expect(disabledFilteredHashes).toEqual([])
+  })
+
+  it('restores the retained snapshot immediately when the timeline becomes visible', () => {
+    enabledTimelineHashes = []
+    render(fixtureProviders(baseFixture, <ToggleableTimelineProbe />))
+    act(() => setTimelineEnabled(false))
+    enabledTimelineHashes = []
+
+    act(() => setTimelineEnabled(true))
+
+    expect(enabledTimelineHashes).not.toContainEqual([])
+    expect(enabledTimelineHashes.at(-1)).toEqual(['m2', 'm1'])
   })
 
   it('defaults to the default branch and its tracking remote', () => {

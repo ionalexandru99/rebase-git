@@ -2,26 +2,22 @@ import fs from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { createFixtureRepo, expect, gitIn, test } from './fixtures'
+import {
+  type AppHarness,
+  createFixtureRepo,
+  expect,
+  gitIn,
+  test,
+  waitForRepoSurface
+} from './fixtures'
 
-const destinations: string[] = []
-
-function createDestinationInHome(): string {
+function createDestinationInHome(harness: AppHarness): string {
   const destination = fs.realpathSync.native(
     fs.mkdtempSync(path.join(os.homedir(), '.rebase-e2e-clone-'))
   )
-  destinations.push(destination)
+  harness.track(destination)
   return destination
 }
-
-test.afterAll(() => {
-  for (const destination of destinations) {
-    try {
-      fs.rmSync(destination, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
-    } catch {}
-  }
-  destinations.length = 0
-})
 
 const fileUrl = (repo: string): string => `file://${repo.split(path.sep).join('/')}`
 
@@ -57,7 +53,7 @@ test('clones a repository from the new tab and lands in it', async ({ harness })
   test.setTimeout(60_000)
   const source = createFixtureRepo()
   harness.track(source)
-  const destination = createDestinationInHome()
+  const destination = createDestinationInHome(harness)
 
   await harness.seed({
     workspaces: [destination],
@@ -79,9 +75,12 @@ test('clones a repository from the new tab and lands in it', async ({ harness })
   await page.getByRole('button', { name: 'Clone', exact: true }).click()
 
   const clonedTab = page.getByRole('tab', { name: clonedName })
+  const clonedRepo = path.join(destination, clonedName)
+  harness.track(clonedRepo)
   await expect(clonedTab).toBeVisible({ timeout: 30_000 })
   await expect(clonedTab).toHaveAttribute('aria-selected', 'true')
-  expect(fs.existsSync(path.join(destination, clonedName, '.git'))).toBe(true)
+  await waitForRepoSurface(page, clonedRepo, 30_000)
+  expect(fs.existsSync(path.join(clonedRepo, '.git'))).toBe(true)
 
   await page.getByRole('button', { name: `Close tab ${clonedName}`, exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Open a repository' })).toBeVisible({
@@ -91,15 +90,14 @@ test('clones a repository from the new tab and lands in it', async ({ harness })
   await expect(recentCard.first()).toBeVisible({ timeout: 15_000 })
   await recentCard.first().click()
   await expect(page.getByRole('tab', { name: clonedName })).toBeVisible({ timeout: 30_000 })
-
-  harness.track(path.join(destination, clonedName))
+  await waitForRepoSurface(page, clonedRepo, 30_000)
 })
 
 test('reports the git failure and stays in the dialog when the source does not exist', async ({
   harness
 }) => {
   test.setTimeout(60_000)
-  const destination = createDestinationInHome()
+  const destination = createDestinationInHome(harness)
 
   await harness.seed({
     workspaces: [destination],
@@ -123,7 +121,7 @@ test('reports the git failure and stays in the dialog when the source does not e
 
 test('a reload tears down the clone the previous document started', async ({ harness }) => {
   test.setTimeout(150_000)
-  const destination = createDestinationInHome()
+  const destination = createDestinationInHome(harness)
   const sourceParent = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-stalled-'))
   const source = path.join(sourceParent, 'stalled')
   fs.mkdirSync(source)

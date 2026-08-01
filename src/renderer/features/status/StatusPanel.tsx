@@ -56,9 +56,6 @@ export function StatusPanel(props: StatusPanelProps) {
   const loading = props.loading || statusLoading
   const amendRows = props.amendRows ?? []
   const groups = useMemo(() => buildStatusGroups(worktreeRows), [worktreeRows])
-  const stageable = useMemo(() => worktreeRows.filter((row) => !row.isConflicted), [worktreeRows])
-  const stagedCount = stageable.filter((row) => row.stageState !== 'unstaged').length
-  const subtitle = `${worktreeRows.length + amendRows.length} files · ${stagedCount} staged`
 
   const sections = useMemo<FileListSection[]>(() => {
     const working = groups.map((group) => ({
@@ -86,21 +83,13 @@ export function StatusPanel(props: StatusPanelProps) {
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b">
-        <div className="flex min-h-[46px] items-center gap-2.5 py-1.5 pl-3.5 pr-3">
-          <div className="min-w-0">
-            <div className="text-[15px] font-semibold">Changes</div>
-            <div className="truncate text-[13px] text-muted-foreground">{subtitle}</div>
-          </div>
-          <div className="flex-1" />
+      {props.headerActions || loading ? (
+        <div className="scroll-host flex shrink-0 items-center gap-2 overflow-x-auto border-b px-3 py-1.5">
           {loading ? <LoadingBadge /> : null}
+          <div className="flex-1" />
+          {props.headerActions}
         </div>
-        {props.headerActions ? (
-          <div className="scroll-host flex items-center justify-end gap-2 overflow-x-auto px-3 pb-2">
-            {props.headerActions}
-          </div>
-        ) : null}
-      </div>
+      ) : null}
 
       <VirtualFileList
         sections={sections}

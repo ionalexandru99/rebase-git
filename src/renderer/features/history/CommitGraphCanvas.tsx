@@ -28,6 +28,8 @@ interface CommitGraphCanvasProps {
   viewportHeight: number
   visibleSet: Set<string> | null
   rowCount: number
+  paddingStart?: number
+  headRow?: number
   mergeSideRanges?: ReadonlyMap<string, MergeSideRange>
 }
 
@@ -45,6 +47,7 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
     const walker = createLaneWalker()
     let frame: number | null = null
     const backgroundColor = readCssVar('--color-background', '#131313')
+    const workingCopyColor = readCssVar('--color-orange', '#e6804c')
 
     const draw = () => {
       const canvas = canvasRef.current
@@ -56,11 +59,15 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
         latest.current
       const scrollTop = scroller.scrollTop
       const rowHeight = metrics.rowHeight
-      const firstRow = Math.max(0, Math.floor(scrollTop / rowHeight))
-      const lastRow = Math.min(
-        rowCount,
-        commits.length,
-        Math.ceil((scrollTop + viewportHeight) / rowHeight)
+      const paddingStart = latest.current.paddingStart ?? 0
+      const firstRow = Math.max(0, Math.floor((scrollTop - paddingStart) / rowHeight))
+      const lastRow = Math.max(
+        firstRow,
+        Math.min(
+          rowCount,
+          commits.length,
+          Math.ceil((scrollTop + viewportHeight - paddingStart) / rowHeight)
+        )
       )
 
       let laneSpan = 1
@@ -93,15 +100,35 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       for (let row = firstRow; row < lastRow; row++) {
         stepLanes(walker, topology)
         const dim = !!visibleSet && !visibleSet.has(commits[row].hash)
-        collectRowEdges(edges, walker, topology, row, row * rowHeight - scrollTop, dim, metrics)
+        collectRowEdges(
+          edges,
+          walker,
+          topology,
+          row,
+          paddingStart + row * rowHeight - scrollTop,
+          dim,
+          metrics
+        )
       }
       strokeEdgeBatch(ctx, edges)
+
+      if (paddingStart > 0) {
+        const headRow = latest.current.headRow ?? 0
+        const headLane = headRow < layout.commitCount ? layout.commitLane[headRow] : 0
+        drawWorkingCopyStub(
+          ctx,
+          laneX(headLane, metrics),
+          paddingStart / 2 - scrollTop,
+          paddingStart + headRow * rowHeight + rowHeight / 2 - scrollTop,
+          workingCopyColor
+        )
+      }
 
       const mergeSideRanges = latest.current.mergeSideRanges
       for (let row = firstRow; row < lastRow; row++) {
         const commit = commits[row]
         const lane = layout.commitLane[row]
-        const yTop = row * rowHeight - scrollTop
+        const yTop = paddingStart + row * rowHeight - scrollTop
         const dim = !!visibleSet && !visibleSet.has(commit.hash)
         drawCommitDot(ctx, lane, commit.parents.length >= 2, yTop, dim, backgroundColor, metrics)
         const glyph = mergeSideRanges?.get(commit.hash)?.glyph
@@ -112,6 +139,7 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
             yTop + rowHeight / 2,
             glyph,
             laneColor(lane),
+            backgroundColor,
             metrics
           )
         }
@@ -164,6 +192,24 @@ export function CommitGraphCanvas(props: CommitGraphCanvasProps) {
       />
     </div>
   )
+}
+
+function drawWorkingCopyStub(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  topY: number,
+  bottomY: number,
+  color: string
+): void {
+  ctx.globalAlpha = 0.9
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2
+  ctx.setLineDash([3, 3])
+  ctx.beginPath()
+  ctx.moveTo(x, topY)
+  ctx.lineTo(x, bottomY)
+  ctx.stroke()
+  ctx.setLineDash([])
 }
 
 function noop() {}

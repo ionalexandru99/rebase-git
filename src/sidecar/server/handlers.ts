@@ -285,6 +285,10 @@ export const handlersLayer = SidecarRpcs.toLayer({
     ),
   getCommitDetail: ({ repoPath, sha }) =>
     withResolvedRepo(repoPath, (repo) => operations.getCommitDetail(repo, sha)),
+  getCommitStats: ({ repoPath, shas }) =>
+    withResolvedRepo(repoPath, (repo) => operations.getCommitStats(repo, shas)),
+  getWorkingTreeStats: ({ repoPath }) =>
+    withResolvedRepo(repoPath, (repo) => operations.getWorkingTreeStats(repo)),
   stashList: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.stashList(repo)),
   streamLog: ({ repoPath, skip, maxCount, streamId }) =>
     Stream.unwrap(

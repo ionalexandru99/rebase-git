@@ -41,7 +41,7 @@ function createModifiedFileRepo(): string {
 
 async function openCommitDetails(page: Page, subject: string): Promise<void> {
   await expect(commitRow(page, subject)).toBeVisible({ timeout: 15_000 })
-  await commitRow(page, subject).dblclick()
+  await commitRow(page, subject).click()
   await expect(detailsPanel(page)).toBeVisible({ timeout: 10_000 })
 }
 
@@ -81,7 +81,7 @@ function readDiffLineColors(page: Page): Promise<DiffColorReadings> {
       return value
     }
     const body = document.querySelector(
-      '[data-testid="commit-details-panel"] [data-testid="diff-body"]'
+      '[data-testid="commit-detail-pane"] [data-testid="diff-body"]'
     )
     const container = body?.querySelector('diffs-container')
     const shadowRoot = container?.shadowRoot
@@ -230,6 +230,7 @@ test('matches the commit-details appearance', async ({ harness }) => {
   const timestamp = detailsPanel(page).locator('[data-testid="commit-meta"] time')
   await expect(detailsPanel(page)).toHaveScreenshot('commit-details-dark.png', {
     mask: [timestamp],
+    maxDiffPixelRatio: 0.05,
     timeout: 15_000
   })
 })

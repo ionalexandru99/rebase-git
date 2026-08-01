@@ -15,11 +15,13 @@ import {
   DiscardHunk,
   Fetch,
   GetCommitDetail,
+  GetCommitStats,
   GetDiff,
   GetHeadCommit,
   GetLocalBranches,
   GetRemoteRefs,
   GetStatus,
+  GetWorkingTreeStats,
   type HunkLineSelection,
   MergeBranch,
   OpenRepo,
@@ -129,6 +131,14 @@ export type DiffResult = RpcResult<
 export type CommitDetailResult = RpcResult<
   typeof GetCommitDetail.successSchema.Type,
   typeof GetCommitDetail.errorSchema.Type
+>
+export type CommitStatsResult = RpcResult<
+  typeof GetCommitStats.successSchema.Type,
+  typeof GetCommitStats.errorSchema.Type
+>
+export type WorkingTreeStatsResult = RpcResult<
+  typeof GetWorkingTreeStats.successSchema.Type,
+  typeof GetWorkingTreeStats.errorSchema.Type
 >
 export type StashListResult = RpcResult<
   typeof StashList.successSchema.Type,
@@ -466,6 +476,17 @@ export async function rpcGetCommitDetail(
   sha: string
 ): Promise<CommitDetailResult> {
   return callSidecarRpc(GetCommitDetail, { repoPath, sha })
+}
+
+export async function rpcGetCommitStats(
+  repoPath: string,
+  shas: readonly string[]
+): Promise<CommitStatsResult> {
+  return callSidecarRpc(GetCommitStats, { repoPath, shas })
+}
+
+export async function rpcGetWorkingTreeStats(repoPath: string): Promise<WorkingTreeStatsResult> {
+  return callSidecarRpc(GetWorkingTreeStats, { repoPath })
 }
 
 export async function rpcStashList(repoPath: string): Promise<StashListResult> {

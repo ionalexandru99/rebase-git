@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
+  commitListWidth,
   commitSubjects,
   createFixtureRepo,
   expect,
@@ -56,7 +57,9 @@ test('resets the branch to an earlier commit via the history context menu', asyn
   git(['commit', '-m', 'second commit'])
   const page = await harness.openRepo(repo)
 
-  await expect(page.getByText('second commit')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('commit-row').filter({ hasText: 'second commit' })).toBeVisible({
+    timeout: 10_000
+  })
   await expect(page.getByText(/\b2 commits\b/)).toBeVisible({ timeout: 10_000 })
 
   await page.getByText('initial').first().click({ button: 'right' })
@@ -78,43 +81,39 @@ test('collapses a merge by default and expands/collapses its side branch from th
   const page = await harness.openRepo(repo)
 
   const sideRow = page.getByTestId('commit-row').filter({ hasText: 'feature work' })
-  await expect(page.getByText('merge feature branch')).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('main work')).toBeVisible()
+  await expect(
+    page.getByTestId('commit-row').filter({ hasText: 'merge feature branch' })
+  ).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('commit-row').filter({ hasText: 'main work' })).toBeVisible()
   await expect(sideRow).toHaveCount(0)
 
   const canvas = page.getByTestId('commit-graph-canvas')
-  const baseBox = await canvas.boundingBox()
-  if (!baseBox) {
-    throw new Error('expected a bounding box for the graph canvas')
-  }
+  const canvasWidth = () =>
+    canvas.evaluate((element) => Math.round(element.getBoundingClientRect().width))
+  await expect.poll(canvasWidth, { timeout: 10_000 }).toBeGreaterThan(0)
+  const baseWidth = await canvasWidth()
 
   const expandControl = page.getByRole('button', { name: 'Expand merge side branch' })
   await expect(expandControl).toBeVisible()
   await expandControl.click()
 
   await expect(sideRow).toBeVisible({ timeout: 10_000 })
-  await expect
-    .poll(async () => (await canvas.boundingBox())?.width ?? 0, { timeout: 10_000 })
-    .toBeGreaterThan(baseBox.width)
+  await expect.poll(canvasWidth, { timeout: 10_000 }).toBeGreaterThan(baseWidth)
 
   await page.getByRole('button', { name: 'Collapse merge side branch' }).click()
 
   await expect(sideRow).toHaveCount(0)
-  await expect
-    .poll(async () => Math.round((await canvas.boundingBox())?.width ?? 0), { timeout: 10_000 })
-    .toBe(Math.round(baseBox.width))
+  await expect.poll(canvasWidth, { timeout: 10_000 }).toBe(baseWidth)
 })
 
-test('keeps the Author / SHA / Date columns legible on a wide graph while scrolling', async ({
+test('keeps the author, sha and date legible on a wide graph while scrolling', async ({
   harness
 }) => {
   const repo = createWideGraphRepo(16, 24)
-  const page = await harness.openRepo(repo)
+  const page = await harness.openRepo(repo, { listPaneWidths: { [repo]: 700 } })
 
+  expect(await commitListWidth(page)).toBe(700)
   await expect(page.getByText(/filler 23/).first()).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('Author', { exact: true })).toBeVisible()
-  await expect(page.getByText('SHA', { exact: true })).toBeVisible()
-  await expect(page.getByText('Date', { exact: true })).toBeVisible()
 
   const scroll = page.getByTestId('history-scroll')
   await scroll.evaluate((element) => {
@@ -123,16 +122,19 @@ test('keeps the Author / SHA / Date columns legible on a wide graph while scroll
 
   const mergeRow = page.getByTestId('commit-row').filter({ hasText: 'wide octopus merge' })
   await expect(mergeRow).toBeVisible({ timeout: 10_000 })
+  await expect(mergeRow.getByTestId('commit-row-meta')).toHaveCount(0)
+  await expect(mergeRow.getByText('Test', { exact: true })).toBeVisible()
 
   const dateCell = mergeRow.locator('time')
   await expect(dateCell).toBeVisible()
-  await expect(mergeRow.getByText('Test', { exact: true })).toBeVisible()
 
   const containerBox = await scroll.boundingBox()
   const dateBox = await dateCell.boundingBox()
-  if (!containerBox || !dateBox) {
-    throw new Error('expected bounding boxes for the scroll container and date cell')
+  const rowBox = await mergeRow.boundingBox()
+  if (!containerBox || !dateBox || !rowBox) {
+    throw new Error('expected bounding boxes for the scroll container, row and date cell')
   }
+  expect(Math.round(rowBox.height)).toBe(30)
   expect(dateBox.x + dateBox.width).toBeLessThanOrEqual(containerBox.x + containerBox.width + 1)
   expect(dateBox.x).toBeGreaterThanOrEqual(containerBox.x)
 })
@@ -148,13 +150,7 @@ test('opens the row context menu when right-clicking over the pinned metadata', 
 
   const dateCell = mergeRow.locator('time')
   await expect(dateCell).toBeVisible({ timeout: 10_000 })
-  const dateBox = await dateCell.boundingBox()
-  if (!dateBox) {
-    throw new Error('expected a bounding box for the date cell')
-  }
-  await page.mouse.click(dateBox.x + dateBox.width / 2, dateBox.y + dateBox.height / 2, {
-    button: 'right'
-  })
+  await dateCell.click({ button: 'right' })
 
   await expect(page.getByRole('menuitem', { name: 'Copy SHA' })).toBeVisible({ timeout: 10_000 })
 })
@@ -178,6 +174,7 @@ test('typing in the commit filter dims non-matching rows without removing them',
   await expect(betaRow).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText(/3 commits/)).toBeVisible({ timeout: 10_000 })
 
+  await page.getByRole('button', { name: 'Filter commits', exact: true }).click()
   await page.getByRole('textbox', { name: 'Filter commits' }).fill('alpha')
 
   await expect(alphaRow).toHaveCSS('opacity', '1', { timeout: 10_000 })

@@ -269,10 +269,18 @@ export function drawMergeGlyph(
   rowMid: number,
   glyph: 'collapsed' | 'expanded',
   color: string,
+  bgColor: string,
   metrics: GraphMetrics
 ): void {
   ctx.globalAlpha = 1
+  ctx.beginPath()
+  ctx.arc(dotX, rowMid, metrics.mergeGlyphRadius, 0, Math.PI * 2)
+  ctx.fillStyle = bgColor
+  ctx.fill()
   ctx.strokeStyle = color
+  ctx.lineWidth = metrics.mergeStroke
+  ctx.stroke()
+  ctx.lineCap = 'round'
   ctx.lineWidth = metrics.mergeGlyphStroke
   ctx.beginPath()
   ctx.moveTo(dotX - metrics.mergeGlyphArm, rowMid)
@@ -282,4 +290,5 @@ export function drawMergeGlyph(
     ctx.lineTo(dotX, rowMid + metrics.mergeGlyphArm)
   }
   ctx.stroke()
+  ctx.lineCap = 'butt'
 }

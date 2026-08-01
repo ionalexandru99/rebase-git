@@ -4,7 +4,12 @@ import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RepoTab } from '@/app/RepoTab'
 import { renderApp, renderWithQuery } from '../../../test/render-app'
-import { mockBranchResponses, setupLogStream, sidecarMock } from '../../../test/setup'
+import {
+  mockBranchResponses,
+  setupLogStream,
+  setupRepoChanged,
+  sidecarMock
+} from '../../../test/setup'
 
 beforeEach(() => {
   setupLogStream()
@@ -804,7 +809,7 @@ describe('App — workspace (repo open)', () => {
       )
     })
 
-    await screen.findByText('Timeline')
+    await screen.findByRole('region', { name: 'Commits' })
     await waitFor(() => {
       expect(window.electronAPI.startLogStream).toHaveBeenCalledWith('/home/user/projects/my-app', {
         skip: 0,
@@ -961,18 +966,25 @@ describe('App — workspace (repo open)', () => {
     expect(stashApplyBody).toMatchObject({ index: 0, expectedOid: 'stash-oid-0' })
   })
 
-  it('defaults to the history view and swaps to the local-changes view from the topbar', async () => {
+  it('keeps the timeline and the detail pane on screen at once, with no view switcher', async () => {
     await renderWithRepo()
 
-    expect(await screen.findByText('Timeline')).toBeVisible()
     expect(await screen.findByText('Initial commit')).toBeVisible()
-    expect(screen.queryByText(/files · /)).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Commits' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Details' })).toBeInTheDocument()
+    expect(screen.getByTestId('status-dock')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'History' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Local changes' })).not.toBeInTheDocument()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: /Local changes/i }))
+  it('swaps the detail pane to the staging surface when the working copy is picked', async () => {
+    await renderWithRepo()
+    await screen.findByText('Initial commit')
+
+    fireEvent.click(screen.getByTestId('working-copy-row'))
 
     expect(await screen.findByText('4 files · 2 staged')).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Commit message' })).toBeVisible()
-    expect(screen.queryByText('Timeline')).not.toBeInTheDocument()
   })
 
   it('does not expose a Close repository control — closing the tab is the only exit', async () => {
@@ -1016,7 +1028,7 @@ describe('App — workspace (repo open)', () => {
     })
     stream.fireDone('/workspace/repo', false)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Local changes/i }))
+    fireEvent.click(await screen.findByTestId('working-copy-row'))
     await waitFor(() => {
       expect(screen.getByText('Working tree clean')).toBeInTheDocument()
     })
@@ -1057,7 +1069,7 @@ describe('App — workspace (repo open)', () => {
 
     renderApp()
     fireEvent.click(await screen.findByText('/workspace/repo'))
-    fireEvent.click(await screen.findByRole('button', { name: /Local changes/i }))
+    fireEvent.click(await screen.findByTestId('working-copy-row'))
 
     const amend = await screen.findByRole('checkbox', { name: 'Amend last commit' })
     expect(amend).toBeDisabled()
@@ -1159,7 +1171,7 @@ describe('App — workspace (repo open)', () => {
     expect(window.electronAPI.openRepo).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps inactive tab log streams up to date', async () => {
+  it('keeps a selected commit when an inactive tab finishes refreshing history', async () => {
     mockBaseAPI({
       workingDirectory: '/projects',
       scanRepos: ['/projects/repo-a', '/projects/repo-b']
@@ -1173,6 +1185,31 @@ describe('App — workspace (repo open)', () => {
     vi.mocked(sidecarMock.getStatus).mockResolvedValue(statusMock)
     mockBranchResponses(branchesMock)
     const stream = setupLogStream()
+    const repoChanged = setupRepoChanged()
+    const selectedCommit = {
+      ...sampleCommit,
+      hash: 'selected123',
+      message: 'Selected commit',
+      parents: [],
+      refs: ''
+    }
+    const headCommit = {
+      ...sampleCommit,
+      hash: 'head123',
+      message: 'Head commit',
+      parents: [selectedCommit.hash]
+    }
+    vi.mocked(sidecarMock.getCommitDetail).mockImplementation(async (_repoPath, sha) => ({
+      _tag: 'Ok',
+      detail: {
+        sha,
+        author: { name: 'Jane Doe', email: 'jane@example.com' },
+        authorDate: sampleCommit.date,
+        subject: sha === selectedCommit.hash ? selectedCommit.message : headCommit.message,
+        body: '',
+        files: []
+      }
+    }))
 
     renderApp()
 
@@ -1185,6 +1222,17 @@ describe('App — workspace (repo open)', () => {
       })
     })
     await screen.findByTitle('main')
+    stream.fire({ repoPath: '/projects/repo-a', commits: [headCommit, selectedCommit] })
+    stream.fireDone('/projects/repo-a')
+
+    const selectedRow = await screen.findByText(selectedCommit.message)
+    fireEvent.click(selectedRow.closest('[data-testid="commit-row"]') as HTMLElement)
+    await waitFor(() => {
+      expect(selectedRow.closest('[data-testid="commit-row"]')).toHaveAttribute(
+        'data-selected',
+        'true'
+      )
+    })
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     const repoBPickerRow = (await screen.findAllByText('/projects/repo-b'))
@@ -1199,15 +1247,31 @@ describe('App — workspace (repo open)', () => {
       })
     })
 
+    repoChanged.fire({ repoPath: '/projects/repo-a', kind: 'refs' })
+    await waitFor(() => {
+      const repoAStreams = vi
+        .mocked(window.electronAPI.startLogStream)
+        .mock.calls.filter(([repoPath]) => repoPath === '/projects/repo-a')
+      expect(repoAStreams).toHaveLength(2)
+    })
     stream.fire({
       repoPath: '/projects/repo-a',
-      commits: [{ ...sampleCommit, hash: 'hidden123', message: 'Hidden tab commit' }]
+      commits: [{ ...headCommit, hash: 'hidden123', message: 'Hidden tab commit' }, selectedCommit]
     })
     stream.fireDone('/projects/repo-a')
 
     fireEvent.click(screen.getByRole('tab', { name: /repo-a/i }))
 
     expect(await screen.findByText('Hidden tab commit')).toBeVisible()
+    const restoredSelectedRow = screen
+      .getAllByTestId('commit-row')
+      .find((row) => row.textContent?.includes(selectedCommit.message))
+    expect(restoredSelectedRow).toHaveAttribute('data-selected', 'true')
+    await waitFor(() => {
+      expect(screen.getByRole('region', { name: 'Details' })).toHaveTextContent(
+        selectedCommit.message
+      )
+    })
   })
 
   it('switches to the existing tab instead of loading the repo twice', async () => {

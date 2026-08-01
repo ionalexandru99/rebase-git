@@ -1,8 +1,10 @@
 import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useState } from 'react'
+import { type ReactElement, useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
 import { parseRefs } from '@/features/history/graph/refs'
+import { refBadgeColor } from '@/features/history/ref-colors'
 import {
   collectTimelineTips,
   computeBranchFilterSet,
@@ -10,19 +12,28 @@ import {
   refFilterKey
 } from '@/features/history/selectors'
 import type { GitLog, GitLogEntry } from '@/types'
+import { resizeObserverMock, sidecarMock } from '../../../../test/setup'
 import { HistoryPanel } from '..'
 
-const historyHeaderRender = vi.hoisted(() => vi.fn())
+const canvasRender = vi.hoisted(() => vi.fn())
 
-vi.mock('@/features/history/HistoryHeader', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/features/history/HistoryHeader')>()
+vi.mock('@/features/history/CommitGraphCanvas', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/history/CommitGraphCanvas')>()
   return {
-    HistoryHeader: (props: Parameters<typeof actual.HistoryHeader>[0]) => {
-      historyHeaderRender()
-      return actual.HistoryHeader(props)
+    CommitGraphCanvas: (props: Parameters<typeof actual.CommitGraphCanvas>[0]) => {
+      canvasRender(props)
+      return actual.CommitGraphCanvas(props)
     }
   }
 })
+
+function lastCanvasProps() {
+  return canvasRender.mock.lastCall?.[0] as {
+    metrics: { rowHeight: number }
+    paddingStart?: number
+    headRow?: number
+  }
+}
 
 interface PanelOptions {
   loading?: boolean
@@ -32,6 +43,8 @@ interface PanelOptions {
   remoteBranches?: string[]
   repoPath?: string
   currentBranch?: string
+  onSelectWorkingCopy?: () => void
+  workingCopySelected?: boolean
 }
 
 function filterCommits(
@@ -50,6 +63,14 @@ function filterCommits(
   return commits.filter((commit) => reachable.has(commit.hash))
 }
 
+function withQuery(ui: ReactElement) {
+  return (
+    <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+      {ui}
+    </QueryProvider>
+  )
+}
+
 function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
   const visibleBranchRefs =
     options.visibleBranchRefs ??
@@ -57,17 +78,19 @@ function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
   const remoteBranches = options.remoteBranches ?? ['origin/main']
 
   return render(
-    <HistoryPanel
-      log={log}
-      loading={options.loading ?? false}
-      hasMore={options.hasMore}
-      onLoadMore={options.onLoadMore}
-      visibleBranchRefs={visibleBranchRefs}
-      filteredCommits={filterCommits(log, visibleBranchRefs, remoteBranches)}
-      remoteBranches={remoteBranches}
-      repoPath={options.repoPath}
-      currentBranch={options.currentBranch}
-    />
+    withQuery(
+      <HistoryPanel
+        log={log}
+        loading={options.loading ?? false}
+        hasMore={options.hasMore}
+        onLoadMore={options.onLoadMore}
+        filteredCommits={filterCommits(log, visibleBranchRefs, remoteBranches)}
+        repoPath={options.repoPath}
+        currentBranch={options.currentBranch}
+        onSelectWorkingCopy={options.onSelectWorkingCopy}
+        workingCopySelected={options.workingCopySelected}
+      />
+    )
   )
 }
 
@@ -88,6 +111,13 @@ describe('HistoryPanel', () => {
 
     expect(screen.getByText('No commits yet')).toBeInTheDocument()
     expect(screen.getByText(/Make your first commit/)).toBeInTheDocument()
+  })
+
+  it('keeps the working copy reachable while the timeline is still empty', () => {
+    renderPanel({ all: [], loadedCount: 0 })
+
+    expect(screen.getByText('No commits yet')).toBeInTheDocument()
+    expect(screen.getByTestId('working-copy-row')).toBeInTheDocument()
   })
 
   it('shows the empty state when log is null', () => {
@@ -115,7 +145,6 @@ describe('HistoryPanel', () => {
       loadedCount: 2
     })
 
-    expect(screen.getByText('2 commits · 1 branch visible')).toBeInTheDocument()
     expect(screen.getByText('Add support for sparse checkouts')).toBeInTheDocument()
     expect(screen.getByText('Refactor commit panel')).toBeInTheDocument()
     expect(screen.getByText('1234567')).toBeInTheDocument()
@@ -125,37 +154,160 @@ describe('HistoryPanel', () => {
     expect(screen.getByText('AS')).toBeInTheDocument()
   })
 
-  it('renders metadata column headers and drops the Subject column', () => {
+  it('re-pitches its rows when its own container crosses a mode boundary', () => {
+    renderPanel(
+      { all: [entry({ hash: 'aaa', message: 'only commit' })], loadedCount: 1 },
+      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]) }
+    )
+
+    expect(screen.getByTestId('commit-row')).toHaveStyle({ height: '44px' })
+
+    resizeObserverMock.setContentRect({ width: 900 })
+
+    expect(screen.getByTestId('commit-row')).toHaveStyle({ height: '30px' })
+  })
+
+  it('fills in the churn counts for the rows on screen', async () => {
+    sidecarMock.getCommitStats.mockResolvedValue({
+      _tag: 'Ok',
+      stats: [{ sha: 'aaa', additions: 7, deletions: 2 }]
+    })
+
+    renderPanel(
+      { all: [entry({ hash: 'aaa', message: 'only commit' })], loadedCount: 1 },
+      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]), repoPath: '/repo/churn' }
+    )
+
+    expect(await screen.findByText('+7')).toBeInTheDocument()
+    expect(screen.getByText('−2')).toBeInTheDocument()
+    expect(sidecarMock.getCommitStats).toHaveBeenCalledWith('/repo/churn', ['aaa'])
+  })
+
+  it('pins a working-copy row above the first commit at a fixed height in every mode', () => {
+    renderPanel(
+      { all: [entry({ hash: 'aaa', message: 'only commit' })], loadedCount: 1 },
+      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]) }
+    )
+
+    expect(screen.getByTestId('working-copy-row')).toHaveStyle({ height: '44px' })
+    expect(screen.getByTestId('commit-row')).toHaveStyle({ top: '44px' })
+
+    resizeObserverMock.setContentRect({ width: 900 })
+
+    expect(screen.getByTestId('working-copy-row')).toHaveStyle({ height: '44px' })
+    expect(screen.getByTestId('commit-row')).toHaveStyle({ top: '44px' })
+  })
+
+  it('reads the working tree onto the pinned row', async () => {
+    sidecarMock.getStatus.mockResolvedValue({
+      _tag: 'Ok',
+      status: {
+        current: 'main',
+        modified: [],
+        staged: [],
+        not_added: [],
+        conflicted: [],
+        deleted: [],
+        created: [],
+        renamed: [],
+        files: [
+          { path: 'a.ts', index: 'M', working_dir: ' ' },
+          { path: 'b.ts', index: ' ', working_dir: 'M' },
+          { path: 'c.ts', index: '?', working_dir: '?' }
+        ]
+      }
+    })
+    sidecarMock.getWorkingTreeStats.mockResolvedValue({ _tag: 'Ok', additions: 12, deletions: 4 })
+
+    renderPanel(
+      { all: [entry({ hash: 'aaa', message: 'only commit' })], loadedCount: 1 },
+      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]), repoPath: '/repo/wc' }
+    )
+
+    expect(await screen.findByText('1 staged · 2 unstaged')).toBeInTheDocument()
+    expect(screen.getByTestId('working-copy-churn')).toHaveTextContent('+12')
+    expect(screen.getByTestId('working-copy-churn')).toHaveTextContent('−4')
+  })
+
+  it('hands the working copy to its owner when clicked', () => {
+    const onSelectWorkingCopy = vi.fn()
+    renderPanel(
+      { all: [entry({ hash: 'aaa', message: 'only commit' })], loadedCount: 1 },
+      {
+        visibleBranchRefs: new Set([refFilterKey('local', 'main')]),
+        onSelectWorkingCopy,
+        workingCopySelected: true
+      }
+    )
+
+    const pinned = screen.getByTestId('working-copy-row')
+    expect(pinned).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.click(pinned)
+
+    expect(onSelectWorkingCopy).toHaveBeenCalledTimes(1)
+  })
+
+  it('hands the graph the same pitch as the rows, offset by the pinned row', () => {
     renderPanel(
       {
-        all: [entry({ hash: 'aaa', message: 'only commit' })],
+        all: [
+          entry({ hash: 'aaa', message: 'tip', refs: 'HEAD -> main', parents: ['bbb'] }),
+          entry({ hash: 'bbb', message: 'root', refs: '' })
+        ],
+        loadedCount: 2
+      },
+      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]) }
+    )
+
+    expect(lastCanvasProps().metrics.rowHeight).toBe(44)
+    expect(lastCanvasProps().paddingStart).toBe(44)
+    expect(lastCanvasProps().headRow).toBe(0)
+
+    resizeObserverMock.setContentRect({ width: 900 })
+
+    expect(screen.getAllByTestId('commit-row')[0]).toHaveStyle({ height: '30px' })
+    expect(lastCanvasProps().metrics.rowHeight).toBe(30)
+    expect(lastCanvasProps().paddingStart).toBe(44)
+  })
+
+  it('keeps the topmost commit anchored when the pitch changes under it', () => {
+    renderPanel(
+      {
+        all: Array.from({ length: 200 }, (_unused, index) =>
+          entry({
+            hash: `anchor${index}`,
+            message: `anchor-${index}`,
+            parents: index < 199 ? [`anchor${index + 1}`] : [],
+            refs: index === 0 ? 'main' : ''
+          })
+        ),
+        loadedCount: 200
+      },
+      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]), repoPath: '/repo/anchor' }
+    )
+    const scroller = screen.getByTestId('history-scroll')
+    scroller.scrollTop = 44 + 44 * 10
+    fireEvent.scroll(scroller)
+
+    resizeObserverMock.setContentRect({ width: 900 })
+
+    expect(screen.getByTestId('history-scroll').scrollTop).toBe(44 + 30 * 10)
+  })
+
+  it('carries its columns in the rows themselves, with no header strip above them', () => {
+    renderPanel(
+      {
+        all: [entry({ hash: 'abcdef1234567890', message: 'only commit' })],
         loadedCount: 1
       },
       { visibleBranchRefs: new Set([refFilterKey('local', 'main')]) }
     )
 
-    expect(screen.getByText('Author')).toBeInTheDocument()
-    expect(screen.getByText('SHA')).toBeInTheDocument()
-    expect(screen.getByText('Date')).toBeInTheDocument()
-    expect(screen.queryByText('Subject')).not.toBeInTheDocument()
-  })
-
-  it('uses singular copy for one commit', () => {
-    renderPanel(
-      {
-        all: [entry({ hash: 'aaa', message: 'one', author_name: 'Solo' })],
-        loadedCount: 1
-      },
-      { visibleBranchRefs: new Set([refFilterKey('local', 'main')]) }
-    )
-
-    expect(screen.getByText('1 commit · 1 branch visible')).toBeInTheDocument()
-  })
-
-  it('shows the loading badge', () => {
-    renderPanel({ all: [], loadedCount: 0 }, { loading: true })
-
-    expect(screen.getByText('Loading')).toBeInTheDocument()
+    expect(screen.queryByText('Author')).not.toBeInTheDocument()
+    expect(screen.queryByText('SHA')).not.toBeInTheDocument()
+    expect(screen.queryByText('Date')).not.toBeInTheDocument()
+    expect(screen.getByTestId('commit-row')).toHaveTextContent('abcdef1')
   })
 
   it('shows streamed commits without skeleton while history is still loading', () => {
@@ -168,7 +320,6 @@ describe('HistoryPanel', () => {
     )
 
     expect(screen.getByText('first streamed commit')).toBeInTheDocument()
-    expect(screen.getByText('Loading')).toBeInTheDocument()
     expect(screen.queryByLabelText('Loading commit history')).not.toBeInTheDocument()
   })
 
@@ -189,30 +340,31 @@ describe('HistoryPanel', () => {
     expect(screen.getByText('v1.0')).toBeInTheDocument()
   })
 
-  it('uses the graph lane color for visible refs and their commit badges', () => {
+  it('tints every ref badge by its own branch name, so co-located refs stay distinct', () => {
     renderPanel({
       all: [
         entry({
           hash: 'aaa',
           message: 'tip commit',
-          refs: `HEAD -> main${GIT_LOG_REF_SEPARATOR}origin/main`
+          refs: `HEAD -> main${GIT_LOG_REF_SEPARATOR}feature/streaming`
         })
       ],
       loadedCount: 1
     })
 
-    const visibleMain = screen.getByText('Visible:').closest('button')
-    const mainBadge = screen.getByTitle('main')
-    expect(visibleMain).toHaveStyle({ color: '#7c8cff' })
-    expect(mainBadge).toHaveStyle({ color: '#7c8cff' })
+    const mainColor = refBadgeColor('main')
+    const streamingColor = refBadgeColor('feature/streaming', [mainColor])
+    expect(screen.getByTitle('main')).toHaveStyle({ color: mainColor })
+    expect(screen.getByTitle('feature/streaming')).toHaveStyle({ color: streamingColor })
+    expect(mainColor).not.toBe(streamingColor)
   })
 
-  it('marks responsive metadata columns so compact history can hide them', () => {
+  it('sheds row detail as its container narrows, one mode at a time', () => {
     renderPanel({
       all: [
         entry({
           hash: 'abcdef1234567890',
-          date: '2026-07-21T09:42:00.000Z',
+          author_name: 'Jane Doe',
           message: 'tip commit',
           refs: 'main'
         })
@@ -220,54 +372,19 @@ describe('HistoryPanel', () => {
       loadedCount: 1
     })
 
-    expect(screen.getByText('SHA')).toHaveAttribute('data-history-column', 'sha')
-    expect(screen.getByText('Date')).toHaveAttribute('data-history-column', 'date')
-    const commitRow = screen.getByTestId('commit-row')
-    expect(commitRow.querySelector('[data-history-column="sha"]')).toHaveTextContent('abcdef1')
-    expect(commitRow.querySelector('[data-history-column="date"]')).not.toBeEmptyDOMElement()
-  })
+    resizeObserverMock.setContentRect({ width: 900 })
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument()
+    expect(screen.getByText('abcdef1')).toBeInTheDocument()
 
-  it('nests every responsive column inside the history panel scope', () => {
-    const { container } = renderPanel({
-      all: [
-        entry({
-          hash: 'abcdef1234567890',
-          date: '2026-07-21T09:42:00.000Z',
-          message: 'tip commit',
-          refs: 'main'
-        })
-      ],
-      loadedCount: 1
-    })
+    resizeObserverMock.setContentRect({ width: 560 })
+    expect(screen.queryByText('Jane Doe')).not.toBeInTheDocument()
+    expect(screen.getByText('JD')).toBeInTheDocument()
+    expect(screen.getByText('abcdef1')).toBeInTheDocument()
 
-    const panel = container.querySelector('[data-history-panel]')
-    expect(panel).not.toBeNull()
-    const columns = [...container.querySelectorAll('[data-history-column]')]
-    expect(columns.length).toBeGreaterThan(0)
-    for (const column of columns) {
-      expect(panel?.contains(column)).toBe(true)
-    }
-  })
-
-  it('leaves refs without a laid out tip uncolored so they stay visually unresolved', () => {
-    renderPanel(
-      {
-        all: [entry({ hash: 'aaa', message: 'tip commit', refs: 'main' })],
-        loadedCount: 1
-      },
-      {
-        visibleBranchRefs: new Set([
-          refFilterKey('local', 'main'),
-          refFilterKey('local', 'not-loaded')
-        ]),
-        remoteBranches: []
-      }
-    )
-
-    const unresolved = screen.getByText('not-loaded').closest('button')
-    expect(unresolved?.style.color).toBe('var(--muted-foreground)')
-    const resolved = screen.getByText('Visible:').closest('button')
-    expect(resolved).toHaveStyle({ color: '#7c8cff' })
+    resizeObserverMock.setContentRect({ width: 100 })
+    expect(screen.queryByText('tip commit')).not.toBeInTheDocument()
+    expect(screen.queryByText('abcdef1')).not.toBeInTheDocument()
+    expect(screen.getByTestId('commit-row')).toBeInTheDocument()
   })
 
   it('renders complete branch and tag badges when their names contain commas', () => {
@@ -328,26 +445,6 @@ describe('HistoryPanel', () => {
     expect(screen.queryByText('commit-9999')).not.toBeInTheDocument()
   })
 
-  it('does not rerender the full panel header on scroll', () => {
-    const all = Array.from({ length: 500 }, (_unused, index) =>
-      entry({
-        hash: `render-${index}`,
-        message: `render-${index}`,
-        parents: index < 499 ? [`render-${index + 1}`] : [],
-        refs: index === 0 ? 'main' : ''
-      })
-    )
-    renderPanel({ all, loadedCount: all.length })
-    const scroller = screen.getByTestId('history-scroll')
-    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 320 })
-    historyHeaderRender.mockClear()
-
-    scroller.scrollTop = 640
-    fireEvent.scroll(scroller)
-
-    expect(historyHeaderRender).not.toHaveBeenCalled()
-  })
-
   it('marks merge commits (parents.length >= 2) with a merge indicator', () => {
     renderPanel({
       all: [
@@ -379,34 +476,10 @@ describe('HistoryPanel', () => {
       }
     )
 
-    expect(screen.getByText('2 commits · 1 branch visible')).toBeInTheDocument()
+    expect(screen.getAllByTestId('commit-row')).toHaveLength(2)
     expect(screen.getByText('feature tip')).toBeInTheDocument()
     expect(screen.getByText('shared base')).toBeInTheDocument()
     expect(screen.queryByText('main tip')).not.toBeInTheDocument()
-  })
-
-  it('keeps the same commit count when adding a branch already on main', () => {
-    const log = {
-      all: [
-        entry({
-          hash: 'm1',
-          message: 'main tip',
-          refs: `main${GIT_LOG_REF_SEPARATOR}origin/main`,
-          parents: ['f1']
-        }),
-        entry({ hash: 'f1', message: 'feature tip', refs: 'feature', parents: ['base'] }),
-        entry({ hash: 'base', message: 'shared base', parents: [] })
-      ],
-      loadedCount: 3
-    }
-    renderPanel(log, {
-      visibleBranchRefs: new Set([
-        refFilterKey('local', 'main'),
-        refFilterKey('remote', 'origin/main'),
-        refFilterKey('local', 'feature')
-      ])
-    })
-    expect(screen.getByText('3 commits · 2 branches visible')).toBeInTheDocument()
   })
 
   it('dims commits that are not reachable from the current local branch', () => {
@@ -442,7 +515,7 @@ describe('HistoryPanel', () => {
     })
   })
 
-  it('shows more-available copy when additional history can be loaded', () => {
+  it('offers a Load more affordance inline at the bottom of the list', () => {
     renderPanel(
       {
         all: [entry({ hash: 'a', message: 'first' }), entry({ hash: 'b', message: 'second' })],
@@ -451,8 +524,6 @@ describe('HistoryPanel', () => {
       { hasMore: true, onLoadMore: () => {} }
     )
 
-    expect(screen.getByText(/more available/)).toBeInTheDocument()
-    expect(screen.getByText(/2 loaded/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
   })
 
@@ -499,17 +570,17 @@ describe('HistoryPanel', () => {
     }
     const visibleBranchRefs = new Set([refFilterKey('local', 'main')])
     view.rerender(
-      <HistoryPanel
-        log={second}
-        loading={false}
-        loadingMore={false}
-        hasMore={true}
-        onLoadMore={onLoadMore}
-        visibleBranchRefs={visibleBranchRefs}
-        filteredCommits={filterCommits(second, visibleBranchRefs, [])}
-        remoteBranches={[]}
-        repoPath="/repo/paginated"
-      />
+      withQuery(
+        <HistoryPanel
+          log={second}
+          loading={false}
+          loadingMore={false}
+          hasMore={true}
+          onLoadMore={onLoadMore}
+          filteredCommits={filterCommits(second, visibleBranchRefs, [])}
+          repoPath="/repo/paginated"
+        />
+      )
     )
 
     await waitFor(() => expect(onLoadMore).toHaveBeenCalledTimes(2))
@@ -587,29 +658,28 @@ describe('HistoryPanel', () => {
     remembered.unmount()
 
     const shortLog = { all: [longLog.all[0]], loadedCount: 1 }
-    const visibleRefs = new Set([refFilterKey('local', 'main')])
     const view = render(
-      <HistoryPanel
-        log={shortLog}
-        loading={true}
-        repoPath={repoPath}
-        visibleBranchRefs={visibleRefs}
-        remoteBranches={[]}
-        filteredCommits={shortLog.all}
-      />
+      withQuery(
+        <HistoryPanel
+          log={shortLog}
+          loading={true}
+          repoPath={repoPath}
+          filteredCommits={shortLog.all}
+        />
+      )
     )
     const clampedScroller = screen.getByTestId('history-scroll')
     clampedScroller.scrollTop = 0
 
     view.rerender(
-      <HistoryPanel
-        log={longLog}
-        loading={true}
-        repoPath={repoPath}
-        visibleBranchRefs={visibleRefs}
-        remoteBranches={[]}
-        filteredCommits={longLog.all}
-      />
+      withQuery(
+        <HistoryPanel
+          log={longLog}
+          loading={true}
+          repoPath={repoPath}
+          filteredCommits={longLog.all}
+        />
+      )
     )
 
     expect(screen.getByTestId('history-scroll').scrollTop).toBe(320)
@@ -627,8 +697,6 @@ function CollapsibleHistory({ log }: { log: GitLog }) {
     <HistoryPanel
       log={log}
       loading={false}
-      remoteBranches={[]}
-      visibleBranchRefs={visibleBranchRefs}
       graphCommits={allCommits}
       timelineTips={tips}
       filteredCommits={filteredCommits}
@@ -663,7 +731,7 @@ describe('HistoryPanel merge collapse', () => {
   }
 
   it('hides side-branch commits until the merge dot is expanded, then restores on collapse', () => {
-    render(<CollapsibleHistory log={mergeLog} />)
+    render(withQuery(<CollapsibleHistory log={mergeLog} />))
 
     expect(screen.getAllByTestId('commit-row')).toHaveLength(4)
     expect(screen.queryByText('feature-two')).not.toBeInTheDocument()

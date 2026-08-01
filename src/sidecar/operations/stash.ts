@@ -19,6 +19,7 @@ interface ParsedStash {
   oid: string
   message: string
   branch: string
+  lastCommitAt?: string
 }
 
 function parseStashList(raw: string): ParsedStash[] {
@@ -27,18 +28,20 @@ function parseStashList(raw: string): ParsedStash[] {
     if (!line) {
       continue
     }
-    const [oid, ref, subject = ''] = line.split(STASH_FIELD_SEP)
+    const [oid, ref, subject = '', committerDate = ''] = line.split(STASH_FIELD_SEP)
     const indexMatch = ref.match(/^stash@\{(\d+)\}$/)
     if (!indexMatch) {
       continue
     }
     const subjectMatch = subject.match(/^(?:WIP on|On) ([^:]+): (.*)$/)
+    const lastCommitAt = committerDate.trim()
     stashes.push({
       index: Number(indexMatch[1]),
       ref,
       oid,
       branch: subjectMatch ? subjectMatch[1] : '',
-      message: subjectMatch ? subjectMatch[2] : subject
+      message: subjectMatch ? subjectMatch[2] : subject,
+      ...(lastCommitAt ? { lastCommitAt } : {})
     })
   }
   return stashes
@@ -50,7 +53,11 @@ export function stashList(
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     const raw = yield* tryGit(() =>
-      git.raw(['stash', 'list', `--format=%H${STASH_FIELD_SEP}%gd${STASH_FIELD_SEP}%gs`])
+      git.raw([
+        'stash',
+        'list',
+        `--format=%H${STASH_FIELD_SEP}%gd${STASH_FIELD_SEP}%gs${STASH_FIELD_SEP}%cI`
+      ])
     )
     return { stashes: parseStashList(raw) }
   })

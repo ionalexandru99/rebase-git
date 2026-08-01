@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import type { Page } from '@playwright/test'
 import {
   advanceRemote,
   commitSubjects,
@@ -10,8 +11,16 @@ import {
   openLocalChanges,
   porcelainStatus,
   stashEntries,
+  syncButton,
   test
 } from './fixtures'
+
+async function syncUntilBehind(page: Page): Promise<void> {
+  const sync = syncButton(page)
+  await expect(sync).toBeVisible({ timeout: 10_000 })
+  await sync.click()
+  await expect(sync).toContainText('↓1', { timeout: 15_000 })
+}
 
 const LOCAL_README = '# fixture\nlocal edit\n'
 const REMOTE_MESSAGE = 'teammate note'
@@ -32,10 +41,11 @@ test('a pull autostashes an overlapping local edit and surfaces the reapply conf
 
   await expect(page.getByRole('button', { name: 'main current' })).toBeVisible({ timeout: 10_000 })
   await openLocalChanges(page)
+  await syncUntilBehind(page)
 
   const toast = await harness.expectToast(
     { type: 'warning', title: 'Pulled, but your uncommitted changes conflicted' },
-    () => page.getByRole('button', { name: 'Pull', exact: true }).click()
+    () => syncButton(page).click()
   )
   expect(toast.description).toMatch(/kept stash/i)
 
@@ -71,9 +81,9 @@ test('a pull succeeds while an unrelated local edit is in the tree', async ({ ha
     timeout: 10_000
   })
 
-  await harness.expectToast({ type: 'success', title: 'Pulled' }, () =>
-    page.getByRole('button', { name: 'Pull', exact: true }).click()
-  )
+  await syncUntilBehind(page)
+
+  await harness.expectToast({ type: 'success', title: 'Pulled' }, () => syncButton(page).click())
 
   await openHistory(page)
   await expect(page.getByTestId('commit-row').filter({ hasText: REMOTE_MESSAGE })).toBeVisible({

@@ -141,7 +141,9 @@ describe('ConflictBanner — continue', () => {
     renderBanner({ conflicted: ['a.ts'], operation: operation({ kind: 'cherry-pick' }) })
 
     expect(screen.getByRole('button', { name: 'Continue cherry-pick' })).toBeDisabled()
-    expect(banner()).toHaveTextContent('Resolve and stage every file before you continue')
+    expect(banner()).toHaveTextContent(
+      '1 merge conflict — resolve a.ts, then stage it to continue.'
+    )
   })
 
   it('continues the operation when clicked', () => {
@@ -221,15 +223,39 @@ describe('ConflictBanner — legacy fallback (conflicts without an operation)', 
   it('describes a single conflict in the singular', () => {
     renderBanner({ conflicted: ['src/conflict.ts'] })
 
-    expect(banner()).toHaveTextContent('1 merge conflict')
-    expect(banner()).toHaveTextContent('Resolve the file, then stage it to continue')
+    expect(banner()).toHaveTextContent(
+      '1 merge conflict — resolve src/conflict.ts, then stage it to continue.'
+    )
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('agrees in number with the conflict count', () => {
     renderBanner({ conflicted: ['src/one.ts', 'src/two.ts'] })
 
-    expect(banner()).toHaveTextContent('2 merge conflicts')
-    expect(banner()).toHaveTextContent('Resolve the files, then stage them to continue')
+    expect(banner()).toHaveTextContent(
+      '2 merge conflicts — resolve src/one.ts, then stage it to continue.'
+    )
+  })
+})
+
+describe('ConflictBanner — conflict bar', () => {
+  it('marks itself as the conflict bar for the layout to hang off', () => {
+    renderBanner({ conflicted: ['src/one.ts'] })
+
+    expect(screen.getByTestId('conflict-bar')).toBe(banner())
+  })
+
+  it('names the first blocking file alongside an operation’s own controls', () => {
+    renderBanner({
+      conflicted: ['src/one.ts', 'src/two.ts'],
+      operation: operation({ kind: 'rebase-merge' })
+    })
+
+    expect(banner()).toHaveTextContent('Rebasing feature/login onto main')
+    expect(banner()).toHaveTextContent(
+      '2 merge conflicts — resolve src/one.ts, then stage it to continue.'
+    )
+    expect(screen.getByRole('button', { name: 'Continue rebase' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Abort rebase' })).toBeInTheDocument()
   })
 })

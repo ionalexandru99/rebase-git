@@ -11,6 +11,7 @@ import {
   ContextMenuTrigger
 } from '../../../components/ui/context-menu'
 import { AheadBehindBadge } from './AheadBehindBadge'
+import { RefFreshnessLabel } from './RefFreshnessLabel'
 
 interface LeafRowProps {
   row: RefLeafRow
@@ -112,7 +113,10 @@ export function LeafRow(props: LeafRowProps) {
           title={props.row.fullPath}
         >
           <span
-            className={cn('min-w-0 truncate text-left', props.row.isCurrent && 'font-semibold')}
+            className={cn(
+              'min-w-[3rem] flex-1 truncate text-left',
+              props.row.isCurrent && 'font-semibold'
+            )}
           >
             {props.row.name}
           </span>
@@ -125,6 +129,7 @@ export function LeafRow(props: LeafRowProps) {
             </span>
           ) : null}
           <AheadBehindBadge ahead={props.row.ahead} behind={props.row.behind} />
+          <RefFreshnessLabel lastCommitAt={props.row.lastCommitAt} />
         </ContextMenuTrigger>
 
         {showTimelineEye ? (

@@ -3,6 +3,9 @@ import { avatarColor, avatarInitials } from '@/features/repos/repo-avatar'
 import { cn } from '@/lib/utils'
 import type { TabDescriptor } from '../hooks/useTabs'
 
+export const REPO_RAIL_WIDTH = 44
+const RAIL_BUTTON_SIZE = 34
+
 interface RepoRailProps {
   tabs: TabDescriptor[]
   activeTabId: string
@@ -27,10 +30,14 @@ export function RepoRail(props: RepoRailProps) {
   }
 
   return (
-    <nav aria-label="Open repositories" className="drag-region flex min-h-0 flex-col bg-chrome">
+    <nav
+      aria-label="Open repositories"
+      style={{ width: `${REPO_RAIL_WIDTH}px` }}
+      className="drag-region flex min-h-0 flex-col bg-chrome"
+    >
       <div
         role="tablist"
-        className="scroll-host no-drag flex min-h-0 flex-1 flex-col items-center gap-[3px] overflow-y-auto overflow-x-hidden px-1 py-3"
+        className="scroll-host no-drag flex min-h-0 flex-1 flex-col items-center gap-[3px] overflow-y-auto overflow-x-hidden px-1 py-2"
       >
         {repoTabs.map((tab) => (
           <RepoTabButton
@@ -46,8 +53,9 @@ export function RepoRail(props: RepoRailProps) {
           aria-label="Open new tab"
           aria-pressed={activeIsBlank}
           onClick={openNew}
+          style={{ width: `${RAIL_BUTTON_SIZE}px`, height: `${RAIL_BUTTON_SIZE}px` }}
           className={cn(
-            'flex size-[46px] items-center justify-center rounded-[var(--r-lg)] text-[15px] text-muted-foreground transition-colors hover:bg-card-2 hover:text-foreground',
+            'flex shrink-0 items-center justify-center rounded-[var(--r-md)] text-[15px] text-muted-foreground transition-colors hover:bg-card-2 hover:text-foreground',
             activeIsBlank && 'bg-card-2 text-foreground'
           )}
         >
@@ -84,17 +92,18 @@ function RepoTabButton(props: RepoTabButtonProps) {
             props.onClose()
           }
         }}
+        style={{ width: `${RAIL_BUTTON_SIZE}px`, height: `${RAIL_BUTTON_SIZE}px` }}
         className={cn(
-          'flex size-[46px] items-center justify-center rounded-[var(--r-lg)] border transition-colors',
+          'flex shrink-0 items-center justify-center rounded-[var(--r-md)] border transition-colors',
           !loaded && !props.isActive && 'opacity-60',
           props.isActive
             ? 'border-2 border-primary p-0.5'
-            : 'border-transparent p-[3px] hover:border-border hover:bg-card-2'
+            : 'border-transparent p-[2px] hover:border-border hover:bg-card-2'
         )}
       >
         <span
           className={cn(
-            'flex size-full items-center justify-center rounded-[10px] text-[13px] font-bold',
+            'flex size-full items-center justify-center rounded-[7px] text-[11px] font-bold',
             loaded ? 'text-white' : 'bg-muted text-muted-foreground'
           )}
           style={loaded ? { background: avatarColor(colorKey) } : undefined}

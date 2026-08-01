@@ -73,6 +73,8 @@ function patchHash(patch: string): string {
 export function DiffPanel(props: DiffPanelProps) {
   const {
     status,
+    stageFile: stageFileOp,
+    unstageFile: unstageFileOp,
     stageHunk: stageHunkOp,
     unstageHunk: unstageHunkOp,
     discardHunk: discardHunkOp,
@@ -132,6 +134,7 @@ export function DiffPanel(props: DiffPanelProps) {
   const hunkActionsEnabled =
     isWorktree && !isConflict && !isBinary && (showsStagedSide || !isUntracked)
   const gutterEnabled = Boolean(hunkActionsEnabled || amendDrop)
+  const fileStagingEnabled = isWorktree && !isConflict && !isBinary && selectedFile !== null
 
   const parsed = useMemo(() => {
     if (patch === undefined || selectedFile === null) {
@@ -484,6 +487,17 @@ export function DiffPanel(props: DiffPanelProps) {
   const hasAnyHunks = hunks.length > 0
   const hasParsedContent = displayFiles.some((file) => file.hunks.length > 0)
 
+  const toggleFileStaged = () => {
+    if (!selectedFile) {
+      return
+    }
+    if (showsStagedSide) {
+      void unstageFileOp(selectedFile, props.selected?.renameSource)
+      return
+    }
+    void stageFileOp(selectedFile)
+  }
+
   return (
     <section className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
       {props.selected ? (
@@ -510,6 +524,15 @@ export function DiffPanel(props: DiffPanelProps) {
             </span>
           ) : null}
           <div className="flex-1" />
+          {fileStagingEnabled ? (
+            <button
+              type="button"
+              onClick={toggleFileStaged}
+              className="h-7 shrink-0 rounded-[var(--r-sm)] border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
+            >
+              {showsStagedSide ? 'Unstage file' : 'Stage file'}
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="border-b" />

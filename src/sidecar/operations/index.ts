@@ -40,6 +40,7 @@ export {
 } from './conflict-resolution'
 export { detectOperationState } from './operation-state'
 export { stashApply, stashDrop, stashList, stashPop, stashPush } from './stash'
+export { getCommitStats, getWorkingTreeStats } from './stats'
 export { fetchRepo, pullRepo, pushRepo } from './sync'
 export {
   discardAll,

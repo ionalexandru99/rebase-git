@@ -70,6 +70,10 @@ export function layoutGraph(topology: GraphTopology, reuse?: GraphLayoutReuse): 
     builder.maxLanes = Math.max(builder.maxLanes, railLanes)
   }
 
+  if (commitCount % CHECKPOINT_ROWS === 0) {
+    writeCheckpoint(builder, commitCount)
+  }
+
   return {
     commitCount,
     commitLane: builder.commitLane,

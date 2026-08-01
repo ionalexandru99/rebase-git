@@ -2,7 +2,7 @@ import { Context, Effect, ExecutionStrategy, Exit, Layer, Scope } from 'effect'
 import type { SimpleGit } from 'simple-git'
 import { type GitError, gitError, NotARepo, RepoNotOpen } from '../git/errors'
 import { getOrCreateGit, lookupGit, normalizeRepoPath } from '../git/instances'
-import { startBackgroundGit } from '../git/spawn'
+import { cancelRepoReads, openRepoReads, startBackgroundGit } from '../git/spawn'
 import { removeAbandonedAmendIndexes } from '../operations/amend-index'
 import { releaseFetchSemaphore, retainFetchSemaphore } from './fetch-semaphore'
 import { releaseRepoSemaphore, retainRepoSemaphore } from './lock'
@@ -112,6 +112,7 @@ function makeRepoSessions(): RepoSessionsService {
           return yield* Effect.fail(new NotARepo())
         }
         if (!scopes.has(key)) {
+          openRepoReads(key)
           yield* Effect.promise(async () => {
             const gitDir = (await git.revparse(['--absolute-git-dir'])).trim()
             await removeAbandonedAmendIndexes(gitDir)
@@ -140,6 +141,7 @@ function makeRepoSessions(): RepoSessionsService {
       Effect.gen(function* () {
         const key = normalizeRepoPath(repoPath)
         instances.delete(key)
+        yield* Effect.promise(() => cancelRepoReads(key))
         const scope = scopes.get(key)
         if (scope) {
           scopes.delete(key)

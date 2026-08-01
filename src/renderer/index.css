@@ -61,7 +61,6 @@
 }
 
 :root {
-  --history-grid-tail: 12rem 4.5rem 7.5rem;
   --radius: 0.625rem;
   --background: oklch(0.205 0 0);
   --foreground: oklch(0.96 0 0);
@@ -130,26 +129,6 @@
   --untracked-bg: oklch(0.32 0.035 245);
   --deleted-bg: oklch(0.32 0.035 25);
   --shadow: 0 12px 32px oklch(0 0 0 / 16%);
-}
-
-@media (max-width: 1100px) {
-  :root {
-    --history-grid-tail: 12rem 4.5rem;
-  }
-
-  [data-history-panel] [data-history-column="date"] {
-    display: none;
-  }
-}
-
-@media (max-width: 899px) {
-  :root {
-    --history-grid-tail: 10rem;
-  }
-
-  [data-history-panel] [data-history-column="sha"] {
-    display: none;
-  }
 }
 
 @layer base {

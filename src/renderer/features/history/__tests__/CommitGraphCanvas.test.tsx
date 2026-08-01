@@ -26,6 +26,25 @@ function chain(length: number): GitLogEntry[] {
   )
 }
 
+function expandedMergeHistory(): GitLogEntry[] {
+  const mergeRow = 120
+  const sideLength = 3
+  const commits: GitLogEntry[] = []
+  for (let index = 0; index < mergeRow; index++) {
+    commits.push(entry(`c${index}`, [`c${index + 1}`]))
+  }
+  commits.push(entry(`c${mergeRow}`, [`c${mergeRow + 1}`, 's0']))
+  for (let index = 0; index < sideLength; index++) {
+    commits.push(
+      entry(`s${index}`, [index < sideLength - 1 ? `s${index + 1}` : `c${mergeRow + 4}`])
+    )
+  }
+  for (let index = mergeRow + 1; index < 200; index++) {
+    commits.push(entry(`c${index}`, index < 199 ? [`c${index + 1}`] : []))
+  }
+  return commits
+}
+
 function graphOf(commits: GitLogEntry[]) {
   const topology = buildGraphTopology(commits)
   return { commits, topology, layout: layoutGraph(topology) }
@@ -53,6 +72,8 @@ interface CanvasProps {
   viewportHeight?: number
   visibleSet?: Set<string> | null
   rowCount?: number
+  paddingStart?: number
+  headRow?: number
 }
 
 function renderCanvas(props: CanvasProps) {
@@ -66,6 +87,8 @@ function renderCanvas(props: CanvasProps) {
       viewportHeight={props.viewportHeight ?? 400}
       visibleSet={props.visibleSet ?? null}
       rowCount={props.rowCount ?? props.graph.layout.commitCount}
+      paddingStart={props.paddingStart}
+      headRow={props.headRow}
     />
   )
 }
@@ -75,19 +98,40 @@ describe('CommitGraphCanvas', () => {
   let dotCount = 0
   let arcRadii: number[] = []
   let arcCenters: Array<{ x: number; y: number }> = []
+  let dashPatterns: number[][] = []
+  let segments: Array<{ startX: number; startY: number; endX: number; endY: number }> = []
+  let penX = 0
+  let penY = 0
 
   beforeEach(() => {
     strokeCount = 0
     dotCount = 0
     arcRadii = []
     arcCenters = []
+    dashPatterns = []
+    segments = []
+    penX = 0
+    penY = 0
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       setTransform: vi.fn(),
       clearRect: vi.fn(),
       beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      lineTo: vi.fn(),
-      bezierCurveTo: vi.fn(),
+      moveTo: vi.fn((x: number, y: number) => {
+        penX = x
+        penY = y
+      }),
+      lineTo: vi.fn((x: number, y: number) => {
+        segments.push({ startX: penX, startY: penY, endX: x, endY: y })
+        penX = x
+        penY = y
+      }),
+      bezierCurveTo: vi.fn(
+        (_c1x: number, _c1y: number, _c2x: number, _c2y: number, x: number, y: number) => {
+          segments.push({ startX: penX, startY: penY, endX: x, endY: y })
+          penX = x
+          penY = y
+        }
+      ),
       stroke: vi.fn(() => {
         strokeCount++
       }),
@@ -97,6 +141,9 @@ describe('CommitGraphCanvas', () => {
       }),
       fill: vi.fn(() => {
         dotCount++
+      }),
+      setLineDash: vi.fn((pattern: number[]) => {
+        dashPatterns.push(pattern)
       })
     } as unknown as CanvasRenderingContext2D)
   })
@@ -114,6 +161,53 @@ describe('CommitGraphCanvas', () => {
       expect(dotCount).toBeGreaterThan(0)
     })
     expect(dotCount).toBeLessThanOrEqual(7)
+  })
+
+  it('drops every row by the height of the pinned working-copy row', async () => {
+    const paddingStart = 44
+    render(
+      renderCanvas({
+        graph: graphOf(chain(5)),
+        scrollContainer: scroller(),
+        viewportHeight: METRICS.rowHeight * 5,
+        paddingStart
+      })
+    )
+
+    await vi.waitFor(() => {
+      expect(arcCenters.length).toBeGreaterThan(0)
+    })
+    expect(Math.min(...arcCenters.map((center) => center.y))).toBeCloseTo(
+      paddingStart + METRICS.rowHeight / 2,
+      5
+    )
+  })
+
+  it('runs a dashed stub from the pinned row into the HEAD dot', async () => {
+    render(
+      renderCanvas({
+        graph: graphOf(chain(5)),
+        scrollContainer: scroller(),
+        viewportHeight: METRICS.rowHeight * 5,
+        paddingStart: 44,
+        headRow: 1
+      })
+    )
+
+    await vi.waitFor(() => {
+      expect(dashPatterns.length).toBeGreaterThan(0)
+    })
+    expect(dashPatterns.some((pattern) => pattern.length > 0)).toBe(true)
+    expect(dashPatterns.at(-1)).toEqual([])
+  })
+
+  it('leaves the graph solid when nothing is pinned above it', async () => {
+    render(renderCanvas({ graph: graphOf(chain(5)), scrollContainer: scroller() }))
+
+    await vi.waitFor(() => {
+      expect(dotCount).toBeGreaterThan(0)
+    })
+    expect(dashPatterns).toEqual([])
   })
 
   it('draws the rows a live scroll reveals, without waiting for a re-render', async () => {
@@ -292,6 +386,61 @@ describe('CommitGraphCanvas', () => {
       expect(dotCount).toBeGreaterThan(0)
     })
     expect(dotCount).toBe(3)
+  })
+
+  it('joins every visible row to its parent row, across an expanded merge and a checkpoint', async () => {
+    const graph = graphOf(expandedMergeHistory())
+    const paddingStart = 44
+    const scrollTop = paddingStart + METRICS.rowHeight * 115
+    const viewportHeight = METRICS.rowHeight * 20
+    render(
+      renderCanvas({
+        graph,
+        scrollContainer: scroller({ scrollTop }),
+        viewportHeight,
+        paddingStart,
+        headRow: 0
+      })
+    )
+    await vi.waitFor(() => {
+      expect(arcCenters.length).toBeGreaterThan(0)
+    })
+
+    const rowOfDot = new Map<number, { x: number; y: number }>()
+    for (const center of arcCenters) {
+      const row = Math.round(
+        (center.y + scrollTop - paddingStart - METRICS.rowHeight / 2) / METRICS.rowHeight
+      )
+      rowOfDot.set(row, center)
+    }
+
+    const gaps: string[] = []
+    for (const [row, dot] of rowOfDot) {
+      const child = graph.commits[row]
+      const next = graph.commits[row + 1]
+      const below = rowOfDot.get(row + 1)
+      if (!next || !below || !child.parents.includes(next.hash)) {
+        continue
+      }
+      const leavesDot = segments.some(
+        (segment) =>
+          Math.abs(segment.startX - dot.x) < 0.01 &&
+          Math.abs(segment.startY - dot.y) < 0.01 &&
+          segment.endY >= dot.y + METRICS.rowHeight / 2 - 0.01
+      )
+      const reachesDot = segments.some(
+        (segment) =>
+          Math.abs(segment.endX - below.x) < 0.01 &&
+          Math.abs(segment.endY - below.y) < 0.01 &&
+          segment.startY <= below.y - METRICS.rowHeight / 2 + 0.01
+      )
+      if (!leavesDot || !reachesDot) {
+        gaps.push(`${child.hash} -> ${next.hash}`)
+      }
+    }
+
+    expect(rowOfDot.size).toBeGreaterThan(15)
+    expect(gaps).toEqual([])
   })
 
   it('never draws past the rows that have a valid layout', async () => {

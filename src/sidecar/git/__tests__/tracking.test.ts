@@ -3,8 +3,8 @@ import { parseLocalBranchRefs, parseRemoteAndTagRefs } from '../tracking'
 
 const SEP = '\x00'
 
-function localLine(name: string, head: ' ' | '*' = ' ', track = ''): string {
-  return `${name}${SEP}${head}${SEP}${track}`
+function localLine(name: string, head: ' ' | '*' = ' ', track = '', committerDate = ''): string {
+  return `${name}${SEP}${head}${SEP}${track}${SEP}${committerDate}`
 }
 
 describe('parseLocalBranchRefs', () => {
@@ -13,7 +13,20 @@ describe('parseLocalBranchRefs', () => {
     expect(parseLocalBranchRefs(raw)).toEqual({
       current: 'main',
       all: ['dev', 'main'],
-      tracking: {}
+      tracking: {},
+      lastCommitAt: {}
+    })
+  })
+
+  it('reads each branch tip committer date', () => {
+    const raw = [
+      localLine('main', '*', '', '2021-01-02T03:04:05+00:00'),
+      localLine('feature', ' ', '', '2022-06-07T08:09:10+00:00'),
+      ''
+    ].join('\n')
+    expect(parseLocalBranchRefs(raw).lastCommitAt).toEqual({
+      main: '2021-01-02T03:04:05+00:00',
+      feature: '2022-06-07T08:09:10+00:00'
     })
   })
 
@@ -50,7 +63,12 @@ describe('parseLocalBranchRefs', () => {
   })
 
   it('handles blank lines and empty output', () => {
-    expect(parseLocalBranchRefs('')).toEqual({ current: '', all: [], tracking: {} })
+    expect(parseLocalBranchRefs('')).toEqual({
+      current: '',
+      all: [],
+      tracking: {},
+      lastCommitAt: {}
+    })
     const raw = [
       '',
       localLine('main', '*', '[ahead 2]'),
@@ -64,7 +82,8 @@ describe('parseLocalBranchRefs', () => {
       tracking: {
         main: { ahead: 2, behind: 0 },
         feature: { ahead: 0, behind: 1 }
-      }
+      },
+      lastCommitAt: {}
     })
   })
 
@@ -73,41 +92,87 @@ describe('parseLocalBranchRefs', () => {
     expect(parseLocalBranchRefs(raw)).toEqual({
       current: '',
       all: ['feature/a/b/c'],
-      tracking: { 'feature/a/b/c': { ahead: 4, behind: 2 } }
+      tracking: { 'feature/a/b/c': { ahead: 4, behind: 2 } },
+      lastCommitAt: {}
     })
   })
 })
 
+function remoteOrTagLine(refname: string, symref = '', committerDate = '', peeled = ''): string {
+  return `${refname}${SEP}${symref}${SEP}${committerDate}${SEP}${peeled}`
+}
+
 describe('parseRemoteAndTagRefs', () => {
   it('splits remote branches and tags by ref prefix', () => {
     const raw = [
-      `refs/remotes/origin/feature${SEP}`,
-      `refs/remotes/origin/main${SEP}`,
-      `refs/tags/v1${SEP}`,
-      `refs/tags/v2${SEP}`,
+      remoteOrTagLine('refs/remotes/origin/feature'),
+      remoteOrTagLine('refs/remotes/origin/main'),
+      remoteOrTagLine('refs/tags/v1'),
+      remoteOrTagLine('refs/tags/v2'),
       ''
     ].join('\n')
     expect(parseRemoteAndTagRefs(raw)).toEqual({
       remotes: ['origin/feature', 'origin/main'],
-      tags: ['v1', 'v2']
+      tags: ['v1', 'v2'],
+      remoteLastCommitAt: {},
+      tagLastCommitAt: {}
+    })
+  })
+
+  it('reads each remote branch tip committer date', () => {
+    const raw = [
+      remoteOrTagLine('refs/remotes/origin/main', '', '2021-01-02T03:04:05+00:00'),
+      remoteOrTagLine('refs/remotes/origin/feature', '', '2022-06-07T08:09:10+00:00'),
+      ''
+    ].join('\n')
+    expect(parseRemoteAndTagRefs(raw).remoteLastCommitAt).toEqual({
+      'origin/main': '2021-01-02T03:04:05+00:00',
+      'origin/feature': '2022-06-07T08:09:10+00:00'
+    })
+  })
+
+  it('prefers the peeled committer date so annotated tags report their target commit', () => {
+    const raw = [
+      remoteOrTagLine('refs/tags/light', '', '2021-01-02T03:04:05+00:00'),
+      remoteOrTagLine('refs/tags/annotated', '', '', '2020-03-04T05:06:07+00:00'),
+      ''
+    ].join('\n')
+    expect(parseRemoteAndTagRefs(raw).tagLastCommitAt).toEqual({
+      light: '2021-01-02T03:04:05+00:00',
+      annotated: '2020-03-04T05:06:07+00:00'
     })
   })
 
   it('skips symbolic refs like origin/HEAD', () => {
     const raw = [
-      `refs/remotes/origin/HEAD${SEP}refs/remotes/origin/main`,
-      `refs/remotes/origin/main${SEP}`,
+      remoteOrTagLine('refs/remotes/origin/HEAD', 'refs/remotes/origin/main'),
+      remoteOrTagLine('refs/remotes/origin/main'),
       ''
     ].join('\n')
-    expect(parseRemoteAndTagRefs(raw)).toEqual({ remotes: ['origin/main'], tags: [] })
+    expect(parseRemoteAndTagRefs(raw)).toEqual({
+      remotes: ['origin/main'],
+      tags: [],
+      remoteLastCommitAt: {},
+      tagLastCommitAt: {}
+    })
   })
 
   it('keeps remote branch names that contain slashes intact', () => {
-    const raw = [`refs/remotes/upstream/feature/a/b${SEP}`, ''].join('\n')
-    expect(parseRemoteAndTagRefs(raw)).toEqual({ remotes: ['upstream/feature/a/b'], tags: [] })
+    const raw = [remoteOrTagLine('refs/remotes/upstream/feature/a/b'), ''].join('\n')
+    expect(parseRemoteAndTagRefs(raw)).toEqual({
+      remotes: ['upstream/feature/a/b'],
+      tags: [],
+      remoteLastCommitAt: {},
+      tagLastCommitAt: {}
+    })
   })
 
   it('returns empty lists for empty output', () => {
-    expect(parseRemoteAndTagRefs('')).toEqual({ remotes: [], tags: [] })
+    expect(parseRemoteAndTagRefs('')).toEqual({
+      remotes: [],
+      tags: [],
+      remoteLastCommitAt: {},
+      tagLastCommitAt: {}
+    })
   })
 })

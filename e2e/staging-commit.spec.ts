@@ -14,7 +14,8 @@ import {
   stagedFileRow,
   test,
   unstageFileFromRow,
-  unstagedFileRow
+  unstagedFileRow,
+  workingCopyRow
 } from './fixtures'
 
 test('stages a file from its row and commits through the UI, draining the tree into history', async ({
@@ -105,23 +106,28 @@ test('Stage all / Unstage all move whole groups and gate the Commit button', asy
   await expect(unstagedFileRow(page, 'note.txt')).toBeVisible()
   await expect(unstagedFileRow(page, 'second.txt')).toBeVisible()
 
-  const subtitle = page.getByText(/\d+ files.*\d+ staged/)
+  const workingCopyHeader = page.getByTestId('working-copy-header')
+  const subtitle = workingCopyHeader.getByText(/\d+ files.*\d+ staged/)
   await expect(subtitle).toHaveText(/3 files.*0 staged/)
 
   const message = page.getByRole('textbox', { name: 'Commit message' })
   const commitButton = page.getByRole('button', { name: /^Commit/ })
+  const fileList = page.getByTestId('status-file-scroll')
+  const headerStageAll = workingCopyHeader.getByRole('button', { name: 'Stage all', exact: true })
 
   await message.fill('msg')
   await expect(commitButton).toHaveText('Commit')
   await expect(commitButton).toBeDisabled()
+  await expect(headerStageAll).toBeEnabled()
 
-  await page.getByRole('button', { name: 'Stage all', exact: true }).click()
+  await fileList.getByRole('button', { name: 'Stage all', exact: true }).click()
 
   await expect(stagedFileRow(page, 'README.md')).toBeVisible({ timeout: 10_000 })
   await expect(stagedFileRow(page, 'note.txt')).toBeVisible()
   await expect(stagedFileRow(page, 'second.txt')).toBeVisible()
   await expect(subtitle).toHaveText(/3 files.*3 staged/)
-  await expect(page.getByRole('button', { name: 'Stage all', exact: true })).toHaveCount(0)
+  await expect(fileList.getByRole('button', { name: 'Stage all', exact: true })).toHaveCount(0)
+  await expect(headerStageAll).toBeDisabled()
   await expect(commitButton).toHaveText('Commit 3 files')
   await expect(commitButton).toBeEnabled()
 
@@ -131,18 +137,19 @@ test('Stage all / Unstage all move whole groups and gate the Commit button', asy
   await message.fill('msg')
   await expect(commitButton).toBeEnabled()
 
-  await page.getByRole('button', { name: 'Unstage all', exact: true }).click()
+  await fileList.getByRole('button', { name: 'Unstage all', exact: true }).click()
 
   await expect(unstagedFileRow(page, 'README.md')).toBeVisible({ timeout: 10_000 })
   await expect(unstagedFileRow(page, 'note.txt')).toBeVisible()
   await expect(unstagedFileRow(page, 'second.txt')).toBeVisible()
   await expect(subtitle).toHaveText(/3 files.*0 staged/)
-  await expect(page.getByRole('button', { name: 'Unstage all', exact: true })).toHaveCount(0)
+  await expect(fileList.getByRole('button', { name: 'Unstage all', exact: true })).toHaveCount(0)
+  await expect(headerStageAll).toBeEnabled()
   await expect(commitButton).toHaveText('Commit')
   await expect(commitButton).toBeDisabled()
 })
 
-test('selecting a modified file renders the diff and staging its hovered hunk carries the file over', async ({
+test('stages a hovered hunk from the detail pane and commits it through the one-line bar', async ({
   harness
 }) => {
   const repo = createFixtureRepo()
@@ -172,6 +179,14 @@ test('selecting a modified file renders the diff and staging its hovered hunk ca
       timeout: 10_000
     })
     .toBe(true)
+  await expect(workingCopyRow(page)).toContainText('1 staged · 0 unstaged', { timeout: 10_000 })
+
+  await page.getByRole('textbox', { name: 'Commit message' }).fill('publish the hunk')
+  await page.getByRole('button', { name: /^Commit 1 file$/ }).click()
+
+  await expect(workingCopyRow(page)).toContainText('No changes', { timeout: 10_000 })
+  expect(commitSubjects(repo)).toEqual(['publish the hunk', 'initial'])
+  expect(porcelainStatus(repo)).toEqual([])
 })
 
 test('lists a partially staged file in both groups, each row showing only its side', async ({

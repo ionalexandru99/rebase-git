@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createLaneWalker, seekLanes } from '@/features/history/graph/lane-walker'
 import {
   alignRowsToCheckpoint,
+  CHECKPOINT_ROWS,
   type GraphLayout,
   layoutGraph
 } from '@/features/history/graph/layout'
@@ -189,6 +190,12 @@ function longChain(total: number, from = 0): GitLogEntry[] {
   )
 }
 
+function stalledChain(total: number): GitLogEntry[] {
+  return Array.from({ length: total }, (_unused, index) =>
+    entry(`a${index}`, index === total - 6 ? [`a${index + 1}`, 'side'] : [`a${index + 1}`])
+  )
+}
+
 describe('layoutGraph reuse', () => {
   it('produces the same layout resuming from a checkpoint as in one pass', () => {
     const page1 = longChain(300)
@@ -213,6 +220,17 @@ describe('layoutGraph reuse', () => {
 
     expect(lanes(first)).toEqual(before)
     expect(first.layout.commitCount).toBe(300)
+  })
+
+  it('resumes from a checkpoint that lands on the last row of the reused layout', () => {
+    const page1 = stalledChain(CHECKPOINT_ROWS * 2)
+    const page2 = [...page1, entry('b0', ['b1']), entry('b1')]
+    const first = graphOf(page1)
+
+    const extended = relayout(first, page2)
+
+    expect(lanes(extended)).toEqual(lanes(graphOf(page2)))
+    expect(boundaries(extended)).toEqual(boundaries(graphOf(page2)))
   })
 
   it('rebuilds from scratch when no rows carry over', () => {

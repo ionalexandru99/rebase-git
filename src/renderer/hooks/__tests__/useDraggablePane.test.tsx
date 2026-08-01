@@ -42,6 +42,71 @@ describe('useDraggablePane persistence', () => {
     await waitFor(() => expect(undersized.result.current.size).toBe(200))
   })
 
+  it('keeps an in-flight drag instead of applying a late-arriving persisted size', async () => {
+    let resolveLoad: (state: { open: boolean; size: number }) => void = () => {}
+    const load = () =>
+      new Promise<{ open: boolean; size: number }>((resolve) => {
+        resolveLoad = resolve
+      })
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load })
+    )
+
+    act(() => {
+      result.current.onResizeStart(new MouseEvent('mousedown', { clientX: 0 }))
+    })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 100 }))
+    })
+    await act(async () => {
+      resolveLoad({ open: true, size: 300 })
+      await Promise.resolve()
+    })
+    act(() => {
+      window.dispatchEvent(new MouseEvent('mouseup'))
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.size).toBe(356)
+  })
+
+  it('reports itself unloaded until the persisted size arrives', async () => {
+    let resolveLoad: (state: { open: boolean; size: number }) => void = () => {}
+    const load = () =>
+      new Promise<{ open: boolean; size: number }>((resolve) => {
+        resolveLoad = resolve
+      })
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load })
+    )
+
+    expect(result.current.loaded).toBe(false)
+    await act(async () => {
+      resolveLoad({ open: true, size: 300 })
+      await Promise.resolve()
+    })
+    expect(result.current.loaded).toBe(true)
+  })
+
+  it('reports itself loaded immediately when there is nothing to load', () => {
+    const { result } = renderHook(() => useDraggablePane({ min: 200, max: 520, defaultSize: 256 }))
+
+    expect(result.current.loaded).toBe(true)
+  })
+
+  it('reports itself loaded after a failed load, so the pane stays usable', async () => {
+    const load = async () => {
+      throw new Error('prefs unavailable')
+    }
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 200, max: 520, defaultSize: 256, load, onLoadError: vi.fn() })
+    )
+
+    await waitFor(() => expect(result.current.loaded).toBe(true))
+  })
+
   it('reports a failed load and keeps the default size', async () => {
     const failure = new Error('prefs unavailable')
     const load = async () => {
@@ -94,6 +159,20 @@ describe('useDraggablePane', () => {
     expect(result.current.size).toBe(256)
     expect(result.current.isOpen).toBe(true)
     expect(save).toHaveBeenLastCalledWith({ open: true, size: 256 })
+  })
+
+  it('restores and persists the default size when a caller resets the pane directly', () => {
+    const save = vi.fn()
+    const { result } = renderHook(() =>
+      useDraggablePane({ min: 100, max: 600, defaultSize: 300, save })
+    )
+    drag(result.current.onResizeStart, { clientX: 300, clientY: 0 }, { clientX: 500, clientY: 0 })
+    expect(result.current.size).toBe(500)
+
+    act(() => result.current.reset())
+
+    expect(result.current.size).toBe(300)
+    expect(save).toHaveBeenLastCalledWith({ open: true, size: 300 })
   })
 
   it('keeps one reset listener when every render passes a new save identity', () => {

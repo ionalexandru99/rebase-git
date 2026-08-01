@@ -43,6 +43,8 @@ export interface IElectronAPI {
   setRefTreeToggles: (toggles: RefTreeToggles) => Promise<void>
   getPersistedTabs: () => Promise<PersistedTabs>
   setPersistedTabs: (state: PersistedTabs) => Promise<void>
+  getListPaneWidth: (repoPath: string) => Promise<number>
+  setListPaneWidth: (repoPath: string, width: number) => Promise<void>
   getPullDivergedStrategy: () => Promise<PullDivergedStrategy>
   setPullDivergedStrategy: (strategy: PullDivergedStrategy) => Promise<void>
   getWorkspaces: () => Promise<string[]>
@@ -92,6 +94,10 @@ const api: IElectronAPI = {
     ipcRenderer.invoke(Channel.setRefTreeToggles, toggles),
   getPersistedTabs: () => ipcRenderer.invoke(Channel.getPersistedTabs),
   setPersistedTabs: (state: PersistedTabs) => ipcRenderer.invoke(Channel.setPersistedTabs, state),
+  getListPaneWidth: (repoPath: string) =>
+    ipcRenderer.invoke(Channel.getListPaneWidth, { repoPath }),
+  setListPaneWidth: (repoPath: string, width: number) =>
+    ipcRenderer.invoke(Channel.setListPaneWidth, { repoPath, width }),
   getPullDivergedStrategy: () => ipcRenderer.invoke(Channel.getPullDivergedStrategy),
   setPullDivergedStrategy: (strategy: PullDivergedStrategy) =>
     ipcRenderer.invoke(Channel.setPullDivergedStrategy, strategy),

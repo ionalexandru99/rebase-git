@@ -297,7 +297,6 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
   const latest = useLatestRef({
     getOpenGeneration: () => openGenerationRef.current,
     getRepoPath: () => liveRepoPath.current,
-    isTabActive: () => tabActiveRef.current,
     setError,
     scheduleLogFlush,
     flushLogToStore
@@ -305,14 +304,8 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
 
   useEffect(() => {
     const unsubLog = window.electronAPI.onLogChunk((chunk) => {
-      const {
-        getOpenGeneration,
-        getRepoPath,
-        isTabActive,
-        scheduleLogFlush,
-        flushLogToStore,
-        setError
-      } = latest.current
+      const { getOpenGeneration, getRepoPath, scheduleLogFlush, flushLogToStore, setError } =
+        latest.current
       if (chunk.repoPath !== getRepoPath()) {
         return
       }
@@ -349,11 +342,9 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         if (chunk.hasMore !== undefined) {
           setLogUi('logHasMore', chunk.hasMore)
         }
+        flushLogToStore(getOpenGeneration(), getRepoPath())
         setLogUi('logLoading', false)
         setLogUi('logLoadingMore', false)
-        if (isTabActive()) {
-          flushLogToStore(getOpenGeneration(), getRepoPath())
-        }
       }
     })
     return () => {

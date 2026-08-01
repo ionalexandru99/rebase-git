@@ -13,7 +13,6 @@ function panelElement(overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}
       loading={overrides.loading ?? false}
       branch={overrides.branch ?? 'main'}
       stagedCount={overrides.stagedCount ?? 2}
-      ahead={overrides.ahead}
       onAmendChange={overrides.onAmendChange}
       droppedHeadPaths={overrides.droppedHeadPaths}
       droppedHeadHunks={overrides.droppedHeadHunks}
@@ -62,10 +61,54 @@ describe('CommitPanel', () => {
     expect(screen.getByRole('button', { name: /Committing/i })).toBeDisabled()
   })
 
-  it('shows the staged and ahead chips', () => {
-    renderPanel({ stagedCount: 4, ahead: 2 })
-    expect(screen.getByText('4 staged')).toBeInTheDocument()
-    expect(screen.getByText('↑2')).toBeInTheDocument()
+  it('names the current branch in a chip of its own', () => {
+    renderPanel({ branch: 'feature/ui' })
+
+    expect(screen.getByTestId('commit-branch-chip')).toHaveTextContent('feature/ui')
+  })
+
+  it('drops the staged and ahead chips the header and status dock already carry', () => {
+    renderPanel({ stagedCount: 4 })
+
+    expect(screen.queryByText('4 staged')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^↑\d/)).not.toBeInTheDocument()
+  })
+
+  it('starts as a single-line bar', () => {
+    renderPanel()
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('rows', '1')
+  })
+
+  it('grows for a multi-line message and shrinks back when it is cleared', () => {
+    renderPanel()
+    const textarea = screen.getByRole('textbox')
+
+    fireEvent.input(textarea, { target: { value: 'subject\n\nbody' } })
+    expect(textarea).toHaveAttribute('rows', '3')
+
+    fireEvent.input(textarea, { target: { value: '' } })
+    expect(textarea).toHaveAttribute('rows', '1')
+  })
+
+  it('caps how far the bar grows', () => {
+    renderPanel()
+    const textarea = screen.getByRole('textbox')
+
+    fireEvent.input(textarea, { target: { value: 'a\nb\nc\nd\ne\nf\ng\nh\ni\nj' } })
+
+    expect(Number(textarea.getAttribute('rows'))).toBeLessThanOrEqual(6)
+  })
+
+  it('does not commit on Enter, which types a newline instead', () => {
+    const onCommit = vi.fn().mockResolvedValue(true)
+    renderPanel({ onCommit })
+    const textarea = screen.getByRole('textbox')
+    fireEvent.input(textarea, { target: { value: 'a message' } })
+
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    expect(onCommit).not.toHaveBeenCalled()
   })
 
   it('invokes onCommit with the trimmed message and clears the textarea on success', async () => {

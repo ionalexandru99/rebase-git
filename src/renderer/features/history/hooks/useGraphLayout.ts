@@ -52,8 +52,10 @@ export function useGraphLayout(options: UseGraphLayoutOptions): GraphLayoutHandl
   const workerRows = useRef(0)
   const generation = useRef(0)
   const requestedTopology = useRef<GraphTopology>(EMPTY_TOPOLOGY)
+  const laidOutTopology = useRef<GraphTopology>(EMPTY_TOPOLOGY)
 
   const applyLayout = useCallback((layout: GraphLayout, topology: GraphTopology) => {
+    laidOutTopology.current = topology
     setHandle({ layout, topology, validRows: layout.commitCount, pending: false })
   }, [])
 
@@ -130,7 +132,7 @@ export function useGraphLayout(options: UseGraphLayoutOptions): GraphLayoutHandl
       dropWorker()
       generation.current += 1
       const topology = requestedTopology.current
-      layoutInline(topology, sharedTopologyRows(handleRef.current.topology, topology))
+      layoutInline(topology, sharedTopologyRows(laidOutTopology.current, topology))
     }
 
     return worker
@@ -151,6 +153,7 @@ export function useGraphLayout(options: UseGraphLayoutOptions): GraphLayoutHandl
       requestedTopology.current = EMPTY_TOPOLOGY
       if (previous.layout.commitCount > 0 || previous.pending) {
         generation.current += 1
+        laidOutTopology.current = EMPTY_TOPOLOGY
         setHandle(emptyHandle())
       }
       return
@@ -167,7 +170,7 @@ export function useGraphLayout(options: UseGraphLayoutOptions): GraphLayoutHandl
       return
     }
 
-    const carriedRows = sharedTopologyRows(previous.topology, topology)
+    const carriedRows = sharedTopologyRows(laidOutTopology.current, topology)
     requestedTopology.current = topology
 
     const worker = ensureWorker()

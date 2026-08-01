@@ -142,6 +142,7 @@ describe('RepoSessions session scope', () => {
         const fiber = yield* Effect.fork(withSessionScope(repoDir, probe))
         yield* Deferred.await(acquired)
         yield* closeSession(repoDir)
+        expect(released).toBe(true)
         yield* Deferred.succeed(held, undefined)
         yield* Fiber.join(fiber)
       })

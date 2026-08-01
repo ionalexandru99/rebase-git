@@ -1,3 +1,4 @@
+import { clampListPaneWidth, LIST_PANE_DEFAULT_WIDTH } from '@shared/list-layout'
 import type {
   GitLogEntry,
   GitStatus,
@@ -35,6 +36,7 @@ interface ManualState {
   branches: string[]
   commits: GitLogEntry[]
   onboardingComplete: boolean
+  listPaneWidths: Record<string, number>
   nextObjectId: number
   persistedTabs: { tabs: Array<string | null>; activeIndex: number }
   pullDivergedStrategy: 'rebase' | 'merge' | null
@@ -164,6 +166,7 @@ function createState(options: PlaywrightMcpElectronApiOptions): ManualState {
     branches: ['main', 'feature/streaming', 'fix/window-state'],
     commits: createManualCommits(options.historyCount ?? initialCommits.length),
     onboardingComplete,
+    listPaneWidths: {},
     nextObjectId: 1,
     persistedTabs: {
       tabs: [null],
@@ -504,6 +507,10 @@ export function createPlaywrightMcpElectronApi(
         tabs: [...persistedTabs.tabs],
         activeIndex: persistedTabs.activeIndex
       }
+    },
+    getListPaneWidth: async (repoPath) => state.listPaneWidths[repoPath] ?? LIST_PANE_DEFAULT_WIDTH,
+    setListPaneWidth: async (repoPath, width) => {
+      state.listPaneWidths[repoPath] = clampListPaneWidth(width)
     },
     getPullDivergedStrategy: async () => state.pullDivergedStrategy,
     setPullDivergedStrategy: async (strategy) => {

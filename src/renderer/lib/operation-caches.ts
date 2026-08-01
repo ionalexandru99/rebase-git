@@ -51,6 +51,8 @@ const OPERATION_CACHES = {
   getRemoteRefs: null,
   getDiff: null,
   getCommitDetail: null,
+  getCommitStats: null,
+  getWorkingTreeStats: null,
   stashList: null,
   streamLog: null,
   abortOperation: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],

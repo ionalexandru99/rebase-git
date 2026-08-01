@@ -1,9 +1,9 @@
 import { GitMergeIcon } from 'lucide-react'
 import { memo, useMemo } from 'react'
-import { computeGraphRailWidth, laneColor, laneX } from '@/features/history/graph/canvas'
+import { laneX } from '@/features/history/graph/canvas'
 import type { GraphMetrics } from '@/features/history/graph/metrics'
 import { parseRefs } from '@/features/history/graph/refs'
-import { formatCommitDate, initials } from '@/lib/format'
+import { formatCommitAge, initials } from '@/lib/format'
 import type { CommitAction } from '@/lib/git-actions'
 import { cn } from '@/lib/utils'
 import type { GitLogEntry } from '@/types'
@@ -15,25 +15,29 @@ import {
   ContextMenuTriggerArea
 } from '../../components/ui/context-menu'
 import type { SelectionModifiers } from './commit-selection'
-import { RefBadge } from './RefBadge'
+import type { CommitStat } from './hooks/useCommitStats'
+import { type HistoryListMode, modeIsSingleLine, modeShowsAuthorName } from './list-modes'
+import { RefBadge, refBadgeName } from './RefBadge'
+import { assignRefBadgeColors } from './ref-colors'
+import { singleLineGridTemplate } from './row-layout'
 import type { MergeGlyph } from './selectors'
 
 interface CommitRowProps {
   commit: GitLogEntry
   lane: number
-  railLanes: number
   metrics: GraphMetrics
+  mode: HistoryListMode
+  railWidth: number
+  stats?: CommitStat
   top: number
   dim: boolean
   offBranch: boolean
-  gridTail: string
   remotes: Record<string, string>
   remoteNames: Set<string>
   mergeGlyph?: MergeGlyph
   selected: boolean
   onToggleExpand?: (mergeHash: string) => void
   onSelect?: (sha: string, modifiers: SelectionModifiers) => void
-  onOpenDetails?: (sha: string) => void
   onCommitAction?: (action: CommitAction, sha: string, message: string) => void
 }
 
@@ -56,14 +60,57 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
     () => parseRefs(commit.refs, props.remoteNames),
     [commit.refs, props.remoteNames]
   )
-  const laneHex = laneColor(props.lane)
+  const badgeColors = useMemo(() => assignRefBadgeColors(refs.map(refBadgeName)), [refs])
   const rowOpacity = props.dim ? 0.35 : props.offBranch ? 0.6 : 1
   const subjectClass = props.offBranch ? 'text-muted-foreground' : 'text-foreground'
-  const railWidth = computeGraphRailWidth(props.railLanes, props.metrics)
+  const gridTemplate = singleLineGridTemplate(props.mode)
   const glyph = props.mergeGlyph
   const expandable = glyph === 'collapsed' || glyph === 'expanded'
   const act = (action: CommitAction) => props.onCommitAction?.(action, commit.hash, commit.message)
   const rowSurface = props.selected ? 'bg-[var(--brand-soft)]' : 'bg-card group-hover/row:bg-muted'
+
+  const subject = (
+    <span className="flex min-w-0 items-center gap-1 text-sm">
+      {isMerge ? <GitMergeIcon aria-hidden="true" className="size-3 shrink-0 text-green" /> : null}
+      {refs.map((parsedRef, refIndex) => (
+        <RefBadge
+          key={`${parsedRef.kind}:${parsedRef.label}`}
+          parsedRef={parsedRef}
+          badgeHex={badgeColors[refIndex]}
+          remotes={props.remotes}
+        />
+      ))}
+      <span className={cn('min-w-0 truncate', subjectClass)}>{commit.message}</span>
+    </span>
+  )
+  const avatar = (
+    <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground/80">
+      {initials(commit.author_name)}
+    </span>
+  )
+  const shortSha = (
+    <span className="truncate text-right text-xs tabular-nums text-muted-foreground">
+      {commit.hash.slice(0, 7)}
+    </span>
+  )
+  const churn = (
+    <span
+      data-testid="commit-row-churn"
+      className="flex shrink-0 items-center justify-end gap-1 text-xs tabular-nums"
+    >
+      {props.stats ? (
+        <>
+          <span className="text-add">{`+${props.stats.additions}`}</span>
+          <span className="text-del">{`−${props.stats.deletions}`}</span>
+        </>
+      ) : null}
+    </span>
+  )
+  const age = (
+    <time className="truncate text-right text-xs tabular-nums text-muted-foreground">
+      {formatCommitAge(commit.date, Date.now())}
+    </time>
+  )
 
   return (
     <ContextMenu>
@@ -76,7 +123,6 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
             range: event.shiftKey
           })
         }
-        onDoubleClick={() => props.onOpenDetails?.(commit.hash)}
         className="group/row absolute inset-x-0 z-10 select-none border-b"
         style={{
           top: `${props.top}px`,
@@ -106,59 +152,55 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
           />
         ) : null}
 
-        <span
-          className={cn(
-            'absolute inset-y-0 right-0 flex items-center gap-1 overflow-hidden pr-2 text-sm',
-            rowSurface
-          )}
-          style={{ left: `${railWidth}px` }}
-        >
-          <span className="sr-only">
-            {commitTopologyLabel(commit.parents.length, props.offBranch)}
-            {props.selected ? ', selected' : ''}
-          </span>
-          {isMerge ? (
-            <GitMergeIcon aria-hidden="true" className="size-3 shrink-0 text-green" />
-          ) : null}
-          {refs.map((parsedRef) => (
-            <RefBadge
-              key={`${parsedRef.kind}:${parsedRef.label}`}
-              parsedRef={parsedRef}
-              laneHex={laneHex}
-              remotes={props.remotes}
-            />
-          ))}
-          <span className={cn('min-w-0 truncate', subjectClass)}>{commit.message}</span>
+        <span className="sr-only">
+          {commitTopologyLabel(commit.parents.length, props.offBranch)}
+          {props.selected ? ', selected' : ''}
         </span>
 
-        <span
-          className={cn(
-            'pointer-events-none absolute inset-y-0 right-0 grid items-center gap-2',
-            rowSurface
-          )}
-          style={{ gridTemplateColumns: props.gridTail }}
-        >
-          <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-            <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground/80">
-              {initials(commit.author_name)}
+        {props.mode === 'index' ? null : modeIsSingleLine(props.mode) ? (
+          <div
+            data-testid="commit-row-content"
+            className={cn(
+              'absolute inset-y-0 right-0 grid items-center gap-2 overflow-hidden pr-3',
+              rowSurface
+            )}
+            style={{ left: `${props.railWidth}px`, gridTemplateColumns: gridTemplate }}
+          >
+            {subject}
+
+            <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+              {avatar}
+              {modeShowsAuthorName(props.mode) ? (
+                <span className="min-w-0 truncate">{commit.author_name}</span>
+              ) : null}
             </span>
-            <span className="min-w-0 truncate">{commit.author_name}</span>
-          </span>
 
-          <span
-            data-history-column="sha"
-            className="truncate text-xs tabular-nums text-muted-foreground"
+            {shortSha}
+            {age}
+            {churn}
+          </div>
+        ) : (
+          <div
+            data-testid="commit-row-content"
+            className={cn(
+              'absolute inset-y-0 right-0 flex flex-col justify-center gap-0.5 overflow-hidden pr-3',
+              rowSurface
+            )}
+            style={{ left: `${props.railWidth}px` }}
           >
-            {commit.hash.slice(0, 7)}
-          </span>
-
-          <time
-            data-history-column="date"
-            className="truncate pr-3 text-right text-xs tabular-nums text-muted-foreground"
-          >
-            {formatCommitDate(commit.date)}
-          </time>
-        </span>
+            {subject}
+            <span
+              data-testid="commit-row-meta"
+              className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+            >
+              {avatar}
+              <span className="min-w-0 truncate">{commit.author_name}</span>
+              {shortSha}
+              {age}
+              {churn}
+            </span>
+          </div>
+        )}
       </ContextMenuTriggerArea>
       <ContextMenuContent>
         <ContextMenuItem onSelect={() => act('branch-here')}>Create branch here</ContextMenuItem>

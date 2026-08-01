@@ -2,7 +2,14 @@ import type { AddressInfo } from 'node:net'
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
-import { createFixtureRepo, expect, gitIn, test } from './fixtures'
+import {
+  createFixtureRepo,
+  expect,
+  gitIn,
+  makeBranchAheadOfOrigin,
+  syncButton,
+  test
+} from './fixtures'
 
 async function startChallengingRemote(): Promise<{ url: string; close: () => Promise<void> }> {
   const server = http.createServer((_request, response) => {
@@ -28,20 +35,21 @@ test('a remote that asks for credentials names what is missing', async ({ harnes
   try {
     const repo = createFixtureRepo()
     withRemote(repo, remote.url)
+    makeBranchAheadOfOrigin(repo)
     const page = await harness.openRepo(repo)
     await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({
       timeout: 10_000
     })
 
-    const pushButton = page.getByRole('button', { name: 'Push', exact: true })
-    await expect(pushButton).toBeVisible({ timeout: 10_000 })
+    const sync = syncButton(page)
+    await expect(sync).toContainText('↑1', { timeout: 10_000 })
     const toast = await harness.expectToast(
       {
         type: 'error',
         title: 'Pushed failed',
         description: /credential helper/
       },
-      () => pushButton.click()
+      () => sync.click()
     )
 
     expect(toast.description).toContain('127.0.0.1')
@@ -79,14 +87,15 @@ test('an unreachable remote is reported as a network failure, not a silent no-op
 }) => {
   const repo = createFixtureRepo()
   withRemote(repo, 'http://127.0.0.1:9/fixture.git')
+  makeBranchAheadOfOrigin(repo)
   const page = await harness.openRepo(repo)
   await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({ timeout: 10_000 })
 
-  const pushButton = page.getByRole('button', { name: 'Push', exact: true })
-  await expect(pushButton).toBeVisible({ timeout: 10_000 })
+  const sync = syncButton(page)
+  await expect(sync).toContainText('↑1', { timeout: 10_000 })
   const toast = await harness.expectToast(
     { type: 'error', title: 'Pushed failed', description: /Couldn't reach 127\.0\.0\.1/ },
-    () => pushButton.click()
+    () => sync.click()
   )
 
   expect(toast.description).toContain('network')
@@ -96,11 +105,12 @@ test('a repository with no remote says so instead of reporting a raw git failure
   harness
 }) => {
   const repo = createFixtureRepo()
+  makeBranchAheadOfOrigin(repo)
   const page = await harness.openRepo(repo)
   await expect(page.getByRole('tab', { name: path.basename(repo) })).toBeVisible({ timeout: 10_000 })
 
-  const pushButton = page.getByRole('button', { name: 'Push', exact: true })
-  await expect(pushButton).toBeVisible({ timeout: 10_000 })
+  const sync = syncButton(page)
+  await expect(sync).toContainText('↑1', { timeout: 10_000 })
   const toast = await harness.expectToast(
     {
       type: 'error',
@@ -108,7 +118,7 @@ test('a repository with no remote says so instead of reporting a raw git failure
       description:
         'This repository has no remote named origin, so there is nothing to sync with. Add one, then try again.'
     },
-    () => pushButton.click()
+    () => sync.click()
   )
 
   expect(toast.description).not.toContain('fatal:')

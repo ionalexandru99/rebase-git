@@ -28,6 +28,27 @@ export function formatRelativeTime(timestamp: number, now: number): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
+const CALENDAR_FALLBACK_MS = 30 * 24 * 60 * 60 * 1000
+
+export function formatCommitAge(date: string, now: number): string {
+  const timestamp = new Date(date).getTime()
+  if (Number.isNaN(timestamp)) {
+    return ''
+  }
+  if (now - timestamp >= CALENDAR_FALLBACK_MS) {
+    return DATE_FORMATTER.format(timestamp)
+  }
+  return formatRelativeTime(timestamp, now)
+}
+
+export function formatCommitAgeShort(date: string, now: number): string {
+  const long = formatCommitAge(date, now)
+  if (long === 'just now') {
+    return 'now'
+  }
+  return long.replace(/ ago$/, '')
+}
+
 export function initials(name: string): string {
   return name
     .split(/\s+/)

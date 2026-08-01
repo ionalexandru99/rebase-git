@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test'
 export const commitRow = (page: Page, subject: string) =>
   page.getByTestId('commit-row').filter({ hasText: subject })
 
-export const detailsPanel = (page: Page) => page.getByTestId('commit-details-panel')
+export const detailsPanel = (page: Page) => page.getByTestId('commit-detail-pane')
 
 export const diffBody = (page: Page) => detailsPanel(page).getByTestId('diff-body')
 

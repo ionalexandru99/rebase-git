@@ -53,28 +53,34 @@ export function useCoalescedCommitSnapshot(
   streaming: boolean,
   enabled: boolean
 ): GitLogEntry[] {
-  const source = enabled ? commits : EMPTY_COMMITS
-  const [snapshot, setSnapshot] = useState(source)
-  const pending = useRef(source)
+  const [snapshot, setSnapshot] = useState(enabled ? commits : EMPTY_COMMITS)
+  const pending = useRef(commits)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  pending.current = source
+  pending.current = commits
 
   useEffect(() => {
+    if (!enabled) {
+      if (timer.current !== null) {
+        clearTimeout(timer.current)
+        timer.current = null
+      }
+      return
+    }
     if (!streaming) {
       if (timer.current !== null) {
         clearTimeout(timer.current)
         timer.current = null
       }
-      setSnapshot(source)
+      setSnapshot(commits)
       return
     }
     if (timer.current === null) {
       timer.current = setTimeout(() => {
         timer.current = null
         setSnapshot(pending.current)
-      }, coalesceDelayFor(source.length))
+      }, coalesceDelayFor(commits.length))
     }
-  }, [source, streaming])
+  }, [commits, enabled, streaming])
 
   useEffect(() => {
     return () => {

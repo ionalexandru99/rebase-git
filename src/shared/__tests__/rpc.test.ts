@@ -1,15 +1,21 @@
+import { MAX_COMMIT_STATS_BATCH } from '@shared/git-constants'
 import {
   AmendCommit,
   DiscardChanges,
+  GetCommitStats,
   GetDiff,
   GetHeadCommit,
+  GetLocalBranches,
+  GetRemoteRefs,
   GetStatus,
+  GetWorkingTreeStats,
   MergeBranch,
   ScanForRepos,
   StageFile,
   StageHunk,
   StashApply,
   StashDrop,
+  StashList,
   StashPop,
   StashPush,
   UnstageFile
@@ -95,6 +101,71 @@ describe('RPC payload schemas', () => {
     }
 
     expect(Either.getOrUndefined(decode(GetHeadCommit.successSchema, result))).toEqual(result)
+  })
+
+  it('accepts a getCommitStats batch up to the cap and rejects a larger one', () => {
+    const schema = GetCommitStats.payloadSchema
+    const shas = Array.from({ length: MAX_COMMIT_STATS_BATCH }, (_, index) => `sha${index}`)
+    expect(Either.isRight(decode(schema, { repoPath: '/repo', shas }))).toBe(true)
+    expect(Either.isRight(decode(schema, { repoPath: '/repo', shas: [] }))).toBe(true)
+    expect(
+      Either.isLeft(decode(schema, { repoPath: '/repo', shas: [...shas, 'one-too-many'] }))
+    ).toBe(true)
+    expect(Either.isLeft(decode(schema, { repoPath: '/repo', shas: [''] }))).toBe(true)
+    expect(Either.isLeft(decode(schema, { repoPath: '/repo' }))).toBe(true)
+  })
+
+  it('reads getWorkingTreeStats totals off the success schema', () => {
+    const stats = { additions: 12, deletions: 3 }
+    expect(Either.getOrUndefined(decode(GetWorkingTreeStats.successSchema, stats))).toEqual(stats)
+    expect(Either.isLeft(decode(GetWorkingTreeStats.successSchema, { additions: 1 }))).toBe(true)
+  })
+
+  it('carries optional branch freshness through the local branches response', () => {
+    const branches = {
+      current: 'main',
+      all: ['main', 'feature'],
+      lastCommitAt: { main: '2021-01-02T03:04:05+00:00' }
+    }
+    expect(Either.getOrUndefined(decode(GetLocalBranches.successSchema, { branches }))).toEqual({
+      branches
+    })
+    expect(
+      Either.isRight(
+        decode(GetLocalBranches.successSchema, {
+          branches: { current: 'main', all: ['main'] }
+        })
+      )
+    ).toBe(true)
+  })
+
+  it('carries optional remote and tag freshness through the remote refs response', () => {
+    const refs = {
+      remotes: ['origin/main'],
+      tags: ['v1.0.0'],
+      remoteLastCommitAt: { 'origin/main': '2021-01-02T03:04:05+00:00' },
+      tagLastCommitAt: { 'v1.0.0': '2020-03-04T05:06:07+00:00' }
+    }
+    expect(Either.getOrUndefined(decode(GetRemoteRefs.successSchema, { refs }))).toEqual({ refs })
+    expect(
+      Either.isRight(decode(GetRemoteRefs.successSchema, { refs: { remotes: [], tags: [] } }))
+    ).toBe(true)
+  })
+
+  it('carries an optional stash committer date through the stash list response', () => {
+    const stash = {
+      index: 0,
+      ref: 'stash@{0}',
+      oid: 'abc',
+      message: 'wip',
+      branch: 'main',
+      lastCommitAt: '2021-01-02T03:04:05+00:00'
+    }
+    expect(Either.getOrUndefined(decode(StashList.successSchema, { stashes: [stash] }))).toEqual({
+      stashes: [stash]
+    })
+    const withoutDate = { index: 0, ref: 'stash@{0}', oid: 'abc', message: 'wip', branch: 'main' }
+    expect(Either.isRight(decode(StashList.successSchema, { stashes: [withoutDate] }))).toBe(true)
   })
 
   it('keeps a getDiff file name verbatim', () => {

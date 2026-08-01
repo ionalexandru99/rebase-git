@@ -1,5 +1,5 @@
 import { Loader2Icon } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PullStrategy } from '@/lib/rpc-client'
 import type { PullOutcome } from '@/stores/action-runner'
@@ -12,7 +12,7 @@ export interface PullFlowDeps {
 }
 
 export interface PullFlow {
-  requestPull: () => Promise<void>
+  requestPull: () => Promise<boolean>
   divergedDialog: ReactNode
 }
 
@@ -101,43 +101,76 @@ function DivergedDialog(props: {
 export function usePullFlow(deps: PullFlowDeps): PullFlow {
   const [choosing, setChoosing] = useState(false)
   const [pending, setPending] = useState<PullStrategy | null>(null)
+  const pendingChoice = useRef<{
+    promise: Promise<boolean>
+    resolve: (success: boolean) => void
+  } | null>(null)
 
-  const pullWithStrategy = async (strategy: PullStrategy) => {
+  const settleChoice = (success: boolean) => {
+    const choice = pendingChoice.current
+    pendingChoice.current = null
+    choice?.resolve(success)
+  }
+
+  useEffect(
+    () => () => {
+      const choice = pendingChoice.current
+      pendingChoice.current = null
+      choice?.resolve(false)
+    },
+    []
+  )
+
+  const pullWithStrategy = async (strategy: PullStrategy): Promise<boolean> => {
     setPending(strategy)
     try {
-      await deps.pull(strategy)
+      const outcome = await deps.pull(strategy)
+      return outcome.kind === 'ok'
     } finally {
       setPending(null)
       setChoosing(false)
     }
   }
 
-  const requestPull = async () => {
+  const requestPull = async (): Promise<boolean> => {
+    if (pendingChoice.current) {
+      return pendingChoice.current.promise
+    }
     const outcome = await deps.pull()
     if (outcome.kind !== 'diverged') {
-      return
+      return outcome.kind === 'ok'
     }
     const remembered = await deps.loadRememberedStrategy().catch(() => null)
     if (remembered !== null) {
-      await pullWithStrategy(remembered)
-      return
+      return pullWithStrategy(remembered)
     }
+    let resolveChoice: (success: boolean) => void = () => {}
+    const promise = new Promise<boolean>((resolve) => {
+      resolveChoice = resolve
+    })
+    pendingChoice.current = { promise, resolve: resolveChoice }
     setChoosing(true)
+    return promise
   }
 
-  const choose = (strategy: PullStrategy, remember: boolean) => {
+  const choose = async (strategy: PullStrategy, remember: boolean) => {
     if (remember) {
       deps.rememberStrategy(strategy)
     }
-    void pullWithStrategy(strategy)
+    settleChoice(await pullWithStrategy(strategy))
   }
 
   const dismiss = () => {
     setChoosing(false)
+    settleChoice(false)
   }
 
   const divergedDialog = choosing ? (
-    <DivergedDialog pending={pending} onChoose={choose} onDismiss={dismiss} />
+    <DivergedDialog
+      pending={pending}
+      onChoose={(strategy, remember) => void choose(strategy, remember)}
+      onDismiss={dismiss}
+    />
   ) : null
 
   return { requestPull, divergedDialog }

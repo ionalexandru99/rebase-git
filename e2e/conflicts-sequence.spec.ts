@@ -78,7 +78,7 @@ test('a rebase started in a terminal appears on its own and continues through bo
   const banner = page.getByRole('status').filter({ hasText: 'Rebasing feature onto main' })
   await expect(banner).toBeVisible({ timeout: 20_000 })
   await expect(banner).toContainText('1/2')
-  await expect(banner).toContainText('1 conflicted file left')
+  await expect(banner).toContainText('1 merge conflict — resolve alpha.txt, then stage it to continue.')
 
   await openConflictMenu(harness, 'alpha.txt')
   await expect(page.getByRole('menuitem', { name: 'Keep main' })).toBeVisible()

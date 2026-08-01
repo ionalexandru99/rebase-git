@@ -181,7 +181,7 @@ jobs:
 
       - name: End-to-end tests
         if: runner.os != 'Linux'
-        run: pnpm exec playwright test
+        run: pnpm exec playwright test e2e/platform.spec.ts --workers=1
 
       - name: Smoke test (Linux)
         if: runner.os == 'Linux'

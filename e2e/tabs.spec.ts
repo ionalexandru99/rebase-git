@@ -1,14 +1,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
+  commitListWidth,
   createFixtureRepo,
+  dragListDivider,
   expect,
   stageFileFromRow,
   stagedFileRow,
   gitIn,
   openHistory,
   openLocalChanges,
-  test
+  test,
+  waitForRepoSurface
 } from './fixtures'
 
 test('two repos in tabs stay isolated: committing in one leaves the other untouched', async ({
@@ -39,6 +42,11 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
   await expect(tabA).toHaveAttribute('aria-selected', 'true')
   await expect(tabB).toHaveAttribute('aria-selected', 'false')
 
+  await tabB.click()
+  await waitForRepoSurface(page, repoB)
+  await tabA.click()
+  await waitForRepoSurface(page, repoA)
+
   await openLocalChanges(page)
   await stageFileFromRow(page, 'extra.txt')
   await expect(stagedFileRow(page, 'extra.txt')).toBeVisible({ timeout: 10_000 })
@@ -47,6 +55,9 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
 
   await openHistory(page)
   await expect(page.getByText('alpha commit').first()).toBeVisible({ timeout: 10_000 })
+  const selectedCommit = page.getByTestId('commit-row').filter({ hasText: 'alpha only' })
+  await selectedCommit.click()
+  await expect(selectedCommit).toHaveAttribute('data-selected', 'true')
 
   await tabB.click()
   await expect(tabB).toHaveAttribute('aria-selected', 'true')
@@ -58,6 +69,10 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
   await expect(tabA).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText('alpha commit').first()).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('beta only').first()).toBeHidden()
+  await expect(selectedCommit).toHaveAttribute('data-selected', 'true')
+  await expect(page.getByTestId('commit-detail-pane').filter({ visible: true })).toContainText(
+    'alpha only'
+  )
 })
 
 test('a destructive dialog from an inactive repo is hidden and cannot be activated', async ({
@@ -157,13 +172,19 @@ test('closing tabs activates the survivor; closing the last resets to a blank pi
   })
 })
 
-test('persisted tabs survive a second relaunch without re-seeding', async ({ harness }) => {
+test('persisted tabs and their commit-list width survive a second relaunch without re-seeding', async ({
+  harness
+}) => {
   const repoA = createFixtureRepo()
   const page = await harness.openRepo(repoA)
 
   await expect(page.getByRole('tab', { name: path.basename(repoA) })).toBeVisible({
     timeout: 10_000
   })
+  await expect.poll(() => commitListWidth(page), { timeout: 10_000 }).toBe(400)
+
+  await dragListDivider(page, 180)
+  await expect.poll(() => commitListWidth(page), { timeout: 10_000 }).toBe(580)
 
   const mainProcessId = await harness.mainProcessId()
   const relaunched = await harness.restart()
@@ -173,6 +194,7 @@ test('persisted tabs survive a second relaunch without re-seeding', async ({ har
   await expect(relaunched.getByRole('tab', { name: path.basename(repoA) })).toBeVisible({
     timeout: 10_000
   })
+  await expect.poll(() => commitListWidth(relaunched), { timeout: 15_000 }).toBe(580)
   await expect.poll(() => harness.inspectLifecycle()).toMatchObject({
     sidecarProcessCount: 1,
     sidecarRespawnCount: 0

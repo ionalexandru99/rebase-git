@@ -52,7 +52,9 @@ test('a conflicted stash apply resolves through the legacy banner and neutral si
 
   const banner = page.getByRole('status').filter({ hasText: '1 merge conflict' })
   await expect(banner).toBeVisible({ timeout: 10_000 })
-  await expect(banner).toContainText('Resolve the file, then stage it to continue.')
+  await expect(banner).toContainText(
+    '1 merge conflict — resolve contested.txt, then stage it to continue.'
+  )
   await expect(banner.getByRole('button')).toHaveCount(0)
 
   const conflictRow = page.getByTestId('status-file-row').filter({ hasText: 'contested.txt' })

@@ -8,6 +8,8 @@ import {
   rpcDeleteBranch,
   rpcDeleteTag,
   rpcFetch,
+  rpcGetCommitStats,
+  rpcGetWorkingTreeStats,
   rpcMergeBranch,
   rpcPull,
   rpcPush,
@@ -497,5 +499,46 @@ describe('rpcPull', () => {
 
     expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('pull', { repoPath: '/repo' })
     expect(result._tag).toBe('Ok')
+  })
+})
+
+describe('rpcGetCommitStats', () => {
+  it('sends the batch under the getCommitStats tag and decodes the totals', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'Ok',
+      stats: [{ sha: 'abc1234', additions: 12, deletions: 3 }]
+    })
+
+    const result = await rpcGetCommitStats('/repo', ['abc1234'])
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('getCommitStats', {
+      repoPath: '/repo',
+      shas: ['abc1234']
+    })
+    expect(result._tag).toBe('Ok')
+    if (result._tag === 'Ok') {
+      expect(result.stats).toEqual([{ sha: 'abc1234', additions: 12, deletions: 3 }])
+    }
+  })
+})
+
+describe('rpcGetWorkingTreeStats', () => {
+  it('sends the repoPath under the getWorkingTreeStats tag and decodes the totals', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({
+      _tag: 'Ok',
+      additions: 4,
+      deletions: 1
+    })
+
+    const result = await rpcGetWorkingTreeStats('/repo')
+
+    expect(window.electronAPI.sidecarRequest).toHaveBeenCalledWith('getWorkingTreeStats', {
+      repoPath: '/repo'
+    })
+    expect(result._tag).toBe('Ok')
+    if (result._tag === 'Ok') {
+      expect(result.additions).toBe(4)
+      expect(result.deletions).toBe(1)
+    }
   })
 })

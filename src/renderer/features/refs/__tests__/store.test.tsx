@@ -566,3 +566,74 @@ describe('useRefs — per-repo fetch timestamp', () => {
     })
   })
 })
+
+describe('useRefs — branch freshness', () => {
+  it('carries each branch tip committer date through to the combined branches', async () => {
+    sidecarMock.getLocalBranches.mockResolvedValue({
+      _tag: 'Ok',
+      branches: {
+        current: 'main',
+        all: ['main', 'dev'],
+        lastCommitAt: { main: '2026-01-02T03:04:05+00:00', dev: '2025-12-31T23:59:59+00:00' }
+      }
+    })
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    function Probe() {
+      const refs = useRefs()
+      openRepo = useRepoSession().openRepo
+      return <div data-testid="freshness">{refs.branches?.lastCommitAt?.main ?? ''}</div>
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Probe />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('freshness')).toHaveTextContent('2026-01-02T03:04:05+00:00')
+    })
+  })
+
+  it('carries remote branch and tag freshness through to the combined branches', async () => {
+    sidecarMock.getRemoteRefs.mockResolvedValue({
+      _tag: 'Ok',
+      refs: {
+        remotes: ['origin/main'],
+        tags: ['v1'],
+        remoteLastCommitAt: { 'origin/main': '2026-01-01T00:00:00+00:00' },
+        tagLastCommitAt: { v1: '2025-11-11T11:11:11+00:00' }
+      }
+    })
+    let openRepo: ((path: string) => Promise<string | null>) | undefined
+    function Probe() {
+      const refs = useRefs()
+      openRepo = useRepoSession().openRepo
+      return (
+        <div>
+          <div data-testid="remote-freshness">
+            {refs.branches?.remoteLastCommitAt?.['origin/main'] ?? ''}
+          </div>
+          <div data-testid="tag-freshness">{refs.branches?.tagLastCommitAt?.v1 ?? ''}</div>
+        </div>
+      )
+    }
+    renderWithQuery(() => (
+      <GitStoreProvider tabId="refs-tab" tabActive={true}>
+        <Probe />
+      </GitStoreProvider>
+    ))
+
+    await act(async () => {
+      await openRepo?.(repoPath)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('remote-freshness')).toHaveTextContent('2026-01-01T00:00:00+00:00')
+    })
+    expect(screen.getByTestId('tag-freshness')).toHaveTextContent('2025-11-11T11:11:11+00:00')
+  })
+})

@@ -1,4 +1,3 @@
-import { MinusIcon, PlusIcon } from 'lucide-react'
 import type { HeadDropState } from '@/features/commit/amend-drops'
 import {
   type ConflictLabels,
@@ -37,12 +36,57 @@ interface FileRowProps {
   onResolveConflict?: (file: string, side: ConflictSide) => void
 }
 
-const ROW_GRID =
-  'group/file-row grid h-8 grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2 rounded-[var(--r-sm)] px-2 transition-colors'
+const ROW_BASE =
+  'group/file-row grid h-8 items-center gap-2 rounded-[var(--r-sm)] px-2 transition-colors'
+
+const HEAD_ROW_GRID = `${ROW_BASE} grid-cols-[18px_minmax(0,1fr)_auto]`
+
+const WORKTREE_ROW_GRID = `${ROW_BASE} grid-cols-[18px_auto_minmax(0,1fr)]`
+
+type StageIndicatorState = 'conflicted' | 'staged' | 'unstaged'
+
+const STAGE_INDICATORS: Record<StageIndicatorState, { glyph: string | null; className: string }> = {
+  conflicted: { glyph: '!', className: 'border-orange bg-orange/15 text-orange' },
+  staged: { glyph: '✓', className: 'border-add bg-add/15 text-add' },
+  unstaged: { glyph: null, className: 'border-border-strong bg-card hover:border-brand' }
+}
+
+function StageIndicator(props: {
+  state: StageIndicatorState
+  label: string
+  onToggle: () => void
+}) {
+  const indicator = STAGE_INDICATORS[props.state]
+  return (
+    <button
+      type="button"
+      data-testid="file-stage-indicator"
+      data-state={props.state}
+      aria-label={props.label}
+      title={props.label}
+      onClick={(event) => {
+        if (event.detail > 1) {
+          return
+        }
+        props.onToggle()
+      }}
+      onDoubleClick={(event) => event.stopPropagation()}
+      className={cn(
+        'grid size-[15px] shrink-0 place-content-center rounded-[var(--r-xs)] border-[1.5px] text-[10px] font-bold leading-none transition-colors',
+        indicator.className
+      )}
+    >
+      {indicator.glyph}
+    </button>
+  )
+}
 
 export function FileRow(props: FileRowProps) {
   const label = props.display ?? props.file
-  const rowClass = cn(ROW_GRID, props.isSelected ? 'bg-[var(--brand-soft)]' : 'hover:bg-muted')
+  const rowClass = cn(
+    props.group === 'head-commit' ? HEAD_ROW_GRID : WORKTREE_ROW_GRID,
+    props.isSelected ? 'bg-[var(--brand-soft)]' : 'hover:bg-muted'
+  )
   const select = () => {
     if (props.renameSource) {
       props.onSelect(props.file, props.renameSource)
@@ -129,6 +173,11 @@ export function FileRow(props: FileRowProps) {
     : isConflicted
       ? `Mark ${label} as resolved`
       : `Stage ${label}`
+  const indicatorState: StageIndicatorState = isConflicted
+    ? 'conflicted'
+    : isStaged
+      ? 'staged'
+      : 'unstaged'
 
   return (
     <ContextMenu>
@@ -139,23 +188,9 @@ export function FileRow(props: FileRowProps) {
         data-file={props.file}
         onDoubleClick={toggleStaged}
       >
+        <StageIndicator state={indicatorState} label={actionLabel} onToggle={toggleStaged} />
         <StatusBadge kind={props.kind} />
         {nameButton}
-        <button
-          type="button"
-          onClick={(event) => {
-            if (event.detail > 1) {
-              return
-            }
-            toggleStaged()
-          }}
-          onDoubleClick={(event) => event.stopPropagation()}
-          aria-label={actionLabel}
-          title={actionLabel}
-          className="grid size-5 shrink-0 place-content-center rounded-[var(--r-xs)] text-muted-foreground opacity-0 transition-opacity hover:bg-card-2 hover:text-foreground focus-visible:opacity-100 group-hover/file-row:opacity-100"
-        >
-          {isStaged ? <MinusIcon className="size-3.5" /> : <PlusIcon className="size-3.5" />}
-        </button>
       </ContextMenuTriggerArea>
       <ContextMenuContent>
         {conflict ? (

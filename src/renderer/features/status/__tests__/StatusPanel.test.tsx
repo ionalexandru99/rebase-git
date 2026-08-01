@@ -114,6 +114,13 @@ const groupOf = (file: string) =>
 describe('StatusPanel', () => {
   it('renders nothing when status is null', () => {
     renderPanel({ status: null })
+    expect(screen.queryByTestId('status-file-scroll')).not.toBeInTheDocument()
+  })
+
+  it('leaves the file counts to the working-copy header', () => {
+    renderPanel({ status: emptyStatus({ files: [code('a.ts', ' ', 'M')] }) })
+
+    expect(screen.queryByText(/files · /)).not.toBeInTheDocument()
     expect(screen.queryByText('Changes')).not.toBeInTheDocument()
   })
 
@@ -139,7 +146,7 @@ describe('StatusPanel', () => {
     expect(onFileAction).toHaveBeenCalledWith('copy-path', 'a.ts')
   })
 
-  it('splits the changes into staged and unstaged groups with a staged count', () => {
+  it('splits the changes into staged and unstaged groups with per-group counts', () => {
     renderPanel({
       status: emptyStatus({
         files: [
@@ -151,7 +158,6 @@ describe('StatusPanel', () => {
       })
     })
 
-    expect(screen.getByText('4 files · 1 staged')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Staged' }).closest('li')).toHaveTextContent('1')
     expect(screen.getByRole('heading', { name: 'Unstaged' }).closest('li')).toHaveTextContent('3')
     expect(groupOf('c.ts')).toEqual(['staged'])
@@ -331,7 +337,6 @@ describe('StatusPanel', () => {
       onToggleDrop
     })
 
-    expect(screen.getByText('2 files · 0 staged')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Unstaged' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Last commit' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Stage work.ts' })).toBeInTheDocument()

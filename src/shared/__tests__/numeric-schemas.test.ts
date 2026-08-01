@@ -2,7 +2,13 @@ import { Either, Schema } from 'effect'
 import { describe, expect, it } from 'vitest'
 import { NonNaNNumber } from '../codec'
 import { CommitSummarySchema, GitLogSchema } from '../schemas/git'
-import { PersistedTabsSchema, SidebarPrefsSchema, StashEntrySchema } from '../schemas/ipc'
+import {
+  ListPaneWidthQuerySchema,
+  ListPaneWidthSchema,
+  PersistedTabsSchema,
+  SidebarPrefsSchema,
+  StashEntrySchema
+} from '../schemas/ipc'
 
 const rejects = <A, I>(schema: Schema.Schema<A, I>, value: unknown): boolean =>
   Either.isLeft(Schema.decodeUnknownEither(schema)(value))
@@ -32,6 +38,17 @@ describe('persisted numeric fields reject NaN', () => {
   it('PersistedTabsSchema.activeIndex', () => {
     expect(accepts(PersistedTabsSchema, { tabs: [null], activeIndex: 0 })).toBe(true)
     expect(rejects(PersistedTabsSchema, { tabs: [null], activeIndex: NaN })).toBe(true)
+  })
+
+  it('ListPaneWidthSchema.width', () => {
+    expect(accepts(ListPaneWidthSchema, { repoPath: '/repo/a', width: 400 })).toBe(true)
+    expect(rejects(ListPaneWidthSchema, { repoPath: '/repo/a', width: NaN })).toBe(true)
+  })
+
+  it('ListPaneWidth schemas require a non-empty repo path', () => {
+    expect(accepts(ListPaneWidthQuerySchema, { repoPath: '/repo/a' })).toBe(true)
+    expect(rejects(ListPaneWidthQuerySchema, { repoPath: '' })).toBe(true)
+    expect(rejects(ListPaneWidthSchema, { repoPath: '   ', width: 400 })).toBe(true)
   })
 
   it('StashEntrySchema.index', () => {

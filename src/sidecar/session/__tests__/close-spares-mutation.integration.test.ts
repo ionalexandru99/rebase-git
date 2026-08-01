@@ -7,6 +7,7 @@ import type { SimpleGit } from 'simple-git'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type GitError, RepoNotOpen } from '../../git/errors'
 import { normalizeRepoPath } from '../../git/instances'
+import { runWithRequestChildren, startGit } from '../../git/spawn'
 import { closeRepo, fetchRepo, openRepo } from '../../operations/index'
 import {
   createHangingRemote,
@@ -154,4 +155,40 @@ describe('closing a repo session spares an in-flight mutation (ADR-0002)', () =>
     await runOp(closeRepo(repoDir))
     expect(repoSemaphoreSize()).toBe(baseline)
   })
+})
+
+describe('closing a repo session cancels in-flight reads', () => {
+  it('awaits the read process tree before close completes', async () => {
+    await runOp(openRepo(repoDir))
+    const hangingRemote = createHangingRemote('rebase-close-read-')
+    const controller = new AbortController()
+
+    try {
+      const reading = runWithRequestChildren(controller.signal, async () => {
+        const running = startGit(
+          [
+            '-C',
+            repoDir,
+            'fetch',
+            '--upload-pack',
+            hangingRemote.uploadPack,
+            hangingRemote.remoteDir
+          ],
+          { collectStdout: false }
+        )
+        return running.result
+      })
+      await waitUntil(() => hangingRemote.childPid() !== undefined)
+      const transportPid = hangingRemote.childPid()
+
+      await runOp(closeRepo(repoDir))
+
+      expect(processAlive(transportPid)).toBe(false)
+      await reading
+    } finally {
+      controller.abort()
+      killIfAlive(hangingRemote.childPid())
+      hangingRemote.cleanup()
+    }
+  }, 30_000)
 })

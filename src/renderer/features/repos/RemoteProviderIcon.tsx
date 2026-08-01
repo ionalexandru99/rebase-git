@@ -1,24 +1,67 @@
 import { CloudIcon } from 'lucide-react'
-import azureSvg from '@/assets/providers/azure.svg?raw'
-import bitbucketSvg from '@/assets/providers/bitbucket.svg?raw'
-import codebergSvg from '@/assets/providers/codeberg.svg?raw'
-import giteaSvg from '@/assets/providers/gitea.svg?raw'
-import githubSvg from '@/assets/providers/github.svg?raw'
-import gitlabSvg from '@/assets/providers/gitlab.svg?raw'
-import sourcehutSvg from '@/assets/providers/sourcehut.svg?raw'
 import { detectProvider, type Provider } from '@/features/repos/remote-providers'
 import { cn } from '@/lib/utils'
 
-type Style = 'color' | 'mono'
+interface ProviderMark {
+  label: string
+  viewBox: string
+  paths: readonly string[]
+  fillRule?: 'evenodd'
+}
 
-const PROVIDERS: Record<Provider, { svg: string; label: string; style: Style }> = {
-  github: { svg: githubSvg, label: 'GitHub', style: 'color' },
-  gitlab: { svg: gitlabSvg, label: 'GitLab', style: 'color' },
-  azure: { svg: azureSvg, label: 'Azure DevOps', style: 'color' },
-  bitbucket: { svg: bitbucketSvg, label: 'Bitbucket', style: 'mono' },
-  codeberg: { svg: codebergSvg, label: 'Codeberg', style: 'mono' },
-  gitea: { svg: giteaSvg, label: 'Gitea', style: 'mono' },
-  sourcehut: { svg: sourcehutSvg, label: 'sourcehut', style: 'mono' }
+const PROVIDERS: Record<Provider, ProviderMark> = {
+  github: {
+    label: 'GitHub',
+    viewBox: '0 0 16 16',
+    fillRule: 'evenodd',
+    paths: [
+      'M8 0C3.58 0 0 3.58 0 8C0 11.54 2.29 14.53 5.47 15.59C5.87 15.66 6.02 15.42 6.02 15.21C6.02 15.02 6.01 14.39 6.01 13.72C4 14.09 3.48 13.23 3.32 12.78C3.23 12.55 2.84 11.84 2.5 11.65C2.22 11.5 1.82 11.13 2.49 11.12C3.12 11.11 3.57 11.7 3.72 11.94C4.44 13.15 5.59 12.81 6.05 12.6C6.12 12.08 6.33 11.73 6.56 11.53C4.78 11.33 2.92 10.64 2.92 7.58C2.92 6.71 3.23 5.99 3.74 5.43C3.66 5.23 3.38 4.41 3.82 3.31C3.82 3.31 4.49 3.1 6.02 4.13C6.66 3.95 7.34 3.86 8.02 3.86C8.7 3.86 9.38 3.95 10.02 4.13C11.55 3.09 12.22 3.31 12.22 3.31C12.66 4.41 12.38 5.23 12.3 5.43C12.81 5.99 13.12 6.7 13.12 7.58C13.12 10.65 11.25 11.33 9.47 11.53C9.76 11.78 10.01 12.26 10.01 13.01C10.01 14.08 10 14.94 10 15.21C10 15.42 10.15 15.67 10.55 15.59C13.71 14.53 16 11.53 16 8C16 3.58 12.42 0 8 0Z'
+    ]
+  },
+  gitlab: {
+    label: 'GitLab',
+    viewBox: '0 0 32 32',
+    paths: [
+      'm31.46 12.78-.04-.12-4.35-11.35A1.14 1.14 0 0 0 25.94.6c-.24 0-.47.1-.66.24-.19.15-.33.36-.39.6l-2.94 9h-11.9l-2.94-9A1.14 1.14 0 0 0 6.07.58a1.15 1.15 0 0 0-1.14.72L.58 12.68l-.05.11a8.1 8.1 0 0 0 2.68 9.34l.02.01.04.03 6.63 4.97 3.28 2.48 2 1.52a1.35 1.35 0 0 0 1.62 0l2-1.52 3.28-2.48 6.67-5h.02a8.09 8.09 0 0 0 2.7-9.36Z'
+    ]
+  },
+  azure: {
+    label: 'Azure DevOps',
+    viewBox: '0 0 96 96',
+    paths: [
+      'M33.34 6.54h26.04l-27.03 80.1a4.15 4.15 0 0 1-3.94 2.81H8.15a4.14 4.14 0 0 1-3.93-5.47L29.4 9.38a4.15 4.15 0 0 1 3.94-2.83z',
+      'M71.17 60.26H29.88a1.91 1.91 0 0 0-1.3 3.31l26.53 24.76a4.17 4.17 0 0 0 2.85 1.13h23.38z',
+      'M66.6 9.36a4.14 4.14 0 0 0-3.93-2.82H33.65a4.15 4.15 0 0 1 3.93 2.82l25.18 74.62a4.15 4.15 0 0 1-3.93 5.48h29.02a4.15 4.15 0 0 0 3.93-5.48z'
+    ]
+  },
+  bitbucket: {
+    label: 'Bitbucket',
+    viewBox: '0 0 24 24',
+    paths: [
+      'M.778 1.213a.768.768 0 00-.768.892l3.263 19.81c.084.5.515.868 1.022.873H19.95a.772.772 0 00.77-.646l3.27-20.03a.768.768 0 00-.768-.891zM14.52 15.53H9.522L8.17 8.466h7.561z'
+    ]
+  },
+  codeberg: {
+    label: 'Codeberg',
+    viewBox: '0 0 24 24',
+    paths: [
+      'M11.999.747A11.974 11.974 0 0 0 0 12.75c0 2.254.635 4.465 1.833 6.376L11.837 6.19c.072-.092.251-.092.323 0l4.178 5.402h-2.992l.065.239h3.113l.882 1.138h-3.674l.103.374h3.86l.777 1.003h-4.358l.135.483h4.593l.695.894h-5.038l.165.589h5.326l.609.785h-5.717l.182.65h6.038l.562.727h-6.397l.183.65h6.717A12.003 12.003 0 0 0 24 12.75 11.977 11.977 0 0 0 11.999.747zm3.654 19.104.182.65h5.326c.173-.204.353-.433.513-.65zm.385 1.377.18.65h3.563c.233-.198.485-.428.712-.65zm.383 1.377.182.648h1.203c.356-.204.685-.412 1.042-.648zz'
+    ]
+  },
+  gitea: {
+    label: 'Gitea',
+    viewBox: '0 0 24 24',
+    paths: [
+      'M4.209 4.603c-.247 0-.525.02-.84.088-.333.07-1.28.283-2.054 1.027C-.403 7.25.035 9.685.089 10.052c.065.446.263 1.687 1.21 2.768 1.749 2.141 5.513 2.092 5.513 2.092s.462 1.103 1.168 2.119c.955 1.263 1.936 2.248 2.89 2.367 2.406 0 7.212-.004 7.212-.004s.458.004 1.08-.394c.535-.324 1.013-.893 1.013-.893s.492-.527 1.18-1.73c.21-.37.385-.729.538-1.068 0 0 2.107-4.471 2.107-8.823-.042-1.318-.367-1.55-.443-1.627-.156-.156-.366-.153-.366-.153s-4.475.252-6.792.306c-.508.011-1.012.023-1.512.027v4.474l-.634-.301c0-1.39-.004-4.17-.004-4.17-1.107.016-3.405-.084-3.405-.084s-5.399-.27-5.987-.324c-.187-.011-.401-.032-.648-.032zm.354 1.832h.111s.271 2.269.6 3.597C5.549 11.147 6.22 13 6.22 13s-.996-.119-1.641-.348c-.99-.324-1.409-.714-1.409-.714s-.73-.511-1.096-1.52C1.444 8.73 2.021 7.7 2.021 7.7s.32-.859 1.47-1.145c.395-.106.863-.12 1.072-.12zm8.33 2.554c.26.003.509.127.509.127l.868.422-.529 1.075a.686.686 0 0 0-.614.359.685.685 0 0 0 .072.756l-.939 1.924a.69.69 0 0 0-.66.527.687.687 0 0 0 .347.763.686.686 0 0 0 .867-.206.688.688 0 0 0-.069-.882l.916-1.874a.667.667 0 0 0 .237-.02.657.657 0 0 0 .271-.137 8.826 8.826 0 0 1 1.016.512.761.761 0 0 1 .286.282c.073.21-.073.569-.073.569-.087.29-.702 1.55-.702 1.55a.692.692 0 0 0-.676.477.681.681 0 1 0 1.157-.252c.073-.141.141-.282.214-.431.19-.397.515-1.16.515-1.16.035-.066.218-.394.103-.814-.095-.435-.48-.638-.48-.638-.467-.301-1.116-.58-1.116-.58s0-.156-.042-.27a.688.688 0 0 0-.148-.241l.516-1.062 2.89 1.401s.48.218.583.619c.073.282-.019.534-.069.657-.24.587-2.1 4.317-2.1 4.317s-.232.554-.748.588a1.065 1.065 0 0 1-.393-.045l-.202-.08-4.31-2.1s-.417-.218-.49-.596c-.083-.31.104-.691.104-.691l2.073-4.272s.183-.37.466-.497a.855.855 0 0 1 .35-.077z'
+    ]
+  },
+  sourcehut: {
+    label: 'sourcehut',
+    viewBox: '0 0 24 24',
+    paths: [
+      'M12 0C5.371 0 0 5.371 0 12s5.371 12 12 12 12-5.371 12-12S18.629 0 12 0Zm0 21.677A9.675 9.675 0 0 1 2.323 12 9.675 9.675 0 0 1 12 2.323 9.675 9.675 0 0 1 21.677 12 9.675 9.675 0 0 1 12 21.677Z'
+    ]
+  }
 }
 
 interface RemoteProviderIconProps {
@@ -28,19 +71,24 @@ interface RemoteProviderIconProps {
 
 export function RemoteProviderIcon(props: RemoteProviderIconProps) {
   const provider = detectProvider(props.url)
-  const entry = provider ? PROVIDERS[provider] : null
-  return entry ? (
-    <img
-      alt={entry.label}
-      title={entry.label}
-      className={cn(
-        'inline-flex shrink-0 object-contain',
-        entry.style === 'mono' && 'text-current',
-        props.className
-      )}
-      src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(entry.svg)}`}
-    />
-  ) : (
-    <CloudIcon aria-label="remote" className={cn('shrink-0', props.className)} />
+  const mark = provider ? PROVIDERS[provider] : null
+  if (!mark) {
+    return <CloudIcon aria-label="remote" className={cn('shrink-0', props.className)} />
+  }
+  return (
+    <svg
+      role="img"
+      aria-label={mark.label}
+      viewBox={mark.viewBox}
+      fill="currentColor"
+      fillRule={mark.fillRule}
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn('inline-flex size-4 shrink-0', props.className)}
+    >
+      <title>{mark.label}</title>
+      {mark.paths.map((pathData) => (
+        <path key={pathData} d={pathData} />
+      ))}
+    </svg>
   )
 }

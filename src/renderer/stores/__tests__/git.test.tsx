@@ -1816,7 +1816,7 @@ describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
     })
   })
 
-  it('computes load-more skip from the buffer when the store flush lags', async () => {
+  it('publishes a completed log buffer while the tab is inactive', async () => {
     vi.useFakeTimers()
     const stream = setupLogStream()
     const { git, setTabActive } = renderGitStore(true)
@@ -1829,7 +1829,7 @@ describe('GitStoreProvider — Phase 2 streaming + watcher', () => {
     })
     await advanceTimers(200)
 
-    expect(git.state.log?.all.length ?? 0).toBe(0)
+    expect(git.state.log?.all.map((commit) => commit.message)).toEqual(['A', 'B'])
 
     vi.mocked(window.electronAPI.startLogStream).mockClear()
     await git.loadMoreHistory()

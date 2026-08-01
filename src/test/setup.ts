@@ -1,12 +1,15 @@
 import '@testing-library/jest-dom/vitest'
+import { LIST_PANE_DEFAULT_WIDTH } from '@shared/list-layout'
 import type {
   Commit,
   Fetch,
   GetCommitDetail,
+  GetCommitStats,
   GetDiff,
   GetLocalBranches,
   GetRemoteRefs,
   GetStatus,
+  GetWorkingTreeStats,
   HunkLineSelection,
   Pull,
   PullStrategy,
@@ -36,6 +39,14 @@ type GetDiffResponse = RpcEncodedResult<typeof GetDiff.successSchema, typeof Get
 type CommitDetailResponse = RpcEncodedResult<
   typeof GetCommitDetail.successSchema,
   typeof GetCommitDetail.errorSchema
+>
+type CommitStatsResponse = RpcEncodedResult<
+  typeof GetCommitStats.successSchema,
+  typeof GetCommitStats.errorSchema
+>
+type WorkingTreeStatsResponse = RpcEncodedResult<
+  typeof GetWorkingTreeStats.successSchema,
+  typeof GetWorkingTreeStats.errorSchema
 >
 type StageHunkResponse = RpcEncodedResult<
   typeof StageHunk.successSchema,
@@ -79,6 +90,9 @@ export const sidecarMock = {
       ) => Promise<GetDiffResponse>
     >(),
   getCommitDetail: vi.fn<(repoPath: string, sha: string) => Promise<CommitDetailResponse>>(),
+  getCommitStats:
+    vi.fn<(repoPath: string, shas: readonly string[]) => Promise<CommitStatsResponse>>(),
+  getWorkingTreeStats: vi.fn<(repoPath: string) => Promise<WorkingTreeStatsResponse>>(),
   stageHunk:
     vi.fn<(repoPath: string, file: string, hunkHeader: string) => Promise<StageHunkResponse>>(),
   unstageHunk:
@@ -142,26 +156,58 @@ Object.defineProperty(window, 'matchMedia', {
   })
 })
 
+const DEFAULT_OBSERVED_RECT = { height: 800, width: 400 }
+let observedRect = { ...DEFAULT_OBSERVED_RECT }
+const liveResizeObservers = new Set<ResizeObserverMock>()
+
 class ResizeObserverMock {
   private callback: ResizeObserverCallback
+  private targets = new Set<Element>()
 
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback
+    liveResizeObservers.add(this)
+  }
+
+  emit(): void {
+    for (const target of this.targets) {
+      this.callback(
+        [{ target, contentRect: { ...observedRect } as DOMRectReadOnly } as ResizeObserverEntry],
+        this as unknown as ResizeObserver
+      )
+    }
   }
 
   observe = vi.fn((element: Element) => {
+    this.targets.add(element)
     this.callback(
       [
         {
           target: element,
-          contentRect: { height: 800, width: 400 } as DOMRectReadOnly
+          contentRect: { ...observedRect } as DOMRectReadOnly
         } as ResizeObserverEntry
       ],
       this as unknown as ResizeObserver
     )
   })
-  unobserve = vi.fn()
-  disconnect = vi.fn()
+  unobserve = vi.fn((element: Element) => {
+    this.targets.delete(element)
+  })
+  disconnect = vi.fn(() => {
+    this.targets.clear()
+    liveResizeObservers.delete(this)
+  })
+}
+
+export const resizeObserverMock = {
+  setContentRect(rect: Partial<{ width: number; height: number }>): void {
+    observedRect = { ...observedRect, ...rect }
+    act(() => {
+      for (const observer of [...liveResizeObservers]) {
+        observer.emit()
+      }
+    })
+  }
 }
 Object.defineProperty(window, 'ResizeObserver', {
   writable: true,
@@ -186,6 +232,8 @@ const mockElectronAPI = {
   setRefTreeToggles: vi.fn(),
   getPersistedTabs: vi.fn(),
   setPersistedTabs: vi.fn(),
+  getListPaneWidth: vi.fn(),
+  setListPaneWidth: vi.fn(),
   getPullDivergedStrategy: vi.fn(),
   setPullDivergedStrategy: vi.fn(),
   getWorkspaces: vi.fn(),
@@ -306,6 +354,7 @@ export function mockBranchResponses(
 beforeEach(() => {
   vi.resetAllMocks()
   opHandlers.clear()
+  observedRect = { ...DEFAULT_OBSERVED_RECT }
   vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
   vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({
@@ -313,6 +362,8 @@ beforeEach(() => {
     activeIndex: 0
   })
   vi.mocked(window.electronAPI.setPersistedTabs).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.getListPaneWidth).mockResolvedValue(LIST_PANE_DEFAULT_WIDTH)
+  vi.mocked(window.electronAPI.setListPaneWidth).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getPullDivergedStrategy).mockResolvedValue(null)
   vi.mocked(window.electronAPI.setPullDivergedStrategy).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.sidecarRequest).mockImplementation(async (op, body) => {
@@ -334,6 +385,10 @@ beforeEach(() => {
         })
       case 'getCommitDetail':
         return sidecarMock.getCommitDetail(repoPath, body.sha as string)
+      case 'getCommitStats':
+        return sidecarMock.getCommitStats(repoPath, body.shas as readonly string[])
+      case 'getWorkingTreeStats':
+        return sidecarMock.getWorkingTreeStats(repoPath)
       case 'stashList':
         return sidecarMock.stashList(repoPath)
       case 'stageFile':
@@ -387,6 +442,8 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.disownRepo).mockResolvedValue(undefined)
   sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })
+  sidecarMock.getCommitStats.mockResolvedValue({ _tag: 'Ok', stats: [] })
+  sidecarMock.getWorkingTreeStats.mockResolvedValue({ _tag: 'Ok', additions: 0, deletions: 0 })
   sidecarMock.checkout.mockResolvedValue({ _tag: 'Ok', checkedOut: 'main' })
   sidecarMock.fetchRepo.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.pushRepo.mockResolvedValue({ _tag: 'Ok' })

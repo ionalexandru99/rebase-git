@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { graphMetricsFor } from '@/features/history/graph/metrics'
 import type { GitLogEntry } from '@/types'
 import { CommitRow, commitTopologyLabel } from '../CommitRow'
+import type { HistoryListMode } from '../list-modes'
 
 const METRICS = graphMetricsFor(16)
 const REMOTE_NAMES = new Set<string>()
@@ -26,10 +27,11 @@ function rowProps(overrides: Partial<GitLogEntry> = {}) {
     lane: 0,
     railLanes: 1,
     metrics: METRICS,
+    mode: 'xwide' as HistoryListMode,
+    railWidth: 28,
     top: 0,
     dim: false,
     offBranch: false,
-    gridTail: '1fr',
     remotes: REMOTES,
     remoteNames: REMOTE_NAMES,
     selected: false
@@ -79,6 +81,70 @@ describe('commitTopologyLabel', () => {
 
   it('appends off-branch status', () => {
     expect(commitTopologyLabel(1, true)).toBe('Commit, off the current branch')
+  })
+})
+
+describe('CommitRow modes', () => {
+  it('drops every scrap of row text in index mode so only the graph reads', () => {
+    render(<CommitRow {...rowProps()} mode="index" />)
+
+    expect(screen.queryByText('do the thing')).not.toBeInTheDocument()
+    expect(screen.queryByText('abcdef1')).not.toBeInTheDocument()
+    expect(screen.queryByText('AD')).not.toBeInTheDocument()
+  })
+
+  it('spells the author out in xwide and falls back to the avatar alone in wide', () => {
+    const { rerender } = render(<CommitRow {...rowProps()} mode="xwide" />)
+
+    expect(screen.getByText('Ann Dev')).toBeInTheDocument()
+    expect(screen.getByText('AD')).toBeInTheDocument()
+
+    rerender(<CommitRow {...rowProps()} mode="wide" />)
+
+    expect(screen.queryByText('Ann Dev')).not.toBeInTheDocument()
+    expect(screen.getByText('AD')).toBeInTheDocument()
+    expect(screen.getByText('abcdef1')).toBeInTheDocument()
+  })
+
+  it('starts its content at the fixed rail offset the panel measured, not at its own lanes', () => {
+    render(<CommitRow {...rowProps()} railWidth={72} />)
+
+    expect(screen.getByTestId('commit-row-content')).toHaveStyle({ left: '72px' })
+  })
+
+  it('stacks narrow rows into a message line and a metadata line', () => {
+    render(<CommitRow {...rowProps()} mode="narrow" />)
+
+    const meta = screen.getByTestId('commit-row-meta')
+    expect(meta).toHaveTextContent('AD')
+    expect(meta).toHaveTextContent('Ann Dev')
+    expect(meta).toHaveTextContent('abcdef1')
+    expect(meta).not.toHaveTextContent('do the thing')
+    expect(screen.getByText('do the thing')).toBeInTheDocument()
+  })
+
+  it('reads the commit date as an age', () => {
+    render(<CommitRow {...rowProps({ date: new Date(Date.now() - 2 * 3600_000).toISOString() })} />)
+
+    expect(screen.getByText('2h ago')).toBeInTheDocument()
+  })
+
+  it('shows the churn counts once they arrive and stays blank until they do', () => {
+    const { rerender } = render(<CommitRow {...rowProps()} />)
+
+    expect(screen.queryByText('+3')).not.toBeInTheDocument()
+    expect(screen.getByTestId('commit-row-churn')).toBeEmptyDOMElement()
+
+    rerender(<CommitRow {...rowProps()} stats={{ additions: 3, deletions: 1 }} />)
+
+    expect(screen.getByText('+3')).toBeInTheDocument()
+    expect(screen.getByText('−1')).toBeInTheDocument()
+  })
+
+  it('keeps single-line modes on one line', () => {
+    render(<CommitRow {...rowProps()} mode="wide" />)
+
+    expect(screen.queryByTestId('commit-row-meta')).not.toBeInTheDocument()
   })
 })
 
