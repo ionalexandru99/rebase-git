@@ -96,9 +96,7 @@ describe('Shell four-column layout', () => {
     expect(screen.getByRole('button', { name: 'Resize commit list' })).toBeInTheDocument()
   })
 
-  it('threads branch freshness through to the refs sidebar rows', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'))
+  it('renders branch rows without an age label', async () => {
     render(
       <Shell
         repoPath={repoPath}
@@ -107,8 +105,7 @@ describe('Shell four-column layout', () => {
           repoPath,
           localBranches: ['main'],
           remoteBranches: [],
-          tags: [],
-          lastCommitAt: { main: '2026-08-01T10:00:00Z' }
+          tags: []
         }}
         listHeader={<div>list header</div>}
         listBody={<div>commit list</div>}
@@ -117,8 +114,8 @@ describe('Shell four-column layout', () => {
       />
     )
 
-    await waitFor(() => expect(screen.getByTestId('ref-freshness').textContent).toBe('2h'))
-    vi.useRealTimers()
+    await waitFor(() => expect(screen.getByTitle('main')).toBeInTheDocument())
+    expect(screen.queryByTestId('ref-freshness')).not.toBeInTheDocument()
   })
 
   it('applies the persisted branches panel width', async () => {

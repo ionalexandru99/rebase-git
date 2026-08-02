@@ -29,9 +29,6 @@ interface RefTreePanelProps {
   currentBranch: string
   loading?: boolean
   tracking?: Record<string, BranchTracking>
-  lastCommitAt?: Record<string, string>
-  remoteLastCommitAt?: Record<string, string>
-  tagLastCommitAt?: Record<string, string>
   visibleTimelineRefs?: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void
@@ -145,11 +142,6 @@ export function RefTreePanel(props: RefTreePanelProps) {
         currentBranch: props.currentBranch,
         localLoading: props.loading ?? false,
         tracking: props.tracking,
-        freshness: {
-          local: props.lastCommitAt,
-          remote: props.remoteLastCommitAt,
-          tag: props.tagLastCommitAt
-        },
         stashes: props.stashes,
         query: deferredQuery
       }),
@@ -161,9 +153,6 @@ export function RefTreePanel(props: RefTreePanelProps) {
       props.currentBranch,
       props.loading,
       props.tracking,
-      props.lastCommitAt,
-      props.remoteLastCommitAt,
-      props.tagLastCommitAt,
       props.stashes,
       deferredQuery
     ]
