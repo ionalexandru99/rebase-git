@@ -292,6 +292,18 @@ export const handlersLayer = SidecarRpcs.toLayer({
   getWorkingTreeStats: ({ repoPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.getWorkingTreeStats(repo)),
   stashList: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.stashList(repo)),
+  getIdentity: ({ repoPath }) =>
+    repoPath === undefined
+      ? operations.getIdentity(undefined)
+      : withResolvedRepo(repoPath, (repo) => operations.getIdentity(repo)),
+  setIdentity: ({ scope, repoPath, name, email }) =>
+    repoPath === undefined
+      ? operations.setIdentity({ scope, repoPath: undefined, name, email })
+      : withResolvedRepo(repoPath, (repo) =>
+          operations.setIdentity({ scope, repoPath: repo, name, email })
+        ),
+  clearIdentity: ({ repoPath, fields }) =>
+    withResolvedRepo(repoPath, (repo) => operations.clearIdentity(repo, fields)),
   streamLog: ({ repoPath, skip, maxCount, streamId }) =>
     Stream.unwrap(
       resolveRepo(repoPath).pipe(

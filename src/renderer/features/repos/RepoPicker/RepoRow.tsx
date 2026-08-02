@@ -1,6 +1,6 @@
 import { ChevronRightIcon } from 'lucide-react'
 import { avatarColor, avatarInitials } from '@/features/repos/repo-avatar'
-import { repoDisplayName } from '@/features/repos/repo-display-name'
+import { repoDisplayName } from '@/lib/repo-display-name'
 import { cn } from '@/lib/utils'
 
 interface RepoCardProps {

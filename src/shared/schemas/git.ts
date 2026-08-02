@@ -201,6 +201,25 @@ export const CloneProgressSchema = Schema.Struct({
 })
 export type CloneProgress = typeof CloneProgressSchema.Type
 
+export const GitIdentitySchema = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  email: Schema.optional(Schema.String)
+})
+export type GitIdentity = typeof GitIdentitySchema.Type
+
+export const IdentityScopeSchema = Schema.Literal('global', 'local')
+export type IdentityScope = typeof IdentityScopeSchema.Type
+
+export const IdentityFieldSchema = Schema.Literal('name', 'email')
+export type IdentityField = typeof IdentityFieldSchema.Type
+
+export const ResolvedIdentitySchema = Schema.Struct({
+  local: GitIdentitySchema,
+  global: GitIdentitySchema,
+  effective: GitIdentitySchema
+})
+export type ResolvedIdentity = typeof ResolvedIdentitySchema.Type
+
 export const RepoChangeKindSchema = Schema.Literal('refs', 'workingTree', 'index')
 export type RepoChangeKind = typeof RepoChangeKindSchema.Type
 

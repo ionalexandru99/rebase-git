@@ -86,6 +86,7 @@ function TabsShell(props: TabsShellProps) {
     persistedSnapshot
   } = useTabs(props.persisted)
   const [recentRepos, setRecentRepos] = useState<string[]>([])
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [activatedTabIds, setActivatedTabIds] = useState<Set<string>>(new Set([activeTabId]))
 
   useEffect(() => {
@@ -174,6 +175,8 @@ function TabsShell(props: TabsShellProps) {
           onSelect={setActiveTabId}
           onClose={closeTab}
           onNew={newTab}
+          settingsOpen={settingsOpen}
+          onToggleSettings={() => setSettingsOpen((open) => !open)}
         />
 
         <div className="relative flex min-h-0 flex-col overflow-hidden">
@@ -186,6 +189,8 @@ function TabsShell(props: TabsShellProps) {
                   <TabView
                     tab={tab}
                     tabActive={tabActive}
+                    settingsOpen={settingsOpen}
+                    onCloseSettings={() => setSettingsOpen(false)}
                     catalog={workspaceCatalog}
                     onOpenRepo={openRepoInTab}
                     onRepoOpened={confirmRepoOpen}

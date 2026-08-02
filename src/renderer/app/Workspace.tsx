@@ -18,10 +18,10 @@ import {
 import { LAYOUT_RESET_EVENT } from '@/lib/layout'
 import type { PullStrategy } from '@/lib/rpc-client'
 import { type RefKind, shortRefName } from '../features/refs/ref-tree'
-import { repoDisplayName } from '../features/repos/repo-display-name'
 import { useCheckoutRef } from '../hooks/git/useCheckoutRef'
 import { useGitActions } from '../hooks/git/useGitActions'
 import { useStashes } from '../hooks/git/useStashes'
+import { repoDisplayName } from '../lib/repo-display-name'
 import {
   useActionRunner,
   useCommitHistory,

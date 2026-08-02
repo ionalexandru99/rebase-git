@@ -1,4 +1,4 @@
-import { PlusIcon, XIcon } from 'lucide-react'
+import { PlusIcon, SettingsIcon, XIcon } from 'lucide-react'
 import { avatarColor, avatarInitials } from '@/features/repos/repo-avatar'
 import { cn } from '@/lib/utils'
 import type { TabDescriptor } from '../hooks/useTabs'
@@ -12,6 +12,8 @@ interface RepoRailProps {
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onNew: () => void
+  settingsOpen: boolean
+  onToggleSettings: () => void
 }
 
 export function RepoRail(props: RepoRailProps) {
@@ -60,6 +62,22 @@ export function RepoRail(props: RepoRailProps) {
           )}
         >
           <PlusIcon className="size-4" />
+        </button>
+      </div>
+
+      <div className="no-drag flex shrink-0 items-center justify-center px-1 pb-2">
+        <button
+          type="button"
+          aria-label="Settings"
+          aria-pressed={props.settingsOpen}
+          onClick={props.onToggleSettings}
+          style={{ width: `${RAIL_BUTTON_SIZE}px`, height: `${RAIL_BUTTON_SIZE}px` }}
+          className={cn(
+            'flex shrink-0 items-center justify-center rounded-[var(--r-md)] text-muted-foreground transition-colors hover:bg-card-2 hover:text-foreground',
+            props.settingsOpen && 'bg-card-2 text-foreground'
+          )}
+        >
+          <SettingsIcon className="size-4" />
         </button>
       </div>
     </nav>

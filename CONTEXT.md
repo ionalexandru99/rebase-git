@@ -44,6 +44,16 @@ _Avoid_: hunk id, hunk index (indexes shift as the diff changes; the header is r
 The wire carries the raw unified patch, nothing parsed: `GetDiff` returns `{ patch, binary }` and every consumer derives what it needs from that text. `@pierre/diffs` renders it (virtualized, worker-highlighted, unified + split); the same shared `parseUnifiedDiff` (`src/shared/unified-diff.ts`, next to the fingerprint) gives the renderer its hunk metadata — headers, hover ranges, line indexes for selections — and gives the sidecar its staging structures. Staging never trusts renderer state: `applyHunk`/`applyLines` re-read and re-parse the diff under the repo lock, match the [[Hunk header identity]], and for line selections also verify a fingerprint of the whole hunk body (`fingerprintHunk`) so a shifted diff surfaces as `HunkNotFound` rather than staging the wrong lines. A working-tree read that yields no hunks but contains `@@@` is a combined conflict diff the unified parser cannot represent, so the sidecar re-reads with `--ours` to keep the surface displayable. Renderer theme knobs for the diff view have a single owner: the `--diffs-*` custom properties live only in `diff-theme.ts` (inline style + `unsafeCSS`), never in Tailwind classes or other stylesheets. Exactly one `shiki` may resolve in the lockfile — two copies mean two highlighter instances and broken shared caches; the `@pierre/diffs>shiki` override in `pnpm-workspace.yaml` pins it.
 _Avoid_: sending parsed hunks over the wire, second parsers (renderer and sidecar must index hunk lines identically or fingerprints and selections diverge)
 
+**Identity**:
+The `user.name` / `user.email` pair a commit is authored with, always read as three values at once:
+the **local** one written in the repo's own config, the **global** one written in the user's config,
+and the **effective** one Git itself resolves from them. Rebase adds no defaults layer of its own —
+Git's global→local inheritance *is* the defaults system, so a repository "override" is simply a local
+value shadowing the global one, and clearing it means unsetting the local key. Only these two keys are
+readable or writable from the app; there is no generic config surface.
+_Avoid_: author, committer (those name a commit's recorded fields, not the configured source), user
+account, profile
+
 **System auth**:
 Rebase carries no credentials of its own: every remote operation authenticates through the machine's
 own Git setup (SSH agent, `known_hosts`, credential helper). Git runs with prompts suppressed, so a

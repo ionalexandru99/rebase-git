@@ -1,3 +1,4 @@
+import { SettingsPanel } from '../features/settings/SettingsPanel'
 import type { TabRecord } from '../hooks/useTabs'
 import { NewTab, type WorkspaceCatalog } from './NewTab'
 import { RepoTab } from './RepoTab'
@@ -5,6 +6,8 @@ import { RepoTab } from './RepoTab'
 interface TabViewProps {
   tab: TabRecord
   tabActive: boolean
+  settingsOpen: boolean
+  onCloseSettings: () => void
   catalog: WorkspaceCatalog
   onOpenRepo: (sourceTabId: string, path: string) => void
   onRepoOpened: (tabId: string, path: string) => boolean
@@ -12,6 +15,11 @@ interface TabViewProps {
 }
 
 export function TabView(props: TabViewProps) {
+  if (props.tabActive && props.settingsOpen) {
+    const repoPath = props.tab.kind === 'new' ? null : props.tab.repoPath
+    return <SettingsPanel repoPath={repoPath} onClose={props.onCloseSettings} />
+  }
+
   if (
     props.tab.kind === 'repo' ||
     props.tab.kind === 'opening-repo' ||

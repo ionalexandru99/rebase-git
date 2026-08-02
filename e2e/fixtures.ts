@@ -205,6 +205,7 @@ export interface LifecycleSnapshot {
 
 export interface AppHarness {
   readonly page: Page
+  readonly globalGitConfigPath: string
   app(): ElectronApplication
   close(): Promise<void>
   launchCount(): number
@@ -371,6 +372,8 @@ export const test = base.extend<{ harness: AppHarness }>({
   harness: async ({}, use, testInfo) => {
     const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-e2e-'))
     const userDataDir = fs.mkdtempSync(path.join(fixtureRoot, 'rebase-e2e-user-data-'))
+    const globalGitConfigPath = path.join(fixtureRoot, 'gitconfig-global')
+    fs.writeFileSync(globalGitConfigPath, '')
     activeFixtureRoot = fixtureRoot
     const externalFixturePaths = new Set<string>()
     let electronApp: ElectronApplication | undefined
@@ -379,7 +382,12 @@ export const test = base.extend<{ harness: AppHarness }>({
 
     const launch = async (): Promise<Page> => {
       launches += 1
-      const electronEnv = { ...process.env, NODE_ENV: 'test' }
+      const electronEnv = {
+        ...process.env,
+        NODE_ENV: 'test',
+        GIT_CONFIG_GLOBAL: globalGitConfigPath,
+        GIT_CONFIG_NOSYSTEM: '1'
+      }
       delete electronEnv.ELECTRON_RUN_AS_NODE
       if (process.platform === 'linux') {
         electronEnv.ELECTRON_OZONE_PLATFORM_HINT = 'x11'
@@ -476,6 +484,7 @@ export const test = base.extend<{ harness: AppHarness }>({
       get page() {
         return currentPage()
       },
+      globalGitConfigPath,
       app: currentApp,
       close: closeApp,
       launchCount: () => launches,

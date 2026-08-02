@@ -5,6 +5,7 @@ import {
   AmendCommit,
   Checkout,
   CherryPick,
+  ClearIdentity,
   Commit,
   ContinueOperation,
   CreateBranch,
@@ -19,6 +20,7 @@ import {
   GetCommitStats,
   GetDiff,
   GetHeadCommit,
+  GetIdentity,
   GetLocalBranches,
   GetRemoteRefs,
   GetStatus,
@@ -34,6 +36,7 @@ import {
   ResolveConflict,
   RevertCommit,
   ScanForRepos,
+  SetIdentity,
   type SidecarRpc,
   StageAll,
   StageFile,
@@ -50,6 +53,7 @@ import {
   UnstageLines
 } from '@shared/rpc'
 import { type RpcContract, type RpcResult, rpcResultSchema } from '@shared/rpc-result'
+import type { GitIdentity, IdentityField, IdentityScope } from '@shared/schemas/git'
 import type { RefKind, ResetMode } from '@shared/schemas/ipc'
 
 type RpcResultFor<Contract extends Rpc.Any> = RpcResult<
@@ -105,6 +109,9 @@ export type CommitDetailResult = RpcResultFor<typeof GetCommitDetail>
 export type CommitStatsResult = RpcResultFor<typeof GetCommitStats>
 export type WorkingTreeStatsResult = RpcResultFor<typeof GetWorkingTreeStats>
 export type StashListResult = RpcResultFor<typeof StashList>
+export type IdentityResult = RpcResultFor<typeof GetIdentity>
+export type SetIdentityResult = RpcResultFor<typeof SetIdentity>
+export type ClearIdentityResult = RpcResultFor<typeof ClearIdentity>
 
 export async function rpcOpenRepo(repoPath: string, owner: number): Promise<OpenRepoResult> {
   return decodeRpcResult(OpenRepo, await window.electronAPI.openRepo(repoPath, owner))
@@ -460,4 +467,28 @@ export async function rpcGetWorkingTreeStats(repoPath: string): Promise<WorkingT
 
 export async function rpcStashList(repoPath: string): Promise<StashListResult> {
   return callSidecarRpc(StashList, { repoPath })
+}
+
+export async function rpcGetIdentity(repoPath: string | null): Promise<IdentityResult> {
+  return callSidecarRpc(GetIdentity, { repoPath: repoPath ?? undefined })
+}
+
+export async function rpcSetIdentity(
+  scope: IdentityScope,
+  repoPath: string | null,
+  identity: GitIdentity
+): Promise<SetIdentityResult> {
+  return callSidecarRpc(SetIdentity, {
+    scope,
+    repoPath: repoPath ?? undefined,
+    name: identity.name,
+    email: identity.email
+  })
+}
+
+export async function rpcClearIdentity(
+  repoPath: string,
+  fields: readonly IdentityField[]
+): Promise<ClearIdentityResult> {
+  return callSidecarRpc(ClearIdentity, { repoPath, fields })
 }
