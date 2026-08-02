@@ -14,7 +14,8 @@ function viewElement(overrides: Partial<Parameters<typeof CommitPanelView>[0]> =
       stagedCount={overrides.stagedCount ?? 2}
       concludesMerge={overrides.concludesMerge ?? false}
       commitBlockedReason={overrides.commitBlockedReason}
-      identityCallout={overrides.identityCallout}
+      identityMissing={overrides.identityMissing ?? false}
+      onSetIdentity={overrides.onSetIdentity ?? vi.fn()}
       hasDroppedFiles={overrides.hasDroppedFiles ?? false}
       expectedHeadAvailable={overrides.expectedHeadAvailable ?? true}
       onMessageChange={overrides.onMessageChange ?? vi.fn()}
@@ -80,14 +81,18 @@ describe('CommitPanelView', () => {
     expect(screen.getByText(/staged changes in dropped files will also be excluded/i)).toBeVisible()
   })
 
-  it('renders the identity callout and refuses the commit while it is up', () => {
+  it('refuses the commit while git has no identity and offers the fix', () => {
+    const onSetIdentity = vi.fn()
     const view = renderView({ message: 'message' })
     expect(screen.getByRole('button', { name: 'Commit 2 files' })).toBeEnabled()
 
-    view.rerender(viewElement({ message: 'message', identityCallout: <p>Tell git who you are</p> }))
+    view.rerender(viewElement({ message: 'message', identityMissing: true, onSetIdentity }))
 
-    expect(screen.getByText('Tell git who you are')).toBeInTheDocument()
+    expect(screen.getByText('Tell git who you are before committing.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Commit 2 files' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set identity' }))
+    expect(onSetIdentity).toHaveBeenCalledOnce()
   })
 
   it('shows and disables the amend control from view state', () => {

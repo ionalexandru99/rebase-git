@@ -1,5 +1,5 @@
-import { GetIdentity } from '@shared/rpc'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { GetIdentity, SetIdentity } from '@shared/rpc'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
@@ -351,13 +351,43 @@ describe('CommitPanel identity gate', () => {
     return current
   }
 
-  it('raises the callout and holds the commit while git has no identity', async () => {
+  it('holds the commit while git has no identity and opens the fix in a modal', async () => {
     identityResponder({})
     renderPanel()
     fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
 
-    expect(await screen.findByTestId('missing-identity-callout')).toBeInTheDocument()
+    expect(await screen.findByTestId('missing-identity-notice')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Commit 2 files/i })).toBeDisabled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set identity' }))
+
+    expect(screen.getByTestId('missing-identity-dialog')).toBeInTheDocument()
+  })
+
+  it('closes the modal and releases the commit once the identity is saved', async () => {
+    const identity = identityResponder({})
+    sidecarMock.respond(SetIdentity, (payload) => {
+      identity.effective = { name: payload.name, email: payload.email }
+      return { _tag: 'Ok' }
+    })
+    renderPanel()
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
+    await screen.findByTestId('missing-identity-notice')
+    fireEvent.click(screen.getByRole('button', { name: 'Set identity' }))
+
+    const dialog = screen.getByRole('dialog')
+    fireEvent.input(within(dialog).getByLabelText('Name'), { target: { value: 'Ada Lovelace' } })
+    fireEvent.input(within(dialog).getByLabelText('Email'), {
+      target: { value: 'ada@example.com' }
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save identity' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('missing-identity-notice')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Commit 2 files/i })).toBeEnabled()
   })
 
   it('re-reads the identity after a rejected commit, so the backstop error lands on the inline fix', async () => {
@@ -374,6 +404,6 @@ describe('CommitPanel identity gate', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /Commit 2 files/i }))
 
-    expect(await screen.findByTestId('missing-identity-callout')).toBeInTheDocument()
+    expect(await screen.findByTestId('missing-identity-notice')).toBeInTheDocument()
   })
 })

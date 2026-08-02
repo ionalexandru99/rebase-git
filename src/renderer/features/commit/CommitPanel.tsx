@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useIdentity } from '@/stores/identity'
 import { CommitPanelView } from './CommitPanelView'
-import { MissingIdentityCallout } from './MissingIdentityCallout'
+import { MissingIdentityDialog } from './MissingIdentityDialog'
 import { missingIdentityFields } from './missing-identity'
 
 interface CommitPanelProps {
@@ -30,6 +30,7 @@ interface CommitPanelProps {
 
 export function CommitPanel(props: CommitPanelProps) {
   const identity = useIdentity(props.repoPath)
+  const [identityDialogOpen, setIdentityDialogOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [amend, setAmend] = useState(false)
   const [savedDraft, setSavedDraft] = useState('')
@@ -128,37 +129,41 @@ export function CommitPanel(props: CommitPanelProps) {
 
   const loading = props.loading || submitting
   const hasDroppedFiles = amend && (props.droppedHeadPaths?.length ?? 0) > 0
-  const identityCallout =
-    missingIdentityFields(identity.identity).length > 0 ? (
-      <MissingIdentityCallout
-        effective={identity.identity?.effective ?? {}}
-        saving={identity.saving}
-        error={identity.error}
-        onSave={(scope, values) => identity.save({ scope, identity: values })}
-      />
-    ) : undefined
+  const identityMissing = missingIdentityFields(identity.identity).length > 0
 
   return (
-    <CommitPanelView
-      message={message}
-      amend={amend}
-      amendAvailable={props.amendAvailable}
-      amendDisabled={props.amendDisabled}
-      loading={loading}
-      branch={props.branch}
-      stagedCount={props.stagedCount}
-      concludesMerge={Boolean(props.concludesMerge)}
-      commitBlockedReason={props.commitBlockedReason}
-      identityCallout={identityCallout}
-      hasDroppedFiles={hasDroppedFiles}
-      expectedHeadAvailable={Boolean(props.expectedHead)}
-      onMessageChange={(nextMessage) => {
-        amendLoadGeneration.current += 1
-        messageRef.current = nextMessage
-        setMessage(nextMessage)
-      }}
-      onAmendChange={(nextAmend) => void handleAmendToggle(nextAmend)}
-      onCommit={() => void handleCommit()}
-    />
+    <>
+      <CommitPanelView
+        message={message}
+        amend={amend}
+        amendAvailable={props.amendAvailable}
+        amendDisabled={props.amendDisabled}
+        loading={loading}
+        branch={props.branch}
+        stagedCount={props.stagedCount}
+        concludesMerge={Boolean(props.concludesMerge)}
+        commitBlockedReason={props.commitBlockedReason}
+        identityMissing={identityMissing}
+        onSetIdentity={() => setIdentityDialogOpen(true)}
+        hasDroppedFiles={hasDroppedFiles}
+        expectedHeadAvailable={Boolean(props.expectedHead)}
+        onMessageChange={(nextMessage) => {
+          amendLoadGeneration.current += 1
+          messageRef.current = nextMessage
+          setMessage(nextMessage)
+        }}
+        onAmendChange={(nextAmend) => void handleAmendToggle(nextAmend)}
+        onCommit={() => void handleCommit()}
+      />
+      {identityMissing && identityDialogOpen ? (
+        <MissingIdentityDialog
+          effective={identity.identity?.effective ?? {}}
+          saving={identity.saving}
+          error={identity.error}
+          onSave={(scope, values) => identity.save({ scope, identity: values })}
+          onDismiss={() => setIdentityDialogOpen(false)}
+        />
+      ) : null}
+    </>
   )
 }

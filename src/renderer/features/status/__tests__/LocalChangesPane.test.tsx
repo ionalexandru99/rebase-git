@@ -151,7 +151,7 @@ describe('a repository git has no identity for', () => {
     return identity
   }
 
-  it('offers the inline fix and blocks the commit until the identity is saved', async () => {
+  it('offers the fix in a modal and blocks the commit until the identity is saved', async () => {
     const identity = await renderWithStagedChange({})
     const writes: unknown[] = []
     sidecarMock.respond(SetIdentity, (payload) => {
@@ -160,20 +160,22 @@ describe('a repository git has no identity for', () => {
       return { _tag: 'Ok' }
     })
 
-    const callout = await screen.findByTestId('missing-identity-callout')
+    expect(await screen.findByTestId('missing-identity-notice')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeDisabled()
 
-    fireEvent.input(within(callout).getByLabelText('Name'), {
-      target: { value: 'Ada Lovelace' }
-    })
-    fireEvent.input(within(callout).getByLabelText('Email'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Set identity' }))
+
+    const dialog = screen.getByRole('dialog')
+    fireEvent.input(within(dialog).getByLabelText('Name'), { target: { value: 'Ada Lovelace' } })
+    fireEvent.input(within(dialog).getByLabelText('Email'), {
       target: { value: 'ada@example.com' }
     })
-    fireEvent.click(within(callout).getByRole('button', { name: 'Save identity' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save identity' }))
 
     await waitFor(() => {
-      expect(screen.queryByTestId('missing-identity-callout')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('missing-identity-notice')).not.toBeInTheDocument()
     })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(writes).toEqual([{ scope: 'global', name: 'Ada Lovelace', email: 'ada@example.com' }])
     expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeEnabled()
   })
@@ -184,7 +186,7 @@ describe('a repository git has no identity for', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeEnabled()
     })
-    expect(screen.queryByTestId('missing-identity-callout')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('missing-identity-notice')).not.toBeInTheDocument()
   })
 })
 
