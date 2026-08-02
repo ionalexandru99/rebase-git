@@ -30,9 +30,6 @@ export function AppSidebar(props: AppSidebarProps) {
           currentBranch={props.currentBranch}
           loading={props.branchBrowser.branchesLoading}
           tracking={props.branchBrowser.tracking}
-          lastCommitAt={props.branchBrowser.lastCommitAt}
-          remoteLastCommitAt={props.branchBrowser.remoteLastCommitAt}
-          tagLastCommitAt={props.branchBrowser.tagLastCommitAt}
           visibleTimelineRefs={props.branchBrowser.visibleTimelineRefs}
           onToggleTimelineVisibility={props.branchBrowser.onToggleTimelineVisibility}
           onCheckoutRef={props.branchBrowser.onCheckoutRef}

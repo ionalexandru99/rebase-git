@@ -25,9 +25,6 @@ export interface BranchBrowser {
   stashes?: StashRowData[]
   branchesLoading?: boolean
   tracking?: Record<string, BranchTracking>
-  lastCommitAt?: Record<string, string>
-  remoteLastCommitAt?: Record<string, string>
-  tagLastCommitAt?: Record<string, string>
   visibleTimelineRefs?: ReadonlySet<string>
   onToggleTimelineVisibility?: (refKind: RefKind, fullPath: string) => void
   onCheckoutRef?: (refKind: RefKind, fullPath: string) => void

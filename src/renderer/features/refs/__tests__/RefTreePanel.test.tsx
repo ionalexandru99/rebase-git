@@ -180,9 +180,6 @@ describe('RefTreePanel freshness', () => {
         remoteBranches={['origin/main']}
         tags={['v1.0.0']}
         currentBranch="main"
-        lastCommitAt={{ main: '2026-07-30T12:00:00.000Z' }}
-        remoteLastCommitAt={{ 'origin/main': '2026-07-31T12:00:00.000Z' }}
-        tagLastCommitAt={{ 'v1.0.0': '2026-07-22T12:00:00.000Z' }}
         stashes={[
           {
             index: 0,
@@ -199,34 +196,20 @@ describe('RefTreePanel freshness', () => {
     return result
   }
 
-  it.each<[string, string, string]>([
-    ['local branch', 'main', '2d'],
-    ['remote branch', 'origin/main', '1d'],
-    ['tag', 'v1.0.0', '10d']
-  ])('labels the %s row with its age', async (_kind, title, expected) => {
+  it.each<[string, string]>([
+    ['local branch', 'main'],
+    ['remote branch', 'origin/main'],
+    ['tag', 'v1.0.0']
+  ])('renders no age label on the %s row', async (_kind, title) => {
     await renderFreshPanel()
     const row = screen.getByTitle(title).closest('[data-testid="ref-tree-leaf-row"]')
     expect(row).not.toBeNull()
-    expect(within(row as HTMLElement).getByTestId('ref-freshness').textContent).toBe(expected)
+    expect(within(row as HTMLElement).queryByTestId('ref-freshness')).not.toBeInTheDocument()
   })
 
   it('labels the stash row with its age', async () => {
     await renderFreshPanel()
     const row = screen.getByTestId('ref-tree-stash-row')
     expect(within(row).getByTestId('ref-freshness').textContent).toBe('1d')
-  })
-
-  it('renders no label on rows without a known date', async () => {
-    render(
-      <RefTreePanel
-        repoPath="/repo-a"
-        localBranches={['main']}
-        remoteBranches={[]}
-        tags={[]}
-        currentBranch="main"
-      />
-    )
-    const row = (await screen.findByTitle('main')).closest('[data-testid="ref-tree-leaf-row"]')
-    expect(within(row as HTMLElement).queryByTestId('ref-freshness')).not.toBeInTheDocument()
   })
 })

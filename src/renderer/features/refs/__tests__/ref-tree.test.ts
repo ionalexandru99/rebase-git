@@ -1,6 +1,6 @@
 import { REF_TREE_REMOTE_SECTION_KEY, REF_TREE_TAG_SECTION_KEY } from '@shared/ref-tree-toggles'
 import { describe, expect, it } from 'vitest'
-import { buildRefTreeRows, folderKey, rowKey } from '../ref-tree'
+import { buildRefTreeRows, folderKey } from '../ref-tree'
 
 function rowsFor(toggles: Set<string> = new Set()) {
   return buildRefTreeRows({
@@ -339,12 +339,6 @@ describe('ref-tree tracking attachment to local leaves', () => {
 })
 
 describe('ref-tree freshness attachment', () => {
-  const freshness = {
-    local: { main: '2026-07-30T12:00:00.000Z' },
-    remote: { 'origin/main': '2026-07-29T12:00:00.000Z' },
-    tag: { 'v1.0.0': '2026-06-01T12:00:00.000Z' }
-  }
-
   function freshRows() {
     return buildRefTreeRows({
       localBranches: ['main', 'develop'],
@@ -357,7 +351,6 @@ describe('ref-tree freshness attachment', () => {
       ]),
       currentBranch: 'main',
       localLoading: false,
-      freshness,
       stashes: [
         {
           index: 0,
@@ -371,41 +364,13 @@ describe('ref-tree freshness attachment', () => {
     })
   }
 
-  it.each<[string, string, string]>([
-    ['local', 'main', '2026-07-30T12:00:00.000Z'],
-    ['remote', 'origin/main', '2026-07-29T12:00:00.000Z'],
-    ['tag', 'v1.0.0', '2026-06-01T12:00:00.000Z']
-  ])('attaches the %s leaf last commit date', (refKind, fullPath, expected) => {
-    const leaf = freshRows().find(
-      (row) => row.kind === 'leaf' && row.refKind === refKind && row.fullPath === fullPath
-    )
-    expect(leaf?.kind === 'leaf' && leaf.lastCommitAt).toBe(expected)
-  })
-
   it('carries the stash last commit date onto the stash row', () => {
     const stashRow = freshRows().find((row) => row.kind === 'stash')
     expect(stashRow?.kind === 'stash' && stashRow.lastCommitAt).toBe('2026-07-31T12:00:00.000Z')
   })
 
-  it('leaves rows without a known date undated', () => {
-    const leaf = freshRows().find((row) => row.kind === 'leaf' && row.fullPath === 'develop')
-    expect(leaf?.kind === 'leaf' && leaf.lastCommitAt).toBeUndefined()
-  })
-
-  it('keeps the row order unchanged when freshness is supplied', () => {
-    const withoutFreshness = buildRefTreeRows({
-      localBranches: ['main', 'develop'],
-      remoteBranches: ['origin/main'],
-      tags: ['v1.0.0'],
-      toggles: new Set([
-        REF_TREE_REMOTE_SECTION_KEY,
-        REF_TREE_TAG_SECTION_KEY,
-        folderKey('remote', 'origin')
-      ]),
-      currentBranch: 'main',
-      localLoading: false,
-      stashes: [{ index: 0, ref: 'stash@{0}', oid: 'stash-oid-0', message: 'wip', branch: 'main' }]
-    })
-    expect(freshRows().map(rowKey)).toEqual(withoutFreshness.map(rowKey))
+  it('leaves branch and tag rows undated', () => {
+    const dated = freshRows().filter((row) => row.kind === 'leaf' && 'lastCommitAt' in row)
+    expect(dated).toEqual([])
   })
 })
