@@ -1,4 +1,3 @@
-import { PULL_REAPPLY_CONFLICTS_MESSAGE } from '@shared/git-constants'
 import type { LostCommit } from '@shared/git-rpc-errors'
 import { AmendCommit, Commit, Pull, Push } from '@shared/rpc'
 import { useMutation } from '@tanstack/react-query'
@@ -24,6 +23,9 @@ import {
   rpcPull,
   rpcPush
 } from '@/lib/rpc-client'
+import { decidePullResponse, type PullNotice, type PullOutcome } from './action-runner-outcomes'
+
+export type { PullOutcome } from './action-runner-outcomes'
 
 export type PushRejectionReason = 'non-fast-forward' | 'lease-stale' | 'remote-moved'
 
@@ -35,12 +37,6 @@ export type PushOutcome =
       lostCommits: readonly LostCommit[]
       remoteSha?: string
     }
-  | { kind: 'error'; message: string }
-
-export type PullOutcome =
-  | { kind: 'ok' }
-  | { kind: 'diverged' }
-  | { kind: 'conflict' }
   | { kind: 'error'; message: string }
 
 export interface RunActionOptions {
@@ -81,6 +77,25 @@ const notifyBusy = (): void => {
   toast.info('Another Git action is still running', {
     description: 'Wait for it to finish, then try again.'
   })
+}
+
+const showPullNotice = (notice: PullNotice | undefined): void => {
+  if (!notice) {
+    return
+  }
+  if (notice.kind === 'success') {
+    toast.success(notice.title)
+    return
+  }
+  if (notice.kind === 'warning') {
+    toast.warning(notice.title, { description: notice.description })
+    return
+  }
+  if (notice.kind === 'error') {
+    toast.error(notice.title)
+    return
+  }
+  toastGitFailure(notice.title, notice.message)
 }
 
 const pushLabel = (force?: PushForce): string => {
@@ -265,41 +280,12 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       if (!isCurrentRepo(generation, repoPath)) {
         return { kind: 'error', message: 'Repository changed' }
       }
-      if (response._tag === 'Ok' || response._tag === 'Conflict') {
+      const decision = decidePullResponse(response)
+      if (decision.refreshCaches) {
         await refreshCaches(repoPath, cachesForOperation(Pull._tag))
       }
-      if (response._tag === 'Ok') {
-        toast.success('Pulled')
-        return { kind: 'ok' }
-      }
-      if (response._tag === 'PullDiverged') {
-        return { kind: 'diverged' }
-      }
-      if (response._tag === 'Conflict') {
-        if (response.message === PULL_REAPPLY_CONFLICTS_MESSAGE) {
-          toast.warning('Pulled, but your uncommitted changes conflicted', {
-            description:
-              'Resolve the conflicted files, then drop the kept stash — your original changes are safe in it.'
-          })
-        } else {
-          toast.warning('Pull hit conflicts', {
-            description: 'Resolve the conflicted files, then continue or abort.'
-          })
-        }
-        return { kind: 'conflict' }
-      }
-      if (response._tag === 'OperationInProgress') {
-        toast.warning('Another Git operation is in progress', {
-          description: `Finish or abort the in-progress ${response.operation} first.`
-        })
-        return { kind: 'error', message: `A ${response.operation} is already in progress` }
-      }
-      if (response._tag === 'RepoNotOpen') {
-        toast.error('Repository is not open')
-        return { kind: 'error', message: 'Repository is not open' }
-      }
-      toastGitFailure('Pull failed', response.message)
-      return { kind: 'error', message: response.message }
+      showPullNotice(decision.notice)
+      return decision.outcome
     } catch (error) {
       const message = formatCause(error)
       if (!isCurrentRepo(generation, repoPath)) {

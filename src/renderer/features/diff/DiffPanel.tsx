@@ -19,6 +19,7 @@ import {
   sweepSelectedChangeLines
 } from '@/features/diff/line-selection'
 import { parsePatch } from '@/features/diff/patch-parse'
+import { useDiffHunkActions } from '@/features/diff/useDiffHunkActions'
 import { cn } from '@/lib/utils'
 import { useFileDiff, useWorkingTreeStatus } from '@/stores/git'
 import { Checkbox } from '../../components/ui/checkbox'
@@ -43,14 +44,6 @@ interface HoveredLine {
   side: DiffSide
 }
 
-interface PendingHunkRemoval {
-  file: string
-  staged: boolean
-  header: string
-  resolution: 'accept' | 'reject'
-  dataUpdatedAt: number
-}
-
 interface PendingLineSelection {
   file: string
   staged: boolean
@@ -59,8 +52,6 @@ interface PendingLineSelection {
 }
 
 const SELECTION_SWEEP_MAX_FRAMES = 12
-
-type HunkAction = 'stage' | 'unstage' | 'discard'
 
 function patchHash(patch: string): string {
   let hash = 2166136261
@@ -106,19 +97,21 @@ export function DiffPanel(props: DiffPanelProps) {
   const hunks = useMemo(() => (patch === undefined ? [] : parseUnifiedDiff(patch).hunks), [patch])
   const isBinary = Boolean(data?.binary)
 
-  const [pending, setPending] = useState<PendingHunkRemoval | null>(null)
   const [hoveredLine, setHoveredLine] = useState<HoveredLine | null>(null)
   const [lineSelection, setLineSelection] = useState<PendingLineSelection | null>(null)
   const diffBodyRef = useRef<HTMLDivElement | null>(null)
   const selectionSweepGeneration = useRef(0)
 
-  const activePending =
-    pending &&
-    pending.file === selectedFile &&
-    pending.staged === showsStagedSide &&
-    pending.dataUpdatedAt === activeQuery.dataUpdatedAt
-      ? pending
-      : null
+  const { activePending, requestHunkAction } = useDiffHunkActions({
+    selectedFile,
+    showsStagedSide,
+    hunks,
+    dataUpdatedAt: activeQuery.dataUpdatedAt,
+    stageHunk: stageHunkOp,
+    unstageHunk: unstageHunkOp,
+    discardHunk: discardHunkOp,
+    confirm
+  })
 
   const currentPatchKey = useMemo(() => (patch === undefined ? null : patchHash(patch)), [patch])
 
@@ -158,59 +151,6 @@ export function DiffPanel(props: DiffPanelProps) {
         : file
     )
   }, [parsedFiles, activePending, hunks])
-
-  const runHunkAction = useCallback(
-    async (action: HunkAction, hunk: ParsedHunk) => {
-      if (!selectedFile) {
-        return
-      }
-      const isLastOnSide = hunks.length === 1
-      setPending({
-        file: selectedFile,
-        staged: showsStagedSide,
-        header: hunk.header,
-        resolution: action === 'stage' ? 'accept' : 'reject',
-        dataUpdatedAt: activeQuery.dataUpdatedAt
-      })
-      try {
-        if (action === 'stage') {
-          await stageHunkOp(selectedFile, hunk.header, { fullyStagesFile: isLastOnSide })
-        } else if (action === 'unstage') {
-          await unstageHunkOp(selectedFile, hunk.header, { fullyUnstagesFile: isLastOnSide })
-        } else {
-          await discardHunkOp(selectedFile, hunk.header)
-        }
-      } catch {
-        setPending(null)
-      }
-    },
-    [
-      selectedFile,
-      hunks,
-      showsStagedSide,
-      activeQuery.dataUpdatedAt,
-      stageHunkOp,
-      unstageHunkOp,
-      discardHunkOp
-    ]
-  )
-
-  const requestHunkAction = useCallback(
-    (action: HunkAction, hunk: ParsedHunk) => {
-      if (action === 'discard') {
-        confirm({
-          title: `Discard hunk in ${selectedFile}?`,
-          message: 'Local edits in this hunk are lost.',
-          confirmText: 'Discard',
-          destructive: true,
-          onConfirm: () => void runHunkAction('discard', hunk)
-        })
-        return
-      }
-      void runHunkAction(action, hunk)
-    },
-    [confirm, selectedFile, runHunkAction]
-  )
 
   const toggleHunkDrop = useCallback(
     (hunk: ParsedHunk) => {

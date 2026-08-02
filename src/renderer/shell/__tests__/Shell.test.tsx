@@ -6,25 +6,33 @@ import {
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LAYOUT_RESET_EVENT } from '@/lib/layout'
-import { Shell } from '../Shell'
+import { type BranchBrowser, Shell } from '../Shell'
 
 const repoPath = '/home/user/acme'
 
-function renderShell() {
+type ShellProps = Parameters<typeof Shell>[0]
+type ShellOverrides = Partial<Omit<ShellProps, 'branchBrowser'>> & {
+  branchBrowser?: Partial<BranchBrowser>
+}
+
+function renderShell(overrides: ShellOverrides = {}) {
+  const renderedRepoPath = overrides.repoPath === undefined ? repoPath : overrides.repoPath
   return render(
     <Shell
-      repoPath={repoPath}
-      currentBranch="main"
+      repoPath={renderedRepoPath}
+      currentBranch={overrides.currentBranch ?? 'main'}
       branchBrowser={{
-        repoPath,
+        repoPath: renderedRepoPath,
         localBranches: ['main'],
         remoteBranches: [],
-        tags: []
+        tags: [],
+        ...overrides.branchBrowser
       }}
-      listHeader={<div>list header</div>}
-      listBody={<div>commit list</div>}
-      detailPane={<div>detail pane</div>}
-      statusDock={<div>status dock</div>}
+      banner={overrides.banner}
+      listHeader={overrides.listHeader ?? <div>list header</div>}
+      listBody={overrides.listBody ?? <div>commit list</div>}
+      detailPane={overrides.detailPane ?? <div>detail pane</div>}
+      statusDock={overrides.statusDock ?? <div>status dock</div>}
     />
   )
 }
@@ -97,22 +105,7 @@ describe('Shell four-column layout', () => {
   })
 
   it('renders branch rows without an age label', async () => {
-    render(
-      <Shell
-        repoPath={repoPath}
-        currentBranch="main"
-        branchBrowser={{
-          repoPath,
-          localBranches: ['main'],
-          remoteBranches: [],
-          tags: []
-        }}
-        listHeader={<div>list header</div>}
-        listBody={<div>commit list</div>}
-        detailPane={<div>detail pane</div>}
-        statusDock={<div>status dock</div>}
-      />
-    )
+    renderShell()
 
     await waitFor(() => expect(screen.getByTitle('main')).toBeInTheDocument())
     expect(screen.queryByTestId('ref-freshness')).not.toBeInTheDocument()
@@ -181,8 +174,9 @@ describe('Shell four-column layout', () => {
     )
   })
 
-  it('offers no view switcher, because both surfaces are on screen', () => {
+  it('offers no view switcher, because both surfaces are on screen', async () => {
     renderShell()
+    await screen.findByRole('button', { name: 'Resize commit list' })
 
     expect(screen.queryByRole('button', { name: 'History' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Local changes' })).not.toBeInTheDocument()

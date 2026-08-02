@@ -12,7 +12,6 @@ import {
 import { CommitPanel } from '@/features/commit/CommitPanel'
 import { DiffPanel } from '@/features/diff/DiffPanel'
 import { buildHeadCommitRange } from '@/features/history/head-commit-range'
-import type { FileAction } from '@/lib/git-actions'
 import {
   useActionRunner,
   useCommitHistory,
@@ -23,7 +22,7 @@ import {
 import { useDraggablePane } from '../../hooks/useDraggablePane'
 import { CleanWorkingTree } from './CleanWorkingTree'
 import { ConflictBanner } from './ConflictBanner'
-import type { ConflictSide } from './conflict-resolution'
+import { createLocalChangesActions } from './local-changes-actions'
 import { type OperationSummary, summarizeOperation } from './operation-summary'
 import { StashControl } from './StashControl'
 import { type SelectedFile, StatusPanel } from './StatusPanel'
@@ -94,95 +93,6 @@ export function LocalChangesPane(props: LocalChangesPaneProps) {
     [amendRows, drops]
   )
 
-  const promptStash = (title: string, run: (message?: string) => Promise<boolean>) => {
-    prompt({
-      title,
-      label: 'Message (optional)',
-      placeholder: 'Describe these changes',
-      confirmText: 'Stash',
-      allowEmpty: true,
-      onConfirm: (message) => void run(message.trim() || undefined)
-    })
-  }
-
-  const stashSelected = (files: string[]) => {
-    if (files.length === 0) {
-      return
-    }
-    promptStash('Stash selected changes', (message) => actions.stashPush(message, true, files))
-  }
-
-  const stashAll = () => {
-    promptStash('Stash all changes', (message) => actions.stashPush(message, true))
-  }
-
-  const handleFileAction = (action: FileAction, file: string, renameSource?: string) => {
-    switch (action) {
-      case 'stage':
-        void stageFile(file)
-        return
-      case 'unstage':
-        void unstageFile(file, renameSource)
-        return
-      case 'discard':
-        confirm({
-          title: `Discard changes to ${file}?`,
-          message: 'Local edits to this file are lost. Untracked files are deleted.',
-          confirmText: 'Discard',
-          destructive: true,
-          onConfirm: () =>
-            void actions.discardChanges(
-              renameSource ? [renameSource, file] : [file],
-              `Discarded ${file}`
-            )
-        })
-        return
-      case 'copy-path':
-        void navigator.clipboard
-          .writeText(file)
-          .then(() => toast.success('Copied path'))
-          .catch(() => toast.error('Copy failed'))
-        return
-    }
-  }
-
-  const resolveConflict = (file: string, side: ConflictSide) => {
-    void actions.resolveConflict(file, side)
-  }
-
-  const requestAbortOperation = (summary: OperationSummary) => {
-    confirm({
-      title: summary.confirmTitle,
-      message: summary.confirmMessage,
-      confirmText: summary.abortText,
-      destructive: true,
-      onConfirm: () => void actions.abortOperation(summary.noun)
-    })
-  }
-
-  const discardAll = () => {
-    const summary = status?.operation ? summarizeOperation(status.operation) : null
-    confirm({
-      title: 'Discard all changes?',
-      message: summary
-        ? `Every uncommitted change in the working tree is permanently lost, and the in-progress ${summary.noun} is aborted.`
-        : 'Every uncommitted change in the working tree is permanently lost.',
-      confirmText: 'Discard all',
-      destructive: true,
-      onConfirm: () => {
-        void (async () => {
-          if (summary) {
-            const aborted = await actions.abortOperation(summary.noun)
-            if (!aborted) {
-              return
-            }
-          }
-          await actions.discardAll()
-        })()
-      }
-    })
-  }
-
   const { size: filesWidth, onResizeStart } = useDraggablePane({
     min: FILES_PANEL_WIDTH_MIN,
     max: FILES_PANEL_WIDTH_MAX,
@@ -201,6 +111,24 @@ export function LocalChangesPane(props: LocalChangesPaneProps) {
   const amendDisabled = headAvailabilityLoading || conflictCount > 0 || operation !== undefined
   const operationSummary = operation ? summarizeOperation(operation) : null
   const commitBlockedReason = conflictBlockedReason(conflictCount, operationSummary)
+  const {
+    stashSelected,
+    stashAll,
+    handleFileAction,
+    resolveConflict,
+    requestAbortOperation,
+    discardAll
+  } = createLocalChangesActions({
+    stageFile,
+    unstageFile,
+    actions,
+    prompt,
+    confirm,
+    operationSummary,
+    writeClipboard: (text) => navigator.clipboard.writeText(text),
+    reportCopySuccess: () => toast.success('Copied path'),
+    reportCopyFailure: () => toast.error('Copy failed')
+  })
 
   const groupRows = useMemo(() => flattenStatusGroups(buildStatusGroups(rows)), [rows])
   const previousGroupRows = useRef<StatusGroupRow[]>(groupRows)

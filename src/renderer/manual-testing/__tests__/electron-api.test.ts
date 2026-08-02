@@ -2,6 +2,10 @@ import type { LogChunk } from '@shared/schemas/git'
 import { describe, expect, it, vi } from 'vitest'
 import { createPlaywrightMcpElectronApi, PLAYWRIGHT_MCP_REPO_PATH } from '../electron-api'
 
+function requestStatus(api: ReturnType<typeof createPlaywrightMcpElectronApi>) {
+  return api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
+}
+
 describe('Playwright MCP Electron API', () => {
   it('starts with a realistic repository available', async () => {
     const api = createPlaywrightMcpElectronApi()
@@ -18,9 +22,7 @@ describe('Playwright MCP Electron API', () => {
         defaultBranch: 'main'
       }
     })
-    await expect(
-      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
-    ).resolves.toMatchObject({
+    await expect(requestStatus(api)).resolves.toMatchObject({
       _tag: 'Ok',
       status: {
         current: 'main',
@@ -40,9 +42,7 @@ describe('Playwright MCP Electron API', () => {
       repoPath: PLAYWRIGHT_MCP_REPO_PATH,
       file: 'src/renderer/App.tsx'
     })
-    await expect(
-      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
-    ).resolves.toMatchObject({
+    await expect(requestStatus(api)).resolves.toMatchObject({
       _tag: 'Ok',
       status: {
         modified: [],
@@ -59,9 +59,7 @@ describe('Playwright MCP Electron API', () => {
       _tag: 'Ok',
       result: { branch: 'main', summary: { changes: 2 } }
     })
-    await expect(
-      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
-    ).resolves.toMatchObject({
+    await expect(requestStatus(api)).resolves.toMatchObject({
       _tag: 'Ok',
       status: { staged: [] }
     })
@@ -118,9 +116,7 @@ describe('Playwright MCP Electron API', () => {
   it('can expose a deterministic conflict for visual testing', async () => {
     const api = createPlaywrightMcpElectronApi({ conflicted: true })
 
-    await expect(
-      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
-    ).resolves.toMatchObject({
+    await expect(requestStatus(api)).resolves.toMatchObject({
       status: {
         conflicted: ['src/conflict.ts'],
         files: expect.arrayContaining([
@@ -191,9 +187,7 @@ describe('Playwright MCP Electron API', () => {
       message: 'manual stash',
       files: ['notes/manual-test.md']
     })
-    await expect(
-      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
-    ).resolves.toMatchObject({ status: { not_added: [] } })
+    await expect(requestStatus(api)).resolves.toMatchObject({ status: { not_added: [] } })
     const stashList = (await api.sidecarRequest('stashList', {
       repoPath: PLAYWRIGHT_MCP_REPO_PATH
     })) as { stashes: Array<{ index: number; oid: string }> }
@@ -207,9 +201,7 @@ describe('Playwright MCP Electron API', () => {
       index: 0,
       expectedOid: newStashOid
     })
-    await expect(
-      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
-    ).resolves.toMatchObject({
+    await expect(requestStatus(api)).resolves.toMatchObject({
       status: { not_added: expect.arrayContaining(['notes/manual-test.md']) }
     })
     await expect(
@@ -221,17 +213,13 @@ describe('Playwright MCP Electron API', () => {
 
   it('stashes all statuses exactly and gives repeated stashes unique identities', async () => {
     const api = createPlaywrightMcpElectronApi()
-    const initial = (await api.sidecarRequest('getStatus', {
-      repoPath: PLAYWRIGHT_MCP_REPO_PATH
-    })) as { status: Record<string, unknown> }
+    const initial = (await requestStatus(api)) as { status: Record<string, unknown> }
 
     await api.sidecarRequest('stashPush', {
       repoPath: PLAYWRIGHT_MCP_REPO_PATH,
       message: 'all changes'
     })
-    await expect(
-      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
-    ).resolves.toMatchObject({
+    await expect(requestStatus(api)).resolves.toMatchObject({
       status: { modified: [], staged: [], not_added: [], files: [] }
     })
     const firstList = (await api.sidecarRequest('stashList', {
@@ -243,9 +231,7 @@ describe('Playwright MCP Electron API', () => {
       index: 0,
       expectedOid: firstOid
     })
-    await expect(
-      api.sidecarRequest('getStatus', { repoPath: PLAYWRIGHT_MCP_REPO_PATH })
-    ).resolves.toEqual({ _tag: 'Ok', status: initial.status })
+    await expect(requestStatus(api)).resolves.toEqual({ _tag: 'Ok', status: initial.status })
 
     await api.sidecarRequest('stashPush', {
       repoPath: PLAYWRIGHT_MCP_REPO_PATH,

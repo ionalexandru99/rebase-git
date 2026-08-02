@@ -1,7 +1,5 @@
-import { Loader2Icon } from 'lucide-react'
-import type { ChangeEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { cn } from '@/lib/utils'
+import { CommitPanelView } from './CommitPanelView'
 
 interface CommitPanelProps {
   onCommit: (message: string) => Promise<boolean>
@@ -26,17 +24,11 @@ interface CommitPanelProps {
   commitBlockedReason?: string
 }
 
-const MAX_SUBJECT_LENGTH = 72
-
-const MAX_MESSAGE_ROWS = 6
-
 export function CommitPanel(props: CommitPanelProps) {
   const [message, setMessage] = useState('')
   const [amend, setAmend] = useState(false)
   const [savedDraft, setSavedDraft] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [wrappedRows, setWrappedRows] = useState(1)
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const messageRef = useRef(message)
   const amendRef = useRef(amend)
   const amendLoadGeneration = useRef(0)
@@ -58,20 +50,8 @@ export function CommitPanel(props: CommitPanelProps) {
     setMessage(prefill ?? '')
   }, [props.prefillMessage])
 
-  useEffect(() => {
-    const node = textareaRef.current
-    const lineHeight = node ? node.clientHeight / node.rows : 0
-    if (message.length === 0 || !Number.isFinite(lineHeight) || lineHeight <= 0 || !node) {
-      setWrappedRows(1)
-      return
-    }
-    setWrappedRows(
-      Math.min(Math.max(Math.ceil(node.scrollHeight / lineHeight), 1), MAX_MESSAGE_ROWS)
-    )
-  }, [message])
-
-  const handleAmendToggle = async (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.currentTarget.checked) {
+  const handleAmendToggle = async (nextAmend: boolean) => {
+    if (nextAmend) {
       setSavedDraft(message)
       amendRef.current = true
       setAmend(true)
@@ -138,101 +118,29 @@ export function CommitPanel(props: CommitPanelProps) {
     }
   }
 
-  const messageRows = Math.min(Math.max(message.split('\n').length, wrappedRows), MAX_MESSAGE_ROWS)
-  const subjectLength = (message.split('\n')[0] ?? '').length
-  const subjectWarn = subjectLength > MAX_SUBJECT_LENGTH
-  const concludesMerge = Boolean(props.concludesMerge) && !amend
-  const commitLabel = amend
-    ? 'Amend'
-    : concludesMerge
-      ? 'Commit merge'
-      : props.stagedCount > 0
-        ? `Commit ${props.stagedCount} file${props.stagedCount === 1 ? '' : 's'}`
-        : 'Commit'
   const loading = props.loading || submitting
   const hasDroppedFiles = amend && (props.droppedHeadPaths?.length ?? 0) > 0
-  const commitBlocked = Boolean(props.commitBlockedReason)
-  const commitDisabled =
-    !message.trim() ||
-    loading ||
-    commitBlocked ||
-    (!amend && !concludesMerge && props.stagedCount === 0) ||
-    (amend && !props.expectedHead)
 
   return (
-    <div className="shrink-0 border-t px-3 py-2" data-testid="commit-bar">
-      {commitBlocked ? (
-        <p className="pb-1.5 text-xs text-amber-foreground">{props.commitBlockedReason}</p>
-      ) : null}
-      {hasDroppedFiles ? (
-        <p className="pb-1.5 text-xs text-amber-foreground">
-          Amend restores dropped files from the parent commit. Staged changes in dropped files will
-          also be excluded.
-        </p>
-      ) : null}
-      <div className="flex min-h-[36px] items-center gap-2 rounded-[var(--r-md)] border bg-background px-2 py-1 transition-shadow focus-within:border-[var(--brand-line)] focus-within:shadow-[0_0_0_3px_var(--brand-soft)]">
-        <span
-          data-testid="commit-branch-chip"
-          title={props.branch}
-          className="inline-flex h-6 max-w-[140px] shrink-0 items-center truncate rounded-full px-2 text-xs font-semibold"
-          style={{
-            color: 'var(--blue)',
-            backgroundColor: 'color-mix(in oklch, var(--blue) 16%, transparent)'
-          }}
-        >
-          {props.branch}
-        </span>
-        <textarea
-          ref={textareaRef}
-          value={message}
-          onChange={(event) => {
-            const nextMessage = event.currentTarget.value
-            amendLoadGeneration.current += 1
-            messageRef.current = nextMessage
-            setMessage(nextMessage)
-          }}
-          placeholder="Describe your changes…"
-          aria-label="Commit message"
-          rows={messageRows}
-          className="min-w-0 flex-1 resize-none self-center border-0 bg-transparent px-1 py-1 text-sm leading-5 text-foreground outline-none"
-        />
-        {props.amendAvailable && (
-          <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={amend}
-              disabled={props.amendDisabled || loading}
-              onChange={handleAmendToggle}
-              aria-label="Amend last commit"
-              className="size-3.5 accent-[var(--brand)]"
-            />
-            Amend
-          </label>
-        )}
-        <span
-          className={cn(
-            'shrink-0 text-xs tabular-nums',
-            subjectWarn ? 'text-destructive' : 'text-muted-foreground'
-          )}
-        >
-          {subjectLength} / {MAX_SUBJECT_LENGTH}
-        </span>
-        <button
-          type="button"
-          onClick={handleCommit}
-          disabled={commitDisabled}
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--r-sm)] bg-brand px-3 text-sm font-semibold text-brand-foreground transition-colors hover:bg-[var(--brand-strong)] disabled:opacity-50"
-        >
-          {loading ? (
-            <>
-              <Loader2Icon className="size-3.5 animate-spin" />
-              Committing…
-            </>
-          ) : (
-            commitLabel
-          )}
-        </button>
-      </div>
-    </div>
+    <CommitPanelView
+      message={message}
+      amend={amend}
+      amendAvailable={props.amendAvailable}
+      amendDisabled={props.amendDisabled}
+      loading={loading}
+      branch={props.branch}
+      stagedCount={props.stagedCount}
+      concludesMerge={Boolean(props.concludesMerge)}
+      commitBlockedReason={props.commitBlockedReason}
+      hasDroppedFiles={hasDroppedFiles}
+      expectedHeadAvailable={Boolean(props.expectedHead)}
+      onMessageChange={(nextMessage) => {
+        amendLoadGeneration.current += 1
+        messageRef.current = nextMessage
+        setMessage(nextMessage)
+      }}
+      onAmendChange={(nextAmend) => void handleAmendToggle(nextAmend)}
+      onCommit={() => void handleCommit()}
+    />
   )
 }

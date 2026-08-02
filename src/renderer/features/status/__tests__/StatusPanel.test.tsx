@@ -9,6 +9,7 @@ import type { FileRowGroup } from '@/features/status/status-groups'
 import { type WorkingTreeStatus, WorkingTreeStatusProvider } from '@/features/status/store'
 import type { FileAction } from '@/lib/git-actions'
 import type { GitStatus } from '@/types'
+import { makeGitStatus } from '../../../../test/builders'
 import { type SelectedFile, StatusPanel } from '../StatusPanel'
 
 type Code = { path: string; index: string; working_dir: string }
@@ -20,18 +21,7 @@ const code = (path: string, index: string, working_dir: string): Code => ({
 })
 
 function emptyStatus(overrides: Partial<GitStatus> = {}): GitStatus {
-  return {
-    current: 'main',
-    modified: [],
-    staged: [],
-    not_added: [],
-    conflicted: [],
-    deleted: [],
-    created: [],
-    renamed: [],
-    files: [],
-    ...overrides
-  }
+  return makeGitStatus(overrides)
 }
 
 function provideStatus(status: GitStatus | null, overrides: Partial<WorkingTreeStatus>) {

@@ -54,6 +54,37 @@ interface CommitDetailPaneProps {
   onCommitAction?: CommitActionHandler
 }
 
+interface SingleCommitDetailViewProps {
+  mode: 'single'
+  sha: string
+  entry: GitLogEntry | undefined
+  remotes: Record<string, string>
+  remoteNames: Set<string>
+  onCommitAction?: CommitActionHandler
+  detail: CommitDetail | undefined
+  fetching: boolean
+  error: unknown
+  renderDiff: (selection: CommitDiffSelection | null) => ReactNode
+}
+
+interface MultiCommitSummaryViewProps {
+  mode: 'multi'
+  shas: readonly string[]
+  commitsByHash: ReadonlyMap<string, GitLogEntry>
+  details: readonly CommitDetail[]
+  pending: boolean
+  truncated: boolean
+}
+
+interface EmptyCommitDetailViewProps {
+  mode: 'empty'
+}
+
+export type CommitDetailPaneViewProps =
+  | SingleCommitDetailViewProps
+  | MultiCommitSummaryViewProps
+  | EmptyCommitDetailViewProps
+
 export const COMMIT_DETAIL_HEADER_HEIGHT = 34
 
 function PaneHeader(props: { title: string; children?: ReactNode }) {
@@ -85,6 +116,18 @@ export function CommitDetailPane(props: CommitDetailPaneProps) {
 
   if (shas.length > 1) {
     return <MultiCommitSummary shas={shas} commitsByHash={props.commitsByHash} />
+  }
+
+  return <CommitDetailPaneView mode="empty" />
+}
+
+export function CommitDetailPaneView(props: CommitDetailPaneViewProps) {
+  if (props.mode === 'single') {
+    return <SingleCommitDetailView {...props} />
+  }
+
+  if (props.mode === 'multi') {
+    return <MultiCommitSummaryView {...props} />
   }
 
   return (
@@ -121,6 +164,19 @@ function SingleCommitDetail(props: {
   onCommitAction?: CommitActionHandler
 }) {
   const detailQuery = useCommitDetail(props.sha)
+  return (
+    <CommitDetailPaneView
+      mode="single"
+      {...props}
+      detail={detailQuery.data}
+      fetching={detailQuery.isFetching}
+      error={detailQuery.isError ? detailQuery.error : undefined}
+      renderDiff={(selection) => <CommitDiffView selected={selection} />}
+    />
+  )
+}
+
+function SingleCommitDetailView(props: SingleCommitDetailViewProps) {
   const {
     size: fileListWidth,
     reset: resetFileListWidth,
@@ -136,7 +192,7 @@ function SingleCommitDetail(props: {
   const startFileListResize = (event: ReactMouseEvent) => {
     onFileListResizeStart(event.nativeEvent)
   }
-  const detail = detailQuery.data
+  const detail = props.detail
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const files = detail?.files ?? []
 
@@ -194,7 +250,7 @@ function SingleCommitDetail(props: {
             ) : null}
           </span>
         ) : null}
-        {detailQuery.isFetching ? <LoadingBadge /> : null}
+        {props.fetching ? <LoadingBadge /> : null}
         <div className="flex-1" />
         <button type="button" onClick={() => act('revert')} className={headerButtonClass}>
           Revert
@@ -221,10 +277,10 @@ function SingleCommitDetail(props: {
         </DropdownMenu>
       </PaneHeader>
 
-      {detailQuery.isError ? (
+      {props.error !== undefined ? (
         <div className="px-3 py-4 text-sm text-destructive">
           Failed to load commit details
-          {detailQuery.error instanceof Error ? `: ${detailQuery.error.message}` : '.'}
+          {props.error instanceof Error ? `: ${props.error.message}` : '.'}
         </div>
       ) : detail ? (
         <>
@@ -266,9 +322,7 @@ function SingleCommitDetail(props: {
                   <span className="mx-auto block h-full w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/70" />
                 </button>
               </div>
-              <div className="min-h-0 min-w-0 overflow-hidden">
-                <CommitDiffView selected={selected} />
-              </div>
+              <div className="min-h-0 min-w-0 overflow-hidden">{props.renderDiff(selected)}</div>
             </div>
           )}
         </>
@@ -288,15 +342,28 @@ function MultiCommitSummary(props: {
   const loaded = detailQueries
     .map((query) => query.data)
     .filter((detail): detail is CommitDetail => detail !== undefined)
-  const files = loaded.flatMap((detail) => detail.files)
-  const totals = totalsOf(files)
   const pending = detailQueries.some((query) => query.isPending)
   const truncated = props.shas.length > counted.length
 
   return (
+    <CommitDetailPaneView
+      mode="multi"
+      {...props}
+      details={loaded}
+      pending={pending}
+      truncated={truncated}
+    />
+  )
+}
+
+function MultiCommitSummaryView(props: MultiCommitSummaryViewProps) {
+  const files = props.details.flatMap((detail) => detail.files)
+  const totals = totalsOf(files)
+
+  return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="commit-detail-pane">
       <PaneHeader title={`${props.shas.length} commits selected`}>
-        {pending ? <LoadingBadge /> : null}
+        {props.pending ? <LoadingBadge /> : null}
       </PaneHeader>
       <div className="shrink-0 border-b px-3 py-2 text-[13px] text-muted-foreground">
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
@@ -305,9 +372,9 @@ function MultiCommitSummary(props: {
           </span>
           <span className="text-add">+{totals.additions}</span>
           <span className="text-del">−{totals.deletions}</span>
-          {truncated ? (
+          {props.truncated ? (
             <span>
-              combined stats cover the first {counted.length} of {props.shas.length}
+              combined stats cover the first {SUMMARY_STAT_LIMIT} of {props.shas.length}
             </span>
           ) : null}
         </span>

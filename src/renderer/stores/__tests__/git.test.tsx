@@ -16,6 +16,12 @@ import {
   useRepoSession,
   useWorkingTreeStatus
 } from '@/stores/git'
+import {
+  localBranchesResponse,
+  openedRepoResponse,
+  remoteRefsResponse,
+  statusResponse
+} from '../../../test/builders'
 import { renderWithQuery } from '../../../test/render-app'
 import { setupLogStream, setupRepoChanged, sidecarMock } from '../../../test/setup'
 
@@ -30,47 +36,15 @@ vi.mock('sonner', () => ({ toast }))
 const repoPath = '/home/user/project'
 const otherRepoPath = '/home/user/other-project'
 
-const openRepoOkFor = (path: string) => ({
-  _tag: 'Ok' as const,
-  result: {
-    path,
-    remotes: {},
-    defaultBranch: 'main'
-  }
-})
+const openRepoOkFor = (path: string) => openedRepoResponse(path)
 
 const openRepoOk = openRepoOkFor(repoPath)
 
-const statusOk = {
-  _tag: 'Ok' as const,
-  status: {
-    current: 'main',
-    modified: [],
-    staged: [],
-    not_added: [],
-    conflicted: [],
-    deleted: [],
-    created: [],
-    renamed: [],
-    files: []
-  }
-}
+const statusOk = statusResponse()
 
-const localBranchesOk = {
-  _tag: 'Ok' as const,
-  branches: {
-    current: 'main',
-    all: ['main', 'dev']
-  }
-}
+const localBranchesOk = localBranchesResponse({ all: ['main', 'dev'] })
 
-const remoteRefsOk = {
-  _tag: 'Ok' as const,
-  refs: {
-    remotes: ['origin/main'],
-    tags: ['v1']
-  }
-}
+const remoteRefsOk = remoteRefsResponse({ remotes: ['origin/main'], tags: ['v1'] })
 
 function useAggregateGit() {
   const session = useRepoSession()
@@ -653,14 +627,10 @@ describe('GitStoreProvider — parallel repo loading', () => {
       expect(git.state.currentBranch).toBe('main')
     })
 
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: { ...statusOk.status, current: 'dev' }
-    })
-    sidecarMock.getLocalBranches.mockResolvedValue({
-      _tag: 'Ok',
-      branches: { current: 'dev', all: ['main', 'dev'] }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse({ current: 'dev' }))
+    sidecarMock.getLocalBranches.mockResolvedValue(
+      localBranchesResponse({ current: 'dev', all: ['main', 'dev'] })
+    )
 
     await git.runAction(
       'checkout',
@@ -682,10 +652,9 @@ describe('GitStoreProvider — parallel repo loading', () => {
     })
 
     sidecarMock.getStatus.mockResolvedValue(statusOk)
-    sidecarMock.getLocalBranches.mockResolvedValue({
-      _tag: 'Ok',
-      branches: { current: 'renamed', all: ['renamed', 'dev'] }
-    })
+    sidecarMock.getLocalBranches.mockResolvedValue(
+      localBranchesResponse({ current: 'renamed', all: ['renamed', 'dev'] })
+    )
 
     await git.runAction('renameBranch', () => Promise.resolve({ _tag: 'Ok' as const }), 'Renamed')
 
@@ -809,23 +778,15 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('discards an out-of-order status response that resolves after a newer one', async () => {
-    const partialStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        modified: ['a.ts'],
-        staged: ['a.ts'],
-        files: [{ path: 'a.ts', index: 'M', working_dir: 'M' }]
-      }
-    }
-    const stagedStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        staged: ['a.ts'],
-        files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
-      }
-    }
+    const partialStatus = statusResponse({
+      modified: ['a.ts'],
+      staged: ['a.ts'],
+      files: [{ path: 'a.ts', index: 'M', working_dir: 'M' }]
+    })
+    const stagedStatus = statusResponse({
+      staged: ['a.ts'],
+      files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
+    })
 
     let repoChanged: (event: { repoPath: string; kind: 'refs' | 'workingTree' }) => void = () => {}
     vi.mocked(window.electronAPI.onRepoChanged).mockImplementation((callback) => {
@@ -872,23 +833,15 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('optimistically marks a file staged when staging its final hunk', async () => {
-    const partialStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        modified: ['a.ts'],
-        staged: ['a.ts'],
-        files: [{ path: 'a.ts', index: 'M', working_dir: 'M' }]
-      }
-    }
-    const stagedStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        staged: ['a.ts'],
-        files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
-      }
-    }
+    const partialStatus = statusResponse({
+      modified: ['a.ts'],
+      staged: ['a.ts'],
+      files: [{ path: 'a.ts', index: 'M', working_dir: 'M' }]
+    })
+    const stagedStatus = statusResponse({
+      staged: ['a.ts'],
+      files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
+    })
     let resolveStageHunk: () => void = () => {}
 
     sidecarMock.getStatus.mockResolvedValueOnce(partialStatus).mockResolvedValue(stagedStatus)
@@ -936,22 +889,14 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('stageFile optimistically stages then confirms from the sidecar', async () => {
-    const modifiedStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        modified: ['a.ts'],
-        files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
-      }
-    }
-    const stagedStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        staged: ['a.ts'],
-        files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
-      }
-    }
+    const modifiedStatus = statusResponse({
+      modified: ['a.ts'],
+      files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
+    })
+    const stagedStatus = statusResponse({
+      staged: ['a.ts'],
+      files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
+    })
     sidecarMock.getStatus.mockResolvedValueOnce(modifiedStatus).mockResolvedValue(stagedStatus)
     let resolveStage: () => void = () => {}
     sidecarMock.stageFile.mockImplementation(
@@ -1009,14 +954,10 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('rolls the optimistic stage back when the sidecar rejects it', async () => {
-    const modifiedStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        modified: ['a.ts'],
-        files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
-      }
-    }
+    const modifiedStatus = statusResponse({
+      modified: ['a.ts'],
+      files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
+    })
     sidecarMock.getStatus.mockResolvedValue(modifiedStatus)
     sidecarMock.stageFile.mockResolvedValue({ _tag: 'GitError', message: 'cannot stage' })
 
@@ -1038,14 +979,10 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('clears a mutation error banner after a later mutation succeeds', async () => {
-    const modifiedStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        modified: ['a.ts'],
-        files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
-      }
-    }
+    const modifiedStatus = statusResponse({
+      modified: ['a.ts'],
+      files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
+    })
     sidecarMock.getStatus.mockResolvedValue(modifiedStatus)
     sidecarMock.stageFile
       .mockResolvedValueOnce({ _tag: 'GitError', message: 'cannot stage' })
@@ -1302,14 +1239,10 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('rolls back and surfaces the error when staging throws', async () => {
-    const modifiedStatus = {
-      _tag: 'Ok' as const,
-      status: {
-        ...statusOk.status,
-        modified: ['a.ts'],
-        files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
-      }
-    }
+    const modifiedStatus = statusResponse({
+      modified: ['a.ts'],
+      files: [{ path: 'a.ts', index: ' ', working_dir: 'M' }]
+    })
     sidecarMock.getStatus.mockResolvedValue(modifiedStatus)
     let rejectStage: (error: Error) => void = () => {}
     sidecarMock.stageFile.mockImplementation(

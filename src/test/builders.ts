@@ -1,6 +1,6 @@
 import type { GetLocalBranches, GetRemoteRefs, GetStatus, OpenRepo } from '@shared/rpc'
 import type { GitStatus, LocalBranches, RemoteRefs, RepoOpenSuccess } from '@shared/schemas/git'
-import type { RpcWireResult } from './sidecar-rpc-fake'
+import type { RpcOkResult } from './sidecar-rpc-fake'
 
 export function makeGitStatus(overrides: Partial<GitStatus> = {}): GitStatus {
   return {
@@ -17,16 +17,14 @@ export function makeGitStatus(overrides: Partial<GitStatus> = {}): GitStatus {
   }
 }
 
-export function statusResponse(
-  overrides: Partial<GitStatus> = {}
-): RpcWireResult<typeof GetStatus> {
+export function statusResponse(overrides: Partial<GitStatus> = {}): RpcOkResult<typeof GetStatus> {
   return { _tag: 'Ok', status: makeGitStatus(overrides) }
 }
 
 export function openedRepoResponse(
   repoPath: string,
   overrides: Partial<RepoOpenSuccess> = {}
-): RpcWireResult<typeof OpenRepo> {
+): RpcOkResult<typeof OpenRepo> {
   return {
     _tag: 'Ok',
     result: { path: repoPath, remotes: {}, defaultBranch: 'main', ...overrides }
@@ -35,7 +33,7 @@ export function openedRepoResponse(
 
 export function localBranchesResponse(
   overrides: Partial<LocalBranches> = {}
-): RpcWireResult<typeof GetLocalBranches> {
+): RpcOkResult<typeof GetLocalBranches> {
   return {
     _tag: 'Ok',
     branches: { current: 'main', all: ['main'], ...overrides }
@@ -44,7 +42,7 @@ export function localBranchesResponse(
 
 export function remoteRefsResponse(
   overrides: Partial<RemoteRefs> = {}
-): RpcWireResult<typeof GetRemoteRefs> {
+): RpcOkResult<typeof GetRemoteRefs> {
   return {
     _tag: 'Ok',
     refs: { remotes: [], tags: [], ...overrides }

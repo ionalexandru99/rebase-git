@@ -1,9 +1,16 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
 import { CreateBranch, CreateTag, StashApply } from '@shared/rpc'
+import type { GitStatus } from '@shared/schemas/git'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RepoTab } from '@/app/RepoTab'
+import {
+  localBranchesResponse,
+  openedRepoResponse,
+  remoteRefsResponse,
+  statusResponse
+} from '../../../test/builders'
 import { renderApp, renderWithQuery } from '../../../test/render-app'
 import {
   mockBranchResponses,
@@ -15,6 +22,17 @@ import {
 beforeEach(() => {
   setupLogStream()
 })
+
+function mockSuccessfulRepo(
+  repoPath: string,
+  statusOverrides: Partial<GitStatus> = {},
+  defaultBranch = 'main'
+) {
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(
+    openedRepoResponse(repoPath, { defaultBranch })
+  )
+  sidecarMock.getStatus.mockResolvedValue(statusResponse(statusOverrides))
+}
 
 function mockBaseAPI(
   overrides: Partial<{
@@ -75,24 +93,7 @@ describe('App — onboarding gate', () => {
       scanRepos: ['/home/user/projects/app']
     })
     vi.mocked(window.electronAPI.setOnboardingComplete).mockResolvedValue(undefined)
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/home/user/projects/app', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/home/user/projects/app')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
 
     renderApp()
@@ -211,24 +212,7 @@ describe('App — repo picker (no repo open)', () => {
       workingDirectory: '/home/user/repos',
       scanRepos: ['/home/user/repos/my-app']
     })
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/home/user/repos/my-app', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/home/user/repos/my-app')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
 
     renderApp()
@@ -249,24 +233,7 @@ describe('App — repo picker (no repo open)', () => {
       workingDirectory: '/home/user/repos',
       scanRepos: ['/home/user/repos/my-app']
     })
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/home/user/repos/my-app', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/home/user/repos/my-app')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
 
     renderApp({ strictMode: true })
@@ -329,27 +296,11 @@ describe('App — persisted tabs', () => {
       () =>
         new Promise((resolve) => {
           resolveOpen = () => {
-            resolve({
-              _tag: 'Ok',
-              result: { path: '/home/user/projects/restored', remotes: {}, defaultBranch: 'main' }
-            })
+            resolve(openedRepoResponse('/home/user/projects/restored'))
           }
         })
     )
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse())
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
@@ -392,24 +343,7 @@ describe('App — persisted tabs', () => {
       tabs: ['/home/user/projects/restored'],
       activeIndex: 0
     })
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/home/user/projects/restored', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/home/user/projects/restored')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
@@ -429,24 +363,7 @@ describe('App — persisted tabs', () => {
       tabs: ['/home/user/projects/restored'],
       activeIndex: 0
     })
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/home/user/projects/restored', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/home/user/projects/restored')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
@@ -467,25 +384,9 @@ describe('App — persisted tabs', () => {
       activeIndex: 1
     })
     vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
-      Promise.resolve({
-        _tag: 'Ok',
-        result: { path, remotes: {}, defaultBranch: 'main' }
-      })
+      Promise.resolve(openedRepoResponse(path))
     )
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse())
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
@@ -541,24 +442,7 @@ describe('App — persisted tabs', () => {
       workingDirectory: '/home/user/projects',
       scanRepos: ['/home/user/projects/my-app']
     })
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/home/user/projects/my-app', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/home/user/projects/my-app')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
@@ -608,25 +492,9 @@ describe('App — persisted tabs', () => {
       if (path === '/home/user/projects/stale-repo') {
         return Promise.resolve({ _tag: 'NotARepo' })
       }
-      return Promise.resolve({
-        _tag: 'Ok',
-        result: { path, remotes: {}, defaultBranch: 'main' }
-      })
+      return Promise.resolve(openedRepoResponse(path))
     })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse())
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
@@ -651,24 +519,7 @@ describe('App — persisted tabs', () => {
       workingDirectory: '/home/user/projects',
       scanRepos: ['/home/user/projects/link-to-my-app']
     })
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/real/repos/my-app', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/real/repos/my-app')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
@@ -698,29 +549,11 @@ describe('App — persisted tabs', () => {
       activeIndex: 0
     })
     vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
-      Promise.resolve({
-        _tag: 'Ok',
-        result: {
-          path: path === '/home/user/projects/repo-link' ? '/real/repos/project' : path,
-          remotes: {},
-          defaultBranch: 'main'
-        }
-      })
+      Promise.resolve(
+        openedRepoResponse(path === '/home/user/projects/repo-link' ? '/real/repos/project' : path)
+      )
     )
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse())
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
 
     renderApp()
@@ -751,28 +584,15 @@ describe('App — persisted tabs', () => {
 })
 
 describe('App — workspace (repo open)', () => {
-  const openRepoMock = {
-    _tag: 'Ok' as const,
-    result: {
-      path: '/home/user/projects/my-app',
-      remotes: {},
-      defaultBranch: 'feature/ui'
-    }
-  }
-  const statusMock = {
-    _tag: 'Ok' as const,
-    status: {
-      current: 'feature/ui',
-      modified: ['src/a.ts'],
-      staged: ['src/b.ts', 'src/c.ts'],
-      not_added: ['new.ts'],
-      conflicted: [],
-      deleted: [],
-      created: [],
-      renamed: [],
-      files: []
-    }
-  }
+  const openRepoMock = openedRepoResponse('/home/user/projects/my-app', {
+    defaultBranch: 'feature/ui'
+  })
+  const statusMock = statusResponse({
+    current: 'feature/ui',
+    modified: ['src/a.ts'],
+    staged: ['src/b.ts', 'src/c.ts'],
+    not_added: ['new.ts']
+  })
   const branchesMock = {
     current: 'feature/ui',
     all: ['main', 'feature/ui'],
@@ -795,6 +615,17 @@ describe('App — workspace (repo open)', () => {
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
     vi.mocked(sidecarMock.getStatus).mockResolvedValue(statusMock)
+    sidecarMock.getCommitDetail.mockImplementation(async (_repoPath, sha) => ({
+      _tag: 'Ok',
+      detail: {
+        sha,
+        author: { name: sampleCommit.author_name, email: 'jane@example.com' },
+        authorDate: sampleCommit.date,
+        subject: sampleCommit.message,
+        body: '',
+        files: []
+      }
+    }))
     mockBranchResponses(branches)
     const stream = setupLogStream()
 
@@ -824,6 +655,13 @@ describe('App — workspace (repo open)', () => {
       commits: [sampleCommit]
     })
     stream.fireDone('/home/user/projects/my-app')
+    await waitFor(() => {
+      expect(sidecarMock.getCommitDetail).toHaveBeenCalledWith(
+        '/home/user/projects/my-app',
+        sampleCommit.hash
+      )
+      expect(screen.getByTestId('commit-detail-sha')).toHaveTextContent('1234567')
+    })
   }
 
   it('renders the repo dashboard with name, branch, and change counts', async () => {
@@ -852,18 +690,11 @@ describe('App — workspace (repo open)', () => {
         status: { ...statusMock.status, current: 'main' }
       })
     vi.mocked(sidecarMock.getLocalBranches)
-      .mockResolvedValueOnce({
-        _tag: 'Ok',
-        branches: { current: 'develop', all: ['main', 'develop'] }
-      })
-      .mockResolvedValue({
-        _tag: 'Ok',
-        branches: { current: 'main', all: ['main', 'develop'] }
-      })
-    vi.mocked(sidecarMock.getRemoteRefs).mockResolvedValue({
-      _tag: 'Ok',
-      refs: { remotes: [], tags: [] }
-    })
+      .mockResolvedValueOnce(
+        localBranchesResponse({ current: 'develop', all: ['main', 'develop'] })
+      )
+      .mockResolvedValue(localBranchesResponse({ all: ['main', 'develop'] }))
+    vi.mocked(sidecarMock.getRemoteRefs).mockResolvedValue(remoteRefsResponse())
     vi.mocked(sidecarMock.checkout).mockResolvedValue({
       _tag: 'Ok',
       checkedOut: 'main'
@@ -970,7 +801,9 @@ describe('App — workspace (repo open)', () => {
   it('keeps the timeline and the detail pane on screen at once, with no view switcher', async () => {
     await renderWithRepo()
 
-    expect(await screen.findByText('Initial commit')).toBeVisible()
+    expect(
+      await within(screen.getByRole('region', { name: 'Commits' })).findByText('Initial commit')
+    ).toBeVisible()
     expect(screen.getByRole('region', { name: 'Commits' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Details' })).toBeInTheDocument()
     expect(screen.getByTestId('status-dock')).toBeInTheDocument()
@@ -980,7 +813,7 @@ describe('App — workspace (repo open)', () => {
 
   it('swaps the detail pane to the staging surface when the working copy is picked', async () => {
     await renderWithRepo()
-    await screen.findByText('Initial commit')
+    await within(screen.getByRole('region', { name: 'Commits' })).findByText('Initial commit')
 
     fireEvent.click(screen.getByTestId('working-copy-row'))
 
@@ -1000,24 +833,7 @@ describe('App — workspace (repo open)', () => {
       workingDirectory: '/workspace',
       scanRepos: ['/workspace/repo']
     })
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/workspace/repo', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/workspace/repo')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     const stream = setupLogStream()
 
@@ -1040,24 +856,7 @@ describe('App — workspace (repo open)', () => {
       workingDirectory: '/workspace',
       scanRepos: ['/workspace/repo']
     })
-    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-      _tag: 'Ok',
-      result: { path: '/workspace/repo', remotes: {}, defaultBranch: 'main' }
-    })
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    mockSuccessfulRepo('/workspace/repo')
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     const stream = setupLogStream()
     let resolveStart: (() => void) | undefined
@@ -1105,25 +904,9 @@ describe('App — workspace (repo open)', () => {
       scanRepos: ['/projects/repo-a', '/projects/repo-b']
     })
     vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
-      Promise.resolve({
-        _tag: 'Ok',
-        result: { path, remotes: {}, defaultBranch: 'main' }
-      })
+      Promise.resolve(openedRepoResponse(path))
     )
-    vi.mocked(sidecarMock.getStatus).mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse())
     mockBranchResponses({ current: 'main', all: ['main'], remotes: [], tags: [] })
     setupLogStream()
 
@@ -1281,6 +1064,8 @@ describe('App — workspace (repo open)', () => {
       scanRepos: ['/home/user/projects/my-app']
     })
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openRepoMock)
+    sidecarMock.getStatus.mockResolvedValue(statusMock)
+    mockBranchResponses(branchesMock)
     setupLogStream()
 
     renderApp()

@@ -12,8 +12,10 @@ import {
   refFilterKey
 } from '@/features/history/selectors'
 import type { GitLog, GitLogEntry } from '@/types'
+import { statusResponse } from '../../../../test/builders'
 import { resizeObserverMock, sidecarMock } from '../../../../test/setup'
 import { HistoryPanel } from '..'
+import { createHistoryEntryBuilder } from './fixtures'
 
 const canvasRender = vi.hoisted(() => vi.fn())
 
@@ -94,16 +96,12 @@ function renderPanel(log: GitLog | null, options: PanelOptions = {}) {
   )
 }
 
-function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {
-  return {
-    message: 'msg',
-    author_name: 'Jane Doe',
-    date: new Date().toISOString(),
-    parents: [],
-    refs: 'main',
-    ...overrides
-  }
-}
+const entry = createHistoryEntryBuilder({
+  message: 'msg',
+  author_name: 'Jane Doe',
+  date: new Date().toISOString(),
+  refs: 'main'
+})
 
 describe('HistoryPanel', () => {
   it('shows the empty state when there are no commits', () => {
@@ -199,24 +197,15 @@ describe('HistoryPanel', () => {
   })
 
   it('reads the working tree onto the pinned row', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
+    sidecarMock.getStatus.mockResolvedValue(
+      statusResponse({
         files: [
           { path: 'a.ts', index: 'M', working_dir: ' ' },
           { path: 'b.ts', index: ' ', working_dir: 'M' },
           { path: 'c.ts', index: '?', working_dir: '?' }
         ]
-      }
-    })
+      })
+    )
     sidecarMock.getWorkingTreeStats.mockResolvedValue({ _tag: 'Ok', additions: 12, deletions: 4 })
 
     renderPanel(

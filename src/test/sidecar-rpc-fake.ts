@@ -9,6 +9,11 @@ export type RpcWireResult<Contract extends Rpc.Any> = RpcResult<
   Rpc.ErrorExitEncoded<Contract>
 >
 
+export type RpcOkResult<Contract extends Rpc.Any> = Extract<
+  RpcWireResult<Contract>,
+  { readonly _tag: 'Ok' }
+>
+
 export type RpcResponseHandler<Contract extends SidecarRpc> = (
   payload: Rpc.Payload<Contract>
 ) => MaybePromise<RpcWireResult<Contract>>

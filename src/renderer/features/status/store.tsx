@@ -3,6 +3,7 @@ import type { HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/features/status/status-file-rows'
+import { applyStageToStatus, applyUnstageToStatus } from '@/features/status/status-transitions'
 import { formatCause } from '@/lib/format-cause'
 import { engineFailureBannerText, gitFailureBannerText } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
@@ -50,50 +51,6 @@ interface FileMutationVars {
   file: string
   renameSource?: string
 }
-
-const withoutFile = (files: string[], file: string): string[] => files.filter((f) => f !== file)
-const withFile = (files: string[], file: string): string[] =>
-  files.includes(file) ? files : [...files, file]
-
-const stageCodes = (index: string, workingDir: string): { index: string; working_dir: string } => {
-  if (index === '?' || workingDir === '?') {
-    return { index: 'A', working_dir: ' ' }
-  }
-  return { index: workingDir !== ' ' ? workingDir : index, working_dir: ' ' }
-}
-
-const unstageCodes = (index: string): { index: string; working_dir: string } => {
-  if (index === 'A') {
-    return { index: '?', working_dir: '?' }
-  }
-  return { index: ' ', working_dir: index !== ' ' ? index : 'M' }
-}
-
-type StatusFileCode = NonNullable<GitStatus['files']>[number]
-
-const mapFileCodes = (
-  status: GitStatus,
-  file: string,
-  next: (entry: StatusFileCode) => { index: string; working_dir: string }
-): StatusFileCode[] =>
-  (status.files ?? []).map((entry) => (entry.path === file ? { ...entry, ...next(entry) } : entry))
-
-const applyStage = (status: GitStatus, file: string): GitStatus => ({
-  ...status,
-  staged: withFile(status.staged, file),
-  modified: withoutFile(status.modified, file),
-  not_added: withoutFile(status.not_added, file),
-  created: withoutFile(status.created, file),
-  deleted: withoutFile(status.deleted, file),
-  files: mapFileCodes(status, file, (entry) => stageCodes(entry.index, entry.working_dir))
-})
-
-const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
-  ...status,
-  staged: withoutFile(status.staged, file),
-  modified: withFile(status.modified, file),
-  files: mapFileCodes(status, file, (entry) => unstageCodes(entry.index))
-})
 
 interface HunkMutationVars {
   op: 'stage' | 'unstage' | 'discard'
@@ -255,28 +212,28 @@ export function useWorkingTreeStatusController(
 
   const stageMutation = useMutation(
     statusMutationOptions<string>(
-      (current, file) => applyStage(current, file),
+      (current, file) => applyStageToStatus(current, file),
       (path, file) => rpcStageFile(path, file)
     )
   )
 
   const unstageMutation = useMutation(
     statusMutationOptions<FileMutationVars>(
-      (current, vars) => applyUnstage(current, vars.file),
+      (current, vars) => applyUnstageToStatus(current, vars.file),
       (path, vars) => rpcUnstageFile(path, vars.file, vars.renameSource)
     )
   )
 
   const stageAllMutation = useMutation(
     statusMutationOptions<string[]>(
-      (current, files) => files.reduce((next, file) => applyStage(next, file), current),
+      (current, files) => files.reduce((next, file) => applyStageToStatus(next, file), current),
       (path, files) => rpcStageAll(path, files)
     )
   )
 
   const unstageAllMutation = useMutation(
     statusMutationOptions<string[]>(
-      (current, files) => files.reduce((next, file) => applyUnstage(next, file), current),
+      (current, files) => files.reduce((next, file) => applyUnstageToStatus(next, file), current),
       (path, files) => rpcUnstageAll(path, files)
     )
   )
@@ -285,10 +242,10 @@ export function useWorkingTreeStatusController(
     statusMutationOptions<HunkMutationVars>(
       (current, vars) => {
         if (vars.op === 'stage' && vars.options.fullyStagesFile) {
-          return applyStage(current, vars.file)
+          return applyStageToStatus(current, vars.file)
         }
         if (vars.op === 'unstage' && vars.options.fullyUnstagesFile) {
-          return applyUnstage(current, vars.file)
+          return applyUnstageToStatus(current, vars.file)
         }
         return null
       },

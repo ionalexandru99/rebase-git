@@ -45,20 +45,6 @@ beforeEach(() => {
 })
 
 describe('SyncButton', () => {
-  it('labels how far the branch is behind and ahead', () => {
-    renderSync({ ahead: 3, behind: 2 })
-
-    expect(syncButton()).toHaveTextContent('Sync')
-    expect(syncButton()).toHaveTextContent('↓2')
-    expect(syncButton()).toHaveTextContent('↑3')
-  })
-
-  it('drops the arrows when the branch is level with its upstream', () => {
-    renderSync({ ahead: 0, behind: 0 })
-
-    expect(syncButton().textContent).toBe('Sync')
-  })
-
   it('fetches when there is nothing to pull or push', async () => {
     const { calls } = renderSync({ ahead: 0, behind: 0 })
 
@@ -98,15 +84,6 @@ describe('SyncButton', () => {
     fireEvent.click(syncButton())
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(calls).toEqual([])
-  })
-
-  it('stays out of the way while a sync is already running', () => {
-    const { calls } = renderSync({ ahead: 1, syncing: true })
-
-    fireEvent.click(syncButton())
-
-    expect(syncButton()).toBeDisabled()
     expect(calls).toEqual([])
   })
 

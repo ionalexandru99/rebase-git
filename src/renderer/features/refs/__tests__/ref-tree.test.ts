@@ -1,15 +1,27 @@
 import { REF_TREE_REMOTE_SECTION_KEY, REF_TREE_TAG_SECTION_KEY } from '@shared/ref-tree-toggles'
 import { describe, expect, it } from 'vitest'
-import { buildRefTreeRows, folderKey } from '../ref-tree'
+import { buildRefTreeRows as buildRefTreeRowsFrom, folderKey } from '../ref-tree'
+
+type RefTreeOptions = Parameters<typeof buildRefTreeRowsFrom>[0]
+
+function buildRefTreeRows(overrides: Partial<RefTreeOptions> = {}) {
+  return buildRefTreeRowsFrom({
+    localBranches: ['main'],
+    remoteBranches: [],
+    tags: [],
+    toggles: new Set(),
+    currentBranch: 'main',
+    localLoading: false,
+    ...overrides
+  })
+}
 
 function rowsFor(toggles: Set<string> = new Set()) {
   return buildRefTreeRows({
     localBranches: ['main', 'feature/foo'],
     remoteBranches: ['origin/main'],
     tags: ['v1.0.0'],
-    toggles,
-    currentBranch: 'main',
-    localLoading: false
+    toggles
   })
 }
 
@@ -51,12 +63,6 @@ describe('ref-tree stashes section', () => {
 
   it('omits the stashes section when there are no stashes', () => {
     const rows = buildRefTreeRows({
-      localBranches: ['main'],
-      remoteBranches: [],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       stashes: []
     })
     expect(rows.some((row) => row.kind === 'section' && row.refKind === 'stash')).toBe(false)
@@ -64,12 +70,6 @@ describe('ref-tree stashes section', () => {
 
   it('renders an expanded stashes section with one row per stash', () => {
     const rows = buildRefTreeRows({
-      localBranches: ['main'],
-      remoteBranches: [],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       stashes
     })
     const section = rows.find((row) => row.kind === 'section' && row.refKind === 'stash')
@@ -83,12 +83,7 @@ describe('ref-tree stashes section', () => {
 
   it('collapses the stashes section when toggled', () => {
     const rows = buildRefTreeRows({
-      localBranches: ['main'],
-      remoteBranches: [],
-      tags: [],
       toggles: new Set(['section:stash']),
-      currentBranch: 'main',
-      localLoading: false,
       stashes
     })
     const section = rows.find((row) => row.kind === 'section' && row.refKind === 'stash')
@@ -101,10 +96,6 @@ describe('ref-tree loading skeleton', () => {
   it('shows local skeleton only while remote and tags stay collapsed', () => {
     const rows = buildRefTreeRows({
       localBranches: [],
-      remoteBranches: [],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
       localLoading: true
     })
     expect(rows.some((row) => row.kind === 'skeleton' && row.refKind === 'local')).toBe(true)
@@ -121,11 +112,6 @@ describe('ref-tree name filter', () => {
   it('narrows local branches to fuzzy matches of the query', () => {
     const rows = buildRefTreeRows({
       localBranches: ['main', 'develop'],
-      remoteBranches: [],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       query: 'main'
     })
     const localLeaves = rows.filter((row) => row.kind === 'leaf' && row.refKind === 'local')
@@ -137,9 +123,6 @@ describe('ref-tree name filter', () => {
       localBranches: ['main', 'feature/foo'],
       remoteBranches: ['origin/main'],
       tags: ['v1.0.0'],
-      toggles: new Set<string>(),
-      currentBranch: 'main',
-      localLoading: false,
       stashes: [{ index: 0, ref: 'stash@{0}', oid: 'stash-oid-0', message: 'wip', branch: 'main' }]
     }
     const unfiltered = buildRefTreeRows(options)
@@ -149,11 +132,8 @@ describe('ref-tree name filter', () => {
   it('filters tags and stashes by the query', () => {
     const rows = buildRefTreeRows({
       localBranches: [],
-      remoteBranches: [],
       tags: ['v1-main', 'v2-dev'],
       toggles: new Set([REF_TREE_TAG_SECTION_KEY]),
-      currentBranch: 'main',
-      localLoading: false,
       stashes: [
         {
           index: 0,
@@ -174,12 +154,7 @@ describe('ref-tree name filter', () => {
 
   it('auto-expands matching sections and folders regardless of collapse toggles', () => {
     const rows = buildRefTreeRows({
-      localBranches: ['main'],
       remoteBranches: ['origin/feature/login'],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       query: 'login'
     })
     const remoteSection = rows.find((row) => row.kind === 'section' && row.refKind === 'remote')
@@ -194,11 +169,7 @@ describe('ref-tree name filter', () => {
   it('matches the full ref path by folder segment and by subsequence', () => {
     const base = {
       localBranches: ['feature/login', 'release'],
-      remoteBranches: ['origin/main', 'upstream/dev'],
-      tags: [],
-      toggles: new Set<string>(),
-      currentBranch: 'main',
-      localLoading: false
+      remoteBranches: ['origin/main', 'upstream/dev']
     }
     const byFolderSegment = buildRefTreeRows({ ...base, query: 'origin' })
     expect(
@@ -220,11 +191,6 @@ describe('ref-tree name filter', () => {
   it('keeps stable alphabetical order rather than fuzzy score order', () => {
     const rows = buildRefTreeRows({
       localBranches: ['zeta-feature', 'feature', 'alpha-feature'],
-      remoteBranches: [],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       query: 'feature'
     })
     const localLeaves = rows.filter((row) => row.kind === 'leaf' && row.refKind === 'local')
@@ -240,9 +206,6 @@ describe('ref-tree name filter', () => {
       localBranches: ['feature/login', 'feature/logout', 'archive/old', 'release'],
       remoteBranches: ['origin/main'],
       tags: ['v1.0.0'],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       query: 'login'
     })
     expect(rows.some((row) => row.kind === 'section' && row.refKind === 'remote')).toBe(false)
@@ -260,10 +223,7 @@ describe('ref-tree name filter', () => {
     buildRefTreeRows({
       localBranches: ['feature/login'],
       remoteBranches: ['origin/feature/login'],
-      tags: [],
       toggles,
-      currentBranch: 'main',
-      localLoading: false,
       query: 'login'
     })
     expect(toggles).toEqual(before)
@@ -272,11 +232,6 @@ describe('ref-tree name filter', () => {
   it('counts only the filtered matches in the section header', () => {
     const rows = buildRefTreeRows({
       localBranches: ['feature/login', 'feature/logbook', 'release'],
-      remoteBranches: [],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       query: 'log'
     })
     const localSection = rows.find((row) => row.kind === 'section' && row.refKind === 'local')
@@ -285,12 +240,8 @@ describe('ref-tree name filter', () => {
 
   it('renders a single "No matching refs" empty row when nothing matches', () => {
     const rows = buildRefTreeRows({
-      localBranches: ['main'],
       remoteBranches: ['origin/main'],
       tags: ['v1.0.0'],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       stashes: [{ index: 0, ref: 'stash@{0}', oid: 'stash-oid-0', message: 'wip', branch: 'main' }],
       query: 'zzzznomatch'
     })
@@ -304,11 +255,6 @@ describe('ref-tree tracking attachment to local leaves', () => {
   it('attaches ahead/behind to flat local leaf rows', () => {
     const rows = buildRefTreeRows({
       localBranches: ['main', 'develop'],
-      remoteBranches: [],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       tracking: {
         main: { ahead: 2, behind: 1 },
         develop: { ahead: 0, behind: 3 }
@@ -325,11 +271,6 @@ describe('ref-tree tracking attachment to local leaves', () => {
   it('does not attach tracking to leaves that have no entry in the map', () => {
     const rows = buildRefTreeRows({
       localBranches: ['main', 'untracked'],
-      remoteBranches: [],
-      tags: [],
-      toggles: new Set(),
-      currentBranch: 'main',
-      localLoading: false,
       tracking: { main: { ahead: 1, behind: 0 } }
     })
     const untracked = rows.find((r) => r.kind === 'leaf' && r.fullPath === 'untracked')
@@ -349,8 +290,6 @@ describe('ref-tree freshness attachment', () => {
         REF_TREE_TAG_SECTION_KEY,
         folderKey('remote', 'origin')
       ]),
-      currentBranch: 'main',
-      localLoading: false,
       stashes: [
         {
           index: 0,

@@ -3,6 +3,7 @@ import { type CSSProperties, type ReactNode, useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CommitDiffSelection, CommitDiffView } from '@/features/diff/CommitDiffView'
 import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
+import { openedRepoResponse, statusResponse } from '../../../../test/builders'
 import { renderWithQuery } from '../../../../test/render-app'
 import { setupLogStream, sidecarMock } from '../../../../test/setup'
 import { COMBINED_DIFF_PATCH, MODIFY_PATCH } from './patch-fixtures'
@@ -86,26 +87,10 @@ const selection: CommitDiffSelection = {
 
 beforeEach(() => {
   localStorage.clear()
-  vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    _tag: 'Ok',
-    result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
-  })
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(repoPath))
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
   setupLogStream()
-  sidecarMock.getStatus.mockResolvedValue({
-    _tag: 'Ok',
-    status: {
-      current: 'main',
-      modified: [],
-      staged: [],
-      not_added: [],
-      conflicted: [],
-      deleted: [],
-      created: [],
-      renamed: [],
-      files: []
-    }
-  })
+  sidecarMock.getStatus.mockResolvedValue(statusResponse())
   sidecarMock.getDiff.mockResolvedValue(diffEnvelope(MODIFY_PATCH))
 })
 

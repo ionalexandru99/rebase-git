@@ -584,20 +584,12 @@ describe('DiffPanel hunk hover actions', () => {
   })
 
   it('offers no hunk actions for a conflicted file', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
+    sidecarMock.getStatus.mockResolvedValue(
+      statusResponse({
         conflicted: ['src/app.ts'],
-        deleted: [],
-        created: [],
-        renamed: [],
         files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
-      }
-    })
+      })
+    )
     await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
 
     await screen.findByTestId('pierre-file-diff')
@@ -608,20 +600,7 @@ describe('DiffPanel hunk hover actions', () => {
   })
 
   it('hides hunk actions for untracked files', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: ['src/app.ts'],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse({ not_added: ['src/app.ts'] }))
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
     await screen.findByTestId('pierre-file-diff')
@@ -819,20 +798,12 @@ describe('DiffPanel line selection', () => {
   })
 
   it('disables line selection for conflicted files', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
+    sidecarMock.getStatus.mockResolvedValue(
+      statusResponse({
         conflicted: ['src/app.ts'],
-        deleted: [],
-        created: [],
-        renamed: [],
         files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
-      }
-    })
+      })
+    )
     await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
 
     await screen.findByTestId('pierre-file-diff')
@@ -840,20 +811,7 @@ describe('DiffPanel line selection', () => {
   })
 
   it('disables line selection for untracked files', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: ['src/app.ts'],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse({ not_added: ['src/app.ts'] }))
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
     await screen.findByTestId('pierre-file-diff')
@@ -965,20 +923,12 @@ describe('DiffPanel keyboard access', () => {
   })
 
   it('offers no annotation buttons for a conflicted file', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
+    sidecarMock.getStatus.mockResolvedValue(
+      statusResponse({
         conflicted: ['src/app.ts'],
-        deleted: [],
-        created: [],
-        renamed: [],
         files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
-      }
-    })
+      })
+    )
     await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
 
     await screen.findByTestId('pierre-file-diff')

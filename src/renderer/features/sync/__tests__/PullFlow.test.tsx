@@ -62,6 +62,13 @@ async function pullUntilDiverged(pull: ReturnType<typeof vi.fn>) {
   return screen.findByRole('dialog')
 }
 
+async function renderDivergedFlow(overrides: Omit<Partial<HarnessProps>, 'pull'> = {}) {
+  const pull = vi.fn<PullFn>(async () => diverged)
+  const rendered = renderFlow({ ...overrides, pull })
+  const dialog = await pullUntilDiverged(pull)
+  return { ...rendered, pull, dialog }
+}
+
 function deferredPull() {
   let resolvePull = (_outcome: PullOutcome) => {}
   const pull = vi.fn<PullFn>(async (strategy?: PullStrategy) => {
@@ -91,19 +98,14 @@ describe('usePullFlow', () => {
   })
 
   it('offers rebase or merge when the pull reports divergence', async () => {
-    const pull = vi.fn<PullFn>(async () => diverged)
-    renderFlow({ pull })
-
-    await pullUntilDiverged(pull)
+    await renderDivergedFlow()
 
     expect(screen.getByRole('button', { name: 'Rebase onto upstream' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Merge upstream' })).toBeInTheDocument()
   })
 
   it('re-pulls with rebase when that choice is made', async () => {
-    const pull = vi.fn<PullFn>(async () => diverged)
-    renderFlow({ pull })
-    await pullUntilDiverged(pull)
+    const { pull } = await renderDivergedFlow()
 
     pull.mockResolvedValue(ok)
     fireEvent.click(screen.getByRole('button', { name: 'Rebase onto upstream' }))
@@ -115,10 +117,7 @@ describe('usePullFlow', () => {
   })
 
   it('does not remember the choice unless asked to', async () => {
-    const pull = vi.fn<PullFn>(async () => diverged)
-    const rememberStrategy = vi.fn()
-    renderFlow({ pull, rememberStrategy })
-    await pullUntilDiverged(pull)
+    const { pull, rememberStrategy } = await renderDivergedFlow()
 
     pull.mockResolvedValue(ok)
     fireEvent.click(screen.getByRole('button', { name: 'Merge upstream' }))
@@ -128,10 +127,7 @@ describe('usePullFlow', () => {
   })
 
   it('remembers the choice when the checkbox is ticked', async () => {
-    const pull = vi.fn<PullFn>(async () => diverged)
-    const rememberStrategy = vi.fn()
-    renderFlow({ pull, rememberStrategy })
-    await pullUntilDiverged(pull)
+    const { pull, rememberStrategy } = await renderDivergedFlow()
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Always use this choice' }))
     pull.mockResolvedValue(ok)
@@ -167,9 +163,7 @@ describe('usePullFlow', () => {
   })
 
   it('cancelling the dialog pulls nothing further', async () => {
-    const pull = vi.fn<PullFn>(async () => diverged)
-    renderFlow({ pull })
-    await pullUntilDiverged(pull)
+    const { pull } = await renderDivergedFlow()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -179,9 +173,7 @@ describe('usePullFlow', () => {
   })
 
   it('dismisses on Escape without pulling again', async () => {
-    const pull = vi.fn<PullFn>(async () => diverged)
-    renderFlow({ pull })
-    await pullUntilDiverged(pull)
+    const { pull } = await renderDivergedFlow()
 
     fireEvent.keyDown(document, { key: 'Escape' })
 
@@ -190,9 +182,7 @@ describe('usePullFlow', () => {
   })
 
   it('dismisses on a backdrop click without pulling again', async () => {
-    const pull = vi.fn<PullFn>(async () => diverged)
-    renderFlow({ pull })
-    const dialog = await pullUntilDiverged(pull)
+    const { pull, dialog } = await renderDivergedFlow()
     const backdrop = dialog.parentElement as HTMLElement
 
     fireEvent.pointerDown(backdrop)

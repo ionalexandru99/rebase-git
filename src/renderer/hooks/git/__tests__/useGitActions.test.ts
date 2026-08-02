@@ -1,9 +1,8 @@
+import { Conflict } from '@shared/rpc'
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGitActions } from '@/hooks/git/useGitActions'
 import {
-  type ConflictableResult,
-  type RefWriteResult,
   rpcCherryPick,
   rpcContinueOperation,
   rpcCreateBranch,
@@ -22,12 +21,6 @@ import {
   rpcStashPush
 } from '@/lib/rpc-client'
 import type { ActionRunner } from '@/stores/git'
-
-const conflictable = (wire: { _tag: string; message?: string }): ConflictableResult =>
-  wire as unknown as ConflictableResult
-
-const refWrite = (wire: { _tag: string; message?: string }): RefWriteResult =>
-  wire as unknown as RefWriteResult
 
 vi.mock('@/lib/rpc-client', () => ({
   rpcMergeBranch: vi.fn(),
@@ -78,7 +71,7 @@ beforeEach(() => {
 
 describe('useGitActions conflictable ops route through the runner', () => {
   it('routes mergeBranch through the runner with the mapped tag, call, and label', async () => {
-    vi.mocked(rpcMergeBranch).mockResolvedValue(conflictable({ _tag: 'Ok' }))
+    vi.mocked(rpcMergeBranch).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().mergeBranch('remote', 'origin/feature')
 
@@ -92,7 +85,7 @@ describe('useGitActions conflictable ops route through the runner', () => {
   })
 
   it('routes revertCommit through the runner', async () => {
-    vi.mocked(rpcRevertCommit).mockResolvedValue(conflictable({ _tag: 'Ok' }))
+    vi.mocked(rpcRevertCommit).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().revertCommit('abcdef1234567')
 
@@ -102,7 +95,7 @@ describe('useGitActions conflictable ops route through the runner', () => {
   })
 
   it('routes cherryPick through the runner', async () => {
-    vi.mocked(rpcCherryPick).mockResolvedValue(conflictable({ _tag: 'Ok' }))
+    vi.mocked(rpcCherryPick).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().cherryPick('abcdef1234567')
 
@@ -116,7 +109,7 @@ describe('useGitActions conflictable ops route through the runner', () => {
   })
 
   it('routes resetToCommit through the runner', async () => {
-    vi.mocked(rpcReset).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcReset).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().resetToCommit('abcdef1234567', 'hard')
 
@@ -126,7 +119,7 @@ describe('useGitActions conflictable ops route through the runner', () => {
   })
 
   it('reports a conflictable op that hits conflicts as not-ok', async () => {
-    vi.mocked(rpcMergeBranch).mockResolvedValue(conflictable({ _tag: 'Conflict' }))
+    vi.mocked(rpcMergeBranch).mockResolvedValue(new Conflict({ message: 'merge conflicted' }))
 
     const ok = await actionsFor().mergeBranch('local', 'feature')
 
@@ -135,7 +128,9 @@ describe('useGitActions conflictable ops route through the runner', () => {
   })
 
   it('routes continueOperation with guidance that names Continue, not a commit', async () => {
-    vi.mocked(rpcContinueOperation).mockResolvedValue(conflictable({ _tag: 'Conflict' }))
+    vi.mocked(rpcContinueOperation).mockResolvedValue(
+      new Conflict({ message: 'operation still conflicted' })
+    )
 
     const ok = await actionsFor().continueOperation('rebase')
 
@@ -155,7 +150,7 @@ describe('useGitActions conflictable ops route through the runner', () => {
 
 describe('useGitActions branch & tag ops route through the runner', () => {
   it('routes createBranch+checkout through the runner with the switched label', async () => {
-    vi.mocked(rpcCreateBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcCreateBranch).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().createBranch('feature', 'main', true, 'remote')
 
@@ -169,7 +164,7 @@ describe('useGitActions branch & tag ops route through the runner', () => {
   })
 
   it('routes a no-checkout createBranch with the plain label', async () => {
-    vi.mocked(rpcCreateBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcCreateBranch).mockResolvedValue({ _tag: 'Ok' })
 
     await actionsFor().createBranch('feature')
 
@@ -188,7 +183,7 @@ describe('useGitActions branch & tag ops route through the runner', () => {
   })
 
   it('routes deleteBranch through the runner', async () => {
-    vi.mocked(rpcDeleteBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcDeleteBranch).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().deleteBranch('feature', true)
 
@@ -202,7 +197,7 @@ describe('useGitActions branch & tag ops route through the runner', () => {
   })
 
   it('routes renameBranch through the runner', async () => {
-    vi.mocked(rpcRenameBranch).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcRenameBranch).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().renameBranch('old', 'new')
 
@@ -216,7 +211,7 @@ describe('useGitActions branch & tag ops route through the runner', () => {
   })
 
   it('routes createTag through the runner', async () => {
-    vi.mocked(rpcCreateTag).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcCreateTag).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().createTag('v1', 'main', undefined, 'local')
 
@@ -226,7 +221,7 @@ describe('useGitActions branch & tag ops route through the runner', () => {
   })
 
   it('routes deleteTag through the runner', async () => {
-    vi.mocked(rpcDeleteTag).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcDeleteTag).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().deleteTag('v1')
 
@@ -238,7 +233,7 @@ describe('useGitActions branch & tag ops route through the runner', () => {
 
 describe('useGitActions working-tree & stash ops route through the runner', () => {
   it('routes discardChanges through the runner with the caller-supplied label', async () => {
-    vi.mocked(rpcDiscardChanges).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcDiscardChanges).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().discardChanges(['a.ts'], 'Discarded a.ts')
 
@@ -248,7 +243,7 @@ describe('useGitActions working-tree & stash ops route through the runner', () =
   })
 
   it('routes discardAll through the runner', async () => {
-    vi.mocked(rpcDiscardAll).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcDiscardAll).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().discardAll()
 
@@ -262,7 +257,7 @@ describe('useGitActions working-tree & stash ops route through the runner', () =
   })
 
   it('routes stashPush through the runner', async () => {
-    vi.mocked(rpcStashPush).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcStashPush).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().stashPush('wip', true, ['a.ts'])
 
@@ -272,7 +267,7 @@ describe('useGitActions working-tree & stash ops route through the runner', () =
   })
 
   it('routes stashApply through the runner', async () => {
-    vi.mocked(rpcStashApply).mockResolvedValue(conflictable({ _tag: 'Ok' }))
+    vi.mocked(rpcStashApply).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().stashApply(2, 'stash-oid-2')
 
@@ -282,7 +277,7 @@ describe('useGitActions working-tree & stash ops route through the runner', () =
   })
 
   it('routes stashPop through the runner', async () => {
-    vi.mocked(rpcStashPop).mockResolvedValue(conflictable({ _tag: 'Ok' }))
+    vi.mocked(rpcStashPop).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().stashPop(1, 'stash-oid-1')
 
@@ -292,7 +287,7 @@ describe('useGitActions working-tree & stash ops route through the runner', () =
   })
 
   it('routes stashDrop through the runner', async () => {
-    vi.mocked(rpcStashDrop).mockResolvedValue(refWrite({ _tag: 'Ok' }))
+    vi.mocked(rpcStashDrop).mockResolvedValue({ _tag: 'Ok' })
 
     const ok = await actionsFor().stashDrop(0, 'stash-oid-0')
 
