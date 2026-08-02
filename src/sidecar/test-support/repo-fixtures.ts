@@ -22,6 +22,57 @@ export function removeRepoDir(repo: string): void {
   } catch {}
 }
 
+export interface RepoFixture {
+  path: string
+  git: (...args: string[]) => string
+  write: (name: string, contents: string | Buffer) => void
+  writeLines: (name: string, lines: readonly string[]) => void
+  read: (name: string) => string
+  readLines: (name: string) => string[]
+  mkdir: (name: string) => void
+  removeFile: (name: string) => void
+  commitStaged: (message: string) => string
+  head: () => string
+  cleanup: () => void
+}
+
+export interface RepoFixtureOptions {
+  prefix: string
+  userEmail?: string
+  userName?: string
+}
+
+export function createRepoFixture(options: RepoFixtureOptions): RepoFixture {
+  const repoPath = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), options.prefix)))
+  const runGit = (...args: string[]): string =>
+    execFileSync('git', ['-C', repoPath, ...args], { encoding: 'utf8' })
+  const head = (): string => runGit('rev-parse', 'HEAD').trim()
+
+  runGit('init', '-b', 'main')
+  runGit('config', 'user.email', options.userEmail ?? 'test@example.com')
+  runGit('config', 'user.name', options.userName ?? 'Test')
+  runGit('config', 'commit.gpgsign', 'false')
+
+  return {
+    path: repoPath,
+    git: runGit,
+    write: (name, contents) => fs.writeFileSync(path.join(repoPath, name), contents),
+    writeLines: (name, lines) =>
+      fs.writeFileSync(path.join(repoPath, name), `${lines.join('\n')}\n`),
+    read: (name) => fs.readFileSync(path.join(repoPath, name), 'utf8'),
+    readLines: (name) =>
+      fs.readFileSync(path.join(repoPath, name), 'utf8').split('\n').slice(0, -1),
+    mkdir: (name) => fs.mkdirSync(path.join(repoPath, name), { recursive: true }),
+    removeFile: (name) => fs.rmSync(path.join(repoPath, name)),
+    commitStaged: (message) => {
+      runGit('commit', '--no-gpg-sign', '-m', message)
+      return head()
+    },
+    head,
+    cleanup: () => removeRepoDir(repoPath)
+  }
+}
+
 export function makeRepo(messages: string[]): string {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-stream-'))
   git(repo, ['init', '-b', 'main'])

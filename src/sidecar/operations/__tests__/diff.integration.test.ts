@@ -1,10 +1,7 @@
-import { execFileSync } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createRepoFixture, type RepoFixture } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import {
   closeRepo,
@@ -18,32 +15,23 @@ import {
 
 const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 let repoDir: string
-
-function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
-}
-
-function writeLines(file: string, lines: string[]): void {
-  fs.writeFileSync(path.join(repoDir, file), `${lines.join('\n')}\n`)
-}
+let repo: RepoFixture
 
 const baseLines = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`)
 
 beforeAll(async () => {
-  repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-diff-test-')))
-  git('init', '-b', 'main')
-  git('config', 'user.email', 'test@example.com')
-  git('config', 'user.name', 'Test')
-  writeLines('sample.txt', baseLines)
-  git('add', '.')
-  git('commit', '-m', 'base')
+  repo = createRepoFixture({ prefix: 'rebase-diff-test-' })
+  repoDir = repo.path
+  repo.writeLines('sample.txt', baseLines)
+  repo.git('add', '.')
+  repo.commitStaged('base')
 
   await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
   await runOp(closeRepo(repoDir))
-  fs.rmSync(repoDir, { recursive: true, force: true })
+  repo.cleanup()
 })
 
 describe('diff operations against a real repository', () => {
@@ -51,7 +39,7 @@ describe('diff operations against a real repository', () => {
     const edited = [...baseLines]
     edited[0] = 'line 1 EDITED'
     edited[35] = 'line 36 EDITED'
-    writeLines('sample.txt', edited)
+    repo.writeLines('sample.txt', edited)
 
     const unstaged = await runOp(getDiff(repoDir, 'sample.txt', false))
     expect(hunksOf(unstaged)).toHaveLength(2)
@@ -103,7 +91,7 @@ describe('diff operations against a real repository', () => {
     const entry = status.status.files?.find((candidate) => candidate.path === 'sample.txt')
     expect(entry).toEqual({ path: 'sample.txt', index: 'M', working_dir: ' ' })
 
-    git('reset', 'HEAD', 'sample.txt')
+    repo.git('reset', 'HEAD', 'sample.txt')
   })
 
   it('returns HunkNotFound for a stale hunk header', async () => {
@@ -117,7 +105,7 @@ describe('diff operations against a real repository', () => {
   })
 
   it('produces a synthetic diff for untracked files', async () => {
-    writeLines('brand-new.txt', ['alpha', 'beta'])
+    repo.writeLines('brand-new.txt', ['alpha', 'beta'])
 
     const diff = await runOp(getDiff(repoDir, 'brand-new.txt', false))
     expect(hunksOf(diff)).toHaveLength(1)
@@ -126,7 +114,7 @@ describe('diff operations against a real repository', () => {
   })
 
   it('produces a synthetic diff for an untracked unicode-named file', async () => {
-    writeLines('café.txt', ['gamma', 'delta'])
+    repo.writeLines('café.txt', ['gamma', 'delta'])
 
     const diff = await runOp(getDiff(repoDir, 'café.txt', false))
     expect(hunksOf(diff)).toHaveLength(1)
@@ -135,9 +123,9 @@ describe('diff operations against a real repository', () => {
   })
 
   it('returns an empty diff for a clean tracked file', async () => {
-    git('checkout', '--', 'sample.txt')
-    git('reset', 'HEAD', 'sample.txt')
-    git('checkout', '--', 'sample.txt')
+    repo.git('checkout', '--', 'sample.txt')
+    repo.git('reset', 'HEAD', 'sample.txt')
+    repo.git('checkout', '--', 'sample.txt')
 
     const diff = await runOp(getDiff(repoDir, 'sample.txt', false))
     expect(hunksOf(diff)).toHaveLength(0)
@@ -145,42 +133,42 @@ describe('diff operations against a real repository', () => {
 
   it('unstages an option-like filename as a path, never as a flag', async () => {
     const canary = 'reset-canary.txt'
-    fs.writeFileSync(path.join(repoDir, canary), 'committed\n')
-    git('add', '--', canary)
-    git('commit', '-m', 'add reset canary')
-    fs.writeFileSync(path.join(repoDir, canary), 'uncommitted edit\n')
+    repo.write(canary, 'committed\n')
+    repo.git('add', '--', canary)
+    repo.commitStaged('add reset canary')
+    repo.write(canary, 'uncommitted edit\n')
 
     const optionLikeName = '--hard'
-    fs.writeFileSync(path.join(repoDir, optionLikeName), 'staged\n')
-    git('add', '--', optionLikeName)
+    repo.write(optionLikeName, 'staged\n')
+    repo.git('add', '--', optionLikeName)
 
     await runOp(unstageFile(repoDir, optionLikeName))
 
-    expect(git('diff', '--cached', '--name-only')).not.toContain(optionLikeName)
-    expect(fs.readFileSync(path.join(repoDir, canary), 'utf8')).toBe('uncommitted edit\n')
+    expect(repo.git('diff', '--cached', '--name-only')).not.toContain(optionLikeName)
+    expect(repo.read(canary)).toBe('uncommitted edit\n')
 
-    fs.rmSync(path.join(repoDir, optionLikeName))
-    git('checkout', '--', canary)
+    repo.removeFile(optionLikeName)
+    repo.git('checkout', '--', canary)
   })
 
   it('returns displayable hunks for an unresolved merge conflict', async () => {
-    fs.writeFileSync(path.join(repoDir, 'conflict.txt'), 'base\n')
-    git('add', 'conflict.txt')
-    git('commit', '-m', 'conflict base')
-    git('checkout', '-b', 'conflict-side')
-    fs.writeFileSync(path.join(repoDir, 'conflict.txt'), 'side\n')
-    git('commit', '-am', 'side change')
-    git('checkout', 'main')
-    fs.writeFileSync(path.join(repoDir, 'conflict.txt'), 'main\n')
-    git('commit', '-am', 'main change')
-    expect(() => git('merge', 'conflict-side')).toThrow()
+    repo.write('conflict.txt', 'base\n')
+    repo.git('add', 'conflict.txt')
+    repo.commitStaged('conflict base')
+    repo.git('checkout', '-b', 'conflict-side')
+    repo.write('conflict.txt', 'side\n')
+    repo.git('commit', '-am', 'side change')
+    repo.git('checkout', 'main')
+    repo.write('conflict.txt', 'main\n')
+    repo.git('commit', '-am', 'main change')
+    expect(() => repo.git('merge', 'conflict-side')).toThrow()
 
     try {
       const diff = await runOp(getDiff(repoDir, 'conflict.txt', false))
       expect(hunksOf(diff).length).toBeGreaterThan(0)
       expect(hunksOf(diff).flatMap((hunk) => hunk.lines).length).toBeGreaterThan(0)
     } finally {
-      git('merge', '--abort')
+      repo.git('merge', '--abort')
     }
   })
 })

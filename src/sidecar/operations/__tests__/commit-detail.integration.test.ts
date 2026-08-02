@@ -1,10 +1,7 @@
-import { execFileSync } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createRepoFixture, type RepoFixture } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, getCommitDetail, getDiff, openRepo } from '../index'
 
@@ -12,48 +9,38 @@ const getParsedDiff = (...args: Parameters<typeof getDiff>) =>
   getDiff(...args).pipe(Effect.map((result) => ({ diff: parseUnifiedDiff(result.patch) })))
 
 let repoDir: string
+let repo: RepoFixture
 const sha: Record<string, string> = {}
 
-function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
-}
-
-function commit(message: string): string {
-  git('-c', 'commit.gpgsign=false', 'commit', '--no-gpg-sign', '-m', message)
-  return git('rev-parse', 'HEAD').trim()
-}
-
-function write(file: string, contents: string): void {
-  fs.writeFileSync(path.join(repoDir, file), contents)
-}
-
 beforeAll(async () => {
-  repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-commit-detail-')))
-  git('init', '-b', 'main')
-  git('config', 'user.email', 'author@example.com')
-  git('config', 'user.name', 'Ada Author')
+  repo = createRepoFixture({
+    prefix: 'rebase-commit-detail-',
+    userEmail: 'author@example.com',
+    userName: 'Ada Author'
+  })
+  repoDir = repo.path
 
-  write('one.txt', 'a\nb\nc\n')
-  write('doomed.txt', 'gone\n')
-  fs.writeFileSync(path.join(repoDir, 'logo.png'), Buffer.from([0, 1, 2, 3, 0, 255]))
-  git('add', '-A')
-  sha.root = commit('root commit')
+  repo.write('one.txt', 'a\nb\nc\n')
+  repo.write('doomed.txt', 'gone\n')
+  repo.write('logo.png', Buffer.from([0, 1, 2, 3, 0, 255]))
+  repo.git('add', '-A')
+  sha.root = repo.commitStaged('root commit')
 
-  write('one.txt', 'a\nB\nc\n')
-  write('added.txt', 'fresh\n')
-  git('rm', '-q', 'doomed.txt')
-  fs.mkdirSync(path.join(repoDir, 'assets'))
-  git('mv', 'logo.png', 'assets/logo.png')
-  git('add', '-A')
-  sha.second = commit('second commit\n\nA body paragraph.\nAnd a second line.')
+  repo.write('one.txt', 'a\nB\nc\n')
+  repo.write('added.txt', 'fresh\n')
+  repo.git('rm', '-q', 'doomed.txt')
+  repo.mkdir('assets')
+  repo.git('mv', 'logo.png', 'assets/logo.png')
+  repo.git('add', '-A')
+  sha.second = repo.commitStaged('second commit\n\nA body paragraph.\nAnd a second line.')
 
-  git('checkout', '-q', '-b', 'side', sha.root)
-  write('side.txt', 'from the side\n')
-  git('add', '-A')
-  sha.side = commit('side commit')
+  repo.git('checkout', '-q', '-b', 'side', sha.root)
+  repo.write('side.txt', 'from the side\n')
+  repo.git('add', '-A')
+  sha.side = repo.commitStaged('side commit')
 
-  git('checkout', '-q', 'main')
-  git(
+  repo.git('checkout', '-q', 'main')
+  repo.git(
     '-c',
     'commit.gpgsign=false',
     '-c',
@@ -67,14 +54,14 @@ beforeAll(async () => {
     'Merge side into main',
     'side'
   )
-  sha.merge = git('rev-parse', 'HEAD').trim()
+  sha.merge = repo.head()
 
   await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
   await runOp(closeRepo(repoDir))
-  fs.rmSync(repoDir, { recursive: true, force: true })
+  repo.cleanup()
 })
 
 describe('getCommitDetail', () => {
@@ -192,9 +179,9 @@ describe('getDiff for a commit', () => {
   })
 
   it('flags an edited binary file instead of returning hunks', async () => {
-    fs.writeFileSync(path.join(repoDir, 'assets/logo.png'), Buffer.from([9, 8, 7, 0, 6]))
-    git('add', '-A')
-    const binarySha = commit('touch up the logo')
+    repo.write('assets/logo.png', Buffer.from([9, 8, 7, 0, 6]))
+    repo.git('add', '-A')
+    const binarySha = repo.commitStaged('touch up the logo')
 
     const { diff } = await runOp(
       getParsedDiff(repoDir, 'assets/logo.png', false, { commit: binarySha })
@@ -205,10 +192,10 @@ describe('getDiff for a commit', () => {
   })
 
   it('reads a rename as a rename when given the old path alongside the new one', async () => {
-    git('mv', 'one.txt', 'renamed.txt')
-    write('renamed.txt', 'a\nB\nC\n')
-    git('add', '-A')
-    const renameSha = commit('rename and edit')
+    repo.git('mv', 'one.txt', 'renamed.txt')
+    repo.write('renamed.txt', 'a\nB\nC\n')
+    repo.git('add', '-A')
+    const renameSha = repo.commitStaged('rename and edit')
 
     const { diff } = await runOp(
       getParsedDiff(repoDir, 'renamed.txt', false, { commit: renameSha, renameSource: 'one.txt' })

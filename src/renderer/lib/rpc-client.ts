@@ -1,3 +1,4 @@
+import type { Rpc } from '@effect/rpc'
 import { parseOrThrow } from '@shared/codec'
 import {
   AbortOperation,
@@ -32,6 +33,7 @@ import {
   ResolveConflict,
   RevertCommit,
   ScanForRepos,
+  type SidecarRpc,
   StageAll,
   StageFile,
   StageHunk,
@@ -49,104 +51,62 @@ import {
 import { type RpcContract, type RpcResult, rpcResultSchema } from '@shared/rpc-result'
 import type { RefKind, ResetMode } from '@shared/schemas/ipc'
 
-async function callSidecarRpc<Success, SuccessInput, Failure, FailureInput>(
-  rpc: RpcContract<Success, SuccessInput, Failure, FailureInput>,
-  body: Record<string, unknown>
-): Promise<RpcResult<Success, Failure>> {
-  const payload = await window.electronAPI.sidecarRequest(rpc._tag, body)
-  return parseOrThrow(rpcResultSchema(rpc), payload)
+type RpcResultFor<Contract extends Rpc.Any> = RpcResult<
+  Rpc.SuccessExit<Contract>,
+  Rpc.ErrorExit<Contract>
+>
+
+function decodeRpcResult<Success, SuccessInput, Failure, FailureInput>(
+  contract: RpcContract<Success, SuccessInput, Failure, FailureInput>,
+  payload: unknown
+): RpcResult<Success, Failure> {
+  return parseOrThrow(rpcResultSchema(contract), payload)
 }
 
-export type CommitPayload = typeof Commit.payloadSchema.Type
-export type CommitResult = RpcResult<
-  typeof Commit.successSchema.Type,
-  typeof Commit.errorSchema.Type
->
-export type HeadCommitResult = RpcResult<
-  typeof GetHeadCommit.successSchema.Type,
-  typeof GetHeadCommit.errorSchema.Type
->
-export type AmendResult = RpcResult<
-  typeof AmendCommit.successSchema.Type,
-  typeof AmendCommit.errorSchema.Type
->
-export type OpenRepoResult = RpcResult<
-  typeof OpenRepo.successSchema.Type,
-  typeof OpenRepo.errorSchema.Type
->
-export type ScanForReposResult = RpcResult<
-  typeof ScanForRepos.successSchema.Type,
-  typeof ScanForRepos.errorSchema.Type
->
-export type StageResult = RpcResult<
-  typeof StageFile.successSchema.Type,
-  typeof StageFile.errorSchema.Type
->
-export type HunkResult = RpcResult<
-  typeof StageHunk.successSchema.Type,
-  typeof StageHunk.errorSchema.Type
->
-export type GuardedWriteResult = RpcResult<
-  typeof UnstageFile.successSchema.Type,
-  typeof UnstageFile.errorSchema.Type
->
-export type GuardedHunkResult = RpcResult<
-  typeof UnstageHunk.successSchema.Type,
-  typeof UnstageHunk.errorSchema.Type
->
-export type ConflictableResult = RpcResult<
-  typeof MergeBranch.successSchema.Type,
-  typeof MergeBranch.errorSchema.Type
->
-export type RefWriteResult = RpcResult<
-  typeof DeleteBranch.successSchema.Type,
-  typeof DeleteBranch.errorSchema.Type
->
-export type PushResult = RpcResult<typeof Push.successSchema.Type, typeof Push.errorSchema.Type>
-export type PushForce = NonNullable<typeof Push.payloadSchema.Type.force>
-export type PullResult = RpcResult<typeof Pull.successSchema.Type, typeof Pull.errorSchema.Type>
-export type PullStrategy = NonNullable<typeof Pull.payloadSchema.Type.strategy>
-export type ConflictSide = typeof ResolveConflict.payloadSchema.Type.side
-export type CheckoutResult = RpcResult<
-  typeof Checkout.successSchema.Type,
-  typeof Checkout.errorSchema.Type
->
-export type FetchResult = RpcResult<typeof Fetch.successSchema.Type, typeof Fetch.errorSchema.Type>
-export type StatusResult = RpcResult<
-  typeof GetStatus.successSchema.Type,
-  typeof GetStatus.errorSchema.Type
->
-export type LocalBranchesResult = RpcResult<
-  typeof GetLocalBranches.successSchema.Type,
-  typeof GetLocalBranches.errorSchema.Type
->
-export type RemoteRefsResult = RpcResult<
-  typeof GetRemoteRefs.successSchema.Type,
-  typeof GetRemoteRefs.errorSchema.Type
->
-export type DiffResult = RpcResult<
-  typeof GetDiff.successSchema.Type,
-  typeof GetDiff.errorSchema.Type
->
-export type CommitDetailResult = RpcResult<
-  typeof GetCommitDetail.successSchema.Type,
-  typeof GetCommitDetail.errorSchema.Type
->
-export type CommitStatsResult = RpcResult<
-  typeof GetCommitStats.successSchema.Type,
-  typeof GetCommitStats.errorSchema.Type
->
-export type WorkingTreeStatsResult = RpcResult<
-  typeof GetWorkingTreeStats.successSchema.Type,
-  typeof GetWorkingTreeStats.errorSchema.Type
->
-export type StashListResult = RpcResult<
-  typeof StashList.successSchema.Type,
-  typeof StashList.errorSchema.Type
->
+async function callSidecarRpc<Contract extends SidecarRpc>(
+  contract: Contract,
+  payload: Rpc.Payload<Contract>
+): Promise<RpcResultFor<Contract>> {
+  const response = await window.electronAPI.sidecarRequest(contract._tag, payload)
+  const resultContract = contract as unknown as RpcContract<
+    Rpc.SuccessExit<Contract>,
+    Rpc.SuccessExitEncoded<Contract>,
+    Rpc.ErrorExit<Contract>,
+    Rpc.ErrorExitEncoded<Contract>
+  >
+  return decodeRpcResult(resultContract, response)
+}
+
+export type CommitPayload = Rpc.Payload<typeof Commit>
+export type CommitResult = RpcResultFor<typeof Commit>
+export type HeadCommitResult = RpcResultFor<typeof GetHeadCommit>
+export type AmendResult = RpcResultFor<typeof AmendCommit>
+export type OpenRepoResult = RpcResultFor<typeof OpenRepo>
+export type ScanForReposResult = RpcResultFor<typeof ScanForRepos>
+export type StageResult = RpcResultFor<typeof StageFile>
+export type HunkResult = RpcResultFor<typeof StageHunk>
+export type GuardedWriteResult = RpcResultFor<typeof UnstageFile>
+export type GuardedHunkResult = RpcResultFor<typeof UnstageHunk>
+export type ConflictableResult = RpcResultFor<typeof MergeBranch>
+export type RefWriteResult = RpcResultFor<typeof DeleteBranch>
+export type PushResult = RpcResultFor<typeof Push>
+export type PushForce = NonNullable<Rpc.Payload<typeof Push>['force']>
+export type PullResult = RpcResultFor<typeof Pull>
+export type PullStrategy = NonNullable<Rpc.Payload<typeof Pull>['strategy']>
+export type ConflictSide = Rpc.Payload<typeof ResolveConflict>['side']
+export type CheckoutResult = RpcResultFor<typeof Checkout>
+export type FetchResult = RpcResultFor<typeof Fetch>
+export type StatusResult = RpcResultFor<typeof GetStatus>
+export type LocalBranchesResult = RpcResultFor<typeof GetLocalBranches>
+export type RemoteRefsResult = RpcResultFor<typeof GetRemoteRefs>
+export type DiffResult = RpcResultFor<typeof GetDiff>
+export type CommitDetailResult = RpcResultFor<typeof GetCommitDetail>
+export type CommitStatsResult = RpcResultFor<typeof GetCommitStats>
+export type WorkingTreeStatsResult = RpcResultFor<typeof GetWorkingTreeStats>
+export type StashListResult = RpcResultFor<typeof StashList>
 
 export async function rpcOpenRepo(repoPath: string, owner: number): Promise<OpenRepoResult> {
-  return parseOrThrow(rpcResultSchema(OpenRepo), await window.electronAPI.openRepo(repoPath, owner))
+  return decodeRpcResult(OpenRepo, await window.electronAPI.openRepo(repoPath, owner))
 }
 
 export async function rpcCloseRepo(repoPath: string, owner: number): Promise<void> {
@@ -158,7 +118,7 @@ export async function rpcDisownRepo(repoPath: string, owner: number): Promise<vo
 }
 
 export async function rpcScanForRepos(dirPath: string): Promise<ScanForReposResult> {
-  return parseOrThrow(rpcResultSchema(ScanForRepos), await window.electronAPI.scanForRepos(dirPath))
+  return decodeRpcResult(ScanForRepos, await window.electronAPI.scanForRepos(dirPath))
 }
 
 export async function rpcCommit(repoPath: string, message: string): Promise<CommitResult> {

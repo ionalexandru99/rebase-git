@@ -3,9 +3,11 @@ import type { HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/features/status/status-file-rows'
+import {
+  createStatusMutationOptions,
+  type StatusMutationResult
+} from '@/features/status/status-mutation-lifecycle'
 import { applyStageToStatus, applyUnstageToStatus } from '@/features/status/status-transitions'
-import { formatCause } from '@/lib/format-cause'
-import { engineFailureBannerText, gitFailureBannerText } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
@@ -30,21 +32,6 @@ import { type RepoSessionErrorSource, useRepoSession } from '../../stores/repo-s
 export interface HunkStageOptions {
   fullyStagesFile?: boolean
   fullyUnstagesFile?: boolean
-}
-
-type StatusMutationResult =
-  | { _tag: 'Ok' }
-  | { _tag: 'RepoNotOpen' }
-  | { _tag: 'GitError'; message: string }
-  | { _tag: 'HunkNotFound' }
-  | { _tag: 'OperationInProgress'; operation: string }
-
-interface StatusMutationContext {
-  path: string
-  generation: number
-  key: readonly unknown[]
-  previous: GitStatus | undefined
-  hadOptimistic: boolean
 }
 
 interface FileMutationVars {
@@ -125,90 +112,22 @@ export function useWorkingTreeStatusController(
     }
   })
 
-  const resyncStatusAndDiffs = (context: StatusMutationContext) =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: context.key }),
-      queryClient.invalidateQueries({ queryKey: repoQueryKeys(context.path).diffRoot })
-    ])
-
   const statusMutationOptions = <Vars,>(
     applyOptimistic: (current: GitStatus, vars: Vars) => GitStatus | null,
     request: (path: string, vars: Vars) => Promise<StatusMutationResult>
-  ) => ({
-    mutationFn: async (vars: Vars): Promise<StatusMutationResult | null> => {
-      const path = liveRepoPath.current
-      if (!path) {
-        return null
-      }
-      return request(path, vars)
-    },
-    onMutate: async (vars: Vars): Promise<StatusMutationContext | undefined> => {
-      const path = liveRepoPath.current
-      if (!path) {
-        return undefined
-      }
-      const key = repoQueryKeys(path).status
-      await queryClient.cancelQueries({ queryKey: key })
-      const previous = queryClient.getQueryData<GitStatus>(key)
-      const optimistic = previous ? applyOptimistic(previous, vars) : null
-      if (optimistic) {
-        queryClient.setQueryData<GitStatus>(key, optimistic)
-      }
-      return {
-        path,
-        generation: openGenerationRef.current,
-        key,
-        previous,
-        hadOptimistic: Boolean(optimistic)
-      }
-    },
-    onError: (error: unknown, _vars: Vars, context: StatusMutationContext | undefined) => {
-      if (context?.hadOptimistic && context.previous) {
-        queryClient.setQueryData<GitStatus>(context.key, context.previous)
-      }
-      if (context && isCurrentRepo(context.generation, context.path)) {
-        setError('mutation', engineFailureBannerText('The change did not run', formatCause(error)))
-      }
-      if (context) {
-        return resyncStatusAndDiffs(context)
-      }
-      return undefined
-    },
-    onSuccess: (
-      response: StatusMutationResult | null,
-      _vars: Vars,
-      context: StatusMutationContext | undefined
-    ) => {
-      if (!response || !context) {
-        return undefined
-      }
-      if (response._tag === 'Ok') {
-        if (isCurrentRepo(context.generation, context.path)) {
-          clearError('mutation')
-        }
-        return resyncStatusAndDiffs(context)
-      }
-      if (context.hadOptimistic && context.previous) {
-        queryClient.setQueryData<GitStatus>(context.key, context.previous)
-      }
-      if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
-        setError('mutation', gitFailureBannerText('Git rejected the change', response.message))
-      }
-      if (response._tag === 'HunkNotFound' && isCurrentRepo(context.generation, context.path)) {
-        setError(
-          'mutation',
-          'The diff changed since this view loaded — it was refreshed. Try again.'
-        )
-      }
-      if (
-        response._tag === 'OperationInProgress' &&
-        isCurrentRepo(context.generation, context.path)
-      ) {
-        setError('mutation', `Finish or abort the in-progress ${response.operation} first.`)
-      }
-      return resyncStatusAndDiffs(context)
-    }
-  })
+  ) =>
+    createStatusMutationOptions(
+      {
+        queryClient,
+        getRepoPath: () => liveRepoPath.current,
+        getGeneration: () => openGenerationRef.current,
+        isCurrentRepo,
+        setMutationError: (error) => setError('mutation', error),
+        clearMutationError: () => clearError('mutation')
+      },
+      applyOptimistic,
+      request
+    )
 
   const stageMutation = useMutation(
     statusMutationOptions<string>(

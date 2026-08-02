@@ -1,53 +1,40 @@
-import { execFileSync } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { MAX_COMMIT_STATS_BATCH } from '@shared/git-constants'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createRepoFixture, type RepoFixture } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, getCommitStats, openRepo } from '../index'
 
 let repoDir: string
+let repo: RepoFixture
 const sha: Record<string, string> = {}
 
-function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
-}
-
-function commit(message: string): string {
-  git('-c', 'commit.gpgsign=false', 'commit', '--no-gpg-sign', '-m', message)
-  return git('rev-parse', 'HEAD').trim()
-}
-
-function write(file: string, contents: string): void {
-  fs.writeFileSync(path.join(repoDir, file), contents)
-}
-
 beforeAll(async () => {
-  repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-commit-stats-')))
-  git('init', '-b', 'main')
-  git('config', 'user.email', 'author@example.com')
-  git('config', 'user.name', 'Ada Author')
+  repo = createRepoFixture({
+    prefix: 'rebase-commit-stats-',
+    userEmail: 'author@example.com',
+    userName: 'Ada Author'
+  })
+  repoDir = repo.path
 
-  write('one.txt', 'a\nb\nc\n')
-  write('two.txt', 'x\n')
-  git('add', '-A')
-  sha.root = commit('root commit')
+  repo.write('one.txt', 'a\nb\nc\n')
+  repo.write('two.txt', 'x\n')
+  repo.git('add', '-A')
+  sha.root = repo.commitStaged('root commit')
 
-  write('one.txt', 'a\nB\nc\nd\n')
-  write('two.txt', 'y\nz\n')
-  fs.writeFileSync(path.join(repoDir, 'logo.png'), Buffer.from([0, 1, 2, 3, 0, 255]))
-  git('add', '-A')
-  sha.second = commit('second commit')
+  repo.write('one.txt', 'a\nB\nc\nd\n')
+  repo.write('two.txt', 'y\nz\n')
+  repo.write('logo.png', Buffer.from([0, 1, 2, 3, 0, 255]))
+  repo.git('add', '-A')
+  sha.second = repo.commitStaged('second commit')
 
-  git('checkout', '-q', '-b', 'side', sha.root)
-  write('side.txt', 'from\nthe\nside\n')
-  git('add', '-A')
-  sha.side = commit('side commit')
+  repo.git('checkout', '-q', '-b', 'side', sha.root)
+  repo.write('side.txt', 'from\nthe\nside\n')
+  repo.git('add', '-A')
+  sha.side = repo.commitStaged('side commit')
 
-  git('checkout', '-q', 'main')
-  git(
+  repo.git('checkout', '-q', 'main')
+  repo.git(
     '-c',
     'commit.gpgsign=false',
     'merge',
@@ -57,14 +44,14 @@ beforeAll(async () => {
     'Merge side into main',
     'side'
   )
-  sha.merge = git('rev-parse', 'HEAD').trim()
+  sha.merge = repo.head()
 
   await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
   await runOp(closeRepo(repoDir))
-  fs.rmSync(repoDir, { recursive: true, force: true })
+  repo.cleanup()
 })
 
 describe('getCommitStats', () => {
