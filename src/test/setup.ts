@@ -1,7 +1,9 @@
 import '@testing-library/jest-dom/vitest'
 import { LIST_PANE_DEFAULT_WIDTH } from '@shared/list-layout'
-import type {
+import {
+  Checkout,
   Commit,
+  DiscardHunk,
   Fetch,
   GetCommitDetail,
   GetCommitStats,
@@ -10,75 +12,64 @@ import type {
   GetRemoteRefs,
   GetStatus,
   GetWorkingTreeStats,
-  HunkLineSelection,
+  type HunkLineSelection,
   Pull,
-  PullStrategy,
+  type PullStrategy,
+  Push,
   StageFile,
   StageHunk,
+  StageLines,
   StashList,
-  UnstageHunk
+  UnstageFile,
+  UnstageHunk,
+  UnstageLines
 } from '@shared/rpc'
-import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { GitBranches } from '@shared/schemas/git'
-import { act, cleanup } from '@testing-library/react'
-import { Storage } from 'happy-dom'
+import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
+import { installBrowserTestEnvironment, resizeObserverMock } from './browser-environment'
+import { createSidecarRpcFake, type RpcWireResult } from './sidecar-rpc-fake'
 
-type StatusResponse = RpcEncodedResult<typeof GetStatus.successSchema, typeof GetStatus.errorSchema>
-type LocalBranchesResponse = RpcEncodedResult<
-  typeof GetLocalBranches.successSchema,
-  typeof GetLocalBranches.errorSchema
->
-type RemoteRefsResponse = RpcEncodedResult<
-  typeof GetRemoteRefs.successSchema,
-  typeof GetRemoteRefs.errorSchema
->
-type StageResponse = RpcEncodedResult<typeof StageFile.successSchema, typeof StageFile.errorSchema>
-type CommitResponse = RpcEncodedResult<typeof Commit.successSchema, typeof Commit.errorSchema>
-type GetDiffResponse = RpcEncodedResult<typeof GetDiff.successSchema, typeof GetDiff.errorSchema>
-type CommitDetailResponse = RpcEncodedResult<
-  typeof GetCommitDetail.successSchema,
-  typeof GetCommitDetail.errorSchema
->
-type CommitStatsResponse = RpcEncodedResult<
-  typeof GetCommitStats.successSchema,
-  typeof GetCommitStats.errorSchema
->
-type WorkingTreeStatsResponse = RpcEncodedResult<
-  typeof GetWorkingTreeStats.successSchema,
-  typeof GetWorkingTreeStats.errorSchema
->
-type StageHunkResponse = RpcEncodedResult<
-  typeof StageHunk.successSchema,
-  typeof StageHunk.errorSchema
->
-type GuardedHunkResponse = RpcEncodedResult<
-  typeof UnstageHunk.successSchema,
-  typeof UnstageHunk.errorSchema
->
-type StashListResponse = RpcEncodedResult<
-  typeof StashList.successSchema,
-  typeof StashList.errorSchema
->
-type VoidWriteWire = StageResponse
-type PullWire = RpcEncodedResult<typeof Pull.successSchema, typeof Pull.errorSchema>
-type FetchWire = RpcEncodedResult<typeof Fetch.successSchema, typeof Fetch.errorSchema>
+export {
+  type LogStreamHandle,
+  type RepoChangedHandle,
+  setupLogStream,
+  setupRepoChanged
+} from './electron-event-fakes'
+export { resizeObserverMock }
 
-const opHandlers = new Map<string, (body: Record<string, unknown>) => unknown | Promise<unknown>>()
+type StatusResponse = RpcWireResult<typeof GetStatus>
+type LocalBranchesResponse = RpcWireResult<typeof GetLocalBranches>
+type RemoteRefsResponse = RpcWireResult<typeof GetRemoteRefs>
+type StageResponse = RpcWireResult<typeof StageFile>
+type GuardedWriteResponse = RpcWireResult<typeof UnstageFile>
+type CommitResponse = RpcWireResult<typeof Commit>
+type GetDiffResponse = RpcWireResult<typeof GetDiff>
+type CommitDetailResponse = RpcWireResult<typeof GetCommitDetail>
+type CommitStatsResponse = RpcWireResult<typeof GetCommitStats>
+type WorkingTreeStatsResponse = RpcWireResult<typeof GetWorkingTreeStats>
+type StageHunkResponse = RpcWireResult<typeof StageHunk>
+type GuardedHunkResponse = RpcWireResult<typeof UnstageHunk>
+type StashListResponse = RpcWireResult<typeof StashList>
+type PullWire = RpcWireResult<typeof Pull>
+type FetchWire = RpcWireResult<typeof Fetch>
+type PushWire = RpcWireResult<typeof Push>
+
+const sidecarRpcFake = createSidecarRpcFake()
 
 export const sidecarMock = {
-  respond(op: string, handler: (body: Record<string, unknown>) => unknown): void {
-    opHandlers.set(op, handler)
-  },
+  respond: sidecarRpcFake.respond,
   getStatus: vi.fn<(repoPath: string) => Promise<StatusResponse>>(),
   getLocalBranches: vi.fn<(repoPath: string) => Promise<LocalBranchesResponse>>(),
   getRemoteRefs: vi.fn<(repoPath: string) => Promise<RemoteRefsResponse>>(),
   stageFile: vi.fn<(repoPath: string, file: string) => Promise<StageResponse>>(),
   unstageFile:
-    vi.fn<(repoPath: string, file: string, renameSource?: string) => Promise<StageResponse>>(),
+    vi.fn<
+      (repoPath: string, file: string, renameSource?: string) => Promise<GuardedWriteResponse>
+    >(),
   commit: vi.fn<(repoPath: string, message: string) => Promise<CommitResponse>>(),
   fetchRepo: vi.fn<(repoPath: string) => Promise<FetchWire>>(),
-  pushRepo: vi.fn<(repoPath: string) => Promise<VoidWriteWire>>(),
+  pushRepo: vi.fn<(repoPath: string) => Promise<PushWire>>(),
   pullRepo: vi.fn<(repoPath: string, strategy?: PullStrategy) => Promise<PullWire>>(),
   getDiff:
     vi.fn<
@@ -117,102 +108,17 @@ export const sidecarMock = {
     >(),
   stashList: vi.fn<(repoPath: string) => Promise<StashListResponse>>(),
   checkout:
-    vi.fn<(repoPath: string, refKind: string, fullPath: string) => Promise<CheckoutResult>>()
+    vi.fn<
+      (
+        repoPath: string,
+        refKind: string,
+        fullPath: string
+      ) => Promise<RpcWireResult<typeof Checkout>>
+    >()
 }
-
-type CheckoutResult =
-  | { _tag: 'Ok'; checkedOut: string }
-  | { _tag: 'RepoNotOpen' }
-  | { _tag: 'GitError'; message: string }
 ;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
 
-const localStorageMock = new Storage()
-const sessionStorageMock = new Storage()
-for (const storageTarget of [globalThis, window]) {
-  Object.defineProperties(storageTarget, {
-    localStorage: {
-      configurable: true,
-      value: localStorageMock
-    },
-    sessionStorage: {
-      configurable: true,
-      value: sessionStorageMock
-    }
-  })
-}
-
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  configurable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false
-  })
-})
-
-const DEFAULT_OBSERVED_RECT = { height: 800, width: 400 }
-let observedRect = { ...DEFAULT_OBSERVED_RECT }
-const liveResizeObservers = new Set<ResizeObserverMock>()
-
-class ResizeObserverMock {
-  private callback: ResizeObserverCallback
-  private targets = new Set<Element>()
-
-  constructor(callback: ResizeObserverCallback) {
-    this.callback = callback
-    liveResizeObservers.add(this)
-  }
-
-  emit(): void {
-    for (const target of this.targets) {
-      this.callback(
-        [{ target, contentRect: { ...observedRect } as DOMRectReadOnly } as ResizeObserverEntry],
-        this as unknown as ResizeObserver
-      )
-    }
-  }
-
-  observe = vi.fn((element: Element) => {
-    this.targets.add(element)
-    this.callback(
-      [
-        {
-          target: element,
-          contentRect: { ...observedRect } as DOMRectReadOnly
-        } as ResizeObserverEntry
-      ],
-      this as unknown as ResizeObserver
-    )
-  })
-  unobserve = vi.fn((element: Element) => {
-    this.targets.delete(element)
-  })
-  disconnect = vi.fn(() => {
-    this.targets.clear()
-    liveResizeObservers.delete(this)
-  })
-}
-
-export const resizeObserverMock = {
-  setContentRect(rect: Partial<{ width: number; height: number }>): void {
-    observedRect = { ...observedRect, ...rect }
-    act(() => {
-      for (const observer of [...liveResizeObservers]) {
-        observer.emit()
-      }
-    })
-  }
-}
-Object.defineProperty(window, 'ResizeObserver', {
-  writable: true,
-  value: ResizeObserverMock
-})
+installBrowserTestEnvironment()
 
 const mockElectronAPI = {
   platform: 'darwin' as NodeJS.Platform,
@@ -255,82 +161,6 @@ Object.defineProperty(window, 'electronAPI', {
   writable: true
 })
 
-export interface LogStreamHandle {
-  fire: (chunk: {
-    repoPath: string
-    commits: Array<{
-      hash: string
-      message: string
-      author_name: string
-      date: string
-      parents: string[]
-      refs: string
-    }>
-    done?: boolean
-    hasMore?: boolean
-    error?: string
-    streamId?: number
-  }) => void
-  fireDone: (repoPath: string, hasMore?: boolean) => void
-}
-
-export function setupLogStream(): LogStreamHandle {
-  const listeners: Array<(chunk: unknown) => void> = []
-  vi.mocked(window.electronAPI.onLogChunk).mockImplementation((cb) => {
-    listeners.push(cb as (chunk: unknown) => void)
-    return () => {
-      const index = listeners.indexOf(cb as (chunk: unknown) => void)
-      if (index !== -1) {
-        listeners.splice(index, 1)
-      }
-    }
-  })
-  vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
-  vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
-  return {
-    fire: (chunk) => {
-      act(() => {
-        for (const callback of listeners.slice()) {
-          callback({ done: false, ...chunk })
-        }
-      })
-    },
-    fireDone: (repoPath, hasMore) => {
-      act(() => {
-        for (const callback of listeners.slice()) {
-          callback({ repoPath, commits: [], done: true, hasMore })
-        }
-      })
-    }
-  }
-}
-
-export interface RepoChangedHandle {
-  fire: (evt: { repoPath: string; kind: 'refs' | 'workingTree' | 'index' }) => void
-}
-
-export function setupRepoChanged(): RepoChangedHandle {
-  const listeners: Array<(evt: unknown) => void> = []
-  vi.mocked(window.electronAPI.onRepoChanged).mockImplementation((cb) => {
-    listeners.push(cb as (evt: unknown) => void)
-    return () => {
-      const index = listeners.indexOf(cb as (evt: unknown) => void)
-      if (index !== -1) {
-        listeners.splice(index, 1)
-      }
-    }
-  })
-  return {
-    fire: (evt) => {
-      act(() => {
-        for (const callback of listeners.slice()) {
-          callback(evt)
-        }
-      })
-    }
-  }
-}
-
 export function mockBranchResponses(
   branches: Pick<GitBranches, 'current' | 'all'> &
     Partial<Pick<GitBranches, 'remotes' | 'tags' | 'tracking'>>
@@ -353,8 +183,8 @@ export function mockBranchResponses(
 
 beforeEach(() => {
   vi.resetAllMocks()
-  opHandlers.clear()
-  observedRect = { ...DEFAULT_OBSERVED_RECT }
+  sidecarRpcFake.reset()
+  resizeObserverMock.reset()
   vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
   vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({
@@ -366,79 +196,59 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.setListPaneWidth).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getPullDivergedStrategy).mockResolvedValue(null)
   vi.mocked(window.electronAPI.setPullDivergedStrategy).mockResolvedValue(undefined)
-  vi.mocked(window.electronAPI.sidecarRequest).mockImplementation(async (op, body) => {
-    const repoPath = body.repoPath as string
-    switch (op) {
-      case 'commit':
-        return sidecarMock.commit(repoPath, body.message as string)
-      case 'getStatus':
-        return sidecarMock.getStatus(repoPath)
-      case 'getLocalBranches':
-        return sidecarMock.getLocalBranches(repoPath)
-      case 'getRemoteRefs':
-        return sidecarMock.getRemoteRefs(repoPath)
-      case 'getDiff':
-        return sidecarMock.getDiff(repoPath, body.file as string, body.staged === true, {
-          range: body.range as string | undefined,
-          commit: body.commit as string | undefined,
-          renameSource: body.renameSource as string | undefined
-        })
-      case 'getCommitDetail':
-        return sidecarMock.getCommitDetail(repoPath, body.sha as string)
-      case 'getCommitStats':
-        return sidecarMock.getCommitStats(repoPath, body.shas as readonly string[])
-      case 'getWorkingTreeStats':
-        return sidecarMock.getWorkingTreeStats(repoPath)
-      case 'stashList':
-        return sidecarMock.stashList(repoPath)
-      case 'stageFile':
-        return sidecarMock.stageFile(repoPath, body.file as string)
-      case 'unstageFile':
-        return typeof body.renameSource === 'string'
-          ? sidecarMock.unstageFile(repoPath, body.file as string, body.renameSource)
-          : sidecarMock.unstageFile(repoPath, body.file as string)
-      case 'stageHunk':
-        return sidecarMock.stageHunk(repoPath, body.file as string, body.hunkHeader as string)
-      case 'unstageHunk':
-        return sidecarMock.unstageHunk(repoPath, body.file as string, body.hunkHeader as string)
-      case 'discardHunk':
-        return sidecarMock.discardHunk(repoPath, body.file as string, body.hunkHeader as string)
-      case 'stageLines':
-        return sidecarMock.stageLines(
-          repoPath,
-          body.file as string,
-          body.selections as HunkLineSelection[]
-        )
-      case 'unstageLines':
-        return sidecarMock.unstageLines(
-          repoPath,
-          body.file as string,
-          body.selections as HunkLineSelection[]
-        )
-      case 'checkout':
-        return sidecarMock.checkout(repoPath, body.refKind as string, body.fullPath as string)
-      case 'fetch':
-        return sidecarMock.fetchRepo(repoPath)
-      case 'push':
-        return sidecarMock.pushRepo(repoPath)
-      case 'pull': {
-        if (body.strategy === undefined) {
-          return sidecarMock.pullRepo(repoPath)
-        }
-        if (body.strategy !== 'rebase' && body.strategy !== 'merge') {
-          throw new Error(`invalid pull strategy: ${String(body.strategy)}`)
-        }
-        return sidecarMock.pullRepo(repoPath, body.strategy)
-      }
-      default: {
-        const handler = opHandlers.get(op)
-        if (handler) {
-          return handler(body)
-        }
-        return { _tag: 'Ok' }
-      }
+  sidecarRpcFake.respond(Commit, ({ repoPath, message }) => sidecarMock.commit(repoPath, message))
+  sidecarRpcFake.respond(GetStatus, ({ repoPath }) => sidecarMock.getStatus(repoPath))
+  sidecarRpcFake.respond(GetLocalBranches, ({ repoPath }) => sidecarMock.getLocalBranches(repoPath))
+  sidecarRpcFake.respond(GetRemoteRefs, ({ repoPath }) => sidecarMock.getRemoteRefs(repoPath))
+  sidecarRpcFake.respond(GetDiff, ({ repoPath, file, staged, range, commit, renameSource }) =>
+    sidecarMock.getDiff(repoPath, file, staged === true, { range, commit, renameSource })
+  )
+  sidecarRpcFake.respond(GetCommitDetail, ({ repoPath, sha }) =>
+    sidecarMock.getCommitDetail(repoPath, sha)
+  )
+  sidecarRpcFake.respond(GetCommitStats, ({ repoPath, shas }) =>
+    sidecarMock.getCommitStats(repoPath, shas)
+  )
+  sidecarRpcFake.respond(GetWorkingTreeStats, ({ repoPath }) =>
+    sidecarMock.getWorkingTreeStats(repoPath)
+  )
+  sidecarRpcFake.respond(StashList, ({ repoPath }) => sidecarMock.stashList(repoPath))
+  sidecarRpcFake.respond(StageFile, ({ repoPath, file }) => sidecarMock.stageFile(repoPath, file))
+  sidecarRpcFake.respond(UnstageFile, ({ repoPath, file, renameSource }) =>
+    renameSource === undefined
+      ? sidecarMock.unstageFile(repoPath, file)
+      : sidecarMock.unstageFile(repoPath, file, renameSource)
+  )
+  sidecarRpcFake.respond(StageHunk, ({ repoPath, file, hunkHeader }) =>
+    sidecarMock.stageHunk(repoPath, file, hunkHeader)
+  )
+  sidecarRpcFake.respond(UnstageHunk, ({ repoPath, file, hunkHeader }) =>
+    sidecarMock.unstageHunk(repoPath, file, hunkHeader)
+  )
+  sidecarRpcFake.respond(DiscardHunk, ({ repoPath, file, hunkHeader }) =>
+    sidecarMock.discardHunk(repoPath, file, hunkHeader)
+  )
+  sidecarRpcFake.respond(StageLines, ({ repoPath, file, selections }) =>
+    sidecarMock.stageLines(repoPath, file, selections)
+  )
+  sidecarRpcFake.respond(UnstageLines, ({ repoPath, file, selections }) =>
+    sidecarMock.unstageLines(repoPath, file, selections)
+  )
+  sidecarRpcFake.respond(Checkout, ({ repoPath, refKind, fullPath }) =>
+    sidecarMock.checkout(repoPath, refKind, fullPath)
+  )
+  sidecarRpcFake.respond(Fetch, ({ repoPath }) => sidecarMock.fetchRepo(repoPath))
+  sidecarRpcFake.respond(Push, ({ repoPath }) => sidecarMock.pushRepo(repoPath))
+  sidecarRpcFake.respond(Pull, ({ repoPath, strategy }) => {
+    if (strategy === undefined) {
+      return sidecarMock.pullRepo(repoPath)
     }
+    if (strategy === 'rebase' || strategy === 'merge') {
+      return sidecarMock.pullRepo(repoPath, strategy)
+    }
+    throw new Error(`Unexpected pull strategy '${strategy}'`)
   })
+  vi.mocked(window.electronAPI.sidecarRequest).mockImplementation(sidecarRpcFake.request)
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.disownRepo).mockResolvedValue(undefined)
   sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })

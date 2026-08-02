@@ -11,31 +11,22 @@ import {
 import { formatCause } from '@/lib/format-cause'
 import { gitFailureBannerText } from '@/lib/git-report'
 import { rpcCloseRepo, rpcDisownRepo, rpcOpenRepo } from '@/lib/rpc-client'
+import { createRepoSessionOwnership } from './repo-session-ownership'
+import {
+  clearRepoSessionError,
+  completeRepoOpening,
+  displayedRepoSessionError,
+  failRepoOpening,
+  initialRepoSessionState,
+  type OpenedRepo,
+  type RepoSessionErrorSource,
+  type RepoSessionState,
+  resetRepoSession,
+  setRepoSessionError,
+  startRepoOpening
+} from './repo-session-state'
 
-export interface OpenedRepo {
-  path: string
-  remotes: Record<string, string>
-  defaultBranch?: string
-}
-
-interface RepoSessionState {
-  repoPath: string | null
-  remotes: Record<string, string>
-  defaultBranch: string | undefined
-  opening: boolean
-  errors: RepoSessionErrors
-  openGeneration: number
-  resetEpoch: number
-}
-
-export type RepoSessionErrorSource = 'session' | 'status' | 'mutation' | 'refs' | 'history'
-
-interface RepoSessionError {
-  message: string
-  sequence: number
-}
-
-type RepoSessionErrors = Partial<Record<RepoSessionErrorSource, RepoSessionError>>
+export type { OpenedRepo, RepoSessionErrorSource } from './repo-session-state'
 
 export interface RepoSession {
   repoPath: string | null
@@ -68,62 +59,9 @@ export interface RepoSessionLifecycleRef {
   current: RepoSessionLifecycle
 }
 
-const initialSessionState: RepoSessionState = {
-  repoPath: null,
-  remotes: {},
-  defaultBranch: undefined,
-  opening: false,
-  errors: {},
-  openGeneration: 0,
-  resetEpoch: 0
-}
+const initialSessionState = initialRepoSessionState()
 
-const errorSourcesByPriority: readonly RepoSessionErrorSource[] = [
-  'session',
-  'mutation',
-  'history',
-  'status',
-  'refs'
-]
-
-const displayedError = (errors: RepoSessionErrors): RepoSessionError | null => {
-  let selected: RepoSessionError | undefined
-  for (const source of errorSourcesByPriority) {
-    const candidate = errors[source]
-    if (candidate && (!selected || candidate.sequence > selected.sequence)) {
-      selected = candidate
-    }
-  }
-  return selected ?? null
-}
-
-const pendingUnmountCloses = new Map<string, ReturnType<typeof setTimeout>>()
-const canonicalPathByRequestedPath = new Map<string, string>()
-const activeRepoOpenRequests = new Map<string, number>()
-let nextRepoOwner = 0
-
-const beginRepoOpenRequest = (requestedPath: string): string => {
-  const identity = canonicalPathByRequestedPath.get(requestedPath) ?? requestedPath
-  activeRepoOpenRequests.set(identity, (activeRepoOpenRequests.get(identity) ?? 0) + 1)
-  return identity
-}
-
-const endRepoOpenRequest = (identity: string) => {
-  const remaining = (activeRepoOpenRequests.get(identity) ?? 0) - 1
-  if (remaining > 0) {
-    activeRepoOpenRequests.set(identity, remaining)
-  } else {
-    activeRepoOpenRequests.delete(identity)
-  }
-}
-
-const cancelPendingUnmountClose = (repoPath: string) => {
-  const timer = pendingUnmountCloses.get(repoPath)
-  if (timer !== undefined) {
-    clearTimeout(timer)
-    pendingUnmountCloses.delete(repoPath)
-  }
-}
+const repoSessionOwnership = createRepoSessionOwnership()
 
 export const emptyRepoSessionLifecycle: RepoSessionLifecycle = {
   onRepoOpened: () => {},
@@ -155,23 +93,11 @@ export function useRepoSessionController(
 
   const setError = useCallback((source: RepoSessionErrorSource, error: string) => {
     const sequence = ++errorSequenceRef.current
-    setSessionState((previous) => {
-      return {
-        ...previous,
-        errors: { ...previous.errors, [source]: { message: error, sequence } }
-      }
-    })
+    setSessionState((previous) => setRepoSessionError(previous, source, error, sequence))
   }, [])
 
   const clearError = useCallback((source: RepoSessionErrorSource) => {
-    setSessionState((previous) => {
-      if (!previous.errors[source]) {
-        return previous
-      }
-      const errors = { ...previous.errors }
-      delete errors[source]
-      return { ...previous, errors }
-    })
+    setSessionState((previous) => clearRepoSessionError(previous, source))
   }, [])
 
   const bumpOpenGeneration = useCallback(() => {
@@ -185,11 +111,7 @@ export function useRepoSessionController(
     (openGeneration: number) => {
       liveRepoPath.current = null
       liveRepoOwner.current = null
-      setSessionState((previous) => ({
-        ...initialSessionState,
-        openGeneration,
-        resetEpoch: previous.resetEpoch
-      }))
+      setSessionState((previous) => resetRepoSession(previous, openGeneration))
       lifecycle.current.onSessionReset()
     },
     [lifecycle]
@@ -197,17 +119,12 @@ export function useRepoSessionController(
 
   const openRepo = useCallback(
     async (requestedPath: string): Promise<string | null> => {
-      cancelPendingUnmountClose(canonicalPathByRequestedPath.get(requestedPath) ?? requestedPath)
-      const owner = ++nextRepoOwner
+      repoSessionOwnership.cancelPendingClose(repoSessionOwnership.resolvePath(requestedPath))
+      const owner = repoSessionOwnership.nextOwner()
       const previousOwner = liveRepoOwner.current
       const generation = bumpOpenGeneration()
-      setSessionState((previous) => ({
-        ...previous,
-        opening: true,
-        errors: {},
-        openGeneration: generation
-      }))
-      const openRequestIdentity = beginRepoOpenRequest(requestedPath)
+      setSessionState((previous) => startRepoOpening(previous, generation))
+      const openRequestIdentity = repoSessionOwnership.beginOpen(requestedPath)
 
       try {
         const openResponse = await rpcOpenRepo(requestedPath, owner)
@@ -224,19 +141,14 @@ export function useRepoSessionController(
               ? 'Not a git repository'
               : gitFailureBannerText('Could not open this repository', openResponse.message)
           const sequence = ++errorSequenceRef.current
-          setSessionState((previous) => ({
-            ...previous,
-            opening: false,
-            errors: { session: { message: errorMessage, sequence } }
-          }))
+          setSessionState((previous) => failRepoOpening(previous, errorMessage, sequence))
           return null
         }
 
         const previousPath = liveRepoPath.current
         const opened = openResponse.result
-        canonicalPathByRequestedPath.set(requestedPath, opened.path)
-        canonicalPathByRequestedPath.set(opened.path, opened.path)
-        cancelPendingUnmountClose(opened.path)
+        repoSessionOwnership.rememberCanonicalPath(requestedPath, opened.path)
+        repoSessionOwnership.cancelPendingClose(opened.path)
         if (previousPath && previousPath !== opened.path) {
           try {
             await lifecycle.current.onBeforeRepoClosed(previousPath)
@@ -253,15 +165,7 @@ export function useRepoSessionController(
         }
         liveRepoPath.current = opened.path
         liveRepoOwner.current = owner
-        setSessionState((previous) => ({
-          ...previous,
-          repoPath: opened.path,
-          remotes: opened.remotes,
-          defaultBranch: opened.defaultBranch,
-          opening: false,
-          errors: {},
-          openGeneration: generation
-        }))
+        setSessionState((previous) => completeRepoOpening(previous, opened, generation))
         lifecycle.current.onRepoOpened(opened, generation)
         return opened.path
       } catch (error) {
@@ -269,14 +173,10 @@ export function useRepoSessionController(
           return null
         }
         const sequence = ++errorSequenceRef.current
-        setSessionState((previous) => ({
-          ...previous,
-          opening: false,
-          errors: { session: { message: formatCause(error), sequence } }
-        }))
+        setSessionState((previous) => failRepoOpening(previous, formatCause(error), sequence))
         return null
       } finally {
-        endRepoOpenRequest(openRequestIdentity)
+        repoSessionOwnership.endOpen(openRequestIdentity)
       }
     },
     [bumpOpenGeneration, lifecycle]
@@ -301,11 +201,7 @@ export function useRepoSessionController(
     const owner = liveRepoOwner.current
     liveRepoPath.current = null
     liveRepoOwner.current = null
-    setSessionState((previous) => ({
-      ...initialSessionState,
-      openGeneration: generation,
-      resetEpoch: previous.resetEpoch
-    }))
+    setSessionState((previous) => resetRepoSession(previous, generation))
     if (repoPath) {
       Promise.resolve(lifecycle.current.onBeforeRepoClosed(repoPath)).catch(() => {})
       if (owner !== null) {
@@ -318,7 +214,7 @@ export function useRepoSessionController(
   useEffect(() => {
     const repoPath = liveRepoPath.current
     if (repoPath) {
-      cancelPendingUnmountClose(repoPath)
+      repoSessionOwnership.cancelPendingClose(repoPath)
     }
 
     return () => {
@@ -329,35 +225,31 @@ export function useRepoSessionController(
       lifecycle.current.onSessionReset()
       liveRepoPath.current = null
       liveRepoOwner.current = null
-      setSessionState((previous) => ({
-        ...initialSessionState,
-        openGeneration,
-        resetEpoch: previous.resetEpoch + 1
-      }))
+      setSessionState((previous) => resetRepoSession(previous, openGeneration, true))
       if (!closingRepoPath || closingRepoOwner === null) {
         return
       }
       let timer: ReturnType<typeof setTimeout>
       const closeWhenReconciled = () => {
-        if (pendingUnmountCloses.get(closingRepoPath) !== timer) {
+        if (!repoSessionOwnership.matchesPendingClose(closingRepoPath, timer)) {
           return
         }
-        if ((activeRepoOpenRequests.get(closingRepoPath) ?? 0) > 0) {
+        if (repoSessionOwnership.hasActiveOpen(closingRepoPath)) {
           timer = setTimeout(closeWhenReconciled, 10)
-          pendingUnmountCloses.set(closingRepoPath, timer)
+          repoSessionOwnership.trackPendingClose(closingRepoPath, timer)
           return
         }
-        pendingUnmountCloses.delete(closingRepoPath)
+        repoSessionOwnership.releasePendingClose(closingRepoPath)
         Promise.resolve(lifecycle.current.onBeforeRepoClosed(closingRepoPath)).catch(() => {})
         Promise.resolve(rpcCloseRepo(closingRepoPath, closingRepoOwner)).catch(() => {})
       }
       timer = setTimeout(closeWhenReconciled, 0)
-      pendingUnmountCloses.set(closingRepoPath, timer)
+      repoSessionOwnership.trackPendingClose(closingRepoPath, timer)
     }
   }, [lifecycle])
 
   const publicValue = useMemo<RepoSession>(() => {
-    const error = displayedError(sessionState.errors)
+    const error = displayedRepoSessionError(sessionState.errors)
     return {
       repoPath: sessionState.repoPath,
       opening: sessionState.opening,

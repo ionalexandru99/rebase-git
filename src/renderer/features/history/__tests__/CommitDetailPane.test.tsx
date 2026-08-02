@@ -4,9 +4,10 @@ import { type CSSProperties, type ReactNode, useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CommitDetailPane } from '@/features/history/CommitDetailPane'
 import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
-import type { GitLogEntry } from '@/types'
+import { openedRepoResponse, statusResponse } from '../../../../test/builders'
 import { renderWithQuery } from '../../../../test/render-app'
 import { setupLogStream, sidecarMock } from '../../../../test/setup'
+import { createHistoryEntryBuilder } from './fixtures'
 
 vi.mock('@/features/diff/diff-theme', () => ({
   diffThemeStyle: () => ({}),
@@ -30,16 +31,11 @@ vi.mock('@pierre/diffs/react', () => ({
 
 const repoPath = '/home/user/project'
 
-function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {
-  return {
-    message: 'msg',
-    author_name: 'Ada Author',
-    date: '2026-07-21T09:42:00.000Z',
-    parents: [],
-    refs: '',
-    ...overrides
-  }
-}
+const entry = createHistoryEntryBuilder({
+  message: 'msg',
+  author_name: 'Ada Author',
+  date: '2026-07-21T09:42:00.000Z'
+})
 
 const commits = [
   entry({
@@ -143,26 +139,10 @@ const pane = () => screen.getByTestId('commit-detail-pane')
 
 beforeEach(() => {
   onCommitAction = vi.fn()
-  vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    _tag: 'Ok',
-    result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
-  })
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(repoPath))
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
   setupLogStream()
-  sidecarMock.getStatus.mockResolvedValue({
-    _tag: 'Ok',
-    status: {
-      current: 'main',
-      modified: [],
-      staged: [],
-      not_added: [],
-      conflicted: [],
-      deleted: [],
-      created: [],
-      renamed: [],
-      files: []
-    }
-  })
+  sidecarMock.getStatus.mockResolvedValue(statusResponse())
   sidecarMock.getCommitDetail.mockImplementation(async (_repo: string, sha: string) => ({
     _tag: 'Ok' as const,
     detail:

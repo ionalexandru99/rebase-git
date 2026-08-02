@@ -4,6 +4,7 @@ import { buildUnifiedFileRows } from '@/features/status/status-file-rows'
 import { type WorkingTreeStatus, WorkingTreeStatusProvider } from '@/features/status/store'
 import { WorkingCopyHeader } from '@/features/status/WorkingCopyHeader'
 import type { GitStatus } from '@/types'
+import { makeGitStatus } from '../../../../test/builders'
 
 type Code = { path: string; index: string; working_dir: string }
 
@@ -14,18 +15,7 @@ const code = (path: string, index: string, working_dir: string): Code => ({
 })
 
 function statusWith(files: Code[], overrides: Partial<GitStatus> = {}): GitStatus {
-  return {
-    current: 'main',
-    modified: [],
-    staged: [],
-    not_added: [],
-    conflicted: [],
-    deleted: [],
-    created: [],
-    renamed: [],
-    files,
-    ...overrides
-  }
+  return makeGitStatus({ files, ...overrides })
 }
 
 function renderHeader(status: GitStatus, stageAll = vi.fn()) {

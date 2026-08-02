@@ -1,9 +1,8 @@
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { Effect, Either, Stream } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createRepoFixture, type RepoFixture } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import {
   checkoutRef,
@@ -25,9 +24,10 @@ import {
 import { logChunkStream } from '../log-stream'
 
 let repoDir: string
+let repo: RepoFixture
 
 function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
+  return repo.git(...args)
 }
 
 function currentBranch(): string {
@@ -35,22 +35,18 @@ function currentBranch(): string {
 }
 
 function readFile(name: string): string {
-  return fs.readFileSync(path.join(repoDir, name), 'utf8')
+  return repo.read(name)
 }
 
 function commitFile(name: string, contents: string, message: string): void {
-  fs.writeFileSync(path.join(repoDir, name), contents)
-  git('add', '.')
-  git('commit', '-m', message)
+  repo.write(name, contents)
+  repo.git('add', '.')
+  repo.commitStaged(message)
 }
 
 beforeAll(async () => {
-  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-bc-test-')))
-  repoDir = path.join(base, 'repo')
-  fs.mkdirSync(repoDir)
-  execFileSync('git', ['-C', repoDir, 'init', '-b', 'main'])
-  git('config', 'user.email', 'test@example.com')
-  git('config', 'user.name', 'Test')
+  repo = createRepoFixture({ prefix: 'rebase-bc-test-' })
+  repoDir = repo.path
   commitFile('file.txt', 'base\n', 'base')
 
   await runOp(openRepo(repoDir))
@@ -58,7 +54,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await runOp(closeRepo(repoDir))
-  fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
+  repo.cleanup()
 })
 
 describe('branch operations', () => {

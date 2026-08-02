@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useDialogs } from '@/components/ui/prompt-dialog'
 import { type WorkingTreeStatus, WorkingTreeStatusProvider } from '@/features/status/store'
-import type { GitStatus } from '@/types'
+import { makeGitStatus } from '../../../../test/builders'
 import { ConflictBanner } from '../ConflictBanner'
 
 interface BannerOptions {
@@ -39,18 +39,11 @@ function Harness(props: { value: WorkingTreeStatus; actions: BannerActions }) {
 
 function renderBanner(options: BannerOptions = {}) {
   const conflicted = options.conflicted ?? []
-  const status: GitStatus = {
-    current: 'main',
-    modified: [],
-    staged: [],
-    not_added: [],
+  const status = makeGitStatus({
     conflicted,
-    deleted: [],
-    created: [],
-    renamed: [],
     files: conflicted.map((path) => ({ path, index: 'U', working_dir: 'U' })),
     operation: options.operation
-  }
+  })
   const value: WorkingTreeStatus = {
     status,
     rows: [],

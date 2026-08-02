@@ -8,17 +8,25 @@ const baseTabs: TabDescriptor[] = [
   { id: 'b', title: 'web-app', hasRepo: true, repoPath: '/dev/web-app' }
 ]
 
+function renderRail(overrides: Partial<Parameters<typeof RepoRail>[0]> = {}) {
+  const onSelect = overrides.onSelect ?? vi.fn()
+  const onClose = overrides.onClose ?? vi.fn()
+  const onNew = overrides.onNew ?? vi.fn()
+  render(
+    <RepoRail
+      tabs={overrides.tabs ?? baseTabs}
+      activeTabId={overrides.activeTabId ?? 'a'}
+      onSelect={onSelect}
+      onClose={onClose}
+      onNew={onNew}
+    />
+  )
+  return { onSelect, onClose, onNew }
+}
+
 describe('RepoRail', () => {
   it('renders an avatar tab per repo plus a new-tab button', () => {
-    render(
-      <RepoRail
-        tabs={baseTabs}
-        activeTabId="a"
-        onSelect={vi.fn()}
-        onClose={vi.fn()}
-        onNew={vi.fn()}
-      />
-    )
+    renderRail()
 
     expect(screen.getAllByRole('tab')).toHaveLength(2)
     expect(screen.getByText('MA')).toBeInTheDocument()
@@ -27,15 +35,7 @@ describe('RepoRail', () => {
   })
 
   it('fits its avatars inside a 44px rail', () => {
-    render(
-      <RepoRail
-        tabs={baseTabs}
-        activeTabId="a"
-        onSelect={vi.fn()}
-        onClose={vi.fn()}
-        onNew={vi.fn()}
-      />
-    )
+    renderRail()
 
     expect(screen.getByRole('navigation', { name: 'Open repositories' })).toHaveStyle({
       width: '44px'
@@ -50,15 +50,7 @@ describe('RepoRail', () => {
   })
 
   it('marks the active tab with aria-selected', () => {
-    render(
-      <RepoRail
-        tabs={baseTabs}
-        activeTabId="b"
-        onSelect={vi.fn()}
-        onClose={vi.fn()}
-        onNew={vi.fn()}
-      />
-    )
+    renderRail({ activeTabId: 'b' })
 
     const tabs = screen.getAllByRole('tab')
     expect(tabs[0]).toHaveAttribute('aria-selected', 'false')
@@ -66,32 +58,14 @@ describe('RepoRail', () => {
   })
 
   it('invokes onSelect when an avatar is clicked', () => {
-    const onSelect = vi.fn()
-    render(
-      <RepoRail
-        tabs={baseTabs}
-        activeTabId="a"
-        onSelect={onSelect}
-        onClose={vi.fn()}
-        onNew={vi.fn()}
-      />
-    )
+    const { onSelect } = renderRail()
 
     fireEvent.click(screen.getByRole('tab', { name: 'web-app' }))
     expect(onSelect).toHaveBeenCalledWith('b')
   })
 
   it('invokes onClose when a close button is clicked', () => {
-    const onClose = vi.fn()
-    render(
-      <RepoRail
-        tabs={baseTabs}
-        activeTabId="a"
-        onSelect={vi.fn()}
-        onClose={onClose}
-        onNew={vi.fn()}
-      />
-    )
+    const { onClose } = renderRail()
 
     const closeButtons = screen.getAllByRole('button', { name: /Close tab/i })
     fireEvent.click(closeButtons[1])
@@ -99,33 +73,16 @@ describe('RepoRail', () => {
   })
 
   it('creates a new tab from the plus button when no blank tab exists', () => {
-    const onNew = vi.fn()
-    render(
-      <RepoRail
-        tabs={baseTabs}
-        activeTabId="a"
-        onSelect={vi.fn()}
-        onClose={vi.fn()}
-        onNew={onNew}
-      />
-    )
+    const { onNew } = renderRail()
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(onNew).toHaveBeenCalledTimes(1)
   })
 
   it('activates an existing blank tab instead of creating another', () => {
-    const onNew = vi.fn()
-    const onSelect = vi.fn()
-    render(
-      <RepoRail
-        tabs={[...baseTabs, { id: 'blank', title: 'New tab', hasRepo: false, repoPath: null }]}
-        activeTabId="a"
-        onSelect={onSelect}
-        onClose={vi.fn()}
-        onNew={onNew}
-      />
-    )
+    const { onNew, onSelect } = renderRail({
+      tabs: [...baseTabs, { id: 'blank', title: 'New tab', hasRepo: false, repoPath: null }]
+    })
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(onSelect).toHaveBeenCalledWith('blank')

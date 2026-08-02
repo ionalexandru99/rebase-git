@@ -9,6 +9,12 @@ import {
   useRepoSession,
   useWorkingTreeStatus
 } from '@/stores/git'
+import {
+  localBranchesResponse,
+  openedRepoResponse,
+  remoteRefsResponse,
+  statusResponse
+} from '../../../../test/builders'
 import { renderWithQuery } from '../../../../test/render-app'
 import { type LogStreamHandle, setupLogStream, sidecarMock } from '../../../../test/setup'
 
@@ -23,20 +29,7 @@ vi.mock('sonner', () => ({ toast }))
 const repoPath = '/home/user/project'
 const otherRepoPath = '/home/user/other-project'
 
-const statusOk = {
-  _tag: 'Ok' as const,
-  status: {
-    current: 'main',
-    modified: ['src/app.ts'],
-    staged: [],
-    not_added: [],
-    conflicted: [],
-    deleted: [],
-    created: [],
-    renamed: [],
-    files: []
-  }
-}
+const statusOk = statusResponse({ modified: ['src/app.ts'] })
 
 function streamedCommit(hash: string) {
   return {
@@ -61,26 +54,17 @@ afterEach(() => {
 })
 
 beforeEach(() => {
-  vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    _tag: 'Ok',
-    result: {
-      path: repoPath,
-      remotes: { origin: 'git@example.com:me/project.git' },
-      defaultBranch: 'main'
-    }
-  })
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(
+    openedRepoResponse(repoPath, { remotes: { origin: 'git@example.com:me/project.git' } })
+  )
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
   logStream = setupLogStream()
   sidecarMock.getStatus.mockResolvedValue(statusOk)
-  sidecarMock.getLocalBranches.mockResolvedValue({
-    _tag: 'Ok',
-    branches: { current: 'main', all: ['main', 'dev'] }
-  })
-  sidecarMock.getRemoteRefs.mockResolvedValue({
-    _tag: 'Ok',
-    refs: { remotes: ['origin/main'], tags: ['v1'] }
-  })
+  sidecarMock.getLocalBranches.mockResolvedValue(localBranchesResponse({ all: ['main', 'dev'] }))
+  sidecarMock.getRemoteRefs.mockResolvedValue(
+    remoteRefsResponse({ remotes: ['origin/main'], tags: ['v1'] })
+  )
 })
 
 describe('useRefs', () => {
@@ -150,10 +134,9 @@ describe('useRefs', () => {
     })
 
     sidecarMock.getStatus.mockResolvedValue(statusOk)
-    sidecarMock.getLocalBranches.mockResolvedValue({
-      _tag: 'Ok',
-      branches: { current: 'renamed', all: ['renamed', 'dev'] }
-    })
+    sidecarMock.getLocalBranches.mockResolvedValue(
+      localBranchesResponse({ current: 'renamed', all: ['renamed', 'dev'] })
+    )
     await act(async () => {
       await runAction?.('renameBranch', () => Promise.resolve({ _tag: 'Ok' as const }), 'Renamed')
     })
@@ -527,14 +510,8 @@ describe('useRefs — auto-fetch', () => {
 describe('useRefs — per-repo fetch timestamp', () => {
   it('scopes the fetched timestamp to the repo it was fetched for', async () => {
     vi.mocked(window.electronAPI.openRepo)
-      .mockResolvedValueOnce({
-        _tag: 'Ok',
-        result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
-      })
-      .mockResolvedValueOnce({
-        _tag: 'Ok',
-        result: { path: otherRepoPath, remotes: {}, defaultBranch: 'main' }
-      })
+      .mockResolvedValueOnce(openedRepoResponse(repoPath))
+      .mockResolvedValueOnce(openedRepoResponse(otherRepoPath))
 
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     let fetchNow: (() => Promise<void>) | undefined
@@ -569,14 +546,12 @@ describe('useRefs — per-repo fetch timestamp', () => {
 
 describe('useRefs — branch freshness', () => {
   it('carries each branch tip committer date through to the combined branches', async () => {
-    sidecarMock.getLocalBranches.mockResolvedValue({
-      _tag: 'Ok',
-      branches: {
-        current: 'main',
+    sidecarMock.getLocalBranches.mockResolvedValue(
+      localBranchesResponse({
         all: ['main', 'dev'],
         lastCommitAt: { main: '2026-01-02T03:04:05+00:00', dev: '2025-12-31T23:59:59+00:00' }
-      }
-    })
+      })
+    )
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function Probe() {
       const refs = useRefs()
@@ -599,15 +574,14 @@ describe('useRefs — branch freshness', () => {
   })
 
   it('carries remote branch and tag freshness through to the combined branches', async () => {
-    sidecarMock.getRemoteRefs.mockResolvedValue({
-      _tag: 'Ok',
-      refs: {
+    sidecarMock.getRemoteRefs.mockResolvedValue(
+      remoteRefsResponse({
         remotes: ['origin/main'],
         tags: ['v1'],
         remoteLastCommitAt: { 'origin/main': '2026-01-01T00:00:00+00:00' },
         tagLastCommitAt: { v1: '2025-11-11T11:11:11+00:00' }
-      }
-    })
+      })
+    )
     let openRepo: ((path: string) => Promise<string | null>) | undefined
     function Probe() {
       const refs = useRefs()

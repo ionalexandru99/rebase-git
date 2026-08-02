@@ -1,6 +1,5 @@
 import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
 import { describe, expect, it } from 'vitest'
-import type { GitLogEntry } from '@/types'
 import {
   computeBranchFilterSet,
   computeOnBranchSet,
@@ -13,17 +12,7 @@ import {
   refFilterKey,
   resolveTrackingRemoteBranches
 } from '../selectors'
-
-function entry(overrides: Partial<GitLogEntry> & Pick<GitLogEntry, 'hash'>): GitLogEntry {
-  return {
-    message: 'msg',
-    author_name: 'Author',
-    date: new Date().toISOString(),
-    parents: [],
-    refs: '',
-    ...overrides
-  }
-}
+import { makeHistoryEntry as entry } from './fixtures'
 
 describe('refFilterKey', () => {
   it('encodes kind and full path', () => {

@@ -2,6 +2,12 @@ import { act, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useWorkingTreeStatus } from '@/features/status/store'
 import { GitStoreProvider, useCommitHistory, useRepoSession } from '@/stores/git'
+import {
+  localBranchesResponse,
+  openedRepoResponse,
+  remoteRefsResponse,
+  statusResponse
+} from '../../../../test/builders'
 import { renderWithQuery } from '../../../../test/render-app'
 import { type LogStreamHandle, setupLogStream, sidecarMock } from '../../../../test/setup'
 
@@ -15,20 +21,7 @@ vi.mock('sonner', () => ({ toast }))
 
 const repoPath = '/home/user/project'
 
-const statusOk = {
-  _tag: 'Ok' as const,
-  status: {
-    current: 'main',
-    modified: ['src/app.ts'],
-    staged: [],
-    not_added: [],
-    conflicted: [],
-    deleted: [],
-    created: [],
-    renamed: [],
-    files: []
-  }
-}
+const statusOk = statusResponse({ modified: ['src/app.ts'] })
 
 let statusRenderCount = 0
 
@@ -58,19 +51,13 @@ let logStream: LogStreamHandle
 
 beforeEach(() => {
   statusRenderCount = 0
-  vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    _tag: 'Ok',
-    result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
-  })
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(repoPath))
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
   logStream = setupLogStream()
   sidecarMock.getStatus.mockResolvedValue(statusOk)
-  sidecarMock.getLocalBranches.mockResolvedValue({
-    _tag: 'Ok',
-    branches: { current: 'main', all: ['main'] }
-  })
-  sidecarMock.getRemoteRefs.mockResolvedValue({ _tag: 'Ok', refs: { remotes: [], tags: [] } })
+  sidecarMock.getLocalBranches.mockResolvedValue(localBranchesResponse())
+  sidecarMock.getRemoteRefs.mockResolvedValue(remoteRefsResponse())
 })
 
 describe('useWorkingTreeStatus — concern isolation', () => {
@@ -109,10 +96,9 @@ describe('useWorkingTreeStatus — concern isolation', () => {
   })
 
   it('updates a status consumer when a stage changes the working tree through the context', async () => {
-    sidecarMock.getStatus.mockResolvedValueOnce(statusOk).mockResolvedValue({
-      _tag: 'Ok',
-      status: { ...statusOk.status, modified: [], staged: ['src/app.ts'] }
-    })
+    sidecarMock.getStatus
+      .mockResolvedValueOnce(statusOk)
+      .mockResolvedValue(statusResponse({ staged: ['src/app.ts'] }))
     sidecarMock.stageFile.mockResolvedValue({ _tag: 'Ok' })
 
     let stage: ((file: string) => Promise<unknown>) | undefined

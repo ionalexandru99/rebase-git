@@ -5,21 +5,23 @@ import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { installRefTransactionHook } from '../../test-support/ref-transaction-hook'
+import { createRepoFixture, type RepoFixture } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import { amendCommit, casAdvanceHead, closeRepo, getHeadCommit, openRepo } from '../index'
 
 let repoDir: string
+let repo: RepoFixture
 
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 })
 
 function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
+  return repo.git(...args)
 }
 
 function commitFile(name: string, contents: string, message: string): void {
-  fs.writeFileSync(path.join(repoDir, name), contents)
-  git('add', '.')
-  git('commit', '-m', message)
+  repo.write(name, contents)
+  repo.git('add', '.')
+  repo.commitStaged(message)
 }
 
 function show(format: string, rev = 'HEAD'): string {
@@ -41,18 +43,18 @@ function amendCurrent(
 }
 
 beforeEach(async () => {
-  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-amend-test-')))
-  repoDir = path.join(base, 'repo')
-  fs.mkdirSync(repoDir)
-  execFileSync('git', ['-C', repoDir, 'init', '-b', 'main'])
-  git('config', 'user.email', 'committer@example.com')
-  git('config', 'user.name', 'Committer')
+  repo = createRepoFixture({
+    prefix: 'rebase-amend-test-',
+    userEmail: 'committer@example.com',
+    userName: 'Committer'
+  })
+  repoDir = repo.path
   await runOp(openRepo(repoDir))
 })
 
 afterEach(async () => {
   await runOp(closeRepo(repoDir))
-  fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
+  repo.cleanup()
 })
 
 describe('amendCommit — reword', () => {

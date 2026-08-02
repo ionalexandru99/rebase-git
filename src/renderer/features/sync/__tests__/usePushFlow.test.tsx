@@ -6,6 +6,14 @@ import type { PushOutcome } from '@/stores/action-runner'
 import { type PushFlowDeps, usePushFlow } from '../usePushFlow'
 
 const ok: PushOutcome = { kind: 'ok' }
+type RejectedPushOutcome = Extract<PushOutcome, { kind: 'rejected' }>
+
+function rejectedPush(
+  reason: RejectedPushOutcome['reason'],
+  overrides: Partial<Omit<RejectedPushOutcome, 'kind' | 'reason'>> = {}
+): RejectedPushOutcome {
+  return { kind: 'rejected', reason, lostCommits: [], ...overrides }
+}
 
 vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() }
@@ -80,13 +88,7 @@ describe('usePushFlow', () => {
   })
 
   it('escalates to the Tier 1 confirm when a plain push is refused as non-fast-forward', async () => {
-    const push = vi.fn(
-      async (): Promise<PushOutcome> => ({
-        kind: 'rejected',
-        reason: 'non-fast-forward',
-        lostCommits: []
-      })
-    )
+    const push = vi.fn(async (): Promise<PushOutcome> => rejectedPush('non-fast-forward'))
     renderFlow({ ahead: 2, behind: 0, push })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
@@ -106,12 +108,10 @@ describe('usePushFlow', () => {
   it('opens the Tier 2 escalation with the loss preview when the leased force is refused', async () => {
     const push = vi.fn(async (force?: PushForce): Promise<PushOutcome> => {
       if (force === 'with-lease') {
-        return {
-          kind: 'rejected',
-          reason: 'lease-stale',
+        return rejectedPush('lease-stale', {
           lostCommits: [{ sha: 'abc1234', subject: 'teammate work' }],
           remoteSha: 'abc1234fullsha'
-        }
+        })
       }
       return ok
     })
@@ -129,12 +129,10 @@ describe('usePushFlow', () => {
   it('issues a pinned overwrite to the shown remote tip when the escalation is accepted', async () => {
     const push = vi.fn(async (force?: PushForce): Promise<PushOutcome> => {
       if (force === 'with-lease') {
-        return {
-          kind: 'rejected',
-          reason: 'remote-moved',
+        return rejectedPush('remote-moved', {
           lostCommits: [{ sha: 'abc1234', subject: 'teammate work' }],
           remoteSha: 'PINNED_SHA'
-        }
+        })
       }
       return ok
     })
@@ -151,25 +149,21 @@ describe('usePushFlow', () => {
     let overwriteAttempts = 0
     const push = vi.fn(async (force?: PushForce): Promise<PushOutcome> => {
       if (force === 'with-lease') {
-        return {
-          kind: 'rejected',
-          reason: 'remote-moved',
+        return rejectedPush('remote-moved', {
           lostCommits: [{ sha: 'aaa', subject: 'first teammate work' }],
           remoteSha: 'sha-1'
-        }
+        })
       }
       if (force === 'overwrite') {
         overwriteAttempts += 1
         if (overwriteAttempts === 1) {
-          return {
-            kind: 'rejected',
-            reason: 'remote-moved',
+          return rejectedPush('remote-moved', {
             lostCommits: [
               { sha: 'bbb', subject: 'second teammate work' },
               { sha: 'aaa', subject: 'first teammate work' }
             ],
             remoteSha: 'sha-2'
-          }
+          })
         }
       }
       return ok
@@ -266,25 +260,19 @@ describe('usePushFlow', () => {
     fireEvent.click(screen.getByRole('button', { name: /force push \(with lease\)/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    resolveForce({
-      kind: 'rejected',
-      reason: 'remote-moved',
-      lostCommits: [{ sha: 'abc1234', subject: 'late result' }],
-      remoteSha: 'abc1234'
-    })
+    resolveForce(
+      rejectedPush('remote-moved', {
+        lostCommits: [{ sha: 'abc1234', subject: 'late result' }],
+        remoteSha: 'abc1234'
+      })
+    )
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(screen.queryByText('late result')).not.toBeInTheDocument()
   })
 
   it('says why the flow ended when a forced push is refused for a reason it cannot escalate', async () => {
-    const push = vi.fn(
-      async (): Promise<PushOutcome> => ({
-        kind: 'rejected',
-        reason: 'non-fast-forward',
-        lostCommits: []
-      })
-    )
+    const push = vi.fn(async (): Promise<PushOutcome> => rejectedPush('non-fast-forward'))
     renderFlow({ ahead: 2, behind: 3, push })
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))

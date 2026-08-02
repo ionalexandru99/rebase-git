@@ -21,7 +21,7 @@ test('a Sync that pushes a repo with no remote surfaces an error toast', async (
 
   const sync = syncButton(page)
   await expect(sync).toContainText('↑1', { timeout: 10_000 })
-  const toast = await harness.expectToast({ type: 'error', title: 'Pushed failed' }, () =>
+  const toast = await harness.expectToast({ type: 'error', title: 'Push failed' }, () =>
     sync.click()
   )
   expect(toast.description).not.toBe('')

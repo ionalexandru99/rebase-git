@@ -3,8 +3,11 @@ import type { HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/features/status/status-file-rows'
-import { formatCause } from '@/lib/format-cause'
-import { engineFailureBannerText, gitFailureBannerText } from '@/lib/git-report'
+import {
+  createStatusMutationOptions,
+  type StatusMutationResult
+} from '@/features/status/status-mutation-lifecycle'
+import { applyStageToStatus, applyUnstageToStatus } from '@/features/status/status-transitions'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
 import {
@@ -31,69 +34,10 @@ export interface HunkStageOptions {
   fullyUnstagesFile?: boolean
 }
 
-type StatusMutationResult =
-  | { _tag: 'Ok' }
-  | { _tag: 'RepoNotOpen' }
-  | { _tag: 'GitError'; message: string }
-  | { _tag: 'HunkNotFound' }
-  | { _tag: 'OperationInProgress'; operation: string }
-
-interface StatusMutationContext {
-  path: string
-  generation: number
-  key: readonly unknown[]
-  previous: GitStatus | undefined
-  hadOptimistic: boolean
-}
-
 interface FileMutationVars {
   file: string
   renameSource?: string
 }
-
-const withoutFile = (files: string[], file: string): string[] => files.filter((f) => f !== file)
-const withFile = (files: string[], file: string): string[] =>
-  files.includes(file) ? files : [...files, file]
-
-const stageCodes = (index: string, workingDir: string): { index: string; working_dir: string } => {
-  if (index === '?' || workingDir === '?') {
-    return { index: 'A', working_dir: ' ' }
-  }
-  return { index: workingDir !== ' ' ? workingDir : index, working_dir: ' ' }
-}
-
-const unstageCodes = (index: string): { index: string; working_dir: string } => {
-  if (index === 'A') {
-    return { index: '?', working_dir: '?' }
-  }
-  return { index: ' ', working_dir: index !== ' ' ? index : 'M' }
-}
-
-type StatusFileCode = NonNullable<GitStatus['files']>[number]
-
-const mapFileCodes = (
-  status: GitStatus,
-  file: string,
-  next: (entry: StatusFileCode) => { index: string; working_dir: string }
-): StatusFileCode[] =>
-  (status.files ?? []).map((entry) => (entry.path === file ? { ...entry, ...next(entry) } : entry))
-
-const applyStage = (status: GitStatus, file: string): GitStatus => ({
-  ...status,
-  staged: withFile(status.staged, file),
-  modified: withoutFile(status.modified, file),
-  not_added: withoutFile(status.not_added, file),
-  created: withoutFile(status.created, file),
-  deleted: withoutFile(status.deleted, file),
-  files: mapFileCodes(status, file, (entry) => stageCodes(entry.index, entry.working_dir))
-})
-
-const applyUnstage = (status: GitStatus, file: string): GitStatus => ({
-  ...status,
-  staged: withoutFile(status.staged, file),
-  modified: withFile(status.modified, file),
-  files: mapFileCodes(status, file, (entry) => unstageCodes(entry.index))
-})
 
 interface HunkMutationVars {
   op: 'stage' | 'unstage' | 'discard'
@@ -168,115 +112,47 @@ export function useWorkingTreeStatusController(
     }
   })
 
-  const resyncStatusAndDiffs = (context: StatusMutationContext) =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: context.key }),
-      queryClient.invalidateQueries({ queryKey: repoQueryKeys(context.path).diffRoot })
-    ])
-
   const statusMutationOptions = <Vars,>(
     applyOptimistic: (current: GitStatus, vars: Vars) => GitStatus | null,
     request: (path: string, vars: Vars) => Promise<StatusMutationResult>
-  ) => ({
-    mutationFn: async (vars: Vars): Promise<StatusMutationResult | null> => {
-      const path = liveRepoPath.current
-      if (!path) {
-        return null
-      }
-      return request(path, vars)
-    },
-    onMutate: async (vars: Vars): Promise<StatusMutationContext | undefined> => {
-      const path = liveRepoPath.current
-      if (!path) {
-        return undefined
-      }
-      const key = repoQueryKeys(path).status
-      await queryClient.cancelQueries({ queryKey: key })
-      const previous = queryClient.getQueryData<GitStatus>(key)
-      const optimistic = previous ? applyOptimistic(previous, vars) : null
-      if (optimistic) {
-        queryClient.setQueryData<GitStatus>(key, optimistic)
-      }
-      return {
-        path,
-        generation: openGenerationRef.current,
-        key,
-        previous,
-        hadOptimistic: Boolean(optimistic)
-      }
-    },
-    onError: (error: unknown, _vars: Vars, context: StatusMutationContext | undefined) => {
-      if (context?.hadOptimistic && context.previous) {
-        queryClient.setQueryData<GitStatus>(context.key, context.previous)
-      }
-      if (context && isCurrentRepo(context.generation, context.path)) {
-        setError('mutation', engineFailureBannerText('The change did not run', formatCause(error)))
-      }
-      if (context) {
-        return resyncStatusAndDiffs(context)
-      }
-      return undefined
-    },
-    onSuccess: (
-      response: StatusMutationResult | null,
-      _vars: Vars,
-      context: StatusMutationContext | undefined
-    ) => {
-      if (!response || !context) {
-        return undefined
-      }
-      if (response._tag === 'Ok') {
-        if (isCurrentRepo(context.generation, context.path)) {
-          clearError('mutation')
-        }
-        return resyncStatusAndDiffs(context)
-      }
-      if (context.hadOptimistic && context.previous) {
-        queryClient.setQueryData<GitStatus>(context.key, context.previous)
-      }
-      if (response._tag === 'GitError' && isCurrentRepo(context.generation, context.path)) {
-        setError('mutation', gitFailureBannerText('Git rejected the change', response.message))
-      }
-      if (response._tag === 'HunkNotFound' && isCurrentRepo(context.generation, context.path)) {
-        setError(
-          'mutation',
-          'The diff changed since this view loaded — it was refreshed. Try again.'
-        )
-      }
-      if (
-        response._tag === 'OperationInProgress' &&
-        isCurrentRepo(context.generation, context.path)
-      ) {
-        setError('mutation', `Finish or abort the in-progress ${response.operation} first.`)
-      }
-      return resyncStatusAndDiffs(context)
-    }
-  })
+  ) =>
+    createStatusMutationOptions(
+      {
+        queryClient,
+        getRepoPath: () => liveRepoPath.current,
+        getGeneration: () => openGenerationRef.current,
+        isCurrentRepo,
+        setMutationError: (error) => setError('mutation', error),
+        clearMutationError: () => clearError('mutation')
+      },
+      applyOptimistic,
+      request
+    )
 
   const stageMutation = useMutation(
     statusMutationOptions<string>(
-      (current, file) => applyStage(current, file),
+      (current, file) => applyStageToStatus(current, file),
       (path, file) => rpcStageFile(path, file)
     )
   )
 
   const unstageMutation = useMutation(
     statusMutationOptions<FileMutationVars>(
-      (current, vars) => applyUnstage(current, vars.file),
+      (current, vars) => applyUnstageToStatus(current, vars.file),
       (path, vars) => rpcUnstageFile(path, vars.file, vars.renameSource)
     )
   )
 
   const stageAllMutation = useMutation(
     statusMutationOptions<string[]>(
-      (current, files) => files.reduce((next, file) => applyStage(next, file), current),
+      (current, files) => files.reduce((next, file) => applyStageToStatus(next, file), current),
       (path, files) => rpcStageAll(path, files)
     )
   )
 
   const unstageAllMutation = useMutation(
     statusMutationOptions<string[]>(
-      (current, files) => files.reduce((next, file) => applyUnstage(next, file), current),
+      (current, files) => files.reduce((next, file) => applyUnstageToStatus(next, file), current),
       (path, files) => rpcUnstageAll(path, files)
     )
   )
@@ -285,10 +161,10 @@ export function useWorkingTreeStatusController(
     statusMutationOptions<HunkMutationVars>(
       (current, vars) => {
         if (vars.op === 'stage' && vars.options.fullyStagesFile) {
-          return applyStage(current, vars.file)
+          return applyStageToStatus(current, vars.file)
         }
         if (vars.op === 'unstage' && vars.options.fullyUnstagesFile) {
-          return applyUnstage(current, vars.file)
+          return applyUnstageToStatus(current, vars.file)
         }
         return null
       },

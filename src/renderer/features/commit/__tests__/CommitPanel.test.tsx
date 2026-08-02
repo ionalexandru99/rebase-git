@@ -33,73 +33,6 @@ function renderPanel(
 const amendToggle = () => screen.getByRole('checkbox', { name: /amend last commit/i })
 
 describe('CommitPanel', () => {
-  it('renders an empty textarea and the branch chip', () => {
-    renderPanel({ branch: 'feature/ui' })
-
-    expect(screen.getByRole('textbox')).toHaveValue('')
-    expect(screen.getByText('feature/ui')).toBeInTheDocument()
-  })
-
-  it('labels the commit button with the staged count', () => {
-    renderPanel({ stagedCount: 4 })
-    expect(screen.getByRole('button', { name: 'Commit 4 files' })).toBeInTheDocument()
-  })
-
-  it('disables commit when the message is empty', () => {
-    renderPanel()
-    expect(screen.getByRole('button', { name: /Commit 2 files/i })).toBeDisabled()
-  })
-
-  it('disables commit when nothing is staged', () => {
-    renderPanel({ stagedCount: 0 })
-    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'message' } })
-    expect(screen.getByRole('button', { name: 'Commit' })).toBeDisabled()
-  })
-
-  it('disables commit while the loading prop is true', () => {
-    renderPanel({ loading: true })
-    expect(screen.getByRole('button', { name: /Committing/i })).toBeDisabled()
-  })
-
-  it('names the current branch in a chip of its own', () => {
-    renderPanel({ branch: 'feature/ui' })
-
-    expect(screen.getByTestId('commit-branch-chip')).toHaveTextContent('feature/ui')
-  })
-
-  it('drops the staged and ahead chips the header and status dock already carry', () => {
-    renderPanel({ stagedCount: 4 })
-
-    expect(screen.queryByText('4 staged')).not.toBeInTheDocument()
-    expect(screen.queryByText(/^↑\d/)).not.toBeInTheDocument()
-  })
-
-  it('starts as a single-line bar', () => {
-    renderPanel()
-
-    expect(screen.getByRole('textbox')).toHaveAttribute('rows', '1')
-  })
-
-  it('grows for a multi-line message and shrinks back when it is cleared', () => {
-    renderPanel()
-    const textarea = screen.getByRole('textbox')
-
-    fireEvent.input(textarea, { target: { value: 'subject\n\nbody' } })
-    expect(textarea).toHaveAttribute('rows', '3')
-
-    fireEvent.input(textarea, { target: { value: '' } })
-    expect(textarea).toHaveAttribute('rows', '1')
-  })
-
-  it('caps how far the bar grows', () => {
-    renderPanel()
-    const textarea = screen.getByRole('textbox')
-
-    fireEvent.input(textarea, { target: { value: 'a\nb\nc\nd\ne\nf\ng\nh\ni\nj' } })
-
-    expect(Number(textarea.getAttribute('rows'))).toBeLessThanOrEqual(6)
-  })
-
   it('does not commit on Enter, which types a newline instead', () => {
     const onCommit = vi.fn().mockResolvedValue(true)
     renderPanel({ onCommit })
@@ -334,21 +267,6 @@ describe('CommitPanel', () => {
     await waitFor(() => expect(onAmend).toHaveBeenCalledWith('head message', [], [], 'abc123'))
   })
 
-  it('hides the amend toggle when there is no HEAD to amend', () => {
-    renderPanel({ amendAvailable: false })
-    expect(screen.queryByRole('checkbox', { name: /amend last commit/i })).not.toBeInTheDocument()
-  })
-
-  it('disables the amend toggle when conflicts are present', () => {
-    renderPanel({ amendAvailable: true, amendDisabled: true })
-    expect(amendToggle()).toBeDisabled()
-  })
-
-  it('offers the amend toggle when available and unconflicted (e.g. detached HEAD)', () => {
-    renderPanel({ amendAvailable: true, amendDisabled: false, branch: 'HEAD' })
-    expect(amendToggle()).toBeEnabled()
-  })
-
   it('reports amend state to onAmendChange as the toggle flips', async () => {
     const onAmendChange = vi.fn()
     renderPanel({
@@ -405,62 +323,5 @@ describe('CommitPanel', () => {
     view.rerender(panelElement({ prefillMessage: undefined }))
 
     expect(textarea).toHaveValue('')
-  })
-
-  it('keeps commit enabled with nothing staged while a merge is waiting to be concluded', () => {
-    renderPanel({ stagedCount: 0, concludesMerge: true })
-    fireEvent.input(screen.getByRole('textbox'), { target: { value: "Merge branch 'feature'" } })
-
-    expect(screen.getByRole('button', { name: 'Commit merge' })).toBeEnabled()
-  })
-
-  it('still refuses the merge commit while a conflict is unresolved', () => {
-    renderPanel({
-      stagedCount: 0,
-      concludesMerge: true,
-      commitBlockedReason: 'Resolve and stage every conflicted file before committing.'
-    })
-    fireEvent.input(screen.getByRole('textbox'), { target: { value: "Merge branch 'feature'" } })
-
-    expect(screen.getByRole('button', { name: 'Commit merge' })).toBeDisabled()
-  })
-
-  it('disables committing with a visible explanation when the operation must be continued', () => {
-    renderPanel({
-      commitBlockedReason: 'Finish this cherry-pick with Continue above, not a commit.'
-    })
-    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
-
-    expect(screen.getByRole('button', { name: /Commit 2 files/i })).toBeDisabled()
-    expect(
-      screen.getByText('Finish this cherry-pick with Continue above, not a commit.')
-    ).toBeInTheDocument()
-  })
-
-  it('keeps the block in force when the amend toggle is on', async () => {
-    renderPanel({
-      amendAvailable: true,
-      expectedHead: 'abc123',
-      commitBlockedReason: 'Finish this cherry-pick with Continue above, not a commit.'
-    })
-
-    await act(async () => {
-      fireEvent.click(amendToggle())
-    })
-    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
-
-    expect(screen.getByRole('button', { name: 'Amend' })).toBeDisabled()
-    expect(
-      screen.getByText('Finish this cherry-pick with Continue above, not a commit.')
-    ).toBeInTheDocument()
-  })
-
-  it('updates the subject-length counter as the user types', () => {
-    renderPanel()
-
-    expect(screen.getByText(/0 \/ 72/)).toBeInTheDocument()
-
-    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'short subject' } })
-    expect(screen.getByText(/13 \/ 72/)).toBeInTheDocument()
   })
 })

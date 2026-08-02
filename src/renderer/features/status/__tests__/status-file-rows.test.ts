@@ -6,21 +6,11 @@ import {
   type StatusFileKind
 } from '@/features/status/status-file-rows'
 import type { GitStatus } from '@/types'
+import { makeGitStatus } from '../../../../test/builders'
 
 type Code = { path: string; index: string; working_dir: string }
 
-const status = (overrides: Partial<GitStatus> = {}): GitStatus => ({
-  current: 'main',
-  modified: [],
-  staged: [],
-  not_added: [],
-  conflicted: [],
-  deleted: [],
-  created: [],
-  renamed: [],
-  files: [],
-  ...overrides
-})
+const status = (overrides: Partial<GitStatus> = {}): GitStatus => makeGitStatus(overrides)
 
 const code = (path: string, index: string, working_dir: string): Code => ({
   path,

@@ -1,18 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useWorkspaceContext } from '@/app/WorkspaceContext'
-import {
-  assembleDrops,
-  dropStateOf,
-  type FileDrops,
-  hunkDropped,
-  toggleFileDrop,
-  toggleHunkDrop
-} from '@/features/commit/amend-drops'
 import { CommitPanel } from '@/features/commit/CommitPanel'
 import { DiffPanel } from '@/features/diff/DiffPanel'
-import { buildHeadCommitRange } from '@/features/history/head-commit-range'
-import type { FileAction } from '@/lib/git-actions'
 import {
   useActionRunner,
   useCommitHistory,
@@ -23,18 +13,12 @@ import {
 import { useDraggablePane } from '../../hooks/useDraggablePane'
 import { CleanWorkingTree } from './CleanWorkingTree'
 import { ConflictBanner } from './ConflictBanner'
-import type { ConflictSide } from './conflict-resolution'
+import { createLocalChangesActions } from './local-changes-actions'
 import { type OperationSummary, summarizeOperation } from './operation-summary'
 import { StashControl } from './StashControl'
-import { type SelectedFile, StatusPanel } from './StatusPanel'
-import { followSelection } from './selection-follow'
-import { buildHeadCommitRows, buildStagedFilePaths } from './status-file-rows'
-import {
-  buildStatusGroups,
-  type FileRowGroup,
-  flattenStatusGroups,
-  type StatusGroupRow
-} from './status-groups'
+import { StatusPanel } from './StatusPanel'
+import { buildStagedFilePaths } from './status-file-rows'
+import { useLocalChangesSelection } from './useLocalChangesSelection'
 
 const FILES_PANEL_WIDTH_MIN = 240
 const FILES_PANEL_WIDTH_MAX = 620
@@ -79,109 +63,26 @@ export function LocalChangesPane(props: LocalChangesPaneProps) {
   const history = useCommitHistory()
   const loading = opening || busy
   const { actions, prompt, confirm } = useWorkspaceContext()
-  const [selected, setSelected] = useState<SelectedFile | null>(null)
   const [amendActive, setAmendActive] = useState(false)
-  const [drops, setDrops] = useState<FileDrops>(() => new Map())
   const headCommit = useHeadCommit(amendActive)
   const headFiles = headCommit.data?.files ?? []
   const headParentCount = headCommit.data?.parentCount ?? 0
-  const amendRows = useMemo(
-    () => (amendActive && headParentCount <= 1 ? buildHeadCommitRows(headFiles, drops) : []),
-    [amendActive, headParentCount, headFiles, drops]
-  )
-  const { droppedHeadPaths, droppedHeadHunks } = useMemo(
-    () => assembleDrops(drops, amendRows),
-    [amendRows, drops]
-  )
-
-  const promptStash = (title: string, run: (message?: string) => Promise<boolean>) => {
-    prompt({
-      title,
-      label: 'Message (optional)',
-      placeholder: 'Describe these changes',
-      confirmText: 'Stash',
-      allowEmpty: true,
-      onConfirm: (message) => void run(message.trim() || undefined)
-    })
-  }
-
-  const stashSelected = (files: string[]) => {
-    if (files.length === 0) {
-      return
-    }
-    promptStash('Stash selected changes', (message) => actions.stashPush(message, true, files))
-  }
-
-  const stashAll = () => {
-    promptStash('Stash all changes', (message) => actions.stashPush(message, true))
-  }
-
-  const handleFileAction = (action: FileAction, file: string, renameSource?: string) => {
-    switch (action) {
-      case 'stage':
-        void stageFile(file)
-        return
-      case 'unstage':
-        void unstageFile(file, renameSource)
-        return
-      case 'discard':
-        confirm({
-          title: `Discard changes to ${file}?`,
-          message: 'Local edits to this file are lost. Untracked files are deleted.',
-          confirmText: 'Discard',
-          destructive: true,
-          onConfirm: () =>
-            void actions.discardChanges(
-              renameSource ? [renameSource, file] : [file],
-              `Discarded ${file}`
-            )
-        })
-        return
-      case 'copy-path':
-        void navigator.clipboard
-          .writeText(file)
-          .then(() => toast.success('Copied path'))
-          .catch(() => toast.error('Copy failed'))
-        return
-    }
-  }
-
-  const resolveConflict = (file: string, side: ConflictSide) => {
-    void actions.resolveConflict(file, side)
-  }
-
-  const requestAbortOperation = (summary: OperationSummary) => {
-    confirm({
-      title: summary.confirmTitle,
-      message: summary.confirmMessage,
-      confirmText: summary.abortText,
-      destructive: true,
-      onConfirm: () => void actions.abortOperation(summary.noun)
-    })
-  }
-
-  const discardAll = () => {
-    const summary = status?.operation ? summarizeOperation(status.operation) : null
-    confirm({
-      title: 'Discard all changes?',
-      message: summary
-        ? `Every uncommitted change in the working tree is permanently lost, and the in-progress ${summary.noun} is aborted.`
-        : 'Every uncommitted change in the working tree is permanently lost.',
-      confirmText: 'Discard all',
-      destructive: true,
-      onConfirm: () => {
-        void (async () => {
-          if (summary) {
-            const aborted = await actions.abortOperation(summary.noun)
-            if (!aborted) {
-              return
-            }
-          }
-          await actions.discardAll()
-        })()
-      }
-    })
-  }
+  const {
+    selected,
+    amendRows,
+    droppedHeadPaths,
+    droppedHeadHunks,
+    amendDrop,
+    resetAmend,
+    selectFile,
+    toggleHeadFileDrop
+  } = useLocalChangesSelection({
+    rows,
+    headFiles,
+    headParentCount,
+    headSha: headCommit.data?.sha,
+    amendActive
+  })
 
   const { size: filesWidth, onResizeStart } = useDraggablePane({
     min: FILES_PANEL_WIDTH_MIN,
@@ -201,87 +102,33 @@ export function LocalChangesPane(props: LocalChangesPaneProps) {
   const amendDisabled = headAvailabilityLoading || conflictCount > 0 || operation !== undefined
   const operationSummary = operation ? summarizeOperation(operation) : null
   const commitBlockedReason = conflictBlockedReason(conflictCount, operationSummary)
-
-  const groupRows = useMemo(() => flattenStatusGroups(buildStatusGroups(rows)), [rows])
-  const previousGroupRows = useRef<StatusGroupRow[]>(groupRows)
+  const {
+    stashSelected,
+    stashAll,
+    handleFileAction,
+    resolveConflict,
+    requestAbortOperation,
+    discardAll
+  } = createLocalChangesActions({
+    stageFile,
+    unstageFile,
+    actions,
+    prompt,
+    confirm,
+    operationSummary,
+    writeClipboard: (text) => navigator.clipboard.writeText(text),
+    reportCopySuccess: () => toast.success('Copied path'),
+    reportCopyFailure: () => toast.error('Copy failed')
+  })
 
   const stagedFiles = useMemo(() => buildStagedFilePaths(rows), [rows])
-
-  const firstSelection = (): SelectedFile | null => {
-    const first = groupRows[0]
-    return first
-      ? { file: first.row.file, renameSource: first.row.renameSource, group: first.group }
-      : null
-  }
-
-  useEffect(() => {
-    const previous = previousGroupRows.current
-    previousGroupRows.current = groupRows
-    if (selected?.source === 'head-commit') {
-      return
-    }
-    const follow = followSelection({
-      selected: selected ? { file: selected.file, group: selected.group ?? 'unstaged' } : null,
-      previous,
-      next: groupRows
-    })
-    if (follow.kind === 'keep') {
-      return
-    }
-    setSelected(
-      follow.kind === 'clear'
-        ? null
-        : { file: follow.file, renameSource: follow.renameSource, group: follow.group }
-    )
-  }, [groupRows, selected])
 
   const handleAmendChange = (active: boolean) => {
     setAmendActive(active)
     if (!active) {
-      setDrops(new Map())
-      setSelected((current) => (current?.source === 'head-commit' ? firstSelection() : current))
+      resetAmend()
     }
   }
-
-  const toggleHeadFileDrop = (file: string) => {
-    setDrops((current) => toggleFileDrop(current, file))
-  }
-
-  const toggleHeadHunkDrop = (file: string, hunkHeader: string, allHeaders: string[]) => {
-    setDrops((current) => toggleHunkDrop(current, file, hunkHeader, allHeaders))
-  }
-
-  const selectHeadFile = (file: string, renameSource?: string) => {
-    const headSha = headCommit.data?.sha
-    if (!headSha) {
-      return
-    }
-    setSelected({
-      file,
-      renameSource,
-      source: 'head-commit',
-      range: buildHeadCommitRange(headParentCount, headSha)
-    })
-  }
-
-  const selectWorktreeFile = (
-    file: string,
-    group: Exclude<FileRowGroup, 'head-commit'>,
-    renameSource?: string
-  ) => {
-    setSelected({ file, renameSource, group })
-  }
-
-  const amendDrop =
-    selected?.source === 'head-commit'
-      ? {
-          dropState: dropStateOf(drops, selected.file),
-          isHunkDropped: (hunkHeader: string) => hunkDropped(drops, selected.file, hunkHeader),
-          onToggleFile: () => toggleHeadFileDrop(selected.file),
-          onToggleHunk: (hunkHeader: string, allHeaders: string[]) =>
-            toggleHeadHunkDrop(selected.file, hunkHeader, allHeaders)
-        }
-      : undefined
 
   if (!status && statusState !== 'ready') {
     return <StatusPanel selected={null} onSelect={() => {}} loading={loading} />
@@ -319,11 +166,7 @@ export function LocalChangesPane(props: LocalChangesPaneProps) {
               <div className="min-h-0 flex-1 overflow-hidden">
                 <StatusPanel
                   selected={selected}
-                  onSelect={(file, group, renameSource) =>
-                    group === 'head-commit'
-                      ? selectHeadFile(file, renameSource)
-                      : selectWorktreeFile(file, group, renameSource)
-                  }
+                  onSelect={selectFile}
                   onToggleDrop={toggleHeadFileDrop}
                   amendRows={amendRows}
                   onFileAction={handleFileAction}

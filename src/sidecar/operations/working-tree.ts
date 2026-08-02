@@ -15,6 +15,12 @@ import { runGit } from '../git/spawn'
 import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
 import { unmergedPaths } from './conflict-resolution'
+import {
+  classifyDiscardPaths,
+  discardAllArgs,
+  trackedDiscardArgs,
+  untrackedDiscardArgs
+} from './discard-plan'
 import { requireGit, requireOpen, tryGit } from './helpers'
 import { requireNoOperationForPaths } from './in-progress'
 import { detectOperationState } from './operation-state'
@@ -352,35 +358,16 @@ export function discardChanges(
         const statusRaw = yield* tryGit(() =>
           git.raw(['status', '--porcelain', '-z', '--', ...literalPathspecs(files)])
         )
-        const untracked = new Set<string>()
-        for (const entry of statusRaw.split('\0')) {
-          if (entry.startsWith('??')) {
-            untracked.add(entry.slice(3))
-          }
-        }
-        const tracked = files.filter((file) => !untracked.has(file))
+        const { tracked, untracked } = classifyDiscardPaths(files, statusRaw)
         if (tracked.length > 0) {
           const headCheck = yield* Effect.either(
             tryGit(() => git.raw(['rev-parse', '--verify', '--quiet', 'HEAD']))
           )
           const headExists = Either.isRight(headCheck) && headCheck.right.trim().length > 0
-          if (headExists) {
-            yield* tryGit(() =>
-              git.raw([
-                'restore',
-                '--source=HEAD',
-                '--staged',
-                '--worktree',
-                '--',
-                ...literalPathspecs(tracked)
-              ])
-            )
-          } else {
-            yield* tryGit(() => git.raw(['rm', '-rf', '--', ...literalPathspecs(tracked)]))
-          }
+          yield* tryGit(() => git.raw(trackedDiscardArgs(tracked, headExists)))
         }
-        if (untracked.size > 0) {
-          yield* tryGit(() => git.raw(['clean', '-fd', '--', ...literalPathspecs([...untracked])]))
+        if (untracked.length > 0) {
+          yield* tryGit(() => git.raw(untrackedDiscardArgs(untracked)))
         }
       })
     )
@@ -399,12 +386,9 @@ export function discardAll(
           tryGit(() => git.raw(['rev-parse', '--verify', '--quiet', 'HEAD']))
         )
         const headExists = Either.isRight(headCheck) && headCheck.right.trim().length > 0
-        if (headExists) {
-          yield* tryGit(() => git.raw(['reset', '--hard', 'HEAD']))
-        } else {
-          yield* tryGit(() => git.raw(['rm', '-rf', '--cached', '--ignore-unmatch', '--', '.']))
+        for (const args of discardAllArgs(headExists)) {
+          yield* tryGit(() => git.raw(args))
         }
-        yield* tryGit(() => git.raw(['clean', '-fd']))
       })
     )
   })

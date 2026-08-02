@@ -17,19 +17,17 @@ import { spawnGit } from '../git/spawn'
 import { withRepoLock } from '../session/lock'
 import type { RepoSessions } from '../session/sessions'
 import { amendIndexPath, readIndexTree, synchronizeIndexToCommit } from './amend-index'
+import {
+  type AmendHeadCommit,
+  parseAmendDiffSummary,
+  parseAmendHeadCommit,
+  parseAmendNameStatus,
+  stripTrailingNewlines
+} from './amend-metadata'
 import { requireOpen, tryGit } from './helpers'
 import { detectInProgressOperation } from './in-progress'
 
-const NUL = '\x00'
 const HEAD_FORMAT = `%H${'%x00'}%P${'%x00'}%an${'%x00'}%ae${'%x00'}%aI`
-
-interface HeadCommit {
-  sha: string
-  parents: string[]
-  authorName: string
-  authorEmail: string
-  authorDate: string
-}
 
 async function runGitOk(key: string, args: string[], stdin?: string): Promise<string> {
   const { code, stdout, stderr } = await spawnGit(['-C', key, ...args], { stdin })
@@ -39,22 +37,15 @@ async function runGitOk(key: string, args: string[], stdin?: string): Promise<st
   return stdout
 }
 
-async function readHeadCommit(key: string): Promise<HeadCommit> {
+async function readHeadCommit(key: string): Promise<AmendHeadCommit> {
   const output = await runGitOk(key, ['show', '-s', `--format=${HEAD_FORMAT}`, 'HEAD'])
-  const [sha, parentsField, authorName, authorEmail, authorDate] = output.trim().split(NUL)
-  return {
-    sha,
-    parents: parentsField.split(' ').filter((parent) => parent.length > 0),
-    authorName,
-    authorEmail,
-    authorDate
-  }
+  return parseAmendHeadCommit(output)
 }
 
 async function buildAmendedCommit(
   key: string,
   tree: string,
-  head: HeadCommit,
+  head: AmendHeadCommit,
   message: string
 ): Promise<string> {
   const args = ['-C', key, 'commit-tree', tree]
@@ -176,10 +167,6 @@ async function compareAndSwapHead(
   throw new Error(stderr.trim() || `git update-ref exited with code ${code}`)
 }
 
-function stripTrailingNewlines(message: string): string {
-  return message.replace(/\n+$/, '')
-}
-
 async function readNameStatus(key: string): Promise<HeadCommitInfo['files']> {
   const output = await runGitOk(key, [
     'diff-tree',
@@ -191,24 +178,7 @@ async function readNameStatus(key: string): Promise<HeadCommitInfo['files']> {
     '--root',
     'HEAD'
   ])
-  const files: HeadCommitInfo['files'] = []
-  const fields = output.split(NUL)
-  for (let index = 0; index < fields.length - 1; ) {
-    const status = fields[index++]
-    if (status.startsWith('R') || status.startsWith('C')) {
-      const sourcePath = fields[index++]
-      const filePath = fields[index++]
-      files.push({
-        status,
-        path: filePath,
-        ...(status.startsWith('R') ? { renameSource: sourcePath } : {})
-      })
-      continue
-    }
-    const filePath = fields[index++]
-    files.push({ status, path: filePath })
-  }
-  return files
+  return parseAmendNameStatus(output)
 }
 
 export function getHeadCommit(
@@ -248,26 +218,7 @@ async function diffSummary(
     ? ['diff-tree', '--numstat', '--no-commit-id', '-r', firstParent, newSha]
     : ['diff-tree', '--numstat', '--no-commit-id', '-r', '--root', newSha]
   const output = await runGitOk(key, args)
-  let changes = 0
-  let insertions = 0
-  let deletions = 0
-  const countOf = (field: string | undefined): number => {
-    if (field === undefined || field === '-') {
-      return 0
-    }
-    const parsed = Number(field)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-  for (const line of output.split('\n')) {
-    if (line.trim().length === 0) {
-      continue
-    }
-    changes += 1
-    const [added, deleted] = line.split('\t')
-    insertions += countOf(added)
-    deletions += countOf(deleted)
-  }
-  return { changes, insertions, deletions }
+  return parseAmendDiffSummary(output)
 }
 
 async function readHeadSha(key: string): Promise<string> {

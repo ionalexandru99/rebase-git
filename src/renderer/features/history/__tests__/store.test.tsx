@@ -8,6 +8,12 @@ import { useWorkingTreeStatus } from '@/features/status/store'
 import { repoQueryKeys } from '@/lib/query-keys'
 import { GitStoreProvider } from '@/stores/git'
 import { useRepoSession } from '@/stores/repo-session'
+import {
+  localBranchesResponse,
+  openedRepoResponse,
+  remoteRefsResponse,
+  statusResponse
+} from '../../../../test/builders'
 import { renderWithQuery } from '../../../../test/render-app'
 import {
   type LogStreamHandle,
@@ -26,20 +32,7 @@ vi.mock('sonner', () => ({ toast }))
 
 const repoPath = '/home/user/project'
 
-const statusOk = {
-  _tag: 'Ok' as const,
-  status: {
-    current: 'main',
-    modified: ['src/app.ts'],
-    staged: [],
-    not_added: [],
-    conflicted: [],
-    deleted: [],
-    created: [],
-    renamed: [],
-    files: []
-  }
-}
+const statusOk = statusResponse({ modified: ['src/app.ts'] })
 
 let diffRenderCount = 0
 
@@ -86,19 +79,13 @@ afterEach(() => {
 
 beforeEach(() => {
   diffRenderCount = 0
-  vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    _tag: 'Ok',
-    result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
-  })
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(repoPath))
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
   logStream = setupLogStream()
   sidecarMock.getStatus.mockResolvedValue(statusOk)
-  sidecarMock.getLocalBranches.mockResolvedValue({
-    _tag: 'Ok',
-    branches: { current: 'main', all: ['main'] }
-  })
-  sidecarMock.getRemoteRefs.mockResolvedValue({ _tag: 'Ok', refs: { remotes: [], tags: [] } })
+  sidecarMock.getLocalBranches.mockResolvedValue(localBranchesResponse())
+  sidecarMock.getRemoteRefs.mockResolvedValue(remoteRefsResponse())
 })
 
 describe('useCommitHistory — concern isolation', () => {

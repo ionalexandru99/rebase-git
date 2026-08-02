@@ -1,21 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { GitStatus } from '@/types'
+import { makeGitStatus } from '../../../test/builders'
 import { StatusDock } from '../StatusDock'
-
-function statusWith(files: GitStatus['files'], conflicted: string[] = []): GitStatus {
-  return {
-    current: 'main',
-    modified: [],
-    staged: [],
-    not_added: [],
-    conflicted,
-    deleted: [],
-    created: [],
-    renamed: [],
-    files
-  }
-}
 
 function renderDock(overrides: Partial<Parameters<typeof StatusDock>[0]> = {}) {
   return render(
@@ -62,11 +48,13 @@ describe('StatusDock', () => {
 
   it('counts the working copy, leaving conflicts out when there are none', () => {
     renderDock({
-      status: statusWith([
-        { path: 'a.ts', index: 'M', working_dir: ' ' },
-        { path: 'b.ts', index: ' ', working_dir: 'M' },
-        { path: 'c.ts', index: '?', working_dir: '?' }
-      ])
+      status: makeGitStatus({
+        files: [
+          { path: 'a.ts', index: 'M', working_dir: ' ' },
+          { path: 'b.ts', index: ' ', working_dir: 'M' },
+          { path: 'c.ts', index: '?', working_dir: '?' }
+        ]
+      })
     })
 
     expect(dock()).toHaveTextContent('3 changed')
@@ -76,13 +64,13 @@ describe('StatusDock', () => {
 
   it('counts conflicts when the working tree has them', () => {
     renderDock({
-      status: statusWith(
-        [
+      status: makeGitStatus({
+        files: [
           { path: 'a.ts', index: 'U', working_dir: 'U' },
           { path: 'b.ts', index: ' ', working_dir: 'M' }
         ],
-        ['a.ts']
-      )
+        conflicted: ['a.ts']
+      })
     })
 
     expect(dock()).toHaveTextContent('1 conflict')

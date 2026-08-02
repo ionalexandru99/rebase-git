@@ -11,6 +11,7 @@ import {
   rpcGetCommitStats,
   rpcGetWorkingTreeStats,
   rpcMergeBranch,
+  rpcOpenRepo,
   rpcPull,
   rpcPush,
   rpcRenameBranch,
@@ -24,6 +25,23 @@ import {
   rpcStashPush
 } from '@/lib/rpc-client'
 import { sidecarMock } from '../../../test/setup'
+
+describe('rpcOpenRepo', () => {
+  it('decodes the Electron-mediated response with the same contract result schema', async () => {
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/repo', remotes: { origin: 'git@example.com:acme/app.git' } }
+    })
+
+    const result = await rpcOpenRepo('/repo', 7)
+
+    expect(window.electronAPI.openRepo).toHaveBeenCalledWith('/repo', 7)
+    expect(result).toEqual({
+      _tag: 'Ok',
+      result: { path: '/repo', remotes: { origin: 'git@example.com:acme/app.git' } }
+    })
+  })
+})
 
 describe('rpcCommit', () => {
   it('decodes a typed Ok result from the contract-derived wire shape', async () => {
@@ -72,6 +90,12 @@ describe('rpcCommit', () => {
     vi.mocked(sidecarMock.commit).mockRejectedValue(new Error("sidecar RPC 'commit' failed"))
 
     await expect(rpcCommit('/repo', 'a message')).rejects.toThrow("sidecar RPC 'commit' failed")
+  })
+
+  it('rejects a malformed success response at the renderer boundary', async () => {
+    vi.mocked(window.electronAPI.sidecarRequest).mockResolvedValue({ _tag: 'Ok' })
+
+    await expect(rpcCommit('/repo', 'a message')).rejects.toThrow()
   })
 })
 

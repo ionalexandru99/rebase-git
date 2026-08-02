@@ -1,66 +1,26 @@
-import { diffAcceptRejectHunk, type SelectedLineRange } from '@pierre/diffs'
+import { diffAcceptRejectHunk } from '@pierre/diffs'
 import { FileDiff, Virtualizer } from '@pierre/diffs/react'
-import { type ParsedHunk, parseUnifiedDiff } from '@shared/unified-diff'
-import {
-  FileDiffIcon,
-  type LucideIcon,
-  MinusIcon,
-  PlusIcon,
-  Trash2Icon,
-  Undo2Icon
-} from 'lucide-react'
-import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
+import { parseUnifiedDiff } from '@shared/unified-diff'
+import { FileDiffIcon } from 'lucide-react'
+import { type ReactNode, useMemo } from 'react'
 import { useWorkspaceContext } from '@/app/WorkspaceContext'
 import { DIFF_UNSAFE_CSS, diffThemeStyle } from '@/features/diff/diff-theme'
-import { type DiffSide, hunkAtLine } from '@/features/diff/hunk-at-line'
-import {
-  mapSelectionToHunkSelections,
-  type SelectedChangeLine,
-  sweepSelectedChangeLines
-} from '@/features/diff/line-selection'
 import { parsePatch } from '@/features/diff/patch-parse'
+import { type AmendDropControls, useDiffGutterActions } from '@/features/diff/useDiffGutterActions'
+import { useDiffHunkActions } from '@/features/diff/useDiffHunkActions'
+import { useDiffLineSelection } from '@/features/diff/useDiffLineSelection'
 import { cn } from '@/lib/utils'
 import { useFileDiff, useWorkingTreeStatus } from '@/stores/git'
 import { Checkbox } from '../../components/ui/checkbox'
 import { EmptyState } from '../../components/ui/empty-state'
-import type { HeadDropState } from '../commit/amend-drops'
 import type { SelectedFile } from '../status/StatusPanel'
 
-export interface AmendDropControls {
-  dropState: HeadDropState
-  isHunkDropped: (hunkHeader: string) => boolean
-  onToggleFile: () => void
-  onToggleHunk: (hunkHeader: string, allHeaders: string[]) => void
-}
+export type { AmendDropControls } from '@/features/diff/useDiffGutterActions'
 
 interface DiffPanelProps {
   selected: SelectedFile | null
   amendDrop?: AmendDropControls
 }
-
-interface HoveredLine {
-  lineNumber: number
-  side: DiffSide
-}
-
-interface PendingHunkRemoval {
-  file: string
-  staged: boolean
-  header: string
-  resolution: 'accept' | 'reject'
-  dataUpdatedAt: number
-}
-
-interface PendingLineSelection {
-  file: string
-  staged: boolean
-  patchKey: string
-  lines: SelectedChangeLine[]
-}
-
-const SELECTION_SWEEP_MAX_FRAMES = 12
-
-type HunkAction = 'stage' | 'unstage' | 'discard'
 
 function patchHash(patch: string): string {
   let hash = 2166136261
@@ -106,34 +66,32 @@ export function DiffPanel(props: DiffPanelProps) {
   const hunks = useMemo(() => (patch === undefined ? [] : parseUnifiedDiff(patch).hunks), [patch])
   const isBinary = Boolean(data?.binary)
 
-  const [pending, setPending] = useState<PendingHunkRemoval | null>(null)
-  const [hoveredLine, setHoveredLine] = useState<HoveredLine | null>(null)
-  const [lineSelection, setLineSelection] = useState<PendingLineSelection | null>(null)
-  const diffBodyRef = useRef<HTMLDivElement | null>(null)
-  const selectionSweepGeneration = useRef(0)
-
-  const activePending =
-    pending &&
-    pending.file === selectedFile &&
-    pending.staged === showsStagedSide &&
-    pending.dataUpdatedAt === activeQuery.dataUpdatedAt
-      ? pending
-      : null
+  const { activePending, requestHunkAction } = useDiffHunkActions({
+    selectedFile,
+    showsStagedSide,
+    hunks,
+    dataUpdatedAt: activeQuery.dataUpdatedAt,
+    stageHunk: stageHunkOp,
+    unstageHunk: unstageHunkOp,
+    discardHunk: discardHunkOp,
+    confirm
+  })
 
   const currentPatchKey = useMemo(() => (patch === undefined ? null : patchHash(patch)), [patch])
-
-  const activeLineSelection =
-    lineSelection &&
-    lineSelection.file === selectedFile &&
-    lineSelection.staged === showsStagedSide &&
-    lineSelection.patchKey === currentPatchKey
-      ? lineSelection
-      : null
+  const { activeLineSelection, diffBodyRef, onLineSelectionEnd, runLineAction } =
+    useDiffLineSelection({
+      selectedFile,
+      showsStagedSide,
+      patch,
+      patchKey: currentPatchKey,
+      hunks,
+      stageLines: stageLinesOp,
+      unstageLines: unstageLinesOp
+    })
 
   const amendDrop = isHeadCommit ? props.amendDrop : undefined
   const hunkActionsEnabled =
     isWorktree && !isConflict && !isBinary && (showsStagedSide || !isUntracked)
-  const gutterEnabled = Boolean(hunkActionsEnabled || amendDrop)
   const fileStagingEnabled = isWorktree && !isConflict && !isBinary && selectedFile !== null
 
   const parsed = useMemo(() => {
@@ -159,226 +117,16 @@ export function DiffPanel(props: DiffPanelProps) {
     )
   }, [parsedFiles, activePending, hunks])
 
-  const runHunkAction = useCallback(
-    async (action: HunkAction, hunk: ParsedHunk) => {
-      if (!selectedFile) {
-        return
-      }
-      const isLastOnSide = hunks.length === 1
-      setPending({
-        file: selectedFile,
-        staged: showsStagedSide,
-        header: hunk.header,
-        resolution: action === 'stage' ? 'accept' : 'reject',
-        dataUpdatedAt: activeQuery.dataUpdatedAt
-      })
-      try {
-        if (action === 'stage') {
-          await stageHunkOp(selectedFile, hunk.header, { fullyStagesFile: isLastOnSide })
-        } else if (action === 'unstage') {
-          await unstageHunkOp(selectedFile, hunk.header, { fullyUnstagesFile: isLastOnSide })
-        } else {
-          await discardHunkOp(selectedFile, hunk.header)
-        }
-      } catch {
-        setPending(null)
-      }
-    },
-    [
-      selectedFile,
+  const { gutterEnabled, onLineEnter, renderGutterUtility, hunkAnnotations, renderAnnotation } =
+    useDiffGutterActions({
       hunks,
-      showsStagedSide,
-      activeQuery.dataUpdatedAt,
-      stageHunkOp,
-      unstageHunkOp,
-      discardHunkOp
-    ]
-  )
-
-  const requestHunkAction = useCallback(
-    (action: HunkAction, hunk: ParsedHunk) => {
-      if (action === 'discard') {
-        confirm({
-          title: `Discard hunk in ${selectedFile}?`,
-          message: 'Local edits in this hunk are lost.',
-          confirmText: 'Discard',
-          destructive: true,
-          onConfirm: () => void runHunkAction('discard', hunk)
-        })
-        return
-      }
-      void runHunkAction(action, hunk)
-    },
-    [confirm, selectedFile, runHunkAction]
-  )
-
-  const toggleHunkDrop = useCallback(
-    (hunk: ParsedHunk) => {
-      amendDrop?.onToggleHunk(
-        hunk.header,
-        hunks.map((entry) => entry.header)
-      )
-    },
-    [amendDrop, hunks]
-  )
-
-  const onLineSelectionEnd = useCallback(
-    (range: SelectedLineRange | null) => {
-      const generation = ++selectionSweepGeneration.current
-      if (!range || !selectedFile || currentPatchKey === null) {
-        setLineSelection(null)
-        return
-      }
-      setLineSelection(null)
-      const file = selectedFile
-      const staged = showsStagedSide
-      const patchKey = currentPatchKey
-      let previousSignature: string | null = null
-      let framesLeft = SELECTION_SWEEP_MAX_FRAMES
-      const sweep = () => {
-        if (generation !== selectionSweepGeneration.current) {
-          return
-        }
-        if (!diffBodyRef.current) {
-          setLineSelection(null)
-          return
-        }
-        const lines = sweepSelectedChangeLines(diffBodyRef.current)
-        const signature = lines.map((line) => `${line.kind}:${line.lineNumber}`).join('|')
-        if (lines.length > 0 && signature === previousSignature) {
-          setLineSelection({ file, staged, patchKey, lines })
-          return
-        }
-        framesLeft -= 1
-        if (framesLeft <= 0) {
-          setLineSelection(lines.length === 0 ? null : { file, staged, patchKey, lines })
-          return
-        }
-        previousSignature = signature
-        requestAnimationFrame(sweep)
-      }
-      requestAnimationFrame(sweep)
-    },
-    [selectedFile, showsStagedSide, currentPatchKey]
-  )
-
-  const runLineAction = useCallback(async () => {
-    if (!selectedFile || !activeLineSelection || patch === undefined) {
-      return
-    }
-    const selections = mapSelectionToHunkSelections(hunks, patch, activeLineSelection.lines)
-    if (selections.length === 0) {
-      setLineSelection(null)
-      return
-    }
-    const applied = showsStagedSide
-      ? await unstageLinesOp(selectedFile, selections)
-      : await stageLinesOp(selectedFile, selections)
-    if (applied) {
-      setLineSelection(null)
-    }
-  }, [
-    selectedFile,
-    activeLineSelection,
-    patch,
-    hunks,
-    showsStagedSide,
-    stageLinesOp,
-    unstageLinesOp
-  ])
-
-  const hoveredHunk = hoveredLine
-    ? hunkAtLine(hunks, hoveredLine.side, hoveredLine.lineNumber)
-    : null
-  const hoveredDropped = hoveredHunk
-    ? (amendDrop?.isHunkDropped(hoveredHunk.header) ?? false)
-    : false
-
-  const renderGutterUtility = useCallback(
-    (getHoveredLine: () => HoveredLine | undefined): ReactNode => {
-      const actOnHovered = (run: (hunk: ParsedHunk) => void) => () => {
-        const hovered = getHoveredLine()
-        if (!hovered) {
-          return
-        }
-        const hunk = hunkAtLine(hunks, hovered.side, hovered.lineNumber)
-        if (hunk) {
-          run(hunk)
-        }
-      }
-      if (amendDrop) {
-        return (
-          <GutterActionRow>
-            <GutterActionButton
-              label={hoveredDropped ? 'Keep hunk' : 'Drop hunk'}
-              icon={hoveredDropped ? Undo2Icon : MinusIcon}
-              onClick={actOnHovered(toggleHunkDrop)}
-            />
-          </GutterActionRow>
-        )
-      }
-      if (!hunkActionsEnabled) {
-        return null
-      }
-      if (activeLineSelection) {
-        const count = activeLineSelection.lines.length
-        const noun = count === 1 ? 'line' : 'lines'
-        return (
-          <GutterActionRow>
-            <GutterActionButton
-              label={
-                showsStagedSide
-                  ? `Unstage ${count} selected ${noun}`
-                  : `Stage ${count} selected ${noun}`
-              }
-              icon={showsStagedSide ? MinusIcon : PlusIcon}
-              onClick={() => void runLineAction()}
-            />
-          </GutterActionRow>
-        )
-      }
-      return (
-        <GutterActionRow>
-          {showsStagedSide ? (
-            <GutterActionButton
-              label="Unstage hunk"
-              icon={MinusIcon}
-              onClick={actOnHovered((hunk) => requestHunkAction('unstage', hunk))}
-            />
-          ) : (
-            <>
-              <GutterActionButton
-                label="Stage hunk"
-                icon={PlusIcon}
-                onClick={actOnHovered((hunk) => requestHunkAction('stage', hunk))}
-              />
-              <GutterActionButton
-                label="Discard hunk"
-                icon={Trash2Icon}
-                destructive={true}
-                onClick={actOnHovered((hunk) => requestHunkAction('discard', hunk))}
-              />
-            </>
-          )}
-        </GutterActionRow>
-      )
-    },
-    [
       amendDrop,
-      hoveredDropped,
-      toggleHunkDrop,
       hunkActionsEnabled,
-      activeLineSelection,
-      runLineAction,
+      activeLineCount: activeLineSelection?.lines.length ?? null,
       showsStagedSide,
-      requestHunkAction,
-      hunks
-    ]
-  )
-
-  const onLineEnter = useCallback((event: { lineNumber: number; annotationSide: DiffSide }) => {
-    setHoveredLine({ lineNumber: event.lineNumber, side: event.annotationSide })
-  }, [])
+      runLineAction,
+      requestHunkAction
+    })
 
   const options = useMemo(
     () => ({
@@ -396,77 +144,6 @@ export function DiffPanel(props: DiffPanelProps) {
       onLineSelectionEnd
     }),
     [gutterEnabled, hunkActionsEnabled, onLineEnter, onLineSelectionEnd]
-  )
-
-  const hunkAnnotations = useMemo(() => {
-    if (!gutterEnabled || hunks.length === 0) {
-      return undefined
-    }
-    return hunks.map((hunk) => ({
-      side: (hunk.newCount > 0 ? 'additions' : 'deletions') as DiffSide,
-      lineNumber: hunk.newCount > 0 ? hunk.newStart : hunk.oldStart,
-      metadata: { header: hunk.header }
-    }))
-  }, [gutterEnabled, hunks])
-
-  const renderAnnotation = useCallback(
-    (annotation: { metadata: { header: string } }): ReactNode => {
-      const hunkIndex = hunks.findIndex((entry) => entry.header === annotation.metadata.header)
-      if (hunkIndex === -1) {
-        return null
-      }
-      const hunk = hunks[hunkIndex]
-      const position = `${hunkIndex + 1} of ${hunks.length}`
-      if (amendDrop) {
-        if (amendDrop.isHunkDropped(hunk.header)) {
-          return (
-            <div className="flex items-center gap-2 border-b border-t bg-card-2 px-2.5 py-1 text-xs text-muted-foreground">
-              <span>Dropped from last commit</span>
-              <GutterActionButton
-                label={`Keep hunk ${position}`}
-                icon={Undo2Icon}
-                onClick={() => toggleHunkDrop(hunk)}
-              />
-            </div>
-          )
-        }
-        return (
-          <FocusRevealRow>
-            <GutterActionButton
-              label={`Drop hunk ${position}`}
-              icon={MinusIcon}
-              onClick={() => toggleHunkDrop(hunk)}
-            />
-          </FocusRevealRow>
-        )
-      }
-      return (
-        <FocusRevealRow>
-          {showsStagedSide ? (
-            <GutterActionButton
-              label={`Unstage hunk ${position}`}
-              icon={MinusIcon}
-              onClick={() => requestHunkAction('unstage', hunk)}
-            />
-          ) : (
-            <>
-              <GutterActionButton
-                label={`Stage hunk ${position}`}
-                icon={PlusIcon}
-                onClick={() => requestHunkAction('stage', hunk)}
-              />
-              <GutterActionButton
-                label={`Discard hunk ${position}`}
-                icon={Trash2Icon}
-                destructive={true}
-                onClick={() => requestHunkAction('discard', hunk)}
-              />
-            </>
-          )}
-        </FocusRevealRow>
-      )
-    },
-    [hunks, amendDrop, toggleHunkDrop, showsStagedSide, requestHunkAction]
   )
 
   const totals = useMemo(() => {
@@ -597,46 +274,5 @@ function StateNotice(props: { className?: string; children: ReactNode }) {
         {props.children}
       </div>
     </div>
-  )
-}
-
-function FocusRevealRow(props: { children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-1 px-2.5 py-0.5 not-focus-within:sr-only">
-      {props.children}
-    </div>
-  )
-}
-
-function GutterActionRow(props: { children: ReactNode }) {
-  return (
-    <div className="absolute left-1 top-1/2 flex -translate-y-1/2 items-center gap-1">
-      {props.children}
-    </div>
-  )
-}
-
-function GutterActionButton(props: {
-  label: string
-  icon: LucideIcon
-  destructive?: boolean
-  onClick: () => void
-}) {
-  const Icon = props.icon
-  return (
-    <button
-      type="button"
-      aria-label={props.label}
-      title={props.label}
-      onClick={props.onClick}
-      className={cn(
-        'grid size-[22px] place-content-center rounded-[var(--r-sm)] border bg-card shadow-sm transition-colors',
-        props.destructive
-          ? 'text-destructive hover:bg-destructive hover:text-white'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-      )}
-    >
-      <Icon className="size-3.5" />
-    </button>
   )
 }

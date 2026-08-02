@@ -1,3 +1,4 @@
+import { AbortOperation, DiscardAll } from '@shared/rpc'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceProvider } from '@/app/WorkspaceContext'
@@ -7,6 +8,7 @@ import { useGitActions } from '@/hooks/git/useGitActions'
 import { useStashes } from '@/hooks/git/useStashes'
 import { GitStoreProvider, type RepoSession, useActionRunner, useRepoSession } from '@/stores/git'
 import type { GitStatus } from '@/types'
+import { openedRepoResponse, statusResponse } from '../../../../test/builders'
 import { renderWithQuery } from '../../../../test/render-app'
 import { setupLogStream, sidecarMock } from '../../../../test/setup'
 
@@ -15,21 +17,9 @@ const repoPath = '/home/user/project'
 const modified = (path: string) => ({ path, index: ' ', working_dir: 'M' })
 
 function mockStatus(overrides: Partial<GitStatus> = {}) {
-  sidecarMock.getStatus.mockResolvedValue({
-    _tag: 'Ok',
-    status: {
-      current: 'main',
-      modified: [],
-      staged: [],
-      not_added: [],
-      conflicted: [],
-      deleted: [],
-      created: [],
-      renamed: [],
-      files: [modified('a.ts'), modified('b.ts')],
-      ...overrides
-    }
-  })
+  sidecarMock.getStatus.mockResolvedValue(
+    statusResponse({ files: [modified('a.ts'), modified('b.ts')], ...overrides })
+  )
 }
 
 function Harness(props: { onSession: (session: RepoSession) => void }) {
@@ -72,10 +62,7 @@ async function renderLocalChanges(
 }
 
 beforeEach(() => {
-  vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    _tag: 'Ok',
-    result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
-  })
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(repoPath))
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
   setupLogStream()
   mockStatus()
@@ -201,11 +188,11 @@ describe('discard all during an in-progress operation', () => {
   it('names the abort in the confirm and aborts before discarding', async () => {
     mockStatus({ operation: mergeOperation })
     const rpcCalls: string[] = []
-    sidecarMock.respond('abortOperation', () => {
+    sidecarMock.respond(AbortOperation, () => {
       rpcCalls.push('abortOperation')
       return { _tag: 'Ok' }
     })
-    sidecarMock.respond('discardAll', () => {
+    sidecarMock.respond(DiscardAll, () => {
       rpcCalls.push('discardAll')
       return { _tag: 'Ok' }
     })
@@ -224,11 +211,11 @@ describe('discard all during an in-progress operation', () => {
   it('keeps the plain warning and skips the abort when nothing is in progress', async () => {
     mockStatus()
     const rpcCalls: string[] = []
-    sidecarMock.respond('abortOperation', () => {
+    sidecarMock.respond(AbortOperation, () => {
       rpcCalls.push('abortOperation')
       return { _tag: 'Ok' }
     })
-    sidecarMock.respond('discardAll', () => {
+    sidecarMock.respond(DiscardAll, () => {
       rpcCalls.push('discardAll')
       return { _tag: 'Ok' }
     })

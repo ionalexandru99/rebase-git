@@ -1,49 +1,37 @@
-import { execFileSync } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { GIT_EMPTY_TREE_OID } from '@shared/git-constants'
 import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createRepoFixture, type RepoFixture } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import { closeRepo, getDiff, openRepo } from '../index'
 
 const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 let repoDir: string
-
-function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
-}
-
-function writeLines(file: string, lines: string[]): void {
-  fs.writeFileSync(path.join(repoDir, file), `${lines.join('\n')}\n`)
-}
+let repo: RepoFixture
 
 const baseLines = Array.from({ length: 8 }, (_, index) => `line ${index + 1}`)
 
 beforeAll(async () => {
-  repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-diff-range-')))
-  git('init', '-b', 'main')
-  git('config', 'user.email', 'test@example.com')
-  git('config', 'user.name', 'Test')
+  repo = createRepoFixture({ prefix: 'rebase-diff-range-' })
+  repoDir = repo.path
 
-  writeLines('sample.txt', baseLines)
-  git('add', '.')
-  git('commit', '-m', 'base')
+  repo.writeLines('sample.txt', baseLines)
+  repo.git('add', '.')
+  repo.commitStaged('base')
 
   const edited = [...baseLines]
   edited[0] = 'line 1 EDITED'
-  writeLines('sample.txt', edited)
-  git('add', '.')
-  git('commit', '-m', 'edit line 1')
+  repo.writeLines('sample.txt', edited)
+  repo.git('add', '.')
+  repo.commitStaged('edit line 1')
 
   await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
   await runOp(closeRepo(repoDir))
-  fs.rmSync(repoDir, { recursive: true, force: true })
+  repo.cleanup()
 })
 
 describe('getDiff with a commit range', () => {
@@ -65,7 +53,7 @@ describe('getDiff with a commit range', () => {
   })
 
   it('still produces the synthetic untracked diff when no range is given', async () => {
-    writeLines('fresh.txt', ['alpha', 'beta'])
+    repo.writeLines('fresh.txt', ['alpha', 'beta'])
 
     const diff = await runOp(getDiff(repoDir, 'fresh.txt', false))
 
@@ -73,7 +61,7 @@ describe('getDiff with a commit range', () => {
     expect(hunksOf(diff)[0].lines.map((line) => line.text)).toEqual(['alpha', 'beta'])
     expect(hunksOf(diff)[0].lines.every((line) => line.kind === 'add')).toBe(true)
 
-    fs.rmSync(path.join(repoDir, 'fresh.txt'))
+    repo.removeFile('fresh.txt')
   })
 
   it('rejects an option-like range as a GitError', async () => {

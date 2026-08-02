@@ -1,6 +1,8 @@
+import { RevertCommit, StageAll } from '@shared/rpc'
 import type { CommitDetail } from '@shared/schemas/git'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { openedRepoResponse, statusResponse } from '../../../test/builders'
 import { renderApp } from '../../../test/render-app'
 import { mockBranchResponses, setupLogStream, sidecarMock } from '../../../test/setup'
 
@@ -52,28 +54,18 @@ function mockBaseAPI() {
   vi.mocked(window.electronAPI.setActiveWorkspace).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getRecentRepos).mockResolvedValue([])
   vi.mocked(window.electronAPI.scanForRepos).mockResolvedValue({ _tag: 'Ok', repos: [repoPath] })
-  vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    _tag: 'Ok',
-    result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
-  })
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(repoPath))
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
-  sidecarMock.getStatus.mockResolvedValue({
-    _tag: 'Ok',
-    status: {
-      current: 'main',
+  sidecarMock.getStatus.mockResolvedValue(
+    statusResponse({
       modified: ['src/a.ts'],
       staged: ['src/b.ts'],
-      not_added: [],
-      conflicted: [],
-      deleted: [],
-      created: [],
-      renamed: [],
       files: [
         { path: 'src/a.ts', index: ' ', working_dir: 'M' },
         { path: 'src/b.ts', index: 'M', working_dir: ' ' }
       ]
-    }
-  })
+    })
+  )
   sidecarMock.getCommitDetail.mockImplementation(async (_repo: string, sha: string) => ({
     _tag: 'Ok' as const,
     detail: detailFor(sha)
@@ -213,7 +205,7 @@ describe('Workspace selection drives the detail pane', () => {
 
   it('stages every unstaged file from the working-copy header', async () => {
     let stageAllBody: Record<string, unknown> | undefined
-    sidecarMock.respond('stageAll', (body) => {
+    sidecarMock.respond(StageAll, (body) => {
       stageAllBody = body
       return { _tag: 'Ok' }
     })
@@ -272,7 +264,7 @@ describe('Workspace selection drives the detail pane', () => {
 
   it('acts on the right-clicked commit regardless of the current selection', async () => {
     let revertBody: Record<string, unknown> | undefined
-    sidecarMock.respond('revertCommit', (body) => {
+    sidecarMock.respond(RevertCommit, (body) => {
       revertBody = body
       return { _tag: 'Ok' }
     })
