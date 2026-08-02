@@ -12,6 +12,7 @@ function renderRail(overrides: Partial<Parameters<typeof RepoRail>[0]> = {}) {
   const onSelect = overrides.onSelect ?? vi.fn()
   const onClose = overrides.onClose ?? vi.fn()
   const onNew = overrides.onNew ?? vi.fn()
+  const onToggleSettings = overrides.onToggleSettings ?? vi.fn()
   render(
     <RepoRail
       tabs={overrides.tabs ?? baseTabs}
@@ -19,9 +20,11 @@ function renderRail(overrides: Partial<Parameters<typeof RepoRail>[0]> = {}) {
       onSelect={onSelect}
       onClose={onClose}
       onNew={onNew}
+      settingsOpen={overrides.settingsOpen ?? false}
+      onToggleSettings={onToggleSettings}
     />
   )
-  return { onSelect, onClose, onNew }
+  return { onSelect, onClose, onNew, onToggleSettings }
 }
 
 describe('RepoRail', () => {
@@ -77,6 +80,15 @@ describe('RepoRail', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Open new tab/i }))
     expect(onNew).toHaveBeenCalledTimes(1)
+  })
+
+  it('toggles settings from the gear and reflects whether they are open', () => {
+    const { onToggleSettings } = renderRail({ settingsOpen: true })
+
+    const settings = screen.getByRole('button', { name: 'Settings' })
+    expect(settings).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(settings)
+    expect(onToggleSettings).toHaveBeenCalledTimes(1)
   })
 
   it('activates an existing blank tab instead of creating another', () => {

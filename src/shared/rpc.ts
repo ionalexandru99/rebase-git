@@ -22,10 +22,13 @@ import {
   CommitSummarySchema,
   GitStatusSchema,
   HeadCommitSchema,
+  IdentityFieldSchema,
+  IdentityScopeSchema,
   LocalBranchesSchema,
   LogChunkSchema,
   RemoteRefsSchema,
   RepoOpenSuccessSchema,
+  ResolvedIdentitySchema,
   WorkingTreeStatsSchema
 } from './schemas/git'
 import { RefKindSchema, ResetModeSchema, StashEntrySchema } from './schemas/ipc'
@@ -410,6 +413,32 @@ export const StashList = Rpc.make('stashList', {
   error: ReadError
 })
 
+export const GetIdentity = Rpc.make('getIdentity', {
+  payload: { repoPath: Schema.optional(OpaqueString) },
+  success: ResolvedIdentitySchema,
+  error: ScanError
+})
+
+export const SetIdentity = Rpc.make('setIdentity', {
+  payload: {
+    scope: IdentityScopeSchema,
+    repoPath: Schema.optional(OpaqueString),
+    name: Schema.optional(Schema.String),
+    email: Schema.optional(Schema.String)
+  },
+  success: Schema.Void,
+  error: ScanError
+})
+
+export const ClearIdentity = Rpc.make('clearIdentity', {
+  payload: {
+    repoPath: OpaqueString,
+    fields: Schema.Array(IdentityFieldSchema).pipe(Schema.minItems(1))
+  },
+  success: Schema.Void,
+  error: ScanError
+})
+
 export const StreamLog = Rpc.make('streamLog', {
   payload: {
     repoPath: OpaqueString,
@@ -470,6 +499,9 @@ export const SidecarRpcs = RpcGroup.make(
   GetCommitStats,
   GetWorkingTreeStats,
   StashList,
+  GetIdentity,
+  SetIdentity,
+  ClearIdentity,
   StreamLog
 )
 

@@ -38,6 +38,7 @@ export {
   continueOperation,
   resolveConflict
 } from './conflict-resolution'
+export { clearIdentity, getIdentity, setIdentity } from './identity'
 export { detectOperationState } from './operation-state'
 export { stashApply, stashDrop, stashList, stashPop, stashPush } from './stash'
 export { getCommitStats, getWorkingTreeStats } from './stats'
