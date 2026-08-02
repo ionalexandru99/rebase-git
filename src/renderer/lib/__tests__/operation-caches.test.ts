@@ -73,12 +73,23 @@ describe('cachesForOperation', () => {
   it('dirties the working tree, refs, and timeline for a history op, a checkout, or a create+checkout', () => {
     const union = ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit']
     expect(cachesForOperation('mergeBranch')).toEqual(union)
-    expect(cachesForOperation('rebaseOnto')).toEqual(union)
     expect(cachesForOperation('reset')).toEqual(union)
     expect(cachesForOperation('revertCommit')).toEqual(union)
     expect(cachesForOperation('cherryPick')).toEqual(union)
     expect(cachesForOperation('checkout')).toEqual(union)
     expect(cachesForOperation('createBranchCheckout')).toEqual(union)
+  })
+
+  it('additionally dirties the stash cache for a rebase, which can park an autostash', () => {
+    expect(cachesForOperation('rebaseOnto')).toEqual([
+      'status',
+      'localBranches',
+      'remoteRefs',
+      'diff',
+      'log',
+      'headCommit',
+      'stash'
+    ])
   })
 
   it('dirties the working-tree caches for a stash apply or pop', () => {

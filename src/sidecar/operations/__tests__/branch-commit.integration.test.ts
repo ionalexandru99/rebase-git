@@ -299,6 +299,24 @@ describe('rebase', () => {
     git('checkout', '--', 'rebase-dirty-base.txt')
     git('checkout', 'main')
   })
+
+  it('rebases onto the selected remote ref when a local branch has the same full path', async () => {
+    git('checkout', 'main')
+    git('checkout', '-b', 'rebase-remote-source')
+    commitFile('rebase-remote.txt', 'remote\n', 'remote work')
+    const remoteTip = git('rev-parse', 'HEAD').trim()
+    git('checkout', 'main')
+    git('branch', 'origin/rebase-collision')
+    git('update-ref', 'refs/remotes/origin/rebase-collision', remoteTip)
+    await runOp(createBranch(repoDir, 'rebase/onto-remote', undefined, true))
+    commitFile('rebase-topic.txt', 'topic\n', 'topic work')
+
+    await runOp(rebaseOnto(repoDir, 'remote', 'origin/rebase-collision'))
+
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(remoteTip)
+    expect(fs.existsSync(path.join(repoDir, 'rebase-remote.txt'))).toBe(true)
+    git('checkout', 'main')
+  })
 })
 
 describe('reset', () => {

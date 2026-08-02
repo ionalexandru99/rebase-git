@@ -30,7 +30,7 @@ const OPERATION_CACHES = {
   discardChanges: ['status', 'diff', 'stash'],
   discardAll: ['status', 'diff', 'stash'],
   mergeBranch: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
-  rebaseOnto: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
+  rebaseOnto: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit', 'stash'],
   revertCommit: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
   cherryPick: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
   checkout: ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit'],
