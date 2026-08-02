@@ -142,6 +142,7 @@ export function useGraphLayout(options: UseGraphLayoutOptions): GraphLayoutHandl
     return () => {
       generation.current += 1
       dropWorker()
+      requestedTopology.current = EMPTY_TOPOLOGY
     }
   }, [dropWorker])
 

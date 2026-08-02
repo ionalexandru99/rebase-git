@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { useState } from 'react'
+import { StrictMode, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CHECKPOINT_ROWS, layoutGraph } from '@/features/history/graph/layout'
 import {
@@ -150,6 +150,28 @@ describe('useGraphLayout without a worker', () => {
 })
 
 describe('useGraphLayout with a worker', () => {
+  it('replaces the worker after a StrictMode effect replay', () => {
+    const workers = useWorkers()
+    const commits = [entry('a', ['b']), entry('b')]
+
+    const { result } = renderHook(() => useGraphLayout({ commits, enabled: true }), {
+      wrapper: StrictMode
+    })
+
+    expect(workers).toHaveLength(2)
+    expect(workers[0].terminate).toHaveBeenCalledOnce()
+    expect(workers[1].requests).toHaveLength(1)
+
+    workers[1].reply({
+      status: 'ready',
+      generation: workers[1].requests[0].generation,
+      layout: layoutFor(commits)
+    })
+
+    expect(result.current.validRows).toBe(commits.length)
+    expect(result.current.pending).toBe(false)
+  })
+
   it('sends the whole log first, then only the tail past the last checkpoint', () => {
     const workers = useWorkers()
     const page1 = chain(300)
