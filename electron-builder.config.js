@@ -5,14 +5,17 @@ export default {
     output: 'release'
   },
   files: ['out'],
+  artifactName: `\${productName}-\${version}-\${os}-\${arch}.\${ext}`,
   mac: {
+    category: 'public.app-category.developer-tools',
     target: ['dmg', 'zip']
   },
   win: {
-    target: ['nsis', 'zip']
+    target: ['nsis']
   },
   linux: {
-    target: ['AppImage', 'deb', 'rpm']
+    category: 'Development',
+    target: ['AppImage', 'deb']
   },
   publish: {
     provider: 'github',
