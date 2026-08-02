@@ -81,10 +81,7 @@ describe('App — repository tab ownership', () => {
       scanRepos: ['/projects/repo-a', '/projects/repo-b']
     })
     vi.mocked(window.electronAPI.openRepo).mockImplementation((path) =>
-      Promise.resolve({
-        _tag: 'Ok',
-        result: { path, remotes: {}, defaultBranch: 'feature/ui' }
-      })
+      Promise.resolve(openedRepoResponse(path, { defaultBranch: 'feature/ui' }))
     )
     vi.mocked(sidecarMock.getStatus).mockResolvedValue(statusMock)
     mockBranchResponses(branchesMock)

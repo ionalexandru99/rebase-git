@@ -1,5 +1,5 @@
 import { act, screen } from '@testing-library/react'
-import type { CSSProperties, ReactNode } from 'react'
+import { type CSSProperties, type ReactNode, useEffect } from 'react'
 import { beforeEach, vi } from 'vitest'
 import { type WorkspaceContextValue, WorkspaceProvider } from '@/app/WorkspaceContext'
 import type { ConfirmRequest } from '@/components/ui/prompt-dialog'
@@ -230,7 +230,9 @@ function DiffPanelHarness(props: HarnessProps) {
 
 function DiffPanelProbe(props: Pick<HarnessProps, 'selected' | 'amendDrop' | 'onSession'>) {
   const session = useRepoSession()
-  props.onSession(session)
+  useEffect(() => {
+    props.onSession(session)
+  }, [props.onSession, session])
   return <DiffPanel selected={props.selected} amendDrop={props.amendDrop} />
 }
 

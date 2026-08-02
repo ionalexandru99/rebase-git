@@ -224,7 +224,7 @@ describe('GitStoreProvider — commit, push, and pull synchronization', () => {
 
     await git.pushNow()
 
-    expect(toast.error).toHaveBeenCalledWith('Pushed failed', {
+    expect(toast.error).toHaveBeenCalledWith('Push failed', {
       description: 'Git rejected the operation. The full output is in the developer console.'
     })
     expect(git.state.error).toBeNull()
@@ -242,12 +242,12 @@ describe('GitStoreProvider — commit, push, and pull synchronization', () => {
     await git.pushNow()
 
     expect(toast.error).toHaveBeenCalledWith(
-      'Pushed failed',
+      'Push failed',
       expect.objectContaining({
         description: expect.stringContaining('github.com refused your SSH key')
       })
     )
-    expect(logged).toHaveBeenCalledWith('[git] Pushed failed:', raw)
+    expect(logged).toHaveBeenCalledWith('[git] Push failed:', raw)
     logged.mockRestore()
   })
 
@@ -315,9 +315,10 @@ describe('GitStoreProvider — commit, push, and pull synchronization', () => {
 
     expect(session.repoPath).toBe(otherRepoPath)
     expect(session.error).toBeNull()
-    expect(toast.error).not.toHaveBeenCalledWith('Pushed failed', {
-      description: 'old push failed'
-    })
+    expect(toast.error).not.toHaveBeenCalledWith(
+      'Push failed',
+      expect.objectContaining({ description: expect.any(String) })
+    )
     await session.closeRepo()
   })
 

@@ -116,6 +116,7 @@ describe('status mutation lifecycle', () => {
   })
 
   it.each([
+    [{ _tag: 'RepoNotOpen' } as const, 'Repository is not open'],
     [
       { _tag: 'HunkNotFound' } as const,
       'The diff changed since this view loaded — it was refreshed. Try again.'

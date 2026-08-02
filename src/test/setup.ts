@@ -239,11 +239,15 @@ beforeEach(() => {
   )
   sidecarRpcFake.respond(Fetch, ({ repoPath }) => sidecarMock.fetchRepo(repoPath))
   sidecarRpcFake.respond(Push, ({ repoPath }) => sidecarMock.pushRepo(repoPath))
-  sidecarRpcFake.respond(Pull, ({ repoPath, strategy }) =>
-    strategy === undefined
-      ? sidecarMock.pullRepo(repoPath)
-      : sidecarMock.pullRepo(repoPath, strategy)
-  )
+  sidecarRpcFake.respond(Pull, ({ repoPath, strategy }) => {
+    if (strategy === undefined) {
+      return sidecarMock.pullRepo(repoPath)
+    }
+    if (strategy === 'rebase' || strategy === 'merge') {
+      return sidecarMock.pullRepo(repoPath, strategy)
+    }
+    throw new Error(`Unexpected pull strategy '${strategy}'`)
+  })
   vi.mocked(window.electronAPI.sidecarRequest).mockImplementation(sidecarRpcFake.request)
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.disownRepo).mockResolvedValue(undefined)

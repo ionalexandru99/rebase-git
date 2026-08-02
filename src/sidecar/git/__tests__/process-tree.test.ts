@@ -1,5 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import { descendantPidsFromProcessTable } from '../process-tree'
+import type { ChildProcess } from 'node:child_process'
+import { EventEmitter } from 'node:events'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  createTrackedProcessGroup,
+  descendantPidsFromProcessTable,
+  waitForProcesses
+} from '../process-tree'
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
 
 describe('descendantPidsFromProcessTable', () => {
   it('collects children across every generation', () => {
@@ -30,5 +41,57 @@ describe('descendantPidsFromProcessTable', () => {
 
   it('returns no descendants when the parent is absent', () => {
     expect(descendantPidsFromProcessTable('', 999)).toEqual([])
+  })
+
+  it('stops at cyclic and self-parent process rows', () => {
+    const output = ['1 10', '10 1', '20 20', '30 1', '40 30'].join('\n')
+
+    expect(descendantPidsFromProcessTable(output, 1)).toEqual([30, 40, 10])
+    expect(descendantPidsFromProcessTable(output, 20)).toEqual([])
+  })
+
+  it('does not return duplicate descendants', () => {
+    const output = ['10 1', '10 1', '20 10'].join('\n')
+
+    expect(descendantPidsFromProcessTable(output, 1)).toEqual([10, 20])
+  })
+})
+
+describe('waitForProcesses', () => {
+  it('stops polling when the wait limit expires', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(process, 'kill').mockReturnValue(true)
+
+    const waiting = waitForProcesses([123], 25)
+    await vi.advanceTimersByTimeAsync(25)
+
+    await expect(waiting).resolves.toBeUndefined()
+    expect(process.kill).toHaveBeenCalled()
+  })
+})
+
+describe('tracked process groups', () => {
+  it('starts its polling deadline only when termination begins', async () => {
+    vi.useFakeTimers()
+    const child = Object.assign(new EventEmitter(), {
+      pid: undefined,
+      exitCode: null,
+      signalCode: null,
+      kill: vi.fn()
+    }) as unknown as ChildProcess
+    const tracked = createTrackedProcessGroup(child)
+    let exited = false
+    void tracked.exited.then(() => {
+      exited = true
+    })
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(exited).toBe(false)
+
+    const termination = tracked.terminate()
+    await vi.advanceTimersByTimeAsync(4_000)
+
+    await expect(termination).resolves.toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

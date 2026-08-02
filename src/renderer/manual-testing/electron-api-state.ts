@@ -225,8 +225,14 @@ export function stageFile(state: ManualGitState, file: string): void {
 }
 
 export function unstageFile(state: ManualGitState, file: string): void {
+  const wasAdded = state.status.files.some((entry) => entry.path === file && entry.index === 'A')
   state.status.staged = without(state.status.staged, file)
-  state.status.modified = withValue(state.status.modified, file)
+  state.status.modified = wasAdded
+    ? without(state.status.modified, file)
+    : withValue(state.status.modified, file)
+  state.status.not_added = wasAdded
+    ? withValue(state.status.not_added, file)
+    : without(state.status.not_added, file)
   state.status.files = state.status.files.map((entry) => {
     if (entry.path !== file) {
       return entry

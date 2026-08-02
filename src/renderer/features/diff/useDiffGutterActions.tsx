@@ -3,6 +3,7 @@ import { type LucideIcon, MinusIcon, PlusIcon, Trash2Icon, Undo2Icon } from 'luc
 import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import type { HeadDropState } from '@/features/commit/amend-drops'
 import { type DiffSide, hunkAtLine } from '@/features/diff/hunk-at-line'
+import type { HunkAction } from '@/features/diff/useDiffHunkActions'
 import { cn } from '@/lib/utils'
 
 export interface AmendDropControls {
@@ -24,7 +25,7 @@ interface DiffGutterActionsInput {
   activeLineCount: number | null
   showsStagedSide: boolean
   runLineAction: () => void | Promise<void>
-  requestHunkAction: (action: 'stage' | 'unstage' | 'discard', hunk: ParsedHunk) => void
+  requestHunkAction: (action: HunkAction, hunk: ParsedHunk) => void
 }
 
 export function useDiffGutterActions(input: DiffGutterActionsInput) {
@@ -138,9 +139,14 @@ export function useDiffGutterActions(input: DiffGutterActionsInput) {
     ]
   )
 
-  const onLineEnter = useCallback((event: { lineNumber: number; annotationSide: DiffSide }) => {
-    setHoveredLine({ lineNumber: event.lineNumber, side: event.annotationSide })
-  }, [])
+  const onLineEnter = useCallback(
+    (event: { lineNumber: number; annotationSide: DiffSide }) => {
+      if (amendDrop) {
+        setHoveredLine({ lineNumber: event.lineNumber, side: event.annotationSide })
+      }
+    },
+    [amendDrop]
+  )
 
   const hunkAnnotations = useMemo(
     () =>

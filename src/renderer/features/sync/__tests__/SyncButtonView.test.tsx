@@ -57,4 +57,15 @@ describe('SyncButtonView', () => {
     expect(screen.getByRole('button', { name: /sync options/i })).toBeDisabled()
     expect(onSync).not.toHaveBeenCalled()
   })
+
+  it('disables force push while detached', async () => {
+    const { onForcePush } = renderView({ ahead: 1, detached: true })
+
+    fireEvent.click(screen.getByRole('button', { name: /sync options/i }))
+    const forcePush = await screen.findByRole('menuitem', { name: /force push \(with lease\)/i })
+    fireEvent.click(forcePush)
+
+    expect(forcePush).toBeDisabled()
+    expect(onForcePush).not.toHaveBeenCalled()
+  })
 })

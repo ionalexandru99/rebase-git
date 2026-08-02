@@ -32,6 +32,12 @@ afterEach(async () => {
 })
 
 describe('discardHunk against a real repository', () => {
+  it('reads the final line when a fixture file has no trailing newline', () => {
+    repo.write('no-newline.txt', 'first\nlast')
+
+    expect(repo.readLines('no-newline.txt')).toEqual(['first', 'last'])
+  })
+
   it('discards the middle hunk from the worktree and leaves the other hunks and the index intact', async () => {
     const edited = [...baseLines]
     edited[0] = 'line 1 EDITED'

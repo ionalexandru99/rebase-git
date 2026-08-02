@@ -2,7 +2,7 @@ import type { ParsedHunk } from '@shared/unified-diff'
 import { useCallback, useState } from 'react'
 import type { ConfirmRequest } from '@/components/ui/prompt-dialog'
 
-type HunkAction = 'stage' | 'unstage' | 'discard'
+export type HunkAction = 'stage' | 'unstage' | 'discard'
 
 interface PendingHunkRemoval {
   file: string

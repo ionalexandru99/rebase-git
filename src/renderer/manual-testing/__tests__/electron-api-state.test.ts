@@ -48,7 +48,8 @@ describe('manual Git state', () => {
     })
 
     unstageFile(state, 'notes/manual-test.md')
-    expect(state.status.modified).toContain('notes/manual-test.md')
+    expect(state.status.modified).not.toContain('notes/manual-test.md')
+    expect(state.status.not_added).toContain('notes/manual-test.md')
     expect(state.status.files.find((file) => file.path === 'notes/manual-test.md')).toMatchObject({
       index: '?',
       working_dir: '?'

@@ -20,11 +20,7 @@ describe('GitStoreProvider — working-tree mutations and status state', () => {
       files: [{ path: 'a.ts', index: 'M', working_dir: ' ' }]
     })
 
-    let repoChanged: (event: { repoPath: string; kind: 'refs' | 'workingTree' }) => void = () => {}
-    vi.mocked(window.electronAPI.onRepoChanged).mockImplementation((callback) => {
-      repoChanged = callback
-      return () => {}
-    })
+    const repoChanged = setupRepoChanged()
     sidecarMock.stageHunk.mockResolvedValue({ _tag: 'Ok' })
 
     const { git } = renderGitStore()
@@ -43,7 +39,7 @@ describe('GitStoreProvider — working-tree mutations and status state', () => {
       )
       .mockResolvedValue(stagedStatus)
 
-    repoChanged({ repoPath, kind: 'workingTree' })
+    repoChanged.fire({ repoPath, kind: 'workingTree' })
     await git.stageHunk('a.ts', '@@ -1,1 +1,1 @@')
 
     await waitFor(() => {
@@ -54,8 +50,10 @@ describe('GitStoreProvider — working-tree mutations and status state', () => {
       })
     })
 
-    resolveStale()
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await act(async () => {
+      resolveStale()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
 
     expect(git.state.status?.files?.[0]).toEqual({
       path: 'a.ts',

@@ -161,6 +161,7 @@ describe('createLocalChangesActions', () => {
     await waitFor(() => {
       expect(abortOperation).toHaveBeenCalled()
     })
+    await vi.mocked(abortOperation).mock.results[0].value
     expect(options.actions.discardAll).not.toHaveBeenCalled()
   })
 })

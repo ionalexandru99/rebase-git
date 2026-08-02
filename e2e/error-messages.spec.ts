@@ -46,7 +46,7 @@ test('a remote that asks for credentials names what is missing', async ({ harnes
     const toast = await harness.expectToast(
       {
         type: 'error',
-        title: 'Pushed failed',
+        title: 'Push failed',
         description: /credential helper/
       },
       () => sync.click()
@@ -94,7 +94,7 @@ test('an unreachable remote is reported as a network failure, not a silent no-op
   const sync = syncButton(page)
   await expect(sync).toContainText('↑1', { timeout: 10_000 })
   const toast = await harness.expectToast(
-    { type: 'error', title: 'Pushed failed', description: /Couldn't reach 127\.0\.0\.1/ },
+    { type: 'error', title: 'Push failed', description: /Couldn't reach 127\.0\.0\.1/ },
     () => sync.click()
   )
 
@@ -114,7 +114,7 @@ test('a repository with no remote says so instead of reporting a raw git failure
   const toast = await harness.expectToast(
     {
       type: 'error',
-      title: 'Pushed failed',
+      title: 'Push failed',
       description:
         'This repository has no remote named origin, so there is nothing to sync with. Add one, then try again.'
     },

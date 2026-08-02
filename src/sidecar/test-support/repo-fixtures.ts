@@ -63,8 +63,13 @@ export function createRepoFixture(options: RepoFixtureOptions): RepoFixture {
     write,
     writeLines: (name, lines) => write(name, `${lines.join('\n')}\n`),
     read: (name) => fs.readFileSync(path.join(repoPath, name), 'utf8'),
-    readLines: (name) =>
-      fs.readFileSync(path.join(repoPath, name), 'utf8').split('\n').slice(0, -1),
+    readLines: (name) => {
+      const lines = fs.readFileSync(path.join(repoPath, name), 'utf8').split('\n')
+      if (lines.at(-1) === '') {
+        lines.pop()
+      }
+      return lines
+    },
     mkdir: (name) => fs.mkdirSync(path.join(repoPath, name), { recursive: true }),
     removeFile: (name) => fs.rmSync(path.join(repoPath, name)),
     commitStaged: (message) => {

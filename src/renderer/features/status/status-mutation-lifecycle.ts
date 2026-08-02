@@ -99,6 +99,9 @@ export function createStatusMutationOptions<Vars>(
       if (response._tag === 'GitError' && deps.isCurrentRepo(context.generation, context.path)) {
         deps.setMutationError(gitFailureBannerText('Git rejected the change', response.message))
       }
+      if (response._tag === 'RepoNotOpen' && deps.isCurrentRepo(context.generation, context.path)) {
+        deps.setMutationError('Repository is not open')
+      }
       if (
         response._tag === 'HunkNotFound' &&
         deps.isCurrentRepo(context.generation, context.path)

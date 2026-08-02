@@ -58,6 +58,7 @@ export const resizeObserverMock = {
   },
   reset(): void {
     observedRect = { ...DEFAULT_OBSERVED_RECT }
+    liveResizeObservers.clear()
   }
 }
 
@@ -94,6 +95,7 @@ export function installBrowserTestEnvironment(): void {
 
   Object.defineProperty(window, 'ResizeObserver', {
     writable: true,
+    configurable: true,
     value: ResizeObserverMock
   })
 }

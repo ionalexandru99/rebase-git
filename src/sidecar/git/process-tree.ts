@@ -2,6 +2,7 @@ import { type ChildProcess, execFile, spawnSync } from 'node:child_process'
 
 const FORCE_KILL_DELAY_MS = 2_000
 const PROCESS_EXIT_POLL_MS = 10
+const PROCESS_EXIT_WAIT_MS = FORCE_KILL_DELAY_MS * 2
 
 export interface TrackedProcessGroup {
   child: ChildProcess
@@ -50,9 +51,14 @@ export function descendantPidsFromProcessTable(output: string, parentPid: number
     childrenByParent.set(parent, children)
   }
   const descendants: number[] = []
+  const visited = new Set([parentPid])
   const pending = [...(childrenByParent.get(parentPid) ?? [])]
   while (pending.length > 0) {
     const pid = pending.pop() as number
+    if (visited.has(pid)) {
+      continue
+    }
+    visited.add(pid)
     descendants.push(pid)
     pending.push(...(childrenByParent.get(pid) ?? []))
   }
@@ -84,9 +90,17 @@ function signalProcesses(pids: number[], signal: NodeJS.Signals): void {
   }
 }
 
-async function waitForProcesses(pids: number[]): Promise<void> {
+export async function waitForProcesses(
+  pids: number[],
+  timeoutMilliseconds = PROCESS_EXIT_WAIT_MS
+): Promise<void> {
+  const deadline = Date.now() + timeoutMilliseconds
   while (pids.some(processRunning)) {
-    await delay(PROCESS_EXIT_POLL_MS)
+    const remainingMilliseconds = deadline - Date.now()
+    if (remainingMilliseconds <= 0) {
+      return
+    }
+    await delay(Math.min(PROCESS_EXIT_POLL_MS, remainingMilliseconds))
   }
 }
 
@@ -107,24 +121,49 @@ function signalProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   }
 }
 
-function waitForProcessGroup(child: ChildProcess): Promise<void> {
-  return new Promise((resolve) => {
+interface ProcessGroupExitTracker {
+  exited: Promise<void>
+  beginTermination: () => void
+}
+
+function trackProcessGroupExit(child: ChildProcess): ProcessGroupExitTracker {
+  let beginTermination = () => {}
+  const exited = new Promise<void>((resolve) => {
+    let deadline: number | undefined
     let childClosed = child.exitCode !== null || child.signalCode !== null
     let timer: ReturnType<typeof setTimeout> | undefined
     let settled = false
+    beginTermination = () => {
+      deadline ??= Date.now() + PROCESS_EXIT_WAIT_MS
+    }
+    const complete = () => {
+      settled = true
+      if (timer !== undefined) {
+        clearTimeout(timer)
+      }
+      child.off('exit', closed)
+      child.off('close', closed)
+      child.off('error', closed)
+      resolve()
+    }
     const finish = () => {
       if (settled) {
         return
       }
       if (!childClosed || processGroupRunning(child)) {
-        timer = setTimeout(finish, PROCESS_EXIT_POLL_MS)
+        let nextPollMilliseconds = PROCESS_EXIT_POLL_MS
+        if (deadline !== undefined) {
+          const remainingMilliseconds = deadline - Date.now()
+          if (remainingMilliseconds <= 0) {
+            complete()
+            return
+          }
+          nextPollMilliseconds = Math.min(nextPollMilliseconds, remainingMilliseconds)
+        }
+        timer = setTimeout(finish, nextPollMilliseconds)
         return
       }
-      settled = true
-      if (timer !== undefined) {
-        clearTimeout(timer)
-      }
-      resolve()
+      complete()
     }
     const closed = () => {
       childClosed = true
@@ -135,10 +174,12 @@ function waitForProcessGroup(child: ChildProcess): Promise<void> {
     child.once('error', closed)
     finish()
   })
+  return { exited, beginTermination }
 }
 
 export function createTrackedProcessGroup(child: ChildProcess): TrackedProcessGroup {
-  const exited = waitForProcessGroup(child)
+  const exitTracker = trackProcessGroupExit(child)
+  const { exited } = exitTracker
   let termination: Promise<void> | undefined
   return {
     child,
@@ -148,6 +189,7 @@ export function createTrackedProcessGroup(child: ChildProcess): TrackedProcessGr
         return termination
       }
       termination = (async () => {
+        exitTracker.beginTermination()
         if (process.platform === 'win32' && child.pid !== undefined) {
           await terminateWindowsTree(child.pid)
           await exited

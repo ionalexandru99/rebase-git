@@ -56,6 +56,18 @@ describe('useDiffGutterActions', () => {
     expect(requestHunkAction).toHaveBeenCalledWith('stage', hunks[1])
   })
 
+  it('does not rerender for hovered lines when amend controls are absent', () => {
+    let renderCount = 0
+    const { result } = renderHook(() => {
+      renderCount += 1
+      return useDiffGutterActions(createInput())
+    })
+
+    act(() => result.current.onLineEnter({ lineNumber: 36, annotationSide: 'additions' }))
+
+    expect(renderCount).toBe(1)
+  })
+
   it('replaces hunk controls with the active staged-line action', () => {
     const runLineAction = vi.fn()
     const requestHunkAction = vi.fn()

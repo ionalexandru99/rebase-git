@@ -75,7 +75,7 @@ export function decidePushResponse(
       return {
         outcome: { kind: 'error', message: response.message },
         refreshCaches: false,
-        notice: { kind: 'git-error', title: `${label} failed`, message: response.message }
+        notice: { kind: 'git-error', title: 'Push failed', message: response.message }
       }
   }
 }

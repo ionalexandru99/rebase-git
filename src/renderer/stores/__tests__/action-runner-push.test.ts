@@ -51,7 +51,7 @@ describe('decidePushResponse', () => {
     })
   })
 
-  it('maps Git failures to a force-specific Git notice without refreshing', () => {
+  it('maps Git failures to a push Git notice without refreshing', () => {
     expect(
       decidePushResponse({ _tag: 'GitError', message: 'permission denied' }, 'with-lease')
     ).toEqual({
@@ -59,7 +59,7 @@ describe('decidePushResponse', () => {
       refreshCaches: false,
       notice: {
         kind: 'git-error',
-        title: 'Force pushed failed',
+        title: 'Push failed',
         message: 'permission denied'
       }
     })

@@ -11,7 +11,14 @@ export interface AmendHeadCommit {
 }
 
 export function parseAmendHeadCommit(output: string): AmendHeadCommit {
-  const [sha, parentsField, authorName, authorEmail, authorDate] = output.trim().split(NUL)
+  const fields = output.trimEnd().split(NUL)
+  if (
+    fields.length !== 5 ||
+    fields.some((field, index) => index !== 1 && field.trim().length === 0)
+  ) {
+    throw new Error('Invalid amend HEAD metadata')
+  }
+  const [sha, parentsField, authorName, authorEmail, authorDate] = fields
   return {
     sha,
     parents: parentsField.split(' ').filter((parent) => parent.length > 0),
@@ -26,13 +33,25 @@ export function stripTrailingNewlines(message: string): string {
 }
 
 export function parseAmendNameStatus(output: string): HeadCommit['files'] {
+  if (output.length === 0) {
+    return []
+  }
+  if (!output.endsWith(NUL)) {
+    throw new Error('Invalid amend name-status output')
+  }
   const files: HeadCommit['files'] = []
   const fields = output.split(NUL)
   for (let index = 0; index < fields.length - 1; ) {
     const status = fields[index++]
+    if (status.length === 0) {
+      throw new Error('Invalid amend name-status output')
+    }
     if (status.startsWith('R') || status.startsWith('C')) {
       const sourcePath = fields[index++]
       const filePath = fields[index++]
+      if (!sourcePath || !filePath) {
+        throw new Error('Invalid amend name-status output')
+      }
       files.push({
         status,
         path: filePath,
@@ -41,6 +60,9 @@ export function parseAmendNameStatus(output: string): HeadCommit['files'] {
       continue
     }
     const filePath = fields[index++]
+    if (!filePath) {
+      throw new Error('Invalid amend name-status output')
+    }
     files.push({ status, path: filePath })
   }
   return files

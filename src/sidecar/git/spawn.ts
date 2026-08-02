@@ -31,8 +31,16 @@ export interface RepoOperation {
 
 async function cancelChildren(registry: ChildRegistry): Promise<void> {
   registry.cancelling = true
-  while (registry.children.size > 0) {
-    await Promise.all([...registry.children].map((tracked) => tracked.terminate()))
+  await drainTrackedProcesses(registry.children)
+}
+
+export async function drainTrackedProcesses(children: Set<TrackedProcessGroup>): Promise<void> {
+  while (children.size > 0) {
+    const trackedProcesses = [...children]
+    await Promise.all(trackedProcesses.map((tracked) => tracked.terminate()))
+    for (const tracked of trackedProcesses) {
+      children.delete(tracked)
+    }
   }
 }
 
