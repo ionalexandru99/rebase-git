@@ -1,5 +1,6 @@
 import { PULL_REAPPLY_CONFLICTS_MESSAGE } from '@shared/git-constants'
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
+import { AmendCommit } from '@shared/rpc'
 import { act, render, waitFor } from '@testing-library/react'
 import { StrictMode, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -1210,7 +1211,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('amend maps OperationInProgress to a finish-or-abort warning and reports failure', async () => {
-    sidecarMock.respond('amendCommit', () => ({
+    sidecarMock.respond(AmendCommit, () => ({
       _tag: 'OperationInProgress',
       operation: 'merge'
     }))
@@ -1232,7 +1233,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
 
   it('amend forwards the expectedHead sha the UI rendered against into the RPC payload', async () => {
     let amendBody: Record<string, unknown> | undefined
-    sidecarMock.respond('amendCommit', (body) => {
+    sidecarMock.respond(AmendCommit, (body) => {
       amendBody = body
       return {
         _tag: 'Ok',
@@ -1257,7 +1258,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('amend refreshes the repo caches even when it fails with a GitError', async () => {
-    sidecarMock.respond('amendCommit', () => ({ _tag: 'GitError', message: 'index locked' }))
+    sidecarMock.respond(AmendCommit, () => ({ _tag: 'GitError', message: 'index locked' }))
 
     const { git } = renderGitStore()
     await git.openRepo(repoPath)
@@ -1281,7 +1282,7 @@ describe('GitStoreProvider — parallel repo loading', () => {
   })
 
   it('amend maps HunkNotFound to a stale-view warning and refreshes the caches', async () => {
-    sidecarMock.respond('amendCommit', () => ({ _tag: 'HunkNotFound' }))
+    sidecarMock.respond(AmendCommit, () => ({ _tag: 'HunkNotFound' }))
 
     const { git } = renderGitStore()
     await git.openRepo(repoPath)

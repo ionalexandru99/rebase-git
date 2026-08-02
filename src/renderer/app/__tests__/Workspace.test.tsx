@@ -1,3 +1,4 @@
+import { RevertCommit, StageAll } from '@shared/rpc'
 import type { CommitDetail } from '@shared/schemas/git'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -213,7 +214,7 @@ describe('Workspace selection drives the detail pane', () => {
 
   it('stages every unstaged file from the working-copy header', async () => {
     let stageAllBody: Record<string, unknown> | undefined
-    sidecarMock.respond('stageAll', (body) => {
+    sidecarMock.respond(StageAll, (body) => {
       stageAllBody = body
       return { _tag: 'Ok' }
     })
@@ -272,7 +273,7 @@ describe('Workspace selection drives the detail pane', () => {
 
   it('acts on the right-clicked commit regardless of the current selection', async () => {
     let revertBody: Record<string, unknown> | undefined
-    sidecarMock.respond('revertCommit', (body) => {
+    sidecarMock.respond(RevertCommit, (body) => {
       revertBody = body
       return { _tag: 'Ok' }
     })

@@ -1,4 +1,5 @@
 import { LOG_PAGE_SIZE } from '@shared/graph-config'
+import { CreateBranch, CreateTag, StashApply } from '@shared/rpc'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -897,7 +898,7 @@ describe('App — workspace (repo open)', () => {
 
   it('keeps a tag start point qualified when creating a branch from the ref tree', async () => {
     let createBranchBody: Record<string, unknown> | undefined
-    sidecarMock.respond('createBranch', (body) => {
+    sidecarMock.respond(CreateBranch, (body) => {
       createBranchBody = body
       return { _tag: 'Ok' }
     })
@@ -920,7 +921,7 @@ describe('App — workspace (repo open)', () => {
 
   it('keeps a branch target qualified when creating a tag from the ref tree', async () => {
     let createTagBody: Record<string, unknown> | undefined
-    sidecarMock.respond('createTag', (body) => {
+    sidecarMock.respond(CreateTag, (body) => {
       createTagBody = body
       return { _tag: 'Ok' }
     })
@@ -954,7 +955,7 @@ describe('App — workspace (repo open)', () => {
         }
       ]
     })
-    sidecarMock.respond('stashApply', (body) => {
+    sidecarMock.respond(StashApply, (body) => {
       stashApplyBody = body
       return { _tag: 'Ok' }
     })

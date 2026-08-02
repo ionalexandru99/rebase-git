@@ -7,6 +7,12 @@ import type { ConfirmRequest } from '@/components/ui/prompt-dialog'
 import { DiffPanel } from '@/features/diff/DiffPanel'
 import type { SelectedFile } from '@/features/status/StatusPanel'
 import { GitStoreProvider, type RepoSession, useRepoSession } from '@/stores/git'
+import {
+  localBranchesResponse,
+  openedRepoResponse,
+  remoteRefsResponse,
+  statusResponse
+} from '../../../../test/builders'
 import { renderWithQuery } from '../../../../test/render-app'
 import { setupLogStream, setupRepoChanged, sidecarMock } from '../../../../test/setup'
 
@@ -245,37 +251,15 @@ beforeEach(() => {
   pierreControl.captured = []
   pierreControl.selectedRows = []
   confirmRequests.length = 0
-  vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
-    _tag: 'Ok',
-    result: { path: repoPath, remotes: {}, defaultBranch: 'main' }
-  })
+  vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(repoPath))
   vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
   vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.onRepoChanged).mockReturnValue(() => {})
   setupLogStream()
-  sidecarMock.getStatus.mockResolvedValue({
-    _tag: 'Ok',
-    status: {
-      current: 'main',
-      modified: ['src/app.ts'],
-      staged: [],
-      not_added: [],
-      conflicted: [],
-      deleted: [],
-      created: [],
-      renamed: [],
-      files: []
-    }
-  })
-  sidecarMock.getLocalBranches.mockResolvedValue({
-    _tag: 'Ok',
-    branches: { current: 'main', all: ['main'] }
-  })
-  sidecarMock.getRemoteRefs.mockResolvedValue({
-    _tag: 'Ok',
-    refs: { remotes: [], tags: [] }
-  })
+  sidecarMock.getStatus.mockResolvedValue(statusResponse({ modified: ['src/app.ts'] }))
+  sidecarMock.getLocalBranches.mockResolvedValue(localBranchesResponse())
+  sidecarMock.getRemoteRefs.mockResolvedValue(remoteRefsResponse())
   mockDiffOn('unstaged')
   sidecarMock.stageFile.mockResolvedValue({ _tag: 'Ok' })
   sidecarMock.unstageFile.mockResolvedValue({ _tag: 'Ok' })
@@ -396,20 +380,7 @@ describe('DiffPanel file staging', () => {
   })
 
   it('still stages an untracked file whole, even though it has no hunk actions', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: ['src/app.ts'],
-        conflicted: [],
-        deleted: [],
-        created: [],
-        renamed: [],
-        files: []
-      }
-    })
+    sidecarMock.getStatus.mockResolvedValue(statusResponse({ not_added: ['src/app.ts'] }))
     await renderDiffPanel({ file: 'src/app.ts', group: 'unstaged' })
 
     await screen.findByTestId('pierre-file-diff')
@@ -422,20 +393,12 @@ describe('DiffPanel file staging', () => {
   })
 
   it('offers no file staging for a conflicted file', async () => {
-    sidecarMock.getStatus.mockResolvedValue({
-      _tag: 'Ok',
-      status: {
-        current: 'main',
-        modified: [],
-        staged: [],
-        not_added: [],
+    sidecarMock.getStatus.mockResolvedValue(
+      statusResponse({
         conflicted: ['src/app.ts'],
-        deleted: [],
-        created: [],
-        renamed: [],
         files: [{ path: 'src/app.ts', index: 'U', working_dir: 'U' }]
-      }
-    })
+      })
+    )
     await renderDiffPanel({ file: 'src/app.ts', group: 'conflicts' })
 
     await screen.findByTestId('pierre-file-diff')

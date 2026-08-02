@@ -1,3 +1,4 @@
+import { AbortOperation, DiscardAll } from '@shared/rpc'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceProvider } from '@/app/WorkspaceContext'
@@ -201,11 +202,11 @@ describe('discard all during an in-progress operation', () => {
   it('names the abort in the confirm and aborts before discarding', async () => {
     mockStatus({ operation: mergeOperation })
     const rpcCalls: string[] = []
-    sidecarMock.respond('abortOperation', () => {
+    sidecarMock.respond(AbortOperation, () => {
       rpcCalls.push('abortOperation')
       return { _tag: 'Ok' }
     })
-    sidecarMock.respond('discardAll', () => {
+    sidecarMock.respond(DiscardAll, () => {
       rpcCalls.push('discardAll')
       return { _tag: 'Ok' }
     })
@@ -224,11 +225,11 @@ describe('discard all during an in-progress operation', () => {
   it('keeps the plain warning and skips the abort when nothing is in progress', async () => {
     mockStatus()
     const rpcCalls: string[] = []
-    sidecarMock.respond('abortOperation', () => {
+    sidecarMock.respond(AbortOperation, () => {
       rpcCalls.push('abortOperation')
       return { _tag: 'Ok' }
     })
-    sidecarMock.respond('discardAll', () => {
+    sidecarMock.respond(DiscardAll, () => {
       rpcCalls.push('discardAll')
       return { _tag: 'Ok' }
     })
