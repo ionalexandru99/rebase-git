@@ -2,10 +2,12 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { RpcTest } from '@effect/rpc'
 import { SidecarRpcs } from '@shared/rpc'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { withRepoLock } from '../../session/lock'
 import { runOp } from '../../test-support/run-op'
 import { handlersLayer } from '../handlers'
 
@@ -165,6 +167,37 @@ describe('identity rpcs', () => {
     const identity = expectRight(await getIdentity({ repoPath: repoDir }))
     expect(identity.local).toEqual({ name: 'Local Name' })
     expect(identity.effective).toEqual({ name: 'Local Name', email: 'global@example.com' })
+  })
+
+  it('rejects a local write that carries no repository', async () => {
+    const result = await setIdentity({ scope: 'local', name: 'Local Name' })
+
+    expect(Either.isLeft(result)).toBe(true)
+  })
+
+  it('waits for in-flight repo work before writing a local override', async () => {
+    let releaseLock = () => {}
+    const lockHeld = new Promise<void>((resolve) => {
+      releaseLock = resolve
+    })
+    const lockedWork = Effect.runPromise(
+      withRepoLock(
+        repoDir,
+        Effect.promise(() => lockHeld)
+      )
+    )
+
+    const write = setIdentity({ scope: 'local', repoPath: repoDir, name: 'Serialized Name' })
+    await delay(100)
+    expect(expectRight(await getIdentity({ repoPath: repoDir })).local).toEqual({})
+
+    releaseLock()
+    await lockedWork
+    expectRight(await write)
+
+    expect(expectRight(await getIdentity({ repoPath: repoDir })).local).toEqual({
+      name: 'Serialized Name'
+    })
   })
 
   it('clears an override that was never set', async () => {

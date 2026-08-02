@@ -1,4 +1,4 @@
-import { repoDisplayName } from '@/features/repos/repo-display-name'
+import { repoDisplayName } from '@/lib/repo-display-name'
 import { SettingsView } from './SettingsView'
 import { useIdentity } from './useIdentity'
 

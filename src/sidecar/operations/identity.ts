@@ -7,6 +7,7 @@ import type {
 import { Effect } from 'effect'
 import { GitError, gitError } from '../git/errors'
 import { nonInteractiveEnv, runGit } from '../git/spawn'
+import { withRepoLock } from '../session/lock'
 
 const NAME_KEY = 'user.name'
 const EMAIL_KEY = 'user.email'
@@ -101,7 +102,11 @@ export function setIdentity(write: IdentityWrite): Effect.Effect<void, GitError>
     if (!scopeArgs) {
       return Effect.fail(new GitError({ message: MISSING_REPO }))
     }
-    return Effect.tryPromise({ try: () => writeIdentity(scopeArgs, identity), catch: gitError })
+    const run = Effect.tryPromise({
+      try: () => writeIdentity(scopeArgs, identity),
+      catch: gitError
+    })
+    return write.scope === 'local' && write.repoPath ? withRepoLock(write.repoPath, run) : run
   })
 }
 
@@ -120,5 +125,8 @@ export function clearIdentity(
   repoPath: string,
   fields: readonly IdentityField[]
 ): Effect.Effect<void, GitError> {
-  return Effect.tryPromise({ try: () => unsetLocalIdentity(repoPath, fields), catch: gitError })
+  return withRepoLock(
+    repoPath,
+    Effect.tryPromise({ try: () => unsetLocalIdentity(repoPath, fields), catch: gitError })
+  )
 }

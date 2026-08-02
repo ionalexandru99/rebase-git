@@ -111,6 +111,25 @@ describe('SettingsView', () => {
     expect(appSection().getByRole('alert')).toHaveTextContent(/name cannot be empty/i)
   })
 
+  it('points a screen reader at the field it rejected', () => {
+    renderView()
+
+    fireEvent.change(appSection().getByLabelText('Name'), { target: { value: '   ' } })
+    fireEvent.click(appSection().getByRole('button', { name: 'Save' }))
+
+    const nameInput = appSection().getByLabelText('Name')
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true')
+    expect(nameInput).toHaveAccessibleDescription(/name cannot be empty/i)
+    expect(appSection().getByLabelText('Email')).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('holds both Save buttons inert while a write is in flight', () => {
+    renderView({ saving: true })
+
+    expect(appSection().getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(repoSection().getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
   it('surfaces the failure the sidecar reported', () => {
     renderView({ error: 'user.email has multiple values' })
 

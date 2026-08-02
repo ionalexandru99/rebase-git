@@ -55,6 +55,7 @@ interface IdentityFieldRowProps {
   value: string
   placeholder: string
   overridden: boolean
+  rejectedMessageId: string | null
   onChange: (value: string) => void
   onClear: (() => void) | null
 }
@@ -83,6 +84,8 @@ function IdentityFieldRow(props: IdentityFieldRowProps) {
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
         placeholder={props.placeholder}
+        aria-invalid={props.rejectedMessageId !== null}
+        aria-describedby={props.rejectedMessageId ?? undefined}
         spellCheck={false}
         autoCorrect="off"
         autoCapitalize="off"
@@ -104,6 +107,7 @@ interface IdentitySectionProps {
 }
 
 function IdentitySection(props: IdentitySectionProps) {
+  const blankMessageId = useId()
   const [form, setForm] = useState(() => toForm(props.values))
   const [blankField, setBlankField] = useState<IdentityField | null>(null)
 
@@ -132,6 +136,7 @@ function IdentitySection(props: IdentitySectionProps) {
           value={form.name}
           placeholder={props.placeholders.name ?? ''}
           overridden={props.values.name !== undefined}
+          rejectedMessageId={blankField === 'name' ? blankMessageId : null}
           onChange={(name) => setForm({ ...form, name })}
           onClear={props.onClear ? () => props.onClear?.('name') : null}
         />
@@ -140,13 +145,14 @@ function IdentitySection(props: IdentitySectionProps) {
           value={form.email}
           placeholder={props.placeholders.email ?? ''}
           overridden={props.values.email !== undefined}
+          rejectedMessageId={blankField === 'email' ? blankMessageId : null}
           onChange={(email) => setForm({ ...form, email })}
           onClear={props.onClear ? () => props.onClear?.('email') : null}
         />
 
         <div className="flex items-center justify-between gap-3">
           {blankField ? (
-            <p role="alert" className="text-xs text-destructive">
+            <p id={blankMessageId} role="alert" className="text-xs text-destructive">
               The {FIELD_LABELS[blankField].toLowerCase()} cannot be empty.
             </p>
           ) : (

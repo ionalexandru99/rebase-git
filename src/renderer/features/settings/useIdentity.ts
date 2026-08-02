@@ -36,7 +36,10 @@ export function useIdentity(repoPath: string | null) {
         await rpcSetIdentity(input.scope, input.scope === 'local' ? repoPath : null, input.identity)
       )
     },
-    onSuccess: invalidate
+    onSuccess: () => {
+      clear.reset()
+      return invalidate()
+    }
   })
 
   const clear = useMutation({
@@ -45,7 +48,10 @@ export function useIdentity(repoPath: string | null) {
         unwrapOk(await rpcClearIdentity(repoPath, fields))
       }
     },
-    onSuccess: invalidate
+    onSuccess: () => {
+      save.reset()
+      return invalidate()
+    }
   })
 
   const failure = save.error ?? clear.error

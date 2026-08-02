@@ -44,7 +44,9 @@ test('sets the app and repository git identity from the settings view', async ({
   await appSettings.getByRole('button', { name: 'Save' }).click()
 
   await expect.poll(() => appIdentity(harness.globalGitConfigPath, 'user.name')).toBe('Ada Lovelace')
-  expect(appIdentity(harness.globalGitConfigPath, 'user.email')).toBe('ada@example.com')
+  await expect
+    .poll(() => appIdentity(harness.globalGitConfigPath, 'user.email'))
+    .toBe('ada@example.com')
 
   const repoSettings = page.getByRole('region', { name: 'Repository settings' })
   await expect(repoSettings.getByLabel('Name')).toHaveValue('')
@@ -60,9 +62,10 @@ test('sets the app and repository git identity from the settings view', async ({
 
   await repoSettings.getByRole('button', { name: 'Use app settings for email' }).click()
 
-  await expect
-    .poll(() => effectiveIdentity(repo, harness.globalGitConfigPath, 'user.email'))
-    .toBe('ada@example.com')
+  await expect.poll(() => readConfig(['--local', 'user.email'], { cwd: repo })).toBe('')
+  expect(effectiveIdentity(repo, harness.globalGitConfigPath, 'user.email')).toBe(
+    'ada@example.com'
+  )
 
   await page.getByRole('button', { name: 'Close settings' }).click()
   await expect(settings).toBeHidden()
