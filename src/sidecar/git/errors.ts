@@ -6,6 +6,7 @@ export {
   FetchSkipped,
   GitError,
   HunkNotFound,
+  MissingIdentity,
   NotARepo,
   OperationInProgress,
   PullDiverged,
@@ -18,6 +19,7 @@ import type {
   Conflict,
   FetchSkipped,
   HunkNotFound,
+  MissingIdentity,
   NotARepo,
   OperationInProgress,
   PullDiverged,
@@ -36,6 +38,7 @@ export type GitOpError =
   | PushRejected
   | AmendRejected
   | OperationInProgress
+  | MissingIdentity
 
 export const gitError = (error: unknown): GitError =>
   new GitError({ message: error instanceof Error ? error.message : String(error) })

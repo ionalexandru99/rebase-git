@@ -8,6 +8,7 @@ import {
   FetchSkipped,
   GitError,
   HunkNotFound,
+  MissingIdentity,
   NotARepo,
   OperationInProgress,
   PullDiverged,
@@ -39,6 +40,7 @@ export {
   FetchSkipped,
   GitError,
   HunkNotFound,
+  MissingIdentity,
   NotARepo,
   OperationInProgress,
   PullDiverged,
@@ -47,7 +49,7 @@ export {
 } from './git-rpc-errors'
 
 const ReadError = Schema.Union(RepoNotOpen, GitError)
-const CommitError = Schema.Union(RepoNotOpen, GitError)
+const CommitError = Schema.Union(RepoNotOpen, GitError, MissingIdentity)
 const StageError = Schema.Union(RepoNotOpen, GitError)
 const GuardedWriteError = Schema.Union(RepoNotOpen, GitError, OperationInProgress)
 const HunkError = Schema.Union(RepoNotOpen, GitError, HunkNotFound)

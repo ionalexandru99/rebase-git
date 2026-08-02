@@ -59,6 +59,18 @@ describe('decideActionResponse', () => {
     })
   })
 
+  it('sends the user to the identity fix instead of raw git output', () => {
+    expect(decideActionResponse({ _tag: 'MissingIdentity' }, 'Committed')).toEqual({
+      succeeded: false,
+      refreshCaches: false,
+      notice: {
+        kind: 'error',
+        title: 'Tell git who you are before committing',
+        description: 'Set a name and email for this repository, then commit again.'
+      }
+    })
+  })
+
   it('maps a closed repository to its shared error notice', () => {
     expect(decideActionResponse({ _tag: 'RepoNotOpen' }, 'Stashed')).toEqual({
       succeeded: false,

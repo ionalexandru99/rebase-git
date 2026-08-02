@@ -1,6 +1,6 @@
 import { repoDisplayName } from '@/lib/repo-display-name'
+import { useIdentity } from '@/stores/identity'
 import { SettingsView } from './SettingsView'
-import { useIdentity } from './useIdentity'
 
 interface SettingsPanelProps {
   repoPath: string | null

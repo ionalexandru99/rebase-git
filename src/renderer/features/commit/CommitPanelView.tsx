@@ -1,5 +1,5 @@
 import { Loader2Icon } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 export interface CommitPanelViewProps {
@@ -12,6 +12,7 @@ export interface CommitPanelViewProps {
   stagedCount: number
   concludesMerge: boolean
   commitBlockedReason?: string
+  identityCallout?: ReactNode
   hasDroppedFiles: boolean
   expectedHeadAvailable: boolean
   onMessageChange: (message: string) => void
@@ -56,11 +57,13 @@ export function CommitPanelView(props: CommitPanelViewProps) {
     !props.message.trim() ||
     props.loading ||
     Boolean(props.commitBlockedReason) ||
+    Boolean(props.identityCallout) ||
     (!props.amend && !concludesMerge && props.stagedCount === 0) ||
     (props.amend && !props.expectedHeadAvailable)
 
   return (
     <div className="shrink-0 border-t px-3 py-2" data-testid="commit-bar">
+      {props.identityCallout}
       {props.commitBlockedReason ? (
         <p className="pb-1.5 text-xs text-amber-foreground">{props.commitBlockedReason}</p>
       ) : null}

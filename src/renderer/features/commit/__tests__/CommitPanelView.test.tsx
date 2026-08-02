@@ -14,6 +14,7 @@ function viewElement(overrides: Partial<Parameters<typeof CommitPanelView>[0]> =
       stagedCount={overrides.stagedCount ?? 2}
       concludesMerge={overrides.concludesMerge ?? false}
       commitBlockedReason={overrides.commitBlockedReason}
+      identityCallout={overrides.identityCallout}
       hasDroppedFiles={overrides.hasDroppedFiles ?? false}
       expectedHeadAvailable={overrides.expectedHeadAvailable ?? true}
       onMessageChange={overrides.onMessageChange ?? vi.fn()}
@@ -77,6 +78,16 @@ describe('CommitPanelView', () => {
 
     expect(screen.getByText('Resolve conflicts first.')).toBeInTheDocument()
     expect(screen.getByText(/staged changes in dropped files will also be excluded/i)).toBeVisible()
+  })
+
+  it('renders the identity callout and refuses the commit while it is up', () => {
+    const view = renderView({ message: 'message' })
+    expect(screen.getByRole('button', { name: 'Commit 2 files' })).toBeEnabled()
+
+    view.rerender(viewElement({ message: 'message', identityCallout: <p>Tell git who you are</p> }))
+
+    expect(screen.getByText('Tell git who you are')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Commit 2 files' })).toBeDisabled()
   })
 
   it('shows and disables the amend control from view state', () => {

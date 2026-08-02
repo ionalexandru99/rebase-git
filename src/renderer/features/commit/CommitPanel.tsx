@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { CommitPanelView } from './CommitPanelView'
 
 interface CommitPanelProps {
@@ -22,6 +22,7 @@ interface CommitPanelProps {
   prefillMessage?: string
   concludesMerge?: boolean
   commitBlockedReason?: string
+  identityCallout?: ReactNode
 }
 
 export function CommitPanel(props: CommitPanelProps) {
@@ -132,6 +133,7 @@ export function CommitPanel(props: CommitPanelProps) {
       stagedCount={props.stagedCount}
       concludesMerge={Boolean(props.concludesMerge)}
       commitBlockedReason={props.commitBlockedReason}
+      identityCallout={props.identityCallout}
       hasDroppedFiles={hasDroppedFiles}
       expectedHeadAvailable={Boolean(props.expectedHead)}
       onMessageChange={(nextMessage) => {

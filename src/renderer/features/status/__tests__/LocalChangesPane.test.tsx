@@ -1,4 +1,4 @@
-import { AbortOperation, DiscardAll } from '@shared/rpc'
+import { AbortOperation, DiscardAll, GetIdentity, SetIdentity } from '@shared/rpc'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceProvider } from '@/app/WorkspaceContext'
@@ -124,6 +124,67 @@ describe('LocalChangesPane', () => {
     expect(screen.getByRole('button', { name: 'Discard all' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Stash' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'More stash options' })).toBeInTheDocument()
+  })
+})
+
+describe('a repository git has no identity for', () => {
+  const staged = (path: string) => ({ path, index: 'M', working_dir: ' ' })
+
+  function mockIdentity(effective: { name?: string; email?: string }) {
+    const current = { effective }
+    sidecarMock.respond(GetIdentity, () => ({
+      _tag: 'Ok',
+      local: {},
+      global: {},
+      effective: current.effective
+    }))
+    return current
+  }
+
+  async function renderWithStagedChange(effective: { name?: string; email?: string }) {
+    mockStatus({ files: [staged('a.ts')] })
+    const identity = mockIdentity(effective)
+    await renderLocalChanges()
+    fireEvent.input(screen.getByRole('textbox', { name: 'Commit message' }), {
+      target: { value: 'a message' }
+    })
+    return identity
+  }
+
+  it('offers the inline fix and blocks the commit until the identity is saved', async () => {
+    const identity = await renderWithStagedChange({})
+    const writes: unknown[] = []
+    sidecarMock.respond(SetIdentity, (payload) => {
+      writes.push(payload)
+      identity.effective = { name: payload.name, email: payload.email }
+      return { _tag: 'Ok' }
+    })
+
+    const callout = await screen.findByTestId('missing-identity-callout')
+    expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeDisabled()
+
+    fireEvent.input(within(callout).getByLabelText('Name'), {
+      target: { value: 'Ada Lovelace' }
+    })
+    fireEvent.input(within(callout).getByLabelText('Email'), {
+      target: { value: 'ada@example.com' }
+    })
+    fireEvent.click(within(callout).getByRole('button', { name: 'Save identity' }))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('missing-identity-callout')).not.toBeInTheDocument()
+    })
+    expect(writes).toEqual([{ scope: 'global', name: 'Ada Lovelace', email: 'ada@example.com' }])
+    expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeEnabled()
+  })
+
+  it('stays out of the way once git knows who the author is', async () => {
+    await renderWithStagedChange({ name: 'Ada Lovelace', email: 'ada@example.com' })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeEnabled()
+    })
+    expect(screen.queryByTestId('missing-identity-callout')).not.toBeInTheDocument()
   })
 })
 

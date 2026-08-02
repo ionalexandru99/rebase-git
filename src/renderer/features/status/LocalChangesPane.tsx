@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useWorkspaceContext } from '@/app/WorkspaceContext'
 import { CommitPanel } from '@/features/commit/CommitPanel'
+import { MissingIdentityCallout } from '@/features/commit/MissingIdentityCallout'
+import { missingIdentityFields } from '@/features/commit/missing-identity'
 import { DiffPanel } from '@/features/diff/DiffPanel'
 import {
   useActionRunner,
@@ -10,6 +12,7 @@ import {
   useRepoSession,
   useWorkingTreeStatus
 } from '@/stores/git'
+import { useIdentity } from '@/stores/identity'
 import { useDraggablePane } from '../../hooks/useDraggablePane'
 import { CleanWorkingTree } from './CleanWorkingTree'
 import { ConflictBanner } from './ConflictBanner'
@@ -59,7 +62,8 @@ interface LocalChangesPaneProps {
 export function LocalChangesPane(props: LocalChangesPaneProps) {
   const { status, rows, statusState, stageFile, unstageFile } = useWorkingTreeStatus()
   const { commit, amend, loadHeadMessage, busy } = useActionRunner()
-  const { opening } = useRepoSession()
+  const { repoPath, opening } = useRepoSession()
+  const identity = useIdentity(repoPath)
   const history = useCommitHistory()
   const loading = opening || busy
   const { actions, prompt, confirm } = useWorkspaceContext()
@@ -122,6 +126,15 @@ export function LocalChangesPane(props: LocalChangesPaneProps) {
   })
 
   const stagedFiles = useMemo(() => buildStagedFilePaths(rows), [rows])
+  const identityCallout =
+    missingIdentityFields(identity.identity).length > 0 ? (
+      <MissingIdentityCallout
+        effective={identity.identity?.effective ?? {}}
+        saving={identity.saving}
+        error={identity.error}
+        onSave={(scope, values) => identity.save({ scope, identity: values })}
+      />
+    ) : undefined
 
   const handleAmendChange = (active: boolean) => {
     setAmendActive(active)
@@ -236,6 +249,7 @@ export function LocalChangesPane(props: LocalChangesPaneProps) {
         prefillMessage={operation?.kind === 'merge' ? operation.mergeMessage : undefined}
         concludesMerge={operation?.kind === 'merge'}
         commitBlockedReason={commitBlockedReason}
+        identityCallout={identityCallout}
       />
     </div>
   )

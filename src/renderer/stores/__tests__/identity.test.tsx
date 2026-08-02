@@ -2,8 +2,8 @@ import { ClearIdentity, GetIdentity, SetIdentity } from '@shared/rpc'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
-import { sidecarMock } from '../../../../test/setup'
-import { useIdentity } from '../useIdentity'
+import { sidecarMock } from '../../../test/setup'
+import { useIdentity } from '../identity'
 
 const REPO = '/home/user/projects/my-app'
 

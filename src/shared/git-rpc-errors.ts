@@ -10,6 +10,7 @@ export class Conflict extends Schema.TaggedError<Conflict>()('Conflict', {
   message: Schema.String
 }) {}
 export class FetchSkipped extends Schema.TaggedError<FetchSkipped>()('FetchSkipped', {}) {}
+export class MissingIdentity extends Schema.TaggedError<MissingIdentity>()('MissingIdentity', {}) {}
 
 export const LostCommit = Schema.Struct({ sha: Schema.String, subject: Schema.String })
 export type LostCommit = Schema.Schema.Type<typeof LostCommit>
