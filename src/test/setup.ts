@@ -8,6 +8,7 @@ import {
   GetCommitDetail,
   GetCommitStats,
   GetDiff,
+  GetIdentity,
   GetLocalBranches,
   GetRemoteRefs,
   GetStatus,
@@ -51,9 +52,12 @@ type WorkingTreeStatsResponse = RpcWireResult<typeof GetWorkingTreeStats>
 type StageHunkResponse = RpcWireResult<typeof StageHunk>
 type GuardedHunkResponse = RpcWireResult<typeof UnstageHunk>
 type StashListResponse = RpcWireResult<typeof StashList>
+type IdentityResponse = RpcWireResult<typeof GetIdentity>
 type PullWire = RpcWireResult<typeof Pull>
 type FetchWire = RpcWireResult<typeof Fetch>
 type PushWire = RpcWireResult<typeof Push>
+
+const KNOWN_IDENTITY = { name: 'Test', email: 'test@example.com' }
 
 const sidecarRpcFake = createSidecarRpcFake()
 
@@ -107,6 +111,7 @@ export const sidecarMock = {
       ) => Promise<GuardedHunkResponse>
     >(),
   stashList: vi.fn<(repoPath: string) => Promise<StashListResponse>>(),
+  getIdentity: vi.fn<() => Promise<IdentityResponse>>(),
   checkout:
     vi.fn<
       (
@@ -237,6 +242,7 @@ beforeEach(() => {
   sidecarRpcFake.respond(Checkout, ({ repoPath, refKind, fullPath }) =>
     sidecarMock.checkout(repoPath, refKind, fullPath)
   )
+  sidecarRpcFake.respond(GetIdentity, () => sidecarMock.getIdentity())
   sidecarRpcFake.respond(Fetch, ({ repoPath }) => sidecarMock.fetchRepo(repoPath))
   sidecarRpcFake.respond(Push, ({ repoPath }) => sidecarMock.pushRepo(repoPath))
   sidecarRpcFake.respond(Pull, ({ repoPath, strategy }) => {
@@ -252,6 +258,12 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.closeRepo).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.disownRepo).mockResolvedValue(undefined)
   sidecarMock.stashList.mockResolvedValue({ _tag: 'Ok', stashes: [] })
+  sidecarMock.getIdentity.mockResolvedValue({
+    _tag: 'Ok',
+    local: {},
+    global: KNOWN_IDENTITY,
+    effective: KNOWN_IDENTITY
+  })
   sidecarMock.getCommitStats.mockResolvedValue({ _tag: 'Ok', stats: [] })
   sidecarMock.getWorkingTreeStats.mockResolvedValue({ _tag: 'Ok', additions: 0, deletions: 0 })
   sidecarMock.checkout.mockResolvedValue({ _tag: 'Ok', checkedOut: 'main' })

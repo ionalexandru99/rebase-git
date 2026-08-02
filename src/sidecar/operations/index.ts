@@ -7,6 +7,7 @@ import { resolveDefaultBranch } from '../git/default-branch'
 import {
   type Conflict,
   GitError,
+  MissingIdentity,
   type NotARepo,
   type OperationInProgress,
   type RepoNotOpen
@@ -18,6 +19,7 @@ import { withRepoLock } from '../session/lock'
 import { closeSession, openSession, type RepoSessions } from '../session/sessions'
 import { runWithConflictDetection } from './conflict'
 import { requireGit, tryGit } from './helpers'
+import { isMissingIdentityMessage } from './identity'
 import { requireNoOperation } from './in-progress'
 
 export { isCommitGraphTracked } from '../session/sessions'
@@ -123,12 +125,16 @@ interface CommitResult {
 export function commit(
   repoPath: string,
   message: string
-): Effect.Effect<CommitResult, RepoNotOpen | GitError, RepoSessions> {
+): Effect.Effect<CommitResult, RepoNotOpen | GitError | MissingIdentity, RepoSessions> {
   return Effect.gen(function* () {
     const git = yield* requireGit(repoPath)
     return yield* withRepoLock(
       repoPath,
       tryGit(() => git.commit(message)).pipe(
+        Effect.catchIf(
+          (failure) => isMissingIdentityMessage(failure.message),
+          () => Effect.fail(new MissingIdentity())
+        ),
         Effect.map((result) => ({
           result: {
             commit: result.commit,

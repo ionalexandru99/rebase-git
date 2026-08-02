@@ -121,6 +121,18 @@ async function unsetLocalIdentity(repoPath: string, fields: readonly IdentityFie
   }
 }
 
+const MISSING_IDENTITY_MARKERS = [
+  'please tell me who you are',
+  'unable to auto-detect email address',
+  'no email was given',
+  'empty ident name'
+]
+
+export function isMissingIdentityMessage(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return MISSING_IDENTITY_MARKERS.some((marker) => normalized.includes(marker))
+}
+
 export function clearIdentity(
   repoPath: string,
   fields: readonly IdentityField[]

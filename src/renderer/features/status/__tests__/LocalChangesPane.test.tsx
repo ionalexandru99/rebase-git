@@ -1,4 +1,4 @@
-import { AbortOperation, DiscardAll } from '@shared/rpc'
+import { AbortOperation, DiscardAll, GetIdentity, SetIdentity } from '@shared/rpc'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceProvider } from '@/app/WorkspaceContext'
@@ -124,6 +124,69 @@ describe('LocalChangesPane', () => {
     expect(screen.getByRole('button', { name: 'Discard all' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Stash' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'More stash options' })).toBeInTheDocument()
+  })
+})
+
+describe('a repository git has no identity for', () => {
+  const staged = (path: string) => ({ path, index: 'M', working_dir: ' ' })
+
+  function mockIdentity(effective: { name?: string; email?: string }) {
+    const current = { effective }
+    sidecarMock.respond(GetIdentity, () => ({
+      _tag: 'Ok',
+      local: {},
+      global: {},
+      effective: current.effective
+    }))
+    return current
+  }
+
+  async function renderWithStagedChange(effective: { name?: string; email?: string }) {
+    mockStatus({ files: [staged('a.ts')] })
+    const identity = mockIdentity(effective)
+    await renderLocalChanges()
+    fireEvent.input(screen.getByRole('textbox', { name: 'Commit message' }), {
+      target: { value: 'a message' }
+    })
+    return identity
+  }
+
+  it('offers the fix in a modal and blocks the commit until the identity is saved', async () => {
+    const identity = await renderWithStagedChange({})
+    const writes: unknown[] = []
+    sidecarMock.respond(SetIdentity, (payload) => {
+      writes.push(payload)
+      identity.effective = { name: payload.name, email: payload.email }
+      return { _tag: 'Ok' }
+    })
+
+    expect(await screen.findByTestId('missing-identity-notice')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set identity' }))
+
+    const dialog = screen.getByRole('dialog')
+    fireEvent.input(within(dialog).getByLabelText('Name'), { target: { value: 'Ada Lovelace' } })
+    fireEvent.input(within(dialog).getByLabelText('Email'), {
+      target: { value: 'ada@example.com' }
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save identity' }))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('missing-identity-notice')).not.toBeInTheDocument()
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(writes).toEqual([{ scope: 'global', name: 'Ada Lovelace', email: 'ada@example.com' }])
+    expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeEnabled()
+  })
+
+  it('stays out of the way once git knows who the author is', async () => {
+    await renderWithStagedChange({ name: 'Ada Lovelace', email: 'ada@example.com' })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Commit 1 file' })).toBeEnabled()
+    })
+    expect(screen.queryByTestId('missing-identity-notice')).not.toBeInTheDocument()
   })
 })
 

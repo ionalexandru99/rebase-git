@@ -58,6 +58,16 @@ export function decideActionResponse(
         refreshCaches: false,
         notice: { kind: 'git-error', title: failedTitle, message: response.message ?? '' }
       }
+    case 'MissingIdentity':
+      return {
+        succeeded: false,
+        refreshCaches: false,
+        notice: {
+          kind: 'error',
+          title: 'Tell git who you are before committing',
+          description: 'Set a name and email for this repository, then commit again.'
+        }
+      }
     case 'RepoNotOpen':
       return {
         succeeded: false,

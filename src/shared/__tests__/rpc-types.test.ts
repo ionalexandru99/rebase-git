@@ -4,6 +4,7 @@ import {
   FetchSkipped,
   GitError,
   HunkNotFound,
+  MissingIdentity,
   NotARepo,
   OperationInProgress,
   PullDiverged,
@@ -34,7 +35,8 @@ const ExpectedErrorSchema = Schema.Union(
   PullDiverged,
   PushRejected,
   AmendRejected,
-  OperationInProgress
+  OperationInProgress,
+  MissingIdentity
 )
 type ExpectedError = typeof ExpectedErrorSchema.Type
 type ExpectedErrorResponse = typeof ExpectedErrorSchema.Encoded

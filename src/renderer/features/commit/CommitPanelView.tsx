@@ -12,6 +12,8 @@ export interface CommitPanelViewProps {
   stagedCount: number
   concludesMerge: boolean
   commitBlockedReason?: string
+  identityMissing: boolean
+  onSetIdentity: () => void
   hasDroppedFiles: boolean
   expectedHeadAvailable: boolean
   onMessageChange: (message: string) => void
@@ -56,11 +58,29 @@ export function CommitPanelView(props: CommitPanelViewProps) {
     !props.message.trim() ||
     props.loading ||
     Boolean(props.commitBlockedReason) ||
+    props.identityMissing ||
     (!props.amend && !concludesMerge && props.stagedCount === 0) ||
     (props.amend && !props.expectedHeadAvailable)
 
   return (
     <div className="shrink-0 border-t px-3 py-2" data-testid="commit-bar">
+      {props.identityMissing ? (
+        <div
+          data-testid="missing-identity-notice"
+          className="flex items-center justify-between gap-2 pb-1.5"
+        >
+          <p className="min-w-0 text-xs text-amber-foreground">
+            Tell git who you are before committing.
+          </p>
+          <button
+            type="button"
+            onClick={props.onSetIdentity}
+            className="h-6 shrink-0 rounded-[var(--r-sm)] border bg-card-2 px-2 text-xs font-medium transition-colors hover:border-border-strong"
+          >
+            Set identity
+          </button>
+        </div>
+      ) : null}
       {props.commitBlockedReason ? (
         <p className="pb-1.5 text-xs text-amber-foreground">{props.commitBlockedReason}</p>
       ) : null}

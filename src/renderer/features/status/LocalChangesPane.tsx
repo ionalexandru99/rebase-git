@@ -59,7 +59,7 @@ interface LocalChangesPaneProps {
 export function LocalChangesPane(props: LocalChangesPaneProps) {
   const { status, rows, statusState, stageFile, unstageFile } = useWorkingTreeStatus()
   const { commit, amend, loadHeadMessage, busy } = useActionRunner()
-  const { opening } = useRepoSession()
+  const { repoPath, opening } = useRepoSession()
   const history = useCommitHistory()
   const loading = opening || busy
   const { actions, prompt, confirm } = useWorkspaceContext()
@@ -221,6 +221,7 @@ export function LocalChangesPane(props: LocalChangesPaneProps) {
         )}
       </div>
       <CommitPanel
+        repoPath={repoPath}
         onCommit={commit}
         onAmend={amend}
         loadHeadMessage={loadHeadMessage}
