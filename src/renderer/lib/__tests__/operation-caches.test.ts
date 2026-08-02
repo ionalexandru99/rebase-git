@@ -80,6 +80,18 @@ describe('cachesForOperation', () => {
     expect(cachesForOperation('createBranchCheckout')).toEqual(union)
   })
 
+  it('additionally dirties the stash cache for a rebase, which can park an autostash', () => {
+    expect(cachesForOperation('rebaseOnto')).toEqual([
+      'status',
+      'localBranches',
+      'remoteRefs',
+      'diff',
+      'log',
+      'headCommit',
+      'stash'
+    ])
+  })
+
   it('dirties the working-tree caches for a stash apply or pop', () => {
     expect(cachesForOperation('stashApply')).toEqual(['status', 'diff', 'stash'])
     expect(cachesForOperation('stashPop')).toEqual(['status', 'diff', 'stash'])

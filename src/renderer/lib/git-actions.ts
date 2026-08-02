@@ -4,6 +4,7 @@ export type { ResetMode }
 
 export type BranchAction =
   | 'merge'
+  | 'rebase'
   | 'rename'
   | 'delete'
   | 'new-branch'

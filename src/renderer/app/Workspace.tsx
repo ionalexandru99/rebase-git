@@ -164,6 +164,9 @@ export function Workspace(props: WorkspaceProps) {
       case 'merge':
         void actions.mergeBranch(refKind, fullPath)
         return
+      case 'rebase':
+        void actions.rebaseOnto(refKind, fullPath, refs.currentBranch)
+        return
       case 'rename':
         prompt({
           title: `Rename ${fullPath}`,

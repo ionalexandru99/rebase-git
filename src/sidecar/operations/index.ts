@@ -159,6 +159,21 @@ export function mergeBranch(
   })
 }
 
+export function rebaseOnto(
+  repoPath: string,
+  refKind: RefKind,
+  fullPath: string
+): Effect.Effect<void, RepoNotOpen | GitError | Conflict | OperationInProgress, RepoSessions> {
+  return Effect.gen(function* () {
+    const git = yield* requireGit(repoPath)
+    if (!isSafeRefArg(fullPath)) {
+      return yield* Effect.fail(new GitError({ message: 'invalid ref name' }))
+    }
+    const ontoRef = yield* tryGit(() => mergeRefSpelling(git, refKind, fullPath))
+    yield* runWithConflictDetection(repoPath, git, ['rebase', '--autostash', ontoRef, '--'])
+  })
+}
+
 async function peel(git: SimpleGit, ref: string): Promise<string | undefined> {
   try {
     return (

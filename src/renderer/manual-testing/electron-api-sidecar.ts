@@ -265,6 +265,7 @@ export function createManualSidecarRequest(
       case 'push':
       case 'pull':
       case 'mergeBranch':
+      case 'rebaseOnto':
       case 'revertCommit':
       case 'cherryPick':
       case 'reset':

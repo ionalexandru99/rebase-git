@@ -17,6 +17,7 @@ import {
   getRemoteRefs,
   mergeBranch,
   openRepo,
+  rebaseOnto,
   renameBranch,
   resetToCommit,
   revertCommit
@@ -241,6 +242,80 @@ describe('merge', () => {
     await runOp(mergeBranch(repoDir, 'remote', 'origin/collision'))
 
     expect(fs.existsSync(path.join(repoDir, 'remote-only.txt'))).toBe(true)
+  })
+})
+
+describe('rebase', () => {
+  it('replays the current branch on top of the selected ref', async () => {
+    git('checkout', 'main')
+    commitFile('rebase-main.txt', 'main\n', 'main work before the rebase')
+    const mainTip = git('rev-parse', 'HEAD').trim()
+    await runOp(createBranch(repoDir, 'rebase/clean', 'HEAD~1', true))
+    commitFile('rebase-branch.txt', 'branch\n', 'branch work')
+
+    await runOp(rebaseOnto(repoDir, 'local', 'main'))
+
+    expect(currentBranch()).toBe('rebase/clean')
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(mainTip)
+    expect(fs.existsSync(path.join(repoDir, 'rebase-main.txt'))).toBe(true)
+    expect(fs.existsSync(path.join(repoDir, 'rebase-branch.txt'))).toBe(true)
+  })
+
+  it('reports a conflict and parks in a rebase the existing banner can drive', async () => {
+    git('checkout', 'main')
+    commitFile('rebase-conflict.txt', 'main-side\n', 'main side of the rebase conflict')
+    await runOp(createBranch(repoDir, 'rebase/conflict', 'HEAD~1', true))
+    commitFile('rebase-conflict.txt', 'branch-side\n', 'branch side of the rebase conflict')
+
+    const result = await runOp(Effect.either(rebaseOnto(repoDir, 'local', 'main')))
+
+    try {
+      expect(Either.isLeft(result)).toBe(true)
+      if (Either.isLeft(result)) {
+        expect(result.left._tag).toBe('Conflict')
+      }
+      expect((await detectOperationState(repoDir))?.kind).toBe('rebase-merge')
+      expect(readFile('rebase-conflict.txt')).toContain('<<<<<<<')
+    } finally {
+      git('rebase', '--abort')
+      git('checkout', 'main')
+    }
+  })
+
+  it('autostashes an unrelated uncommitted edit and reapplies it afterwards', async () => {
+    git('checkout', 'main')
+    commitFile('rebase-dirty-base.txt', 'base\n', 'base for the dirty rebase')
+    commitFile('rebase-dirty-main.txt', 'main\n', 'main work beside the dirty rebase')
+    const mainTip = git('rev-parse', 'HEAD').trim()
+    await runOp(createBranch(repoDir, 'rebase/dirty', 'HEAD~1', true))
+    commitFile('rebase-dirty-branch.txt', 'branch\n', 'branch work')
+    repo.write('rebase-dirty-base.txt', 'edited in the working tree\n')
+
+    await runOp(rebaseOnto(repoDir, 'local', 'main'))
+
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(mainTip)
+    expect(readFile('rebase-dirty-base.txt')).toBe('edited in the working tree\n')
+    expect(git('stash', 'list').trim()).toBe('')
+    git('checkout', '--', 'rebase-dirty-base.txt')
+    git('checkout', 'main')
+  })
+
+  it('rebases onto the selected remote ref when a local branch has the same full path', async () => {
+    git('checkout', 'main')
+    git('checkout', '-b', 'rebase-remote-source')
+    commitFile('rebase-remote.txt', 'remote\n', 'remote work')
+    const remoteTip = git('rev-parse', 'HEAD').trim()
+    git('checkout', 'main')
+    git('branch', 'origin/rebase-collision')
+    git('update-ref', 'refs/remotes/origin/rebase-collision', remoteTip)
+    await runOp(createBranch(repoDir, 'rebase/onto-remote', undefined, true))
+    commitFile('rebase-topic.txt', 'topic\n', 'topic work')
+
+    await runOp(rebaseOnto(repoDir, 'remote', 'origin/rebase-collision'))
+
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(remoteTip)
+    expect(fs.existsSync(path.join(repoDir, 'rebase-remote.txt'))).toBe(true)
+    git('checkout', 'main')
   })
 })
 

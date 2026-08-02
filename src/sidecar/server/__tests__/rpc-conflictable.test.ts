@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { RpcTest } from '@effect/rpc'
 import { Conflict, GitError, RepoNotOpen } from '@shared/git-rpc-errors'
-import { CherryPick, MergeBranch, RevertCommit, SidecarRpcs } from '@shared/rpc'
+import { CherryPick, MergeBranch, RebaseOnto, RevertCommit, SidecarRpcs } from '@shared/rpc'
 import { Effect, Either, Schema } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { closeRepo, openRepo } from '../../operations/index'
@@ -58,6 +58,18 @@ const mergeThroughGroup = (payload: {
     }).pipe(Effect.scoped, Effect.provide(handlersLayer))
   )
 
+const rebaseThroughGroup = (payload: {
+  repoPath: string
+  refKind: 'local' | 'remote' | 'tag'
+  fullPath: string
+}) =>
+  runOp(
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(SidecarRpcs)
+      return yield* Effect.either(client.rebaseOnto(payload))
+    }).pipe(Effect.scoped, Effect.provide(handlersLayer))
+  )
+
 beforeAll(async () => {
   const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-conf-')))
   repoDir = path.join(base, 'repo')
@@ -85,14 +97,15 @@ describe('conflictable RPC payload schemas', () => {
   })
 
   it('accepts a well-formed ref payload and rejects missing identity or a blank path', () => {
-    const schema = MergeBranch.payloadSchema
-    expect(
-      Either.isRight(decode(schema, { repoPath: '/repo', refKind: 'local', fullPath: 'feature' }))
-    ).toBe(true)
-    expect(Either.isLeft(decode(schema, { repoPath: '/repo' }))).toBe(true)
-    expect(
-      Either.isLeft(decode(schema, { repoPath: '/repo', refKind: 'local', fullPath: '   ' }))
-    ).toBe(true)
+    for (const schema of [MergeBranch.payloadSchema, RebaseOnto.payloadSchema]) {
+      expect(
+        Either.isRight(decode(schema, { repoPath: '/repo', refKind: 'local', fullPath: 'feature' }))
+      ).toBe(true)
+      expect(Either.isLeft(decode(schema, { repoPath: '/repo' }))).toBe(true)
+      expect(
+        Either.isLeft(decode(schema, { repoPath: '/repo', refKind: 'local', fullPath: '   ' }))
+      ).toBe(true)
+    }
   })
 })
 
@@ -239,5 +252,53 @@ describe('mergeBranch RPC handler', () => {
       expect(result.left).toBeInstanceOf(Conflict)
     }
     git('merge', '--abort')
+  })
+})
+
+describe('rebaseOnto RPC handler', () => {
+  it('fails with a typed GitError when the repo path does not resolve', async () => {
+    const result = await rebaseThroughGroup({
+      repoPath: '/no/such/path/here',
+      refKind: 'local',
+      fullPath: 'main'
+    })
+    expect(Either.isLeft(result)).toBe(true)
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(GitError)
+    }
+  })
+
+  it('rebases the current branch onto the selected ref and returns a void Ok success', async () => {
+    git('checkout', 'main')
+    commitFile('rebase-main.txt', 'main\n', 'main work before the rebase')
+    const mainTip = headSha()
+    git('checkout', '-b', 'rebase/clean', 'HEAD~1')
+    commitFile('rebase-branch.txt', 'branch\n', 'branch work')
+
+    const result = await rebaseThroughGroup({
+      repoPath: repoDir,
+      refKind: 'local',
+      fullPath: 'main'
+    })
+    expect(Either.isRight(result)).toBe(true)
+    expect(git('rev-parse', 'HEAD~1').trim()).toBe(mainTip)
+  })
+
+  it('surfaces a typed Conflict when a rebase leaves the tree conflicted', async () => {
+    git('checkout', 'main')
+    commitFile('rebase-conflict.txt', 'main-side\n', 'main side of the rebase conflict')
+    git('checkout', '-b', 'rebase/conflict', 'HEAD~1')
+    commitFile('rebase-conflict.txt', 'branch-side\n', 'branch side of the rebase conflict')
+
+    const result = await rebaseThroughGroup({
+      repoPath: repoDir,
+      refKind: 'local',
+      fullPath: 'main'
+    })
+    expect(Either.isLeft(result)).toBe(true)
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(Conflict)
+    }
+    git('rebase', '--abort')
   })
 })

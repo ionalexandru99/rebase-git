@@ -50,6 +50,9 @@ export function LeafRow(props: LeafRowProps) {
     const { refKind, isCurrent } = props.row
     const current = props.currentBranch
     const mergeLabel = current ? `Merge into ${current}` : 'Merge into current branch'
+    const rebaseLabel = current
+      ? `Rebase ${current} onto ${props.row.name}`
+      : `Rebase current branch onto ${props.row.name}`
     if (refKind === 'tag') {
       return [
         { kind: 'item', label: 'Checkout', onSelect: checkout },
@@ -70,6 +73,12 @@ export function LeafRow(props: LeafRowProps) {
         kind: 'item',
         label: mergeLabel,
         onSelect: () => act('merge'),
+        disabled: isCurrent || !current
+      },
+      {
+        kind: 'item',
+        label: rebaseLabel,
+        onSelect: () => act('rebase'),
         disabled: isCurrent || !current
       },
       { kind: 'separator' },
