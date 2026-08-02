@@ -1,4 +1,3 @@
-import type { LostCommit } from '@shared/git-rpc-errors'
 import { AmendCommit, Commit, Pull, Push } from '@shared/rpc'
 import { useMutation } from '@tanstack/react-query'
 import {
@@ -23,27 +22,15 @@ import {
   rpcPull,
   rpcPush
 } from '@/lib/rpc-client'
-import { decidePullResponse, type PullNotice, type PullOutcome } from './action-runner-outcomes'
+import { type ActionDecisionOptions, decideActionResponse } from './action-runner-decision'
+import { showActionRunnerNotice } from './action-runner-notices'
+import { decidePullResponse, type PullOutcome } from './action-runner-outcomes'
+import { decidePushResponse, type PushOutcome, pushLabel } from './action-runner-push'
 
 export type { PullOutcome } from './action-runner-outcomes'
+export type { PushOutcome, PushRejectionReason } from './action-runner-push'
 
-export type PushRejectionReason = 'non-fast-forward' | 'lease-stale' | 'remote-moved'
-
-export type PushOutcome =
-  | { kind: 'ok' }
-  | {
-      kind: 'rejected'
-      reason: PushRejectionReason
-      lostCommits: readonly LostCommit[]
-      remoteSha?: string
-    }
-  | { kind: 'error'; message: string }
-
-export interface RunActionOptions {
-  silentSuccess?: boolean
-  failureLabel?: string
-  conflictDescription?: string
-}
+export type RunActionOptions = ActionDecisionOptions
 
 export type RunAction = (
   operation: MappedOperation,
@@ -77,35 +64,6 @@ const notifyBusy = (): void => {
   toast.info('Another Git action is still running', {
     description: 'Wait for it to finish, then try again.'
   })
-}
-
-const showPullNotice = (notice: PullNotice | undefined): void => {
-  if (!notice) {
-    return
-  }
-  if (notice.kind === 'success') {
-    toast.success(notice.title)
-    return
-  }
-  if (notice.kind === 'warning') {
-    toast.warning(notice.title, { description: notice.description })
-    return
-  }
-  if (notice.kind === 'error') {
-    toast.error(notice.title)
-    return
-  }
-  toastGitFailure(notice.title, notice.message)
-}
-
-const pushLabel = (force?: PushForce): string => {
-  if (force === 'overwrite') {
-    return 'Overwrote remote'
-  }
-  if (force === 'with-lease') {
-    return 'Force pushed'
-  }
-  return 'Pushed'
 }
 
 export interface ActionRunnerDeps {
@@ -168,49 +126,22 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       return false
     }
     const generation = openGenerationRef.current
-    const failedTitle = `${options?.failureLabel ?? label} failed`
     try {
       const response = await call(repoPath)
       if (!isCurrentRepo(generation, repoPath)) {
         return false
       }
-      if (response._tag === 'Ok' || response._tag === 'Conflict') {
+      const decision = decideActionResponse(response, label, options)
+      if (decision.refreshCaches) {
         await refreshCaches(repoPath, cachesForOperation(operation))
       }
-      if (response._tag === 'Ok') {
-        if (!options?.silentSuccess) {
-          toast.success(label)
-        }
-        return true
-      }
-      if (response._tag === 'Conflict') {
-        toast.warning(`${label} hit conflicts`, {
-          description:
-            options?.conflictDescription ?? 'Resolve the conflicted files, then commit or abort.'
-        })
-        return false
-      }
-      if (response._tag === 'OperationInProgress') {
-        toast.warning('Another Git operation is in progress', {
-          description: `Finish or abort the in-progress ${response.operation} first.`
-        })
-        return false
-      }
-      if (response._tag === 'GitError') {
-        toastGitFailure(failedTitle, response.message ?? '')
-        return false
-      }
-      if (response._tag === 'RepoNotOpen') {
-        toast.error('Repository is not open')
-        return false
-      }
-      toast.error(failedTitle, { description: `Unexpected response: ${response._tag}` })
-      return false
+      showActionRunnerNotice(decision.notice)
+      return decision.succeeded
     } catch (error) {
       if (!isCurrentRepo(generation, repoPath)) {
         return false
       }
-      toastEngineFailure(failedTitle, formatCause(error))
+      toastEngineFailure(`${options?.failureLabel ?? label} failed`, formatCause(error))
       return false
     }
   }, [])
@@ -239,25 +170,12 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       if (!isCurrentRepo(generation, repoPath)) {
         return { kind: 'error', message: 'Repository changed' }
       }
-      if (response._tag === 'Ok') {
+      const decision = decidePushResponse(response, force)
+      if (decision.refreshCaches) {
         await refreshCaches(repoPath, cachesForOperation(Push._tag))
-        toast.success(label)
-        return { kind: 'ok' }
       }
-      if (response._tag === 'PushRejected') {
-        return {
-          kind: 'rejected',
-          reason: response.reason,
-          lostCommits: response.lostCommits,
-          remoteSha: response.remoteSha
-        }
-      }
-      if (response._tag === 'RepoNotOpen') {
-        toast.error('Repository is not open')
-        return { kind: 'error', message: 'Repository is not open' }
-      }
-      toastGitFailure(`${label} failed`, response.message)
-      return { kind: 'error', message: response.message }
+      showActionRunnerNotice(decision.notice)
+      return decision.outcome
     } catch (error) {
       const message = formatCause(error)
       if (!isCurrentRepo(generation, repoPath)) {
@@ -284,7 +202,7 @@ export function useActionRunnerController(deps: ActionRunnerDeps): ActionRunner 
       if (decision.refreshCaches) {
         await refreshCaches(repoPath, cachesForOperation(Pull._tag))
       }
-      showPullNotice(decision.notice)
+      showActionRunnerNotice(decision.notice)
       return decision.outcome
     } catch (error) {
       const message = formatCause(error)

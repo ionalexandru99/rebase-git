@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import os from 'node:os'
@@ -8,33 +7,19 @@ import { RpcClient, RpcSerialization } from '@effect/rpc'
 import { RepoNotOpen, SidecarRpcs } from '@shared/rpc'
 import { Effect, Either, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { removeRepoDir } from '../../test-support/repo-fixtures'
+import {
+  createRepoFixture,
+  type RepoFixture,
+  removeRepoDir,
+  git as runGit
+} from '../../test-support/repo-fixtures'
 import { createSidecarServer } from '../http'
 
 const TOKEN = 'rpc-test-token'
 let baseUrl: string
 let repoPath: string
+let repo: RepoFixture
 let server: ReturnType<typeof createSidecarServer>
-
-function git(cwd: string, args: string[]): void {
-  const base =
-    args[0] === 'commit' ? ['-c', 'commit.gpgsign=false', 'commit', '--no-gpg-sign'] : args
-  execFileSync('git', args[0] === 'commit' ? [...base, ...args.slice(1)] : base, {
-    cwd,
-    stdio: 'ignore'
-  })
-}
-
-function makeRepo(): string {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-'))
-  git(repo, ['init', '-b', 'main'])
-  git(repo, ['config', 'user.email', 'test@example.com'])
-  git(repo, ['config', 'user.name', 'Test'])
-  fs.writeFileSync(path.join(repo, 'README.md'), '# hi\n')
-  git(repo, ['add', '.'])
-  git(repo, ['commit', '-m', 'init'])
-  return repo
-}
 
 const protocolLayer = () =>
   RpcClient.layerProtocolHttp({
@@ -79,7 +64,11 @@ async function stageFile(repoPath: string, file: string): Promise<void> {
 }
 
 beforeAll(async () => {
-  repoPath = makeRepo()
+  repo = createRepoFixture({ prefix: 'rebase-rpc-' })
+  repoPath = repo.path
+  repo.write('README.md', '# hi\n')
+  repo.git('add', '.')
+  repo.commitStaged('init')
   server = createSidecarServer(TOKEN)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const { port } = server.address() as AddressInfo
@@ -90,7 +79,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await closeRepo(repoPath)
   await new Promise<void>((resolve) => server.close(() => resolve()))
-  removeRepoDir(repoPath)
+  repo.cleanup()
 })
 
 describe('sidecar RPC read ops', () => {
@@ -108,7 +97,7 @@ describe('sidecar RPC read ops', () => {
 
   it('flows RepoNotOpen as a typed error, not a thrown string', async () => {
     const unopened = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-unopened-'))
-    git(unopened, ['init', '-b', 'main'])
+    runGit(unopened, ['init', '-b', 'main'])
     try {
       const program = Effect.gen(function* () {
         const client = yield* RpcClient.make(SidecarRpcs)
@@ -144,7 +133,7 @@ describe('sidecar RPC write ops', () => {
 
   it('flows a commit RepoNotOpen as a typed error, not a thrown string', async () => {
     const unopened = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-rpc-commit-unopened-'))
-    git(unopened, ['init', '-b', 'main'])
+    runGit(unopened, ['init', '-b', 'main'])
     try {
       const program = Effect.gen(function* () {
         const client = yield* RpcClient.make(SidecarRpcs)

@@ -1,16 +1,12 @@
 import { type ReactNode, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { useDialogs } from '@/components/ui/prompt-dialog'
-import { HistoryPanel } from '@/features/history'
-import { CommitDetailPane } from '@/features/history/CommitDetailPane'
 import { useTimelineVisibility } from '@/features/history/hooks/useTimelineVisibility'
 import {
   countVisibleBranchRefs,
   getCommitIndex,
   getRefTipIndex
 } from '@/features/history/selectors'
-import { LocalChangesPane } from '@/features/status/LocalChangesPane'
-import { WorkingCopyHeader } from '@/features/status/WorkingCopyHeader'
 import { usePullFlow } from '@/features/sync/PullFlow'
 import { useStableCallback } from '@/hooks/useStableCallback'
 import {
@@ -26,9 +22,6 @@ import { repoDisplayName } from '../features/repos/repo-display-name'
 import { useCheckoutRef } from '../hooks/git/useCheckoutRef'
 import { useGitActions } from '../hooks/git/useGitActions'
 import { useStashes } from '../hooks/git/useStashes'
-import { ListColumnHeader } from '../shell/ListColumnHeader'
-import { COLUMN_HEADER_HEIGHT, Shell } from '../shell/Shell'
-import { StatusDock } from '../shell/StatusDock'
 import {
   useActionRunner,
   useCommitHistory,
@@ -38,6 +31,7 @@ import {
 } from '../stores/git'
 import { useDetailSelection } from '../stores/selection'
 import { WorkspaceProvider } from './WorkspaceContext'
+import { WorkspaceView } from './WorkspaceView'
 
 async function copyToClipboard(value: string, label: string): Promise<void> {
   try {
@@ -274,52 +268,9 @@ export function Workspace(props: WorkspaceProps) {
         ? [headSha]
         : NO_SHAS
 
-  const detailPane =
-    selection.selection?.kind === 'working-copy' ? (
-      <>
-        <div style={{ height: `${COLUMN_HEADER_HEIGHT}px` }} className="shrink-0 border-b">
-          <WorkingCopyHeader />
-        </div>
-        <LocalChangesPane currentBranch={refs.currentBranch} />
-      </>
-    ) : (
-      <CommitDetailPane
-        shas={detailShas}
-        commitsByHash={commitsByHash}
-        remotes={refs.remotes}
-        remoteNames={remoteNames}
-        onCommitAction={handleCommitAction}
-      />
-    )
-
-  const listBody = (
-    <HistoryPanel
-      log={history.log}
-      loading={history.logLoading}
-      loadingMore={history.logLoadingMore}
-      hasMore={history.logHasMore}
-      onLoadMore={() => void history.loadMoreHistory()}
-      repoPath={repoPath}
-      remotes={refs.remotes}
-      currentBranch={refs.currentBranch}
-      graphCommits={timeline.graphCommits}
-      timelineTips={timeline.timelineTips}
-      filteredCommits={timeline.filteredCommits}
-      displayedCommitSet={timeline.displayedCommitSet}
-      expandedMerges={timeline.expandedMerges}
-      visibleSet={timeline.visibleSet}
-      onToggleMergeExpansion={timeline.toggleMergeExpansion}
-      onCommitAction={handleCommitAction}
-      selectedShas={selection.selectedShas}
-      onSelectCommit={selectCommitInTimeline}
-      onSelectWorkingCopy={selection.selectWorkingCopy}
-      workingCopySelected={selection.workingCopySelected}
-    />
-  )
-
   return (
     <WorkspaceProvider value={workspaceContextValue}>
-      <Shell
+      <WorkspaceView
         repoPath={repoPath}
         currentBranch={branch}
         branchBrowser={{
@@ -337,51 +288,74 @@ export function Workspace(props: WorkspaceProps) {
           onStashAction: handleStashAction
         }}
         banner={props.errorBanner}
-        listHeader={
-          <ListColumnHeader
-            repoName={repoName}
-            loadedCount={history.log?.all.length ?? 0}
-            visibleTotal={timeline.filteredCommits.length}
-            visibleBranchCount={visibleBranchCount}
-            hasMore={history.logHasMore}
-            loading={history.logLoading || history.logLoadingMore}
-            filter={timeline.filter}
-            onFilterChange={timeline.setFilter}
-            branchName={branch}
-            ahead={ahead}
-            behind={behind}
-            detached={!refs.currentBranch}
-            syncing={actionRunner.pulling || actionRunner.pushing}
-            busy={actionRunner.busy}
-            onFetch={refs.fetchNow}
-            onPull={() => pullFlow.requestPull()}
-            push={actionRunner.push}
-            onResetLayout={() => window.dispatchEvent(new Event(LAYOUT_RESET_EVENT))}
-            onCopyRepoPath={() => {
-              if (repoPath) {
-                void copyToClipboard(repoPath, 'Copied repo path')
-              }
-            }}
-          />
-        }
-        listBody={listBody}
-        detailPane={detailPane}
-        statusDock={
-          <StatusDock
-            branch={refs.currentBranch || null}
-            ahead={ahead}
-            behind={behind}
-            status={status}
-            lastFetchedAt={refs.lastFetchedAt}
-          />
-        }
-      >
-        <span className="sr-only">
-          {totalChanges} changed files, {stagedCount} staged
-        </span>
-        {dialogs}
-        {pullFlow.divergedDialog}
-      </Shell>
+        historyPanel={{
+          log: history.log,
+          loading: history.logLoading,
+          loadingMore: history.logLoadingMore,
+          hasMore: history.logHasMore,
+          onLoadMore: () => void history.loadMoreHistory(),
+          repoPath,
+          remotes: refs.remotes,
+          currentBranch: refs.currentBranch,
+          graphCommits: timeline.graphCommits,
+          timelineTips: timeline.timelineTips,
+          filteredCommits: timeline.filteredCommits,
+          displayedCommitSet: timeline.displayedCommitSet,
+          expandedMerges: timeline.expandedMerges,
+          visibleSet: timeline.visibleSet,
+          onToggleMergeExpansion: timeline.toggleMergeExpansion,
+          onCommitAction: handleCommitAction,
+          selectedShas: selection.selectedShas,
+          onSelectCommit: selectCommitInTimeline,
+          onSelectWorkingCopy: selection.selectWorkingCopy,
+          workingCopySelected: selection.workingCopySelected
+        }}
+        workingCopySelected={selection.selection?.kind === 'working-copy'}
+        workingCopyBranch={refs.currentBranch}
+        commitDetailPane={{
+          shas: detailShas,
+          commitsByHash,
+          remotes: refs.remotes,
+          remoteNames,
+          onCommitAction: handleCommitAction
+        }}
+        listColumnHeader={{
+          repoName,
+          loadedCount: history.log?.all.length ?? 0,
+          visibleTotal: timeline.filteredCommits.length,
+          visibleBranchCount,
+          hasMore: history.logHasMore,
+          loading: history.logLoading || history.logLoadingMore,
+          filter: timeline.filter,
+          onFilterChange: timeline.setFilter,
+          branchName: branch,
+          ahead,
+          behind,
+          detached: !refs.currentBranch,
+          syncing: actionRunner.pulling || actionRunner.pushing,
+          busy: actionRunner.busy,
+          onFetch: refs.fetchNow,
+          onPull: () => pullFlow.requestPull(),
+          push: actionRunner.push,
+          onResetLayout: () => window.dispatchEvent(new Event(LAYOUT_RESET_EVENT)),
+          onCopyRepoPath: () => {
+            if (repoPath) {
+              void copyToClipboard(repoPath, 'Copied repo path')
+            }
+          }
+        }}
+        statusDock={{
+          branch: refs.currentBranch || null,
+          ahead,
+          behind,
+          status,
+          lastFetchedAt: refs.lastFetchedAt
+        }}
+        totalChanges={totalChanges}
+        stagedCount={stagedCount}
+        dialogs={dialogs}
+        pullDialog={pullFlow.divergedDialog}
+      />
     </WorkspaceProvider>
   )
 }

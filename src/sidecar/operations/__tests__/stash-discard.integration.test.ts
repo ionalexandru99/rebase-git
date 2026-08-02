@@ -1,9 +1,8 @@
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { Effect, Either } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createRepoFixture, type RepoFixture } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import {
   closeRepo,
@@ -19,17 +18,18 @@ import {
 } from '../index'
 
 let repoDir: string
+let repo: RepoFixture
 
 function git(...args: string[]): string {
-  return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' })
+  return repo.git(...args)
 }
 
 function write(name: string, contents: string): void {
-  fs.writeFileSync(path.join(repoDir, name), contents)
+  repo.write(name, contents)
 }
 
 function read(name: string): string {
-  return fs.readFileSync(path.join(repoDir, name), 'utf8')
+  return repo.read(name)
 }
 
 function porcelain(): string {
@@ -37,22 +37,18 @@ function porcelain(): string {
 }
 
 beforeAll(async () => {
-  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sd-test-')))
-  repoDir = path.join(base, 'repo')
-  fs.mkdirSync(repoDir)
-  execFileSync('git', ['-C', repoDir, 'init', '-b', 'main'])
-  git('config', 'user.email', 'test@example.com')
-  git('config', 'user.name', 'Test')
+  repo = createRepoFixture({ prefix: 'rebase-sd-test-' })
+  repoDir = repo.path
   write('tracked.txt', 'base\n')
   git('add', '.')
-  git('commit', '-m', 'base')
+  repo.commitStaged('base')
 
   await runOp(openRepo(repoDir))
 })
 
 afterAll(async () => {
   await runOp(closeRepo(repoDir))
-  fs.rmSync(path.dirname(repoDir), { recursive: true, force: true })
+  repo.cleanup()
 })
 
 describe('stash', () => {
@@ -304,48 +300,34 @@ describe('discard', () => {
 
 describe('discard in a repo with no commits', () => {
   it('deletes a staged new file from index and disk', { timeout: 15000 }, async () => {
-    const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sd-unborn-')))
-    const unbornDir = path.join(base, 'repo')
-    fs.mkdirSync(unbornDir)
-    execFileSync('git', ['-C', unbornDir, 'init', '-b', 'main'])
-    execFileSync('git', ['-C', unbornDir, 'config', 'user.email', 'test@example.com'])
-    execFileSync('git', ['-C', unbornDir, 'config', 'user.name', 'Test'])
-    fs.writeFileSync(path.join(unbornDir, 'first.txt'), 'unborn staged\n')
-    execFileSync('git', ['-C', unbornDir, 'add', 'first.txt'])
-    await runOp(openRepo(unbornDir))
+    const unbornRepo = createRepoFixture({ prefix: 'rebase-sd-unborn-' })
+    unbornRepo.write('first.txt', 'unborn staged\n')
+    unbornRepo.git('add', 'first.txt')
+    await runOp(openRepo(unbornRepo.path))
     try {
-      await runOp(discardChanges(unbornDir, ['first.txt']))
-      expect(fs.existsSync(path.join(unbornDir, 'first.txt'))).toBe(false)
-      const status = execFileSync('git', ['-C', unbornDir, 'status', '--porcelain'], {
-        encoding: 'utf8'
-      }).trim()
-      expect(status).toBe('')
+      await runOp(discardChanges(unbornRepo.path, ['first.txt']))
+      expect(fs.existsSync(path.join(unbornRepo.path, 'first.txt'))).toBe(false)
+      expect(unbornRepo.git('status', '--porcelain').trim()).toBe('')
     } finally {
-      await runOp(closeRepo(unbornDir))
-      fs.rmSync(base, { recursive: true, force: true })
+      await runOp(closeRepo(unbornRepo.path))
+      unbornRepo.cleanup()
     }
   })
 
   it('discards all staged and untracked files', { timeout: 15000 }, async () => {
-    const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sd-unborn-')))
-    const unbornDir = path.join(base, 'repo')
-    fs.mkdirSync(unbornDir)
-    execFileSync('git', ['-C', unbornDir, 'init', '-b', 'main'])
-    fs.writeFileSync(path.join(unbornDir, 'staged.txt'), 'staged\n')
-    fs.writeFileSync(path.join(unbornDir, 'untracked.txt'), 'untracked\n')
-    execFileSync('git', ['-C', unbornDir, 'add', 'staged.txt'])
-    await runOp(openRepo(unbornDir))
+    const unbornRepo = createRepoFixture({ prefix: 'rebase-sd-unborn-' })
+    unbornRepo.write('staged.txt', 'staged\n')
+    unbornRepo.write('untracked.txt', 'untracked\n')
+    unbornRepo.git('add', 'staged.txt')
+    await runOp(openRepo(unbornRepo.path))
     try {
-      await runOp(discardAll(unbornDir))
-      expect(fs.existsSync(path.join(unbornDir, 'staged.txt'))).toBe(false)
-      expect(fs.existsSync(path.join(unbornDir, 'untracked.txt'))).toBe(false)
-      const status = execFileSync('git', ['-C', unbornDir, 'status', '--porcelain'], {
-        encoding: 'utf8'
-      }).trim()
-      expect(status).toBe('')
+      await runOp(discardAll(unbornRepo.path))
+      expect(fs.existsSync(path.join(unbornRepo.path, 'staged.txt'))).toBe(false)
+      expect(fs.existsSync(path.join(unbornRepo.path, 'untracked.txt'))).toBe(false)
+      expect(unbornRepo.git('status', '--porcelain').trim()).toBe('')
     } finally {
-      await runOp(closeRepo(unbornDir))
-      fs.rmSync(base, { recursive: true, force: true })
+      await runOp(closeRepo(unbornRepo.path))
+      unbornRepo.cleanup()
     }
   })
 })

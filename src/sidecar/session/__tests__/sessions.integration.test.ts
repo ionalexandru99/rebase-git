@@ -1,12 +1,14 @@
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { Deferred, Effect, Fiber } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { NotARepo, RepoNotOpen } from '../../git/errors'
 import { closeRepo, openRepo } from '../../operations/index'
-import { removeRepoDir } from '../../test-support/repo-fixtures'
+import {
+  createRepoFixture,
+  type RepoFixture,
+  removeRepoDir
+} from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
 import {
   closeSession,
@@ -18,42 +20,33 @@ import {
   withSessionScope
 } from '../sessions'
 
-let baseDir: string
-let repoDir: string
-
-function git(dir: string, ...args: string[]): void {
-  execFileSync('git', ['-C', dir, ...args])
-}
+let repo: RepoFixture
 
 beforeEach(() => {
-  baseDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-sessions-test-')))
-  repoDir = path.join(baseDir, 'repo')
-  fs.mkdirSync(repoDir)
-  git(repoDir, 'init', '-b', 'main')
-  git(repoDir, 'config', 'user.email', 'test@example.com')
-  git(repoDir, 'config', 'user.name', 'Test')
-  fs.writeFileSync(path.join(repoDir, 'README.md'), '# test\n')
-  git(repoDir, 'add', 'README.md')
-  git(repoDir, 'commit', '-m', 'initial')
+  repo = createRepoFixture({ prefix: 'rebase-sessions-test-' })
+  repo.write('README.md', '# test\n')
+  repo.git('add', 'README.md')
+  repo.commitStaged('initial')
 })
 
 afterEach(async () => {
-  await runOp(closeRepo(repoDir))
-  removeRepoDir(baseDir)
+  await runOp(closeRepo(repo.path))
+  repo.cleanup()
+  removeRepoDir(`${repo.path}-plain`)
 })
 
 describe('RepoSessions spine', () => {
   it('yields the open repo simple-git instance through requireGit after openRepo', async () => {
-    const response = await runOp(openRepo(repoDir))
-    expect(response.result.path).toBe(fs.realpathSync.native(repoDir))
+    const response = await runOp(openRepo(repo.path))
+    expect(response.result.path).toBe(repo.path)
 
-    const instance = await runOp(requireGit(repoDir))
+    const instance = await runOp(requireGit(repo.path))
     const branch = await instance.revparse(['--abbrev-ref', 'HEAD'])
     expect(branch.trim()).toBe('main')
   })
 
   it('fails NotARepo for a non-repo path and leaves no session behind', async () => {
-    const plainDir = path.join(baseDir, 'plain')
+    const plainDir = `${repo.path}-plain`
     fs.mkdirSync(plainDir)
 
     const opened = await runOp(Effect.either(openRepo(plainDir)))
@@ -66,43 +59,41 @@ describe('RepoSessions spine', () => {
   })
 
   it('fails requireGit and requireOpen with RepoNotOpen after close', async () => {
-    await runOp(openRepo(repoDir))
-    await runOp(closeRepo(repoDir))
+    await runOp(openRepo(repo.path))
+    await runOp(closeRepo(repo.path))
 
-    const git = await runOp(Effect.either(requireGit(repoDir)))
+    const git = await runOp(Effect.either(requireGit(repo.path)))
     expect(git._tag).toBe('Left')
     expect((git as { left: unknown }).left).toBeInstanceOf(RepoNotOpen)
 
-    const open = await runOp(Effect.either(requireOpen(repoDir)))
+    const open = await runOp(Effect.either(requireOpen(repo.path)))
     expect(open._tag).toBe('Left')
     expect((open as { left: unknown }).left).toBeInstanceOf(RepoNotOpen)
   })
 
   it('creates the session in open so requireGit later resolves the same instance', async () => {
-    const created = await runOp(openSession(repoDir))
-    const resolved = await runOp(requireGit(repoDir))
+    const created = await runOp(openSession(repo.path))
+    const resolved = await runOp(requireGit(repo.path))
     expect(resolved).toBe(created)
   })
 
   it('removes abandoned amend indexes when a repo session opens', async () => {
-    const gitDir = execFileSync('git', ['-C', repoDir, 'rev-parse', '--absolute-git-dir'], {
-      encoding: 'utf8'
-    }).trim()
+    const gitDir = repo.git('rev-parse', '--absolute-git-dir').trim()
     const staleIndex = path.join(gitDir, 'rebase-amend-index-12345')
     const unrelatedFile = path.join(gitDir, 'rebase-amend-state')
     fs.writeFileSync(staleIndex, 'stale')
     fs.writeFileSync(unrelatedFile, 'keep')
 
-    await runOp(openSession(repoDir))
+    await runOp(openSession(repo.path))
 
     expect(fs.existsSync(staleIndex)).toBe(false)
     expect(fs.readFileSync(unrelatedFile, 'utf8')).toBe('keep')
   })
 
   it('exposes the same session state through its Layer-provided service', async () => {
-    const created = await runOp(openSession(repoDir))
+    const created = await runOp(openSession(repo.path))
     const viaService = await runOp(
-      Effect.flatMap(RepoSessions, (sessions) => sessions.requireGit(repoDir)).pipe(
+      Effect.flatMap(RepoSessions, (sessions) => sessions.requireGit(repo.path)).pipe(
         Effect.provide(RepoSessionsLive)
       )
     )
@@ -112,7 +103,7 @@ describe('RepoSessions spine', () => {
 
 describe('RepoSessions session scope', () => {
   it('runs a withSessionScope finalizer when the scoped effect completes', async () => {
-    await runOp(openSession(repoDir))
+    await runOp(openSession(repo.path))
     let released = false
     const probe = Effect.acquireRelease(Effect.succeed('resource'), () =>
       Effect.sync(() => {
@@ -120,13 +111,13 @@ describe('RepoSessions session scope', () => {
       })
     )
 
-    await runOp(withSessionScope(repoDir, probe))
+    await runOp(withSessionScope(repo.path, probe))
 
     expect(released).toBe(true)
   })
 
   it('force-runs an in-flight withSessionScope finalizer when the repo closes', async () => {
-    await runOp(openSession(repoDir))
+    await runOp(openSession(repo.path))
     let released = false
 
     await runOp(
@@ -139,9 +130,9 @@ describe('RepoSessions session scope', () => {
           })
         ).pipe(Effect.zipRight(Deferred.await(held)))
 
-        const fiber = yield* Effect.fork(withSessionScope(repoDir, probe))
+        const fiber = yield* Effect.fork(withSessionScope(repo.path, probe))
         yield* Deferred.await(acquired)
-        yield* closeSession(repoDir)
+        yield* closeSession(repo.path)
         expect(released).toBe(true)
         yield* Deferred.succeed(held, undefined)
         yield* Fiber.join(fiber)

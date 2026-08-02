@@ -25,10 +25,18 @@ import {
   UnstageLines
 } from '@shared/rpc'
 import type { GitBranches } from '@shared/schemas/git'
-import { act, cleanup } from '@testing-library/react'
-import { Storage } from 'happy-dom'
+import { cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
+import { installBrowserTestEnvironment, resizeObserverMock } from './browser-environment'
 import { createSidecarRpcFake, type RpcWireResult } from './sidecar-rpc-fake'
+
+export {
+  type LogStreamHandle,
+  type RepoChangedHandle,
+  setupLogStream,
+  setupRepoChanged
+} from './electron-event-fakes'
+export { resizeObserverMock }
 
 type StatusResponse = RpcWireResult<typeof GetStatus>
 type LocalBranchesResponse = RpcWireResult<typeof GetLocalBranches>
@@ -110,93 +118,7 @@ export const sidecarMock = {
 }
 ;(globalThis as Record<string, unknown>).__sidecarMock = sidecarMock
 
-const localStorageMock = new Storage()
-const sessionStorageMock = new Storage()
-for (const storageTarget of [globalThis, window]) {
-  Object.defineProperties(storageTarget, {
-    localStorage: {
-      configurable: true,
-      value: localStorageMock
-    },
-    sessionStorage: {
-      configurable: true,
-      value: sessionStorageMock
-    }
-  })
-}
-
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  configurable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false
-  })
-})
-
-const DEFAULT_OBSERVED_RECT = { height: 800, width: 400 }
-let observedRect = { ...DEFAULT_OBSERVED_RECT }
-const liveResizeObservers = new Set<ResizeObserverMock>()
-
-class ResizeObserverMock {
-  private callback: ResizeObserverCallback
-  private targets = new Set<Element>()
-
-  constructor(callback: ResizeObserverCallback) {
-    this.callback = callback
-    liveResizeObservers.add(this)
-  }
-
-  emit(): void {
-    for (const target of this.targets) {
-      this.callback(
-        [{ target, contentRect: { ...observedRect } as DOMRectReadOnly } as ResizeObserverEntry],
-        this as unknown as ResizeObserver
-      )
-    }
-  }
-
-  observe = vi.fn((element: Element) => {
-    this.targets.add(element)
-    this.callback(
-      [
-        {
-          target: element,
-          contentRect: { ...observedRect } as DOMRectReadOnly
-        } as ResizeObserverEntry
-      ],
-      this as unknown as ResizeObserver
-    )
-  })
-  unobserve = vi.fn((element: Element) => {
-    this.targets.delete(element)
-  })
-  disconnect = vi.fn(() => {
-    this.targets.clear()
-    liveResizeObservers.delete(this)
-  })
-}
-
-export const resizeObserverMock = {
-  setContentRect(rect: Partial<{ width: number; height: number }>): void {
-    observedRect = { ...observedRect, ...rect }
-    act(() => {
-      for (const observer of [...liveResizeObservers]) {
-        observer.emit()
-      }
-    })
-  }
-}
-Object.defineProperty(window, 'ResizeObserver', {
-  writable: true,
-  value: ResizeObserverMock
-})
+installBrowserTestEnvironment()
 
 const mockElectronAPI = {
   platform: 'darwin' as NodeJS.Platform,
@@ -239,82 +161,6 @@ Object.defineProperty(window, 'electronAPI', {
   writable: true
 })
 
-export interface LogStreamHandle {
-  fire: (chunk: {
-    repoPath: string
-    commits: Array<{
-      hash: string
-      message: string
-      author_name: string
-      date: string
-      parents: string[]
-      refs: string
-    }>
-    done?: boolean
-    hasMore?: boolean
-    error?: string
-    streamId?: number
-  }) => void
-  fireDone: (repoPath: string, hasMore?: boolean) => void
-}
-
-export function setupLogStream(): LogStreamHandle {
-  const listeners: Array<(chunk: unknown) => void> = []
-  vi.mocked(window.electronAPI.onLogChunk).mockImplementation((cb) => {
-    listeners.push(cb as (chunk: unknown) => void)
-    return () => {
-      const index = listeners.indexOf(cb as (chunk: unknown) => void)
-      if (index !== -1) {
-        listeners.splice(index, 1)
-      }
-    }
-  })
-  vi.mocked(window.electronAPI.startLogStream).mockResolvedValue({ _tag: 'Ok' })
-  vi.mocked(window.electronAPI.cancelLogStream).mockResolvedValue({})
-  return {
-    fire: (chunk) => {
-      act(() => {
-        for (const callback of listeners.slice()) {
-          callback({ done: false, ...chunk })
-        }
-      })
-    },
-    fireDone: (repoPath, hasMore) => {
-      act(() => {
-        for (const callback of listeners.slice()) {
-          callback({ repoPath, commits: [], done: true, hasMore })
-        }
-      })
-    }
-  }
-}
-
-export interface RepoChangedHandle {
-  fire: (evt: { repoPath: string; kind: 'refs' | 'workingTree' | 'index' }) => void
-}
-
-export function setupRepoChanged(): RepoChangedHandle {
-  const listeners: Array<(evt: unknown) => void> = []
-  vi.mocked(window.electronAPI.onRepoChanged).mockImplementation((cb) => {
-    listeners.push(cb as (evt: unknown) => void)
-    return () => {
-      const index = listeners.indexOf(cb as (evt: unknown) => void)
-      if (index !== -1) {
-        listeners.splice(index, 1)
-      }
-    }
-  })
-  return {
-    fire: (evt) => {
-      act(() => {
-        for (const callback of listeners.slice()) {
-          callback(evt)
-        }
-      })
-    }
-  }
-}
-
 export function mockBranchResponses(
   branches: Pick<GitBranches, 'current' | 'all'> &
     Partial<Pick<GitBranches, 'remotes' | 'tags' | 'tracking'>>
@@ -338,7 +184,7 @@ export function mockBranchResponses(
 beforeEach(() => {
   vi.resetAllMocks()
   sidecarRpcFake.reset()
-  observedRect = { ...DEFAULT_OBSERVED_RECT }
+  resizeObserverMock.reset()
   vi.mocked(window.electronAPI.getSidebarPrefs).mockResolvedValue({ open: true, width: 256 })
   vi.mocked(window.electronAPI.getRefTreeToggles).mockResolvedValue([])
   vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({

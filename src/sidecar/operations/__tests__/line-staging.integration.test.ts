@@ -1,15 +1,15 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fingerprintHunk } from '@shared/hunk-fingerprint'
 import type { DiffLine } from '@shared/unified-diff'
 import { parseUnifiedDiff } from '@shared/unified-diff'
 import { Effect, Either } from 'effect'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { makeGit } from '../../test-support/git-cli'
 import {
   conflictedPaths,
+  createRepoFixture,
   makeConflictedRepo,
+  type RepoFixture,
   removeRepoDir
 } from '../../test-support/repo-fixtures'
 import { runOp } from '../../test-support/run-op'
@@ -17,11 +17,11 @@ import { closeRepo, getDiff, openRepo, stageLines, unstageLines } from '../index
 
 const hunksOf = (result: { patch: string }) => parseUnifiedDiff(result.patch).hunks
 let repoDir: string
-let git: ReturnType<typeof makeGit>
+let repo: RepoFixture
+let git: RepoFixture['git']
 
 function write(file: string, content: string): void {
-  fs.mkdirSync(path.dirname(path.join(repoDir, file)), { recursive: true })
-  fs.writeFileSync(path.join(repoDir, file), content)
+  repo.write(file, content)
 }
 
 function writeLines(file: string, lines: string[]): void {
@@ -59,11 +59,9 @@ async function selectLines(
 }
 
 beforeEach(async () => {
-  repoDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-line-stage-')))
-  git = makeGit(repoDir)
-  git('init', '-b', 'main')
-  git('config', 'user.email', 'test@example.com')
-  git('config', 'user.name', 'Test')
+  repo = createRepoFixture({ prefix: 'rebase-line-stage-' })
+  repoDir = repo.path
+  git = repo.git
   writeLines('file.txt', ['one', 'two', 'three'])
   commitAll('base')
   await runOp(openRepo(repoDir))
@@ -71,7 +69,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await runOp(closeRepo(repoDir))
-  removeRepoDir(repoDir)
+  repo.cleanup()
 })
 
 describe('stageLines', () => {

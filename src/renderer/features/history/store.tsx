@@ -17,8 +17,9 @@ import { formatCause } from '@/lib/format-cause'
 import { engineFailureBannerText, gitFailureBannerText } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { repoQueryKeys } from '@/lib/query-keys'
-import type { GitLog, GitLogEntry } from '@/types'
+import type { GitLog } from '@/types'
 import type { OpenedRepo, RepoSessionErrorSource } from '../../stores/repo-session'
+import { createCommitLogBuffer } from './log-buffer'
 
 const LOG_FLUSH_MS = 100
 
@@ -108,11 +109,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
   const tabActiveRef = useRef(tabActive)
   tabActiveRef.current = tabActive
 
-  const logBuffer = useRef<GitLogEntry[]>([])
-  const publishedLogBuffer = useRef<GitLogEntry[] | null>(null)
-  const bufferedHashes = useRef(new Set<string>())
-  const bufferRevision = useRef(0)
-  const flushedRevision = useRef(-1)
+  const logBuffer = useRef(createCommitLogBuffer())
   const logFlushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logStreamSeq = useRef(0)
   const historyErrorRef = useRef<{ message: string; streamId: number } | null>(null)
@@ -135,13 +132,12 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         return
       }
       const logKey = repoQueryKeys(expectedPath).log
-      const next = logBuffer.current
-      if (flushedRevision.current === bufferRevision.current) {
+      const next = logBuffer.current.getPublishableSnapshot()
+      if (next === null) {
         return
       }
       queryClient.setQueryData<GitLog>(logKey, { all: next, loadedCount: next.length })
-      publishedLogBuffer.current = next
-      flushedRevision.current = bufferRevision.current
+      logBuffer.current.markCurrentAsFlushed()
     },
     [liveRepoPath, openGenerationRef, queryClient]
   )
@@ -180,16 +176,13 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         clearTimeout(logFlushTimer.current)
         logFlushTimer.current = null
       }
-      logBuffer.current = []
-      publishedLogBuffer.current = null
-      bufferedHashes.current.clear()
-      bufferRevision.current += 1
+      logBuffer.current.beginStream()
       if (clearLog) {
+        const entries = logBuffer.current.markCurrentAsPublished()
         queryClient.setQueryData<GitLog>(repoQueryKeys(repoPath).log, {
-          all: logBuffer.current,
+          all: entries,
           loadedCount: 0
         })
-        publishedLogBuffer.current = logBuffer.current
         setLogUi('logHasMore', false)
       }
       setLogUi({ logLoading: true, logLoadingMore: false })
@@ -259,11 +252,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
   const onRepoOpened = (opened: OpenedRepo, generation: number) => {
     const cachedLog = queryClient.getQueryData<GitLog>(repoQueryKeys(opened.path).log)
     setLogUi({ logLoading: false, logLoadingMore: false, logHasMore: false })
-    logBuffer.current = cachedLog?.all ? [...cachedLog.all] : []
-    publishedLogBuffer.current = null
-    bufferedHashes.current = new Set(logBuffer.current.map((commit) => commit.hash))
-    bufferRevision.current += 1
-    flushedRevision.current = cachedLog ? bufferRevision.current : -1
+    logBuffer.current.restore(cachedLog?.all ?? [], cachedLog !== undefined)
     runIfCurrent(generation, opened.path, 'restartLogStream', async () => {
       await restart(opened.path, { clearLog: !cachedLog })
     })
@@ -275,12 +264,8 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
       .catch(() => {})
 
   const reset = () => {
-    logBuffer.current = []
-    publishedLogBuffer.current = null
-    bufferedHashes.current.clear()
+    logBuffer.current.clear()
     historyErrorRef.current = null
-    bufferRevision.current += 1
-    flushedRevision.current = -1
     if (logFlushTimer.current !== null) {
       clearTimeout(logFlushTimer.current)
       logFlushTimer.current = null
@@ -313,21 +298,7 @@ export function useCommitHistoryController(deps: CommitHistoryDeps): CommitHisto
         return
       }
       if (chunk.commits.length > 0) {
-        let appended = false
-        for (const commit of chunk.commits) {
-          if (bufferedHashes.current.has(commit.hash)) {
-            continue
-          }
-          if (!appended && publishedLogBuffer.current === logBuffer.current) {
-            logBuffer.current = [...logBuffer.current]
-            publishedLogBuffer.current = null
-          }
-          bufferedHashes.current.add(commit.hash)
-          logBuffer.current.push(commit)
-          appended = true
-        }
-        if (appended) {
-          bufferRevision.current += 1
+        if (logBuffer.current.append(chunk.commits)) {
           scheduleLogFlush()
         }
       }

@@ -1,12 +1,6 @@
 import type { CommitDetail, CommitDetailFile } from '@shared/schemas/git'
 import { GitCommitHorizontalIcon, MoreHorizontalIcon } from 'lucide-react'
-import {
-  type MouseEvent as ReactMouseEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useState
-} from 'react'
+import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { type CommitDiffSelection, CommitDiffView } from '@/features/diff/CommitDiffView'
 import type { CommitAction } from '@/lib/git-actions'
 import type { GitLogEntry } from '@/types'
@@ -22,8 +16,8 @@ import { LoadingBadge } from '../../components/ui/loading-badge'
 import { useDraggablePane } from '../../hooks/useDraggablePane'
 import { CommitFileList } from './CommitFileList'
 import { CommitMeta } from './CommitMeta'
-import { firstCommitTreeFile } from './commit-file-tree'
 import { useCommitDetail, useCommitDetails } from './hooks/useCommitDetail'
+import { useCommitFileSelection } from './hooks/useCommitFileSelection'
 
 const SUMMARY_STAT_LIMIT = 50
 const DETAIL_FILE_LIST_WIDTH = 232
@@ -193,30 +187,8 @@ function SingleCommitDetailView(props: SingleCommitDetailViewProps) {
     onFileListResizeStart(event.nativeEvent)
   }
   const detail = props.detail
-  const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const files = detail?.files ?? []
-
-  useEffect(() => {
-    setSelectedPath((current) =>
-      current !== null && files.some((file) => file.path === current)
-        ? current
-        : (firstCommitTreeFile(files)?.path ?? null)
-    )
-  }, [files])
-
-  const selectedFile = files.find((file) => file.path === selectedPath)
-  const selected = useMemo<CommitDiffSelection | null>(
-    () =>
-      selectedFile
-        ? {
-            commit: props.sha,
-            file: selectedFile.path,
-            renameSource: selectedFile.oldPath,
-            binary: selectedFile.binary
-          }
-        : null,
-    [selectedFile, props.sha]
-  )
+  const { selectedPath, selection, selectFile } = useCommitFileSelection(props.sha, files)
 
   const subject = detail?.subject ?? props.entry?.message ?? ''
   const totals = totalsOf(files)
@@ -306,11 +278,7 @@ function SingleCommitDetailView(props: SingleCommitDetailViewProps) {
               }}
             >
               <div className="relative flex min-h-0 min-w-0 flex-col border-r">
-                <CommitFileList
-                  files={files}
-                  selectedPath={selectedPath}
-                  onSelect={(file) => setSelectedPath(file.path)}
-                />
+                <CommitFileList files={files} selectedPath={selectedPath} onSelect={selectFile} />
                 <button
                   type="button"
                   aria-label="Resize changed files list"
@@ -322,7 +290,7 @@ function SingleCommitDetailView(props: SingleCommitDetailViewProps) {
                   <span className="mx-auto block h-full w-px bg-transparent transition-colors group-hover/files-resize:bg-primary/70" />
                 </button>
               </div>
-              <div className="min-h-0 min-w-0 overflow-hidden">{props.renderDiff(selected)}</div>
+              <div className="min-h-0 min-w-0 overflow-hidden">{props.renderDiff(selection)}</div>
             </div>
           )}
         </>

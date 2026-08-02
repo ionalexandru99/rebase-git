@@ -47,6 +47,10 @@ export function createRepoFixture(options: RepoFixtureOptions): RepoFixture {
   const runGit = (...args: string[]): string =>
     execFileSync('git', ['-C', repoPath, ...args], { encoding: 'utf8' })
   const head = (): string => runGit('rev-parse', 'HEAD').trim()
+  const write = (name: string, contents: string | Buffer): void => {
+    fs.mkdirSync(path.dirname(path.join(repoPath, name)), { recursive: true })
+    fs.writeFileSync(path.join(repoPath, name), contents)
+  }
 
   runGit('init', '-b', 'main')
   runGit('config', 'user.email', options.userEmail ?? 'test@example.com')
@@ -56,9 +60,8 @@ export function createRepoFixture(options: RepoFixtureOptions): RepoFixture {
   return {
     path: repoPath,
     git: runGit,
-    write: (name, contents) => fs.writeFileSync(path.join(repoPath, name), contents),
-    writeLines: (name, lines) =>
-      fs.writeFileSync(path.join(repoPath, name), `${lines.join('\n')}\n`),
+    write,
+    writeLines: (name, lines) => write(name, `${lines.join('\n')}\n`),
     read: (name) => fs.readFileSync(path.join(repoPath, name), 'utf8'),
     readLines: (name) =>
       fs.readFileSync(path.join(repoPath, name), 'utf8').split('\n').slice(0, -1),
