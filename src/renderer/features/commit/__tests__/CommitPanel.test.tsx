@@ -1,10 +1,17 @@
+import { GetIdentity } from '@shared/rpc'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
+import { sidecarMock } from '../../../../test/setup'
 import { CommitPanel } from '../CommitPanel'
+
+const REPO = '/home/user/project'
 
 function panelElement(overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}) {
   return (
     <CommitPanel
+      repoPath={overrides.repoPath ?? REPO}
       onCommit={overrides.onCommit ?? vi.fn().mockResolvedValue(true)}
       onAmend={overrides.onAmend ?? vi.fn().mockResolvedValue(true)}
       loadHeadMessage={overrides.loadHeadMessage ?? vi.fn().mockResolvedValue('head message')}
@@ -24,10 +31,16 @@ function panelElement(overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}
   )
 }
 
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+    {children}
+  </QueryProvider>
+)
+
 function renderPanel(
   overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}
 ): ReturnType<typeof render> {
-  return render(panelElement(overrides))
+  return render(panelElement(overrides), { wrapper })
 }
 
 const amendToggle = () => screen.getByRole('checkbox', { name: /amend last commit/i })
@@ -323,5 +336,44 @@ describe('CommitPanel', () => {
     view.rerender(panelElement({ prefillMessage: undefined }))
 
     expect(textarea).toHaveValue('')
+  })
+})
+
+describe('CommitPanel identity gate', () => {
+  const identityResponder = (effective: { name?: string; email?: string }) => {
+    const current = { effective }
+    sidecarMock.respond(GetIdentity, () => ({
+      _tag: 'Ok',
+      local: {},
+      global: {},
+      effective: current.effective
+    }))
+    return current
+  }
+
+  it('raises the callout and holds the commit while git has no identity', async () => {
+    identityResponder({})
+    renderPanel()
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
+
+    expect(await screen.findByTestId('missing-identity-callout')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Commit 2 files/i })).toBeDisabled()
+  })
+
+  it('re-reads the identity after a rejected commit, so the backstop error lands on the inline fix', async () => {
+    const identity = identityResponder({ name: 'Ada Lovelace', email: 'ada@example.com' })
+    const onCommit = vi.fn().mockImplementation(async () => {
+      identity.effective = {}
+      return false
+    })
+    renderPanel({ onCommit })
+    fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a message' } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Commit 2 files/i })).toBeEnabled()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Commit 2 files/i }))
+
+    expect(await screen.findByTestId('missing-identity-callout')).toBeInTheDocument()
   })
 })

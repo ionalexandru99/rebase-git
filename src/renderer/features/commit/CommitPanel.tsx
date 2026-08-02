@@ -1,7 +1,11 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useIdentity } from '@/stores/identity'
 import { CommitPanelView } from './CommitPanelView'
+import { MissingIdentityCallout } from './MissingIdentityCallout'
+import { missingIdentityFields } from './missing-identity'
 
 interface CommitPanelProps {
+  repoPath: string | null
   onCommit: (message: string) => Promise<boolean>
   onAmend: (
     message: string,
@@ -22,10 +26,10 @@ interface CommitPanelProps {
   prefillMessage?: string
   concludesMerge?: boolean
   commitBlockedReason?: string
-  identityCallout?: ReactNode
 }
 
 export function CommitPanel(props: CommitPanelProps) {
+  const identity = useIdentity(props.repoPath)
   const [message, setMessage] = useState('')
   const [amend, setAmend] = useState(false)
   const [savedDraft, setSavedDraft] = useState('')
@@ -101,6 +105,9 @@ export function CommitPanel(props: CommitPanelProps) {
       } else {
         success = await props.onCommit(trimmed)
       }
+      if (!success) {
+        identity.refresh()
+      }
       if (success) {
         setMessage((current) => {
           if (current !== submittedMessage) {
@@ -121,6 +128,15 @@ export function CommitPanel(props: CommitPanelProps) {
 
   const loading = props.loading || submitting
   const hasDroppedFiles = amend && (props.droppedHeadPaths?.length ?? 0) > 0
+  const identityCallout =
+    missingIdentityFields(identity.identity).length > 0 ? (
+      <MissingIdentityCallout
+        effective={identity.identity?.effective ?? {}}
+        saving={identity.saving}
+        error={identity.error}
+        onSave={(scope, values) => identity.save({ scope, identity: values })}
+      />
+    ) : undefined
 
   return (
     <CommitPanelView
@@ -133,7 +149,7 @@ export function CommitPanel(props: CommitPanelProps) {
       stagedCount={props.stagedCount}
       concludesMerge={Boolean(props.concludesMerge)}
       commitBlockedReason={props.commitBlockedReason}
-      identityCallout={props.identityCallout}
+      identityCallout={identityCallout}
       hasDroppedFiles={hasDroppedFiles}
       expectedHeadAvailable={Boolean(props.expectedHead)}
       onMessageChange={(nextMessage) => {

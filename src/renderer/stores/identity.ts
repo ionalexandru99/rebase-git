@@ -61,6 +61,9 @@ export function useIdentity(repoPath: string | null) {
     saving: save.isPending || clear.isPending,
     error: failure ? failure.message : query.error ? query.error.message : null,
     save: save.mutate,
-    clear: clear.mutate
+    clear: clear.mutate,
+    refresh: () => {
+      void invalidate()
+    }
   }
 }
