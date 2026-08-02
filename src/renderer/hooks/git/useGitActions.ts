@@ -9,6 +9,7 @@ import {
   DiscardAll,
   DiscardChanges,
   MergeBranch,
+  RebaseOnto,
   RenameBranch,
   Reset,
   ResolveConflict,
@@ -32,6 +33,7 @@ import {
   rpcDiscardAll,
   rpcDiscardChanges,
   rpcMergeBranch,
+  rpcRebaseOnto,
   rpcRenameBranch,
   rpcReset,
   rpcResolveConflict,
@@ -76,6 +78,12 @@ export function useGitActions(runner: ActionRunner) {
           MergeBranch._tag,
           (path) => rpcMergeBranch(path, refKind, fullPath),
           `Merged ${fullPath}`
+        ),
+      rebaseOnto: (refKind: RefKind, fullPath: string, currentBranch?: string) =>
+        runner.runAction(
+          RebaseOnto._tag,
+          (path) => rpcRebaseOnto(path, refKind, fullPath),
+          `Rebased ${currentBranch ?? 'current branch'} onto ${fullPath}`
         ),
       resetToCommit: (sha: string, mode: ResetMode) =>
         runner.runAction(

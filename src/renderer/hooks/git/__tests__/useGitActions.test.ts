@@ -12,6 +12,7 @@ import {
   rpcDiscardAll,
   rpcDiscardChanges,
   rpcMergeBranch,
+  rpcRebaseOnto,
   rpcRenameBranch,
   rpcReset,
   rpcRevertCommit,
@@ -24,6 +25,7 @@ import type { ActionRunner } from '@/stores/git'
 
 vi.mock('@/lib/rpc-client', () => ({
   rpcMergeBranch: vi.fn(),
+  rpcRebaseOnto: vi.fn(),
   rpcRevertCommit: vi.fn(),
   rpcCherryPick: vi.fn(),
   rpcContinueOperation: vi.fn(),
@@ -82,6 +84,32 @@ describe('useGitActions conflictable ops route through the runner', () => {
     )
     expect(rpcMergeBranch).toHaveBeenCalledWith('/repo', 'remote', 'origin/feature')
     expect(ok).toBe(true)
+  })
+
+  it('routes rebaseOnto through the runner, naming both branches in the label', async () => {
+    vi.mocked(rpcRebaseOnto).mockResolvedValue({ _tag: 'Ok' })
+
+    const ok = await actionsFor().rebaseOnto('remote', 'origin/main', 'feature')
+
+    expect(runAction).toHaveBeenCalledWith(
+      'rebaseOnto',
+      expect.any(Function),
+      'Rebased feature onto origin/main'
+    )
+    expect(rpcRebaseOnto).toHaveBeenCalledWith('/repo', 'remote', 'origin/main')
+    expect(ok).toBe(true)
+  })
+
+  it('falls back to naming no branch when HEAD is detached', async () => {
+    vi.mocked(rpcRebaseOnto).mockResolvedValue({ _tag: 'Ok' })
+
+    await actionsFor().rebaseOnto('local', 'main')
+
+    expect(runAction).toHaveBeenCalledWith(
+      'rebaseOnto',
+      expect.any(Function),
+      'Rebased current branch onto main'
+    )
   })
 
   it('routes revertCommit through the runner', async () => {

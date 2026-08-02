@@ -211,6 +211,8 @@ export const handlersLayer = SidecarRpcs.toLayer({
   discardAll: ({ repoPath }) => withResolvedRepo(repoPath, (repo) => operations.discardAll(repo)),
   mergeBranch: ({ repoPath, refKind, fullPath }) =>
     withResolvedRepo(repoPath, (repo) => operations.mergeBranch(repo, refKind, fullPath)),
+  rebaseOnto: ({ repoPath, refKind, fullPath }) =>
+    withResolvedRepo(repoPath, (repo) => operations.rebaseOnto(repo, refKind, fullPath)),
   revertCommit: ({ repoPath, sha }) =>
     withResolvedRepo(repoPath, (repo) => operations.revertCommit(repo, sha)),
   cherryPick: ({ repoPath, sha }) =>

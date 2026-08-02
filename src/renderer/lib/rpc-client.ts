@@ -28,6 +28,7 @@ import {
   OpenRepo,
   Pull,
   Push,
+  RebaseOnto,
   RenameBranch,
   Reset,
   ResolveConflict,
@@ -237,6 +238,14 @@ export async function rpcMergeBranch(
   fullPath: string
 ): Promise<ConflictableResult> {
   return callSidecarRpc(MergeBranch, { repoPath, refKind, fullPath })
+}
+
+export async function rpcRebaseOnto(
+  repoPath: string,
+  refKind: RefKind,
+  fullPath: string
+): Promise<ConflictableResult> {
+  return callSidecarRpc(RebaseOnto, { repoPath, refKind, fullPath })
 }
 
 export async function rpcRevertCommit(repoPath: string, sha: string): Promise<ConflictableResult> {

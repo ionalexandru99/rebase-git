@@ -74,6 +74,7 @@ describe('RefTreeRow leaf', () => {
 
   it.each<[string, string]>([
     ['Merge into main', 'merge'],
+    ['Rebase main onto feature', 'rebase'],
     ['New branch from here', 'new-branch'],
     ['Create tag here', 'create-tag'],
     ['Rename…', 'rename'],
@@ -94,6 +95,74 @@ describe('RefTreeRow leaf', () => {
     fireEvent.contextMenu(screen.getByTitle('feature'))
     fireEvent.click(await screen.findByRole('menuitem', { name: label }))
     expect(onBranchAction).toHaveBeenCalledWith(action, 'local', 'feature')
+  })
+
+  it('offers Rebase on a remote branch too', async () => {
+    const onBranchAction = vi.fn()
+    render(
+      <RefTreeRow
+        row={leaf({ refKind: 'remote', fullPath: 'origin/feature', name: 'feature' })}
+        top={0}
+        localLoading={false}
+        currentBranch="main"
+        onToggleCollapsed={() => {}}
+        onBranchAction={onBranchAction}
+      />
+    )
+    fireEvent.contextMenu(screen.getByTitle('origin/feature'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rebase main onto feature' }))
+    expect(onBranchAction).toHaveBeenCalledWith('rebase', 'remote', 'origin/feature')
+  })
+
+  it('offers no Rebase on a tag row', async () => {
+    render(
+      <RefTreeRow
+        row={leaf({ refKind: 'tag', fullPath: 'v1.0', name: 'v1.0' })}
+        top={0}
+        localLoading={false}
+        currentBranch="main"
+        onToggleCollapsed={() => {}}
+        onBranchAction={vi.fn()}
+      />
+    )
+    fireEvent.contextMenu(screen.getByTitle('v1.0'))
+    await screen.findByRole('menuitem', { name: 'Checkout' })
+    expect(screen.queryByRole('menuitem', { name: /^Rebase/ })).not.toBeInTheDocument()
+  })
+
+  it('disables Rebase on the current branch', async () => {
+    const onBranchAction = vi.fn()
+    render(
+      <RefTreeRow
+        row={leaf({ refKind: 'local', fullPath: 'main', name: 'main', isCurrent: true })}
+        top={0}
+        localLoading={false}
+        currentBranch="main"
+        onToggleCollapsed={() => {}}
+        onBranchAction={onBranchAction}
+      />
+    )
+    fireEvent.contextMenu(screen.getByTitle('main'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rebase main onto main' }))
+    expect(onBranchAction).not.toHaveBeenCalled()
+  })
+
+  it('disables Rebase on a detached HEAD, naming no current branch', async () => {
+    const onBranchAction = vi.fn()
+    render(
+      <RefTreeRow
+        row={leaf({ refKind: 'local', fullPath: 'feature', name: 'feature' })}
+        top={0}
+        localLoading={false}
+        onToggleCollapsed={() => {}}
+        onBranchAction={onBranchAction}
+      />
+    )
+    fireEvent.contextMenu(screen.getByTitle('feature'))
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Rebase current branch onto feature' })
+    )
+    expect(onBranchAction).not.toHaveBeenCalled()
   })
 
   it('disables Delete and Checkout on the current branch', async () => {

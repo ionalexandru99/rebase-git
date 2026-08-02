@@ -73,6 +73,7 @@ describe('cachesForOperation', () => {
   it('dirties the working tree, refs, and timeline for a history op, a checkout, or a create+checkout', () => {
     const union = ['status', 'localBranches', 'remoteRefs', 'diff', 'log', 'headCommit']
     expect(cachesForOperation('mergeBranch')).toEqual(union)
+    expect(cachesForOperation('rebaseOnto')).toEqual(union)
     expect(cachesForOperation('reset')).toEqual(union)
     expect(cachesForOperation('revertCommit')).toEqual(union)
     expect(cachesForOperation('cherryPick')).toEqual(union)

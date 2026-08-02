@@ -23,6 +23,7 @@ import {
   getStatus,
   mergeBranch,
   openRepo,
+  rebaseOnto,
   resetToCommit,
   resolveConflict,
   stashList,
@@ -109,6 +110,21 @@ describe('operations attempted while a merge conflict is unresolved', () => {
       expect(gitOutput(fixture.path, ['status', '--porcelain']).trim()).toBe('')
       expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(fixture.headBefore)
       expect(await operationKind(fixture.path)).toBeUndefined()
+    })
+  })
+
+  it('refuses a rebase up front without disturbing the merge', async () => {
+    await withMergeConflict(async (fixture) => {
+      const headBefore = gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()
+      const conflictedContents = readRepoFile(fixture.path, 'f.txt')
+
+      const error = await failure(rebaseOnto(fixture.path, 'local', 'feature'))
+
+      expect(error).toMatchObject({ _tag: 'OperationInProgress', operation: 'merge' })
+      expect(gitOutput(fixture.path, ['rev-parse', 'HEAD']).trim()).toBe(headBefore)
+      expect(readRepoFile(fixture.path, 'f.txt')).toBe(conflictedContents)
+      expect(conflictedPaths(fixture.path)).toEqual(['f.txt'])
+      expect(await operationKind(fixture.path)).toBe('merge')
     })
   })
 

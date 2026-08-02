@@ -1,4 +1,4 @@
-import { RevertCommit, StageAll } from '@shared/rpc'
+import { RebaseOnto, RevertCommit, StageAll } from '@shared/rpc'
 import type { CommitDetail } from '@shared/schemas/git'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -276,6 +276,29 @@ describe('Workspace selection drives the detail pane', () => {
 
     await waitFor(() => expect(revertBody).toMatchObject({ sha: 'ccccccc3' }))
     expect(rowFor('newest change')).toHaveAttribute('data-selected', 'true')
+  })
+
+  it('rebases the current branch onto the ref picked in the branch menu', async () => {
+    let rebaseBody: Record<string, unknown> | undefined
+    sidecarMock.respond(RebaseOnto, (body) => {
+      rebaseBody = body
+      return { _tag: 'Ok' }
+    })
+    mockBranchResponses({ current: 'main', all: ['main', 'feature'], remotes: [], tags: [] })
+    const stream = setupLogStream()
+    renderApp()
+    fireEvent.click(await screen.findByText(repoPath))
+    await screen.findByRole('region', { name: 'Commits' })
+    stream.fire({ repoPath, commits })
+    stream.fireDone(repoPath, false)
+
+    fireEvent.contextMenu(await screen.findByTitle('feature'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rebase main onto feature' }))
+
+    await waitFor(() =>
+      expect(rebaseBody).toMatchObject({ repoPath, refKind: 'local', fullPath: 'feature' })
+    )
+    expect(await screen.findByText('Rebased main onto feature')).toBeInTheDocument()
   })
 })
 

@@ -200,6 +200,12 @@ export const MergeBranch = Rpc.make('mergeBranch', {
   error: ConflictableError
 })
 
+export const RebaseOnto = Rpc.make('rebaseOnto', {
+  payload: { repoPath: OpaqueString, refKind: RefKindSchema, fullPath: RequiredString },
+  success: Schema.Void,
+  error: ConflictableError
+})
+
 export const RevertCommit = Rpc.make('revertCommit', {
   payload: { repoPath: OpaqueString, sha: RequiredString },
   success: Schema.Void,
@@ -436,6 +442,7 @@ export const SidecarRpcs = RpcGroup.make(
   DiscardChanges,
   DiscardAll,
   MergeBranch,
+  RebaseOnto,
   RevertCommit,
   CherryPick,
   Checkout,
