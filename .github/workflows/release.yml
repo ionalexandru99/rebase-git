@@ -176,7 +176,7 @@ jobs:
     needs: preflight
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -230,7 +230,12 @@ jobs:
       - name: Package application
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MACOS_CERTIFICATE != '' && 'true' || 'false' }}
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           pnpm exec electron-builder \
             --config electron-builder.config.js \
@@ -238,6 +243,19 @@ jobs:
             --${{ matrix.arch }} \
             --config.extraMetadata.version="${{ needs.preflight.outputs.version }}" \
             --publish never
+
+      - name: Verify signature and notarization
+        if: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '' }}
+        run: |
+          app=$(find release -maxdepth 2 -name '*.app' | head -n 1)
+          if [[ -z "$app" ]]; then
+            echo "No .app bundle found under release/" >&2
+            exit 1
+          fi
+          codesign --verify --strict --verbose=2 "$app"
+          codesign -dvvv "$app"
+          spctl --assess --type execute -vvv "$app"
+          xcrun stapler validate "$app"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7

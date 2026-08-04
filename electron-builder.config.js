@@ -8,7 +8,9 @@ export default {
   artifactName: `\${productName}-\${version}-\${os}-\${arch}.\${ext}`,
   mac: {
     category: 'public.app-category.developer-tools',
-    target: ['dmg', 'zip']
+    target: ['dmg', 'zip'],
+    hardenedRuntime: true,
+    notarize: Boolean(process.env.APPLE_TEAM_ID)
   },
   win: {
     target: ['nsis']
