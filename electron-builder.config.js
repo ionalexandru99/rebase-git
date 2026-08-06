@@ -1,4 +1,4 @@
-import { notarizeDmg } from './scripts/notarize-dmg.mjs'
+import { notarizeDmg } from './build/notarize-dmg.mjs'
 
 export default {
   appId: 'com.rebase-git.app',
