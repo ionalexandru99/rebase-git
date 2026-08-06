@@ -14,6 +14,9 @@ export default {
     hardenedRuntime: true,
     notarize: Boolean(process.env.APPLE_TEAM_ID)
   },
+  dmg: {
+    sign: true
+  },
   win: {
     target: ['nsis']
   },
