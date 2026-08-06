@@ -1,3 +1,5 @@
+import { notarizeDmg } from './build/notarize-dmg.mjs'
+
 export default {
   appId: 'com.rebase-git.app',
   productName: 'Rebase',
@@ -8,7 +10,12 @@ export default {
   artifactName: `\${productName}-\${version}-\${os}-\${arch}.\${ext}`,
   mac: {
     category: 'public.app-category.developer-tools',
-    target: ['dmg', 'zip']
+    target: ['dmg', 'zip'],
+    hardenedRuntime: true,
+    notarize: Boolean(process.env.APPLE_TEAM_ID)
+  },
+  dmg: {
+    sign: true
   },
   win: {
     target: ['nsis']
@@ -21,5 +28,6 @@ export default {
     provider: 'github',
     owner: 'ionalexandru99',
     repo: 'rebase-git'
-  }
+  },
+  afterAllArtifactBuild: notarizeDmg
 }
