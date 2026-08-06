@@ -177,6 +177,8 @@ jobs:
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    env:
+      HAS_MACOS_CERT: ${{ secrets.MACOS_CERTIFICATE != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -230,12 +232,12 @@ jobs:
       - name: Package application
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MACOS_CERTIFICATE != '' && 'true' || 'false' }}
-          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '' && 'true' || 'false' }}
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           pnpm exec electron-builder \
             --config electron-builder.config.js \
@@ -245,7 +247,7 @@ jobs:
             --publish never
 
       - name: Verify signature and notarization
-        if: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '' }}
+        if: ${{ matrix.platform == 'mac' && env.HAS_MACOS_CERT == 'true' }}
         run: |
           app=$(find release -maxdepth 2 -name '*.app' | head -n 1)
           if [[ -z "$app" ]]; then
