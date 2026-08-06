@@ -256,6 +256,10 @@ jobs:
           codesign -dvvv "$app"
           spctl --assess --type execute -vvv "$app"
           xcrun stapler validate "$app"
+          for dmg in release/*.dmg; do
+            xcrun stapler validate "$dmg"
+            spctl --assess --type open --context context:primary-signature -vvv "$dmg"
+          done
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7

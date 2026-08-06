@@ -1,3 +1,5 @@
+import { notarizeDmg } from './scripts/notarize-dmg.mjs'
+
 export default {
   appId: 'com.rebase-git.app',
   productName: 'Rebase',
@@ -23,5 +25,6 @@ export default {
     provider: 'github',
     owner: 'ionalexandru99',
     repo: 'rebase-git'
-  }
+  },
+  afterAllArtifactBuild: notarizeDmg
 }
