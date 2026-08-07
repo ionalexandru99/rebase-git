@@ -7,7 +7,7 @@ const statusReadOwner = 10_001
 const commitOwner = 10_002
 const mergeOwner = 10_003
 
-test.describe('Git GUI E2E', () => {
+test.describe('Rebase E2E', () => {
   test('window opens and title is correct', async ({ harness }) => {
     const page = harness.page
     const title = await page.title()
