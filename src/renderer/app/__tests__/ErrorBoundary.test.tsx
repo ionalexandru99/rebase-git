@@ -98,6 +98,26 @@ describe('crash boundary', () => {
     expect(queryClient.getQueryData(['status', '/repo'])).toBeUndefined()
   })
 
+  it('drops only the failed tab cache, leaving the other tabs loaded', () => {
+    queryClient.setQueryData(['repo', '/broken', 'status'], { poisoned: true })
+    queryClient.setQueryData(['repo', '/healthy', 'status'], { kept: true })
+    queryClient.setQueryData(['identity', '/healthy'], { kept: true })
+
+    render(
+      <ErrorBoundary
+        scope="tab"
+        onReset={() => queryClient.removeQueries({ queryKey: ['repo', '/broken'] })}
+      >
+        <Boom failing={true} />
+      </ErrorBoundary>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+
+    expect(queryClient.getQueryData(['repo', '/broken', 'status'])).toBeUndefined()
+    expect(queryClient.getQueryData(['repo', '/healthy', 'status'])).toEqual({ kept: true })
+    expect(queryClient.getQueryData(['identity', '/healthy'])).toEqual({ kept: true })
+  })
+
   it('recovers the app when the user retries and the render succeeds', () => {
     const { rerender } = render(
       <ErrorBoundary scope="app">

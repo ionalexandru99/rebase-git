@@ -14,6 +14,7 @@ function readsAsMac(): boolean {
 
 interface ErrorBoundaryProps {
   scope: CrashScope
+  onReset?: () => void
   children: ReactNode
 }
 
@@ -57,7 +58,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   private retry = (): void => {
-    queryClient.clear()
+    if (this.props.onReset) {
+      this.props.onReset()
+    } else {
+      queryClient.clear()
+    }
     this.setState({ error: null, componentStack: null })
   }
 

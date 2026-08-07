@@ -6,6 +6,7 @@ import {
   ListPaneWidthQuerySchema,
   ListPaneWidthSchema,
   PersistedTabsSchema,
+  RendererErrorReportSchema,
   SidebarPrefsSchema,
   StashEntrySchema
 } from '../schemas/ipc'
@@ -72,5 +73,32 @@ describe('wire numeric fields reject NaN', () => {
       summary: { changes: 1, insertions: NaN, deletions: 0 }
     }
     expect(rejects(CommitSummarySchema, summary)).toBe(true)
+  })
+})
+
+describe('RendererErrorReportSchema', () => {
+  it('accepts a report carrying only a message', () => {
+    expect(accepts(RendererErrorReportSchema, { message: 'render failed' })).toBe(true)
+  })
+
+  it('accepts a full report with both stacks', () => {
+    expect(
+      accepts(RendererErrorReportSchema, {
+        message: 'cannot read length of null',
+        stack: 'TypeError: cannot read length of null\n    at CommitList',
+        componentStack: '\n    in CommitList\n    in TabView'
+      })
+    ).toBe(true)
+  })
+
+  it('rejects a report the crash log could not identify', () => {
+    expect(rejects(RendererErrorReportSchema, {})).toBe(true)
+    expect(rejects(RendererErrorReportSchema, { message: '' })).toBe(true)
+    expect(rejects(RendererErrorReportSchema, { message: '   ' })).toBe(true)
+  })
+
+  it('rejects non-string stacks', () => {
+    expect(rejects(RendererErrorReportSchema, { message: 'boom', stack: 42 })).toBe(true)
+    expect(rejects(RendererErrorReportSchema, { message: 'boom', componentStack: {} })).toBe(true)
   })
 })
