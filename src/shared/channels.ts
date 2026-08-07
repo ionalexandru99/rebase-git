@@ -28,6 +28,7 @@ export const Channel = {
   getPullDivergedStrategy: 'get-pull-diverged-strategy',
   setPullDivergedStrategy: 'set-pull-diverged-strategy',
   sidecarRequest: 'sidecar-request',
+  reportRendererError: 'report-renderer-error',
   logChunk: 'log-chunk',
   repoChanged: 'repo-changed',
   sidecarRestarted: 'sidecar-restarted'

@@ -4,9 +4,11 @@ import { type ReactElement, StrictMode } from 'react'
 import App from '@/app/App'
 import { createQueryClient, QueryProvider } from '@/app/QueryProvider'
 
-export function renderApp(options?: { strictMode?: boolean }) {
+export function renderApp(options?: { strictMode?: boolean; client?: QueryClient }) {
   const app = (
-    <QueryProvider client={createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}>
+    <QueryProvider
+      client={options?.client ?? createQueryClient({ gcTime: Number.POSITIVE_INFINITY })}
+    >
       <App />
     </QueryProvider>
   )

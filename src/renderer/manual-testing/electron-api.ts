@@ -166,7 +166,10 @@ export function createPlaywrightMcpElectronApi(
       cloneListeners.add(callback)
       return () => cloneListeners.delete(callback)
     },
-    sidecarRequest
+    sidecarRequest,
+    reportRendererError: async (report) => {
+      console.error('[crash] renderer stopped drawing', report)
+    }
   }
 }
 

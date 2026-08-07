@@ -1,12 +1,16 @@
 import type { PersistedTabs } from '@shared/schemas/ipc'
+import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { PortalContainerProvider } from '../components/ui/portal-container'
 import { Toaster } from '../components/ui/sonner'
 import { OnboardingScreen } from '../features/onboarding/OnboardingScreen'
 import { useOnboarding } from '../features/onboarding/useOnboarding'
 import { useTabs } from '../hooks/useTabs'
+import { repoQueryKeys } from '../lib/query-keys'
 import { RepoRail } from '../shell/RepoRail'
 import { Titlebar } from '../shell/Titlebar'
+import { identityQueryKey } from '../stores/identity'
+import { ErrorBoundary } from './ErrorBoundary'
 import type { WorkspaceCatalog } from './NewTab'
 import { TabView } from './TabView'
 
@@ -88,6 +92,18 @@ function TabsShell(props: TabsShellProps) {
   const [recentRepos, setRecentRepos] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [activatedTabIds, setActivatedTabIds] = useState<Set<string>>(new Set([activeTabId]))
+  const queryClient = useQueryClient()
+
+  const dropTabCache = useCallback(
+    (repoPath: string | null) => {
+      if (!repoPath) {
+        return
+      }
+      queryClient.removeQueries({ queryKey: repoQueryKeys(repoPath).root })
+      queryClient.removeQueries({ queryKey: identityQueryKey(repoPath) })
+    },
+    [queryClient]
+  )
 
   useEffect(() => {
     window.electronAPI
@@ -186,16 +202,21 @@ function TabsShell(props: TabsShellProps) {
             return (
               <TabOwner key={tab.id} active={tabActive}>
                 {tabLoaded ? (
-                  <TabView
-                    tab={tab}
-                    tabActive={tabActive}
-                    settingsOpen={settingsOpen}
-                    onCloseSettings={() => setSettingsOpen(false)}
-                    catalog={workspaceCatalog}
-                    onOpenRepo={openRepoInTab}
-                    onRepoOpened={confirmRepoOpen}
-                    onRepoOpenFailed={cancelRepoOpen}
-                  />
+                  <ErrorBoundary
+                    scope="tab"
+                    onReset={() => dropTabCache(tab.kind === 'new' ? null : tab.repoPath)}
+                  >
+                    <TabView
+                      tab={tab}
+                      tabActive={tabActive}
+                      settingsOpen={settingsOpen}
+                      onCloseSettings={() => setSettingsOpen(false)}
+                      catalog={workspaceCatalog}
+                      onOpenRepo={openRepoInTab}
+                      onRepoOpened={confirmRepoOpen}
+                      onRepoOpenFailed={cancelRepoOpen}
+                    />
+                  </ErrorBoundary>
                 ) : null}
               </TabOwner>
             )
