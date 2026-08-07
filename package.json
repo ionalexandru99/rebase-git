@@ -1,7 +1,7 @@
 {
   "name": "rebase",
   "version": "0.0.0",
-  "description": "A fast desktop Git GUI built with Electron + TypeScript",
+  "description": "A fast desktop Git client: several repositories in tabs, staging down to single lines, and history that stays responsive in huge repos",
   "main": "./out/main/index.js",
   "author": "Alexandru Ion <ionalexandru99@users.noreply.github.com>",
   "homepage": "https://github.com/ionalexandru99/rebase-git",
