@@ -158,7 +158,8 @@ const mockElectronAPI = {
   cloneRepo: vi.fn(),
   cancelClone: vi.fn(),
   onCloneProgress: vi.fn(),
-  sidecarRequest: vi.fn()
+  sidecarRequest: vi.fn(),
+  reportRendererError: vi.fn()
 }
 
 Object.defineProperty(window, 'electronAPI', {
@@ -201,6 +202,7 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.setListPaneWidth).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getPullDivergedStrategy).mockResolvedValue(null)
   vi.mocked(window.electronAPI.setPullDivergedStrategy).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.reportRendererError).mockResolvedValue(undefined)
   sidecarRpcFake.respond(Commit, ({ repoPath, message }) => sidecarMock.commit(repoPath, message))
   sidecarRpcFake.respond(GetStatus, ({ repoPath }) => sidecarMock.getStatus(repoPath))
   sidecarRpcFake.respond(GetLocalBranches, ({ repoPath }) => sidecarMock.getLocalBranches(repoPath))

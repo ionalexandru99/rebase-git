@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './app/App'
+import { ErrorBoundary } from './app/ErrorBoundary'
 import { QueryProvider } from './app/QueryProvider'
 import { DiffWorkerPoolProvider } from './features/diff/DiffWorkerPool'
 
@@ -20,11 +21,13 @@ async function start(container: HTMLElement): Promise<void> {
   }
 
   const app = (
-    <QueryProvider>
-      <DiffWorkerPoolProvider>
-        <App />
-      </DiffWorkerPoolProvider>
-    </QueryProvider>
+    <ErrorBoundary scope="app">
+      <QueryProvider>
+        <DiffWorkerPoolProvider>
+          <App />
+        </DiffWorkerPoolProvider>
+      </QueryProvider>
+    </ErrorBoundary>
   )
   createRoot(container).render(playwrightMcpMode ? app : <StrictMode>{app}</StrictMode>)
 }

@@ -7,6 +7,7 @@ import { useOnboarding } from '../features/onboarding/useOnboarding'
 import { useTabs } from '../hooks/useTabs'
 import { RepoRail } from '../shell/RepoRail'
 import { Titlebar } from '../shell/Titlebar'
+import { ErrorBoundary } from './ErrorBoundary'
 import type { WorkspaceCatalog } from './NewTab'
 import { TabView } from './TabView'
 
@@ -186,16 +187,18 @@ function TabsShell(props: TabsShellProps) {
             return (
               <TabOwner key={tab.id} active={tabActive}>
                 {tabLoaded ? (
-                  <TabView
-                    tab={tab}
-                    tabActive={tabActive}
-                    settingsOpen={settingsOpen}
-                    onCloseSettings={() => setSettingsOpen(false)}
-                    catalog={workspaceCatalog}
-                    onOpenRepo={openRepoInTab}
-                    onRepoOpened={confirmRepoOpen}
-                    onRepoOpenFailed={cancelRepoOpen}
-                  />
+                  <ErrorBoundary scope="tab">
+                    <TabView
+                      tab={tab}
+                      tabActive={tabActive}
+                      settingsOpen={settingsOpen}
+                      onCloseSettings={() => setSettingsOpen(false)}
+                      catalog={workspaceCatalog}
+                      onOpenRepo={openRepoInTab}
+                      onRepoOpened={confirmRepoOpen}
+                      onRepoOpenFailed={cancelRepoOpen}
+                    />
+                  </ErrorBoundary>
                 ) : null}
               </TabOwner>
             )

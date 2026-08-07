@@ -3,8 +3,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, session } from 'electron'
+import log from 'electron-log'
 import windowStateKeeper from 'electron-window-state'
 import appIcon from '../../build/icon.png?asset'
+import { installCrashLogging } from './app/crash-log'
 import { buildContentSecurityPolicy } from './app/csp'
 import { installE2eControl } from './app/e2e-control'
 import { setupContextMenu } from './app/menu'
@@ -12,6 +14,7 @@ import { createBeforeQuitHandler } from './app/shutdown'
 import { focusExistingWindow } from './app/single-instance'
 import { setupUpdater } from './app/updater'
 import * as cloneIpc from './ipc/clone'
+import * as crashReportIpc from './ipc/crash-report'
 import * as logStreamIpc from './ipc/log-stream'
 import * as repoIpc from './ipc/repo'
 import * as settingsIpc from './ipc/settings'
@@ -22,6 +25,8 @@ import { replaceStoreWithDefaults } from './store/index'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const WINDOW_BACKGROUND_COLOR = '#131313'
+
+installCrashLogging(process, log)
 
 function resolvePreload(): string {
   const base = path.join(__dirname, '../preload/index')
@@ -151,6 +156,7 @@ function registerIpcHandlers(): void {
   cloneIpc.register()
   workspaceIpc.register(() => mainWindow)
   settingsIpc.register()
+  crashReportIpc.register()
 }
 
 async function shutdownMainResources(): Promise<void> {

@@ -10,6 +10,7 @@ import type {
   PersistedTabs,
   PullDivergedStrategy,
   RefTreeToggles,
+  RendererErrorReport,
   SidebarPrefs,
   StartLogStreamResponse
 } from '@shared/schemas/ipc'
@@ -59,6 +60,7 @@ export interface IElectronAPI {
   cancelClone: (cloneId: number) => Promise<void>
   onCloneProgress: (cb: (event: CloneProgressEvent) => void) => () => void
   sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
+  reportRendererError: (report: RendererErrorReport) => Promise<void>
 }
 
 const api: IElectronAPI = {
@@ -118,7 +120,9 @@ const api: IElectronAPI = {
     return () => ipcRenderer.off(Channel.cloneProgress, handler)
   },
   sidecarRequest: (op: string, body: Record<string, unknown>) =>
-    ipcRenderer.invoke(Channel.sidecarRequest, op, body)
+    ipcRenderer.invoke(Channel.sidecarRequest, op, body),
+  reportRendererError: (report: RendererErrorReport) =>
+    ipcRenderer.invoke(Channel.reportRendererError, report)
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

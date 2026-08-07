@@ -76,3 +76,10 @@ export const PersistedTabsSchema = Schema.Struct({
   activeIndex: NonNaNNumber
 })
 export type PersistedTabs = typeof PersistedTabsSchema.Type
+
+export const RendererErrorReportSchema = Schema.Struct({
+  message: RequiredString,
+  stack: Schema.optional(Schema.String),
+  componentStack: Schema.optional(Schema.String)
+})
+export type RendererErrorReport = typeof RendererErrorReportSchema.Type
