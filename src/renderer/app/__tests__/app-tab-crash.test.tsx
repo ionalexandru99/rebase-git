@@ -1,7 +1,12 @@
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { openedRepoResponse } from '../../../test/builders'
 import { renderApp } from '../../../test/render-app'
+import { createQueryClient } from '../QueryProvider'
 import { mockBaseAPI } from './app-test-harness'
+
+const CRASHED_REPO = '/home/user/projects/my-app'
+const HEALTHY_REPO = '/home/user/projects/other-app'
 
 vi.mock('../TabView', () => ({
   TabView: () => {
@@ -42,5 +47,29 @@ describe('a tab that crashes while rendering', () => {
     })
     const report = vi.mocked(window.electronAPI.reportRendererError).mock.calls[0]?.[0]
     expect(report?.message).toBe('cannot read length of null')
+  })
+
+  it('drops the failed tab caches on retry and leaves the other tabs loaded', async () => {
+    mockBaseAPI({ workingDirectory: '/home/user/projects' })
+    vi.mocked(window.electronAPI.getPersistedTabs).mockResolvedValue({
+      tabs: [CRASHED_REPO],
+      activeIndex: 0
+    })
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(CRASHED_REPO))
+
+    const client = createQueryClient({ gcTime: Number.POSITIVE_INFINITY })
+    client.setQueryData(['repo', CRASHED_REPO, 'status'], { poisoned: true })
+    client.setQueryData(['identity', CRASHED_REPO], { poisoned: true })
+    client.setQueryData(['repo', HEALTHY_REPO, 'status'], { kept: true })
+    client.setQueryData(['identity', HEALTHY_REPO], { kept: true })
+
+    renderApp({ client })
+    await screen.findByTestId('crash-screen')
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+
+    expect(client.getQueryData(['repo', CRASHED_REPO, 'status'])).toBeUndefined()
+    expect(client.getQueryData(['identity', CRASHED_REPO])).toBeUndefined()
+    expect(client.getQueryData(['repo', HEALTHY_REPO, 'status'])).toEqual({ kept: true })
+    expect(client.getQueryData(['identity', HEALTHY_REPO])).toEqual({ kept: true })
   })
 })
