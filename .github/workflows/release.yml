@@ -142,17 +142,13 @@ jobs:
             minor="${remainder%%.*}"
             if (( major >= 1 )); then
               release_name="Rebase v$version"
-              is_prerelease=false
-              make_latest=true
             elif (( minor >= 1 )); then
               release_name="Rebase Beta v$version"
-              is_prerelease=true
-              make_latest=false
             else
               release_name="Rebase Alpha v$version"
-              is_prerelease=true
-              make_latest=false
             fi
+            is_prerelease=false
+            make_latest=true
 
             echo "release_channel=stable" >> "$GITHUB_OUTPUT"
             echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -238,12 +234,18 @@ jobs:
           APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+          RELEASE_CHANNEL: ${{ needs.preflight.outputs.release_channel }}
         run: |
+          publish_channel_args=()
+          if [[ "$RELEASE_CHANNEL" == "nightly" ]]; then
+            publish_channel_args=(--config.publish.channel=nightly)
+          fi
           pnpm exec electron-builder \
             --config electron-builder.config.js \
             --${{ matrix.platform }} \
             --${{ matrix.arch }} \
             --config.extraMetadata.version="${{ needs.preflight.outputs.version }}" \
+            "${publish_channel_args[@]}" \
             --publish never
 
       - name: Verify signature and notarization
@@ -273,6 +275,9 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+            release/nightly*.yml
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
@@ -289,8 +294,18 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: desktop-*
-          merge-multiple: true
-          path: release-assets
+          path: artifacts
+
+      - name: Assemble release assets
+        shell: bash
+        run: |
+          mkdir release-assets
+          mac_manifest=$(basename "$(find artifacts/desktop-mac-arm64 -name '*-mac.yml')")
+          yq eval-all '. as $item ireduce ({}; . *+ $item) | .files |= unique_by(.url)' \
+            "artifacts/desktop-mac-arm64/$mac_manifest" \
+            "artifacts/desktop-mac-x64/$mac_manifest" \
+            > "release-assets/$mac_manifest"
+          find artifacts -type f ! -name '*-mac.yml' -exec mv {} release-assets/ \;
 
       - name: Stage draft release
         id: draft
@@ -308,6 +323,8 @@ jobs:
             release-assets/*.AppImage
             release-assets/*.deb
             release-assets/*.exe
+            release-assets/*.blockmap
+            release-assets/*.yml
           fail_on_unmatched_files: true
 
       - name: Publish release
