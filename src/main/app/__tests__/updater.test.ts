@@ -87,7 +87,6 @@ function startUpdater(options: { storedChannel: UpdateChannel | null }): void {
 
 describe('setupUpdater', () => {
   beforeEach(() => {
-    process.env.REBASE_ENABLE_UPDATER = '1'
     mocks.store.getUpdatePreferences.mockReturnValue({
       downloadInBackground: true,
       installOnQuit: true
@@ -101,7 +100,43 @@ describe('setupUpdater', () => {
     mocks.ipcHandlers.clear()
     mocks.appLifecycleHandlers.clear()
     vi.clearAllMocks()
+    delete process.env.REBASE_DISABLE_UPDATER
     delete process.env.REBASE_ENABLE_UPDATER
+    mocks.app.isPackaged = true
+  })
+
+  it('supports updates in packaged builds without any environment flag', () => {
+    startUpdater({ storedChannel: 'stable' })
+
+    const state = readState()
+    expect(state.supported).toBe(true)
+    expect(state.unsupportedReason).toBeNull()
+  })
+
+  it('reports unpackaged builds as unable to update themselves', () => {
+    mocks.app.isPackaged = false
+    startUpdater({ storedChannel: 'stable' })
+
+    const state = readState()
+    expect(state.supported).toBe(false)
+    expect(state.unsupportedReason).toContain('runs straight from source')
+  })
+
+  it('lets REBASE_ENABLE_UPDATER force the updater on in an unpackaged build', () => {
+    mocks.app.isPackaged = false
+    process.env.REBASE_ENABLE_UPDATER = '1'
+    startUpdater({ storedChannel: 'stable' })
+
+    expect(readState().supported).toBe(true)
+  })
+
+  it('switches updates off when REBASE_DISABLE_UPDATER is set', () => {
+    process.env.REBASE_DISABLE_UPDATER = '1'
+    startUpdater({ storedChannel: 'stable' })
+
+    const state = readState()
+    expect(state.supported).toBe(false)
+    expect(state.unsupportedReason).toContain('switched off in this build')
   })
 
   it('cancels the auto-download of a wrong-channel update and stays usable', async () => {

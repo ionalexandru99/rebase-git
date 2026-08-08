@@ -39,24 +39,19 @@ const { autoUpdater } = electronUpdater
 const STARTUP_CHECK_DELAY_MS = 30_000
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
-function runningUnderE2eHarness(): boolean {
-  return process.env.NODE_ENV === 'test' && process.argv.includes('--e2e')
-}
-
 function detectUpdaterSupport(): UpdaterSupport {
-  const updaterEnabled = process.env.REBASE_ENABLE_UPDATER === '1'
-  if (!app.isPackaged && !(updaterEnabled && runningUnderE2eHarness())) {
-    return {
-      supported: false,
-      reason:
-        'This build runs straight from source, so it cannot replace itself. Rebuild to pick up new versions.'
-    }
-  }
-  if (!updaterEnabled) {
+  if (process.env.REBASE_DISABLE_UPDATER === '1') {
     return {
       supported: false,
       reason:
         'Automatic updates are switched off in this build. Get new versions from the releases page.'
+    }
+  }
+  if (!app.isPackaged && process.env.REBASE_ENABLE_UPDATER !== '1') {
+    return {
+      supported: false,
+      reason:
+        'This build runs straight from source, so it cannot replace itself. Rebuild to pick up new versions.'
     }
   }
   return { supported: true }
