@@ -29,9 +29,16 @@ export const Channel = {
   setPullDivergedStrategy: 'set-pull-diverged-strategy',
   getReopenRepositoriesOnLaunch: 'get-reopen-repositories-on-launch',
   setReopenRepositoriesOnLaunch: 'set-reopen-repositories-on-launch',
+  getUpdaterState: 'get-updater-state',
+  checkForUpdates: 'check-for-updates',
+  downloadUpdate: 'download-update',
+  installUpdate: 'install-update',
+  getUpdatePreferences: 'get-update-preferences',
+  setUpdatePreferences: 'set-update-preferences',
   sidecarRequest: 'sidecar-request',
   reportRendererError: 'report-renderer-error',
   logChunk: 'log-chunk',
   repoChanged: 'repo-changed',
-  sidecarRestarted: 'sidecar-restarted'
+  sidecarRestarted: 'sidecar-restarted',
+  updaterStateChanged: 'updater-state-changed'
 } as const

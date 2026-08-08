@@ -149,6 +149,13 @@ const mockElectronAPI = {
   setPullDivergedStrategy: vi.fn(),
   getReopenRepositoriesOnLaunch: vi.fn(),
   setReopenRepositoriesOnLaunch: vi.fn(),
+  getUpdaterState: vi.fn(),
+  onUpdaterStateChanged: vi.fn(),
+  checkForUpdates: vi.fn(),
+  downloadUpdate: vi.fn(),
+  installUpdate: vi.fn(),
+  getUpdatePreferences: vi.fn(),
+  setUpdatePreferences: vi.fn(),
   getWorkspaces: vi.fn(),
   addWorkspace: vi.fn(),
   removeWorkspace: vi.fn(),
@@ -206,6 +213,25 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.setPullDivergedStrategy).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getReopenRepositoriesOnLaunch).mockResolvedValue(true)
   vi.mocked(window.electronAPI.setReopenRepositoriesOnLaunch).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.getUpdaterState).mockResolvedValue({
+    status: 'idle',
+    supported: true,
+    unsupportedReason: null,
+    currentVersion: '1.0.0',
+    availableVersion: null,
+    downloadPercent: null,
+    lastCheckedAt: null,
+    errorMessage: null
+  })
+  vi.mocked(window.electronAPI.onUpdaterStateChanged).mockReturnValue(() => {})
+  vi.mocked(window.electronAPI.checkForUpdates).mockResolvedValue({ _tag: 'Started' })
+  vi.mocked(window.electronAPI.downloadUpdate).mockResolvedValue({ _tag: 'Started' })
+  vi.mocked(window.electronAPI.installUpdate).mockResolvedValue({ _tag: 'Started' })
+  vi.mocked(window.electronAPI.getUpdatePreferences).mockResolvedValue({
+    downloadInBackground: true,
+    installOnQuit: true
+  })
+  vi.mocked(window.electronAPI.setUpdatePreferences).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.reportRendererError).mockResolvedValue(undefined)
   sidecarRpcFake.respond(Commit, ({ repoPath, message }) => sidecarMock.commit(repoPath, message))
   sidecarRpcFake.respond(GetStatus, ({ repoPath }) => sidecarMock.getStatus(repoPath))

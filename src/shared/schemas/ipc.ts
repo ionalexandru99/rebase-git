@@ -71,6 +71,41 @@ export type PullDivergedStrategy = typeof PullDivergedStrategySchema.Type
 export const ReopenRepositoriesOnLaunchSchema = Schema.Boolean
 export type ReopenRepositoriesOnLaunch = typeof ReopenRepositoriesOnLaunchSchema.Type
 
+export const UpdaterStatusSchema = Schema.Literal(
+  'idle',
+  'checking',
+  'up-to-date',
+  'available',
+  'downloading',
+  'downloaded',
+  'error'
+)
+export type UpdaterStatus = typeof UpdaterStatusSchema.Type
+
+export const UpdaterStateSchema = Schema.Struct({
+  status: UpdaterStatusSchema,
+  supported: Schema.Boolean,
+  unsupportedReason: Schema.NullOr(Schema.String),
+  currentVersion: Schema.String,
+  availableVersion: Schema.NullOr(Schema.String),
+  downloadPercent: Schema.NullOr(NonNaNNumber),
+  lastCheckedAt: Schema.NullOr(Schema.String),
+  errorMessage: Schema.NullOr(Schema.String)
+})
+export type UpdaterState = typeof UpdaterStateSchema.Type
+
+export const UpdaterActionResultSchema = Schema.Union(
+  Schema.TaggedStruct('Started', {}),
+  Schema.TaggedStruct('Rejected', { reason: Schema.String })
+)
+export type UpdaterActionResult = typeof UpdaterActionResultSchema.Type
+
+export const UpdatePreferencesSchema = Schema.Struct({
+  downloadInBackground: Schema.Boolean,
+  installOnQuit: Schema.Boolean
+})
+export type UpdatePreferences = typeof UpdatePreferencesSchema.Type
+
 export const RefTreeTogglesSchema = mutableArray(Schema.String)
 export type RefTreeToggles = typeof RefTreeTogglesSchema.Type
 

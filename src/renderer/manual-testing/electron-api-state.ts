@@ -21,6 +21,7 @@ export interface ManualGitState {
   persistedTabs: { tabs: Array<string | null>; activeIndex: number }
   pullDivergedStrategy: 'rebase' | 'merge' | null
   reopenRepositoriesOnLaunch: boolean
+  updatePreferences: { downloadInBackground: boolean; installOnQuit: boolean }
   recentRepos: string[]
   refTreeToggles: string[]
   sidebarPrefs: { open: boolean; width: number }
@@ -156,6 +157,7 @@ export function createManualGitState(
     persistedTabs: { tabs: [null], activeIndex: 0 },
     pullDivergedStrategy: null,
     reopenRepositoriesOnLaunch: true,
+    updatePreferences: { downloadInBackground: true, installOnQuit: true },
     recentRepos: [repoPath],
     refTreeToggles: [],
     sidebarPrefs: { open: true, width: 244 },

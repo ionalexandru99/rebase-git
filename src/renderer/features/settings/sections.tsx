@@ -8,6 +8,7 @@ import type { LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { generalSection } from './GeneralSection'
 import { gitIdentitySection } from './GitIdentitySection'
+import { updatesSection } from './UpdatesSection'
 
 export interface IdentitySettings {
   resolved: ResolvedIdentity
@@ -29,4 +30,8 @@ export interface SettingsSectionEntry {
   NavBadge?: ComponentType
 }
 
-export const settingsSections: SettingsSectionEntry[] = [generalSection, gitIdentitySection]
+export const settingsSections: SettingsSectionEntry[] = [
+  generalSection,
+  gitIdentitySection,
+  updatesSection
+]

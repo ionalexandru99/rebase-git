@@ -13,7 +13,10 @@ import type {
   RendererErrorReport,
   ReopenRepositoriesOnLaunch,
   SidebarPrefs,
-  StartLogStreamResponse
+  StartLogStreamResponse,
+  UpdatePreferences,
+  UpdaterActionResult,
+  UpdaterState
 } from '@shared/schemas/ipc'
 import type { LogStreamOptions } from '@shared/schemas/log-stream'
 import { contextBridge, ipcRenderer } from 'electron'
@@ -51,6 +54,13 @@ export interface IElectronAPI {
   setPullDivergedStrategy: (strategy: PullDivergedStrategy) => Promise<void>
   getReopenRepositoriesOnLaunch: () => Promise<ReopenRepositoriesOnLaunch>
   setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) => Promise<void>
+  getUpdaterState: () => Promise<UpdaterState>
+  onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void
+  checkForUpdates: () => Promise<UpdaterActionResult>
+  downloadUpdate: () => Promise<UpdaterActionResult>
+  installUpdate: () => Promise<UpdaterActionResult>
+  getUpdatePreferences: () => Promise<UpdatePreferences>
+  setUpdatePreferences: (preferences: UpdatePreferences) => Promise<void>
   getWorkspaces: () => Promise<string[]>
   addWorkspace: (path: string) => Promise<string[]>
   removeWorkspace: (path: string) => Promise<string[]>
@@ -109,6 +119,18 @@ const api: IElectronAPI = {
   getReopenRepositoriesOnLaunch: () => ipcRenderer.invoke(Channel.getReopenRepositoriesOnLaunch),
   setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) =>
     ipcRenderer.invoke(Channel.setReopenRepositoriesOnLaunch, reopen),
+  getUpdaterState: () => ipcRenderer.invoke(Channel.getUpdaterState),
+  onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => {
+    const handler = (_event: unknown, state: UpdaterState) => cb(state)
+    ipcRenderer.on(Channel.updaterStateChanged, handler)
+    return () => ipcRenderer.off(Channel.updaterStateChanged, handler)
+  },
+  checkForUpdates: () => ipcRenderer.invoke(Channel.checkForUpdates),
+  downloadUpdate: () => ipcRenderer.invoke(Channel.downloadUpdate),
+  installUpdate: () => ipcRenderer.invoke(Channel.installUpdate),
+  getUpdatePreferences: () => ipcRenderer.invoke(Channel.getUpdatePreferences),
+  setUpdatePreferences: (preferences: UpdatePreferences) =>
+    ipcRenderer.invoke(Channel.setUpdatePreferences, preferences),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),
   addWorkspace: (path: string) => ipcRenderer.invoke('add-workspace', path),
   removeWorkspace: (path: string) => ipcRenderer.invoke('remove-workspace', path),

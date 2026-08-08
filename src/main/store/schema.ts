@@ -13,6 +13,8 @@ export interface StoreSchema {
   persistedActiveTabIndex: number
   reopenRepositoriesOnLaunch: boolean
   pullDivergedStrategy: 'rebase' | 'merge' | null
+  updateDownloadInBackground: boolean
+  updateInstallOnQuit: boolean
   listPaneWidths: Record<string, number>
 }
 
@@ -31,6 +33,8 @@ export const storeDefaults: StoreSchema = {
   persistedActiveTabIndex: 0,
   reopenRepositoriesOnLaunch: true,
   pullDivergedStrategy: null,
+  updateDownloadInBackground: true,
+  updateInstallOnQuit: true,
   listPaneWidths: {}
 }
 
@@ -47,5 +51,7 @@ export const storeSchema: Schema<StoreSchema> = {
   persistedActiveTabIndex: { type: 'number' },
   reopenRepositoriesOnLaunch: { type: 'boolean' },
   pullDivergedStrategy: { type: ['string', 'null'], enum: ['rebase', 'merge', null] },
+  updateDownloadInBackground: { type: 'boolean' },
+  updateInstallOnQuit: { type: 'boolean' },
   listPaneWidths: { type: 'object', additionalProperties: { type: 'number' } }
 }

@@ -104,6 +104,35 @@ test('switches sections from the settings nav and returns to the repo on close',
   await waitForRepoSurface(page, repo)
 })
 
+test('renders the Updates section read-only when the build cannot self-update', async ({
+  harness
+}) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-view')).toBeVisible()
+
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Updates' })
+    .click()
+  await expect(page.getByRole('region', { name: 'Updates' })).toBeVisible()
+
+  const versionRow = page.getByRole('group', { name: 'Version' })
+  await expect(versionRow).toBeVisible()
+  await expect(versionRow).toContainText(/cannot replace itself|switched off in this build/)
+  await expect(versionRow.getByRole('button')).toHaveCount(0)
+
+  const backgroundToggle = page.getByRole('checkbox', {
+    name: 'Download updates in the background'
+  })
+  await expect(backgroundToggle).toBeDisabled()
+  await expect(page.getByRole('checkbox', { name: 'Install when I quit' })).toBeDisabled()
+})
+
 test('turning off reopen repositories relaunches to a single blank tab', async ({ harness }) => {
   const repo = createFixtureRepo()
 

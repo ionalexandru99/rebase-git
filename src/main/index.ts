@@ -187,7 +187,7 @@ if (!app.requestSingleInstanceLock()) {
     )
     applyContentSecurityPolicy()
     createWindow()
-    setupUpdater()
+    setupUpdater(() => mainWindow)
     setupContextMenu()
 
     app.on('activate', () => {
