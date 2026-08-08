@@ -1,5 +1,5 @@
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
-import type { UpdatePreferences } from '@shared/schemas/ipc'
+import type { UpdateChannel, UpdatePreferences } from '@shared/schemas/ipc'
 import Store from 'electron-store'
 import { readListPaneWidth, writeListPaneWidth } from './list-pane-widths'
 import { migrateReopenRepositoriesOnLaunch, planLegacyWorkspaceMigration } from './migration'
@@ -142,6 +142,14 @@ export function getUpdatePreferences(): UpdatePreferences {
 export function setUpdatePreferences(preferences: UpdatePreferences): void {
   store.set('updateDownloadInBackground', preferences.downloadInBackground)
   store.set('updateInstallOnQuit', preferences.installOnQuit)
+}
+
+export function getStoredUpdateChannel(): UpdateChannel | null {
+  return store.get('updateChannel')
+}
+
+export function setStoredUpdateChannel(channel: UpdateChannel): void {
+  store.set('updateChannel', channel)
 }
 
 export function getRefTreeToggles(): string[] {

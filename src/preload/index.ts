@@ -15,6 +15,7 @@ import type {
   ReopenRepositoriesOnLaunch,
   SidebarPrefs,
   StartLogStreamResponse,
+  UpdateChannel,
   UpdatePreferences,
   UpdaterActionResult,
   UpdaterState
@@ -65,6 +66,8 @@ export interface IElectronAPI {
   installUpdate: () => Promise<UpdaterActionResult>
   getUpdatePreferences: () => Promise<UpdatePreferences>
   setUpdatePreferences: (preferences: UpdatePreferences) => Promise<void>
+  getUpdateChannel: () => Promise<UpdateChannel>
+  setUpdateChannel: (channel: UpdateChannel) => Promise<UpdaterActionResult>
   getWorkspaces: () => Promise<string[]>
   addWorkspace: (path: string) => Promise<string[]>
   removeWorkspace: (path: string) => Promise<string[]>
@@ -138,6 +141,9 @@ const api: IElectronAPI = {
   getUpdatePreferences: () => ipcRenderer.invoke(Channel.getUpdatePreferences),
   setUpdatePreferences: (preferences: UpdatePreferences) =>
     ipcRenderer.invoke(Channel.setUpdatePreferences, preferences),
+  getUpdateChannel: () => ipcRenderer.invoke(Channel.getUpdateChannel),
+  setUpdateChannel: (channel: UpdateChannel) =>
+    ipcRenderer.invoke(Channel.setUpdateChannel, channel),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),
   addWorkspace: (path: string) => ipcRenderer.invoke('add-workspace', path),
   removeWorkspace: (path: string) => ipcRenderer.invoke('remove-workspace', path),

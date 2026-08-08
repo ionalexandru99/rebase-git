@@ -163,6 +163,11 @@ export function createPlaywrightMcpElectronApi(
     setUpdatePreferences: async (preferences) => {
       state.updatePreferences = { ...preferences }
     },
+    getUpdateChannel: async () => state.updateChannel,
+    setUpdateChannel: async (channel) => {
+      state.updateChannel = channel
+      return { _tag: 'Started' }
+    },
     getWorkspaces: async () => [...state.workspaces],
     addWorkspace: async (workspacePath) => {
       state.workspaces = withValue(state.workspaces, workspacePath)

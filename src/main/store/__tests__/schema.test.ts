@@ -58,10 +58,16 @@ describe('store schema / defaults parity', () => {
   })
 
   it('nullable fields allow null and their null defaults are valid', () => {
-    for (const key of ['activeWorkspace', 'workingDirectory'] as const) {
+    for (const key of ['activeWorkspace', 'workingDirectory', 'updateChannel'] as const) {
       expect(declaredTypes(storeSchema[key])).toContain('null')
       expect(storeDefaults[key]).toBeNull()
     }
+  })
+
+  it('updateChannel only accepts the two channels or null', () => {
+    const entry = storeSchema.updateChannel as { enum?: unknown[] }
+    expect(entry.enum).toEqual(['stable', 'nightly', null])
+    expect(storeDefaults.updateChannel).toBeNull()
   })
 
   it('persistedTabRepoPaths items allow null to match its [null] default', () => {

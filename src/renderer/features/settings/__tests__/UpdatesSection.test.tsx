@@ -18,6 +18,8 @@ const updaterState = (overrides: Partial<UpdaterState> = {}): UpdaterState => ({
 
 const versionRow = () => within(screen.getByRole('group', { name: 'Version' }))
 
+const channelSelect = () => screen.getByRole('combobox', { name: 'Update channel' })
+
 async function renderUpdates(state: UpdaterState) {
   vi.mocked(window.electronAPI.getUpdaterState).mockResolvedValue(state)
   render(<UpdatesContent />)
@@ -150,6 +152,74 @@ describe('UpdatesSection', () => {
       downloadInBackground: true,
       installOnQuit: false
     })
+  })
+
+  it('shows the persisted channel without any warning on stable', async () => {
+    await renderUpdates(updaterState())
+
+    await waitFor(() => expect(channelSelect()).toBeEnabled())
+    expect(channelSelect()).toHaveValue('stable')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('reflects a persisted nightly channel and warns about it', async () => {
+    vi.mocked(window.electronAPI.getUpdateChannel).mockResolvedValue('nightly')
+    await renderUpdates(updaterState())
+
+    await waitFor(() => expect(channelSelect()).toHaveValue('nightly'))
+    expect(screen.getByRole('alert')).toHaveTextContent('Nightly builds ship straight from main')
+  })
+
+  it('persists a channel switch and shows the nightly warning', async () => {
+    await renderUpdates(updaterState())
+    await waitFor(() => expect(channelSelect()).toBeEnabled())
+
+    fireEvent.change(channelSelect(), { target: { value: 'nightly' } })
+
+    expect(window.electronAPI.setUpdateChannel).toHaveBeenCalledWith('nightly')
+    expect(channelSelect()).toHaveValue('nightly')
+    expect(screen.getByRole('alert')).toHaveTextContent('not release tested')
+  })
+
+  it('hides the warning again after switching back to stable', async () => {
+    vi.mocked(window.electronAPI.getUpdateChannel).mockResolvedValue('nightly')
+    await renderUpdates(updaterState())
+    await waitFor(() => expect(channelSelect()).toHaveValue('nightly'))
+
+    fireEvent.change(channelSelect(), { target: { value: 'stable' } })
+
+    expect(window.electronAPI.setUpdateChannel).toHaveBeenCalledWith('stable')
+    expect(channelSelect()).toHaveValue('stable')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('keeps the channel control inert while a check runs', async () => {
+    await renderUpdates(updaterState({ status: 'checking' }))
+
+    expect(channelSelect()).toBeDisabled()
+  })
+
+  it('keeps the channel control inert while a download runs', async () => {
+    await renderUpdates(
+      updaterState({ status: 'downloading', availableVersion: '1.3.0', downloadPercent: 10 })
+    )
+
+    expect(channelSelect()).toBeDisabled()
+  })
+
+  it('reverts the selection and shows the reason when a change is rejected', async () => {
+    vi.mocked(window.electronAPI.setUpdateChannel).mockResolvedValue({
+      _tag: 'Rejected',
+      reason: 'An update is downloading right now.'
+    })
+    await renderUpdates(updaterState())
+    await waitFor(() => expect(channelSelect()).toBeEnabled())
+
+    fireEvent.change(channelSelect(), { target: { value: 'nightly' } })
+
+    await waitFor(() => expect(channelSelect()).toHaveValue('stable'))
+    expect(screen.getByText('An update is downloading right now.')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('renders read-only with the reason when the build cannot update itself', async () => {

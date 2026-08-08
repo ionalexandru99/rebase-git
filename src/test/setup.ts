@@ -159,6 +159,8 @@ const mockElectronAPI = {
   installUpdate: vi.fn(),
   getUpdatePreferences: vi.fn(),
   setUpdatePreferences: vi.fn(),
+  getUpdateChannel: vi.fn(),
+  setUpdateChannel: vi.fn(),
   getWorkspaces: vi.fn(),
   addWorkspace: vi.fn(),
   removeWorkspace: vi.fn(),
@@ -243,6 +245,8 @@ beforeEach(() => {
     installOnQuit: true
   })
   vi.mocked(window.electronAPI.setUpdatePreferences).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.getUpdateChannel).mockResolvedValue('stable')
+  vi.mocked(window.electronAPI.setUpdateChannel).mockResolvedValue({ _tag: 'Started' })
   vi.mocked(window.electronAPI.reportRendererError).mockResolvedValue(undefined)
   sidecarRpcFake.respond(Commit, ({ repoPath, message }) => sidecarMock.commit(repoPath, message))
   sidecarRpcFake.respond(GetStatus, ({ repoPath }) => sidecarMock.getStatus(repoPath))

@@ -1,6 +1,12 @@
-import type { UpdatePreferences, UpdaterActionResult, UpdaterState } from '@shared/schemas/ipc'
-import { DownloadIcon } from 'lucide-react'
+import type {
+  UpdateChannel,
+  UpdatePreferences,
+  UpdaterActionResult,
+  UpdaterState
+} from '@shared/schemas/ipc'
+import { DownloadIcon, TriangleAlertIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SettingsRow } from './SettingsRow'
@@ -150,6 +156,99 @@ function VersionRow(props: { updater: UpdaterState | null }) {
   )
 }
 
+const CHANNEL_OPTIONS: Array<{ value: UpdateChannel; label: string }> = [
+  { value: 'stable', label: 'Stable' },
+  { value: 'nightly', label: 'Nightly' }
+]
+
+function actionInProgress(updater: UpdaterState | null): boolean {
+  return updater !== null && (updater.status === 'checking' || updater.status === 'downloading')
+}
+
+function NightlyWarning() {
+  return (
+    <Alert>
+      <TriangleAlertIcon />
+      <AlertTitle>Nightly builds ship straight from main</AlertTitle>
+      <AlertDescription>
+        <p>
+          They are not release tested and can break at any time. Switching back to Stable downgrades
+          to the latest stable release at the next check.
+        </p>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function UpdateChannelRow(props: { updater: UpdaterState | null }) {
+  const [channel, setChannel] = useState<UpdateChannel | null>(null)
+  const [rejection, setRejection] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI
+      .getUpdateChannel()
+      .then((stored) => {
+        if (!cancelled) {
+          setChannel(stored)
+        }
+      })
+      .catch((error: unknown) => {
+        console.error('[settings] failed to load the update channel', error)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const changeChannel = (previous: UpdateChannel, next: UpdateChannel): void => {
+    setChannel(next)
+    setRejection(null)
+    window.electronAPI
+      .setUpdateChannel(next)
+      .then((result) => {
+        if (result._tag === 'Rejected') {
+          setChannel(previous)
+          setRejection(result.reason)
+        }
+      })
+      .catch((error: unknown) => {
+        console.error('[settings] failed to change the update channel', error)
+      })
+  }
+
+  return (
+    <>
+      <SettingsRow
+        id="settings-updates-channel"
+        title="Update channel"
+        description="Which releases Rebase follows: tested stable releases, or a fresh build of main every night."
+        status={rejection ? <p className="text-destructive">{rejection}</p> : null}
+      >
+        <select
+          aria-label="Update channel"
+          value={channel ?? 'stable'}
+          disabled={channel === null || actionInProgress(props.updater)}
+          onChange={(event) => {
+            const selected = CHANNEL_OPTIONS.find((option) => option.value === event.target.value)
+            if (channel !== null && selected && selected.value !== channel) {
+              changeChannel(channel, selected.value)
+            }
+          }}
+          className="h-8 rounded-md border border-input bg-input/30 px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {CHANNEL_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </SettingsRow>
+      {channel === 'nightly' ? <NightlyWarning /> : null}
+    </>
+  )
+}
+
 function UpdatePreferenceRows(props: { readOnly: boolean }) {
   const [preferences, setPreferences] = useState<UpdatePreferences | null>(null)
 
@@ -230,6 +329,7 @@ export function UpdatesContent() {
       description="How Rebase gets new versions."
     >
       <VersionRow updater={updater} />
+      <UpdateChannelRow updater={updater} />
       <UpdatePreferenceRows readOnly={updater !== null && !updater.supported} />
     </SettingsSection>
   )

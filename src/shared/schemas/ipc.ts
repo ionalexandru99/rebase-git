@@ -108,6 +108,9 @@ export const UpdaterActionResultSchema = Schema.Union(
 )
 export type UpdaterActionResult = typeof UpdaterActionResultSchema.Type
 
+export const UpdateChannelSchema = Schema.Literal('stable', 'nightly')
+export type UpdateChannel = typeof UpdateChannelSchema.Type
+
 export const UpdatePreferencesSchema = Schema.Struct({
   downloadInBackground: Schema.Boolean,
   installOnQuit: Schema.Boolean

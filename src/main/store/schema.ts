@@ -15,6 +15,7 @@ export interface StoreSchema {
   pullDivergedStrategy: 'rebase' | 'merge' | null
   updateDownloadInBackground: boolean
   updateInstallOnQuit: boolean
+  updateChannel: 'stable' | 'nightly' | null
   listPaneWidths: Record<string, number>
 }
 
@@ -35,6 +36,7 @@ export const storeDefaults: StoreSchema = {
   pullDivergedStrategy: null,
   updateDownloadInBackground: true,
   updateInstallOnQuit: true,
+  updateChannel: null,
   listPaneWidths: {}
 }
 
@@ -53,5 +55,6 @@ export const storeSchema: Schema<StoreSchema> = {
   pullDivergedStrategy: { type: ['string', 'null'], enum: ['rebase', 'merge', null] },
   updateDownloadInBackground: { type: 'boolean' },
   updateInstallOnQuit: { type: 'boolean' },
+  updateChannel: { type: ['string', 'null'], enum: ['stable', 'nightly', null] },
   listPaneWidths: { type: 'object', additionalProperties: { type: 'number' } }
 }

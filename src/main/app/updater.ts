@@ -1,6 +1,8 @@
 import { Channel } from '@shared/channels'
 import { parseOrThrow } from '@shared/codec'
 import {
+  type UpdateChannel,
+  UpdateChannelSchema,
   type UpdatePreferences,
   UpdatePreferencesSchema,
   type UpdaterActionResult,
@@ -9,7 +11,18 @@ import {
 import { app, type BrowserWindow, ipcMain } from 'electron'
 import log from 'electron-log'
 import electronUpdater from 'electron-updater'
-import { getUpdatePreferences, setUpdatePreferences } from '../store/index'
+import {
+  getStoredUpdateChannel,
+  getUpdatePreferences,
+  setStoredUpdateChannel,
+  setUpdatePreferences
+} from '../store/index'
+import {
+  describeChannelChangeBlocker,
+  resolveUpdateChannel,
+  updaterChannelProfile,
+  versionBelongsToChannel
+} from './update-channel'
 import { createUpdatePoller } from './update-poller'
 import {
   createInitialUpdaterState,
@@ -45,7 +58,10 @@ function detectUpdaterSupport(): UpdaterSupport {
 
 export function setupUpdater(getWindow: () => BrowserWindow | null): void {
   const support = detectUpdaterSupport()
-  let state = createInitialUpdaterState(app.getVersion(), support)
+  const currentVersion = app.getVersion()
+  let state = createInitialUpdaterState(currentVersion, support)
+  let channel = resolveUpdateChannel(getStoredUpdateChannel(), currentVersion)
+  let installing = false
 
   const pushState = (): void => {
     const window = getWindow()
@@ -62,6 +78,15 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
   const applyPreferences = (preferences: UpdatePreferences): void => {
     autoUpdater.autoDownload = preferences.downloadInBackground
     autoUpdater.autoInstallOnAppQuit = preferences.installOnQuit
+  }
+
+  const applyChannel = (): void => {
+    const profile = updaterChannelProfile(channel, currentVersion)
+    if (profile.channel !== null) {
+      autoUpdater.channel = profile.channel
+    }
+    autoUpdater.allowPrerelease = profile.allowPrerelease
+    autoUpdater.allowDowngrade = profile.allowDowngrade
   }
 
   const runCheck = (): void => {
@@ -100,8 +125,28 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle(Channel.checkForUpdates, () => guardedAction('check', runCheck))
   ipcMain.handle(Channel.downloadUpdate, () => guardedAction('download', startDownload))
   ipcMain.handle(Channel.installUpdate, () =>
-    guardedAction('install', () => autoUpdater.quitAndInstall())
+    guardedAction('install', () => {
+      installing = true
+      autoUpdater.quitAndInstall()
+    })
   )
+  ipcMain.handle(Channel.getUpdateChannel, () => parseOrThrow(UpdateChannelSchema, channel))
+  ipcMain.handle(Channel.setUpdateChannel, (_, payload: unknown): UpdaterActionResult => {
+    const requested: UpdateChannel = parseOrThrow(UpdateChannelSchema, payload)
+    const blocker = describeChannelChangeBlocker(state.status, installing)
+    if (blocker !== null) {
+      return { _tag: 'Rejected', reason: blocker }
+    }
+    if (requested !== channel) {
+      channel = requested
+      setStoredUpdateChannel(requested)
+      if (support.supported) {
+        applyChannel()
+        runCheck()
+      }
+    }
+    return { _tag: 'Started' }
+  })
 
   if (!support.supported) {
     return
@@ -110,12 +155,19 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
   log.transports.file.level = 'info'
   autoUpdater.logger = log
   applyPreferences(getUpdatePreferences())
+  applyChannel()
 
   autoUpdater.on('checking-for-update', () => {
     dispatch({ type: 'checking' })
   })
   autoUpdater.on('update-available', (info) => {
-    dispatch({ type: 'update-available', version: info.version, at: new Date().toISOString() })
+    const at = new Date().toISOString()
+    if (!versionBelongsToChannel(info.version, channel)) {
+      log.warn('[updater] discarding update outside the selected channel', info.version, channel)
+      dispatch({ type: 'update-not-available', at })
+      return
+    }
+    dispatch({ type: 'update-available', version: info.version, at })
   })
   autoUpdater.on('update-not-available', () => {
     dispatch({ type: 'update-not-available', at: new Date().toISOString() })
@@ -124,6 +176,10 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
     dispatch({ type: 'download-progress', percent: progress.percent })
   })
   autoUpdater.on('update-downloaded', (info) => {
+    if (!versionBelongsToChannel(info.version, channel)) {
+      log.warn('[updater] discarding download outside the selected channel', info.version, channel)
+      return
+    }
     dispatch({ type: 'update-downloaded', version: info.version })
   })
   autoUpdater.on('error', (error) => {

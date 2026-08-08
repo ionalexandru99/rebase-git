@@ -38,6 +38,8 @@ export const Channel = {
   installUpdate: 'install-update',
   getUpdatePreferences: 'get-update-preferences',
   setUpdatePreferences: 'set-update-preferences',
+  getUpdateChannel: 'get-update-channel',
+  setUpdateChannel: 'set-update-channel',
   sidecarRequest: 'sidecar-request',
   reportRendererError: 'report-renderer-error',
   logChunk: 'log-chunk',

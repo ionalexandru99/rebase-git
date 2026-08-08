@@ -22,6 +22,7 @@ export interface ManualGitState {
   pullDivergedStrategy: 'rebase' | 'merge' | null
   reopenRepositoriesOnLaunch: boolean
   updatePreferences: { downloadInBackground: boolean; installOnQuit: boolean }
+  updateChannel: 'stable' | 'nightly'
   recentRepos: string[]
   refTreeToggles: string[]
   sidebarPrefs: { open: boolean; width: number }
@@ -158,6 +159,7 @@ export function createManualGitState(
     pullDivergedStrategy: null,
     reopenRepositoriesOnLaunch: true,
     updatePreferences: { downloadInBackground: true, installOnQuit: true },
+    updateChannel: 'stable',
     recentRepos: [repoPath],
     refTreeToggles: [],
     sidebarPrefs: { open: true, width: 244 },
