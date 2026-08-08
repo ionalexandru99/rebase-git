@@ -21,7 +21,7 @@ const launchWindowHeight = 800
 
 const demoRecordingEnabled = process.env.REBASE_DEMO === '1'
 const demoVideoDirectory = path.join(currentDir, '..', 'test-results', 'demos')
-const demoSlowMoMilliseconds = 600
+const demoSlowMoMilliseconds = 1200
 
 const demoPacedLocatorMethods = [
   'click',
