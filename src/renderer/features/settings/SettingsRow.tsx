@@ -21,29 +21,27 @@ export function SettingsRow(props: SettingsRowProps) {
       data-settings-row={props.id}
       aria-labelledby={titleId}
       className={cn(
-        'min-w-0 rounded-xl px-4 py-3',
+        'min-w-0 rounded-xl px-3 py-[9px]',
         'transition-colors motion-reduce:transition-none data-[settings-row-highlight]:bg-card-2 data-[settings-row-highlight]:ring-1 data-[settings-row-highlight]:ring-ring',
-        stacked
-          ? 'grid gap-4'
-          : 'grid grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] items-center gap-8'
+        stacked ? 'grid gap-2.5' : 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-6'
       )}
     >
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0">
         <span
           id={titleId}
-          className="block font-medium text-foreground text-sm tracking-[-0.005em]"
+          className="block font-medium text-[13.5px] text-foreground leading-[1.35] tracking-[-0.005em]"
         >
           {props.title}
         </span>
         {props.description ? (
-          <p className="max-w-xl text-[13px] text-muted-foreground/80 leading-[1.45]">
+          <p className="mt-px text-[12.5px] text-muted-foreground/80 leading-[1.4]">
             {props.description}
           </p>
         ) : null}
         {props.status ? (
           <div
             data-testid={`settings-row-status-${props.id}`}
-            className="pt-0.5 text-muted-foreground text-xs"
+            className="mt-1 text-[12px] text-muted-foreground leading-[1.4]"
           >
             {props.status}
           </div>

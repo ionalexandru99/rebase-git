@@ -78,6 +78,7 @@ function BuildRow(props: { buildInfo: BuildInfo | null }) {
         <Button
           type="button"
           size="sm"
+          className="h-[30px] px-2.5 text-[12.5px]"
           variant="outline"
           onClick={() => {
             copyLine(line)
@@ -100,6 +101,7 @@ function LogsRow() {
       <Button
         type="button"
         size="sm"
+        className="h-[30px] px-2.5 text-[12.5px]"
         variant="outline"
         onClick={() => {
           window.electronAPI.revealLogsFolder().catch((error: unknown) => {
@@ -123,6 +125,7 @@ function ReleaseNotesRow() {
       <Button
         type="button"
         size="sm"
+        className="h-[30px] px-2.5 text-[12.5px]"
         variant="outline"
         onClick={() => {
           window.electronAPI.openReleaseNotes().catch((error: unknown) => {

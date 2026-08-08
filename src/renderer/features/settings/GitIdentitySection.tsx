@@ -53,21 +53,10 @@ function IdentityFieldRow(props: IdentityFieldRowProps) {
   const inputId = useId()
 
   return (
-    <div className="grid gap-1">
-      <div className="flex items-baseline justify-between">
-        <label htmlFor={inputId} className="text-xs text-muted-foreground">
-          {FIELD_LABELS[props.field]}
-        </label>
-        {props.onClear && props.overridden ? (
-          <button
-            type="button"
-            onClick={props.onClear}
-            className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            Use app settings for {props.field}
-          </button>
-        ) : null}
-      </div>
+    <>
+      <label htmlFor={inputId} className="justify-self-end text-[12px] text-muted-foreground/80">
+        {FIELD_LABELS[props.field]}
+      </label>
       <input
         id={inputId}
         value={props.value}
@@ -78,9 +67,20 @@ function IdentityFieldRow(props: IdentityFieldRowProps) {
         spellCheck={false}
         autoCorrect="off"
         autoCapitalize="off"
-        className="h-9 w-full rounded-[var(--r-sm)] border bg-background px-2.5 text-sm outline-none focus:border-border-strong disabled:opacity-60"
+        className="h-[30px] w-full rounded-[var(--r-sm)] border bg-background px-2.5 text-[13px] outline-none focus:border-border-strong disabled:opacity-60"
       />
-    </div>
+      {props.onClear && props.overridden ? (
+        <button
+          type="button"
+          onClick={props.onClear}
+          className="justify-self-start whitespace-nowrap text-[11.5px] text-muted-foreground/80 underline-offset-2 hover:text-foreground hover:underline"
+        >
+          Use app settings for {props.field}
+        </button>
+      ) : (
+        <span />
+      )}
+    </>
   )
 }
 
@@ -117,7 +117,7 @@ function IdentityScopeRow(props: IdentityScopeRowProps) {
       variant="stacked"
     >
       <form
-        className="grid gap-3"
+        className="grid w-fit grid-cols-[auto_16rem_auto] items-center gap-x-2.5 gap-y-2 rounded-[var(--r-sm)] bg-card-2 p-3"
         onSubmit={(event) => {
           event.preventDefault()
           submit()
@@ -142,15 +142,22 @@ function IdentityScopeRow(props: IdentityScopeRowProps) {
           onClear={props.onClear ? () => props.onClear?.('email') : null}
         />
 
-        <div className="flex items-center justify-between gap-3">
-          {blankField ? (
-            <p id={blankMessageId} role="alert" className="text-xs text-destructive">
-              The {FIELD_LABELS[blankField].toLowerCase()} cannot be empty.
-            </p>
-          ) : (
-            <span />
-          )}
-          <Button type="submit" size="sm" disabled={props.saving}>
+        {blankField ? (
+          <p
+            id={blankMessageId}
+            role="alert"
+            className="col-start-2 text-[11.5px] text-destructive"
+          >
+            The {FIELD_LABELS[blankField].toLowerCase()} cannot be empty.
+          </p>
+        ) : null}
+        <div className="col-start-2 mt-0.5 flex justify-end">
+          <Button
+            type="submit"
+            size="sm"
+            disabled={props.saving}
+            className="h-[30px] px-2.5 text-[12.5px]"
+          >
             Save
           </Button>
         </div>

@@ -95,11 +95,11 @@ function PullDivergedRow() {
       description="How a pull finishes when you and the remote each have new commits."
       variant="stacked"
     >
-      <div className="grid gap-2">
+      <div className="grid gap-[7px]">
         {PULL_DIVERGED_CHOICES.map((option) => (
           <label
             key={option.value}
-            className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
+            className="flex cursor-pointer items-center gap-2 text-[13.5px] text-foreground leading-[1.35]"
           >
             <input
               type="radio"
@@ -115,7 +115,7 @@ function PullDivergedRow() {
                     console.error('[settings] failed to save the diverged-pull strategy', error)
                   })
               }}
-              className="size-3.5 accent-[var(--brand)]"
+              className="size-[13px] accent-[var(--brand)]"
             />
             {option.label}
           </label>
