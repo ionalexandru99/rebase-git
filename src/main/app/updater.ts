@@ -1,48 +1,247 @@
-import { app } from 'electron'
+import { Channel } from '@shared/channels'
+import { parseOrThrow } from '@shared/codec'
+import {
+  type UpdateChannel,
+  UpdateChannelSchema,
+  type UpdatePreferences,
+  UpdatePreferencesSchema,
+  type UpdaterActionResult,
+  UpdaterStateSchema
+} from '@shared/schemas/ipc'
+import { app, type BrowserWindow, ipcMain } from 'electron'
 import log from 'electron-log'
 import electronUpdater from 'electron-updater'
+import {
+  getStoredUpdateChannel,
+  getUpdatePreferences,
+  setStoredUpdateChannel,
+  setUpdatePreferences
+} from '../store/index'
+import {
+  describeChannelChangeBlocker,
+  resolveUpdateChannel,
+  updaterChannelProfile,
+  versionBelongsToChannel
+} from './update-channel'
+import { createUpdatePoller } from './update-poller'
+import {
+  createInitialUpdaterState,
+  describeRejectedUpdaterAction,
+  reduceUpdaterState,
+  shouldRunScheduledCheck,
+  type UpdaterAction,
+  type UpdaterEvent,
+  type UpdaterSupport
+} from './update-state'
 
 const { autoUpdater } = electronUpdater
 
-export function setupUpdater(): void {
-  if (!app.isPackaged || process.env.REBASE_ENABLE_UPDATER !== '1') {
+const STARTUP_CHECK_DELAY_MS = 30_000
+const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+
+function runningUnderE2eHarness(): boolean {
+  return process.env.NODE_ENV === 'test' && process.argv.includes('--e2e')
+}
+
+function detectUpdaterSupport(): UpdaterSupport {
+  const updaterEnabled = process.env.REBASE_ENABLE_UPDATER === '1'
+  if (!app.isPackaged && !(updaterEnabled && runningUnderE2eHarness())) {
+    return {
+      supported: false,
+      reason:
+        'This build runs straight from source, so it cannot replace itself. Rebuild to pick up new versions.'
+    }
+  }
+  if (!updaterEnabled) {
+    return {
+      supported: false,
+      reason:
+        'Automatic updates are switched off in this build. Get new versions from the releases page.'
+    }
+  }
+  return { supported: true }
+}
+
+export function setupUpdater(getWindow: () => BrowserWindow | null): void {
+  const support = detectUpdaterSupport()
+  const currentVersion = app.getVersion()
+  let state = createInitialUpdaterState(currentVersion, support)
+  let channel = resolveUpdateChannel(getStoredUpdateChannel(), currentVersion)
+  let installing = false
+  let pendingInstallDisarmed = false
+
+  const pushState = (): void => {
+    const window = getWindow()
+    if (window && !window.isDestroyed()) {
+      window.webContents.send(Channel.updaterStateChanged, parseOrThrow(UpdaterStateSchema, state))
+    }
+  }
+
+  const dispatch = (event: UpdaterEvent): void => {
+    state = reduceUpdaterState(state, event)
+    pushState()
+  }
+
+  const applyPreferences = (preferences: UpdatePreferences): void => {
+    autoUpdater.autoDownload = preferences.downloadInBackground
+    autoUpdater.autoInstallOnAppQuit = pendingInstallDisarmed ? false : preferences.installOnQuit
+  }
+
+  const discardPendingUpdate = (): void => {
+    pendingInstallDisarmed = true
+    autoUpdater.autoInstallOnAppQuit = false
+    dispatch({ type: 'pending-update-discarded' })
+  }
+
+  const rearmInstallOnQuit = (): void => {
+    if (pendingInstallDisarmed) {
+      pendingInstallDisarmed = false
+      applyPreferences(getUpdatePreferences())
+    }
+  }
+
+  const applyChannel = (): void => {
+    const profile = updaterChannelProfile(channel, currentVersion)
+    autoUpdater.channel = profile.channel ?? 'latest'
+    autoUpdater.allowPrerelease = profile.allowPrerelease
+    autoUpdater.allowDowngrade = profile.allowDowngrade
+  }
+
+  const runCheck = (): void => {
+    autoUpdater
+      .checkForUpdates()
+      .then((result) => {
+        if (
+          !result?.cancellationToken ||
+          versionBelongsToChannel(result.updateInfo.version, channel)
+        ) {
+          return
+        }
+        log.warn(
+          '[updater] cancelling the download of an update outside the selected channel',
+          result.updateInfo.version,
+          channel
+        )
+        result.cancellationToken.cancel()
+        result.downloadPromise?.catch(() => undefined)
+      })
+      .catch((error: unknown) => {
+        log.warn('[updater] check for updates failed', error)
+      })
+  }
+
+  const startDownload = (): void => {
+    dispatch({ type: 'download-started' })
+    autoUpdater.downloadUpdate().catch((error: unknown) => {
+      log.warn('[updater] download failed', error)
+    })
+  }
+
+  const guardedAction = (action: UpdaterAction, run: () => void): UpdaterActionResult => {
+    const reason = describeRejectedUpdaterAction(state, action)
+    if (reason !== null) {
+      return { _tag: 'Rejected', reason }
+    }
+    run()
+    return { _tag: 'Started' }
+  }
+
+  ipcMain.handle(Channel.getUpdaterState, () => parseOrThrow(UpdaterStateSchema, state))
+  ipcMain.handle(Channel.getUpdatePreferences, () =>
+    parseOrThrow(UpdatePreferencesSchema, getUpdatePreferences())
+  )
+  ipcMain.handle(Channel.setUpdatePreferences, (_, payload: unknown) => {
+    const decoded = parseOrThrow(UpdatePreferencesSchema, payload)
+    setUpdatePreferences(decoded)
+    if (support.supported) {
+      applyPreferences(decoded)
+    }
+  })
+  ipcMain.handle(Channel.checkForUpdates, () => guardedAction('check', runCheck))
+  ipcMain.handle(Channel.downloadUpdate, () => guardedAction('download', startDownload))
+  ipcMain.handle(Channel.installUpdate, () =>
+    guardedAction('install', () => {
+      installing = true
+      autoUpdater.quitAndInstall()
+    })
+  )
+  ipcMain.handle(Channel.getUpdateChannel, () => parseOrThrow(UpdateChannelSchema, channel))
+  ipcMain.handle(Channel.setUpdateChannel, (_, payload: unknown): UpdaterActionResult => {
+    const requested: UpdateChannel = parseOrThrow(UpdateChannelSchema, payload)
+    const blocker = describeChannelChangeBlocker(state.status, installing)
+    if (blocker !== null) {
+      return { _tag: 'Rejected', reason: blocker }
+    }
+    if (requested !== channel) {
+      channel = requested
+      setStoredUpdateChannel(requested)
+      if (support.supported) {
+        if (
+          state.availableVersion !== null &&
+          !versionBelongsToChannel(state.availableVersion, requested)
+        ) {
+          discardPendingUpdate()
+        }
+        applyChannel()
+        runCheck()
+      }
+    }
+    return { _tag: 'Started' }
+  })
+
+  if (!support.supported) {
     return
   }
 
   log.transports.file.level = 'info'
   autoUpdater.logger = log
+  applyPreferences(getUpdatePreferences())
+  applyChannel()
 
   autoUpdater.on('checking-for-update', () => {
-    log.info('Checking for update...')
+    dispatch({ type: 'checking' })
   })
-
   autoUpdater.on('update-available', (info) => {
-    log.info('Update available.', info)
+    const at = new Date().toISOString()
+    if (!versionBelongsToChannel(info.version, channel)) {
+      log.warn('[updater] discarding update outside the selected channel', info.version, channel)
+      dispatch({ type: 'update-not-available', at })
+      return
+    }
+    dispatch({ type: 'update-available', version: info.version, at })
   })
-
-  autoUpdater.on('update-not-available', (info) => {
-    log.info('Update not available.', info)
+  autoUpdater.on('update-not-available', () => {
+    dispatch({ type: 'update-not-available', at: new Date().toISOString() })
   })
-
-  autoUpdater.on('error', (err) => {
-    log.error(`Error in auto-updater. ${err}`)
+  autoUpdater.on('download-progress', (progress) => {
+    if (state.availableVersion === null) {
+      return
+    }
+    dispatch({ type: 'download-progress', percent: progress.percent })
   })
-
-  autoUpdater.on('download-progress', (progressObj) => {
-    const logMessage = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}% (${progressObj.transferred}/${progressObj.total})`
-    log.info(logMessage)
-  })
-
   autoUpdater.on('update-downloaded', (info) => {
-    log.info('Update downloaded', info)
+    if (!versionBelongsToChannel(info.version, channel)) {
+      log.warn('[updater] discarding download outside the selected channel', info.version, channel)
+      discardPendingUpdate()
+      return
+    }
+    rearmInstallOnQuit()
+    dispatch({ type: 'update-downloaded', version: info.version })
+  })
+  autoUpdater.on('error', (error) => {
+    installing = false
+    dispatch({ type: 'update-error', message: error.message, at: new Date().toISOString() })
   })
 
-  const checkForUpdates = () => {
-    autoUpdater.checkForUpdatesAndNotify()
-  }
-  if (app.isReady()) {
-    checkForUpdates()
-  } else {
-    app.on('ready', checkForUpdates)
-  }
+  const poller = createUpdatePoller({
+    startupDelayMs: STARTUP_CHECK_DELAY_MS,
+    intervalMs: CHECK_INTERVAL_MS,
+    runCheck: () => {
+      if (shouldRunScheduledCheck(state)) {
+        runCheck()
+      }
+    }
+  })
+  poller.start()
+  app.on('before-quit', poller.stop)
 }

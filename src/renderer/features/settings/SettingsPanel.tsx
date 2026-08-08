@@ -4,6 +4,7 @@ import { SettingsView } from './SettingsView'
 
 interface SettingsPanelProps {
   repoPath: string | null
+  initialSectionId: string | null
   onClose: () => void
 }
 
@@ -21,6 +22,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
   return (
     <SettingsView
       repoLabel={props.repoPath ? repoDisplayName(props.repoPath) : null}
+      initialSectionId={props.initialSectionId}
       identity={identity.identity}
       saving={identity.saving}
       error={identity.error}

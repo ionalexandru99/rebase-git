@@ -21,7 +21,45 @@ const launchWindowHeight = 800
 
 const demoRecordingEnabled = process.env.REBASE_DEMO === '1'
 const demoVideoDirectory = path.join(currentDir, '..', 'test-results', 'demos')
-const demoSlowMoMilliseconds = 300
+const demoInteractionDelayMilliseconds = 1200
+
+const demoPacedLocatorMethods = [
+  'click',
+  'dblclick',
+  'fill',
+  'press',
+  'selectOption',
+  'check',
+  'uncheck',
+  'hover',
+  'focus'
+] as const
+const demoPacedKeyboardMethods = ['press', 'type', 'insertText'] as const
+let demoPacingInstalled = false
+
+function paceMethods(prototype: object, methods: readonly string[]): void {
+  const target = prototype as Record<string, (...args: unknown[]) => Promise<unknown>>
+  for (const method of methods) {
+    const original = target[method]
+    if (typeof original !== 'function') {
+      continue
+    }
+    target[method] = async function paced(this: unknown, ...args: unknown[]) {
+      const result = await original.apply(this, args)
+      await new Promise((resolve) => setTimeout(resolve, demoInteractionDelayMilliseconds))
+      return result
+    }
+  }
+}
+
+function installDemoPacing(page: Page): void {
+  if (demoPacingInstalled) {
+    return
+  }
+  demoPacingInstalled = true
+  paceMethods(Object.getPrototypeOf(page.locator('body')), demoPacedLocatorMethods)
+  paceMethods(Object.getPrototypeOf(page.keyboard), demoPacedKeyboardMethods)
+}
 
 let activeFixtureRoot: string | undefined
 
@@ -402,7 +440,6 @@ export const test = base.extend<{ harness: AppHarness }>({
         env: electronEnv,
         ...(demoRecordingEnabled
           ? {
-              slowMo: demoSlowMoMilliseconds,
               recordVideo: {
                 dir: demoVideoDirectory,
                 size: { width: launchWindowWidth, height: launchWindowHeight }
@@ -411,6 +448,9 @@ export const test = base.extend<{ harness: AppHarness }>({
           : {})
       })
       page = await electronApp.firstWindow()
+      if (demoRecordingEnabled) {
+        installDemoPacing(page)
+      }
       await installToastRecorder(page)
       await setWindowSize(electronApp, launchWindowWidth, launchWindowHeight)
       return waitForPage(page)

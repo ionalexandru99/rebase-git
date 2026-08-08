@@ -139,3 +139,25 @@ test('shows refs, commits, detail and the status dock at once, with the working 
   await expect(page.getByTestId('status-file-row').filter({ hasText: 'note.txt' })).toBeVisible()
   await expect(pane).toHaveCount(0)
 })
+
+test('the workspace columns fill the window height and the status dock sits at the bottom', async ({
+  harness
+}) => {
+  const repo = createTwoCommitRepo()
+  const page = await harness.openRepo(repo)
+
+  const viewportHeight = await page.evaluate(() => window.innerHeight)
+  const dockBox = await page.getByTestId('status-dock').boundingBox()
+  if (!dockBox) {
+    throw new Error('the status dock has no bounding box')
+  }
+  const dockBottom = dockBox.y + dockBox.height
+  expect(dockBottom).toBeGreaterThanOrEqual(viewportHeight - 2)
+  expect(dockBottom).toBeLessThanOrEqual(viewportHeight + 2)
+
+  const listBox = await commitListRegion(page).boundingBox()
+  if (!listBox) {
+    throw new Error('the commit list has no bounding box')
+  }
+  expect(listBox.height).toBeGreaterThan(viewportHeight * 0.8)
+})

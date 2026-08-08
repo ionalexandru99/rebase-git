@@ -37,8 +37,12 @@ test('sets the app and repository git identity from the settings view', async ({
   await page.getByRole('button', { name: 'Settings' }).click()
   const settings = page.getByTestId('settings-view')
   await expect(settings).toBeVisible()
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Git identity' })
+    .click()
 
-  const appSettings = page.getByRole('region', { name: 'App settings' })
+  const appSettings = page.getByRole('group', { name: 'App settings' })
   await appSettings.getByLabel('Name').fill('Ada Lovelace')
   await appSettings.getByLabel('Email').fill('ada@example.com')
   await appSettings.getByRole('button', { name: 'Save' }).click()
@@ -48,7 +52,7 @@ test('sets the app and repository git identity from the settings view', async ({
     .poll(() => appIdentity(harness.globalGitConfigPath, 'user.email'))
     .toBe('ada@example.com')
 
-  const repoSettings = page.getByRole('region', { name: 'Repository settings' })
+  const repoSettings = page.getByRole('group', { name: 'Repository settings' })
   await expect(repoSettings.getByLabel('Name')).toHaveValue('')
   await expect(repoSettings.getByLabel('Name')).toHaveAttribute('placeholder', 'Ada Lovelace')
   expect(effectiveIdentity(repo, harness.globalGitConfigPath, 'user.name')).toBe('Ada Lovelace')
@@ -69,4 +73,148 @@ test('sets the app and repository git identity from the settings view', async ({
 
   await page.getByRole('button', { name: 'Close settings' }).click()
   await expect(settings).toBeHidden()
+})
+
+test('switches sections from the settings nav and returns to the repo on close', async ({
+  harness
+}) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  const settings = page.getByTestId('settings-view')
+  await expect(settings).toBeVisible()
+
+  const nav = page.getByRole('navigation', { name: 'Settings sections' })
+  const generalItem = nav.getByRole('button', { name: 'General' })
+  await expect(generalItem).toHaveAttribute('aria-current', 'true')
+  await expect(page.getByRole('region', { name: 'General' })).toBeVisible()
+
+  const gitIdentityItem = nav.getByRole('button', { name: 'Git identity' })
+  await gitIdentityItem.click()
+  await expect(gitIdentityItem).toHaveAttribute('aria-current', 'true')
+  await expect(page.getByRole('region', { name: 'Git identity' })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'App settings' })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Repository settings' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Close settings' }).click()
+  await expect(settings).toBeHidden()
+  await waitForRepoSurface(page, repo)
+})
+
+test('renders the Updates section read-only when the build cannot self-update', async ({
+  harness
+}) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-view')).toBeVisible()
+
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Updates' })
+    .click()
+  await expect(page.getByRole('region', { name: 'Updates' })).toBeVisible()
+
+  const versionRow = page.getByRole('group', { name: 'Version' })
+  await expect(versionRow).toBeVisible()
+  await expect(versionRow).toContainText(/cannot replace itself|switched off in this build/)
+  await expect(versionRow.getByRole('button')).toHaveCount(0)
+
+  const backgroundToggle = page.getByRole('checkbox', {
+    name: 'Download updates in the background'
+  })
+  await expect(backgroundToggle).toBeDisabled()
+  await expect(page.getByRole('checkbox', { name: 'Install when I quit' })).toBeDisabled()
+  await expect(page.getByRole('combobox', { name: 'Update channel' })).toBeDisabled()
+})
+
+test('search jumps to the update channel row', async ({ harness }) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-view')).toBeVisible()
+
+  await page.keyboard.press('/')
+  const searchInput = page.getByRole('combobox', { name: 'Search settings' })
+  await expect(searchInput).toBeFocused()
+
+  await searchInput.fill('nightly')
+  await expect(page.getByRole('option', { name: /Update channel/ })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeHidden()
+
+  await page.keyboard.press('Enter')
+
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Settings sections' })
+      .getByRole('button', { name: 'Updates' })
+  ).toHaveAttribute('aria-current', 'true')
+  await expect(page.getByRole('group', { name: 'Update channel' })).toBeInViewport()
+  await expect(searchInput).toHaveValue('')
+})
+
+test('shows the running build in the About section', async ({ harness }) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-view')).toBeVisible()
+
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'About' })
+    .click()
+  await expect(page.getByRole('region', { name: 'About' })).toBeVisible()
+
+  const buildRow = page.getByRole('group', { name: 'Build' })
+  await expect(buildRow).toBeVisible()
+  await expect(buildRow).toContainText(/Rebase \d+\.\d+\.\d+/)
+  await expect(buildRow).toContainText(/Electron \d+/)
+  await expect(buildRow.getByRole('button', { name: 'Copy' })).toBeVisible()
+})
+
+test('turning off reopen repositories relaunches to a single blank tab', async ({ harness }) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-view')).toBeVisible()
+
+  const reopenToggle = page
+    .getByRole('group', { name: 'Reopen repositories on launch' })
+    .getByRole('checkbox')
+  await expect(reopenToggle).toBeChecked()
+  await reopenToggle.click()
+  await expect(reopenToggle).not.toBeChecked()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as {
+            electronAPI: { getReopenRepositoriesOnLaunch: () => Promise<boolean> }
+          }
+        ).electronAPI.getReopenRepositoriesOnLaunch()
+      )
+    )
+    .toBe(false)
+
+  const relaunched = await harness.restart()
+
+  await expect(relaunched.getByRole('tab')).toHaveCount(0, { timeout: 10_000 })
+  await expect(relaunched.getByRole('heading', { name: 'Open a repository' })).toBeVisible({
+    timeout: 10_000
+  })
 })

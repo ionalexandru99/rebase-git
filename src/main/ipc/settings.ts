@@ -6,6 +6,7 @@ import {
   PersistedTabsSchema,
   PullDivergedStrategySchema,
   RefTreeTogglesSchema,
+  ReopenRepositoriesOnLaunchSchema,
   SidebarPrefsSchema
 } from '@shared/schemas/ipc'
 import { ipcMain } from 'electron'
@@ -16,11 +17,13 @@ import {
   getPersistedTabs,
   getPullDivergedStrategy,
   getRefTreeToggles,
+  getReopenRepositoriesOnLaunch,
   getSidebarPrefs,
   setListPaneWidth,
   setPersistedTabs,
   setPullDivergedStrategy,
   setRefTreeToggles,
+  setReopenRepositoriesOnLaunch,
   setSidebarPrefs
 } from '../store/index'
 
@@ -68,6 +71,14 @@ export function register(): void {
   ipcMain.handle(Channel.setPullDivergedStrategy, (_, payload: unknown) => {
     const decoded = parseOrThrow(PullDivergedStrategySchema, payload)
     setPullDivergedStrategy(decoded)
+  })
+
+  ipcMain.handle(Channel.getReopenRepositoriesOnLaunch, () =>
+    parseOrThrow(ReopenRepositoriesOnLaunchSchema, getReopenRepositoriesOnLaunch())
+  )
+  ipcMain.handle(Channel.setReopenRepositoriesOnLaunch, (_, payload: unknown) => {
+    const decoded = parseOrThrow(ReopenRepositoriesOnLaunchSchema, payload)
+    setReopenRepositoriesOnLaunch(decoded)
   })
 
   ipcMain.handle(Channel.getPersistedTabs, () =>

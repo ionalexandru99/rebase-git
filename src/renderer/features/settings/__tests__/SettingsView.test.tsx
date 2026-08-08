@@ -11,8 +11,8 @@ const identityWith = (local: ResolvedIdentity['local']): ResolvedIdentity => ({
   effective: { ...GLOBAL_IDENTITY, ...local }
 })
 
-function renderView(overrides: Partial<SettingsViewProps> = {}) {
-  const props: SettingsViewProps = {
+function makeProps(overrides: Partial<SettingsViewProps> = {}): SettingsViewProps {
+  return {
     repoLabel: 'rebase',
     identity: identityWith({}),
     saving: false,
@@ -22,14 +22,51 @@ function renderView(overrides: Partial<SettingsViewProps> = {}) {
     onClose: vi.fn(),
     ...overrides
   }
+}
+
+function renderView(overrides: Partial<SettingsViewProps> = {}) {
+  const props = makeProps(overrides)
   render(<SettingsView {...props} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Git identity' }))
   return props
 }
 
-const appSection = () => within(screen.getByRole('region', { name: 'App settings' }))
-const repoSection = () => within(screen.getByRole('region', { name: 'Repository settings' }))
+const appSection = () => within(screen.getByRole('group', { name: 'App settings' }))
+const repoSection = () => within(screen.getByRole('group', { name: 'Repository settings' }))
 
 describe('SettingsView', () => {
+  it('opens on the General section and switches to Git identity from the nav', () => {
+    render(<SettingsView {...makeProps()} />)
+
+    const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }))
+    expect(nav.getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('region', { name: 'General' })).toBeInTheDocument()
+
+    fireEvent.click(nav.getByRole('button', { name: 'Git identity' }))
+
+    expect(nav.getByRole('button', { name: 'Git identity' })).toHaveAttribute(
+      'aria-current',
+      'true'
+    )
+    expect(screen.getByRole('region', { name: 'Git identity' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'General' })).toBeNull()
+  })
+
+  it('opens directly on the requested section', () => {
+    render(<SettingsView {...makeProps({ initialSectionId: 'updates' })} />)
+
+    const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }))
+    expect(nav.getByRole('button', { name: 'Updates' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('region', { name: 'Updates' })).toBeInTheDocument()
+  })
+
+  it('falls back to the first section when the requested one is unknown', () => {
+    render(<SettingsView {...makeProps({ initialSectionId: 'missing' })} />)
+
+    const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }))
+    expect(nav.getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'true')
+  })
+
   it('shows the inherited app identity as placeholder text when the repo has no override', () => {
     renderView()
 
@@ -45,8 +82,29 @@ describe('SettingsView', () => {
   it('shows only the app section when the tab has no repository', () => {
     renderView({ repoLabel: null })
 
-    expect(screen.getByRole('region', { name: 'App settings' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Repository settings' })).toBeNull()
+    expect(screen.getByRole('group', { name: 'App settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Repository settings' })).toBeNull()
+  })
+
+  it('offers the repository identity row in search results while a repository is open', () => {
+    render(<SettingsView {...makeProps()} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search settings' }), {
+      target: { value: 'override' }
+    })
+
+    expect(screen.getByRole('option', { name: /Repository settings/ })).toBeInTheDocument()
+  })
+
+  it('keeps the repository identity row out of search results on a blank tab', () => {
+    render(<SettingsView {...makeProps({ repoLabel: null })} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search settings' }), {
+      target: { value: 'override' }
+    })
+
+    expect(screen.queryByRole('option', { name: /Repository settings/ })).toBeNull()
+    expect(screen.getByRole('option', { name: /App settings/ })).toBeInTheDocument()
   })
 
   it('saves the app identity at global scope', () => {

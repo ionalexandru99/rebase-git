@@ -16,3 +16,10 @@ export function planLegacyWorkspaceMigration(
   }
   return { workspaces: [legacyWorkingDirectory], activeWorkspace: legacyWorkingDirectory }
 }
+
+export function migrateReopenRepositoriesOnLaunch(storedValue: unknown): boolean {
+  if (typeof storedValue === 'boolean') {
+    return storedValue
+  }
+  return true
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planLegacyWorkspaceMigration } from '../migration'
+import { migrateReopenRepositoriesOnLaunch, planLegacyWorkspaceMigration } from '../migration'
 
 describe('planLegacyWorkspaceMigration', () => {
   it('promotes the legacy working directory into an empty workspace list', () => {
@@ -21,5 +21,23 @@ describe('planLegacyWorkspaceMigration', () => {
     expect(planLegacyWorkspaceMigration([], '/repo', '/other')).toEqual({
       workspaces: ['/repo']
     })
+  })
+})
+
+describe('migrateReopenRepositoriesOnLaunch', () => {
+  it('turns the preference on for configs written before the key existed', () => {
+    expect(migrateReopenRepositoriesOnLaunch(undefined)).toBe(true)
+  })
+
+  it('keeps a stored opt-out', () => {
+    expect(migrateReopenRepositoriesOnLaunch(false)).toBe(false)
+  })
+
+  it('keeps a stored opt-in', () => {
+    expect(migrateReopenRepositoriesOnLaunch(true)).toBe(true)
+  })
+
+  it('falls back to on when the stored value is not a boolean', () => {
+    expect(migrateReopenRepositoriesOnLaunch('yes')).toBe(true)
   })
 })

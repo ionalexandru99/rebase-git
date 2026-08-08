@@ -13,6 +13,7 @@ interface RepoRailProps {
   onClose: (id: string) => void
   onNew: () => void
   settingsOpen: boolean
+  updateBadged: boolean
   onToggleSettings: () => void
 }
 
@@ -68,16 +69,23 @@ export function RepoRail(props: RepoRailProps) {
       <div className="no-drag flex shrink-0 items-center justify-center px-1 pb-2">
         <button
           type="button"
-          aria-label="Settings"
+          aria-label={props.updateBadged ? 'Settings, update available' : 'Settings'}
           aria-pressed={props.settingsOpen}
           onClick={props.onToggleSettings}
           style={{ width: `${RAIL_BUTTON_SIZE}px`, height: `${RAIL_BUTTON_SIZE}px` }}
           className={cn(
-            'flex shrink-0 items-center justify-center rounded-[var(--r-md)] text-muted-foreground transition-colors hover:bg-card-2 hover:text-foreground',
+            'relative flex shrink-0 items-center justify-center rounded-[var(--r-md)] text-muted-foreground transition-colors hover:bg-card-2 hover:text-foreground',
             props.settingsOpen && 'bg-card-2 text-foreground'
           )}
         >
           <SettingsIcon className="size-4" />
+          {props.updateBadged ? (
+            <span
+              aria-hidden
+              data-testid="settings-update-badge"
+              className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary"
+            />
+          ) : null}
         </button>
       </div>
     </nav>

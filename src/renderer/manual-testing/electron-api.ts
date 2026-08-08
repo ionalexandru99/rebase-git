@@ -18,6 +18,9 @@ const CLONE_PHASES: [string, number][] = [
   ['Resolving deltas', 100]
 ]
 
+const MANUAL_UPDATER_REASON =
+  'This build runs straight from source, so it cannot replace itself. Rebuild to pick up new versions.'
+
 export const PLAYWRIGHT_MCP_WORKSPACE_PATH = '/Users/playwright/Projects'
 export const PLAYWRIGHT_MCP_REPO_PATH = `${PLAYWRIGHT_MCP_WORKSPACE_PATH}/rebase-demo`
 
@@ -129,6 +132,41 @@ export function createPlaywrightMcpElectronApi(
     getPullDivergedStrategy: async () => state.pullDivergedStrategy,
     setPullDivergedStrategy: async (strategy) => {
       state.pullDivergedStrategy = strategy
+    },
+    getReopenRepositoriesOnLaunch: async () => state.reopenRepositoriesOnLaunch,
+    setReopenRepositoriesOnLaunch: async (reopen) => {
+      state.reopenRepositoriesOnLaunch = reopen
+    },
+    getBuildInfo: async () => ({
+      version: '1.0.0',
+      commitSha: 'abcdef1234567890abcdef1234567890abcdef12',
+      electronVersion: '37.2.0',
+      platformArch: 'darwin-arm64'
+    }),
+    revealLogsFolder: async () => {},
+    openReleaseNotes: async () => {},
+    getUpdaterState: async () => ({
+      status: 'idle',
+      supported: false,
+      unsupportedReason: MANUAL_UPDATER_REASON,
+      currentVersion: '1.0.0',
+      availableVersion: null,
+      downloadPercent: null,
+      lastCheckedAt: null,
+      errorMessage: null
+    }),
+    onUpdaterStateChanged: () => () => {},
+    checkForUpdates: async () => ({ _tag: 'Rejected', reason: MANUAL_UPDATER_REASON }),
+    downloadUpdate: async () => ({ _tag: 'Rejected', reason: MANUAL_UPDATER_REASON }),
+    installUpdate: async () => ({ _tag: 'Rejected', reason: MANUAL_UPDATER_REASON }),
+    getUpdatePreferences: async () => ({ ...state.updatePreferences }),
+    setUpdatePreferences: async (preferences) => {
+      state.updatePreferences = { ...preferences }
+    },
+    getUpdateChannel: async () => state.updateChannel,
+    setUpdateChannel: async (channel) => {
+      state.updateChannel = channel
+      return { _tag: 'Started' }
     },
     getWorkspaces: async () => [...state.workspaces],
     addWorkspace: async (workspacePath) => {

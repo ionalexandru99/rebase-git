@@ -3,6 +3,7 @@ import type { OpenRepo, ScanForRepos } from '@shared/rpc'
 import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import type {
+  BuildInfo,
   CancelLogStreamResponse,
   CloneProgressEvent,
   CloneRepoResponse,
@@ -11,8 +12,13 @@ import type {
   PullDivergedStrategy,
   RefTreeToggles,
   RendererErrorReport,
+  ReopenRepositoriesOnLaunch,
   SidebarPrefs,
-  StartLogStreamResponse
+  StartLogStreamResponse,
+  UpdateChannel,
+  UpdatePreferences,
+  UpdaterActionResult,
+  UpdaterState
 } from '@shared/schemas/ipc'
 import type { LogStreamOptions } from '@shared/schemas/log-stream'
 import { contextBridge, ipcRenderer } from 'electron'
@@ -48,6 +54,20 @@ export interface IElectronAPI {
   setListPaneWidth: (repoPath: string, width: number) => Promise<void>
   getPullDivergedStrategy: () => Promise<PullDivergedStrategy>
   setPullDivergedStrategy: (strategy: PullDivergedStrategy) => Promise<void>
+  getReopenRepositoriesOnLaunch: () => Promise<ReopenRepositoriesOnLaunch>
+  setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) => Promise<void>
+  getBuildInfo: () => Promise<BuildInfo>
+  revealLogsFolder: () => Promise<void>
+  openReleaseNotes: () => Promise<void>
+  getUpdaterState: () => Promise<UpdaterState>
+  onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void
+  checkForUpdates: () => Promise<UpdaterActionResult>
+  downloadUpdate: () => Promise<UpdaterActionResult>
+  installUpdate: () => Promise<UpdaterActionResult>
+  getUpdatePreferences: () => Promise<UpdatePreferences>
+  setUpdatePreferences: (preferences: UpdatePreferences) => Promise<void>
+  getUpdateChannel: () => Promise<UpdateChannel>
+  setUpdateChannel: (channel: UpdateChannel) => Promise<UpdaterActionResult>
   getWorkspaces: () => Promise<string[]>
   addWorkspace: (path: string) => Promise<string[]>
   removeWorkspace: (path: string) => Promise<string[]>
@@ -103,6 +123,27 @@ const api: IElectronAPI = {
   getPullDivergedStrategy: () => ipcRenderer.invoke(Channel.getPullDivergedStrategy),
   setPullDivergedStrategy: (strategy: PullDivergedStrategy) =>
     ipcRenderer.invoke(Channel.setPullDivergedStrategy, strategy),
+  getReopenRepositoriesOnLaunch: () => ipcRenderer.invoke(Channel.getReopenRepositoriesOnLaunch),
+  setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) =>
+    ipcRenderer.invoke(Channel.setReopenRepositoriesOnLaunch, reopen),
+  getBuildInfo: () => ipcRenderer.invoke(Channel.getBuildInfo),
+  revealLogsFolder: () => ipcRenderer.invoke(Channel.revealLogsFolder),
+  openReleaseNotes: () => ipcRenderer.invoke(Channel.openReleaseNotes),
+  getUpdaterState: () => ipcRenderer.invoke(Channel.getUpdaterState),
+  onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => {
+    const handler = (_event: unknown, state: UpdaterState) => cb(state)
+    ipcRenderer.on(Channel.updaterStateChanged, handler)
+    return () => ipcRenderer.off(Channel.updaterStateChanged, handler)
+  },
+  checkForUpdates: () => ipcRenderer.invoke(Channel.checkForUpdates),
+  downloadUpdate: () => ipcRenderer.invoke(Channel.downloadUpdate),
+  installUpdate: () => ipcRenderer.invoke(Channel.installUpdate),
+  getUpdatePreferences: () => ipcRenderer.invoke(Channel.getUpdatePreferences),
+  setUpdatePreferences: (preferences: UpdatePreferences) =>
+    ipcRenderer.invoke(Channel.setUpdatePreferences, preferences),
+  getUpdateChannel: () => ipcRenderer.invoke(Channel.getUpdateChannel),
+  setUpdateChannel: (channel: UpdateChannel) =>
+    ipcRenderer.invoke(Channel.setUpdateChannel, channel),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),
   addWorkspace: (path: string) => ipcRenderer.invoke('add-workspace', path),
   removeWorkspace: (path: string) => ipcRenderer.invoke('remove-workspace', path),

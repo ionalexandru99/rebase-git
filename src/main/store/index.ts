@@ -1,7 +1,8 @@
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
+import type { UpdateChannel, UpdatePreferences } from '@shared/schemas/ipc'
 import Store from 'electron-store'
 import { readListPaneWidth, writeListPaneWidth } from './list-pane-widths'
-import { planLegacyWorkspaceMigration } from './migration'
+import { migrateReopenRepositoriesOnLaunch, planLegacyWorkspaceMigration } from './migration'
 import type { StoreSchema } from './schema'
 import { storeDefaults, storeSchema } from './schema'
 
@@ -115,12 +116,40 @@ export function setListPaneWidth(repoPath: string, width: number): void {
   store.set('listPaneWidths', writeListPaneWidth(store.get('listPaneWidths'), repoPath, width))
 }
 
+export function getReopenRepositoriesOnLaunch(): boolean {
+  return migrateReopenRepositoriesOnLaunch(store.get('reopenRepositoriesOnLaunch'))
+}
+
+export function setReopenRepositoriesOnLaunch(reopen: boolean): void {
+  store.set('reopenRepositoriesOnLaunch', reopen)
+}
+
 export function getPullDivergedStrategy(): StoreSchema['pullDivergedStrategy'] {
   return store.get('pullDivergedStrategy')
 }
 
 export function setPullDivergedStrategy(strategy: StoreSchema['pullDivergedStrategy']): void {
   store.set('pullDivergedStrategy', strategy)
+}
+
+export function getUpdatePreferences(): UpdatePreferences {
+  return {
+    downloadInBackground: store.get('updateDownloadInBackground'),
+    installOnQuit: store.get('updateInstallOnQuit')
+  }
+}
+
+export function setUpdatePreferences(preferences: UpdatePreferences): void {
+  store.set('updateDownloadInBackground', preferences.downloadInBackground)
+  store.set('updateInstallOnQuit', preferences.installOnQuit)
+}
+
+export function getStoredUpdateChannel(): UpdateChannel | null {
+  return store.get('updateChannel')
+}
+
+export function setStoredUpdateChannel(channel: UpdateChannel): void {
+  store.set('updateChannel', channel)
 }
 
 export function getRefTreeToggles(): string[] {
@@ -137,6 +166,9 @@ export interface PersistedTabState {
 }
 
 export function getPersistedTabs(): PersistedTabState {
+  if (!getReopenRepositoriesOnLaunch()) {
+    return { tabs: [null], activeIndex: 0 }
+  }
   const tabs = store.get('persistedTabRepoPaths')
   const activeIndex = store.get('persistedActiveTabIndex')
   if (tabs.length === 0) {
@@ -147,6 +179,9 @@ export function getPersistedTabs(): PersistedTabState {
 }
 
 export function setPersistedTabs(state: PersistedTabState): void {
+  if (!getReopenRepositoriesOnLaunch()) {
+    return
+  }
   const tabs = state.tabs.length === 0 ? [null] : state.tabs
   const clampedIndex = Math.max(0, Math.min(state.activeIndex, tabs.length - 1))
   store.set('persistedTabRepoPaths', tabs)

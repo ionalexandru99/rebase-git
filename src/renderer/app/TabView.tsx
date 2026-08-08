@@ -7,6 +7,7 @@ interface TabViewProps {
   tab: TabRecord
   tabActive: boolean
   settingsOpen: boolean
+  settingsInitialSectionId: string | null
   onCloseSettings: () => void
   catalog: WorkspaceCatalog
   onOpenRepo: (sourceTabId: string, path: string) => void
@@ -17,7 +18,13 @@ interface TabViewProps {
 export function TabView(props: TabViewProps) {
   if (props.tabActive && props.settingsOpen) {
     const repoPath = props.tab.kind === 'new' ? null : props.tab.repoPath
-    return <SettingsPanel repoPath={repoPath} onClose={props.onCloseSettings} />
+    return (
+      <SettingsPanel
+        repoPath={repoPath}
+        initialSectionId={props.settingsInitialSectionId}
+        onClose={props.onCloseSettings}
+      />
+    )
   }
 
   if (
