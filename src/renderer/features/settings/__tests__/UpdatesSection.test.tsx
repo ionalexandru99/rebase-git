@@ -222,6 +222,31 @@ describe('UpdatesSection', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('rolls the channel back when the save call itself fails', async () => {
+    vi.mocked(window.electronAPI.setUpdateChannel).mockRejectedValue(new Error('ipc down'))
+    await renderUpdates(updaterState())
+    await waitFor(() => expect(channelSelect()).toBeEnabled())
+
+    fireEvent.change(channelSelect(), { target: { value: 'nightly' } })
+
+    await waitFor(() => expect(channelSelect()).toHaveValue('stable'))
+    expect(screen.getByText('The channel change did not save. Try again.')).toBeInTheDocument()
+  })
+
+  it('rolls the toggles back when the preference save fails', async () => {
+    vi.mocked(window.electronAPI.setUpdatePreferences).mockRejectedValue(new Error('ipc down'))
+    await renderUpdates(updaterState())
+    const downloadToggle = screen.getByRole('checkbox', {
+      name: 'Download updates in the background'
+    })
+    await waitFor(() => expect(downloadToggle).toBeEnabled())
+    expect(downloadToggle).toBeChecked()
+
+    fireEvent.click(downloadToggle)
+
+    await waitFor(() => expect(downloadToggle).toBeChecked())
+  })
+
   it('registers the nav badge on its section entry', () => {
     expect(updatesSection.NavBadge).toBe(UpdatesNavBadge)
   })

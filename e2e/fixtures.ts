@@ -21,7 +21,7 @@ const launchWindowHeight = 800
 
 const demoRecordingEnabled = process.env.REBASE_DEMO === '1'
 const demoVideoDirectory = path.join(currentDir, '..', 'test-results', 'demos')
-const demoSlowMoMilliseconds = 1200
+const demoInteractionDelayMilliseconds = 1200
 
 const demoPacedLocatorMethods = [
   'click',
@@ -31,7 +31,6 @@ const demoPacedLocatorMethods = [
   'selectOption',
   'check',
   'uncheck',
-  'setChecked',
   'hover',
   'focus'
 ] as const
@@ -47,7 +46,7 @@ function paceMethods(prototype: object, methods: readonly string[]): void {
     }
     target[method] = async function paced(this: unknown, ...args: unknown[]) {
       const result = await original.apply(this, args)
-      await new Promise((resolve) => setTimeout(resolve, demoSlowMoMilliseconds))
+      await new Promise((resolve) => setTimeout(resolve, demoInteractionDelayMilliseconds))
       return result
     }
   }
@@ -441,7 +440,6 @@ export const test = base.extend<{ harness: AppHarness }>({
         env: electronEnv,
         ...(demoRecordingEnabled
           ? {
-              slowMo: demoSlowMoMilliseconds,
               recordVideo: {
                 dir: demoVideoDirectory,
                 size: { width: launchWindowWidth, height: launchWindowHeight }

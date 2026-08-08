@@ -71,4 +71,27 @@ describe('GeneralSection', () => {
     expect(askRadio()).toBeChecked()
     expect(mergeRadio()).not.toBeChecked()
   })
+  it('rolls the reopen-on-launch control back when the save fails', async () => {
+    vi.mocked(window.electronAPI.setReopenRepositoriesOnLaunch).mockRejectedValue(
+      new Error('ipc down')
+    )
+    render(<GeneralContent />)
+    await waitFor(() => expect(reopenCheckbox()).toBeEnabled())
+    expect(reopenCheckbox()).toBeChecked()
+
+    fireEvent.click(reopenCheckbox())
+
+    await waitFor(() => expect(reopenCheckbox()).toBeChecked())
+  })
+
+  it('rolls the diverged-pull choice back when the save fails', async () => {
+    vi.mocked(window.electronAPI.setPullDivergedStrategy).mockRejectedValue(new Error('ipc down'))
+    render(<GeneralContent />)
+    await waitFor(() => expect(askRadio()).toBeChecked())
+
+    fireEvent.click(rebaseRadio())
+
+    await waitFor(() => expect(askRadio()).toBeChecked())
+    expect(rebaseRadio()).not.toBeChecked()
+  })
 })

@@ -10,19 +10,21 @@ export function useUpdaterState(): UpdaterState | null {
 
   useEffect(() => {
     let cancelled = false
+    let pushed = false
+    const unsubscribe = window.electronAPI.onUpdaterStateChanged((state) => {
+      pushed = true
+      setUpdater(state)
+    })
     window.electronAPI
       .getUpdaterState()
       .then((state) => {
-        if (!cancelled) {
+        if (!cancelled && !pushed) {
           setUpdater(state)
         }
       })
       .catch((error: unknown) => {
         console.error('[updates] failed to load the update state', error)
       })
-    const unsubscribe = window.electronAPI.onUpdaterStateChanged((state) => {
-      setUpdater(state)
-    })
     return () => {
       cancelled = true
       unsubscribe()

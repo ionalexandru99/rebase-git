@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { AboutContent } from '../AboutSection'
 
@@ -29,6 +30,27 @@ describe('AboutSection', () => {
     await waitFor(() =>
       expect(buildRow().getByRole('button', { name: 'Copied' })).toBeInTheDocument()
     )
+  })
+
+  it('returns the Copy button after the copied feedback delay', async () => {
+    vi.useFakeTimers()
+    try {
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+      render(<AboutContent />)
+      await act(async () => {})
+
+      fireEvent.click(buildRow().getByRole('button', { name: 'Copy' }))
+      await act(async () => {})
+      expect(buildRow().getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+
+      act(() => {
+        vi.advanceTimersByTime(2000)
+      })
+      expect(buildRow().getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('reveals the logs folder in the file manager', async () => {

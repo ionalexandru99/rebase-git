@@ -102,9 +102,7 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
 
   const applyChannel = (): void => {
     const profile = updaterChannelProfile(channel, currentVersion)
-    if (profile.channel !== null) {
-      autoUpdater.channel = profile.channel
-    }
+    autoUpdater.channel = profile.channel ?? 'latest'
     autoUpdater.allowPrerelease = profile.allowPrerelease
     autoUpdater.allowDowngrade = profile.allowDowngrade
   }

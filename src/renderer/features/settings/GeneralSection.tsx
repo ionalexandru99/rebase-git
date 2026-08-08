@@ -53,10 +53,12 @@ function ReopenOnLaunchRow() {
         disabled={reopenOnLaunch === null}
         aria-label="Reopen repositories on launch"
         onChange={(event) => {
+          const previous = reopenOnLaunch
           const reopen = event.target.checked
           setReopenOnLaunch(reopen)
           window.electronAPI.setReopenRepositoriesOnLaunch(reopen).catch((error: unknown) => {
             console.error('[settings] failed to save the reopen-on-launch preference', error)
+            setReopenOnLaunch(previous)
           })
         }}
       />
@@ -108,11 +110,13 @@ function PullDivergedRow() {
               checked={choice === option.value}
               disabled={choice === null}
               onChange={() => {
+                const previous = choice
                 setChoice(option.value)
                 window.electronAPI
                   .setPullDivergedStrategy(toStrategy(option.value))
                   .catch((error: unknown) => {
                     console.error('[settings] failed to save the diverged-pull strategy', error)
+                    setChoice(previous)
                   })
               }}
               className="size-[13px] accent-[var(--brand)]"

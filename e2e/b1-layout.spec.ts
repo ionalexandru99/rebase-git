@@ -151,7 +151,9 @@ test('the workspace columns fill the window height and the status dock sits at t
   if (!dockBox) {
     throw new Error('the status dock has no bounding box')
   }
-  expect(dockBox.y + dockBox.height).toBeGreaterThan(viewportHeight - 2)
+  const dockBottom = dockBox.y + dockBox.height
+  expect(dockBottom).toBeGreaterThanOrEqual(viewportHeight - 2)
+  expect(dockBottom).toBeLessThanOrEqual(viewportHeight + 2)
 
   const listBox = await commitListRegion(page).boundingBox()
   if (!listBox) {

@@ -138,6 +138,15 @@ describe('setupUpdater', () => {
     expect(invokeCheck()._tag).toBe('Started')
   })
 
+  it('maps the stable profile to the latest channel so a nightly channel can be unset', () => {
+    startUpdater({ storedChannel: 'nightly' })
+    expect(mocks.autoUpdater.channel).toBe('nightly')
+
+    expect(invokeSetChannel('stable')._tag).toBe('Started')
+
+    expect(mocks.autoUpdater.channel).toBe('latest')
+  })
+
   it('disarms a downloaded update when the channel switches away from it and re-arms on the next on-channel download', () => {
     startUpdater({ storedChannel: 'nightly' })
 

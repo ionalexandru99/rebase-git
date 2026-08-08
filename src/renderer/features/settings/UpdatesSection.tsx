@@ -189,6 +189,8 @@ function UpdateChannelRow(props: { updater: UpdaterState | null }) {
       })
       .catch((error: unknown) => {
         console.error('[settings] failed to change the update channel', error)
+        setChannel(previous)
+        setRejection('The channel change did not save. Try again.')
       })
   }
 
@@ -252,9 +254,11 @@ function UpdatePreferenceRows(props: { readOnly: boolean }) {
   }, [])
 
   const save = (next: UpdatePreferences): void => {
+    const previous = preferences
     setPreferences(next)
     window.electronAPI.setUpdatePreferences(next).catch((error: unknown) => {
       console.error('[settings] failed to save the update preferences', error)
+      setPreferences(previous)
     })
   }
 
