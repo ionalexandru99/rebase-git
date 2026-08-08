@@ -13,18 +13,16 @@ export function SettingsSection(props: SettingsSectionProps) {
 
   return (
     <section aria-label={props.title} className="min-w-0">
-      <div className="px-3">
-        <h3 className="flex items-center gap-2 font-semibold text-[17px] text-foreground leading-[1.3] tracking-[-0.025em]">
+      <div className="px-4">
+        <h3 className="flex items-center gap-2 font-semibold text-foreground text-lg tracking-[-0.025em]">
           <Icon aria-hidden className="size-4 text-muted-foreground" />
           {props.title}
         </h3>
         {props.description ? (
-          <p className="mt-0.5 text-[13px] text-muted-foreground/80 leading-[1.4]">
-            {props.description}
-          </p>
+          <p className="mt-1 text-[13px] text-muted-foreground/80">{props.description}</p>
         ) : null}
       </div>
-      <div className="mt-2.5 grid gap-0.5">{props.children}</div>
+      <div className="mt-3 grid gap-1">{props.children}</div>
     </section>
   )
 }

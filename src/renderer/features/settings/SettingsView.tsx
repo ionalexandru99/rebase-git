@@ -105,7 +105,7 @@ export function SettingsView(props: SettingsViewProps) {
           )}
         </div>
         <div className="min-w-0 flex-1 overflow-y-auto">
-          <div className="flex w-full max-w-[36rem] flex-col gap-10 pt-8 pr-6 pb-16 pl-10">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 pt-10 pb-12">
             <activeSection.Content
               repoLabel={props.repoLabel}
               identity={{

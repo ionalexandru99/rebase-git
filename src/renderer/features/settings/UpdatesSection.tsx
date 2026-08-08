@@ -116,7 +116,6 @@ function VersionRow(props: { updater: UpdaterState | null }) {
         <Button
           type="button"
           size="sm"
-          className="h-[30px] px-2.5 text-[12.5px]"
           disabled={action.disabled}
           onClick={() => {
             if (action.invoke) {
@@ -142,10 +141,10 @@ function actionInProgress(updater: UpdaterState | null): boolean {
 
 function NightlyWarning() {
   return (
-    <Alert className="mx-3 mt-1.5 p-3">
+    <Alert>
       <TriangleAlertIcon />
-      <AlertTitle className="text-[12.5px]">Nightly builds ship straight from main</AlertTitle>
-      <AlertDescription className="text-[12px] leading-[1.45]">
+      <AlertTitle>Nightly builds ship straight from main</AlertTitle>
+      <AlertDescription>
         <p>
           They are not release tested and can break at any time. Switching back to Stable downgrades
           to the latest stable release at the next check.
@@ -216,7 +215,7 @@ function UpdateChannelRow(props: { updater: UpdaterState | null }) {
               changeChannel(channel, selected.value)
             }
           }}
-          className="h-[30px] rounded-md border border-input bg-input/30 px-2 text-[12.5px] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-8 rounded-md border border-input bg-input/30 px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {CHANNEL_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
