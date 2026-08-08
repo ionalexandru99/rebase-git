@@ -5,7 +5,9 @@ import { PortalContainerProvider } from '../components/ui/portal-container'
 import { Toaster } from '../components/ui/sonner'
 import { OnboardingScreen } from '../features/onboarding/OnboardingScreen'
 import { useOnboarding } from '../features/onboarding/useOnboarding'
+import { updatesSection } from '../features/settings/UpdatesSection'
 import { useTabs } from '../hooks/useTabs'
+import { hasPendingUpdate, useUpdaterState } from '../hooks/useUpdaterState'
 import { repoQueryKeys } from '../lib/query-keys'
 import { RepoRail } from '../shell/RepoRail'
 import { Titlebar } from '../shell/Titlebar'
@@ -91,8 +93,18 @@ function TabsShell(props: TabsShellProps) {
   } = useTabs(props.persisted)
   const [recentRepos, setRecentRepos] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsInitialSectionId, setSettingsInitialSectionId] = useState<string | null>(null)
   const [activatedTabIds, setActivatedTabIds] = useState<Set<string>>(new Set([activeTabId]))
   const queryClient = useQueryClient()
+  const updater = useUpdaterState()
+  const updateBadged = hasPendingUpdate(updater)
+
+  const toggleSettings = () => {
+    if (!settingsOpen) {
+      setSettingsInitialSectionId(updateBadged ? updatesSection.id : null)
+    }
+    setSettingsOpen(!settingsOpen)
+  }
 
   const dropTabCache = useCallback(
     (repoPath: string | null) => {
@@ -192,7 +204,8 @@ function TabsShell(props: TabsShellProps) {
           onClose={closeTab}
           onNew={newTab}
           settingsOpen={settingsOpen}
-          onToggleSettings={() => setSettingsOpen((open) => !open)}
+          updateBadged={updateBadged}
+          onToggleSettings={toggleSettings}
         />
 
         <div className="relative flex min-h-0 flex-col overflow-hidden">
@@ -210,6 +223,7 @@ function TabsShell(props: TabsShellProps) {
                       tab={tab}
                       tabActive={tabActive}
                       settingsOpen={settingsOpen}
+                      settingsInitialSectionId={settingsInitialSectionId}
                       onCloseSettings={() => setSettingsOpen(false)}
                       catalog={workspaceCatalog}
                       onOpenRepo={openRepoInTab}

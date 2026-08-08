@@ -11,6 +11,7 @@ import { settingsSections } from './sections'
 
 export interface SettingsViewProps {
   repoLabel: string | null
+  initialSectionId?: string | null
   identity: ResolvedIdentity
   saving: boolean
   error: string | null
@@ -20,7 +21,11 @@ export interface SettingsViewProps {
 }
 
 export function SettingsView(props: SettingsViewProps) {
-  const [activeSectionId, setActiveSectionId] = useState(settingsSections[0].id)
+  const [activeSectionId, setActiveSectionId] = useState(
+    () =>
+      settingsSections.find((section) => section.id === props.initialSectionId)?.id ??
+      settingsSections[0].id
+  )
   const activeSection =
     settingsSections.find((section) => section.id === activeSectionId) ?? settingsSections[0]
 

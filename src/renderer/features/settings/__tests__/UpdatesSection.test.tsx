@@ -2,7 +2,7 @@ import type { UpdaterState } from '@shared/schemas/ipc'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { act } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { UpdatesContent } from '../UpdatesSection'
+import { UpdatesContent, UpdatesNavBadge, updatesSection } from '../UpdatesSection'
 
 const updaterState = (overrides: Partial<UpdaterState> = {}): UpdaterState => ({
   status: 'idle',
@@ -220,6 +220,70 @@ describe('UpdatesSection', () => {
     await waitFor(() => expect(channelSelect()).toHaveValue('stable'))
     expect(screen.getByText('An update is downloading right now.')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('registers the nav badge on its section entry', () => {
+    expect(updatesSection.NavBadge).toBe(UpdatesNavBadge)
+  })
+
+  it('marks the nav item while an update is ready to download', async () => {
+    vi.mocked(window.electronAPI.getUpdaterState).mockResolvedValue(
+      updaterState({ status: 'available', availableVersion: '1.3.0' })
+    )
+
+    render(<UpdatesNavBadge />)
+
+    expect(await screen.findByTestId('updates-nav-badge')).toBeInTheDocument()
+  })
+
+  it('marks the nav item while an update waits to install', async () => {
+    vi.mocked(window.electronAPI.getUpdaterState).mockResolvedValue(
+      updaterState({ status: 'downloaded', availableVersion: '1.3.0' })
+    )
+
+    render(<UpdatesNavBadge />)
+
+    expect(await screen.findByTestId('updates-nav-badge')).toBeInTheDocument()
+  })
+
+  it('stays empty while the updater is idle', async () => {
+    vi.mocked(window.electronAPI.getUpdaterState).mockResolvedValue(updaterState())
+
+    render(<UpdatesNavBadge />)
+    await act(async () => {})
+
+    expect(screen.queryByTestId('updates-nav-badge')).toBeNull()
+  })
+
+  it('stays empty when the last check failed', async () => {
+    vi.mocked(window.electronAPI.getUpdaterState).mockResolvedValue(
+      updaterState({ status: 'error', errorMessage: 'cannot reach the update server' })
+    )
+
+    render(<UpdatesNavBadge />)
+    await act(async () => {})
+
+    expect(screen.queryByTestId('updates-nav-badge')).toBeNull()
+  })
+
+  it('clears the nav mark once the app is up to date again', async () => {
+    let pushState: ((state: UpdaterState) => void) | null = null
+    vi.mocked(window.electronAPI.onUpdaterStateChanged).mockImplementation((callback) => {
+      pushState = callback
+      return () => {}
+    })
+    vi.mocked(window.electronAPI.getUpdaterState).mockResolvedValue(
+      updaterState({ status: 'downloaded', availableVersion: '1.3.0' })
+    )
+
+    render(<UpdatesNavBadge />)
+    await screen.findByTestId('updates-nav-badge')
+
+    act(() => {
+      pushState?.(updaterState({ status: 'up-to-date' }))
+    })
+
+    expect(screen.queryByTestId('updates-nav-badge')).toBeNull()
   })
 
   it('renders read-only with the reason when the build cannot update itself', async () => {

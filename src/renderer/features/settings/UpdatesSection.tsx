@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { hasPendingUpdate, useUpdaterState } from '@/hooks/useUpdaterState'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
 import type { SettingsSectionEntry } from './sections'
@@ -58,33 +59,6 @@ function availabilityLine(state: UpdaterState): string | null {
     return `Version ${state.availableVersion} is ready to install.`
   }
   return null
-}
-
-function useUpdaterState(): UpdaterState | null {
-  const [updater, setUpdater] = useState<UpdaterState | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    window.electronAPI
-      .getUpdaterState()
-      .then((state) => {
-        if (!cancelled) {
-          setUpdater(state)
-        }
-      })
-      .catch((error: unknown) => {
-        console.error('[settings] failed to load the update state', error)
-      })
-    const unsubscribe = window.electronAPI.onUpdaterStateChanged((state) => {
-      setUpdater(state)
-    })
-    return () => {
-      cancelled = true
-      unsubscribe()
-    }
-  }, [])
-
-  return updater
 }
 
 function VersionStatus(props: { updater: UpdaterState; rejection: string | null }) {
@@ -335,9 +309,26 @@ export function UpdatesContent() {
   )
 }
 
+export function UpdatesNavBadge() {
+  const updater = useUpdaterState()
+
+  if (!hasPendingUpdate(updater)) {
+    return null
+  }
+
+  return (
+    <span
+      aria-hidden
+      data-testid="updates-nav-badge"
+      className="size-2 shrink-0 rounded-full bg-primary"
+    />
+  )
+}
+
 export const updatesSection: SettingsSectionEntry = {
   id: 'updates',
   label: 'Updates',
   icon: DownloadIcon,
-  Content: UpdatesContent
+  Content: UpdatesContent,
+  NavBadge: UpdatesNavBadge
 }

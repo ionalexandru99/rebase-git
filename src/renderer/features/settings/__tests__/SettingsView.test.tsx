@@ -52,6 +52,21 @@ describe('SettingsView', () => {
     expect(screen.queryByRole('region', { name: 'General' })).toBeNull()
   })
 
+  it('opens directly on the requested section', () => {
+    render(<SettingsView {...makeProps({ initialSectionId: 'updates' })} />)
+
+    const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }))
+    expect(nav.getByRole('button', { name: 'Updates' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('region', { name: 'Updates' })).toBeInTheDocument()
+  })
+
+  it('falls back to the first section when the requested one is unknown', () => {
+    render(<SettingsView {...makeProps({ initialSectionId: 'missing' })} />)
+
+    const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }))
+    expect(nav.getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'true')
+  })
+
   it('shows the inherited app identity as placeholder text when the repo has no override', () => {
     renderView()
 

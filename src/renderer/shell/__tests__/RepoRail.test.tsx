@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { TabDescriptor } from '../../hooks/useTabs'
 import { RepoRail } from '../RepoRail'
@@ -21,6 +21,7 @@ function renderRail(overrides: Partial<Parameters<typeof RepoRail>[0]> = {}) {
       onClose={onClose}
       onNew={onNew}
       settingsOpen={overrides.settingsOpen ?? false}
+      updateBadged={overrides.updateBadged ?? false}
       onToggleSettings={onToggleSettings}
     />
   )
@@ -89,6 +90,21 @@ describe('RepoRail', () => {
     expect(settings).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(settings)
     expect(onToggleSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the gear plain while no update is pending', () => {
+    renderRail()
+
+    const settings = screen.getByRole('button', { name: 'Settings' })
+    expect(within(settings).queryByTestId('settings-update-badge')).toBeNull()
+  })
+
+  it('badges the gear and says an update is available when one is pending', () => {
+    renderRail({ updateBadged: true })
+
+    const settings = screen.getByRole('button', { name: 'Settings, update available' })
+    expect(within(settings).getByTestId('settings-update-badge')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
   })
 
   it('activates an existing blank tab instead of creating another', () => {
