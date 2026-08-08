@@ -26,10 +26,19 @@ function renderView(overrides: Partial<SettingsViewProps> = {}) {
   return props
 }
 
-const appSection = () => within(screen.getByRole('region', { name: 'App settings' }))
-const repoSection = () => within(screen.getByRole('region', { name: 'Repository settings' }))
+const appSection = () => within(screen.getByRole('group', { name: 'App settings' }))
+const repoSection = () => within(screen.getByRole('group', { name: 'Repository settings' }))
 
 describe('SettingsView', () => {
+  it('lists the registered sections in the nav with Git identity active', () => {
+    renderView()
+
+    const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }))
+    const gitIdentityItem = nav.getByRole('button', { name: 'Git identity' })
+    expect(gitIdentityItem).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('region', { name: 'Git identity' })).toBeInTheDocument()
+  })
+
   it('shows the inherited app identity as placeholder text when the repo has no override', () => {
     renderView()
 
@@ -45,8 +54,8 @@ describe('SettingsView', () => {
   it('shows only the app section when the tab has no repository', () => {
     renderView({ repoLabel: null })
 
-    expect(screen.getByRole('region', { name: 'App settings' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Repository settings' })).toBeNull()
+    expect(screen.getByRole('group', { name: 'App settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Repository settings' })).toBeNull()
   })
 
   it('saves the app identity at global scope', () => {

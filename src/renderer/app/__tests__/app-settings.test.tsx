@@ -90,8 +90,8 @@ describe('App — settings', () => {
     renderApp()
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
 
-    expect(await screen.findByRole('region', { name: 'App settings' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Repository settings' })).toBeNull()
+    expect(await screen.findByRole('group', { name: 'App settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Repository settings' })).toBeNull()
   })
 
   it('sends the edited app identity to the sidecar', async () => {
@@ -104,7 +104,7 @@ describe('App — settings', () => {
       expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('my-app')
     })
     fireEvent.click(gear())
-    const appSettings = within(await screen.findByRole('region', { name: 'App settings' }))
+    const appSettings = within(await screen.findByRole('group', { name: 'App settings' }))
     fireEvent.change(appSettings.getByLabelText('Name'), { target: { value: 'Ada Lovelace' } })
     fireEvent.click(appSettings.getByRole('button', { name: 'Save' }))
 
