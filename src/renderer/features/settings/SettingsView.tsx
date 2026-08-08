@@ -35,7 +35,11 @@ export function SettingsView(props: SettingsViewProps) {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [revealTarget, setRevealTarget] = useState<{ rowId: string } | null>(null)
-  const searchResults = useMemo(() => searchSettingsIndex(searchQuery), [searchQuery])
+  const repositoryOpen = props.repoLabel !== null
+  const searchResults = useMemo(
+    () => searchSettingsIndex(searchQuery, { repositoryOpen }),
+    [searchQuery, repositoryOpen]
+  )
   const searching = searchQuery.trim().length > 0
 
   const revealSearchResult = (entry: SettingsSearchEntry): void => {

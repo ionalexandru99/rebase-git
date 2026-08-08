@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { searchSettingsIndex, settingsSearchIndex } from '../search-index'
 
-const rowIds = (query: string): string[] => searchSettingsIndex(query).map((entry) => entry.rowId)
+const rowIds = (query: string, repositoryOpen = true): string[] =>
+  searchSettingsIndex(query, { repositoryOpen }).map((entry) => entry.rowId)
 
 describe('searchSettingsIndex', () => {
   it('indexes every registered settings row exactly once', () => {
@@ -44,6 +45,16 @@ describe('searchSettingsIndex', () => {
 
   it('matches case-insensitively', () => {
     expect(rowIds('NIGHTLY')).toContain('settings-updates-channel')
+  })
+
+  it('offers the repository identity row while a repository is open', () => {
+    expect(rowIds('override')).toContain('settings-identity-repository')
+  })
+
+  it('hides the repository identity row when no repository is open', () => {
+    expect(rowIds('override', false)).not.toContain('settings-identity-repository')
+    expect(rowIds('local', false)).not.toContain('settings-identity-repository')
+    expect(rowIds('Repository settings', false)).toEqual([])
   })
 
   it('returns nothing for a query no entry mentions', () => {

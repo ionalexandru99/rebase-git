@@ -4,6 +4,7 @@ import {
   createInitialUpdaterState,
   describeRejectedUpdaterAction,
   reduceUpdaterState,
+  shouldRunScheduledCheck,
   type UpdaterEvent
 } from '../update-state'
 
@@ -159,6 +160,33 @@ describe('reduceUpdaterState', () => {
     expect(next.errorMessage).toBe('unexpected failure')
   })
 
+  it('forgets a discarded pending update and settles on the last check outcome', () => {
+    const next = reduceUpdaterState(
+      supportedState({
+        status: 'downloaded',
+        availableVersion: '1.3.0-nightly.20260808.5',
+        downloadPercent: 100,
+        lastCheckedAt: CHECKED_AT
+      }),
+      { type: 'pending-update-discarded' }
+    )
+
+    expect(next.status).toBe('up-to-date')
+    expect(next.availableVersion).toBeNull()
+    expect(next.downloadPercent).toBeNull()
+    expect(next.lastCheckedAt).toBe(CHECKED_AT)
+  })
+
+  it('returns to idle after a discard when no check has run yet', () => {
+    const next = reduceUpdaterState(
+      supportedState({ status: 'downloaded', availableVersion: '1.3.0-nightly.20260808.5' }),
+      { type: 'pending-update-discarded' }
+    )
+
+    expect(next.status).toBe('idle')
+    expect(next.availableVersion).toBeNull()
+  })
+
   it('clears the failure once the next check finds an update', () => {
     const next = apply(
       supportedState({ status: 'error', errorMessage: 'network down' }),
@@ -168,6 +196,25 @@ describe('reduceUpdaterState', () => {
 
     expect(next.errorMessage).toBeNull()
     expect(next.status).toBe('available')
+  })
+})
+
+describe('shouldRunScheduledCheck', () => {
+  it('runs while nothing is pending', () => {
+    for (const status of ['idle', 'up-to-date', 'available', 'error'] as const) {
+      expect(shouldRunScheduledCheck(supportedState({ status }))).toBe(true)
+    }
+  })
+
+  it('skips while a downloaded update waits to install', () => {
+    expect(
+      shouldRunScheduledCheck(supportedState({ status: 'downloaded', availableVersion: '1.3.0' }))
+    ).toBe(false)
+  })
+
+  it('skips while a check or download is running', () => {
+    expect(shouldRunScheduledCheck(supportedState({ status: 'checking' }))).toBe(false)
+    expect(shouldRunScheduledCheck(supportedState({ status: 'downloading' }))).toBe(false)
   })
 })
 

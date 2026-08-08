@@ -10,6 +10,7 @@ export type UpdaterEvent =
   | { type: 'download-progress'; percent: number }
   | { type: 'update-downloaded'; version: string }
   | { type: 'update-error'; message: string; at: string }
+  | { type: 'pending-update-discarded' }
 
 export type UpdaterAction = 'check' | 'download' | 'install'
 
@@ -69,6 +70,14 @@ export function reduceUpdaterState(state: UpdaterState, event: UpdaterEvent): Up
         errorMessage: null
       }
     }
+    case 'pending-update-discarded': {
+      return {
+        ...state,
+        status: state.lastCheckedAt === null ? 'idle' : 'up-to-date',
+        availableVersion: null,
+        downloadPercent: null
+      }
+    }
     case 'update-error': {
       const downloadFailedWithKnownUpdate =
         state.status === 'downloading' && state.availableVersion !== null
@@ -81,6 +90,13 @@ export function reduceUpdaterState(state: UpdaterState, event: UpdaterEvent): Up
       }
     }
   }
+}
+
+export function shouldRunScheduledCheck(state: UpdaterState): boolean {
+  if (state.status === 'downloaded') {
+    return false
+  }
+  return describeRejectedUpdaterAction(state, 'check') === null
 }
 
 export function describeRejectedUpdaterAction(

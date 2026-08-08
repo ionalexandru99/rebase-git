@@ -202,7 +202,11 @@ function UpdateChannelRow(props: { updater: UpdaterState | null }) {
         <select
           aria-label="Update channel"
           value={channel ?? 'stable'}
-          disabled={channel === null || actionInProgress(props.updater)}
+          disabled={
+            channel === null ||
+            (props.updater !== null && !props.updater.supported) ||
+            actionInProgress(props.updater)
+          }
           onChange={(event) => {
             const selected = CHANNEL_OPTIONS.find((option) => option.value === event.target.value)
             if (channel !== null && selected && selected.value !== channel) {

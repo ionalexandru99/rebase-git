@@ -28,6 +28,7 @@ import {
   createInitialUpdaterState,
   describeRejectedUpdaterAction,
   reduceUpdaterState,
+  shouldRunScheduledCheck,
   type UpdaterAction,
   type UpdaterEvent,
   type UpdaterSupport
@@ -38,15 +39,20 @@ const { autoUpdater } = electronUpdater
 const STARTUP_CHECK_DELAY_MS = 30_000
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
+function runningUnderE2eHarness(): boolean {
+  return process.env.NODE_ENV === 'test' && process.argv.includes('--e2e')
+}
+
 function detectUpdaterSupport(): UpdaterSupport {
-  if (!app.isPackaged) {
+  const updaterEnabled = process.env.REBASE_ENABLE_UPDATER === '1'
+  if (!app.isPackaged && !(updaterEnabled && runningUnderE2eHarness())) {
     return {
       supported: false,
       reason:
         'This build runs straight from source, so it cannot replace itself. Rebuild to pick up new versions.'
     }
   }
-  if (process.env.REBASE_ENABLE_UPDATER !== '1') {
+  if (!updaterEnabled) {
     return {
       supported: false,
       reason:
@@ -62,6 +68,7 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
   let state = createInitialUpdaterState(currentVersion, support)
   let channel = resolveUpdateChannel(getStoredUpdateChannel(), currentVersion)
   let installing = false
+  let pendingInstallDisarmed = false
 
   const pushState = (): void => {
     const window = getWindow()
@@ -77,7 +84,20 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
 
   const applyPreferences = (preferences: UpdatePreferences): void => {
     autoUpdater.autoDownload = preferences.downloadInBackground
-    autoUpdater.autoInstallOnAppQuit = preferences.installOnQuit
+    autoUpdater.autoInstallOnAppQuit = pendingInstallDisarmed ? false : preferences.installOnQuit
+  }
+
+  const discardPendingUpdate = (): void => {
+    pendingInstallDisarmed = true
+    autoUpdater.autoInstallOnAppQuit = false
+    dispatch({ type: 'pending-update-discarded' })
+  }
+
+  const rearmInstallOnQuit = (): void => {
+    if (pendingInstallDisarmed) {
+      pendingInstallDisarmed = false
+      applyPreferences(getUpdatePreferences())
+    }
   }
 
   const applyChannel = (): void => {
@@ -90,9 +110,26 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
   }
 
   const runCheck = (): void => {
-    autoUpdater.checkForUpdates().catch((error: unknown) => {
-      log.warn('[updater] check for updates failed', error)
-    })
+    autoUpdater
+      .checkForUpdates()
+      .then((result) => {
+        if (
+          !result?.cancellationToken ||
+          versionBelongsToChannel(result.updateInfo.version, channel)
+        ) {
+          return
+        }
+        log.warn(
+          '[updater] cancelling the download of an update outside the selected channel',
+          result.updateInfo.version,
+          channel
+        )
+        result.cancellationToken.cancel()
+        result.downloadPromise?.catch(() => undefined)
+      })
+      .catch((error: unknown) => {
+        log.warn('[updater] check for updates failed', error)
+      })
   }
 
   const startDownload = (): void => {
@@ -141,6 +178,12 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
       channel = requested
       setStoredUpdateChannel(requested)
       if (support.supported) {
+        if (
+          state.availableVersion !== null &&
+          !versionBelongsToChannel(state.availableVersion, requested)
+        ) {
+          discardPendingUpdate()
+        }
         applyChannel()
         runCheck()
       }
@@ -173,16 +216,22 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
     dispatch({ type: 'update-not-available', at: new Date().toISOString() })
   })
   autoUpdater.on('download-progress', (progress) => {
+    if (state.availableVersion === null) {
+      return
+    }
     dispatch({ type: 'download-progress', percent: progress.percent })
   })
   autoUpdater.on('update-downloaded', (info) => {
     if (!versionBelongsToChannel(info.version, channel)) {
       log.warn('[updater] discarding download outside the selected channel', info.version, channel)
+      discardPendingUpdate()
       return
     }
+    rearmInstallOnQuit()
     dispatch({ type: 'update-downloaded', version: info.version })
   })
   autoUpdater.on('error', (error) => {
+    installing = false
     dispatch({ type: 'update-error', message: error.message, at: new Date().toISOString() })
   })
 
@@ -190,7 +239,7 @@ export function setupUpdater(getWindow: () => BrowserWindow | null): void {
     startupDelayMs: STARTUP_CHECK_DELAY_MS,
     intervalMs: CHECK_INTERVAL_MS,
     runCheck: () => {
-      if (describeRejectedUpdaterAction(state, 'check') === null) {
+      if (shouldRunScheduledCheck(state)) {
         runCheck()
       }
     }

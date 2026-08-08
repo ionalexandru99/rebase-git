@@ -86,6 +86,27 @@ describe('SettingsView', () => {
     expect(screen.queryByRole('group', { name: 'Repository settings' })).toBeNull()
   })
 
+  it('offers the repository identity row in search results while a repository is open', () => {
+    render(<SettingsView {...makeProps()} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search settings' }), {
+      target: { value: 'override' }
+    })
+
+    expect(screen.getByRole('option', { name: /Repository settings/ })).toBeInTheDocument()
+  })
+
+  it('keeps the repository identity row out of search results on a blank tab', () => {
+    render(<SettingsView {...makeProps({ repoLabel: null })} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Search settings' }), {
+      target: { value: 'override' }
+    })
+
+    expect(screen.queryByRole('option', { name: /Repository settings/ })).toBeNull()
+    expect(screen.getByRole('option', { name: /App settings/ })).toBeInTheDocument()
+  })
+
   it('saves the app identity at global scope', () => {
     const { onSave } = renderView()
 

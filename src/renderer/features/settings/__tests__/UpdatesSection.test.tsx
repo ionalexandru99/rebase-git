@@ -298,6 +298,7 @@ describe('UpdatesSection', () => {
       versionRow().getByText('Automatic updates are switched off in this build.')
     ).toBeInTheDocument()
     expect(versionRow().queryByRole('button')).toBeNull()
+    expect(channelSelect()).toBeDisabled()
     expect(
       screen.getByRole('checkbox', { name: 'Download updates in the background' })
     ).toBeDisabled()

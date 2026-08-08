@@ -5,6 +5,11 @@ export interface SettingsSearchEntry {
   title: string
   description: string
   synonyms: string[]
+  requiresOpenRepository?: boolean
+}
+
+export interface SettingsSearchContext {
+  repositoryOpen: boolean
 }
 
 export const settingsSearchIndex: SettingsSearchEntry[] = [
@@ -40,7 +45,8 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
     rowId: 'settings-identity-repository',
     title: 'Repository settings',
     description: 'Overrides the app identity for the open repository.',
-    synonyms: ['name', 'email', 'override', 'local', 'per-repository']
+    synonyms: ['name', 'email', 'override', 'local', 'per-repository'],
+    requiresOpenRepository: true
   },
   {
     sectionId: 'updates',
@@ -102,14 +108,20 @@ export const settingsSearchIndex: SettingsSearchEntry[] = [
   }
 ]
 
-export function searchSettingsIndex(query: string): SettingsSearchEntry[] {
+export function searchSettingsIndex(
+  query: string,
+  context: SettingsSearchContext
+): SettingsSearchEntry[] {
   const needle = query.trim().toLowerCase()
   if (needle.length === 0) {
     return []
   }
-  return settingsSearchIndex.filter((entry) =>
-    [entry.sectionLabel, entry.title, entry.description, ...entry.synonyms].some((text) =>
+  return settingsSearchIndex.filter((entry) => {
+    if (entry.requiresOpenRepository && !context.repositoryOpen) {
+      return false
+    }
+    return [entry.sectionLabel, entry.title, entry.description, ...entry.synonyms].some((text) =>
       text.toLowerCase().includes(needle)
     )
-  )
+  })
 }
