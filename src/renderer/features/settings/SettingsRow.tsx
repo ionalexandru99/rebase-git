@@ -21,29 +21,36 @@ export function SettingsRow(props: SettingsRowProps) {
       data-settings-row={props.id}
       aria-labelledby={titleId}
       className={cn(
-        'min-w-0 rounded-[var(--r-md)] border bg-card px-4 py-3',
-        'transition-colors motion-reduce:transition-none data-[settings-row-highlight]:border-ring data-[settings-row-highlight]:bg-card-2',
-        stacked ? 'grid gap-3' : 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4'
+        'min-w-0 rounded-xl px-4 py-3',
+        'transition-colors motion-reduce:transition-none data-[settings-row-highlight]:bg-card-2 data-[settings-row-highlight]:ring-1 data-[settings-row-highlight]:ring-ring',
+        stacked
+          ? 'grid gap-4'
+          : 'grid grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] items-center gap-8'
       )}
     >
-      <div className="grid gap-1">
-        <span id={titleId} className="text-sm font-medium">
+      <div className="min-w-0 space-y-1">
+        <span
+          id={titleId}
+          className="block font-medium text-foreground text-sm tracking-[-0.005em]"
+        >
           {props.title}
         </span>
         {props.description ? (
-          <p className="text-xs text-muted-foreground">{props.description}</p>
+          <p className="max-w-xl text-[13px] text-muted-foreground/80 leading-[1.45]">
+            {props.description}
+          </p>
         ) : null}
         {props.status ? (
           <div
             data-testid={`settings-row-status-${props.id}`}
-            className="text-xs text-muted-foreground"
+            className="pt-0.5 text-muted-foreground text-xs"
           >
             {props.status}
           </div>
         ) : null}
       </div>
       {props.children ? (
-        <div className={cn(!stacked && 'justify-self-end')}>{props.children}</div>
+        <div className={cn(!stacked && 'flex items-center justify-self-end')}>{props.children}</div>
       ) : null}
     </fieldset>
   )

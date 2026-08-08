@@ -12,15 +12,17 @@ export function SettingsSection(props: SettingsSectionProps) {
   const Icon = props.icon
 
   return (
-    <section aria-label={props.title} className="px-6 py-5">
-      <div className="flex items-center gap-2">
-        <Icon aria-hidden className="size-4 text-muted-foreground" />
-        <h3 className="text-sm font-semibold">{props.title}</h3>
+    <section aria-label={props.title} className="min-w-0">
+      <div className="px-4">
+        <h3 className="flex items-center gap-2 font-semibold text-foreground text-lg tracking-[-0.025em]">
+          <Icon aria-hidden className="size-4 text-muted-foreground" />
+          {props.title}
+        </h3>
+        {props.description ? (
+          <p className="mt-1 text-[13px] text-muted-foreground/80">{props.description}</p>
+        ) : null}
       </div>
-      {props.description ? (
-        <p className="mt-1 text-xs text-muted-foreground">{props.description}</p>
-      ) : null}
-      <div className="mt-4 grid gap-3">{props.children}</div>
+      <div className="mt-3 grid gap-1">{props.children}</div>
     </section>
   )
 }

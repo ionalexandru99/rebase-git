@@ -89,7 +89,7 @@ export function SettingsView(props: SettingsViewProps) {
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex w-44 shrink-0 flex-col gap-3 overflow-y-auto border-r p-3">
+        <div className="flex w-56 shrink-0 flex-col gap-2 overflow-y-auto border-r p-3">
           <SettingsSearch
             query={searchQuery}
             results={searchResults}
@@ -105,15 +105,17 @@ export function SettingsView(props: SettingsViewProps) {
           )}
         </div>
         <div className="min-w-0 flex-1 overflow-y-auto">
-          <activeSection.Content
-            repoLabel={props.repoLabel}
-            identity={{
-              resolved: props.identity,
-              saving: props.saving,
-              save: props.onSave,
-              clear: props.onClear
-            }}
-          />
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-12 px-6 pt-10 pb-12">
+            <activeSection.Content
+              repoLabel={props.repoLabel}
+              identity={{
+                resolved: props.identity,
+                saving: props.saving,
+                save: props.onSave,
+                clear: props.onClear
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>

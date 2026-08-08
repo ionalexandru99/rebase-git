@@ -1,7 +1,6 @@
 import { SearchIcon } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useEffect, useId, useRef, useState } from 'react'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { SettingsSearchEntry } from './search-index'
 
@@ -99,13 +98,11 @@ export function SettingsSearch(props: SettingsSearchProps) {
 
   return (
     <div className="grid gap-2">
-      <div className="relative">
-        <SearchIcon
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
+      <div className="flex h-8 min-w-0 items-center gap-2 rounded-md px-2 transition-colors focus-within:bg-card-2 hover:bg-card-2">
+        <SearchIcon aria-hidden className="size-4 shrink-0 text-muted-foreground/80" />
+        <input
           ref={inputRef}
+          type="search"
           role="combobox"
           aria-label="Search settings"
           aria-expanded={searching}
@@ -114,15 +111,20 @@ export function SettingsSearch(props: SettingsSearchProps) {
             searching && activeEntry !== null ? optionId(activeEntry) : undefined
           }
           aria-autocomplete="list"
-          placeholder="Search settings"
+          placeholder="Search"
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"
           value={props.query}
           onChange={(event) => changeQuery(event.target.value)}
           onKeyDown={handleKeyDown}
-          className="h-8 pl-7 text-sm"
+          className="min-w-0 flex-1 bg-transparent font-medium text-sm outline-none placeholder:text-muted-foreground"
         />
+        {searching ? null : (
+          <kbd className="rounded-sm bg-card-2 px-1.5 font-sans text-[10px] text-muted-foreground ring-1 ring-border">
+            /
+          </kbd>
+        )}
       </div>
       {searching ? (
         props.results.length === 0 ? (
