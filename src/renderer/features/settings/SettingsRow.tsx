@@ -22,6 +22,7 @@ export function SettingsRow(props: SettingsRowProps) {
       aria-labelledby={titleId}
       className={cn(
         'min-w-0 rounded-[var(--r-md)] border bg-card px-4 py-3',
+        'transition-colors motion-reduce:transition-none data-[settings-row-highlight]:border-ring data-[settings-row-highlight]:bg-card-2',
         stacked ? 'grid gap-3' : 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4'
       )}
     >

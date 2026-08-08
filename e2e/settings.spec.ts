@@ -172,6 +172,34 @@ test('keeps the chosen update channel across settings visits', async ({ harness 
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
+test('search jumps to the update channel row', async ({ harness }) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-view')).toBeVisible()
+
+  await page.keyboard.press('/')
+  const searchInput = page.getByRole('combobox', { name: 'Search settings' })
+  await expect(searchInput).toBeFocused()
+
+  await searchInput.fill('nightly')
+  await expect(page.getByRole('option', { name: /Update channel/ })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeHidden()
+
+  await page.keyboard.press('Enter')
+
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Settings sections' })
+      .getByRole('button', { name: 'Updates' })
+  ).toHaveAttribute('aria-current', 'true')
+  await expect(page.getByRole('group', { name: 'Update channel' })).toBeInViewport()
+  await expect(searchInput).toHaveValue('')
+})
+
 test('shows the running build in the About section', async ({ harness }) => {
   const repo = createFixtureRepo()
 

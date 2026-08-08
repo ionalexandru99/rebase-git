@@ -36,7 +36,7 @@ export function SettingsNav(props: SettingsNavProps) {
   }
 
   return (
-    <nav aria-label="Settings sections" className="w-44 shrink-0 overflow-y-auto border-r p-3">
+    <nav aria-label="Settings sections">
       <ul className="grid gap-1">
         {props.sections.map((section, index) => {
           const active = section.id === props.activeSectionId
