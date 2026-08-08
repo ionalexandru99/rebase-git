@@ -143,7 +143,7 @@ export function Shell(props: ShellProps) {
       {props.banner}
 
       <div
-        className="grid min-h-0 min-w-0 overflow-hidden"
+        className="row-start-2 grid min-h-0 min-w-0 overflow-hidden"
         style={{
           gridTemplateColumns: `${refsWidth}px ${DIVIDER_WIDTH}px ${listWidth}px ${DIVIDER_WIDTH}px minmax(0, 1fr)`
         }}
@@ -222,7 +222,10 @@ export function Shell(props: ShellProps) {
         </section>
       </div>
 
-      <div style={{ height: `${STATUS_DOCK_HEIGHT}px` }} className="min-w-0 shrink-0 border-t">
+      <div
+        style={{ height: `${STATUS_DOCK_HEIGHT}px` }}
+        className="row-start-3 min-w-0 shrink-0 border-t"
+      >
         {props.statusDock}
       </div>
 
