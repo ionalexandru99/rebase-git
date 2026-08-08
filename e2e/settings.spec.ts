@@ -133,6 +133,28 @@ test('renders the Updates section read-only when the build cannot self-update', 
   await expect(page.getByRole('checkbox', { name: 'Install when I quit' })).toBeDisabled()
 })
 
+test('shows the running build in the About section', async ({ harness }) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-view')).toBeVisible()
+
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'About' })
+    .click()
+  await expect(page.getByRole('region', { name: 'About' })).toBeVisible()
+
+  const buildRow = page.getByRole('group', { name: 'Build' })
+  await expect(buildRow).toBeVisible()
+  await expect(buildRow).toContainText(/Rebase \d+\.\d+\.\d+/)
+  await expect(buildRow).toContainText(/Electron \d+/)
+  await expect(buildRow.getByRole('button', { name: 'Copy' })).toBeVisible()
+})
+
 test('turning off reopen repositories relaunches to a single blank tab', async ({ harness }) => {
   const repo = createFixtureRepo()
 

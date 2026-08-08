@@ -137,6 +137,14 @@ export function createPlaywrightMcpElectronApi(
     setReopenRepositoriesOnLaunch: async (reopen) => {
       state.reopenRepositoriesOnLaunch = reopen
     },
+    getBuildInfo: async () => ({
+      version: '1.0.0',
+      commitSha: 'abcdef1234567890abcdef1234567890abcdef12',
+      electronVersion: '37.2.0',
+      platformArch: 'darwin-arm64'
+    }),
+    revealLogsFolder: async () => {},
+    openReleaseNotes: async () => {},
     getUpdaterState: async () => ({
       status: 'idle',
       supported: false,

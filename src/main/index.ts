@@ -13,6 +13,7 @@ import { setupContextMenu } from './app/menu'
 import { createBeforeQuitHandler } from './app/shutdown'
 import { focusExistingWindow } from './app/single-instance'
 import { setupUpdater } from './app/updater'
+import * as aboutIpc from './ipc/about'
 import * as cloneIpc from './ipc/clone'
 import * as crashReportIpc from './ipc/crash-report'
 import * as logStreamIpc from './ipc/log-stream'
@@ -157,6 +158,7 @@ function registerIpcHandlers(): void {
   workspaceIpc.register(() => mainWindow)
   settingsIpc.register()
   crashReportIpc.register()
+  aboutIpc.register()
 }
 
 async function shutdownMainResources(): Promise<void> {

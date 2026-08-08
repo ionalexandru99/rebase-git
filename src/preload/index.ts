@@ -3,6 +3,7 @@ import type { OpenRepo, ScanForRepos } from '@shared/rpc'
 import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import type {
+  BuildInfo,
   CancelLogStreamResponse,
   CloneProgressEvent,
   CloneRepoResponse,
@@ -54,6 +55,9 @@ export interface IElectronAPI {
   setPullDivergedStrategy: (strategy: PullDivergedStrategy) => Promise<void>
   getReopenRepositoriesOnLaunch: () => Promise<ReopenRepositoriesOnLaunch>
   setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) => Promise<void>
+  getBuildInfo: () => Promise<BuildInfo>
+  revealLogsFolder: () => Promise<void>
+  openReleaseNotes: () => Promise<void>
   getUpdaterState: () => Promise<UpdaterState>
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void
   checkForUpdates: () => Promise<UpdaterActionResult>
@@ -119,6 +123,9 @@ const api: IElectronAPI = {
   getReopenRepositoriesOnLaunch: () => ipcRenderer.invoke(Channel.getReopenRepositoriesOnLaunch),
   setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) =>
     ipcRenderer.invoke(Channel.setReopenRepositoriesOnLaunch, reopen),
+  getBuildInfo: () => ipcRenderer.invoke(Channel.getBuildInfo),
+  revealLogsFolder: () => ipcRenderer.invoke(Channel.revealLogsFolder),
+  openReleaseNotes: () => ipcRenderer.invoke(Channel.openReleaseNotes),
   getUpdaterState: () => ipcRenderer.invoke(Channel.getUpdaterState),
   onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => {
     const handler = (_event: unknown, state: UpdaterState) => cb(state)

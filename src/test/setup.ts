@@ -149,6 +149,9 @@ const mockElectronAPI = {
   setPullDivergedStrategy: vi.fn(),
   getReopenRepositoriesOnLaunch: vi.fn(),
   setReopenRepositoriesOnLaunch: vi.fn(),
+  getBuildInfo: vi.fn(),
+  revealLogsFolder: vi.fn(),
+  openReleaseNotes: vi.fn(),
   getUpdaterState: vi.fn(),
   onUpdaterStateChanged: vi.fn(),
   checkForUpdates: vi.fn(),
@@ -213,6 +216,14 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.setPullDivergedStrategy).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getReopenRepositoriesOnLaunch).mockResolvedValue(true)
   vi.mocked(window.electronAPI.setReopenRepositoriesOnLaunch).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.getBuildInfo).mockResolvedValue({
+    version: '1.0.0',
+    commitSha: 'abcdef1234567890abcdef1234567890abcdef12',
+    electronVersion: '37.2.0',
+    platformArch: 'darwin-arm64'
+  })
+  vi.mocked(window.electronAPI.revealLogsFolder).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.openReleaseNotes).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getUpdaterState).mockResolvedValue({
     status: 'idle',
     supported: true,

@@ -71,6 +71,14 @@ export type PullDivergedStrategy = typeof PullDivergedStrategySchema.Type
 export const ReopenRepositoriesOnLaunchSchema = Schema.Boolean
 export type ReopenRepositoriesOnLaunch = typeof ReopenRepositoriesOnLaunchSchema.Type
 
+export const BuildInfoSchema = Schema.Struct({
+  version: Schema.String,
+  commitSha: Schema.String,
+  electronVersion: Schema.String,
+  platformArch: Schema.String
+})
+export type BuildInfo = typeof BuildInfoSchema.Type
+
 export const UpdaterStatusSchema = Schema.Literal(
   'idle',
   'checking',

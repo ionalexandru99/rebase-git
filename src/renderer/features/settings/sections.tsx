@@ -6,6 +6,7 @@ import type {
 } from '@shared/schemas/git'
 import type { LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { aboutSection } from './AboutSection'
 import { generalSection } from './GeneralSection'
 import { gitIdentitySection } from './GitIdentitySection'
 import { updatesSection } from './UpdatesSection'
@@ -33,5 +34,6 @@ export interface SettingsSectionEntry {
 export const settingsSections: SettingsSectionEntry[] = [
   generalSection,
   gitIdentitySection,
-  updatesSection
+  updatesSection,
+  aboutSection
 ]

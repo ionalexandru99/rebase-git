@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -7,6 +8,14 @@ import { injectContentSecurityPolicyMeta } from './src/main/app/csp'
 
 const sharedAlias = {
   '@shared': path.resolve('src/shared')
+}
+
+function resolveCommitSha(): string {
+  try {
+    return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
+  } catch {
+    return 'unknown'
+  }
 }
 
 function packagedCspPlugin(): Plugin {
@@ -22,6 +31,9 @@ export default defineConfig(({ mode }) => ({
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: sharedAlias
+    },
+    define: {
+      __REBASE_COMMIT_SHA__: JSON.stringify(resolveCommitSha())
     },
     build: {
       rollupOptions: {
