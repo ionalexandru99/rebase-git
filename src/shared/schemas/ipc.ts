@@ -68,6 +68,9 @@ export type ListPaneWidth = typeof ListPaneWidthSchema.Type
 export const PullDivergedStrategySchema = Schema.NullOr(Schema.Literal('rebase', 'merge'))
 export type PullDivergedStrategy = typeof PullDivergedStrategySchema.Type
 
+export const ReopenRepositoriesOnLaunchSchema = Schema.Boolean
+export type ReopenRepositoriesOnLaunch = typeof ReopenRepositoriesOnLaunchSchema.Type
+
 export const RefTreeTogglesSchema = mutableArray(Schema.String)
 export type RefTreeToggles = typeof RefTreeTogglesSchema.Type
 

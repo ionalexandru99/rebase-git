@@ -11,6 +11,7 @@ import type {
   PullDivergedStrategy,
   RefTreeToggles,
   RendererErrorReport,
+  ReopenRepositoriesOnLaunch,
   SidebarPrefs,
   StartLogStreamResponse
 } from '@shared/schemas/ipc'
@@ -48,6 +49,8 @@ export interface IElectronAPI {
   setListPaneWidth: (repoPath: string, width: number) => Promise<void>
   getPullDivergedStrategy: () => Promise<PullDivergedStrategy>
   setPullDivergedStrategy: (strategy: PullDivergedStrategy) => Promise<void>
+  getReopenRepositoriesOnLaunch: () => Promise<ReopenRepositoriesOnLaunch>
+  setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) => Promise<void>
   getWorkspaces: () => Promise<string[]>
   addWorkspace: (path: string) => Promise<string[]>
   removeWorkspace: (path: string) => Promise<string[]>
@@ -103,6 +106,9 @@ const api: IElectronAPI = {
   getPullDivergedStrategy: () => ipcRenderer.invoke(Channel.getPullDivergedStrategy),
   setPullDivergedStrategy: (strategy: PullDivergedStrategy) =>
     ipcRenderer.invoke(Channel.setPullDivergedStrategy, strategy),
+  getReopenRepositoriesOnLaunch: () => ipcRenderer.invoke(Channel.getReopenRepositoriesOnLaunch),
+  setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) =>
+    ipcRenderer.invoke(Channel.setReopenRepositoriesOnLaunch, reopen),
   getWorkspaces: () => ipcRenderer.invoke('get-workspaces'),
   addWorkspace: (path: string) => ipcRenderer.invoke('add-workspace', path),
   removeWorkspace: (path: string) => ipcRenderer.invoke('remove-workspace', path),

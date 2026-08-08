@@ -130,6 +130,10 @@ export function createPlaywrightMcpElectronApi(
     setPullDivergedStrategy: async (strategy) => {
       state.pullDivergedStrategy = strategy
     },
+    getReopenRepositoriesOnLaunch: async () => state.reopenRepositoriesOnLaunch,
+    setReopenRepositoriesOnLaunch: async (reopen) => {
+      state.reopenRepositoriesOnLaunch = reopen
+    },
     getWorkspaces: async () => [...state.workspaces],
     addWorkspace: async (workspacePath) => {
       state.workspaces = withValue(state.workspaces, workspacePath)

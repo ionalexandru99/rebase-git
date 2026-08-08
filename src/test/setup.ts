@@ -147,6 +147,8 @@ const mockElectronAPI = {
   setListPaneWidth: vi.fn(),
   getPullDivergedStrategy: vi.fn(),
   setPullDivergedStrategy: vi.fn(),
+  getReopenRepositoriesOnLaunch: vi.fn(),
+  setReopenRepositoriesOnLaunch: vi.fn(),
   getWorkspaces: vi.fn(),
   addWorkspace: vi.fn(),
   removeWorkspace: vi.fn(),
@@ -202,6 +204,8 @@ beforeEach(() => {
   vi.mocked(window.electronAPI.setListPaneWidth).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.getPullDivergedStrategy).mockResolvedValue(null)
   vi.mocked(window.electronAPI.setPullDivergedStrategy).mockResolvedValue(undefined)
+  vi.mocked(window.electronAPI.getReopenRepositoriesOnLaunch).mockResolvedValue(true)
+  vi.mocked(window.electronAPI.setReopenRepositoriesOnLaunch).mockResolvedValue(undefined)
   vi.mocked(window.electronAPI.reportRendererError).mockResolvedValue(undefined)
   sidecarRpcFake.respond(Commit, ({ repoPath, message }) => sidecarMock.commit(repoPath, message))
   sidecarRpcFake.respond(GetStatus, ({ repoPath }) => sidecarMock.getStatus(repoPath))

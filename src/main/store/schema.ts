@@ -11,6 +11,7 @@ export interface StoreSchema {
   sidebarRefTreeToggles: string[]
   persistedTabRepoPaths: (string | null)[]
   persistedActiveTabIndex: number
+  reopenRepositoriesOnLaunch: boolean
   pullDivergedStrategy: 'rebase' | 'merge' | null
   listPaneWidths: Record<string, number>
 }
@@ -28,6 +29,7 @@ export const storeDefaults: StoreSchema = {
   sidebarRefTreeToggles: [],
   persistedTabRepoPaths: [null],
   persistedActiveTabIndex: 0,
+  reopenRepositoriesOnLaunch: true,
   pullDivergedStrategy: null,
   listPaneWidths: {}
 }
@@ -43,6 +45,7 @@ export const storeSchema: Schema<StoreSchema> = {
   sidebarRefTreeToggles: { type: 'array', items: { type: 'string' } },
   persistedTabRepoPaths: { type: 'array', items: { type: ['string', 'null'] } },
   persistedActiveTabIndex: { type: 'number' },
+  reopenRepositoriesOnLaunch: { type: 'boolean' },
   pullDivergedStrategy: { type: ['string', 'null'], enum: ['rebase', 'merge', null] },
   listPaneWidths: { type: 'object', additionalProperties: { type: 'number' } }
 }

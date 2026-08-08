@@ -27,6 +27,8 @@ export const Channel = {
   setListPaneWidth: 'set-list-pane-width',
   getPullDivergedStrategy: 'get-pull-diverged-strategy',
   setPullDivergedStrategy: 'set-pull-diverged-strategy',
+  getReopenRepositoriesOnLaunch: 'get-reopen-repositories-on-launch',
+  setReopenRepositoriesOnLaunch: 'set-reopen-repositories-on-launch',
   sidecarRequest: 'sidecar-request',
   reportRendererError: 'report-renderer-error',
   logChunk: 'log-chunk',

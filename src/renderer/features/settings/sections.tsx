@@ -6,6 +6,7 @@ import type {
 } from '@shared/schemas/git'
 import type { LucideIcon } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { generalSection } from './GeneralSection'
 import { gitIdentitySection } from './GitIdentitySection'
 
 export interface IdentitySettings {
@@ -28,4 +29,4 @@ export interface SettingsSectionEntry {
   NavBadge?: ComponentType
 }
 
-export const settingsSections: SettingsSectionEntry[] = [gitIdentitySection]
+export const settingsSections: SettingsSectionEntry[] = [generalSection, gitIdentitySection]

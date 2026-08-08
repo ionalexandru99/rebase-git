@@ -36,6 +36,10 @@ function mockTwoRepoTabs() {
 
 const gear = () => screen.getByRole('button', { name: 'Settings' })
 
+const openGitIdentitySection = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Git identity' }))
+}
+
 describe('App — settings', () => {
   it('opens the active tab settings from the rail gear', async () => {
     mockTwoRepoTabs()
@@ -47,6 +51,7 @@ describe('App — settings', () => {
     fireEvent.click(gear())
 
     expect(await screen.findByTestId('settings-view')).toBeInTheDocument()
+    await openGitIdentitySection()
     expect(await screen.findByDisplayValue('my-app@example.com')).toBeInTheDocument()
   })
 
@@ -74,9 +79,11 @@ describe('App — settings', () => {
       expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('my-app')
     })
     fireEvent.click(gear())
+    await openGitIdentitySection()
     await screen.findByDisplayValue('my-app@example.com')
     fireEvent.click(screen.getByRole('tab', { name: /^web-app/ }))
 
+    await openGitIdentitySection()
     expect(await screen.findByDisplayValue('web-app@example.com')).toBeInTheDocument()
   })
 
@@ -89,6 +96,7 @@ describe('App — settings', () => {
 
     renderApp()
     fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    await openGitIdentitySection()
 
     expect(await screen.findByRole('group', { name: 'App settings' })).toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Repository settings' })).toBeNull()
@@ -104,6 +112,7 @@ describe('App — settings', () => {
       expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('my-app')
     })
     fireEvent.click(gear())
+    await openGitIdentitySection()
     const appSettings = within(await screen.findByRole('group', { name: 'App settings' }))
     fireEvent.change(appSettings.getByLabelText('Name'), { target: { value: 'Ada Lovelace' } })
     fireEvent.click(appSettings.getByRole('button', { name: 'Save' }))

@@ -76,6 +76,11 @@ describe('store schema / defaults parity', () => {
     expect(storeDefaults.persistedTabRepoPaths).toEqual([null])
   })
 
+  it('reopenRepositoriesOnLaunch is a boolean that defaults to on', () => {
+    expect(declaredTypes(storeSchema.reopenRepositoriesOnLaunch)).toEqual(['boolean'])
+    expect(storeDefaults.reopenRepositoriesOnLaunch).toBe(true)
+  })
+
   it('listPaneWidths is an object keyed by repo path and defaults to empty', () => {
     expect(declaredTypes(storeSchema.listPaneWidths)).toContain('object')
     expect(storeDefaults.listPaneWidths).toEqual({})

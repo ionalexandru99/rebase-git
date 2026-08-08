@@ -11,8 +11,8 @@ const identityWith = (local: ResolvedIdentity['local']): ResolvedIdentity => ({
   effective: { ...GLOBAL_IDENTITY, ...local }
 })
 
-function renderView(overrides: Partial<SettingsViewProps> = {}) {
-  const props: SettingsViewProps = {
+function makeProps(overrides: Partial<SettingsViewProps> = {}): SettingsViewProps {
+  return {
     repoLabel: 'rebase',
     identity: identityWith({}),
     saving: false,
@@ -22,7 +22,12 @@ function renderView(overrides: Partial<SettingsViewProps> = {}) {
     onClose: vi.fn(),
     ...overrides
   }
+}
+
+function renderView(overrides: Partial<SettingsViewProps> = {}) {
+  const props = makeProps(overrides)
   render(<SettingsView {...props} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Git identity' }))
   return props
 }
 
@@ -30,13 +35,21 @@ const appSection = () => within(screen.getByRole('group', { name: 'App settings'
 const repoSection = () => within(screen.getByRole('group', { name: 'Repository settings' }))
 
 describe('SettingsView', () => {
-  it('lists the registered sections in the nav with Git identity active', () => {
-    renderView()
+  it('opens on the General section and switches to Git identity from the nav', () => {
+    render(<SettingsView {...makeProps()} />)
 
     const nav = within(screen.getByRole('navigation', { name: 'Settings sections' }))
-    const gitIdentityItem = nav.getByRole('button', { name: 'Git identity' })
-    expect(gitIdentityItem).toHaveAttribute('aria-current', 'true')
+    expect(nav.getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('region', { name: 'General' })).toBeInTheDocument()
+
+    fireEvent.click(nav.getByRole('button', { name: 'Git identity' }))
+
+    expect(nav.getByRole('button', { name: 'Git identity' })).toHaveAttribute(
+      'aria-current',
+      'true'
+    )
     expect(screen.getByRole('region', { name: 'Git identity' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'General' })).toBeNull()
   })
 
   it('shows the inherited app identity as placeholder text when the repo has no override', () => {

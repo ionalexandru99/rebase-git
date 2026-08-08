@@ -37,6 +37,10 @@ test('sets the app and repository git identity from the settings view', async ({
   await page.getByRole('button', { name: 'Settings' }).click()
   const settings = page.getByTestId('settings-view')
   await expect(settings).toBeVisible()
+  await page
+    .getByRole('navigation', { name: 'Settings sections' })
+    .getByRole('button', { name: 'Git identity' })
+    .click()
 
   const appSettings = page.getByRole('group', { name: 'App settings' })
   await appSettings.getByLabel('Name').fill('Ada Lovelace')
@@ -84,10 +88,13 @@ test('switches sections from the settings nav and returns to the repo on close',
   await expect(settings).toBeVisible()
 
   const nav = page.getByRole('navigation', { name: 'Settings sections' })
-  const gitIdentityItem = nav.getByRole('button', { name: 'Git identity' })
-  await expect(gitIdentityItem).toHaveAttribute('aria-current', 'true')
+  const generalItem = nav.getByRole('button', { name: 'General' })
+  await expect(generalItem).toHaveAttribute('aria-current', 'true')
+  await expect(page.getByRole('region', { name: 'General' })).toBeVisible()
 
+  const gitIdentityItem = nav.getByRole('button', { name: 'Git identity' })
   await gitIdentityItem.click()
+  await expect(gitIdentityItem).toHaveAttribute('aria-current', 'true')
   await expect(page.getByRole('region', { name: 'Git identity' })).toBeVisible()
   await expect(page.getByRole('group', { name: 'App settings' })).toBeVisible()
   await expect(page.getByRole('group', { name: 'Repository settings' })).toBeVisible()
@@ -95,4 +102,39 @@ test('switches sections from the settings nav and returns to the repo on close',
   await page.getByRole('button', { name: 'Close settings' }).click()
   await expect(settings).toBeHidden()
   await waitForRepoSurface(page, repo)
+})
+
+test('turning off reopen repositories relaunches to a single blank tab', async ({ harness }) => {
+  const repo = createFixtureRepo()
+
+  const page = await harness.openRepo(repo)
+  await waitForRepoSurface(page, repo)
+
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByTestId('settings-view')).toBeVisible()
+
+  const reopenToggle = page
+    .getByRole('group', { name: 'Reopen repositories on launch' })
+    .getByRole('checkbox')
+  await expect(reopenToggle).toBeChecked()
+  await reopenToggle.click()
+  await expect(reopenToggle).not.toBeChecked()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as unknown as {
+            electronAPI: { getReopenRepositoriesOnLaunch: () => Promise<boolean> }
+          }
+        ).electronAPI.getReopenRepositoriesOnLaunch()
+      )
+    )
+    .toBe(false)
+
+  const relaunched = await harness.restart()
+
+  await expect(relaunched.getByRole('tab')).toHaveCount(0, { timeout: 10_000 })
+  await expect(relaunched.getByRole('heading', { name: 'Open a repository' })).toBeVisible({
+    timeout: 10_000
+  })
 })
