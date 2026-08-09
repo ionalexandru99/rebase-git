@@ -1,6 +1,6 @@
 import { Schema } from 'effect4'
 
-export const AGENT_PROTOCOL = 1
+export const AGENT_PROTOCOL = 2
 export const AgentProtocolVersionSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
 export class AgentProtocolMismatch extends Schema.TaggedError<AgentProtocolMismatch>()(

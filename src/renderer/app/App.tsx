@@ -5,10 +5,10 @@ import { PortalContainerProvider } from '../components/ui/portal-container'
 import { Toaster } from '../components/ui/sonner'
 import { OnboardingScreen } from '../features/onboarding/OnboardingScreen'
 import { useOnboarding } from '../features/onboarding/useOnboarding'
+import { repoQueryKeys } from '../features/repository-identity'
 import { updatesSection } from '../features/settings/UpdatesSection'
 import { useTabs } from '../hooks/useTabs'
 import { hasPendingUpdate, useUpdaterState } from '../hooks/useUpdaterState'
-import { repoQueryKeys } from '../lib/query-keys'
 import { RepoRail } from '../shell/RepoRail'
 import { Titlebar } from '../shell/Titlebar'
 import { identityQueryKey } from '../stores/identity'
@@ -144,9 +144,14 @@ function TabsShell(props: TabsShellProps) {
   }, [rescanWorkspace])
 
   useEffect(() => {
-    window.electronAPI.setPersistedTabs(persistedSnapshot).catch((error: unknown) => {
-      console.warn('[app] failed to persist tab state', error)
-    })
+    window.electronAPI
+      .setPersistedTabs({
+        tabs: persistedSnapshot.tabs.map((repository) => repository?.path ?? null),
+        activeIndex: persistedSnapshot.activeIndex
+      })
+      .catch((error: unknown) => {
+        console.warn('[app] failed to persist tab state', error)
+      })
   }, [persistedSnapshot])
 
   useEffect(() => {

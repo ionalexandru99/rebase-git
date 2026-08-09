@@ -26,8 +26,8 @@ describe('repo session ownership', () => {
     const firstIdentity = ownership.beginOpen('/repos/link')
     const secondIdentity = ownership.beginOpen('/repos/project')
 
-    expect(firstIdentity).toBe('/repos/project')
-    expect(secondIdentity).toBe('/repos/project')
+    expect(firstIdentity).toBe('["local","/repos/project"]')
+    expect(secondIdentity).toBe('["local","/repos/project"]')
     expect(ownership.hasActiveOpen('/repos/project')).toBe(true)
 
     ownership.endOpen(firstIdentity)

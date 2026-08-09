@@ -12,11 +12,11 @@ import {
   useRef,
   useState
 } from 'react'
+import { repoQueryKeys } from '@/features/repository-identity'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
 import { engineFailureBannerText, gitFailureBannerText } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
-import { repoQueryKeys } from '@/lib/query-keys'
 import type { GitLog } from '@/types'
 import type { OpenedRepo, RepoSessionErrorSource } from '../../stores/repo-session'
 import { createCommitLogBuffer } from './log-buffer'

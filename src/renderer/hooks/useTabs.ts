@@ -1,4 +1,10 @@
+import type { RepoRef } from '@common/features/repository-identity'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type RepositoryIdentity,
+  repositoryIdentityKey,
+  toRepoRef
+} from '@/features/repository-identity'
 
 export interface TabDescriptor {
   id: string
@@ -17,6 +23,7 @@ interface RepoTabRecord {
   id: string
   kind: 'repo'
   repoPath: string
+  repoRef: RepoRef
   openRevision?: number
 }
 
@@ -24,60 +31,82 @@ interface OpeningRepoTabRecord {
   id: string
   kind: 'opening-repo'
   repoPath: string
+  repoRef: RepoRef
 }
 
 interface FailedRepoTabRecord {
   id: string
   kind: 'failed-repo'
   repoPath: string
+  repoRef: RepoRef
 }
 
 export type TabRecord = NewTabRecord | RepoTabRecord | OpeningRepoTabRecord | FailedRepoTabRecord
 
+export interface InitialTabState {
+  tabs: (RepositoryIdentity | null)[]
+  activeIndex: number
+}
+
 export interface PersistedTabState {
-  tabs: (string | null)[]
+  tabs: (RepoRef | null)[]
   activeIndex: number
 }
 
 let tabSeq = 0
 const nextTabId = () => `tab-${++tabSeq}-${Date.now()}`
 
-const repoPathKey = (repoPath: string): string =>
-  repoPath
+const normalizedRepositoryKey = (repository: RepositoryIdentity): string => {
+  const repoRef = toRepoRef(repository)
+  const normalizedPath = repoRef.path
     .replace(/[/\\]+$/, '')
     .split(/[/\\]/)
     .filter(Boolean)
     .join('/')
+  return repositoryIdentityKey({ ...repoRef, path: normalizedPath })
+}
 
-const sameRepoPath = (left: string, right: string): boolean =>
-  repoPathKey(left) === repoPathKey(right)
+const comparisonKey = (repository: RepositoryIdentity): string =>
+  typeof repository === 'string'
+    ? normalizedRepositoryKey(repository)
+    : repositoryIdentityKey(repository)
 
-function hydrateFromPersisted(persisted: PersistedTabState | undefined): {
+const repositoriesMatch = (stored: RepoRef, candidate: RepositoryIdentity): boolean =>
+  typeof candidate === 'string'
+    ? normalizedRepositoryKey(stored) === normalizedRepositoryKey(candidate)
+    : repositoryIdentityKey(stored) === repositoryIdentityKey(candidate)
+
+function hydrateFromPersisted(persisted: InitialTabState | undefined): {
   tabs: TabRecord[]
   activeTabId: string
 } {
-  const sourcePaths =
-    persisted && persisted.tabs.length > 0 ? persisted.tabs : ([null] as (string | null)[])
+  const sourceRepositories = persisted && persisted.tabs.length > 0 ? persisted.tabs : [null]
   const tabs: TabRecord[] = []
   const hydratedIds: string[] = []
-  const repoIdsByPath = new Map<string, string>()
-  for (const path of sourcePaths) {
-    if (!path) {
+  const repoIdsByIdentity = new Map<string, string>()
+  for (const repository of sourceRepositories) {
+    if (!repository) {
       const tab = { id: nextTabId(), kind: 'new' } satisfies NewTabRecord
       tabs.push(tab)
       hydratedIds.push(tab.id)
       continue
     }
-    const key = repoPathKey(path)
-    const existingId = repoIdsByPath.get(key)
+    const repoRef = toRepoRef(repository)
+    const key = comparisonKey(repository)
+    const existingId = repoIdsByIdentity.get(key)
     if (existingId) {
       hydratedIds.push(existingId)
       continue
     }
-    const tab = { id: nextTabId(), kind: 'repo', repoPath: path } satisfies RepoTabRecord
+    const tab = {
+      id: nextTabId(),
+      kind: 'repo',
+      repoPath: repoRef.path,
+      repoRef
+    } satisfies RepoTabRecord
     tabs.push(tab)
     hydratedIds.push(tab.id)
-    repoIdsByPath.set(key, tab.id)
+    repoIdsByIdentity.set(key, tab.id)
   }
   const activeIdx =
     persisted && persisted.activeIndex >= 0 && persisted.activeIndex < hydratedIds.length
@@ -93,13 +122,13 @@ export interface TabsStore {
   tabDescriptors: TabDescriptor[]
   newTab: () => void
   closeTab: (id: string) => void
-  openRepoInTab: (sourceTabId: string, path: string) => boolean
-  confirmRepoOpen: (id: string, path: string) => boolean
-  cancelRepoOpen: (id: string, path: string) => void
+  openRepoInTab: (sourceTabId: string, repository: RepositoryIdentity) => boolean
+  confirmRepoOpen: (id: string, repository: RepositoryIdentity) => boolean
+  cancelRepoOpen: (id: string, repository: RepositoryIdentity) => void
   persistedSnapshot: PersistedTabState
 }
 
-export function useTabs(persisted?: PersistedTabState): TabsStore {
+export function useTabs(persisted?: InitialTabState): TabsStore {
   const [initial] = useState(() => hydrateFromPersisted(persisted))
   const [tabs, setTabs] = useState<TabRecord[]>(initial.tabs)
   const [activeTabId, setActiveTabId] = useState<string>(initial.activeTabId)
@@ -142,12 +171,13 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   )
 
   const openRepoInTab = useCallback(
-    (sourceTabId: string, path: string): boolean => {
+    (sourceTabId: string, repository: RepositoryIdentity): boolean => {
+      const repoRef = toRepoRef(repository)
       const current = tabsRef.current
       const match = current.find(
         (tab) =>
           (tab.kind === 'repo' || tab.kind === 'opening-repo') &&
-          sameRepoPath(tab.repoPath, path) &&
+          repositoriesMatch(tab.repoRef, repository) &&
           tab.id !== sourceTabId
       )
       if (match) {
@@ -158,7 +188,12 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
 
       const next = current.map((tab) =>
         tab.id === sourceTabId
-          ? ({ id: tab.id, kind: 'opening-repo', repoPath: path } satisfies OpeningRepoTabRecord)
+          ? ({
+              id: tab.id,
+              kind: 'opening-repo',
+              repoPath: repoRef.path,
+              repoRef
+            } satisfies OpeningRepoTabRecord)
           : tab
       )
       replaceTabs(next)
@@ -169,13 +204,21 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   )
 
   const confirmRepoOpen = useCallback(
-    (id: string, path: string): boolean => {
+    (id: string, repository: RepositoryIdentity): boolean => {
       const current = tabsRef.current
+      const currentOpening = current.find((tab) => tab.id === id)
+      const suppliedRepoRef = toRepoRef(repository)
+      const repoRef =
+        typeof repository === 'string' &&
+        currentOpening &&
+        (currentOpening.kind === 'opening-repo' || currentOpening.kind === 'failed-repo')
+          ? { ...currentOpening.repoRef, path: repository }
+          : suppliedRepoRef
       const existing = current.find(
         (tab) =>
           tab.id !== id &&
           (tab.kind === 'repo' || tab.kind === 'opening-repo') &&
-          sameRepoPath(tab.repoPath, path)
+          repositoryIdentityKey(tab.repoRef) === repositoryIdentityKey(repoRef)
       )
       if (existing) {
         replaceTabs(
@@ -191,7 +234,9 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
         return false
       }
       const next = current.map((tab) =>
-        tab.id === id ? ({ ...tab, id, kind: 'repo', repoPath: path } satisfies RepoTabRecord) : tab
+        tab.id === id
+          ? ({ ...tab, id, kind: 'repo', repoPath: repoRef.path, repoRef } satisfies RepoTabRecord)
+          : tab
       )
       replaceTabs(next)
       return true
@@ -200,11 +245,21 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   )
 
   const cancelRepoOpen = useCallback(
-    (id: string, path: string) => {
+    (id: string, repository: RepositoryIdentity) => {
       const current = tabsRef.current
       const next = current.map((tab) =>
-        tab.id === id && tab.kind === 'opening-repo' && sameRepoPath(tab.repoPath, path)
-          ? ({ id, kind: 'failed-repo', repoPath: path } satisfies FailedRepoTabRecord)
+        tab.id === id &&
+        tab.kind === 'opening-repo' &&
+        repositoriesMatch(
+          tab.repoRef,
+          typeof repository === 'string' ? { ...tab.repoRef, path: repository } : repository
+        )
+          ? ({
+              id,
+              kind: 'failed-repo',
+              repoPath: tab.repoRef.path,
+              repoRef: tab.repoRef
+            } satisfies FailedRepoTabRecord)
           : tab
       )
       replaceTabs(next)
@@ -271,12 +326,12 @@ export function useTabs(persisted?: PersistedTabState): TabsStore {
   }, [tabs])
 
   const persistedSnapshot = useMemo<PersistedTabState>(() => {
-    const paths = tabs.map((tab) => (tab.kind === 'repo' ? tab.repoPath : null))
+    const repositories = tabs.map((tab) => (tab.kind === 'repo' ? tab.repoRef : null))
     const activeIndex = Math.max(
       0,
       tabs.findIndex((tab) => tab.id === activeTabId)
     )
-    return { tabs: paths, activeIndex }
+    return { tabs: repositories, activeIndex }
   }, [activeTabId, tabs])
 
   return {

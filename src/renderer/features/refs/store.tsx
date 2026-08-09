@@ -11,11 +11,11 @@ import {
   useState
 } from 'react'
 import { toast } from 'sonner'
+import { repoQueryKeys } from '@/features/repository-identity'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
 import { toastEngineFailure, toastGitFailure } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
-import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcFetch, rpcGetLocalBranches, rpcGetRemoteRefs } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import type { GitBranches } from '@/types'
@@ -114,14 +114,14 @@ export function useRefsController(deps: RefsDeps): RefsController {
     queryKey: repoKeys.localBranches,
     enabled: Boolean(repoPath),
     gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: ({ queryKey }) => fetchLocalBranches(queryKey[1] as string)
+    queryFn: () => fetchLocalBranches(repoPath as string)
   })
 
   const remoteRefsQuery = useQuery({
     queryKey: repoKeys.remoteRefs,
     enabled: Boolean(repoPath) && Boolean(localBranchesQuery.data),
     gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: ({ queryKey }) => fetchRemoteRefs(queryKey[1] as string)
+    queryFn: () => fetchRemoteRefs(repoPath as string)
   })
 
   const branches = useMemo(

@@ -3,6 +3,7 @@ import { Data } from 'effect4'
 declare const __REBASE_PRODUCT_VERSION__: string
 
 export interface AgentConfiguration {
+  readonly allowedRoots: readonly string[]
   readonly port: number
   readonly orphanTimeoutMs: number
   readonly heartbeatIntervalMs: number
@@ -39,6 +40,7 @@ export const AGENT_PRODUCT_VERSION =
   typeof __REBASE_PRODUCT_VERSION__ === 'string' ? __REBASE_PRODUCT_VERSION__ : '0.0.2'
 
 const defaultConfiguration: AgentConfiguration = {
+  allowedRoots: [],
   port: 0,
   orphanTimeoutMs: 60_000,
   heartbeatIntervalMs: 1_000,
@@ -69,6 +71,7 @@ export function parseAgentConfiguration(
   arguments_: readonly string[]
 ): AgentConfigurationParseResult {
   const values = new Map<string, string>()
+  const allowedRoots: string[] = []
   for (let index = 0; index < arguments_.length; index += 2) {
     const option = arguments_[index]
     const value = arguments_[index + 1]
@@ -80,6 +83,20 @@ export function parseAgentConfiguration(
           message: 'Agent options must be name-value pairs'
         })
       }
+    }
+    if (option === '--allowed-root') {
+      if (value.length === 0) {
+        return {
+          _tag: 'Failure',
+          failure: new AgentConfigurationFailure({
+            reason: 'InvalidValue',
+            option,
+            message: '--allowed-root must not be empty'
+          })
+        }
+      }
+      allowedRoots.push(value)
+      continue
     }
     if (values.has(option)) {
       return {
@@ -101,7 +118,7 @@ export function parseAgentConfiguration(
     '--shutdown-grace-ms': ['shutdownGraceMs', 1, Number.MAX_SAFE_INTEGER],
     '--git-termination-grace-ms': ['gitTerminationGraceMs', 1, Number.MAX_SAFE_INTEGER]
   } as const
-  const configuration = { ...defaultConfiguration }
+  const configuration = { ...defaultConfiguration, allowedRoots }
   for (const [option, value] of values) {
     const definition = options[option as keyof typeof options]
     if (!definition) {
@@ -120,6 +137,16 @@ export function parseAgentConfiguration(
       return { _tag: 'Failure', failure: parsed }
     }
     configuration[property] = parsed
+  }
+  if (allowedRoots.length === 0) {
+    return {
+      _tag: 'Failure',
+      failure: new AgentConfigurationFailure({
+        reason: 'InvalidArguments',
+        option: '--allowed-root',
+        message: 'Agent requires at least one --allowed-root'
+      })
+    }
   }
   return { _tag: 'Success', configuration }
 }

@@ -1,7 +1,7 @@
 import type { StashEntry } from '@shared/schemas/ipc'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
-import { repoQueryKeys } from '@/lib/query-keys'
+import { repoQueryKeys } from '@/features/repository-identity'
 import { rpcStashList } from '@/lib/rpc-client'
 
 const EMPTY_STASHES: StashEntry[] = []

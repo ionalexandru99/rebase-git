@@ -11,6 +11,10 @@ describe('Agent configuration', () => {
       '4321',
       '--orphan-timeout-ms',
       '5000',
+      '--allowed-root',
+      '/workspaces/one',
+      '--allowed-root',
+      '/workspaces/two',
       '--git-termination-grace-ms',
       '75'
     ])
@@ -19,6 +23,7 @@ describe('Agent configuration', () => {
     if (result._tag === 'Success') {
       expect(result.configuration).toMatchObject({
         port: 4321,
+        allowedRoots: ['/workspaces/one', '/workspaces/two'],
         orphanTimeoutMs: 5000,
         gitTerminationGraceMs: 75
       })
@@ -26,6 +31,10 @@ describe('Agent configuration', () => {
   })
 
   it.each([
+    {
+      arguments_: [],
+      reason: 'InvalidArguments'
+    },
     {
       arguments_: ['--port'],
       reason: 'InvalidArguments'
@@ -40,6 +49,10 @@ describe('Agent configuration', () => {
     },
     {
       arguments_: ['--port', 'invalid'],
+      reason: 'InvalidValue'
+    },
+    {
+      arguments_: ['--allowed-root', ''],
       reason: 'InvalidValue'
     }
   ] as const)('returns typed $reason failures', ({ arguments_, reason }) => {

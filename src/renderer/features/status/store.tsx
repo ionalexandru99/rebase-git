@@ -2,6 +2,7 @@ import type { HunkLineSelection } from '@shared/rpc'
 import type { HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
+import { repoQueryKeys } from '@/features/repository-identity'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/features/status/status-file-rows'
 import {
   createStatusMutationOptions,
@@ -9,7 +10,6 @@ import {
 } from '@/features/status/status-mutation-lifecycle'
 import { applyStageToStatus, applyUnstageToStatus } from '@/features/status/status-transitions'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
-import { repoQueryKeys } from '@/lib/query-keys'
 import {
   rpcDiscardHunk,
   rpcGetDiff,
@@ -106,10 +106,7 @@ export function useWorkingTreeStatusController(
     queryKey: repoQueryKeys(repoPath, { idle: tabId }).status,
     enabled: Boolean(repoPath),
     gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: async ({ queryKey }) => {
-      const path = queryKey[1] as string
-      return unwrapOk(await rpcGetStatus(path)).status
-    }
+    queryFn: async () => unwrapOk(await rpcGetStatus(repoPath as string)).status
   })
 
   const statusMutationOptions = <Vars,>(

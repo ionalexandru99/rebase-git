@@ -62,6 +62,8 @@ function spawnAgent(): ChildProcess {
     process.execPath,
     [
       'out/agent/index.js',
+      '--allowed-root',
+      process.cwd(),
       '--heartbeat-interval-ms',
       '20',
       '--orphan-timeout-ms',

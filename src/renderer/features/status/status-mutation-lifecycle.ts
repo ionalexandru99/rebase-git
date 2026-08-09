@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
+import { repoQueryKeys } from '@/features/repository-identity'
 import { formatCause } from '@/lib/format-cause'
 import { engineFailureBannerText, gitFailureBannerText } from '@/lib/git-report'
-import { repoQueryKeys } from '@/lib/query-keys'
 import type { GitStatus } from '@/types'
 
 export type StatusMutationResult =

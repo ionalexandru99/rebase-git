@@ -1,6 +1,6 @@
 import { act, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { repoQueryKeys } from '@/lib/query-keys'
+import { repoQueryKeys } from '@/features/repository-identity'
 import { statusResponse } from '../../../test/builders'
 import { setupRepoChanged, sidecarMock } from '../../../test/setup'
 import { prepareGitStoreMocks, renderGitStore, repoPath, statusOk } from './git-store-harness'

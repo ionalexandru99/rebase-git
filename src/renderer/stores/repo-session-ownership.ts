@@ -1,41 +1,63 @@
+import type { RepoRef } from '@common/features/repository-identity'
+import {
+  type RepositoryIdentity,
+  type RepositoryIdentityKey,
+  repositoryIdentityKey,
+  toRepoRef
+} from '@/features/repository-identity'
+
 type PendingClose = ReturnType<typeof setTimeout>
 
 export interface RepoSessionOwnership {
   nextOwner: () => number
-  resolvePath: (requestedPath: string) => string
-  rememberCanonicalPath: (requestedPath: string, canonicalPath: string) => void
-  beginOpen: (requestedPath: string) => string
-  endOpen: (identity: string) => void
-  hasActiveOpen: (identity: string) => boolean
-  trackPendingClose: (repoPath: string, pendingClose: PendingClose) => void
-  matchesPendingClose: (repoPath: string, pendingClose: PendingClose) => boolean
-  releasePendingClose: (repoPath: string) => void
-  cancelPendingClose: (repoPath: string) => void
+  resolvePath: (requestedPath: RepositoryIdentity) => string
+  rememberCanonicalPath: (
+    requestedPath: RepositoryIdentity,
+    canonicalPath: RepositoryIdentity
+  ) => void
+  beginOpen: (requestedPath: RepositoryIdentity) => RepositoryIdentityKey
+  endOpen: (identity: RepositoryIdentityKey) => void
+  hasActiveOpen: (repository: RepositoryIdentity) => boolean
+  trackPendingClose: (repository: RepositoryIdentity, pendingClose: PendingClose) => void
+  matchesPendingClose: (repository: RepositoryIdentity, pendingClose: PendingClose) => boolean
+  releasePendingClose: (repository: RepositoryIdentity) => void
+  cancelPendingClose: (repository: RepositoryIdentity) => void
 }
 
 export function createRepoSessionOwnership(
   cancelTimer: (pendingClose: PendingClose) => void = clearTimeout
 ): RepoSessionOwnership {
-  const pendingCloses = new Map<string, PendingClose>()
-  const canonicalPaths = new Map<string, string>()
-  const activeOpenRequests = new Map<string, number>()
+  const pendingCloses = new Map<RepositoryIdentityKey, PendingClose>()
+  const canonicalPaths = new Map<RepositoryIdentityKey, RepoRef>()
+  const activeOpenRequests = new Map<RepositoryIdentityKey, number>()
   let ownerSequence = 0
 
-  const resolvePath = (requestedPath: string): string =>
-    canonicalPaths.get(requestedPath) ?? requestedPath
+  const resolveRepository = (requestedPath: RepositoryIdentity): RepoRef =>
+    canonicalPaths.get(repositoryIdentityKey(requestedPath)) ?? toRepoRef(requestedPath)
 
-  const rememberCanonicalPath = (requestedPath: string, canonicalPath: string): void => {
-    canonicalPaths.set(requestedPath, canonicalPath)
-    canonicalPaths.set(canonicalPath, canonicalPath)
+  const resolvePath = (requestedPath: RepositoryIdentity): string =>
+    resolveRepository(requestedPath).path
+
+  const rememberCanonicalPath = (
+    requestedPath: RepositoryIdentity,
+    canonicalPath: RepositoryIdentity
+  ): void => {
+    const requestedRepoRef = toRepoRef(requestedPath)
+    const canonicalRepoRef =
+      typeof canonicalPath === 'string'
+        ? { ...requestedRepoRef, path: canonicalPath }
+        : canonicalPath
+    canonicalPaths.set(repositoryIdentityKey(requestedRepoRef), canonicalRepoRef)
+    canonicalPaths.set(repositoryIdentityKey(canonicalRepoRef), canonicalRepoRef)
   }
 
-  const beginOpen = (requestedPath: string): string => {
-    const identity = resolvePath(requestedPath)
+  const beginOpen = (requestedPath: RepositoryIdentity): RepositoryIdentityKey => {
+    const identity = repositoryIdentityKey(resolveRepository(requestedPath))
     activeOpenRequests.set(identity, (activeOpenRequests.get(identity) ?? 0) + 1)
     return identity
   }
 
-  const endOpen = (identity: string): void => {
+  const endOpen = (identity: RepositoryIdentityKey): void => {
     const remaining = (activeOpenRequests.get(identity) ?? 0) - 1
     if (remaining > 0) {
       activeOpenRequests.set(identity, remaining)
@@ -44,19 +66,20 @@ export function createRepoSessionOwnership(
     }
   }
 
-  const trackPendingClose = (repoPath: string, pendingClose: PendingClose): void => {
-    pendingCloses.set(repoPath, pendingClose)
+  const trackPendingClose = (repository: RepositoryIdentity, pendingClose: PendingClose): void => {
+    pendingCloses.set(repositoryIdentityKey(repository), pendingClose)
   }
 
-  const releasePendingClose = (repoPath: string): void => {
-    pendingCloses.delete(repoPath)
+  const releasePendingClose = (repository: RepositoryIdentity): void => {
+    pendingCloses.delete(repositoryIdentityKey(repository))
   }
 
-  const cancelPendingClose = (repoPath: string): void => {
-    const pendingClose = pendingCloses.get(repoPath)
+  const cancelPendingClose = (repository: RepositoryIdentity): void => {
+    const key = repositoryIdentityKey(repository)
+    const pendingClose = pendingCloses.get(key)
     if (pendingClose !== undefined) {
       cancelTimer(pendingClose)
-      pendingCloses.delete(repoPath)
+      pendingCloses.delete(key)
     }
   }
 
@@ -66,9 +89,11 @@ export function createRepoSessionOwnership(
     rememberCanonicalPath,
     beginOpen,
     endOpen,
-    hasActiveOpen: (identity) => (activeOpenRequests.get(identity) ?? 0) > 0,
+    hasActiveOpen: (repository) =>
+      (activeOpenRequests.get(repositoryIdentityKey(resolveRepository(repository))) ?? 0) > 0,
     trackPendingClose,
-    matchesPendingClose: (repoPath, pendingClose) => pendingCloses.get(repoPath) === pendingClose,
+    matchesPendingClose: (repository, pendingClose) =>
+      pendingCloses.get(repositoryIdentityKey(repository)) === pendingClose,
     releasePendingClose,
     cancelPendingClose
   }

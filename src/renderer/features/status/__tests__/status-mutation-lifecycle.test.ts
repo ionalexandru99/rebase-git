@@ -1,11 +1,11 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
+import { repoQueryKeys } from '@/features/repository-identity'
 import {
   createStatusMutationOptions,
   type StatusMutationContext,
   type StatusMutationResult
 } from '@/features/status/status-mutation-lifecycle'
-import { repoQueryKeys } from '@/lib/query-keys'
 import { makeGitStatus } from '../../../../test/builders'
 
 const repoPath = '/repo'

@@ -1,6 +1,6 @@
 import { useQueries } from '@tanstack/react-query'
+import { repoQueryKeys } from '@/features/repository-identity'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
-import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcGetCommitStats } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 

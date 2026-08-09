@@ -1,0 +1,24 @@
+{
+  "recentRepos": ["/repos/alpha", "/repos/beta"],
+  "workspaces": ["/workspaces/one", "/workspaces/two"],
+  "activeWorkspace": "/workspaces/two",
+  "workingDirectory": "/legacy/workspace",
+  "onboardingComplete": true,
+  "sidebarOpen": false,
+  "sidebarWidth": 312,
+  "sidebarRefTreeToggles": [
+    "repo:%2Frepos%2Falpha:branch:feature%2Fone",
+    "repo:%2Frepos%2Fbeta:branch:feature%2Ftwo"
+  ],
+  "persistedTabRepoPaths": ["/repos/beta", null, "/repos/alpha"],
+  "persistedActiveTabIndex": 2,
+  "reopenRepositoriesOnLaunch": false,
+  "pullDivergedStrategy": "rebase",
+  "updateDownloadInBackground": false,
+  "updateInstallOnQuit": false,
+  "updateChannel": "nightly",
+  "listPaneWidths": {
+    "/repos/alpha": 521,
+    "/repos/beta": 642
+  }
+}

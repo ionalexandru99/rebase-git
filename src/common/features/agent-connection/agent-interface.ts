@@ -1,5 +1,6 @@
 import { Schema } from 'effect4'
 import { Rpc, RpcGroup } from 'effect4/unstable/rpc'
+import { AuthorizedRepositoryPathSchema, RepositoryPathRejected } from './authorize-repository-path'
 import { AgentObservationSchema } from './observe-agent'
 import {
   AgentProtocolMismatch,
@@ -50,6 +51,12 @@ export const ObserveAgent = Rpc.make('observeAgent', {
   stream: true
 })
 
+export const AuthorizeRepositoryPath = Rpc.make('authorizeRepositoryPath', {
+  payload: { nativePath: Schema.String },
+  success: AuthorizedRepositoryPathSchema,
+  error: Schema.Union([AgentHandshakeRequired, AgentShuttingDown, RepositoryPathRejected])
+})
+
 export const StopAgent = Rpc.make('stopAgent', {
   payload: {
     operationId: AgentOperationIdSchema,
@@ -59,6 +66,12 @@ export const StopAgent = Rpc.make('stopAgent', {
   error: Schema.Union([AgentHandshakeRequired, AgentShuttingDown])
 })
 
-export const AgentRpcs = RpcGroup.make(OpenAgentSession, PingAgent, ObserveAgent, StopAgent)
+export const AgentRpcs = RpcGroup.make(
+  OpenAgentSession,
+  PingAgent,
+  ObserveAgent,
+  AuthorizeRepositoryPath,
+  StopAgent
+)
 
 export type AgentRpc = RpcGroup.Rpcs<typeof AgentRpcs>

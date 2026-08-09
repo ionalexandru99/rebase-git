@@ -1,7 +1,7 @@
 import type { CommitDetail } from '@shared/schemas/git'
 import { useQueries, useQuery } from '@tanstack/react-query'
+import { repoQueryKeys } from '@/features/repository-identity'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
-import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcGetCommitDetail } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import { useRepoSession } from '@/stores/repo-session'
