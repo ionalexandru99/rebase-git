@@ -5,16 +5,13 @@ function boundedDetail(value: string): string {
 }
 
 function detailKind(detail: unknown): string {
-  if (typeof detail === 'object' && detail !== null && '_tag' in detail) {
-    const tag = Reflect.get(detail, '_tag')
-    if (typeof tag === 'string') {
-      return boundedDetail(tag)
-    }
-  }
   if (detail instanceof Error) {
-    return boundedDetail(detail.name)
+    return 'Error'
   }
-  return boundedDetail(typeof detail)
+  if (typeof detail === 'object' && detail !== null && '_tag' in detail) {
+    return 'TaggedError'
+  }
+  return typeof detail
 }
 
 export function safeAgentFailureDetail(
