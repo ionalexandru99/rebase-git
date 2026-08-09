@@ -9,6 +9,7 @@ import {
   AgentConnectionFailure,
   type AgentConnectionFailureReason
 } from './agent-connection-failure'
+import { safeAgentFailureDetail } from './safe-agent-failure-detail'
 
 export function classifyAgentCommunicationFailure(
   error: unknown,
@@ -22,28 +23,28 @@ export function classifyAgentCommunicationFailure(
     return new AgentConnectionFailure({
       reason: 'ProtocolMismatch',
       message: `Agent protocol mismatch: expected ${error.expected}, received ${error.received}`,
-      detail: error
+      detail: { expected: error.expected, received: error.received }
     })
   }
   if (error instanceof AgentHandshakeRequired) {
     return new AgentConnectionFailure({
       reason: 'ProtocolViolation',
       message: `${operation} was rejected because the Agent session is not open`,
-      detail: error
+      detail: safeAgentFailureDetail(error)
     })
   }
   if (error instanceof AgentShuttingDown) {
     return new AgentConnectionFailure({
       reason: 'AgentStopping',
       message: `${operation} was rejected because the Agent is stopping`,
-      detail: error
+      detail: safeAgentFailureDetail(error)
     })
   }
   if (Cause.isTimeoutError(error)) {
     return new AgentConnectionFailure({
       reason: 'TimedOut',
       message: `${operation} timed out`,
-      detail: error
+      detail: safeAgentFailureDetail(error)
     })
   }
   if (error instanceof RpcClientError.RpcClientError && error.reason._tag === 'RpcClientDefect') {
@@ -52,7 +53,7 @@ export function classifyAgentCommunicationFailure(
   return new AgentConnectionFailure({
     reason: 'TransportFailed',
     message: `${operation} could not reach the Agent`,
-    detail: error
+    detail: safeAgentFailureDetail(error)
   })
 }
 
@@ -64,7 +65,7 @@ export function malformedAgentCommunication(
   return new AgentConnectionFailure({
     reason,
     message: `${operation} received malformed Agent data`,
-    detail
+    detail: safeAgentFailureDetail(detail)
   })
 }
 

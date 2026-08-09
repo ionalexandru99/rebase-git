@@ -8,6 +8,7 @@ import { Cause, Effect, Schema } from 'effect4'
 import { RpcClientError } from 'effect4/unstable/rpc'
 import type { AgentCommandOutcome } from './agent-connection'
 import { AgentConnectionFailure } from './failure/agent-connection-failure'
+import { safeAgentFailureDetail } from './failure/safe-agent-failure-detail'
 import type { AgentLiveness } from './lifecycle/agent-liveness'
 import type { AgentInterfaceClient } from './session/establish-agent-session'
 
@@ -35,20 +36,20 @@ function uncertainShutdownFailure(error: unknown): AgentConnectionFailure {
     return new AgentConnectionFailure({
       reason: 'TimedOut',
       message: 'Agent shutdown command timed out after dispatch may have begun',
-      detail: error
+      detail: safeAgentFailureDetail(error)
     })
   }
   if (error instanceof RpcClientError.RpcClientError && error.reason._tag === 'RpcClientDefect') {
     return new AgentConnectionFailure({
       reason: 'ProtocolViolation',
       message: 'Agent shutdown command returned malformed protocol data',
-      detail: error
+      detail: safeAgentFailureDetail(error)
     })
   }
   return new AgentConnectionFailure({
     reason: 'TransportFailed',
     message: 'Agent shutdown command failed after dispatch may have begun',
-    detail: error
+    detail: safeAgentFailureDetail(error)
   })
 }
 
@@ -93,7 +94,7 @@ export function dispatchAgentShutdown(
                     new AgentConnectionFailure({
                       reason: 'ProtocolViolation',
                       message: 'Agent shutdown command failed with malformed protocol data',
-                      detail
+                      detail: safeAgentFailureDetail(detail)
                     })
                   )
                 )
@@ -108,7 +109,7 @@ export function dispatchAgentShutdown(
               const failure = new AgentConnectionFailure({
                 reason: 'ProtocolViolation',
                 message: 'Agent rejected shutdown because its session is not open',
-                detail: error
+                detail: safeAgentFailureDetail(error)
               })
               return liveness
                 .disconnect({ _tag: 'Unreachable', failure })

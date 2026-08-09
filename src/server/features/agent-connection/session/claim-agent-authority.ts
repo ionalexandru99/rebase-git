@@ -9,23 +9,14 @@ import {
 import { Cause, Effect, Schema } from 'effect4'
 import { type HttpClient, HttpClientRequest } from 'effect4/unstable/http'
 import { AgentConnectionFailure } from '../failure/agent-connection-failure'
+import { safeAgentFailureDetail } from '../failure/safe-agent-failure-detail'
 
 function malformedBootstrap(message: string, detail: unknown): AgentConnectionFailure {
   return new AgentConnectionFailure({
     reason: 'MalformedBootstrap',
     message,
-    detail
+    detail: safeAgentFailureDetail(detail)
   })
-}
-
-function safeBootstrapFailureDetail(error: unknown, bootstrapSecret: string) {
-  if (!(error instanceof Error)) {
-    return { kind: typeof error }
-  }
-  return {
-    kind: error.name,
-    message: error.message.replaceAll(bootstrapSecret, '[redacted]')
-  }
 }
 
 export function claimAgentAuthority(
@@ -83,7 +74,7 @@ export function claimAgentAuthority(
         message: Cause.isTimeoutError(error)
           ? 'Agent bootstrap timed out after dispatch may have begun'
           : 'Agent bootstrap failed after dispatch may have begun',
-        detail: safeBootstrapFailureDetail(error, ready.bootstrapSecret)
+        detail: safeAgentFailureDetail(error, [ready.bootstrapSecret])
       })
     })
   )
