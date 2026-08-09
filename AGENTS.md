@@ -4,30 +4,43 @@ Single source of truth for agents in this repo. `CLAUDE.md` imports this file �
 
 ## What this is
 
-**Rebase** — a desktop Git GUI: Electron + React 19 + TypeScript + Tailwind, `pnpm` as package
-manager. Users open repos, stage files, and commit hundreds of times a day, so the app has to feel
-fast: Git runs in a forked sidecar process and the main thread never blocks on it.
+**Rebase** is a Git client built with TypeScript, React 19, Electron, and Effect. Version 0.0.2 is a
+transition from the original Electron/sidecar architecture to a separately runnable Web, Server,
+and leaf Agent architecture. The legacy desktop path is still production code while features move
+slice by slice. Do not confuse coexistence with the desired end state, and do not refactor legacy
+code unless the task requires it.
+
+Users stage and commit constantly, so Git and filesystem work must never block a UI, Electron, or
+Server event loop. Native work belongs in a leaf Agent in the new architecture and in the legacy
+sidecar only for slices that have not migrated yet.
 
 ## Commands
 
 ```bash
-pnpm dev                  # electron-vite dev (hot reload)
-pnpm build                # → out/
+pnpm dev                  # legacy Electron desktop development
+pnpm dev:web              # browser runtime
+pnpm dev:server           # rebuild standalone Server on changes
+pnpm dev:agent            # rebuild standalone Agent on changes
+pnpm build                # Electron + Web + Server + Agent → out/
 pnpm package              # electron-builder; :mac / :win / :linux for one target
 
 pnpm typecheck
-pnpm check:fix            # biome format + lint, autofix
+pnpm check                # Biome format + lint verification
+pnpm check:fix            # Biome autofix
 
-pnpm test:renderer        # components, hooks, UI state (happy-dom)
-pnpm test:main            # store, pure logic (node)
-pnpm test:sidecar         # sidecar logic + real-git integration (node)
+pnpm test:renderer        # Web/renderer UI and state
+pnpm test:main            # legacy Electron main
+pnpm test:main:integration
+pnpm test:sidecar         # legacy sidecar and real-Git integration
+pnpm test:server          # new Server contracts and process integration
+pnpm test:agent           # new Agent contracts and process integration
 pnpm test:smoke           # builds, launches the binary, checks for startup errors
 pnpm test:e2e             # playwright against the real built app
-pnpm test:ci              # renderer + main + sidecar + e2e
+pnpm test:ci
 ```
 
-Single test: `pnpm vitest run <file>` (add `--config vitest.main.config.ts` or
-`vitest.sidecar.config.ts` for those layers), `pnpm playwright test <file>` for e2e.
+Single test: `pnpm vitest run <file>` with the matching `vitest.*.config.ts`, or
+`pnpm playwright test <file>` for E2E.
 
 Demo recording for PR bodies: `REBASE_DEMO=1 pnpm playwright test <file>` runs any e2e spec
 slowed down with video capture on, writing `.webm` files to `test-results/demos/`. On Windows use
@@ -41,44 +54,141 @@ A `pre-push` hook runs `pnpm typecheck` and `pnpm check`; `pnpm install` wires i
 
 ## Architecture
 
-Four processes, hard boundary between them:
+### Target runtimes
 
-- `src/main/` — Electron main. Windows, dialogs, menu, updater, `electron-store`, and the sidecar's
-  lifecycle. Proxies Git IPC to the sidecar. **No Git logic.**
-  - `app/` window + app chrome (menu, updater, CSP, shutdown), `ipc/` channel handlers,
-    `sidecar/` process spawn + lifecycle + RPC + crash recovery, `repo/` filesystem watching,
-    `store/` `electron-store` schema and migrations.
-- `src/sidecar/` — forked `utilityProcess` HTTP server on loopback. Owns all `simple-git` work.
-  - `server/` HTTP + protocol + RPC handlers, `session/` per-repo sessions, locks and semaphores,
-    `git/` process spawning and Git primitives, `operations/` the Git operations themselves,
-    `test-support/` fixtures shared by tests.
-- `src/preload/` — `contextBridge` bridge exposing `window.electronAPI`. Context isolation is on;
-  the renderer has no Node access, and the sidecar's URL and token never leave main + sidecar.
-- `src/renderer/` — React 19 UI. Git through @tanstack/react-query + typed `callSidecarRpc` helpers;
-  @tanstack/react-virtual for long lists.
-  - `app/` bootstrap, tabs and workspace composition; `shell/` app chrome (Shell, Sidebar, Topbar,
-    Titlebar, RepoRail); `features/<slice>/` one folder per domain slice — `history`, `status`,
-    `diff`, `commit`, `refs`, `repos`, `onboarding`, `sync` — each owning its components, its
-    `store.tsx`, and its own pure logic; `components/ui/` shadcn primitives; `lib/` and `hooks/`
-    for genuinely cross-cutting code only; `stores/` for cross-slice state.
+- `src/agent/` — the leaf native runtime for exactly one Environment. It owns system Git,
+  filesystem/process resources, repository sessions, and native observation. It never owns an
+  Environment registry, routing target, browser session, or a way to launch/connect to another
+  Agent. Its executable composition root is `src/agent/index.ts`.
+- `src/server/` — orchestration, Environment ownership, Agent connection/liveness, authentication,
+  retry policy, command certainty, and Browser-facing routing. It does not execute Git or absorb
+  Agent implementation details. Its composition root is `src/server/index.ts`.
+- `src/web/` and `src/renderer/` — the browser runtime and React UI. UI code is organized as domain
+  feature slices. Browser code has no Node access and speaks to the Server through typed contracts.
+- `src/common/features/` — wire facts shared by new runtimes: Effect Schemas, serialized request and
+  response shapes, RPC declarations, protocol constants, and definitive peer-owned failures. It is
+  not a home for workflows, routing, retry, lifecycle, UI state, Server interpretation, or Agent
+  implementation.
 
-`src/shared/` holds the Effect Schema contracts all of them speak.
+### Transitional legacy runtimes
 
-A feature slice may import from `lib/`, `hooks/`, `stores/`, `components/ui/` and `shared/`. Prefer
-not to reach across slices — if two slices need the same thing, it belongs one level up.
+- `src/electron/`, `src/main/`, and `src/preload/` compose the current desktop application.
+- `src/sidecar/` remains the current desktop Git runtime for slices that have not migrated.
+- `src/shared/` contains legacy desktop/sidecar contracts. Do not add new Agent/Server architecture
+  there.
 
-The renderer supports N tabs, each holding a different repo, so every Git call carries a `repoPath` —
-there's no implicit "current repo" anywhere below the UI. One tab per repo is an enforced invariant.
+The packaged desktop intentionally continues to start the legacy sidecar until a vertical feature
+slice replaces that path. Preserve this behavior unless the issue explicitly removes it. New
+architecture work must not import legacy sidecar, Electron, Main, Preload, Renderer, or legacy
+`src/shared/` implementation.
+
+### Dependency direction
+
+```text
+Web/Renderer -> Server-facing contracts
+Server       -> Common Agent contracts
+Agent        -> Common Agent contracts
+Common       -> no runtime implementation
+
+Electron/Main/Preload -> legacy Shared contracts -> legacy Sidecar
+```
+
+Agent never imports Server. Server never imports Agent implementation. Common never imports any
+runtime. A feature should not reach into another feature's internals; depend on its public `index.ts`
+or move a genuinely shared wire fact to Common.
+
+### Feature folders
+
+Organize production code by domain capability:
+
+```text
+src/<runtime>/features/<feature>/
+  index.ts
+  <cohesive-capability>/
+  <cohesive-workflow>.ts
+```
+
+Feature folders may contain several meaningful subfolders and separate contracts, functions, and
+models when that improves locality. Do not impose a global `functions/`, `models/`, `contracts/`, or
+`shared/` taxonomy. Group files that change together and name folders after the capability they own,
+such as `session`, `transport`, `git`, or `repository-observation`.
+
+Avoid both extremes: no giant catch-all files, and no one-file directory or one-function file that
+adds navigation without isolating a real concern. `index.ts` exposes the small feature interface; it
+does not contain the implementation.
+
+Names must state responsibility. Bare names such as `bootstrap.ts`, `commands.ts`,
+`compatibility.ts`, `events.ts`, `rpc.ts`, and `protocol.ts` are usually evidence that unrelated
+concerns were grouped together. Qualify the name with the owned workflow or split the module.
+
+### Common versus runtime ownership
+
+Put something in Common only when it must be serialized unchanged between runtimes. A schema being
+useful to two modules is not enough if the concept belongs to one runtime.
+
+- Agent owns definitive execution results, native paths, process behavior, and repository state.
+- Server owns dispatch certainty, `NotDispatched`/`OutcomeUnknown`, refresh policy, retry,
+  reconnection, routing, and Environment identity.
+- Web owns presentation and browser interaction state.
+- Common owns only the wire representation they agree to exchange.
+
+When uncertain, keep behavior in the runtime that decides it. Promote only the smallest stable wire
+fact, never an implementation convenience.
+
+### Effect 4 boundary
+
+New Agent/Server architecture uses the exact `effect4` dependency. Legacy Effect 3 code may remain
+until its slice migrates; do not mix Effect versions within one new feature.
+
+- Plain deterministic transformations, comparisons, parsing, and state transitions stay plain
+  TypeScript.
+- Async workflows, I/O, clocks, timeouts, retries, interruption, concurrency, and resource lifetime
+  use Effect.
+- Resources use `Scope`, `Layer`, and acquire/release semantics. Do not coordinate ownership with
+  loose timers, mutable flags, or per-call runtimes.
+- Keep typed failures through the module interface. Translate adapter failures once at the owning
+  feature seam.
+- Run Effect once at each executable composition root. Do not erase Effect into Promise inside
+  feature implementation.
+- Wrap Node or platform APIs in one small adapter when Effect 4 does not provide the required
+  integration.
 
 ## Rules
 
-- **Never block the main thread on Git.** It stays in the sidecar.
-- **Every behaviour change ships with tests**, at the layer that matches it (see the table above).
-  Don't mock `BrowserWindow`/`ipcMain` or unit-test Electron boilerplate — E2E and smoke cover those.
+- **Feature ownership first.** Code lives with the runtime and capability that owns the decision.
+  Do not place feature-specific code in Common, Shared, `lib`, or another generic dumping ground.
+- **SOLID with restraint.** Give modules one reason to change, keep dependency direction explicit,
+  and hide complex implementation behind a small interface. Do not manufacture interfaces or
+  classes for hypothetical substitution.
+- **KISS.** Use the smallest design that preserves the real invariant. A design pattern must solve
+  an existing ownership, lifecycle, or variation problem.
+- **DRY knowledge, not syntax.** Centralize protocol constraints and domain decisions. Similar code
+  in two runtimes may remain separate when the runtimes own different policy.
+- **Prefer deep modules.** Callers and tests use the same small interface. Avoid pass-through layers,
+  wrapper classes, and abstractions whose only purpose is making tests easier.
+- **Never block an event loop on Git.** New native work stays in Agent. Unmigrated desktop work stays
+  in the legacy sidecar.
+- **Every behavior change ships with tests** at the matching interface or process boundary.
 - **Exact dependency versions**, no `^` or `~`: we review every version that lands. Add with
   `pnpm add package@1.2.3`. Postinstall scripts are restricted via `allowBuilds` in
-  `pnpm-workspace.yaml` — only listed packages run them.
-- **Don't add abstractions or heavy dependencies** that aren't solving a real problem.
+  `pnpm-workspace.yaml`.
+- **No speculative abstractions or heavy dependencies.** Add them only for a demonstrated need.
+- Preserve unrelated user changes and avoid broad legacy cleanup during a feature migration.
+
+## Testing boundaries
+
+- All new tests, fixtures, fakes, proxies, and harnesses live under top-level `tests/`, never inside
+  `src/`. Existing legacy `src/**/__tests__` can remain until that slice migrates, but do not add to
+  them for new architecture.
+- Mirror feature ownership under `tests/<feature>/` and test through the same production interface
+  callers use.
+- Do not add production classes, methods, flags, endpoints, or dependency injection solely for
+  tests. A seam belongs in production only when production has real variation or ownership to hide.
+- Pure state transitions can have focused tests. Authentication, process lifecycle, cancellation,
+  backpressure, reconnection, and command certainty require real-process or adapter-boundary tests.
+- Compatibility fixtures are append-only. A required peer behavior change creates a new protocol
+  version and fixture; never rewrite a published fixture.
+- Test code must not enter runtime bundles. Keep architecture and bundle-isolation guards green.
 
 ## Style
 
