@@ -1,3 +1,4 @@
+import type { RepoRef } from '@common/features/repository-identity'
 import type { LocalBranches, RemoteRefs } from '@shared/schemas/git'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -6,16 +7,21 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
 } from 'react'
 import { toast } from 'sonner'
+import {
+  type RepositoryIdentity,
+  repoQueryKeys,
+  repositoryIdentityKey
+} from '@/features/repository-identity'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
 import { toastEngineFailure, toastGitFailure } from '@/lib/git-report'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
-import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcFetch, rpcGetLocalBranches, rpcGetRemoteRefs } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 import type { GitBranches } from '@/types'
@@ -51,16 +57,17 @@ const fetchRemoteRefs = async (path: string): Promise<RemoteRefs> => {
 
 export interface RefsDeps {
   repoPath: string | null
+  repository: RepoRef | null
   tabId: string
   tabActive: boolean
   remotes: Record<string, string>
   defaultBranch: string | undefined
   statusCurrent: string | undefined
-  liveRepoPath: RefObject<string | null>
+  liveRepoRef: RefObject<RepoRef | null>
   openGenerationRef: RefObject<number>
-  isCurrentRepo: (generation: number, repoPath: string) => boolean
+  isCurrentRepo: (generation: number, repository: RepositoryIdentity) => boolean
   mutationCoordinator: RepoMutationCoordinator
-  refreshAfterFetch: (repoPath: string) => Promise<unknown>
+  refreshAfterFetch: (repository: RepositoryIdentity) => Promise<unknown>
 }
 
 export interface Refs {
@@ -87,41 +94,50 @@ export interface RefsController {
 export function useRefsController(deps: RefsDeps): RefsController {
   const {
     repoPath,
+    repository,
     tabId,
     tabActive,
     remotes,
     defaultBranch,
     statusCurrent,
-    liveRepoPath,
+    liveRepoRef,
     openGenerationRef,
     isCurrentRepo,
     mutationCoordinator,
     refreshAfterFetch
   } = deps
 
-  const repoKeys = repoQueryKeys(repoPath, { idle: tabId })
+  const repoKeys = repoQueryKeys(repository, { idle: tabId })
 
   const tabActiveRef = useRef(tabActive)
-  tabActiveRef.current = tabActive
+  useLayoutEffect(() => {
+    tabActiveRef.current = tabActive
+  }, [tabActive])
 
   const [fetchTick, setFetchTick] = useState(0)
-  const pendingRefresh = useRef<string | null>(null)
+  const pendingRefresh = useRef<RepoRef | null>(null)
   const lastFetchFailure = useRef<string | null>(null)
-  const [lastFetch, setLastFetch] = useState<{ repoPath: string; fetchedAt: number } | null>(null)
-  const lastFetchedAt = lastFetch?.repoPath === repoPath ? lastFetch.fetchedAt : null
+  const [lastFetch, setLastFetch] = useState<{
+    repositoryKey: string
+    fetchedAt: number
+  } | null>(null)
+  const lastFetchedAt =
+    repository && lastFetch?.repositoryKey === repositoryIdentityKey(repository)
+      ? lastFetch.fetchedAt
+      : null
 
   const localBranchesQuery = useQuery({
     queryKey: repoKeys.localBranches,
     enabled: Boolean(repoPath),
     gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: ({ queryKey }) => fetchLocalBranches(queryKey[1] as string)
+    queryFn: () => fetchLocalBranches(repoPath as string)
   })
 
   const remoteRefsQuery = useQuery({
     queryKey: repoKeys.remoteRefs,
     enabled: Boolean(repoPath) && Boolean(localBranchesQuery.data),
     gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: ({ queryKey }) => fetchRemoteRefs(queryKey[1] as string)
+    queryFn: () => fetchRemoteRefs(repoPath as string)
   })
 
   const branches = useMemo(
@@ -146,30 +162,33 @@ export function useRefsController(deps: RefsDeps): RefsController {
     }
   }
 
-  const runFetchAndRefresh = (path: string, manual = false) =>
+  const runFetchAndRefresh = (candidate: RepoRef, manual = false) =>
     mutationCoordinator.run(
       'fetch',
       undefined,
       async () => {
         const generation = openGenerationRef.current
-        if (!isCurrentRepo(generation, path)) {
+        if (!isCurrentRepo(generation, candidate)) {
           return
         }
         try {
-          const response = await rpcFetch(path)
-          if (!isCurrentRepo(generation, path)) {
+          const response = await rpcFetch(candidate.path)
+          if (!isCurrentRepo(generation, candidate)) {
             return
           }
           if (response._tag === 'Ok') {
             lastFetchFailure.current = null
-            setLastFetch({ repoPath: path, fetchedAt: Date.now() })
+            setLastFetch({
+              repositoryKey: repositoryIdentityKey(candidate),
+              fetchedAt: Date.now()
+            })
             if (manual) {
               toast.success('Fetched from remote')
             }
             if (tabActiveRef.current) {
-              await refreshAfterFetch(path)
+              await refreshAfterFetch(candidate)
             } else {
-              pendingRefresh.current = path
+              pendingRefresh.current = candidate
             }
           } else if (response._tag === 'FetchSkipped') {
             if (manual) {
@@ -179,7 +198,7 @@ export function useRefsController(deps: RefsDeps): RefsController {
             reportFetchFailure(response.message, manual)
           }
         } catch (error) {
-          if (isCurrentRepo(generation, path)) {
+          if (isCurrentRepo(generation, candidate)) {
             toastEngineFailure('Fetch failed', formatCause(error))
           }
         }
@@ -188,12 +207,12 @@ export function useRefsController(deps: RefsDeps): RefsController {
     )
 
   const fetchNowImpl = async () => {
-    const path = liveRepoPath.current
-    if (!path) {
+    const currentRepository = liveRepoRef.current
+    if (!currentRepository) {
       return
     }
     setFetchTick((tick) => tick + 1)
-    await runFetchAndRefresh(path, true)
+    await runFetchAndRefresh(currentRepository, true)
   }
 
   const latest = useLatestRef({
@@ -206,26 +225,32 @@ export function useRefsController(deps: RefsDeps): RefsController {
   const fetchNow = useCallback(() => latest.current.fetchNow(), [])
 
   useEffect(() => {
-    if (!tabActive || !repoPath || pendingRefresh.current !== repoPath) {
+    const pendingRepository = pendingRefresh.current
+    if (
+      !tabActive ||
+      !repository ||
+      !pendingRepository ||
+      repositoryIdentityKey(pendingRepository) !== repositoryIdentityKey(repository)
+    ) {
       return
     }
     pendingRefresh.current = null
-    void latest.current.refreshAfterFetch(repoPath)
-  }, [repoPath, tabActive])
+    void latest.current.refreshAfterFetch(repository)
+  }, [repository, tabActive])
 
   useEffect(() => {
     void fetchTick
-    if (!repoPath) {
+    if (!repository) {
       return
     }
     const handle = window.setInterval(() => {
       const { isTabActive, runFetchAndRefresh } = latest.current
       if (isTabActive()) {
-        void runFetchAndRefresh(repoPath)
+        void runFetchAndRefresh(repository)
       }
     }, AUTO_FETCH_INTERVAL_MS)
     return () => window.clearInterval(handle)
-  }, [repoPath, fetchTick])
+  }, [repository, fetchTick])
 
   const value = useMemo<Refs>(
     () => ({

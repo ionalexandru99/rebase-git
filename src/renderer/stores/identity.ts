@@ -1,3 +1,4 @@
+import type { RepoRef } from '@common/features/repository-identity'
 import type {
   GitIdentity,
   IdentityField,
@@ -6,19 +7,26 @@ import type {
 } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
+import { toRepoRef } from '@/features/repository-identity'
 import { rpcClearIdentity, rpcGetIdentity, rpcSetIdentity } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 
 const IDENTITY_QUERY_ROOT = 'identity'
 
-export const identityQueryKey = (repoPath: string | null) =>
-  [IDENTITY_QUERY_ROOT, repoPath ?? 'app'] as const
+export const identityQueryKey = (repository: RepoRef | string | null) => {
+  if (repository === null) {
+    return [IDENTITY_QUERY_ROOT, 'app'] as const
+  }
+  const repoRef = toRepoRef(repository)
+  return [IDENTITY_QUERY_ROOT, repoRef.environmentId, repoRef.path] as const
+}
 
-export function useIdentity(repoPath: string | null) {
+export function useIdentity(repository: RepoRef | string | null) {
   const queryClient = useQueryClient()
+  const repoPath = repository === null ? null : toRepoRef(repository).path
 
   const query = useQuery<ResolvedIdentity>({
-    queryKey: identityQueryKey(repoPath),
+    queryKey: identityQueryKey(repository),
     queryFn: async () => {
       const { local, global, effective } = unwrapOk(await rpcGetIdentity(repoPath))
       return { local, global, effective }

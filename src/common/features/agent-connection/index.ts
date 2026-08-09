@@ -1,4 +1,5 @@
 export * from './agent-interface'
+export * from './authorize-repository-path'
 export * from './claim-agent'
 export * from './observe-agent'
 export * from './open-agent-session'

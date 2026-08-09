@@ -1,11 +1,11 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
+import { repoQueryKeys, toRepoRef } from '@/features/repository-identity'
 import {
   createStatusMutationOptions,
   type StatusMutationContext,
   type StatusMutationResult
 } from '@/features/status/status-mutation-lifecycle'
-import { repoQueryKeys } from '@/lib/query-keys'
 import { makeGitStatus } from '../../../../test/builders'
 
 const repoPath = '/repo'
@@ -22,7 +22,10 @@ function setup(options: { repoPath?: string | null; current?: boolean } = {}) {
   const lifecycle = createStatusMutationOptions(
     {
       queryClient,
-      getRepoPath: () => (options.repoPath === undefined ? repoPath : options.repoPath),
+      getRepository: () => {
+        const path = options.repoPath === undefined ? repoPath : options.repoPath
+        return path ? toRepoRef(path) : null
+      },
       getGeneration: () => 7,
       isCurrentRepo: () => options.current ?? true,
       setMutationError,

@@ -1,6 +1,7 @@
 import type {
   AgentObservation,
   OpenAgentSessionSuccess,
+  RepositoryPathRejected,
   StopAgentResult
 } from '@common/features/agent-connection'
 import type { Effect, Stream } from 'effect4'
@@ -55,6 +56,9 @@ export interface AgentConnection {
   readonly compatibility: OpenAgentSessionSuccess
   readonly status: Effect.Effect<AgentConnectionStatus>
   readonly ping: (requestId: string) => Effect.Effect<number, AgentConnectionFailure>
+  readonly authorizeRepositoryPath: (
+    nativePath: string
+  ) => Effect.Effect<string, AgentConnectionFailure | RepositoryPathRejected>
   readonly agentActivity: Stream.Stream<AgentObservation, AgentConnectionFailure | AgentSequenceGap>
   readonly shutdown: (operationId: string) => Effect.Effect<AgentCommandOutcome>
 }

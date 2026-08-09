@@ -1,15 +1,17 @@
+import type { RepoRef } from '@common/features/repository-identity'
 import { repoDisplayName } from '@/lib/repo-display-name'
 import { useIdentity } from '@/stores/identity'
 import { SettingsView } from './SettingsView'
 
 interface SettingsPanelProps {
+  repoRef?: RepoRef | null
   repoPath: string | null
   initialSectionId: string | null
   onClose: () => void
 }
 
 export function SettingsPanel(props: SettingsPanelProps) {
-  const identity = useIdentity(props.repoPath)
+  const identity = useIdentity(props.repoRef ?? props.repoPath)
 
   if (!identity.identity) {
     return (

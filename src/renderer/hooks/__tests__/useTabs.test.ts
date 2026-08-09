@@ -83,6 +83,8 @@ describe('useTabs keyboard nav', () => {
 })
 
 describe('useTabs persistence', () => {
+  const localRepository = (path: string) => ({ environmentId: 'local' as const, path })
+
   it('hydrates from a persisted state with one tab per persisted entry', () => {
     const { result } = renderHook(() =>
       useTabs({ tabs: ['/repo/a', null, '/repo/b'], activeIndex: 2 })
@@ -103,25 +105,31 @@ describe('useTabs persistence', () => {
 
   it('updates persistedSnapshot when tabs change', () => {
     const { result } = renderHook(() => useTabs({ tabs: ['/repo/a'], activeIndex: 0 }))
-    expect(result.current.persistedSnapshot).toEqual({ tabs: ['/repo/a'], activeIndex: 0 })
+    expect(result.current.persistedSnapshot).toEqual({
+      tabs: [localRepository('/repo/a')],
+      activeIndex: 0
+    })
 
     act(() => {
       result.current.newTab()
     })
-    expect(result.current.persistedSnapshot.tabs).toEqual(['/repo/a', null])
+    expect(result.current.persistedSnapshot.tabs).toEqual([localRepository('/repo/a'), null])
     expect(result.current.persistedSnapshot.activeIndex).toBe(1)
 
     act(() => {
       result.current.openRepoInTab(result.current.tabs[1].id, '/repo/b')
     })
     expect(result.current.tabs[1]).toMatchObject({ kind: 'opening-repo', repoPath: '/repo/b' })
-    expect(result.current.persistedSnapshot.tabs).toEqual(['/repo/a', null])
+    expect(result.current.persistedSnapshot.tabs).toEqual([localRepository('/repo/a'), null])
 
     act(() => {
       result.current.confirmRepoOpen(result.current.tabs[1].id, '/repo/b')
     })
     expect(result.current.tabs[1]).toMatchObject({ kind: 'repo', repoPath: '/repo/b' })
-    expect(result.current.persistedSnapshot.tabs).toEqual(['/repo/a', '/repo/b'])
+    expect(result.current.persistedSnapshot.tabs).toEqual([
+      localRepository('/repo/a'),
+      localRepository('/repo/b')
+    ])
   })
 
   it('clamps activeIndex when it is out of range', () => {
@@ -155,7 +163,10 @@ describe('useTabs persistence', () => {
     )
 
     expect(result.current.tabs).toHaveLength(2)
-    expect(result.current.persistedSnapshot.tabs).toEqual(['/repo/a', '/repo/b'])
+    expect(result.current.persistedSnapshot.tabs).toEqual([
+      localRepository('/repo/a'),
+      localRepository('/repo/b')
+    ])
     expect(result.current.tabs.find((tab) => tab.id === result.current.activeTabId)).toMatchObject({
       kind: 'repo',
       repoPath: '/repo/a'

@@ -1,7 +1,9 @@
+import type { RepoRef } from '@common/features/repository-identity'
 import type { HunkLineSelection } from '@shared/rpc'
 import type { HeadCommit } from '@shared/schemas/git'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, type RefObject, useCallback, useContext, useMemo, useRef } from 'react'
+import { type RepositoryIdentity, repoQueryKeys } from '@/features/repository-identity'
 import { buildUnifiedFileRows, type UnifiedFileRow } from '@/features/status/status-file-rows'
 import {
   createStatusMutationOptions,
@@ -9,7 +11,6 @@ import {
 } from '@/features/status/status-mutation-lifecycle'
 import { applyStageToStatus, applyUnstageToStatus } from '@/features/status/status-transitions'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
-import { repoQueryKeys } from '@/lib/query-keys'
 import {
   rpcDiscardHunk,
   rpcGetDiff,
@@ -54,10 +55,11 @@ interface LineMutationVars {
 
 export interface WorkingTreeStatusDeps {
   repoPath: string | null
+  repository: RepoRef | null
   tabId: string
-  liveRepoPath: RefObject<string | null>
+  liveRepoRef: RefObject<RepoRef | null>
   openGenerationRef: RefObject<number>
-  isCurrentRepo: (generation: number, repoPath: string) => boolean
+  isCurrentRepo: (generation: number, repository: RepositoryIdentity) => boolean
   setError: (source: RepoSessionErrorSource, error: string) => void
   clearError: (source: RepoSessionErrorSource) => void
   mutationCoordinator: RepoMutationCoordinator
@@ -92,8 +94,9 @@ export function useWorkingTreeStatusController(
   const queryClient = useQueryClient()
   const {
     repoPath,
+    repository,
     tabId,
-    liveRepoPath,
+    liveRepoRef,
     openGenerationRef,
     isCurrentRepo,
     setError,
@@ -103,13 +106,10 @@ export function useWorkingTreeStatusController(
   const runMutation = mutationCoordinator.run
 
   const statusQuery = useQuery({
-    queryKey: repoQueryKeys(repoPath, { idle: tabId }).status,
+    queryKey: repoQueryKeys(repository, { idle: tabId }).status,
     enabled: Boolean(repoPath),
     gcTime: WARM_REOPEN_GC_TIME_MS,
-    queryFn: async ({ queryKey }) => {
-      const path = queryKey[1] as string
-      return unwrapOk(await rpcGetStatus(path)).status
-    }
+    queryFn: async () => unwrapOk(await rpcGetStatus(repoPath as string)).status
   })
 
   const statusMutationOptions = <Vars,>(
@@ -119,7 +119,7 @@ export function useWorkingTreeStatusController(
     createStatusMutationOptions(
       {
         queryClient,
-        getRepoPath: () => liveRepoPath.current,
+        getRepository: () => liveRepoRef.current,
         getGeneration: () => openGenerationRef.current,
         isCurrentRepo,
         setMutationError: (error) => setError('mutation', error),
@@ -328,8 +328,8 @@ export function useWorkingTreeStatus(): WorkingTreeStatus {
 }
 
 export function useFileDiff(file: string | null, staged: boolean, range?: string) {
-  const { repoPath } = useRepoSession()
-  const queryKeys = repoQueryKeys(repoPath, { idle: 'diff-panel' })
+  const { repoRef, repoPath } = useRepoSession()
+  const queryKeys = repoQueryKeys(repoRef, { idle: 'diff-panel' })
   return useQuery({
     queryKey: file ? queryKeys.diff(file, staged, range) : queryKeys.diff('none', staged, range),
     enabled: Boolean(repoPath && file),
@@ -344,8 +344,8 @@ export function useFileDiff(file: string | null, staged: boolean, range?: string
 }
 
 export function useCommitFileDiff(sha: string | null, file: string | null, renameSource?: string) {
-  const { repoPath } = useRepoSession()
-  const queryKeys = repoQueryKeys(repoPath, { idle: 'commit-diff' })
+  const { repoRef, repoPath } = useRepoSession()
+  const queryKeys = repoQueryKeys(repoRef, { idle: 'commit-diff' })
   return useQuery({
     queryKey: queryKeys.commitDiff(sha ?? 'none', file ?? 'none'),
     enabled: Boolean(repoPath && sha && file),
@@ -364,8 +364,8 @@ export function useCommitFileDiff(sha: string | null, file: string | null, renam
 }
 
 export function useHeadCommit(enabled: boolean) {
-  const { repoPath } = useRepoSession()
-  const queryKeys = repoQueryKeys(repoPath, { idle: 'head-commit' })
+  const { repoRef, repoPath } = useRepoSession()
+  const queryKeys = repoQueryKeys(repoRef, { idle: 'head-commit' })
   return useQuery({
     queryKey: queryKeys.headCommit,
     enabled: enabled && Boolean(repoPath),

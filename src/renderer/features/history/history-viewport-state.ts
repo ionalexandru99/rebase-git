@@ -1,20 +1,23 @@
+import type { RepoRef } from '@common/features/repository-identity'
+import { repositoryIdentityKey } from '@/features/repository-identity'
 import { HISTORY_LOAD_MORE_THRESHOLD_ROWS } from '@/lib/virtual-config'
 
 interface HistoryScrollMemory {
-  get(repoPath: string): number
-  remember(repoPath: string, scrollTop: number): void
+  get(repository: RepoRef | string): number
+  remember(repository: RepoRef | string, scrollTop: number): void
 }
 
 export function createHistoryScrollMemory(limit = 32): HistoryScrollMemory {
   const positions = new Map<string, number>()
 
   return {
-    get(repoPath) {
-      return positions.get(repoPath) ?? 0
+    get(repository) {
+      return positions.get(repositoryIdentityKey(repository)) ?? 0
     },
-    remember(repoPath, scrollTop) {
-      positions.delete(repoPath)
-      positions.set(repoPath, scrollTop)
+    remember(repository, scrollTop) {
+      const key = repositoryIdentityKey(repository)
+      positions.delete(key)
+      positions.set(key, scrollTop)
       while (positions.size > limit) {
         const oldestRepoPath = positions.keys().next().value
         if (oldestRepoPath === undefined) {
@@ -33,6 +36,7 @@ interface HistoryAutoLoadInput {
   loading: boolean
   loadingMore?: boolean
   canLoadMore: boolean
+  repository?: RepoRef | string | null
   repoPath?: string | null
   loadedCount: number
 }
@@ -45,7 +49,8 @@ export function nextHistoryAutoLoadKey(
   if (!nearEnd || !input.hasMore || input.loading || input.loadingMore || !input.canLoadMore) {
     return null
   }
-  const key = `${input.repoPath ?? ''}:${input.loadedCount}`
+  const repository = input.repository ?? input.repoPath
+  const key = `${repository ? repositoryIdentityKey(repository) : ''}:${input.loadedCount}`
   return key === previousKey ? null : key
 }
 

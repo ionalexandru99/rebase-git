@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { useIdentity } from '@/stores/identity'
+import { RepoSessionContext } from '@/stores/repo-session'
 import { CommitPanelView } from './CommitPanelView'
 import { MissingIdentityDialog } from './MissingIdentityDialog'
 import { missingIdentityFields } from './missing-identity'
@@ -29,7 +30,8 @@ interface CommitPanelProps {
 }
 
 export function CommitPanel(props: CommitPanelProps) {
-  const identity = useIdentity(props.repoPath)
+  const session = useContext(RepoSessionContext)
+  const identity = useIdentity(session?.repoRef ?? props.repoPath)
   const [identityDialogOpen, setIdentityDialogOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [amend, setAmend] = useState(false)

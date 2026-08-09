@@ -10,6 +10,7 @@ import {
 import { refFilterKey } from '@/features/history/selectors'
 import { type CommitHistory, CommitHistoryProvider } from '@/features/history/store'
 import { type Refs, RefsProvider } from '@/features/refs/store'
+import { toRepoRef } from '@/features/repository-identity'
 import { type RepoSession, RepoSessionProvider } from '@/stores/repo-session'
 import type { GitBranches, GitLog, GitLogEntry } from '@/types'
 
@@ -27,6 +28,7 @@ const asyncNoop = async () => {}
 
 function fixtureProviders(fixture: TimelineFixture, children: ReactNode): ReactNode {
   const session: RepoSession = {
+    repoRef: fixture.repoPath ? toRepoRef(fixture.repoPath) : null,
     repoPath: fixture.repoPath,
     opening: false,
     openGeneration: 0,

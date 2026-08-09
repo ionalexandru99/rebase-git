@@ -4,6 +4,7 @@ import { Effect } from 'effect4'
 import { agentProgram, parseAgentConfiguration } from './features/agent-connection'
 import type { AgentConfigurationFailure } from './features/agent-connection/configuration'
 import type { AgentLoopbackBindFailure } from './features/agent-connection/transport/loopback-server'
+import type { RepositoryAccessFailure } from './features/repository-access'
 
 function isDirectInvocation(entryPath: string): boolean {
   try {
@@ -17,7 +18,7 @@ if (process.argv[1] && isDirectInvocation(process.argv[1])) {
   const parsedConfiguration = parseAgentConfiguration(process.argv.slice(2))
   const standaloneProgram: Effect.Effect<
     void,
-    AgentConfigurationFailure | AgentLoopbackBindFailure
+    AgentConfigurationFailure | AgentLoopbackBindFailure | RepositoryAccessFailure
   > =
     parsedConfiguration._tag === 'Success'
       ? agentProgram(parsedConfiguration.configuration)

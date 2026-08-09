@@ -57,7 +57,7 @@ export function Workspace(props: WorkspaceProps) {
   const refs = useRefs()
   const actionRunner = useActionRunner()
   const { status, rows } = useWorkingTreeStatus()
-  const { repoPath } = useRepoSession()
+  const { repoRef, repoPath } = useRepoSession()
   const repoName = repoDisplayName(repoPath)
   const branch = refs.currentBranch || 'no-branch'
   const stagedCount = rows.filter((row) => row.stageState !== 'unstaged').length
@@ -120,7 +120,7 @@ export function Workspace(props: WorkspaceProps) {
   const handleCheckoutRef = useCheckoutRef(actionRunner)
 
   const actions = useGitActions(actionRunner)
-  const stashList = useStashes(repoPath)
+  const stashList = useStashes(repoRef)
   const { prompt, confirm, dialogs } = useDialogs()
 
   const pullFlow = usePullFlow({
@@ -298,6 +298,7 @@ export function Workspace(props: WorkspaceProps) {
           hasMore: history.logHasMore,
           onLoadMore: () => void history.loadMoreHistory(),
           repoPath,
+          repository: repoRef,
           remotes: refs.remotes,
           currentBranch: refs.currentBranch,
           graphCommits: timeline.graphCommits,

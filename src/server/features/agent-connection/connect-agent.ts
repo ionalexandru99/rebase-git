@@ -2,6 +2,7 @@ import { AGENT_LOOPBACK_HOST, type AgentReadyRecord } from '@common/features/age
 import { Effect, type Scope } from 'effect4'
 import { FetchHttpClient, HttpClient } from 'effect4/unstable/http'
 import type { AgentConnection, ConnectAgentOptions } from './agent-connection'
+import { authorizeRepositoryPath } from './authorize-repository-path'
 import { dispatchAgentShutdown } from './dispatch-agent-shutdown'
 import type { AgentConnectionFailure } from './failure/agent-connection-failure'
 import { acquireAgentLiveness } from './lifecycle/agent-liveness'
@@ -44,6 +45,14 @@ export function connectAgent(
       status: liveness.status,
       ping: (requestId) =>
         checkAgentHealth(session.client, liveness, requestId, requestTimeoutMs, safeQueryRetries),
+      authorizeRepositoryPath: (nativePath) =>
+        authorizeRepositoryPath(
+          session.client,
+          liveness,
+          nativePath,
+          requestTimeoutMs,
+          safeQueryRetries
+        ),
       agentActivity: observeAgentActivity(
         session.client,
         liveness,

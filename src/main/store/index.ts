@@ -1,5 +1,5 @@
 import { filterPersistedRefTreeToggles } from '@shared/ref-tree-toggles'
-import type { UpdateChannel, UpdatePreferences } from '@shared/schemas/ipc'
+import type { PersistedTabRepository, UpdateChannel, UpdatePreferences } from '@shared/schemas/ipc'
 import Store from 'electron-store'
 import { readListPaneWidth, writeListPaneWidth } from './list-pane-widths'
 import { migrateReopenRepositoriesOnLaunch, planLegacyWorkspaceMigration } from './migration'
@@ -161,7 +161,7 @@ export function setRefTreeToggles(toggles: string[]): void {
 }
 
 export interface PersistedTabState {
-  tabs: (string | null)[]
+  tabs: PersistedTabRepository[]
   activeIndex: number
 }
 

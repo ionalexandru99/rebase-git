@@ -32,10 +32,17 @@ export async function startAgent(
   arguments_: ReadonlyArray<string> = [],
   env: NodeJS.ProcessEnv = process.env
 ): Promise<AgentProcess> {
-  const child = spawn(process.execPath, ['out/agent/index.js', ...arguments_], {
+  const allowedRootArguments = arguments_.includes('--allowed-root')
+    ? []
+    : ['--allowed-root', process.cwd()]
+  const child = spawn(
+    process.execPath,
+    ['out/agent/index.js', ...allowedRootArguments, ...arguments_],
+    {
     env,
     stdio: ['ignore', 'pipe', 'pipe']
-  })
+    }
+  )
   const stderrChunks: Buffer[] = []
   const stdoutAfterReadyChunks: Buffer[] = []
   child.stderr!.on('data', (chunk: Buffer) => stderrChunks.push(chunk))

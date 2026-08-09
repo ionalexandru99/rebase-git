@@ -18,8 +18,10 @@ interface TabViewProps {
 export function TabView(props: TabViewProps) {
   if (props.tabActive && props.settingsOpen) {
     const repoPath = props.tab.kind === 'new' ? null : props.tab.repoPath
+    const repoRef = props.tab.kind === 'new' ? null : props.tab.repoRef
     return (
       <SettingsPanel
+        repoRef={repoRef}
         repoPath={repoPath}
         initialSectionId={props.settingsInitialSectionId}
         onClose={props.onCloseSettings}
@@ -36,6 +38,7 @@ export function TabView(props: TabViewProps) {
       <RepoTab
         tabId={props.tab.id}
         tabActive={props.tabActive}
+        repoRef={props.tab.repoRef}
         repoPath={props.tab.repoPath}
         openRevision={props.tab.kind === 'repo' ? props.tab.openRevision : undefined}
         catalog={props.catalog}

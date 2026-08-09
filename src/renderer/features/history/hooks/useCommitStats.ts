@@ -1,6 +1,7 @@
 import { useQueries } from '@tanstack/react-query'
+import type { RepositoryIdentity } from '@/features/repository-identity'
+import { repoQueryKeys, toRepoRef } from '@/features/repository-identity'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
-import { repoQueryKeys } from '@/lib/query-keys'
 import { rpcGetCommitStats } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
 
@@ -55,26 +56,26 @@ function combineBlocks(results: Array<{ data: BlockStats | undefined }>) {
 }
 
 export function useCommitStats(
-  repoPath: string | null | undefined,
+  repository: RepositoryIdentity | null | undefined,
   shas: readonly string[],
   startIndex: number,
   endIndex: number
 ): ReadonlyMap<string, CommitStat> {
-  const blocks = repoPath ? commitStatsBlocks(shas, startIndex, endIndex) : []
+  const blocks = repository ? commitStatsBlocks(shas, startIndex, endIndex) : []
   return useQueries({
     queries: blocks.map((block) => ({
       queryKey: [
-        ...repoQueryKeys(repoPath, { idle: 'commit-stats' }).root,
+        ...repoQueryKeys(repository, { idle: 'commit-stats' }).root,
         'commit-stats',
         ...block.key
       ],
       staleTime: Number.POSITIVE_INFINITY,
       gcTime: WARM_REOPEN_GC_TIME_MS,
       queryFn: async (): Promise<BlockStats> => {
-        if (!repoPath) {
+        if (!repository) {
           return []
         }
-        return unwrapOk(await rpcGetCommitStats(repoPath, block.shas)).stats
+        return unwrapOk(await rpcGetCommitStats(toRepoRef(repository).path, block.shas)).stats
       }
     })),
     combine: combineBlocks

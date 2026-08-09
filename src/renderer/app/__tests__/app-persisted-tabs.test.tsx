@@ -3,10 +3,21 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { RepoTab } from '@/app/RepoTab'
+import { toRepoRef } from '@/features/repository-identity'
 import { openedRepoResponse, statusResponse } from '../../../test/builders'
 import { renderApp, renderWithQuery } from '../../../test/render-app'
 import { mockBranchResponses, setupLogStream, sidecarMock } from '../../../test/setup'
 import { mockBaseAPI, mockSuccessfulRepo } from './app-test-harness'
+
+const hasPersistedRepo = (
+  tabs: Awaited<ReturnType<Window['electronAPI']['getPersistedTabs']>>['tabs'],
+  path: string
+) =>
+  tabs.some((repository) =>
+    typeof repository === 'object' && repository !== null
+      ? repository.environmentId === 'local' && repository.path === path
+      : repository === path
+  )
 
 describe('App — persisted tabs', () => {
   it('finishes opening a restored repo under StrictMode effect replay', async () => {
@@ -30,6 +41,7 @@ describe('App — persisted tabs', () => {
         <RepoTab
           tabId="restored-tab"
           tabActive={true}
+          repoRef={toRepoRef('/home/user/projects/restored')}
           repoPath="/home/user/projects/restored"
           catalog={{
             recentRepos: [],
@@ -171,9 +183,9 @@ describe('App — persisted tabs', () => {
 
     await waitFor(() => {
       const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
-      expect(setCalls.some(([state]) => state.tabs.includes('/home/user/projects/my-app'))).toBe(
-        true
-      )
+      expect(
+        setCalls.some(([state]) => hasPersistedRepo(state.tabs, '/home/user/projects/my-app'))
+      ).toBe(true)
     })
   })
 
@@ -254,7 +266,9 @@ describe('App — persisted tabs', () => {
     })
     await waitFor(() => {
       const setCalls = vi.mocked(window.electronAPI.setPersistedTabs).mock.calls
-      expect(setCalls.some(([state]) => state.tabs.includes('/real/repos/my-app'))).toBe(true)
+      expect(setCalls.some(([state]) => hasPersistedRepo(state.tabs, '/real/repos/my-app'))).toBe(
+        true
+      )
     })
     expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('my-app')
   })

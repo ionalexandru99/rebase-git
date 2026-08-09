@@ -20,7 +20,7 @@ import { Result, Schema } from 'effect4'
 import { RpcSchema } from 'effect4/unstable/rpc'
 import { describe, expect, it } from 'vitest'
 import effectPackage from 'effect4/package.json'
-import protocolFixture from './fixtures/protocol-v1.json'
+import protocolFixture from './fixtures/protocol-v2.json'
 
 const repositoryRoot = path.resolve(import.meta.dirname, '..', '..', '..')
 

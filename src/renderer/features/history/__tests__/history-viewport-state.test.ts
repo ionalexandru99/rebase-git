@@ -44,7 +44,7 @@ describe('history viewport state', () => {
       null
     )
 
-    expect(key).toBe('/repo:20')
+    expect(key).toBe('["local","/repo"]:20')
   })
 
   it('does not repeat auto-load for the same repository page', () => {
@@ -59,8 +59,10 @@ describe('history viewport state', () => {
       loadedCount: 20
     }
 
-    expect(nextHistoryAutoLoadKey(input, '/repo:20')).toBeNull()
-    expect(nextHistoryAutoLoadKey({ ...input, loadedCount: 40 }, '/repo:20')).toBe('/repo:40')
+    expect(nextHistoryAutoLoadKey(input, '["local","/repo"]:20')).toBeNull()
+    expect(nextHistoryAutoLoadKey({ ...input, loadedCount: 40 }, '["local","/repo"]:20')).toBe(
+      '["local","/repo"]:40'
+    )
   })
 
   it.each([

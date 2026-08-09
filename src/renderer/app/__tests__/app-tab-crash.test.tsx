@@ -2,6 +2,8 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openedRepoResponse } from '../../../test/builders'
 import { renderApp } from '../../../test/render-app'
+import { repoQueryKeys } from '../../features/repository-identity'
+import { identityQueryKey } from '../../stores/identity'
 import { createQueryClient } from '../QueryProvider'
 import { mockBaseAPI } from './app-test-harness'
 
@@ -58,18 +60,18 @@ describe('a tab that crashes while rendering', () => {
     vi.mocked(window.electronAPI.openRepo).mockResolvedValue(openedRepoResponse(CRASHED_REPO))
 
     const client = createQueryClient({ gcTime: Number.POSITIVE_INFINITY })
-    client.setQueryData(['repo', CRASHED_REPO, 'status'], { poisoned: true })
-    client.setQueryData(['identity', CRASHED_REPO], { poisoned: true })
-    client.setQueryData(['repo', HEALTHY_REPO, 'status'], { kept: true })
-    client.setQueryData(['identity', HEALTHY_REPO], { kept: true })
+    client.setQueryData(repoQueryKeys(CRASHED_REPO).status, { poisoned: true })
+    client.setQueryData(identityQueryKey(CRASHED_REPO), { poisoned: true })
+    client.setQueryData(repoQueryKeys(HEALTHY_REPO).status, { kept: true })
+    client.setQueryData(identityQueryKey(HEALTHY_REPO), { kept: true })
 
     renderApp({ client })
     await screen.findByTestId('crash-screen')
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
 
-    expect(client.getQueryData(['repo', CRASHED_REPO, 'status'])).toBeUndefined()
-    expect(client.getQueryData(['identity', CRASHED_REPO])).toBeUndefined()
-    expect(client.getQueryData(['repo', HEALTHY_REPO, 'status'])).toEqual({ kept: true })
-    expect(client.getQueryData(['identity', HEALTHY_REPO])).toEqual({ kept: true })
+    expect(client.getQueryData(repoQueryKeys(CRASHED_REPO).status)).toBeUndefined()
+    expect(client.getQueryData(identityQueryKey(CRASHED_REPO))).toBeUndefined()
+    expect(client.getQueryData(repoQueryKeys(HEALTHY_REPO).status)).toEqual({ kept: true })
+    expect(client.getQueryData(identityQueryKey(HEALTHY_REPO))).toEqual({ kept: true })
   })
 })

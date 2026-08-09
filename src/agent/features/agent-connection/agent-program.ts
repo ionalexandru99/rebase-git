@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import os from 'node:os'
 import { AGENT_PROTOCOL, type AgentReadyRecord } from '@common/features/agent-connection'
 import { Deferred, Effect } from 'effect4'
+import { makeRepositoryAccess, type RepositoryAccessFailure } from '../repository-access'
 import { AGENT_PRODUCT_VERSION, type AgentConfiguration } from './configuration'
 import { makeAgentConversationLayer } from './conversations/agent-conversation-layer'
 import { makeAgentLogger } from './logging/redacted-agent-logger'
@@ -31,9 +32,10 @@ function awaitProcessSignal(): Effect.Effect<NodeJS.Signals> {
 
 export function agentProgram(
   configuration: AgentConfiguration
-): Effect.Effect<void, AgentLoopbackBindFailure> {
+): Effect.Effect<void, AgentLoopbackBindFailure | RepositoryAccessFailure> {
   return Effect.scoped(
     Effect.gen(function* () {
+      const repositoryAccess = yield* makeRepositoryAccess(configuration.allowedRoots)
       const logger = yield* makeAgentLogger(configuration.maxLogEntryBytes)
       const bootstrapSecret = randomBytes(32).toString('base64url')
       yield* logger.registerSecret(bootstrapSecret)
@@ -50,7 +52,8 @@ export function agentProgram(
         session,
         configuration,
         shutdownRequested,
-        logger
+        logger,
+        repositoryAccess
       )
       const httpHandler = yield* makeAgentHttpHandler(session, logger, configuration, handlersLayer)
       const port = yield* serveLoopback(

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { toRepoRef } from '@/features/repository-identity'
 import {
   clearRepoSessionError,
   completeRepoOpening,
@@ -42,9 +43,11 @@ describe('repo session state', () => {
           remotes: { origin: 'git@example.com:repo.git' },
           defaultBranch: 'main'
         },
+        toRepoRef('/canonical/repo'),
         3
       )
     ).toEqual({
+      repoRef: toRepoRef('/canonical/repo'),
       repoPath: '/canonical/repo',
       remotes: { origin: 'git@example.com:repo.git' },
       defaultBranch: 'main',
@@ -59,6 +62,7 @@ describe('repo session state', () => {
     const opened = completeRepoOpening(
       initialRepoSessionState(2, 5),
       { path: '/repo', remotes: {}, defaultBranch: 'main' },
+      toRepoRef('/repo'),
       2
     )
 
