@@ -70,7 +70,7 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
   const rowSurface = props.selected ? 'bg-[var(--brand-soft)]' : 'bg-card group-hover/row:bg-muted'
 
   const subject = (
-    <span className="flex min-w-0 items-center gap-1 text-sm">
+    <span className="flex min-w-0 items-center gap-1 overflow-hidden text-sm">
       {isMerge ? <GitMergeIcon aria-hidden="true" className="size-3 shrink-0 text-green" /> : null}
       {refs.map((parsedRef, refIndex) => (
         <RefBadge
