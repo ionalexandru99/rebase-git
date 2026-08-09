@@ -168,7 +168,10 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
           >
             {subject}
 
-            <span className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+            <span
+              data-testid="commit-row-meta"
+              className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
+            >
               {avatar}
               {modeShowsAuthorName(props.mode) ? (
                 <span className="min-w-0 truncate">{commit.author_name}</span>

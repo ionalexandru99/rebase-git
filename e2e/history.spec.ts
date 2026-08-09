@@ -148,24 +148,28 @@ test('keeps ref badges out of the pinned commit metadata', async ({ harness }) =
 
   const row = page.getByTestId('commit-row').filter({ hasText: 'initial' })
   const finalBadge = row.getByText(finalBranch, { exact: true })
-  const author = row.getByText('Test', { exact: true })
+  const metadata = row.getByTestId('commit-row-meta')
   await expect(finalBadge).toBeVisible({ timeout: 10_000 })
-  await expect(author).toBeVisible()
+  await expect(metadata).toBeVisible()
 
-  const authorBox = await author.boundingBox()
-  if (!authorBox) {
-    throw new Error('expected a bounding box for the author')
+  const metadataBox = await metadata.boundingBox()
+  if (!metadataBox) {
+    throw new Error('expected a bounding box for the commit metadata')
   }
-  const visibleBadgeRight = await finalBadge.evaluate((element) => {
-    return new Promise<number>((resolve) => {
+  const visibleBadgeBox = await finalBadge.evaluate((element) => {
+    return new Promise<{ right: number; width: number }>((resolve) => {
       const observer = new IntersectionObserver(([entry]) => {
         observer.disconnect()
-        resolve(entry?.intersectionRect.right ?? 0)
+        resolve({
+          right: entry?.intersectionRect.right ?? 0,
+          width: entry?.intersectionRect.width ?? 0
+        })
       })
       observer.observe(element)
     })
   })
-  expect(visibleBadgeRight).toBeLessThanOrEqual(authorBox.x)
+  expect(visibleBadgeBox.width).toBeGreaterThan(0)
+  expect(visibleBadgeBox.right).toBeLessThanOrEqual(metadataBox.x)
 })
 
 test('opens the row context menu when right-clicking over the pinned metadata', async ({

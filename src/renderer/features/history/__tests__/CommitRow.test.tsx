@@ -141,10 +141,20 @@ describe('CommitRow modes', () => {
     expect(screen.getByText('−1')).toBeInTheDocument()
   })
 
-  it('keeps single-line modes on one line', () => {
+  it('renders single-line modes as a grid', () => {
     render(<CommitRow {...rowProps()} mode="wide" />)
 
-    expect(screen.queryByTestId('commit-row-meta')).not.toBeInTheDocument()
+    expect(screen.getByTestId('commit-row-content')).toHaveClass('grid')
+    expect(screen.getByTestId('commit-row-meta')).toBeInTheDocument()
+  })
+
+  it('clips a ref-bearing subject to the commit content column', () => {
+    render(<CommitRow {...rowProps({ refs: 'HEAD -> main' })} />)
+
+    const subject = screen.getByText('do the thing').parentElement
+    expect(subject).toHaveClass('overflow-hidden')
+    expect(subject).toHaveTextContent('main')
+    expect(subject).toHaveTextContent('do the thing')
   })
 })
 
