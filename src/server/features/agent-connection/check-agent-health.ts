@@ -4,7 +4,8 @@ import type { AgentLiveness } from './agent-liveness'
 import {
   classifyAgentCommunicationFailure,
   isRecoverableAgentCommunicationFailure,
-  malformedAgentCommunication
+  malformedAgentCommunication,
+  shouldDisconnectAfterCommunicationFailure
 } from './classify-agent-communication-failure'
 import type { AgentInterfaceClient } from './establish-agent-session'
 
@@ -32,7 +33,7 @@ export function checkAgentHealth(
   return attempt.pipe(
     Effect.retry({ times: retries, while: isRecoverableAgentCommunicationFailure }),
     Effect.tapError((failure) =>
-      isRecoverableAgentCommunicationFailure(failure)
+      shouldDisconnectAfterCommunicationFailure(failure)
         ? liveness.disconnect({ _tag: 'Unreachable', failure })
         : Effect.void
     )

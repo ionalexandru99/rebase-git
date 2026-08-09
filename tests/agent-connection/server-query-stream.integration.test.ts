@@ -1,12 +1,10 @@
 import { Effect, Option, Stream } from 'effect4'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   AgentSequenceGap,
   connectAgent
 } from '../../src/server/features/agent-connection'
-import { acquireAgentProcess, buildAgent } from './server-process-harness'
-
-beforeAll(buildAgent)
+import { acquireAgentProcess } from './server-process-harness'
 
 describe('Server Agent safe recovery', () => {
   it('retries session negotiation after one transport break', async () => {

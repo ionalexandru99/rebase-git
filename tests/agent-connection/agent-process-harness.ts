@@ -1,4 +1,4 @@
-import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import {
   AGENT_LOOPBACK_HOST,
   AGENT_RPC_PATH,
@@ -9,6 +9,7 @@ import {
 import { Effect, Layer } from 'effect4'
 import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect4/unstable/http'
 import { RpcClient, type RpcClientError, RpcSerialization } from 'effect4/unstable/rpc'
+export { buildAgent } from './build-agent'
 
 type AgentClient = RpcClient.FromGroup<typeof AgentRpcs, RpcClientError.RpcClientError>
 
@@ -27,10 +28,6 @@ export interface AgentProcess {
   }>
 }
 
-export function buildAgent(): void {
-  execFileSync('pnpm', ['build:agent'], { stdio: 'pipe' })
-}
-
 export async function startAgent(
   arguments_: ReadonlyArray<string> = [],
   env: NodeJS.ProcessEnv = process.env
@@ -43,34 +40,61 @@ export async function startAgent(
   const stdoutAfterReadyChunks: Buffer[] = []
   child.stderr!.on('data', (chunk: Buffer) => stderrChunks.push(chunk))
 
+  const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+    child.once('exit', (code, signal) => resolve({ code, signal }))
+  })
   const ready = await new Promise<AgentProcess['ready']>((resolve, reject) => {
     let buffered = ''
+    let settled = false
+    const readinessTimeoutMs = 10_000
+    const timeout = setTimeout(
+      () => fail(new Error(`Agent readiness timed out after ${readinessTimeoutMs}ms`)),
+      readinessTimeoutMs
+    )
+    const cleanup = () => {
+      clearTimeout(timeout)
+      child.stdout!.off('data', onData)
+      child.off('error', onError)
+      child.off('exit', onExit)
+    }
+    const fail = (error: unknown) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      cleanup()
+      if (child.exitCode !== null || child.signalCode !== null || !child.kill('SIGKILL')) {
+        reject(error)
+        return
+      }
+      child.once('exit', () => reject(error))
+    }
+    const onError = (error: Error) => fail(error)
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+      fail(new Error(`Agent exited before readiness: code=${code} signal=${signal}`))
     const onData = (chunk: Buffer | string) => {
       buffered += chunk.toString()
       const newline = buffered.indexOf('\n')
       if (newline < 0) {
         return
       }
-      child.stdout!.off('data', onData)
       const remainder = buffered.slice(newline + 1)
-      if (remainder.length > 0) {
-        stdoutAfterReadyChunks.push(Buffer.from(remainder))
-      }
-      child.stdout!.on('data', (later: Buffer) => stdoutAfterReadyChunks.push(later))
       try {
-        resolve(JSON.parse(buffered.slice(0, newline)))
+        const parsed = JSON.parse(buffered.slice(0, newline)) as AgentProcess['ready']
+        settled = true
+        cleanup()
+        if (remainder.length > 0) {
+          stdoutAfterReadyChunks.push(Buffer.from(remainder))
+        }
+        child.stdout!.on('data', (later: Buffer) => stdoutAfterReadyChunks.push(later))
+        resolve(parsed)
       } catch (error) {
-        reject(error)
+        fail(error)
       }
     }
     child.stdout!.on('data', onData)
-    child.once('error', reject)
-    child.once('exit', (code, signal) =>
-      reject(new Error(`Agent exited before readiness: code=${code} signal=${signal}`))
-    )
-  })
-  const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-    child.once('exit', (code, signal) => resolve({ code, signal }))
+    child.once('error', onError)
+    child.once('exit', onExit)
   })
 
   return {

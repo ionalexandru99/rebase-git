@@ -5,7 +5,8 @@ import type { AgentLiveness } from './agent-liveness'
 import {
   classifyAgentCommunicationFailure,
   isRecoverableAgentCommunicationFailure,
-  malformedAgentCommunication
+  malformedAgentCommunication,
+  shouldDisconnectAfterCommunicationFailure
 } from './classify-agent-communication-failure'
 import type { AgentInterfaceClient } from './establish-agent-session'
 
@@ -80,11 +81,18 @@ export function observeAgentActivity(
 
           return currentStream.pipe(
             Stream.catch((failure) => {
-              if (
-                failure instanceof AgentSequenceGap ||
-                !isRecoverableAgentCommunicationFailure(failure)
-              ) {
+              if (failure instanceof AgentSequenceGap) {
                 return Stream.fail(failure)
+              }
+              if (!isRecoverableAgentCommunicationFailure(failure)) {
+                if (!shouldDisconnectAfterCommunicationFailure(failure)) {
+                  return Stream.fail(failure)
+                }
+                return Stream.fromEffect(
+                  liveness
+                    .disconnect({ _tag: 'Unreachable', failure })
+                    .pipe(Effect.andThen(Effect.fail(failure)))
+                )
               }
               if (reconnects >= maxReconnects) {
                 return Stream.fromEffect(

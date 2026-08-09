@@ -11,8 +11,11 @@ export default defineConfig({
       'tests/agent-connection/server*.test.ts',
       'tests/architecture/runtime-dependencies.test.ts'
     ],
+    globalSetup: ['tests/agent-connection/server-global-setup.ts'],
+    minWorkers: 1,
+    maxWorkers: 2,
     testTimeout: 15_000,
-    hookTimeout: 30_000
+    hookTimeout: 60_000
   },
   resolve: {
     alias: {

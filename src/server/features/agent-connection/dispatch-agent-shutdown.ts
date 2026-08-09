@@ -67,7 +67,7 @@ export function dispatchAgentShutdown(
     })
   }
 
-  return Effect.uninterruptible(
+  return Effect.uninterruptibleMask((restore) =>
     liveness.status.pipe(
       Effect.flatMap((status) => {
         if (status._tag !== 'Connected') {
@@ -79,8 +79,8 @@ export function dispatchAgentShutdown(
           })
         }
 
-        return liveness
-          .whileConnected(
+        return restore(
+          liveness.whileConnected(
             client
               .stopAgent({
                 operationId,
@@ -99,38 +99,36 @@ export function dispatchAgentShutdown(
                 )
               )
           )
-          .pipe(
-            Effect.tap((result) =>
-              result._tag === 'Applied'
-                ? liveness.disconnect({ _tag: 'StopRequested' })
-                : Effect.void
-            ),
-            Effect.catch((error) => {
-              if (error instanceof AgentHandshakeRequired) {
-                const failure = new AgentConnectionFailure({
-                  reason: 'ProtocolViolation',
-                  message: 'Agent rejected shutdown because its session is not open',
-                  detail: error
-                })
-                return liveness
-                  .disconnect({ _tag: 'Unreachable', failure })
-                  .pipe(Effect.as(rejectedByAgent(operationId, 'AgentHandshakeRequired')))
-              }
-              if (error instanceof AgentShuttingDown) {
-                return liveness
-                  .disconnect({ _tag: 'StopRequested' })
-                  .pipe(Effect.as(rejectedByAgent(operationId, 'AgentShuttingDown')))
-              }
-              const failure = uncertainShutdownFailure(error)
-              return liveness.disconnect({ _tag: 'Unreachable', failure }).pipe(
-                Effect.as<AgentCommandOutcome>({
-                  _tag: 'OutcomeUnknown',
-                  operationId,
-                  requiresRefresh: true
-                })
-              )
-            })
-          )
+        ).pipe(
+          Effect.tap((result) =>
+            result._tag === 'Applied' ? liveness.disconnect({ _tag: 'StopRequested' }) : Effect.void
+          ),
+          Effect.catch((error) => {
+            if (error instanceof AgentHandshakeRequired) {
+              const failure = new AgentConnectionFailure({
+                reason: 'ProtocolViolation',
+                message: 'Agent rejected shutdown because its session is not open',
+                detail: error
+              })
+              return liveness
+                .disconnect({ _tag: 'Unreachable', failure })
+                .pipe(Effect.as(rejectedByAgent(operationId, 'AgentHandshakeRequired')))
+            }
+            if (error instanceof AgentShuttingDown) {
+              return liveness
+                .disconnect({ _tag: 'StopRequested' })
+                .pipe(Effect.as(rejectedByAgent(operationId, 'AgentShuttingDown')))
+            }
+            const failure = uncertainShutdownFailure(error)
+            return liveness.disconnect({ _tag: 'Unreachable', failure }).pipe(
+              Effect.as<AgentCommandOutcome>({
+                _tag: 'OutcomeUnknown',
+                operationId,
+                requiresRefresh: true
+              })
+            )
+          })
+        )
       })
     )
   )

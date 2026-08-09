@@ -71,3 +71,17 @@ export function malformedAgentCommunication(
 export function isRecoverableAgentCommunicationFailure(failure: AgentConnectionFailure): boolean {
   return failure.reason === 'TimedOut' || failure.reason === 'TransportFailed'
 }
+
+export function shouldDisconnectAfterCommunicationFailure(
+  failure: AgentConnectionFailure
+): boolean {
+  switch (failure.reason) {
+    case 'AgentExited':
+    case 'AgentStopping':
+    case 'ConnectionReleased':
+    case 'MonitorFailed':
+      return false
+    default:
+      return true
+  }
+}

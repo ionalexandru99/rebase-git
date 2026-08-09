@@ -12,6 +12,7 @@ import {
 import { Clock, Effect, PubSub, Ref, type Scope, Semaphore, Stream } from 'effect4'
 import type { AgentLogger } from '../logging/redacted-agent-logger'
 import {
+  type AgentObservationDraft,
   type AgentSessionState,
   type AgentStopDecision,
   advanceObservation,
@@ -67,7 +68,7 @@ export function makeAgentSession(
     const publicationLock = yield* Semaphore.make(1)
     yield* Effect.addFinalizer(() => PubSub.shutdown(observationStream))
 
-    const publish = (observation: Omit<AgentObservation, 'sequence'>): Effect.Effect<void> =>
+    const publish = (observation: AgentObservationDraft): Effect.Effect<void> =>
       publicationLock.withPermit(
         Effect.uninterruptible(
           Effect.gen(function* () {

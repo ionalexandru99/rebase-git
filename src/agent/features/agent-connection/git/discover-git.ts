@@ -4,9 +4,11 @@ import { Effect } from 'effect4'
 import { terminateProcessTree } from './process-tree'
 
 const MAX_VERSION_BYTES = 4 * 1024
+const DEFAULT_DISCOVERY_TIMEOUT_MS = 5_000
 
 export function discoverGit(
-  terminationGraceMs: number
+  terminationGraceMs: number,
+  discoveryTimeoutMs = DEFAULT_DISCOVERY_TIMEOUT_MS
 ): Effect.Effect<OpenAgentSessionSuccess['git']> {
   return Effect.callback<OpenAgentSessionSuccess['git']>((resume) => {
     const child = spawn('git', ['--version'], {
@@ -52,5 +54,8 @@ export function discoverGit(
       child.removeAllListeners('error')
       child.removeAllListeners('close')
     }).pipe(Effect.andThen(terminateProcessTree(child, terminationGraceMs)))
-  })
+  }).pipe(
+    Effect.timeout(discoveryTimeoutMs),
+    Effect.orElseSucceed(() => ({ discovered: false, executable: 'git' }) as const)
+  )
 }

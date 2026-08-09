@@ -212,6 +212,13 @@ export async function startAgentProxy(
       exchange.responseStatus = upstream.status
       const headers: Record<string, string> = {}
       upstream.headers.forEach((value, name) => {
+        if (
+          name === 'content-length' ||
+          name === 'content-encoding' ||
+          name === 'transfer-encoding'
+        ) {
+          return
+        }
         headers[name] = value
       })
       if (action === 'drop-after-agent-response') {
@@ -221,7 +228,10 @@ export async function startAgentProxy(
       }
       if (action === 'malform-agent-response') {
         exchange.responseBody = malformedAgentResponse(await upstream.text())
-        response.writeHead(upstream.status, headers)
+        response.writeHead(upstream.status, {
+          ...headers,
+          'content-length': String(Buffer.byteLength(exchange.responseBody))
+        })
         response.end(exchange.responseBody)
         return
       }

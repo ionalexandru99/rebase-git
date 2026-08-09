@@ -75,11 +75,19 @@ describe('Agent Git process ownership', () => {
 
         const childPid = Number((await readFile(pidFile, 'utf8')).trim())
         expect(await readFile(signalFile, 'utf8')).toContain('TERM')
-        expect(() => process.kill(childPid, 0)).toThrow()
+        await waitForProcessExit(childPid)
       } finally {
-        process.env.PATH = originalPath
-        process.env.REBASE_AGENT_GIT_PID_FILE = originalPidFile
-        process.env.REBASE_AGENT_GIT_SIGNAL_FILE = originalSignalFile
+        for (const [name, value] of [
+          ['PATH', originalPath],
+          ['REBASE_AGENT_GIT_PID_FILE', originalPidFile],
+          ['REBASE_AGENT_GIT_SIGNAL_FILE', originalSignalFile]
+        ] as const) {
+          if (value === undefined) {
+            delete process.env[name]
+          } else {
+            process.env[name] = value
+          }
+        }
         await rm(fixtureDirectory, { recursive: true, force: true })
       }
     }
@@ -158,7 +166,7 @@ describe('Agent Git process ownership', () => {
         const processIds = JSON.parse(await readFile(pidFile, 'utf8')) as number[]
         await Effect.runPromise(terminateProcessTree(target, 50))
         for (const processId of processIds) {
-          expect(() => process.kill(processId, 0)).toThrow()
+          await waitForProcessExit(processId)
         }
       } finally {
         if (target.exitCode === null && target.signalCode === null) {

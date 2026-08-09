@@ -1,5 +1,4 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { execFileSync } from 'node:child_process'
 import { Effect, Scope } from 'effect4'
 import type { AgentReadyRecord } from '../../src/common/features/agent-connection'
 import {
@@ -19,14 +18,11 @@ export interface AgentProcessFixture {
   readonly agentExited: Effect.Effect<AgentProcessExit, AgentProcessMonitorError>
   readonly ready: AgentReadyRecord
   readonly proxy: AgentProxy
+  readonly stderrOutput: () => string
   readonly stdoutAfterAnnouncement: () => string
 }
 
 export type AgentProxyDecision = (exchange: AgentProxyExchange) => AgentProxyAction
-
-export function buildAgent(): void {
-  execFileSync('pnpm', ['build:agent'], { stdio: 'pipe' })
-}
 
 export function monitorProcess(
   child: ChildProcess
@@ -93,6 +89,14 @@ export function acquireAgentProcess(
 ): Effect.Effect<AgentProcessFixture, unknown, Scope.Scope> {
   return Effect.gen(function* () {
     const child = yield* Effect.acquireRelease(Effect.sync(spawnAgent), stopAgent)
+    const stderrChunks: Buffer[] = []
+    const onStderr = (chunk: Buffer | string) => {
+      stderrChunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+    }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => child.stderr!.on('data', onStderr)),
+      () => Effect.sync(() => child.stderr!.off('data', onStderr))
+    )
     const agentExited = monitorProcess(child)
     const ready = yield* readAgentAnnouncement(child.stdout!, agentExited, 2_000)
     const stdoutChunks: Buffer[] = []
@@ -112,6 +116,7 @@ export function acquireAgentProcess(
       agentExited,
       ready: { ...ready, port: proxy.port },
       proxy,
+      stderrOutput: () => Buffer.concat(stderrChunks).toString('utf8'),
       stdoutAfterAnnouncement: () => Buffer.concat(stdoutChunks).toString('utf8')
     }
   })

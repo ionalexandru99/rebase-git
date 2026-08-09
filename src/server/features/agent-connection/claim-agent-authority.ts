@@ -18,6 +18,16 @@ function malformedBootstrap(message: string, detail: unknown): AgentConnectionFa
   })
 }
 
+function safeBootstrapFailureDetail(error: unknown, bootstrapSecret: string) {
+  if (!(error instanceof Error)) {
+    return { kind: typeof error }
+  }
+  return {
+    kind: error.name,
+    message: error.message.replaceAll(bootstrapSecret, '[redacted]')
+  }
+}
+
 export function claimAgentAuthority(
   ready: AgentReadyRecord,
   client: HttpClient.HttpClient,
@@ -73,7 +83,7 @@ export function claimAgentAuthority(
         message: Cause.isTimeoutError(error)
           ? 'Agent bootstrap timed out after dispatch may have begun'
           : 'Agent bootstrap failed after dispatch may have begun',
-        detail: error
+        detail: safeBootstrapFailureDetail(error, ready.bootstrapSecret)
       })
     })
   )

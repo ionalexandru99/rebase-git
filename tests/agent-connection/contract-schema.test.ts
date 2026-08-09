@@ -22,6 +22,8 @@ import { describe, expect, it } from 'vitest'
 import effectPackage from 'effect4/package.json'
 import protocolFixture from './fixtures/protocol-v1.json'
 
+const repositoryRoot = path.resolve(import.meta.dirname, '..', '..')
+
 function schemaDocument(schema: Schema.Top): unknown {
   return Schema.toJsonSchemaDocument(schema, { additionalProperties: false })
 }
@@ -65,20 +67,26 @@ function originalTrackedFixture(fixturePath: string): string | undefined {
   const creationCommit = execFileSync(
     'git',
     ['log', '--diff-filter=A', '--format=%H', '--', fixturePath],
-    { encoding: 'utf8' }
+    { cwd: repositoryRoot, encoding: 'utf8' }
   )
     .trim()
     .split('\n')
     .at(-1)
   if (!creationCommit) {
     try {
-      execFileSync('git', ['ls-files', '--error-unmatch', fixturePath], { stdio: 'ignore' })
+      execFileSync('git', ['ls-files', '--error-unmatch', fixturePath], {
+        cwd: repositoryRoot,
+        stdio: 'ignore'
+      })
     } catch {
       return undefined
     }
     throw new Error(`Cannot verify the creation revision of tracked fixture ${fixturePath}`)
   }
-  return execFileSync('git', ['show', `${creationCommit}:${fixturePath}`], { encoding: 'utf8' })
+  return execFileSync('git', ['show', `${creationCommit}:${fixturePath}`], {
+    cwd: repositoryRoot,
+    encoding: 'utf8'
+  })
 }
 
 describe('Agent wire interface', () => {
@@ -92,16 +100,20 @@ describe('Agent wire interface', () => {
   })
 
   it('keeps every published protocol fixture append-only', () => {
-    const fixtureDirectory = path.join('tests', 'agent-connection', 'fixtures')
+    const fixtureDirectory = path.join(import.meta.dirname, 'fixtures')
     const fixtureNames = readdirSync(fixtureDirectory).filter((name) =>
       /^protocol-v\d+\.json$/.test(name)
     )
 
     for (const fixtureName of fixtureNames) {
-      const fixturePath = path.join(fixtureDirectory, fixtureName)
+      const fixtureFilePath = path.join(fixtureDirectory, fixtureName)
+      const fixturePath = path
+        .relative(repositoryRoot, fixtureFilePath)
+        .split(path.sep)
+        .join(path.posix.sep)
       const original = originalTrackedFixture(fixturePath)
       if (original !== undefined) {
-        expect(JSON.parse(readFileSync(fixturePath, 'utf8'))).toEqual(JSON.parse(original))
+        expect(JSON.parse(readFileSync(fixtureFilePath, 'utf8'))).toEqual(JSON.parse(original))
       }
     }
   })

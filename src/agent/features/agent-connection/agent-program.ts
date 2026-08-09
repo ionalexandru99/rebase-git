@@ -11,14 +11,21 @@ import { type AgentLoopbackBindFailure, serveLoopback } from './transport/loopba
 
 function awaitProcessSignal(): Effect.Effect<NodeJS.Signals> {
   return Effect.callback<NodeJS.Signals>((resume) => {
-    const onInterrupt = () => resume(Effect.succeed('SIGINT'))
-    const onTerminate = () => resume(Effect.succeed('SIGTERM'))
-    process.once('SIGINT', onInterrupt)
-    process.once('SIGTERM', onTerminate)
-    return Effect.sync(() => {
+    const detach = () => {
       process.off('SIGINT', onInterrupt)
       process.off('SIGTERM', onTerminate)
-    })
+    }
+    const onInterrupt = () => {
+      detach()
+      resume(Effect.succeed('SIGINT'))
+    }
+    const onTerminate = () => {
+      detach()
+      resume(Effect.succeed('SIGTERM'))
+    }
+    process.once('SIGINT', onInterrupt)
+    process.once('SIGTERM', onTerminate)
+    return Effect.sync(detach)
   })
 }
 
@@ -49,7 +56,8 @@ export function agentProgram(
       const port = yield* serveLoopback(
         httpHandler,
         configuration.port,
-        configuration.shutdownGraceMs
+        configuration.shutdownGraceMs,
+        logger
       )
 
       const requestShutdown = (event: string, fields?: Readonly<Record<string, unknown>>) =>

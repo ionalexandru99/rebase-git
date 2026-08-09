@@ -48,6 +48,12 @@ export interface AgentStopDecision {
   readonly shouldShutdown: boolean
 }
 
+type WithoutSequence<Observation> = Observation extends unknown
+  ? Omit<Observation, 'sequence'>
+  : never
+
+export type AgentObservationDraft = WithoutSequence<AgentObservation>
+
 function secretsEqual(provided: string, expected: string): boolean {
   const providedBytes = Buffer.from(provided)
   const expectedBytes = Buffer.from(expected)
@@ -134,14 +140,14 @@ export function requireRunningSession(
 
 export function advanceObservation(
   state: AgentSessionState,
-  observation: Omit<AgentObservation, 'sequence'>
+  observation: AgentObservationDraft
 ): readonly [AgentObservation | undefined, AgentSessionState] {
   if (state._tag !== 'Running') {
     return [undefined, state]
   }
   const nextSequence = state.sequence + 1
   return [
-    { ...observation, sequence: nextSequence } as AgentObservation,
+    { ...observation, sequence: nextSequence },
     { ...state, sequence: nextSequence }
   ]
 }

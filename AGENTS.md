@@ -39,7 +39,7 @@ pnpm test:e2e             # playwright against the real built app
 pnpm test:ci
 ```
 
-Single test: `pnpm vitest run <file>` with the matching `vitest.*.config.ts`, or
+Single test: `pnpm vitest run --config <matching-vitest-config> <file>`, or
 `pnpm playwright test <file>` for E2E.
 
 Demo recording for PR bodies: `REBASE_DEMO=1 pnpm playwright test <file>` runs any e2e spec

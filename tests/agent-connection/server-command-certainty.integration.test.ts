@@ -1,11 +1,9 @@
 import { AgentHandshakeRequired } from '../../src/common/features/agent-connection'
 import { Effect } from 'effect4'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { connectAgent } from '../../src/server/features/agent-connection'
 import { dispatchAgentShutdown } from '../../src/server/features/agent-connection/dispatch-agent-shutdown'
-import { acquireAgentProcess, buildAgent } from './server-process-harness'
-
-beforeAll(buildAgent)
+import { acquireAgentProcess } from './server-process-harness'
 
 describe('Server Agent command certainty', () => {
   it('rejects an invalid operation id before dispatch', async () => {
@@ -64,6 +62,29 @@ describe('Server Agent command certainty', () => {
       operationId: 'typed-agent-rejection',
       reason: 'AgentHandshakeRequired',
       requiresRefresh: false
+    })
+  })
+
+  it('returns OutcomeUnknown when the Agent never answers a shutdown command', async () => {
+    const outcome = await Effect.runPromise(
+      dispatchAgentShutdown(
+        {
+          stopAgent: () => Effect.never
+        } as never,
+        {
+          status: Effect.succeed({ _tag: 'Connected' }),
+          whileConnected: (effect: Effect.Effect<unknown, unknown>) => effect,
+          disconnect: () => Effect.void
+        } as never,
+        'pending-shutdown',
+        20
+      )
+    )
+
+    expect(outcome).toEqual({
+      _tag: 'OutcomeUnknown',
+      operationId: 'pending-shutdown',
+      requiresRefresh: true
     })
   })
 
