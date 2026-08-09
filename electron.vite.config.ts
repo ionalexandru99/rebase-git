@@ -63,7 +63,7 @@ export default defineConfig(({ mode }) => ({
     }
   },
   renderer: {
-    root: path.resolve('src/web'),
+    root: path.resolve('src/renderer'),
     plugins: [packagedCspPlugin(), tailwindcss(), react()],
     publicDir: path.resolve('src/renderer/public'),
     worker: {
@@ -86,7 +86,7 @@ export default defineConfig(({ mode }) => ({
     build: {
       rollupOptions: {
         input: {
-          index: path.resolve('src/web/index.html')
+          index: path.resolve('src/renderer/index.html')
         },
         onwarn(warning, defaultHandler) {
           if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {

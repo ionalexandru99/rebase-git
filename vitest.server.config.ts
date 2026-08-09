@@ -9,6 +9,7 @@ export default defineConfig({
     include: [
       'tests/agent-connection/common/**/*.test.ts',
       'tests/agent-connection/server/**/*.test.ts',
+      'tests/browser-server/server/**/*.test.ts',
       'tests/environment-registry/server/**/*.test.ts',
       'tests/environment-identity/server/**/*.test.ts',
       'tests/repository-identity/common/**/*.test.ts',

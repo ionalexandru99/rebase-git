@@ -49,7 +49,8 @@ export default defineConfig(({ mode }) => {
         fileName: 'index'
       },
       rollupOptions: {
-        external: isExternalModule
+        external: isExternalModule,
+        output: runtime === 'server' ? { banner: '#!/usr/bin/env node' } : undefined
       }
     }
   }

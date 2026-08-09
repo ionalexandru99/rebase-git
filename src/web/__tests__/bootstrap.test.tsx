@@ -1,25 +1,40 @@
 import { act } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { startRuntimeRenderer } from '../bootstrap'
+import type { RebaseClient } from '../features/server-connection'
+
+const connectedClient: RebaseClient = {
+  loadBootstrap: async () => ({
+    environment: {
+      environmentId: 'local',
+      path: '/work/rebase-git'
+    },
+    readOnly: true
+  })
+}
 
 describe('startRuntimeRenderer', () => {
-  it('renders the browser fallback when the preload bridge is unavailable', async () => {
+  it('shows the Server environment after the browser client connects', async () => {
     const container = document.createElement('div')
-    const loadDesktopRenderer = vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined)
 
-    await act(() => startRuntimeRenderer(container, null, loadDesktopRenderer))
+    await act(async () => startRuntimeRenderer(container, connectedClient))
 
-    expect(container).toHaveTextContent('Web runtime unavailable')
-    expect(loadDesktopRenderer).not.toHaveBeenCalled()
+    expect(container).toHaveTextContent('Rebase Server ready')
+    expect(container).toHaveTextContent('/work/rebase-git')
+    expect(container).toHaveTextContent('Read-only')
   })
 
-  it('loads the desktop renderer when the preload bridge is available', async () => {
+  it('shows a browser-safe failure when the Server cannot be reached', async () => {
     const container = document.createElement('div')
-    const loadDesktopRenderer = vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined)
+    const disconnectedClient: RebaseClient = {
+      loadBootstrap: async () => {
+        throw new Error('Server request failed with status 503')
+      }
+    }
 
-    await startRuntimeRenderer(container, {}, loadDesktopRenderer)
+    await act(async () => startRuntimeRenderer(container, disconnectedClient))
 
-    expect(loadDesktopRenderer).toHaveBeenCalledOnce()
-    expect(container).toBeEmptyDOMElement()
+    expect(container).toHaveTextContent('Cannot connect to Rebase Server')
+    expect(container).toHaveTextContent('Server request failed with status 503')
   })
 })
