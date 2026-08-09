@@ -14,8 +14,12 @@ for (const adapter of [
 ]) {
   test.describe(`${adapter.name} module`, () => {
     let markerRoot = ''
+    let originalAdapterModule: string | undefined
+    let originalMarkerRoot: string | undefined
 
     test.beforeAll(() => {
+      originalAdapterModule = process.env.REBASE_E2E_DEPLOYMENT_ADAPTER
+      originalMarkerRoot = process.env.REBASE_E2E_ADAPTER_MARKER_ROOT
       markerRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rebase-adapter-smoke-'))
       process.env.REBASE_E2E_ADAPTER_MARKER_ROOT = markerRoot
       process.env.REBASE_E2E_DEPLOYMENT_ADAPTER = path.join(
@@ -26,14 +30,24 @@ for (const adapter of [
     })
 
     test.afterAll(() => {
-      const closedMarker = fs.readFileSync(path.join(markerRoot, 'closed'), 'utf8')
-      const fixtureRoot = fs.readFileSync(path.join(markerRoot, 'created'), 'utf8')
-      const fixtureRootRemoved = !fs.existsSync(fixtureRoot)
-      delete process.env.REBASE_E2E_DEPLOYMENT_ADAPTER
-      delete process.env.REBASE_E2E_ADAPTER_MARKER_ROOT
-      fs.rmSync(markerRoot, { recursive: true, force: true })
-      expect(closedMarker).toBe('closed')
-      expect(fixtureRootRemoved).toBe(true)
+      try {
+        const closedMarker = fs.readFileSync(path.join(markerRoot, 'closed'), 'utf8')
+        const fixtureRoot = fs.readFileSync(path.join(markerRoot, 'created'), 'utf8')
+        expect(closedMarker).toBe('closed')
+        expect(fs.existsSync(fixtureRoot)).toBe(false)
+      } finally {
+        if (originalAdapterModule === undefined) {
+          delete process.env.REBASE_E2E_DEPLOYMENT_ADAPTER
+        } else {
+          process.env.REBASE_E2E_DEPLOYMENT_ADAPTER = originalAdapterModule
+        }
+        if (originalMarkerRoot === undefined) {
+          delete process.env.REBASE_E2E_ADAPTER_MARKER_ROOT
+        } else {
+          process.env.REBASE_E2E_ADAPTER_MARKER_ROOT = originalMarkerRoot
+        }
+        fs.rmSync(markerRoot, { recursive: true, force: true })
+      }
     })
 
     test('creates and closes the selected deployment adapter', async ({ harness }) => {
