@@ -1,15 +1,19 @@
-import { realpath, stat } from 'node:fs/promises'
 import os from 'node:os'
-import { Data, Effect } from 'effect4'
-import { createFakeEnvironmentConnection, startBrowserServer } from '../browser-server'
-import { makeServerDiagnostics } from '../browser-server/diagnostics'
+import { Effect } from 'effect4'
+import {
+  type BrowserServerFailure,
+  createFakeEnvironmentConnection,
+  makeServerDiagnostics,
+  type RendererBuildFailure,
+  type ServerDiagnostics,
+  startBrowserServer
+} from '../browser-server'
 import { type BrowserOpeningOutcome, openBrowser } from './browser-opening/browser-opener'
-import type { ServerInvocationOptions } from './server-invocation-options'
-
-export class ServerInvocationFailure extends Data.TaggedError('ServerInvocationFailure')<{
-  readonly message: string
-  readonly detail?: unknown
-}> {}
+import {
+  parseServerInvocationOptions,
+  type ServerInvocationOptions,
+  type ServerInvocationOptionsFailure
+} from './server-invocation-options'
 
 function awaitProcessSignal(): Effect.Effect<NodeJS.Signals> {
   return Effect.callback((resume) => {
@@ -44,38 +48,18 @@ function writeBrowserOutcome(outcome: BrowserOpeningOutcome): Effect.Effect<void
 
 export function serverProgram(
   options: ServerInvocationOptions,
-  webRoot: string
+  webRoot: string,
+  diagnostics: ServerDiagnostics
 ): Effect.Effect<
   void,
-  | ServerInvocationFailure
   | import('../browser-server').BrowserServerFailure
   | import('../browser-server').RendererBuildFailure
 > {
   return Effect.scoped(
     Effect.gen(function* () {
-      const initialPath = yield* Effect.tryPromise({
-        try: async () => {
-          const canonicalPath = await realpath(options.path)
-          const pathStats = await stat(canonicalPath)
-          if (!pathStats.isDirectory()) {
-            throw new TypeError('The selected repository or workspace path is not a directory')
-          }
-          return canonicalPath
-        },
-        catch: (detail) =>
-          new ServerInvocationFailure({
-            message: `Could not access repository or workspace path: ${options.path}`,
-            detail
-          })
-      })
-      const diagnostics = yield* makeServerDiagnostics({
-        maxEntryBytes: 4_096,
-        maxRecentEntries: 100,
-        writeLine: (line) => process.stderr.write(line)
-      })
       const server = yield* startBrowserServer({
         environmentConnection: createFakeEnvironmentConnection({
-          initialPath,
+          initialPath: options.path,
           readOnly: options.readOnly
         }),
         port: options.port,
@@ -94,7 +78,7 @@ export function serverProgram(
       yield* Effect.addFinalizer(() => diagnostics.record('server-stopped'))
       yield* writeOutput('Rebase Server is ready')
       yield* writeOutput(
-        `Local Environment: ${initialPath}${options.readOnly ? ' (read-only)' : ''}`
+        `Local Environment: ${options.path}${options.readOnly ? ' (read-only)' : ''}`
       )
       if (options.open === 'none') {
         yield* writeOutput(`Open ${server.browserUrl}`)
@@ -123,6 +107,41 @@ export function serverProgram(
       yield* writeOutput('Press Ctrl+C to stop')
       const signal = yield* awaitProcessSignal()
       yield* diagnostics.record('server-signal-received', { signal })
+    })
+  )
+}
+
+function failureMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+export function standaloneServerProgram(
+  arguments_: readonly string[],
+  currentDirectory: string,
+  webRoot: string
+): Effect.Effect<
+  void,
+  BrowserServerFailure | RendererBuildFailure | ServerInvocationOptionsFailure
+> {
+  return makeServerDiagnostics({
+    maxEntryBytes: 4_096,
+    maxRecentEntries: 100,
+    writeLine: (line) => process.stderr.write(line)
+  }).pipe(
+    Effect.flatMap((diagnostics) => {
+      const parsedOptions = parseServerInvocationOptions(arguments_, currentDirectory)
+      const program: Effect.Effect<
+        void,
+        BrowserServerFailure | RendererBuildFailure | ServerInvocationOptionsFailure
+      > =
+        parsedOptions._tag === 'Success'
+          ? serverProgram(parsedOptions.options, webRoot, diagnostics)
+          : Effect.fail(parsedOptions.failure)
+      return program.pipe(
+        Effect.tapError((error) =>
+          diagnostics.record('server-start-failed', { error: failureMessage(error) })
+        )
+      )
     })
   )
 }

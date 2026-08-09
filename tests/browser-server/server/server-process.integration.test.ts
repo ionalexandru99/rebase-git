@@ -89,7 +89,9 @@ describe('standalone Server process', () => {
     })
 
     const output = await waitForOutput(child, /Press Ctrl\+C to stop/)
-    const browserUrl = output.match(/Open (http:\/\/localhost:\d+\/auth\/[A-Za-z0-9_-]+)/)?.[1]
+    const browserUrl = output.match(
+      /Open (http:\/\/rebase-[a-f0-9]+\.localhost:\d+\/auth\/[A-Za-z0-9_-]+)/
+    )?.[1]
 
     expect(output).toContain('Rebase Server is ready')
     expect(output).toContain(`Local Environment: ${invocationDirectory} (read-only)`)
@@ -147,11 +149,32 @@ describe('standalone Server process', () => {
 
     const output = await waitForOutput(child, /Press Ctrl\+C to stop/)
 
-    expect(output).toMatch(/Open http:\/\/localhost:\d+\/auth\//)
+    expect(output).toMatch(/Open http:\/\/rebase-[a-f0-9]+\.localhost:\d+\/auth\//)
     expect(child.exitCode).toBeNull()
 
     const exited = waitForExit(child)
     child.kill('SIGINT')
     await expect(exited).resolves.toEqual({ code: 0, signal: null })
+  })
+
+  it('bounds and redacts structured startup failures', async () => {
+    const secret = 'browser-start-secret'
+    const child = spawnServer([`--/auth/${secret}${'x'.repeat(8_000)}`], {
+      cwd: repositoryRoot
+    })
+    let diagnostics = ''
+    child.stderr?.on('data', (chunk) => {
+      diagnostics += chunk.toString()
+    })
+
+    const exit = await waitForExit(child)
+    const lines = diagnostics.trim().split('\n')
+
+    expect(exit).toEqual({ code: 1, signal: null })
+    expect(lines).toHaveLength(1)
+    expect(Buffer.byteLength(lines[0])).toBeLessThanOrEqual(4_095)
+    expect(() => JSON.parse(lines[0])).not.toThrow()
+    expect(JSON.parse(lines[0])).toMatchObject({ event: 'server-start-failed' })
+    expect(lines[0]).not.toContain(secret)
   })
 })

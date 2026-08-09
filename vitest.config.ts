@@ -19,6 +19,7 @@ export default defineConfig({
     include: [
       'src/web/**/*.test.{ts,tsx}',
       'src/renderer/**/*.test.{ts,tsx}',
+      'tests/browser-server/web/**/*.test.{ts,tsx}',
       'tests/environment-identity/web/**/*.test.{ts,tsx}',
     ],
     setupFiles: ['./src/test/setup.ts'],

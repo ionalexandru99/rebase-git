@@ -1,7 +1,7 @@
 import {
   parseServerInvocationOptions,
   ServerInvocationOptionsFailure
-} from '../../../src/server/features/server-invocation/server-invocation-options'
+} from '../../../src/server/features/server-invocation'
 
 describe('Server invocation options', () => {
   it('uses the current directory, an ephemeral port, and browser opening by default', () => {

@@ -40,16 +40,16 @@ export {
 } from './features/profile-state'
 export {
   parseServerInvocationOptions,
-  ServerInvocationFailure,
   type ServerInvocationOptions,
   ServerInvocationOptionsFailure,
-  serverProgram
+  serverProgram,
+  standaloneServerProgram
 } from './features/server-invocation'
 
 import { realpathSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Effect } from 'effect4'
-import { parseServerInvocationOptions, serverProgram } from './features/server-invocation'
+import { standaloneServerProgram } from './features/server-invocation'
 
 function isDirectInvocation(entryPath: string): boolean {
   try {
@@ -60,18 +60,12 @@ function isDirectInvocation(entryPath: string): boolean {
 }
 
 if (process.argv[1] && isDirectInvocation(process.argv[1])) {
-  const parsedOptions = parseServerInvocationOptions(process.argv.slice(2), process.cwd())
-  const standaloneProgram: Effect.Effect<void, unknown> =
-    parsedOptions._tag === 'Success'
-      ? serverProgram(parsedOptions.options, fileURLToPath(new URL('../web/', import.meta.url)))
-      : Effect.fail(parsedOptions.failure)
-  Effect.runPromise(standaloneProgram).catch((error: unknown) => {
-    process.stderr.write(
-      `${JSON.stringify({
-        event: 'server-start-failed',
-        error: error instanceof Error ? error.message : String(error)
-      })}\n`
-    )
+  const standaloneProgram = standaloneServerProgram(
+    process.argv.slice(2),
+    process.cwd(),
+    fileURLToPath(new URL('../web/', import.meta.url))
+  )
+  Effect.runPromise(standaloneProgram).catch(() => {
     process.exitCode = 1
   })
 }

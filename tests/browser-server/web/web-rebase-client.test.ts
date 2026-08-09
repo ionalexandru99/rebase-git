@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createWebRebaseClient } from '../features/server-connection'
+import { createWebRebaseClient } from '../../../src/web/features/server-connection'
 
 const bootstrapResponse = {
   environment: {

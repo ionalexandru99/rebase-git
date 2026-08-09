@@ -43,4 +43,25 @@ describe('Browser Server loopback listener', () => {
     } satisfies Partial<BrowserServerFailure>)
     await new Promise<void>((resolve) => occupied.close(() => resolve()))
   })
+
+  it('refuses a Web build from a different product version', async () => {
+    const webRoot = await createWebBuild('renderer-build-test', '9.9.9')
+
+    const attempt = Effect.runPromise(
+      Effect.scoped(
+        startBrowserServer({
+          environmentConnection: createFakeEnvironmentConnection({
+            initialPath: process.cwd(),
+            readOnly: false
+          }),
+          webRoot
+        })
+      )
+    )
+
+    await expect(attempt).rejects.toMatchObject({
+      _tag: 'RendererBuildFailure',
+      message: 'Could not load the exact Web build'
+    })
+  })
 })

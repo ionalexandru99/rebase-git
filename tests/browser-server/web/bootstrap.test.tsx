@@ -1,7 +1,7 @@
 import { act } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { startRuntimeRenderer } from '../bootstrap'
-import type { RebaseClient } from '../features/server-connection'
+import { startRuntimeRenderer } from '../../../src/web/bootstrap'
+import type { RebaseClient } from '../../../src/web/features/server-connection'
 
 const connectedClient: RebaseClient = {
   loadBootstrap: async () => ({

@@ -1,6 +1,6 @@
 import { Effect } from 'effect4'
 import { describe, expect, it } from 'vitest'
-import { makeServerDiagnostics } from '../../../src/server/features/browser-server/diagnostics'
+import { makeServerDiagnostics } from '../../../src/server/features/browser-server'
 
 describe('Server diagnostics', () => {
   it('records valid structured lines without registered secrets or browser auth nonces', async () => {

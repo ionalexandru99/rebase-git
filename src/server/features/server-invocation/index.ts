@@ -6,7 +6,8 @@ export {
   type BrowserOpeningOutcome,
   type BrowserOpeningRequest,
   type OpenBrowserOptions,
-  openBrowser
+  openBrowser,
+  runBrowserCommand
 } from './browser-opening/browser-opener'
 export {
   parseServerInvocationOptions,
@@ -16,4 +17,4 @@ export {
   type ServerInvocationOptionsFailureReason,
   type ServerInvocationOptionsParseResult
 } from './server-invocation-options'
-export { ServerInvocationFailure, serverProgram } from './server-program'
+export { serverProgram, standaloneServerProgram } from './server-program'

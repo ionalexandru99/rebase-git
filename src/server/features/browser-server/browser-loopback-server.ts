@@ -6,6 +6,11 @@ import { createClientSessionAuthority } from './client-session-authority'
 import type { BrowserEnvironmentConnection } from './environment-connection'
 import { loadRendererBuild, type RendererBuildFailure } from './renderer-build'
 
+declare const __REBASE_PRODUCT_VERSION__: string
+
+export const SERVER_PRODUCT_VERSION =
+  typeof __REBASE_PRODUCT_VERSION__ === 'string' ? __REBASE_PRODUCT_VERSION__ : '0.0.1'
+
 export class BrowserServerFailure extends Data.TaggedError('BrowserServerFailure')<{
   readonly message: string
   readonly detail?: unknown
@@ -14,6 +19,7 @@ export class BrowserServerFailure extends Data.TaggedError('BrowserServerFailure
 export interface RunningBrowserServer {
   readonly authority: string
   readonly browserUrl: string
+  readonly mintBrowserUrl: () => string
   readonly origin: string
   readonly port: number
   readonly rendererBuildId: string
@@ -79,7 +85,7 @@ export function startBrowserServer(
   options: StartBrowserServerOptions
 ): Effect.Effect<RunningBrowserServer, BrowserServerFailure | RendererBuildFailure, Scope.Scope> {
   return Effect.gen(function* () {
-    const rendererBuild = yield* loadRendererBuild(options.webRoot)
+    const rendererBuild = yield* loadRendererBuild(options.webRoot, SERVER_PRODUCT_VERSION)
     const environmentBootstrap = yield* options.environmentConnection.loadBootstrap()
     const server = createServer()
     const port = yield* Effect.acquireRelease(
@@ -90,9 +96,10 @@ export function startBrowserServer(
       () => Effect.promise(() => close(server))
     )
     yield* Effect.addFinalizer(() => options.environmentConnection.close())
-    const authority = `localhost:${port}`
-    const origin = `http://${authority}`
     const serverInstanceId = randomUUID()
+    const hostname = `rebase-${serverInstanceId.replaceAll('-', '')}.localhost`
+    const authority = `${hostname}:${port}`
+    const origin = `http://${authority}`
     const clientSessions = createClientSessionAuthority({
       nonceTtlMs: options.nonceTtlMs ?? 60_000,
       now: options.now ?? Date.now,
@@ -103,9 +110,8 @@ export function startBrowserServer(
     const handler = createBrowserHttpHandler({
       authority,
       bootstrapFailureLimit: options.bootstrapFailureLimit ?? 8,
-      browserTicket,
       clientSessions,
-      cookieName: `rebase-client-${port}`,
+      cookieName: 'rebase-client',
       environmentBootstrap,
       now: options.now ?? Date.now,
       origin,
@@ -123,6 +129,7 @@ export function startBrowserServer(
     return {
       authority,
       browserUrl: `${origin}/auth/${browserTicket}`,
+      mintBrowserUrl: () => `${origin}/auth/${clientSessions.mintBrowserTicket()}`,
       origin,
       port,
       rendererBuildId: rendererBuild.rendererBuildId,

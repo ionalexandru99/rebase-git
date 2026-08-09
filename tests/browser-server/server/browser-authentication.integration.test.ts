@@ -34,9 +34,32 @@ describe('Browser Server authentication', () => {
     expect(rejected).toHaveLength(1)
     expect(accepted[0].headers.get('location')).toBe('/')
     expect(accepted[0].headers.get('set-cookie')).toMatch(
-      /^rebase-client-\d+=[^;]+; Path=\/; HttpOnly; SameSite=Strict$/
+      /^rebase-client=[^;]+; Path=\/; HttpOnly; SameSite=Strict$/
     )
     expect(sessionCookie(accepted[0])).not.toContain(fixture.server.browserUrl)
+  })
+
+  it('independently exchanges each browser URL minted by the running Server', async () => {
+    const fixture = await acquireBrowserServer()
+    acquired.push(fixture)
+    const additionalBrowserUrl = fixture.server.mintBrowserUrl()
+
+    const initial = await fetch(fixture.server.browserUrl, {
+      headers: requestHeaders(fixture.server),
+      redirect: 'manual'
+    })
+    const additional = await fetch(additionalBrowserUrl, {
+      headers: requestHeaders(fixture.server),
+      redirect: 'manual'
+    })
+    const replay = await fetch(additionalBrowserUrl, {
+      headers: requestHeaders(fixture.server),
+      redirect: 'manual'
+    })
+
+    expect(initial.status).toBe(303)
+    expect(additional.status).toBe(303)
+    expect(replay.status).toBe(404)
   })
 
   it('rejects an expired ticket without setting a cookie', async () => {

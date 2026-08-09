@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ClientBootstrap, RebaseClient } from './features/server-connection'
+import type { ClientBootstrap, RebaseClient } from './rebase-client'
 
 type ServerState =
   | { readonly status: 'loading' }

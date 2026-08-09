@@ -1,9 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '../renderer/index.css'
-import type { RebaseClient } from './features/server-connection'
-import { createDocumentRebaseClient } from './features/server-connection'
-import { RebaseServerApp } from './RebaseServerApp'
+import {
+  createDocumentRebaseClient,
+  type RebaseClient,
+  RebaseServerApp
+} from './features/server-connection'
 
 export async function startRuntimeRenderer(
   container: HTMLElement,

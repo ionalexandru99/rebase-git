@@ -48,7 +48,8 @@ function parseRendererManifest(contents: Buffer): RendererManifest {
 }
 
 export function loadRendererBuild(
-  webRoot: string
+  webRoot: string,
+  expectedProductVersion: string
 ): Effect.Effect<RendererBuild, RendererBuildFailure> {
   return Effect.tryPromise({
     try: async () => {
@@ -59,6 +60,11 @@ export function loadRendererBuild(
         throw new TypeError('The Web build is missing index.html or rebase-manifest.json')
       }
       const manifest = parseRendererManifest(manifestContents)
+      if (manifest.productVersion !== expectedProductVersion) {
+        throw new TypeError(
+          `Web build product version ${manifest.productVersion} does not match Server ${expectedProductVersion}`
+        )
+      }
       return {
         files,
         indexHtml: indexHtml.toString('utf8'),

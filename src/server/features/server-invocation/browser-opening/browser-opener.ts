@@ -5,7 +5,6 @@ import { Data, Effect } from 'effect4'
 export interface BrowserCommand {
   readonly executable: string
   readonly arguments: readonly string[]
-  readonly completion: 'exit' | 'launch'
 }
 
 export class BrowserCommandFailure extends Data.TaggedError('BrowserCommandFailure')<{
@@ -55,7 +54,6 @@ export const runBrowserCommand: BrowserCommandRunner = (command) =>
     let child: ReturnType<typeof spawn>
     try {
       child = spawn(command.executable, [...command.arguments], {
-        detached: command.completion === 'launch',
         stdio: 'ignore',
         windowsHide: true
       })
@@ -82,22 +80,14 @@ export const runBrowserCommand: BrowserCommandRunner = (command) =>
         )
       )
     child.once('error', fail)
-    if (command.completion === 'launch') {
-      child.once('spawn', () => {
-        child.off('error', fail)
-        child.unref()
+    child.once('exit', (code, signal) => {
+      child.off('error', fail)
+      if (code === 0) {
         complete(Effect.void)
-      })
-    } else {
-      child.once('exit', (code, signal) => {
-        child.off('error', fail)
-        if (code === 0) {
-          complete(Effect.void)
-        } else {
-          fail(new Error(`${command.executable} exited with code ${code} signal ${signal}`))
-        }
-      })
-    }
+      } else {
+        fail(new Error(`${command.executable} exited with code ${code} signal ${signal}`))
+      }
+    })
     return Effect.sync(() => {
       child.removeAllListeners()
       if (!settled && child.exitCode === null && child.signalCode === null) {
@@ -154,8 +144,7 @@ export function openBrowser(
       '-Command',
       'Start-Process -FilePath $args[0]',
       request.browserUrl
-    ],
-    completion: 'launch'
+    ]
   })
   const isWsl =
     environment.platform === 'linux' &&
@@ -171,8 +160,7 @@ export function openBrowser(
         '-Command',
         'try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $args[0] | Out-Null } catch { exit 1 }',
         request.readinessUrl
-      ],
-      completion: 'exit'
+      ]
     })
     return forwardingVerification.pipe(
       Effect.matchEffect({
@@ -192,8 +180,7 @@ export function openBrowser(
   if (environment.platform === 'darwin') {
     return launchWithInstructions({
       executable: 'open',
-      arguments: [request.browserUrl],
-      completion: 'launch'
+      arguments: [request.browserUrl]
     })
   }
   if (environment.platform === 'linux' && !isGraphical) {
@@ -206,8 +193,7 @@ export function openBrowser(
   if (environment.platform === 'linux') {
     return launchWithInstructions({
       executable: 'xdg-open',
-      arguments: [request.browserUrl],
-      completion: 'launch'
+      arguments: [request.browserUrl]
     })
   }
   return windowsOpening

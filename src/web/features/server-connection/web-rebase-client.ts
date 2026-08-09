@@ -1,46 +1,18 @@
-import type { ClientBootstrap, RebaseClient } from './rebase-client'
-
-const BOOTSTRAP_PATH = '/api/bootstrap'
-const CSRF_HEADER = 'X-Rebase-CSRF-Token'
-
-interface BootstrapResponse extends ClientBootstrap {
-  readonly csrfToken: string
-}
+import {
+  CLIENT_BOOTSTRAP_PATH,
+  CLIENT_CSRF_HEADER,
+  ClientBootstrapSchema,
+  RENDERER_BUILD_HEADER,
+  SERVER_INSTANCE_HEADER
+} from '@common/features/client-connection'
+import { Schema } from 'effect4'
+import type { RebaseClient } from './rebase-client'
 
 interface WebRebaseClientOptions {
   readonly fetch: typeof fetch
   readonly reload: () => void
   readonly rendererBuildId: string
   readonly serverInstanceId: string
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function decodeBootstrapResponse(value: unknown): BootstrapResponse {
-  if (!isRecord(value) || !isRecord(value.environment)) {
-    throw new Error('Server returned an invalid bootstrap response')
-  }
-  const { environment } = value
-  if (
-    environment.environmentId !== 'local' ||
-    typeof environment.path !== 'string' ||
-    environment.path.length === 0 ||
-    typeof value.readOnly !== 'boolean' ||
-    typeof value.csrfToken !== 'string' ||
-    value.csrfToken.length === 0
-  ) {
-    throw new Error('Server returned an invalid bootstrap response')
-  }
-  return {
-    environment: {
-      environmentId: environment.environmentId,
-      path: environment.path
-    },
-    readOnly: value.readOnly,
-    csrfToken: value.csrfToken
-  }
 }
 
 export function createWebRebaseClient(options: WebRebaseClientOptions): RebaseClient {
@@ -53,11 +25,11 @@ export function createWebRebaseClient(options: WebRebaseClientOptions): RebaseCl
   ): Promise<Response> => {
     const headers = new Headers({
       Accept: 'application/json',
-      'X-Rebase-Renderer-Build-Id': options.rendererBuildId,
-      'X-Rebase-Server-Instance-Id': options.serverInstanceId
+      [RENDERER_BUILD_HEADER]: options.rendererBuildId,
+      [SERVER_INSTANCE_HEADER]: options.serverInstanceId
     })
     if (method === 'POST' && csrfToken !== null) {
-      headers.set(CSRF_HEADER, csrfToken)
+      headers.set(CLIENT_CSRF_HEADER, csrfToken)
     }
     const response = await options.fetch(path, {
       method,
@@ -77,8 +49,8 @@ export function createWebRebaseClient(options: WebRebaseClientOptions): RebaseCl
 
   return {
     loadBootstrap: async (signal) => {
-      const response = await request(BOOTSTRAP_PATH, 'GET', signal)
-      const bootstrap = decodeBootstrapResponse(await response.json())
+      const response = await request(CLIENT_BOOTSTRAP_PATH, 'GET', signal)
+      const bootstrap = Schema.decodeUnknownSync(ClientBootstrapSchema)(await response.json())
       csrfToken = bootstrap.csrfToken
       return {
         environment: bootstrap.environment,

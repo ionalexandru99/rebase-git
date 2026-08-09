@@ -1,4 +1,9 @@
 import type { IncomingMessage } from 'node:http'
+import {
+  CLIENT_CSRF_HEADER,
+  RENDERER_BUILD_HEADER,
+  SERVER_INSTANCE_HEADER
+} from '@common/features/client-connection'
 import type { ClientSession, ClientSessionAuthority } from './client-session-authority'
 
 export type RequestSecurityFailure =
@@ -76,8 +81,8 @@ export function authorizeApplicationRequest(options: {
     return { failure: 'session-rejected' }
   }
   if (
-    options.request.headers['x-rebase-renderer-build-id'] !== options.rendererBuildId ||
-    options.request.headers['x-rebase-server-instance-id'] !== options.serverInstanceId ||
+    options.request.headers[RENDERER_BUILD_HEADER.toLowerCase()] !== options.rendererBuildId ||
+    options.request.headers[SERVER_INSTANCE_HEADER.toLowerCase()] !== options.serverInstanceId ||
     session.rendererBuildId !== options.rendererBuildId ||
     session.serverInstanceId !== options.serverInstanceId
   ) {
@@ -85,7 +90,7 @@ export function authorizeApplicationRequest(options: {
   }
   const method = options.request.method ?? 'GET'
   if (!['GET', 'HEAD'].includes(method)) {
-    const csrfHeader = options.request.headers['x-rebase-csrf-token']
+    const csrfHeader = options.request.headers[CLIENT_CSRF_HEADER.toLowerCase()]
     if (typeof csrfHeader !== 'string' || csrfHeader !== session.csrfToken) {
       return { failure: 'csrf-rejected' }
     }

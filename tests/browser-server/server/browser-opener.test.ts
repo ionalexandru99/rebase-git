@@ -3,8 +3,9 @@ import {
   type BrowserCommand,
   BrowserCommandFailure,
   type BrowserCommandRunner,
-  openBrowser
-} from '../../../src/server/features/server-invocation/browser-opening/browser-opener'
+  openBrowser,
+  runBrowserCommand
+} from '../../../src/server/features/server-invocation'
 
 const browserUrl = 'http://localhost:4312/auth/one-time-nonce'
 const readinessUrl = 'http://localhost:4312/health'
@@ -17,6 +18,17 @@ function recordingRunner(commands: BrowserCommand[]): BrowserCommandRunner {
 }
 
 describe('platform browser opener', () => {
+  it('reports a launcher that starts and then exits unsuccessfully', async () => {
+    const exit = await Effect.runPromiseExit(
+      runBrowserCommand({
+        executable: process.execPath,
+        arguments: ['-e', 'process.exit(7)']
+      })
+    )
+
+    expect(exit._tag).toBe('Failure')
+  })
+
   it('opens the default Windows browser without interpolating the URL into shell code', async () => {
     const commands: BrowserCommand[] = []
 
@@ -40,8 +52,7 @@ describe('platform browser opener', () => {
           '-Command',
           'Start-Process -FilePath $args[0]',
           browserUrl
-        ],
-        completion: 'launch'
+        ]
       }
     ])
   })
@@ -65,7 +76,7 @@ describe('platform browser opener', () => {
 
     expect(result).toEqual({ _tag: 'Opened' })
     expect(commands).toEqual([
-      { executable, arguments: [browserUrl], completion: 'launch' }
+      { executable, arguments: [browserUrl] }
     ])
   })
 
@@ -96,8 +107,7 @@ describe('platform browser opener', () => {
           '-Command',
           'try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $args[0] | Out-Null } catch { exit 1 }',
           readinessUrl
-        ],
-        completion: 'exit'
+        ]
       },
       {
         executable: 'powershell.exe',
@@ -107,8 +117,7 @@ describe('platform browser opener', () => {
           '-Command',
           'Start-Process -FilePath $args[0]',
           browserUrl
-        ],
-        completion: 'launch'
+        ]
       }
     ])
   })
@@ -180,6 +189,6 @@ describe('platform browser opener', () => {
       ]
     })
     expect(commands).toHaveLength(1)
-    expect(commands[0]?.completion).toBe('exit')
+    expect(commands[0]?.executable).toBe('powershell.exe')
   })
 })

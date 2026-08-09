@@ -4,6 +4,7 @@ import path from 'node:path'
 import { Effect, Exit, Scope } from 'effect4'
 import {
   createFakeEnvironmentConnection,
+  SERVER_PRODUCT_VERSION,
   startBrowserServer,
   type RunningBrowserServer
 } from '../../../src/server/features/browser-server'
@@ -13,7 +14,10 @@ export interface BrowserServerFixture {
   readonly close: () => Promise<void>
 }
 
-export async function createWebBuild(rendererBuildId = 'renderer-build-test'): Promise<string> {
+export async function createWebBuild(
+  rendererBuildId = 'renderer-build-test',
+  productVersion = SERVER_PRODUCT_VERSION
+): Promise<string> {
   const webRoot = await mkdtemp(path.join(tmpdir(), 'rebase-web-build-'))
   await mkdir(path.join(webRoot, 'assets'))
   await writeFile(
@@ -23,7 +27,7 @@ export async function createWebBuild(rendererBuildId = 'renderer-build-test'): P
   await writeFile(path.join(webRoot, 'assets/index-a1b2c3d4.js'), 'globalThis.REBASE_WEB=true')
   await writeFile(
     path.join(webRoot, 'rebase-manifest.json'),
-    JSON.stringify({ rendererBuildId, productVersion: '0.0.2' })
+    JSON.stringify({ rendererBuildId, productVersion })
   )
   await writeFile(path.join(webRoot, 'favicon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>')
   await writeFile(path.join(webRoot, 'not-public.txt'), 'must not be served')

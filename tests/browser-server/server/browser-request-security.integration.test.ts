@@ -176,7 +176,7 @@ describe('Browser Server request security', () => {
       headers: { ...requestHeaders(fixture.server), Cookie: cookie }
     })
     const forgedCookie = await fetch(`${fixture.server.origin}/`, {
-      headers: { ...requestHeaders(fixture.server), Cookie: `rebase-client-${fixture.server.port}=fake` }
+      headers: { ...requestHeaders(fixture.server), Cookie: 'rebase-client=fake' }
     })
     const nonPublicFile = await fetch(`${fixture.server.origin}/not-public.txt`, {
       headers: { ...requestHeaders(fixture.server), Cookie: cookie }
@@ -210,25 +210,29 @@ describe('Browser Server request security', () => {
     expect(traversal).toBe(400)
   })
 
-  it('keeps simultaneous localhost Server sessions isolated by port', async () => {
+  it('keeps simultaneous localhost Server sessions isolated by origin', async () => {
     const first = await acquireBrowserServer()
     const second = await acquireBrowserServer()
     acquired.push(first, second)
     const firstCookie = await authenticate(first)
     const secondCookie = await authenticate(second)
-    const combinedCookies = `${firstCookie}; ${secondCookie}`
-
-    expect(firstCookie.split('=', 1)[0]).not.toBe(secondCookie.split('=', 1)[0])
+    expect(first.server.origin).not.toBe(second.server.origin)
+    expect(new URL(first.server.origin).hostname).toMatch(/^rebase-[a-f0-9]+\.localhost$/)
+    expect(firstCookie.split('=', 1)[0]).toBe(secondCookie.split('=', 1)[0])
 
     const firstBootstrap = await fetch(`${first.server.origin}/api/bootstrap`, {
-      headers: clientHeaders(first, combinedCookies)
+      headers: clientHeaders(first, firstCookie)
     })
     const secondBootstrap = await fetch(`${second.server.origin}/api/bootstrap`, {
-      headers: clientHeaders(second, combinedCookies)
+      headers: clientHeaders(second, secondCookie)
+    })
+    const crossOriginSession = await fetch(`${first.server.origin}/api/bootstrap`, {
+      headers: clientHeaders(first, secondCookie)
     })
 
     expect(firstBootstrap.status).toBe(200)
     expect(secondBootstrap.status).toBe(200)
+    expect(crossOriginSession.status).toBe(401)
   })
 
   it('rejects an old session after a Server restarts on the same port', async () => {
@@ -241,6 +245,7 @@ describe('Browser Server request security', () => {
 
     const restarted = await acquireBrowserServer({ port })
     acquired.push(restarted)
+    expect(restarted.server.origin).not.toBe(first.server.origin)
     const response = await fetch(`${restarted.server.origin}/api/bootstrap`, {
       headers: clientHeaders(restarted, oldCookie)
     })
