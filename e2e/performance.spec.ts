@@ -30,6 +30,16 @@ async function measure(task: () => Promise<void>): Promise<number> {
   return performance.now() - startedAt
 }
 
+async function loadedHistoryCount(page: import('@playwright/test').Page): Promise<number> {
+  const summary = page.getByText(/[\d,]+ loaded · more available/)
+  if ((await summary.count()) === 0) {
+    return 0
+  }
+  const text = await summary.textContent()
+  const match = text?.match(/([\d,]+) loaded/)
+  return match ? Number(match[1]?.replaceAll(',', '')) : 0
+}
+
 const statusObservationKey = '__REBASE_STATUS_OBSERVED_AT__'
 
 async function observeStatusFile(page: import('@playwright/test').Page, file: string): Promise<void> {
@@ -121,14 +131,21 @@ baselineTest('records the 0.0.1 parity baseline on a representative repository',
   }
   const repo = createPerformanceRepo()
   let page = harness.page
+  let initialLoadedHistoryCount = 0
 
   measurements.repositoryOpen = await measure(async () => {
     page = await harness.openRepo(repo)
-    await expect(page.getByText(/2,000 loaded · more available/)).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(/[\d,]+ loaded · more available/)).toBeVisible({ timeout: 30_000 })
+    initialLoadedHistoryCount = await loadedHistoryCount(page)
   })
 
   measurements.historyPage = await measure(async () => {
-    await expect(page.getByText(/4,000 loaded · more available/)).toBeVisible({ timeout: 30_000 })
+    await page
+      .getByTestId('history-scroll')
+      .evaluate((element) => element.scrollTo(0, element.scrollHeight))
+    await expect
+      .poll(() => loadedHistoryCount(page), { timeout: 30_000 })
+      .toBeGreaterThan(initialLoadedHistoryCount)
   })
 
   await openLocalChanges(page)

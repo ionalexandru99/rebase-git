@@ -485,35 +485,51 @@ export const test = base.extend<{ harness: AppHarness }>({
         externalFixturePaths.add(trackedPath)
       }
     }
-    const deploymentAdapter = await loadDeploymentAdapter()
-    if (deploymentAdapter) {
-      const harness = await deploymentAdapter.createHarness({
-        fixtureRoot,
-        globalGitConfigPath,
-        mainEntry,
-        windowSize: { width: launchWindowWidth, height: launchWindowHeight },
-        trackPath
-      })
+    if (process.env.REBASE_E2E_DEPLOYMENT_ADAPTER) {
+      let harness: AppHarness | undefined
+      let executionError: unknown
+      let executionFailed = false
+      let cleanupError: unknown
+      let cleanupFailed = false
       try {
+        const deploymentAdapter = await loadDeploymentAdapter()
+        if (!deploymentAdapter) {
+          throw new Error('deployment adapter is unavailable')
+        }
+        harness = await deploymentAdapter.createHarness({
+          fixtureRoot,
+          globalGitConfigPath,
+          mainEntry,
+          windowSize: { width: launchWindowWidth, height: launchWindowHeight },
+          trackPath
+        })
         await use(harness)
-      } finally {
-        let cleanupError: unknown
+      } catch (error) {
+        executionError = error
+        executionFailed = true
+      }
+      if (harness) {
         try {
           await harness.close()
         } catch (error) {
           cleanupError = error
+          cleanupFailed = true
         }
-        try {
-          removePaths([...externalFixturePaths, fixtureRoot])
-        } catch (error) {
-          cleanupError ??= error
-        }
-        if (activeFixtureRoot === fixtureRoot) {
-          activeFixtureRoot = undefined
-        }
-        if (cleanupError && testInfo.status === testInfo.expectedStatus) {
-          throw cleanupError
-        }
+      }
+      try {
+        removePaths([...externalFixturePaths, fixtureRoot])
+      } catch (error) {
+        cleanupError ??= error
+        cleanupFailed = true
+      }
+      if (activeFixtureRoot === fixtureRoot) {
+        activeFixtureRoot = undefined
+      }
+      if (executionFailed) {
+        throw executionError
+      }
+      if (cleanupFailed && testInfo.status === testInfo.expectedStatus) {
+        throw cleanupError
       }
       return
     }

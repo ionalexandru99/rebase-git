@@ -125,11 +125,16 @@ test('loads the next history page without gaps or duplicate rows', async ({ harn
   const repo = createFixtureRepo()
   appendLinearCommits(repo, 2_100)
   const page = await harness.openRepo(repo)
-
-  await expect(page.getByText(/2,101 commits/)).toBeVisible({ timeout: 30_000 })
+  const continuation = page.getByText(/2,000 loaded · more available/)
+  const completedHistory = page.getByText(/2,101 commits/)
+  await expect(continuation.or(completedHistory)).toBeVisible({ timeout: 30_000 })
+  const history = page.getByTestId('history-scroll')
+  if (await continuation.isVisible()) {
+    await history.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  }
+  await expect(completedHistory).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/more available/)).toHaveCount(0)
 
-  const history = page.getByTestId('history-scroll')
   await history.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(page.getByTestId('commit-row').filter({ hasText: 'initial' })).toHaveCount(1, {
     timeout: 20_000
