@@ -1,32 +1,7 @@
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@playwright/test'
-import { createFixtureRepo, expect, gitIn, test } from './fixtures'
-
-function appendLinearCommits(repo: string, count: number): void {
-  const stream: string[] = []
-  for (let commit = 0; commit < count; commit++) {
-    const content = `commit ${commit}\n`
-    const message = `commit ${commit}`
-    const mark = commit + 1
-    stream.push(`blob\nmark :${mark}\ndata ${Buffer.byteLength(content)}\n${content}\n`)
-    stream.push(
-      'commit refs/heads/main\n' +
-        'author Test <test@example.com> 1700000000 +0000\n' +
-        'committer Test <test@example.com> 1700000000 +0000\n' +
-        `data ${Buffer.byteLength(message)}\n${message}\n` +
-        (commit === 0 ? 'from refs/heads/main^0\n' : '') +
-        `M 100644 :${mark} file.txt\n\n`
-    )
-  }
-  execFileSync('git', ['fast-import', '--quiet'], {
-    cwd: repo,
-    input: stream.join(''),
-    stdio: ['pipe', 'ignore', 'ignore']
-  })
-  execFileSync('git', ['reset', '--hard', 'main'], { cwd: repo, stdio: 'ignore' })
-}
+import { appendLinearCommits, createFixtureRepo, expect, gitIn, test } from './fixtures'
 
 function createBranchyRepo(): string {
   const repo = createFixtureRepo()
@@ -143,4 +118,25 @@ test('keeps drawing the rail after a fast scroll to the middle of the log', asyn
 
   await expect.poll(() => paintedPixels(page, 0), { timeout: 20_000 }).toBeGreaterThan(500)
   await expect.poll(() => paintedPixels(page, 4_000), { timeout: 20_000 }).toBeGreaterThan(500)
+})
+
+test('loads the next history page without gaps or duplicate rows', async ({ harness }) => {
+  test.setTimeout(120_000)
+  const repo = createFixtureRepo()
+  appendLinearCommits(repo, 2_100)
+  const page = await harness.openRepo(repo)
+  const continuation = page.getByText(/2,000 loaded · more available/)
+  const completedHistory = page.getByText(/2,101 commits/)
+  await expect(continuation.or(completedHistory)).toBeVisible({ timeout: 30_000 })
+  const history = page.getByTestId('history-scroll')
+  if (await continuation.isVisible()) {
+    await history.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  }
+  await expect(completedHistory).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/more available/)).toHaveCount(0)
+
+  await history.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  await expect(page.getByTestId('commit-row').filter({ hasText: 'initial' })).toHaveCount(1, {
+    timeout: 20_000
+  })
 })

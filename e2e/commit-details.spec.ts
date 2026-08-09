@@ -222,7 +222,7 @@ test('keeps every region of the detail pane usable at any window and list width'
 
   try {
     for (const size of PANE_LAYOUT_CASES) {
-      await setWindowSize(harness.app(), size.width, size.height)
+      await setWindowSize(harness, size.width, size.height)
       const page = await harness.openRepo(repo, {
         listPaneWidths: { [repo]: size.listPaneWidth }
       })
@@ -298,6 +298,6 @@ test('keeps every region of the detail pane usable at any window and list width'
       expect(layout.paneInsideShell, `detail pane inside the shell at ${at}`).toBe(true)
     }
   } finally {
-    await setWindowSize(harness.app(), LAUNCH_WINDOW.width, LAUNCH_WINDOW.height)
+    await setWindowSize(harness, LAUNCH_WINDOW.width, LAUNCH_WINDOW.height)
   }
 })

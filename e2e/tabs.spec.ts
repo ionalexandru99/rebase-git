@@ -29,12 +29,15 @@ test('two repos in tabs stay isolated: committing in one leaves the other untouc
   gitB(['add', '.'])
   gitB(['commit', '-m', 'beta only'])
   fs.writeFileSync(path.join(repoA, 'extra.txt'), 'extra\n')
-  const mainProcessId = await harness.mainProcessId()
+  const mainProcessId =
+    harness.deploymentName === 'electron' ? await harness.mainProcessId() : undefined
 
   const page = await harness.openTabs([repoA, repoB])
 
-  expect(await harness.mainProcessId()).toBe(mainProcessId)
-  expect(harness.launchCount()).toBe(1)
+  if (mainProcessId !== undefined) {
+    expect(await harness.mainProcessId()).toBe(mainProcessId)
+    expect(harness.launchCount()).toBe(1)
+  }
   const tabA = page.getByRole('tab', { name: path.basename(repoA) })
   const tabB = page.getByRole('tab', { name: path.basename(repoB) })
   await expect(tabA).toBeVisible()
@@ -186,17 +189,22 @@ test('persisted tabs and their commit-list width survive a second relaunch witho
   await dragListDivider(page, 180)
   await expect.poll(() => commitListWidth(page), { timeout: 10_000 }).toBe(580)
 
-  const mainProcessId = await harness.mainProcessId()
+  const mainProcessId =
+    harness.deploymentName === 'electron' ? await harness.mainProcessId() : undefined
   const relaunched = await harness.restart()
 
-  expect(await harness.mainProcessId()).not.toBe(mainProcessId)
-  expect(harness.launchCount()).toBe(2)
+  if (mainProcessId !== undefined) {
+    expect(await harness.mainProcessId()).not.toBe(mainProcessId)
+    expect(harness.launchCount()).toBe(2)
+  }
   await expect(relaunched.getByRole('tab', { name: path.basename(repoA) })).toBeVisible({
     timeout: 10_000
   })
   await expect.poll(() => commitListWidth(relaunched), { timeout: 15_000 }).toBe(580)
-  await expect.poll(() => harness.inspectLifecycle()).toMatchObject({
-    sidecarProcessCount: 1,
-    sidecarRespawnCount: 0
-  })
+  if (harness.deploymentName === 'electron') {
+    await expect.poll(() => harness.inspectLifecycle()).toMatchObject({
+      sidecarProcessCount: 1,
+      sidecarRespawnCount: 0
+    })
+  }
 })

@@ -15,15 +15,9 @@ test.describe('Rebase E2E', () => {
   })
 
   test('window becomes visible after ready-to-show', async ({ harness }) => {
+    test.skip(harness.deploymentName !== 'electron', 'Electron lifecycle contract')
     await expect
-      .poll(
-        () =>
-          harness.app().evaluate(({ BrowserWindow }) => {
-            const win = BrowserWindow.getAllWindows()[0]
-            return win ? win.isVisible() : false
-          }),
-        { timeout: 10_000 }
-      )
+      .poll(() => harness.isWindowVisible(), { timeout: 10_000 })
       .toBe(true)
     expect(harness.launchCount()).toBe(1)
     await expect.poll(() => harness.inspectLifecycle()).toMatchObject({
@@ -32,7 +26,17 @@ test.describe('Rebase E2E', () => {
     })
   })
 
+  test('Linux Electron runs use a private virtual display', async ({ harness }) => {
+    test.skip(process.platform !== 'linux', 'Linux display isolation contract')
+    test.skip(process.env.REBASE_E2E_USE_DESKTOP === '1', 'Interactive desktop opt-in')
+    test.skip(harness.deploymentName !== 'electron', 'Electron display isolation contract')
+    expect(process.env.REBASE_E2E_VIRTUAL_DISPLAY).toBe('1')
+    expect(process.env.DISPLAY).not.toBe(process.env.REBASE_E2E_HOST_DISPLAY)
+    expect(await harness.isWindowVisible()).toBe(true)
+  })
+
   test('shows the onboarding screen on first launch', async ({ harness }) => {
+    test.skip(harness.deploymentName !== 'electron', 'Electron persistence defaults')
     const page = harness.page
     await page.waitForLoadState('domcontentloaded')
 
@@ -102,6 +106,7 @@ test.describe('Rebase E2E', () => {
   test('renderer reaches the sidecar through the preload proxy for status and local branches', async ({
     harness
   }) => {
+    test.skip(harness.deploymentName !== 'electron', 'Electron preload contract')
     const repo = createFixtureRepo()
     harness.track(repo)
     const page = harness.page
@@ -147,6 +152,7 @@ test.describe('Rebase E2E', () => {
   })
 
   test('commits through the typed RPC write seam end to end', async ({ harness }) => {
+    test.skip(harness.deploymentName !== 'electron', 'Electron preload contract')
     const repo = createFixtureRepo()
     harness.track(repo)
     const page = harness.page
@@ -199,6 +205,7 @@ test.describe('Rebase E2E', () => {
   test('a merge conflict flows end to end as a typed Conflict through the RPC seam', async ({
     harness
   }) => {
+    test.skip(harness.deploymentName !== 'electron', 'Electron preload contract')
     const repo = createFixtureRepo()
     harness.track(repo)
     const page = harness.page

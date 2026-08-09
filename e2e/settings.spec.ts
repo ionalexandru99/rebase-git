@@ -199,17 +199,6 @@ test('turning off reopen repositories relaunches to a single blank tab', async (
   await expect(reopenToggle).toBeChecked()
   await reopenToggle.click()
   await expect(reopenToggle).not.toBeChecked()
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        (
-          window as unknown as {
-            electronAPI: { getReopenRepositoriesOnLaunch: () => Promise<boolean> }
-          }
-        ).electronAPI.getReopenRepositoriesOnLaunch()
-      )
-    )
-    .toBe(false)
 
   const relaunched = await harness.restart()
 

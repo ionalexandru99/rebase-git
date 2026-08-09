@@ -34,6 +34,9 @@ slowed down with video capture on, writing `.webm` files to `test-results/demos/
 `$env:REBASE_DEMO='1'; pnpm playwright test <file>` (PowerShell). Record demos by driving the
 feature's own e2e spec — don't add bespoke capture scripts.
 
+Linux E2E runs use a private Xvfb display so Electron windows cannot steal desktop focus. Set
+`REBASE_E2E_USE_DESKTOP=1` only for interactive debugging against the active display.
+
 A `pre-push` hook runs `pnpm typecheck` and `pnpm check`; `pnpm install` wires it up.
 
 ## Architecture

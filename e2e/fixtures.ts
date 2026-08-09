@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   test as base,
   type ElectronApplication,
@@ -67,7 +67,7 @@ function fixturePath(prefix: string): string {
   return path.join(activeFixtureRoot ?? os.tmpdir(), prefix)
 }
 
-export async function setWindowSize(
+async function setElectronWindowSize(
   app: ElectronApplication,
   width: number,
   height: number
@@ -173,6 +173,30 @@ export function createFixtureRepo(options: FixtureRepoOptions = {}): string {
   return repo
 }
 
+export function appendLinearCommits(repo: string, count: number): void {
+  const stream: string[] = []
+  for (let commit = 0; commit < count; commit++) {
+    const content = `commit ${commit}\n`
+    const message = `commit ${commit}`
+    const mark = commit + 1
+    stream.push(`blob\nmark :${mark}\ndata ${Buffer.byteLength(content)}\n${content}\n`)
+    stream.push(
+      'commit refs/heads/main\n' +
+        'author Test <test@example.com> 1700000000 +0000\n' +
+        'committer Test <test@example.com> 1700000000 +0000\n' +
+        `data ${Buffer.byteLength(message)}\n${message}\n` +
+        (commit === 0 ? 'from refs/heads/main^0\n' : '') +
+        `M 100644 :${mark} file.txt\n\n`
+    )
+  }
+  execFileSync('git', ['fast-import', '--quiet'], {
+    cwd: repo,
+    input: stream.join(''),
+    stdio: ['pipe', 'ignore', 'ignore']
+  })
+  execFileSync('git', ['reset', '--hard', 'main'], { cwd: repo, stdio: 'ignore' })
+}
+
 export function createFixtureRepoWithRemote(): { repo: string; remote: string } {
   const remoteBase = fs.mkdtempSync(fixturePath('remote-'))
   const remote = path.join(remoteBase, 'remote.git')
@@ -242,15 +266,18 @@ export interface LifecycleSnapshot {
 }
 
 export interface AppHarness {
+  readonly deploymentName: string
   readonly page: Page
   readonly globalGitConfigPath: string
-  app(): ElectronApplication
   close(): Promise<void>
+  isWindowVisible(): Promise<boolean>
+  launchDurationMilliseconds(): number
   launchCount(): number
   mainProcessId(): Promise<number>
   inspectLifecycle(): Promise<LifecycleSnapshot>
   reload(): Promise<Page>
   restart(): Promise<Page>
+  resizeWindow(width: number, height: number): Promise<void>
   seed(state: SeedState): Promise<void>
   openRepo(
     repo: string,
@@ -264,6 +291,45 @@ export interface AppHarness {
     expected: ExpectedToast,
     trigger: () => Promise<unknown> | unknown
   ): Promise<RecordedToast>
+}
+
+export interface DeploymentAdapterContext {
+  fixtureRoot: string
+  globalGitConfigPath: string
+  mainEntry: string
+  windowSize: { width: number; height: number }
+  trackPath(path: string): void
+}
+
+export interface DeploymentAdapter {
+  name: string
+  createHarness(context: DeploymentAdapterContext): Promise<AppHarness>
+}
+
+export async function setWindowSize(
+  harness: Pick<AppHarness, 'resizeWindow'>,
+  width: number,
+  height: number
+): Promise<void> {
+  await harness.resizeWindow(width, height)
+}
+
+async function loadDeploymentAdapter(): Promise<DeploymentAdapter | undefined> {
+  const modulePath = process.env.REBASE_E2E_DEPLOYMENT_ADAPTER
+  if (!modulePath) {
+    return undefined
+  }
+  const imported = (await import(pathToFileURL(path.resolve(modulePath)).href)) as {
+    default?: DeploymentAdapter
+    deploymentAdapter?: DeploymentAdapter
+  }
+  const adapter = imported.default ?? imported.deploymentAdapter
+  if (!adapter || typeof adapter.name !== 'string' || typeof adapter.createHarness !== 'function') {
+    throw new Error(
+      `deployment adapter ${modulePath} must export a DeploymentAdapter as default or deploymentAdapter`
+    )
+  }
+  return adapter
 }
 
 interface StoreOverrides {
@@ -414,11 +480,66 @@ export const test = base.extend<{ harness: AppHarness }>({
     fs.writeFileSync(globalGitConfigPath, '')
     activeFixtureRoot = fixtureRoot
     const externalFixturePaths = new Set<string>()
+    const trackPath = (trackedPath: string): void => {
+      if (trackedPath !== fixtureRoot && !trackedPath.startsWith(fixtureRoot + path.sep)) {
+        externalFixturePaths.add(trackedPath)
+      }
+    }
+    if (process.env.REBASE_E2E_DEPLOYMENT_ADAPTER) {
+      let harness: AppHarness | undefined
+      let executionError: unknown
+      let executionFailed = false
+      let cleanupError: unknown
+      let cleanupFailed = false
+      try {
+        const deploymentAdapter = await loadDeploymentAdapter()
+        if (!deploymentAdapter) {
+          throw new Error('deployment adapter is unavailable')
+        }
+        harness = await deploymentAdapter.createHarness({
+          fixtureRoot,
+          globalGitConfigPath,
+          mainEntry,
+          windowSize: { width: launchWindowWidth, height: launchWindowHeight },
+          trackPath
+        })
+        await use(harness)
+      } catch (error) {
+        executionError = error
+        executionFailed = true
+      }
+      if (harness) {
+        try {
+          await harness.close()
+        } catch (error) {
+          cleanupError = error
+          cleanupFailed = true
+        }
+      }
+      try {
+        removePaths([...externalFixturePaths, fixtureRoot])
+      } catch (error) {
+        cleanupError ??= error
+        cleanupFailed = true
+      }
+      if (activeFixtureRoot === fixtureRoot) {
+        activeFixtureRoot = undefined
+      }
+      if (executionFailed) {
+        throw executionError
+      }
+      if (cleanupFailed && testInfo.status === testInfo.expectedStatus) {
+        throw cleanupError
+      }
+      return
+    }
     let electronApp: ElectronApplication | undefined
     let page: Page | undefined
     let launches = 0
+    let launchDurationMilliseconds = 0
 
     const launch = async (): Promise<Page> => {
+      const startedAt = performance.now()
       launches += 1
       const electronEnv = {
         ...process.env,
@@ -452,8 +573,11 @@ export const test = base.extend<{ harness: AppHarness }>({
         installDemoPacing(page)
       }
       await installToastRecorder(page)
-      await setWindowSize(electronApp, launchWindowWidth, launchWindowHeight)
-      return waitForPage(page)
+      await setElectronWindowSize(electronApp, launchWindowWidth, launchWindowHeight)
+      const readyPage = await waitForPage(page)
+      await readyPage.locator('#root > *').first().waitFor({ state: 'visible', timeout: 10_000 })
+      launchDurationMilliseconds = performance.now() - startedAt
+      return readyPage
     }
 
     const currentApp = (): ElectronApplication => {
@@ -521,12 +645,18 @@ export const test = base.extend<{ harness: AppHarness }>({
     await launch()
 
     const harness: AppHarness = {
+      deploymentName: 'electron',
       get page() {
         return currentPage()
       },
       globalGitConfigPath,
-      app: currentApp,
       close: closeApp,
+      isWindowVisible: () =>
+        currentApp().evaluate(({ BrowserWindow }) => {
+          const window = BrowserWindow.getAllWindows()[0]
+          return window ? window.isVisible() : false
+        }),
+      launchDurationMilliseconds: () => launchDurationMilliseconds,
       launchCount: () => launches,
       mainProcessId: async () => (await inspectLifecycle()).mainPid,
       inspectLifecycle,
@@ -538,14 +668,8 @@ export const test = base.extend<{ harness: AppHarness }>({
         await closeApp()
         return launch()
       },
-      track: (trackedPath) => {
-        if (
-          trackedPath !== fixtureRoot &&
-          !trackedPath.startsWith(fixtureRoot + path.sep)
-        ) {
-          externalFixturePaths.add(trackedPath)
-        }
-      },
+      resizeWindow: (width, height) => setElectronWindowSize(currentApp(), width, height),
+      track: trackPath,
       seed: async (state) => {
         const workspaces = state.workspaces ?? []
         const activeWorkspace = workspaces.at(-1) ?? null
