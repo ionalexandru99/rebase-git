@@ -3,15 +3,10 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    name: 'main-integration',
+    name: 'server',
     environment: 'node',
     globals: true,
-    include: [
-      'src/main/**/*.integration.test.{ts,tsx}',
-      'src/electron/**/*.integration.test.{ts,tsx}'
-    ],
-    testTimeout: 20_000,
-    hookTimeout: 20_000
+    include: ['src/server/**/*.test.{ts,tsx}', 'src/common/__tests__/runtime-dependencies.test.ts']
   },
   resolve: {
     alias: {

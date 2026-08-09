@@ -8,6 +8,7 @@ export default defineConfig({
     globals: true,
     include: [
       'src/main/**/*.test.{ts,tsx}',
+      'src/electron/**/*.test.{ts,tsx}',
       'src/shared/**/*.test.{ts,tsx}',
       'scripts/**/*.test.mjs',
     ],
@@ -21,6 +22,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      '@common': path.resolve(__dirname, './src/common'),
       '@shared': path.resolve(__dirname, './src/shared'),
     },
   },

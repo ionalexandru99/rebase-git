@@ -11,6 +11,14 @@ async function runSmokeTest() {
   const electronBin = findElectron(rootDir)
   const mainJs = resolve(rootDir, 'out/main/index.js')
   const rendererHtml = resolve(rootDir, 'out/renderer/index.html')
+  const runtimeEntries = [
+    'out/agent/index.js',
+    'out/server/index.js',
+    'out/web/index.html',
+  ]
+  for (const runtimeEntry of runtimeEntries) {
+    accessSync(resolve(rootDir, runtimeEntry), constants.R_OK)
+  }
   const html = readFileSync(rendererHtml, 'utf8')
   if (!html.includes('style="background-color: #131313"')) {
     throw new Error('Packaged document must paint the dark background before styles load')

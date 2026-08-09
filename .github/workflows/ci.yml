@@ -161,6 +161,9 @@ jobs:
         shell: bash
         run: |
           test -f out/main/index.js
+          test -f out/agent/index.js
+          test -f out/server/index.js
+          test -f out/web/index.html
           preload=""
           for candidate in out/preload/index.js out/preload/index.mjs out/preload/index.cjs; do
             if [ -f "$candidate" ]; then
