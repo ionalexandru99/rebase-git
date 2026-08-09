@@ -20,7 +20,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html'],
       reportsDirectory: './coverage/sidecar',
-      include: ['src/sidecar/**']
+      include: ['src/agent/**', 'src/sidecar/**']
     }
   },
   resolve: {

@@ -19,6 +19,7 @@ export function startLegacySidecar(parentPort: SidecarParentPort): void {
   applyNonInteractiveGitEnv(process.env)
   const removeTrackedChildShutdownHooks = installTrackedChildShutdownHooks()
   let server: Server | undefined
+  let startRequested = false
   let shutdownPromise: Promise<void> | undefined
 
   function post(message: SidecarMessage): void {
@@ -26,6 +27,12 @@ export function startLegacySidecar(parentPort: SidecarParentPort): void {
   }
 
   function start(command: SidecarStartMessage): void {
+    if (startRequested) {
+      post({ type: 'error', message: 'Sidecar has already been started' })
+      return
+    }
+    startRequested = true
+
     try {
       server = createSidecarServer(command.token)
       server.on('error', (error) => {
