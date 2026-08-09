@@ -180,7 +180,7 @@ jobs:
 
       - name: End-to-end tests (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a pnpm exec playwright test
+        run: pnpm exec playwright test
 
       - name: End-to-end tests
         if: runner.os != 'Linux'

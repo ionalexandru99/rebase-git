@@ -21,7 +21,7 @@ test('keeps the four-column shell usable at the minimum window size', async ({ h
   page = await harness.reload()
 
   try {
-    await setWindowSize(harness.app(), 800, 600)
+    await setWindowSize(harness, 800, 600)
 
     await expect(page.getByRole('complementary', { name: 'Branches' })).toBeVisible()
     await expect(page.getByRole('searchbox', { name: 'Filter refs' })).toBeVisible()
@@ -56,7 +56,7 @@ test('keeps the four-column shell usable at the minimum window size', async ({ h
     expect(shellFits.detailsWidth).toBeGreaterThan(0)
     expect(shellFits.commitsWidth).toBeGreaterThan(0)
 
-    await setWindowSize(harness.app(), 1280, 800)
+    await setWindowSize(harness, 1280, 800)
     await page.getByRole('button', { name: 'Repository actions' }).click()
     await page.getByRole('menuitem', { name: 'Reset layout' }).click()
 
@@ -67,7 +67,7 @@ test('keeps the four-column shell usable at the minimum window size', async ({ h
       })
       .toBe('320')
   } finally {
-    await setWindowSize(harness.app(), LAUNCH_WINDOW.width, LAUNCH_WINDOW.height)
+    await setWindowSize(harness, LAUNCH_WINDOW.width, LAUNCH_WINDOW.height)
   }
 })
 
