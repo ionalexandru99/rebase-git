@@ -1,15 +1,8 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import '../renderer/index.css'
-import { WebRuntimeUnavailable } from './WebRuntimeUnavailable'
+import { startRuntimeRenderer } from './bootstrap'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {
   throw new Error('Root element not found')
 }
 
-createRoot(rootElement).render(
-  <StrictMode>
-    <WebRuntimeUnavailable />
-  </StrictMode>
-)
+void startRuntimeRenderer(rootElement)
