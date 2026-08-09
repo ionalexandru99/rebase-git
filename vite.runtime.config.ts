@@ -18,8 +18,20 @@ export default defineConfig(({ mode }) => {
     ...Object.keys(packageJson.dependencies),
     ...Object.keys(packageJson.devDependencies)
   ]
+  const externalModules = new Set([
+    ...builtinModules,
+    ...builtinModules.map((moduleName) => `node:${moduleName}`)
+  ])
+  const isExternalModule = (moduleId: string) =>
+    externalModules.has(moduleId) ||
+    externalPackages.some(
+      (packageName) => moduleId === packageName || moduleId.startsWith(`${packageName}/`)
+    )
 
   return {
+    define: {
+      __REBASE_PRODUCT_VERSION__: JSON.stringify(packageJson.version)
+    },
     resolve: {
       alias: {
         '@common': path.resolve('src/common'),
@@ -37,11 +49,7 @@ export default defineConfig(({ mode }) => {
         fileName: 'index'
       },
       rollupOptions: {
-        external: [
-          ...builtinModules,
-          ...builtinModules.map((moduleName) => `node:${moduleName}`),
-          ...externalPackages
-        ]
+        external: isExternalModule
       }
     }
   }

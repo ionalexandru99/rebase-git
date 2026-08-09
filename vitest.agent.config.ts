@@ -3,16 +3,20 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    name: 'server',
+    name: 'agent',
     environment: 'node',
     globals: true,
-    include: [
-      'tests/agent-connection/contract*.test.ts',
-      'tests/agent-connection/server*.test.ts',
-      'tests/architecture/runtime-dependencies.test.ts'
-    ],
+    include: ['tests/agent-connection/agent*.test.ts'],
+    minWorkers: 1,
+    maxWorkers: 2,
     testTimeout: 15_000,
-    hookTimeout: 30_000
+    hookTimeout: 30_000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      reportsDirectory: './coverage/agent',
+      include: ['src/agent/**']
+    }
   },
   resolve: {
     alias: {

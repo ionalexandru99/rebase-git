@@ -40,7 +40,7 @@ export default defineConfig(({ mode }) => ({
       rollupOptions: {
         input: {
           index: path.resolve('src/electron/main.ts'),
-          sidecar: path.resolve('src/agent/index.ts')
+          sidecar: path.resolve('src/sidecar/index.ts')
         }
       }
     }

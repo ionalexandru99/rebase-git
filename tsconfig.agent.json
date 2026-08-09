@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.node.json",
-  "include": ["src/agent/**/*", "src/sidecar/**/*", "src/common/**/*", "src/shared/**/*"]
+  "include": ["src/agent/**/*", "src/common/features/agent-connection/**/*"]
 }

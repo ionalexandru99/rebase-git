@@ -4,15 +4,16 @@ import path from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
-type Runtime = 'agent' | 'common' | 'electron' | 'server' | 'web'
+type Runtime = 'agent' | 'common' | 'electron' | 'server' | 'sidecar' | 'web'
 
 const repositoryRoot = process.cwd()
 const sourceRoot = path.join(repositoryRoot, 'src')
 const runtimeDirectories: Record<Runtime, string[]> = {
-  agent: ['agent', 'sidecar'],
+  agent: ['agent'],
   common: ['common', 'shared'],
   electron: ['electron', 'main', 'preload'],
   server: ['server'],
+  sidecar: ['sidecar'],
   web: ['web', 'renderer']
 }
 const runtimeByDirectory = new Map(
@@ -93,7 +94,16 @@ function collectDependencyViolations(): string[] {
       if (!targetPath) {
         continue
       }
+      if (targetPath.includes(`${path.sep}__tests__${path.sep}`)) {
+        violations.push(`${relativeSource} imports test code '${specifier}'`)
+      }
       const targetRuntime = runtimeForPath(targetPath)
+      if (
+        relativeSource.startsWith(`src${path.sep}agent${path.sep}`) &&
+        targetPath.includes(`${path.sep}sidecar${path.sep}`)
+      ) {
+        violations.push(`${relativeSource} imports legacy Agent implementation '${specifier}'`)
+      }
       if (targetRuntime && targetRuntime !== sourceRuntime && targetRuntime !== 'common') {
         violations.push(
           `${relativeSource} (${sourceRuntime}) imports ${path.relative(repositoryRoot, targetPath)} (${targetRuntime})`
