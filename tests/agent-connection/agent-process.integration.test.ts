@@ -291,28 +291,33 @@ describe.sequential('Agent process boundary', () => {
     expect(agent.stderr()).toContain('agent-stopped')
   })
 
-  it('gracefully closes scoped resources after a signal and writes no extra stdout', async () => {
-    const agent = await startAgent([
-      '--orphan-timeout-ms',
-      '5000',
-      '--shutdown-grace-ms',
-      '50'
-    ])
-    const claim = await claimAgent(agent)
-    const { sessionToken } = await claim.json()
-    await runAgentRpc(agent, sessionToken, (client) =>
-      client.openAgentSession({ agentProtocol: AGENT_PROTOCOL })
-    )
-    agent.child.kill('SIGTERM')
-    const exit = await agent.waitForExit()
-    const log = agent.stderr()
+  it.runIf(process.platform !== 'win32')(
+    'gracefully closes scoped resources after a signal and writes no extra stdout',
+    async () => {
+      const agent = await startAgent([
+        '--orphan-timeout-ms',
+        '5000',
+        '--shutdown-grace-ms',
+        '50'
+      ])
+      const claim = await claimAgent(agent)
+      const { sessionToken } = await claim.json()
+      await runAgentRpc(agent, sessionToken, (client) =>
+        client.openAgentSession({ agentProtocol: AGENT_PROTOCOL })
+      )
+      agent.child.kill('SIGTERM')
+      const exit = await agent.waitForExit()
+      const log = agent.stderr()
 
-    expect(exit).toEqual({ code: 0, signal: null })
-    expect(log).toContain('agent-signal-received')
-    expect(log).toContain('agent-stopped')
-    expect(log).not.toContain(agent.ready.bootstrapSecret)
-    expect(log).not.toContain(sessionToken)
-    expect(log.trimEnd().split('\n').every((line) => Buffer.byteLength(line) < 8 * 1024)).toBe(true)
-    expect(agent.stdoutAfterReady()).toBe('')
-  })
+      expect(exit).toEqual({ code: 0, signal: null })
+      expect(log).toContain('agent-signal-received')
+      expect(log).toContain('agent-stopped')
+      expect(log).not.toContain(agent.ready.bootstrapSecret)
+      expect(log).not.toContain(sessionToken)
+      expect(log.trimEnd().split('\n').every((line) => Buffer.byteLength(line) < 8 * 1024)).toBe(
+        true
+      )
+      expect(agent.stdoutAfterReady()).toBe('')
+    }
+  )
 })

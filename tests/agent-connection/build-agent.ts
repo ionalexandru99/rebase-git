@@ -4,6 +4,7 @@ export function buildAgent(): void {
   const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
   try {
     execFileSync(command, ['build:agent'], {
+      maxBuffer: 32 * 1024 * 1024,
       stdio: 'pipe',
       shell: process.platform === 'win32'
     })
