@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import type { CloneProgress, LogChunk } from '@shared/schemas/git'
 import { Context, Effect, ManagedRuntime } from 'effect'
 import { utilityProcess } from 'electron'
-import type { SidecarMessage } from '../../sidecar/server/protocol'
+import type { SidecarMessage } from '../../common/legacy-sidecar-process'
 import {
   createSidecarLifecycleLayer,
   type SidecarLifecycle,

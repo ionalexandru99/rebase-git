@@ -16,12 +16,15 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/renderer/*"],
+      "@common/*": ["./src/common/*"],
       "@main/*": ["./src/main/*"],
       "@shared/*": ["./src/shared/*"]
     }
   },
   "include": [
     "src/renderer/**/*",
+    "src/web/**/*",
+    "src/common/**/*",
     "src/preload/**/*",
     "src/shared/**/*",
     "src/test/**/*",

@@ -7,6 +7,7 @@ import type { Plugin } from 'vite'
 import { injectContentSecurityPolicyMeta } from './src/main/app/csp'
 
 const sharedAlias = {
+  '@common': path.resolve('src/common'),
   '@shared': path.resolve('src/shared')
 }
 
@@ -38,8 +39,8 @@ export default defineConfig(({ mode }) => ({
     build: {
       rollupOptions: {
         input: {
-          index: path.resolve('src/main/index.ts'),
-          sidecar: path.resolve('src/sidecar/index.ts')
+          index: path.resolve('src/electron/main.ts'),
+          sidecar: path.resolve('src/agent/index.ts')
         }
       }
     }
@@ -51,6 +52,9 @@ export default defineConfig(({ mode }) => ({
     },
     build: {
       rollupOptions: {
+        input: {
+          index: path.resolve('src/electron/preload.ts')
+        },
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs'
@@ -59,7 +63,9 @@ export default defineConfig(({ mode }) => ({
     }
   },
   renderer: {
+    root: path.resolve('src/web'),
     plugins: [packagedCspPlugin(), tailwindcss(), react()],
+    publicDir: path.resolve('src/renderer/public'),
     worker: {
       format: 'es'
     },
@@ -80,7 +86,7 @@ export default defineConfig(({ mode }) => ({
     build: {
       rollupOptions: {
         input: {
-          index: path.resolve('src/renderer/index.html')
+          index: path.resolve('src/web/index.html')
         },
         onwarn(warning, defaultHandler) {
           if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {

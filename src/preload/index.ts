@@ -1,12 +1,7 @@
 import { Channel } from '@shared/channels'
-import type { OpenRepo, ScanForRepos } from '@shared/rpc'
-import type { RpcEncodedResult } from '@shared/rpc-result'
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import type {
-  BuildInfo,
-  CancelLogStreamResponse,
   CloneProgressEvent,
-  CloneRepoResponse,
   CloneRequest,
   PersistedTabs,
   PullDivergedStrategy,
@@ -14,74 +9,17 @@ import type {
   RendererErrorReport,
   ReopenRepositoriesOnLaunch,
   SidebarPrefs,
-  StartLogStreamResponse,
   UpdateChannel,
   UpdatePreferences,
-  UpdaterActionResult,
   UpdaterState
 } from '@shared/schemas/ipc'
 import type { LogStreamOptions } from '@shared/schemas/log-stream'
 import { contextBridge, ipcRenderer } from 'electron'
+import type { IElectronAPI } from '../common/desktop-api'
 
 export type LogChunkEvent = LogChunk
+export type { IElectronAPI } from '../common/desktop-api'
 export type { RepoChangedEvent }
-
-type OpenRepoResponse = RpcEncodedResult<typeof OpenRepo.successSchema, typeof OpenRepo.errorSchema>
-type ScanForReposResponse = RpcEncodedResult<
-  typeof ScanForRepos.successSchema,
-  typeof ScanForRepos.errorSchema
->
-
-export interface IElectronAPI {
-  platform: NodeJS.Platform
-  selectFolder: () => Promise<string | null>
-  openRepo: (path: string, owner: number) => Promise<OpenRepoResponse>
-  closeRepo: (path: string, owner: number) => Promise<void>
-  disownRepo: (path: string, owner: number) => Promise<void>
-  startLogStream: (repoPath: string, options?: LogStreamOptions) => Promise<StartLogStreamResponse>
-  cancelLogStream: (repoPath?: string) => Promise<CancelLogStreamResponse>
-  onLogChunk: (cb: (chunk: LogChunk) => void) => () => void
-  onRepoChanged: (cb: (evt: RepoChangedEvent) => void) => () => void
-  onSidecarRestarted: (cb: () => void) => () => void
-  getRecentRepos: () => Promise<string[]>
-  getSidebarPrefs: () => Promise<SidebarPrefs>
-  setSidebarPrefs: (prefs: SidebarPrefs) => Promise<void>
-  getRefTreeToggles: () => Promise<RefTreeToggles>
-  setRefTreeToggles: (toggles: RefTreeToggles) => Promise<void>
-  getPersistedTabs: () => Promise<PersistedTabs>
-  setPersistedTabs: (state: PersistedTabs) => Promise<void>
-  getListPaneWidth: (repoPath: string) => Promise<number>
-  setListPaneWidth: (repoPath: string, width: number) => Promise<void>
-  getPullDivergedStrategy: () => Promise<PullDivergedStrategy>
-  setPullDivergedStrategy: (strategy: PullDivergedStrategy) => Promise<void>
-  getReopenRepositoriesOnLaunch: () => Promise<ReopenRepositoriesOnLaunch>
-  setReopenRepositoriesOnLaunch: (reopen: ReopenRepositoriesOnLaunch) => Promise<void>
-  getBuildInfo: () => Promise<BuildInfo>
-  revealLogsFolder: () => Promise<void>
-  openReleaseNotes: () => Promise<void>
-  getUpdaterState: () => Promise<UpdaterState>
-  onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void
-  checkForUpdates: () => Promise<UpdaterActionResult>
-  downloadUpdate: () => Promise<UpdaterActionResult>
-  installUpdate: () => Promise<UpdaterActionResult>
-  getUpdatePreferences: () => Promise<UpdatePreferences>
-  setUpdatePreferences: (preferences: UpdatePreferences) => Promise<void>
-  getUpdateChannel: () => Promise<UpdateChannel>
-  setUpdateChannel: (channel: UpdateChannel) => Promise<UpdaterActionResult>
-  getWorkspaces: () => Promise<string[]>
-  addWorkspace: (path: string) => Promise<string[]>
-  removeWorkspace: (path: string) => Promise<string[]>
-  getActiveWorkspace: () => Promise<string | null>
-  setActiveWorkspace: (path: string | null) => Promise<void>
-  getOnboardingComplete: () => Promise<boolean>
-  setOnboardingComplete: (complete: boolean) => Promise<void>
-  scanForRepos: (dirPath: string) => Promise<ScanForReposResponse>
-  cloneRepo: (request: CloneRequest) => Promise<CloneRepoResponse>
-  cancelClone: (cloneId: number) => Promise<void>
-  onCloneProgress: (cb: (event: CloneProgressEvent) => void) => () => void
-  sidecarRequest: (op: string, body: Record<string, unknown>) => Promise<unknown>
-  reportRendererError: (report: RendererErrorReport) => Promise<void>
-}
 
 const api: IElectronAPI = {
   platform: process.platform,
@@ -167,9 +105,3 @@ const api: IElectronAPI = {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
-
-declare global {
-  interface Window {
-    electronAPI: IElectronAPI
-  }
-}

@@ -2,7 +2,7 @@ import { clampListPaneWidth, LIST_PANE_DEFAULT_WIDTH } from '@shared/list-layout
 import type { LogChunk, RepoChangedEvent } from '@shared/schemas/git'
 import type { CloneProgressEvent } from '@shared/schemas/ipc'
 import type { LogStreamOptions } from '@shared/schemas/log-stream'
-import type { IElectronAPI } from '../../preload'
+import type { IElectronAPI } from '../../common/desktop-api'
 import { createManualSidecarRequest } from './electron-api-sidecar'
 import {
   createManualGitState,

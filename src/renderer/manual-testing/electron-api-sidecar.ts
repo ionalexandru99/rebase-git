@@ -1,5 +1,5 @@
 import type { RepoChangedEvent, StatusFileCode } from '@shared/schemas/git'
-import type { IElectronAPI } from '../../preload'
+import type { IElectronAPI } from '../../common/desktop-api'
 import {
   addRef,
   bodyString,
