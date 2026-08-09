@@ -139,6 +139,39 @@ test('keeps the author, sha and date legible on a wide graph while scrolling', a
   expect(dateBox.x).toBeGreaterThanOrEqual(containerBox.x)
 })
 
+test('keeps ref badges out of the pinned commit metadata', async ({ harness }) => {
+  const finalBranch = 't3code/fix-conventional-commit-guidance'
+  const repo = createFixtureRepo({
+    branches: ['release/nightly-2026.08.09', 'worktree/issue-216', finalBranch]
+  })
+  const page = await harness.openRepo(repo, { listPaneWidths: { [repo]: 700 } })
+
+  const row = page.getByTestId('commit-row').filter({ hasText: 'initial' })
+  const finalBadge = row.getByText(finalBranch, { exact: true })
+  const metadata = row.getByTestId('commit-row-pinned-meta')
+  await expect(finalBadge).toBeVisible({ timeout: 10_000 })
+  await expect(metadata).toBeVisible()
+
+  const metadataBox = await metadata.boundingBox()
+  if (!metadataBox) {
+    throw new Error('expected a bounding box for the commit metadata')
+  }
+  const visibleBadgeBox = await finalBadge.evaluate((element) => {
+    return new Promise<{ right: number; width: number }>((resolve) => {
+      const observer = new IntersectionObserver(([entry]) => {
+        observer.disconnect()
+        resolve({
+          right: entry?.intersectionRect.right ?? 0,
+          width: entry?.intersectionRect.width ?? 0
+        })
+      })
+      observer.observe(element)
+    })
+  })
+  expect(visibleBadgeBox.width).toBeGreaterThan(0)
+  expect(visibleBadgeBox.right).toBeLessThanOrEqual(metadataBox.x)
+})
+
 test('opens the row context menu when right-clicking over the pinned metadata', async ({
   harness
 }) => {
