@@ -1,6 +1,9 @@
 import { Deferred, Effect, Ref, type Scope } from 'effect4'
-import type { AgentConnectionStatus, AgentProcessExit } from './agent-connection'
-import { AgentConnectionFailure, type AgentProcessMonitorError } from './agent-connection-failure'
+import type { AgentConnectionStatus, AgentProcessExit } from '../agent-connection'
+import {
+  AgentConnectionFailure,
+  type AgentProcessMonitorError
+} from '../failure/agent-connection-failure'
 
 export interface AgentLiveness {
   readonly status: Effect.Effect<AgentConnectionStatus>

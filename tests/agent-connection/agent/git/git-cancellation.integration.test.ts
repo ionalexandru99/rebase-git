@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Effect, Fiber } from 'effect4'
 import { describe, expect, it } from 'vitest'
-import { discoverGit } from '../../src/agent/features/agent-connection/git/discover-git'
-import { terminateProcessTree } from '../../src/agent/features/agent-connection/git/process-tree'
+import { discoverGit } from '../../../../src/agent/features/agent-connection/git/discover-git'
+import { terminateProcessTree } from '../../../../src/agent/features/agent-connection/git/process-tree'
 
 async function waitForFile(filePath: string): Promise<void> {
   const deadline = Date.now() + 2_000

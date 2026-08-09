@@ -7,11 +7,11 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: [
-      'tests/agent-connection/contract*.test.ts',
-      'tests/agent-connection/server*.test.ts',
+      'tests/agent-connection/common/**/*.test.ts',
+      'tests/agent-connection/server/**/*.test.ts',
       'tests/architecture/runtime-dependencies.test.ts'
     ],
-    globalSetup: ['tests/agent-connection/server-global-setup.ts'],
+    globalSetup: ['tests/agent-connection/server/global-setup.ts'],
     minWorkers: 1,
     maxWorkers: 2,
     testTimeout: 15_000,

@@ -2,13 +2,13 @@ import { AGENT_LOOPBACK_HOST, type AgentReadyRecord } from '@common/features/age
 import { Effect, type Scope } from 'effect4'
 import { FetchHttpClient, HttpClient } from 'effect4/unstable/http'
 import type { AgentConnection, ConnectAgentOptions } from './agent-connection'
-import type { AgentConnectionFailure } from './agent-connection-failure'
-import { acquireAgentLiveness } from './agent-liveness'
-import { checkAgentHealth } from './check-agent-health'
-import { claimAgentAuthority } from './claim-agent-authority'
 import { dispatchAgentShutdown } from './dispatch-agent-shutdown'
-import { establishAgentSession } from './establish-agent-session'
+import type { AgentConnectionFailure } from './failure/agent-connection-failure'
+import { acquireAgentLiveness } from './lifecycle/agent-liveness'
+import { checkAgentHealth } from './lifecycle/check-agent-health'
 import { observeAgentActivity } from './observe-agent-activity'
+import { claimAgentAuthority } from './session/claim-agent-authority'
+import { establishAgentSession } from './session/establish-agent-session'
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000
 const DEFAULT_SAFE_QUERY_RETRIES = 1

@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   AgentSequenceGap,
   connectAgent
-} from '../../src/server/features/agent-connection'
-import { acquireAgentProcess } from './server-process-harness'
+} from '../../../src/server/features/agent-connection'
+import { acquireAgentProcess } from './agent-process-harness'
 
 describe('Server Agent safe recovery', () => {
   it('retries session negotiation after one transport break', async () => {

@@ -2,7 +2,7 @@ import {
   AGENT_PROTOCOL,
   AgentRpcs,
   OpenAgentSessionSuccessSchema
-} from '../../src/common/features/agent-connection'
+} from '../../../src/common/features/agent-connection'
 import { Context, Effect, Schema } from 'effect4'
 import { describe, expect, it } from 'vitest'
 

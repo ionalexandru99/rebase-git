@@ -1,6 +1,6 @@
 import { Effect } from 'effect4'
 import { describe, expect, it, vi } from 'vitest'
-import { makeAgentLogger } from '../../src/agent/features/agent-connection/logging/redacted-agent-logger'
+import { makeAgentLogger } from '../../../../src/agent/features/agent-connection/logging/redacted-agent-logger'
 
 describe('Agent stderr logger', () => {
   it('redacts registered secrets before enforcing the byte limit', async () => {

@@ -5,8 +5,11 @@ import {
   AgentReadyRecordSchema
 } from '@common/features/agent-connection'
 import { Cause, Effect, Exit, Schema } from 'effect4'
-import type { AgentProcessExit } from './agent-connection'
-import { AgentConnectionFailure, type AgentProcessMonitorError } from './agent-connection-failure'
+import type { AgentProcessExit } from '../agent-connection'
+import {
+  AgentConnectionFailure,
+  type AgentProcessMonitorError
+} from '../failure/agent-connection-failure'
 
 const MAX_ANNOUNCEMENT_BYTES = 4096
 

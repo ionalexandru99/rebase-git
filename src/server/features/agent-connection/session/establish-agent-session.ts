@@ -8,13 +8,13 @@ import {
 import { Effect, Layer, type Scope } from 'effect4'
 import { HttpClient, HttpClientRequest } from 'effect4/unstable/http'
 import { RpcClient, type RpcClientError, RpcSerialization } from 'effect4/unstable/rpc'
-import type { AgentConnectionFailure } from './agent-connection-failure'
-import type { AgentLiveness } from './agent-liveness'
+import type { AgentConnectionFailure } from '../failure/agent-connection-failure'
 import {
   classifyAgentCommunicationFailure,
   isRecoverableAgentCommunicationFailure,
   malformedAgentCommunication
-} from './classify-agent-communication-failure'
+} from '../failure/classify-agent-communication-failure'
+import type { AgentLiveness } from '../lifecycle/agent-liveness'
 
 export type AgentInterfaceClient = RpcClient.FromGroup<
   typeof AgentRpcs,

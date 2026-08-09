@@ -5,7 +5,7 @@ import {
   AGENT_SESSION_AUTHORIZATION_SCHEME,
   AgentRpcs,
   CLAIM_AGENT_PATH
-} from '../../src/common/features/agent-connection'
+} from '../../../src/common/features/agent-connection'
 import { Effect, Layer } from 'effect4'
 import { FetchHttpClient, HttpClient, HttpClientRequest } from 'effect4/unstable/http'
 import { RpcClient, type RpcClientError, RpcSerialization } from 'effect4/unstable/rpc'

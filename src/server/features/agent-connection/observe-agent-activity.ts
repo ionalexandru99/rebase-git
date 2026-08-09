@@ -1,14 +1,14 @@
 import type { AgentObservation } from '@common/features/agent-connection'
 import { Cause, Effect, Ref, Stream } from 'effect4'
-import { type AgentConnectionFailure, AgentSequenceGap } from './agent-connection-failure'
-import type { AgentLiveness } from './agent-liveness'
+import { type AgentConnectionFailure, AgentSequenceGap } from './failure/agent-connection-failure'
 import {
   classifyAgentCommunicationFailure,
   isRecoverableAgentCommunicationFailure,
   malformedAgentCommunication,
   shouldDisconnectAfterCommunicationFailure
-} from './classify-agent-communication-failure'
-import type { AgentInterfaceClient } from './establish-agent-session'
+} from './failure/classify-agent-communication-failure'
+import type { AgentLiveness } from './lifecycle/agent-liveness'
+import type { AgentInterfaceClient } from './session/establish-agent-session'
 
 type RepositoryActivityFailure = AgentConnectionFailure | AgentSequenceGap
 type SequenceAcceptance =

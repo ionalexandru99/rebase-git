@@ -1,7 +1,7 @@
 import { Effect, Fiber, Option, Stream } from 'effect4'
 import { describe, expect, it } from 'vitest'
-import { connectAgent } from '../../src/server/features/agent-connection'
-import { acquireAgentProcess } from './server-process-harness'
+import { connectAgent } from '../../../src/server/features/agent-connection'
+import { acquireAgentProcess } from './agent-process-harness'
 
 describe('Server Agent connection process ownership', () => {
   it('owns one scoped session through health, observation, and shutdown', async () => {

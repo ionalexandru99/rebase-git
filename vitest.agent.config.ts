@@ -6,7 +6,7 @@ export default defineConfig({
     name: 'agent',
     environment: 'node',
     globals: true,
-    include: ['tests/agent-connection/agent*.test.ts'],
+    include: ['tests/agent-connection/agent/**/*.test.ts'],
     minWorkers: 1,
     maxWorkers: 2,
     testTimeout: 15_000,

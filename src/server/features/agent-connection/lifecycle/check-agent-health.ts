@@ -1,13 +1,13 @@
 import { Effect } from 'effect4'
-import type { AgentConnectionFailure } from './agent-connection-failure'
-import type { AgentLiveness } from './agent-liveness'
+import type { AgentConnectionFailure } from '../failure/agent-connection-failure'
 import {
   classifyAgentCommunicationFailure,
   isRecoverableAgentCommunicationFailure,
   malformedAgentCommunication,
   shouldDisconnectAfterCommunicationFailure
-} from './classify-agent-communication-failure'
-import type { AgentInterfaceClient } from './establish-agent-session'
+} from '../failure/classify-agent-communication-failure'
+import type { AgentInterfaceClient } from '../session/establish-agent-session'
+import type { AgentLiveness } from './agent-liveness'
 
 export function checkAgentHealth(
   client: AgentInterfaceClient,

@@ -5,11 +5,11 @@ export type {
   AgentProcessExit,
   ConnectAgentOptions
 } from './agent-connection'
+export { connectAgent } from './connect-agent'
 export {
   AgentConnectionFailure,
   type AgentConnectionFailureReason,
   AgentProcessMonitorError,
   AgentSequenceGap
-} from './agent-connection-failure'
-export { connectAgent } from './connect-agent'
-export { readAgentAnnouncement } from './read-agent-announcement'
+} from './failure/agent-connection-failure'
+export { readAgentAnnouncement } from './lifecycle/read-agent-announcement'

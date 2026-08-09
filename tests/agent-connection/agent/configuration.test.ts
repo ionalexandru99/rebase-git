@@ -1,7 +1,7 @@
 import {
   AgentConfigurationFailure,
   parseAgentConfiguration
-} from '../../src/agent/features/agent-connection/configuration'
+} from '../../../src/agent/features/agent-connection/configuration'
 import { describe, expect, it } from 'vitest'
 
 describe('Agent configuration', () => {

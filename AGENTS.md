@@ -168,7 +168,10 @@ until its slice migrates; do not mix Effect versions within one new feature.
   wrapper classes, and abstractions whose only purpose is making tests easier.
 - **Never block an event loop on Git.** New native work stays in Agent. Unmigrated desktop work stays
   in the legacy sidecar.
-- **Every behavior change ships with tests** at the matching interface or process boundary.
+- **Tests follow production behavior.** Add or update tests when live behavior is added or changed
+  and the test provides meaningful confidence at the matching interface or process boundary.
+  Delete tests, fixtures, fakes, and harnesses when the production behavior they cover is deleted.
+  Never retain or create tests solely to preserve deleted architecture or coverage.
 - **Exact dependency versions**, no `^` or `~`: we review every version that lands. Add with
   `pnpm add package@1.2.3`. Postinstall scripts are restricted via `allowBuilds` in
   `pnpm-workspace.yaml`.
@@ -180,8 +183,11 @@ until its slice migrates; do not mix Effect versions within one new feature.
 - All new tests, fixtures, fakes, proxies, and harnesses live under top-level `tests/`, never inside
   `src/`. Existing legacy `src/**/__tests__` can remain until that slice migrates, but do not add to
   them for new architecture.
-- Mirror feature ownership under `tests/<feature>/` and test through the same production interface
-  callers use.
+- Mirror feature and runtime ownership under `tests/<feature>/<runtime>/` and test through the same
+  production interface callers use.
+- Keep test structure aligned with the production runtime and capability it exercises when that
+  improves locality. Do not mirror folders mechanically when a test crosses the feature's public
+  interface or a real process seam.
 - Do not add production classes, methods, flags, endpoints, or dependency injection solely for
   tests. A seam belongs in production only when production has real variation or ownership to hide.
 - Pure state transitions can have focused tests. Authentication, process lifecycle, cancellation,

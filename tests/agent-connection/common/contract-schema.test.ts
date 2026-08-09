@@ -15,14 +15,14 @@ import {
   ClaimAgentRequestSchema,
   ClaimAgentSuccessSchema,
   StopAgentResultSchema
-} from '../../src/common/features/agent-connection'
+} from '../../../src/common/features/agent-connection'
 import { Result, Schema } from 'effect4'
 import { RpcSchema } from 'effect4/unstable/rpc'
 import { describe, expect, it } from 'vitest'
 import effectPackage from 'effect4/package.json'
 import protocolFixture from './fixtures/protocol-v1.json'
 
-const repositoryRoot = path.resolve(import.meta.dirname, '..', '..')
+const repositoryRoot = path.resolve(import.meta.dirname, '..', '..', '..')
 
 function schemaDocument(schema: Schema.Top): unknown {
   return Schema.toJsonSchemaDocument(schema, { additionalProperties: false })
@@ -63,16 +63,34 @@ function agentInterfaceDescriptor() {
   }
 }
 
-function originalTrackedFixture(fixturePath: string): string | undefined {
-  const creationCommit = execFileSync(
+function stagedSourcePath(fixturePath: string): string {
+  const stagedChanges = execFileSync(
     'git',
-    ['log', '--diff-filter=A', '--format=%H', '--', fixturePath],
+    ['diff', '--cached', '--find-renames', '--name-status'],
+    { cwd: repositoryRoot, encoding: 'utf8' }
+  )
+  for (const change of stagedChanges.trim().split('\n')) {
+    const [status, sourcePath, destinationPath] = change.split('\t')
+    if (status?.startsWith('R') && destinationPath === fixturePath && sourcePath) {
+      return sourcePath
+    }
+  }
+  return fixturePath
+}
+
+function originalTrackedFixture(fixturePath: string): string | undefined {
+  const historyPath = stagedSourcePath(fixturePath)
+  const creationRevision = execFileSync(
+    'git',
+    ['log', '--follow', '--diff-filter=A', '--format=%H', '--name-only', '--', historyPath],
     { cwd: repositoryRoot, encoding: 'utf8' }
   )
     .trim()
     .split('\n')
-    .at(-1)
-  if (!creationCommit) {
+    .filter(Boolean)
+  const creationCommit = creationRevision.find((line) => /^[0-9a-f]{40}$/.test(line))
+  const creationPath = creationRevision.find((line) => !/^[0-9a-f]{40}$/.test(line))
+  if (!creationCommit || !creationPath) {
     try {
       execFileSync('git', ['ls-files', '--error-unmatch', fixturePath], {
         cwd: repositoryRoot,
@@ -83,7 +101,7 @@ function originalTrackedFixture(fixturePath: string): string | undefined {
     }
     throw new Error(`Cannot verify the creation revision of tracked fixture ${fixturePath}`)
   }
-  return execFileSync('git', ['show', `${creationCommit}:${fixturePath}`], {
+  return execFileSync('git', ['show', `${creationCommit}:${creationPath}`], {
     cwd: repositoryRoot,
     encoding: 'utf8'
   })

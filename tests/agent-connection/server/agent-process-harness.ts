@@ -1,17 +1,17 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { Effect, Scope } from 'effect4'
-import type { AgentReadyRecord } from '../../src/common/features/agent-connection'
+import type { AgentReadyRecord } from '../../../src/common/features/agent-connection'
 import {
   AgentProcessMonitorError,
   readAgentAnnouncement,
   type AgentProcessExit
-} from '../../src/server/features/agent-connection'
+} from '../../../src/server/features/agent-connection'
 import {
   type AgentProxy,
   type AgentProxyAction,
   type AgentProxyExchange,
   startAgentProxy
-} from './server-agent-proxy'
+} from './agent-proxy'
 
 export interface AgentProcessFixture {
   readonly child: ChildProcess

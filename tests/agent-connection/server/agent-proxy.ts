@@ -3,7 +3,7 @@ import { connect } from 'node:net'
 import type { AddressInfo } from 'node:net'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { AGENT_LOOPBACK_HOST } from '../../src/common/features/agent-connection'
+import { AGENT_LOOPBACK_HOST } from '../../../src/common/features/agent-connection'
 
 export type AgentProxyAction =
   | 'forward'

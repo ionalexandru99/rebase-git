@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AgentConnectionFailure,
   readAgentAnnouncement
-} from '../../src/server/features/agent-connection'
+} from '../../../../src/server/features/agent-connection'
 
 const readyRecord = {
   type: 'ready',

@@ -10,7 +10,7 @@ import {
   AgentHandshakeRequired,
   AgentProtocolMismatch,
   CLAIM_AGENT_PATH
-} from '../../src/common/features/agent-connection'
+} from '../../../src/common/features/agent-connection'
 import { Deferred, Effect, Fiber, Ref, Stream } from 'effect4'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {

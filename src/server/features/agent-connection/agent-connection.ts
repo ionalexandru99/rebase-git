@@ -8,7 +8,7 @@ import type {
   AgentConnectionFailure,
   AgentProcessMonitorError,
   AgentSequenceGap
-} from './agent-connection-failure'
+} from './failure/agent-connection-failure'
 
 export interface AgentProcessExit {
   readonly code: number | null

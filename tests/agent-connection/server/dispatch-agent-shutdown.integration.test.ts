@@ -1,9 +1,9 @@
-import { AgentHandshakeRequired } from '../../src/common/features/agent-connection'
+import { AgentHandshakeRequired } from '../../../src/common/features/agent-connection'
 import { Effect } from 'effect4'
 import { describe, expect, it } from 'vitest'
-import { connectAgent } from '../../src/server/features/agent-connection'
-import { dispatchAgentShutdown } from '../../src/server/features/agent-connection/dispatch-agent-shutdown'
-import { acquireAgentProcess } from './server-process-harness'
+import { connectAgent } from '../../../src/server/features/agent-connection'
+import { dispatchAgentShutdown } from '../../../src/server/features/agent-connection/dispatch-agent-shutdown'
+import { acquireAgentProcess } from './agent-process-harness'
 
 describe('Server Agent command certainty', () => {
   it('rejects an invalid operation id before dispatch', async () => {

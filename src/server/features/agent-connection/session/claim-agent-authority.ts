@@ -8,7 +8,7 @@ import {
 } from '@common/features/agent-connection'
 import { Cause, Effect, Schema } from 'effect4'
 import { type HttpClient, HttpClientRequest } from 'effect4/unstable/http'
-import { AgentConnectionFailure } from './agent-connection-failure'
+import { AgentConnectionFailure } from '../failure/agent-connection-failure'
 
 function malformedBootstrap(message: string, detail: unknown): AgentConnectionFailure {
   return new AgentConnectionFailure({

@@ -1,8 +1,8 @@
-import { AGENT_PROTOCOL } from '../../src/common/features/agent-connection'
+import { AGENT_PROTOCOL } from '../../../../src/common/features/agent-connection'
 import { Deferred, Effect, Fiber, Ref, Stream } from 'effect4'
 import { describe, expect, it } from 'vitest'
-import { makeAgentLogger } from '../../src/agent/features/agent-connection/logging/redacted-agent-logger'
-import { makeAgentSession } from '../../src/agent/features/agent-connection/session/agent-session'
+import { makeAgentLogger } from '../../../../src/agent/features/agent-connection/logging/redacted-agent-logger'
+import { makeAgentSession } from '../../../../src/agent/features/agent-connection/session/agent-session'
 
 describe('Agent observation session', () => {
   it('keeps monotonic sequence and exposes a jump when a slow subscriber exceeds the bounded buffer', async () => {

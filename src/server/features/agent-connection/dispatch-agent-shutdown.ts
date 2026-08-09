@@ -7,9 +7,9 @@ import {
 import { Cause, Effect, Schema } from 'effect4'
 import { RpcClientError } from 'effect4/unstable/rpc'
 import type { AgentCommandOutcome } from './agent-connection'
-import { AgentConnectionFailure } from './agent-connection-failure'
-import type { AgentLiveness } from './agent-liveness'
-import type { AgentInterfaceClient } from './establish-agent-session'
+import { AgentConnectionFailure } from './failure/agent-connection-failure'
+import type { AgentLiveness } from './lifecycle/agent-liveness'
+import type { AgentInterfaceClient } from './session/establish-agent-session'
 
 function isValidOperationId(operationId: string): boolean {
   return Schema.is(AgentOperationIdSchema)(operationId)
