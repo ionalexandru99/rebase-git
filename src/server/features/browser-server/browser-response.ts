@@ -103,6 +103,7 @@ export function sendBrowserJson(
   statusCode: number,
   value: unknown
 ): void {
+  response.setHeader('Cache-Control', 'no-store')
   sendBrowserResponse(
     response,
     statusCode,

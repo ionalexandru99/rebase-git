@@ -3,6 +3,7 @@ import { CLIENT_BOOTSTRAP_PATH, type ClientBootstrap } from '@common/features/cl
 import {
   authorizeApplicationRequest,
   authorizeNavigationRequest,
+  isStaleServerApplicationRequest,
   validateRequestAuthority
 } from './browser-request-security'
 import {
@@ -51,6 +52,14 @@ export function createBrowserHttpHandler(options: {
   return async (request, response) => {
     const authorityFailure = validateRequestAuthority(request, options.authority, options.origin)
     if (authorityFailure) {
+      if (
+        authorityFailure === 'host-rejected' &&
+        request.url === CLIENT_BOOTSTRAP_PATH &&
+        isStaleServerApplicationRequest(request, options.authority)
+      ) {
+        sendBrowserJson(response, 409, { error: 'stale-client', reload: true })
+        return
+      }
       sendBrowserJson(response, 403, { error: authorityFailure })
       return
     }

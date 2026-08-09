@@ -45,6 +45,25 @@ export function validateRequestAuthority(
   return undefined
 }
 
+export function isStaleServerApplicationRequest(
+  request: IncomingMessage,
+  currentAuthority: string
+): boolean {
+  const separatorIndex = currentAuthority.lastIndexOf(':')
+  const currentPort = currentAuthority.slice(separatorIndex + 1)
+  const hostHeaders = rawHeaderValues(request, 'host')
+  const instanceHeaders = rawHeaderValues(request, SERVER_INSTANCE_HEADER.toLowerCase())
+  if (hostHeaders.length !== 1 || instanceHeaders.length !== 1) {
+    return false
+  }
+  const instanceId = instanceHeaders[0]
+  const instanceHostname = instanceId.replaceAll('-', '')
+  return (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(instanceId) &&
+    hostHeaders[0] === `rebase-${instanceHostname}.localhost:${currentPort}`
+  )
+}
+
 export function authorizeNavigationRequest(options: {
   readonly authority: ClientSessionAuthority
   readonly cookieName: string

@@ -235,7 +235,7 @@ describe('Browser Server request security', () => {
     expect(crossOriginSession.status).toBe(401)
   })
 
-  it('rejects an old session after a Server restarts on the same port', async () => {
+  it('reloads an old tab without granting it a session after a Server restart', async () => {
     const first = await acquireBrowserServer()
     acquired.push(first)
     const oldCookie = await authenticate(first)
@@ -246,10 +246,21 @@ describe('Browser Server request security', () => {
     const restarted = await acquireBrowserServer({ port })
     acquired.push(restarted)
     expect(restarted.server.origin).not.toBe(first.server.origin)
-    const response = await fetch(`${restarted.server.origin}/api/bootstrap`, {
+    const staleTabResponse = await fetch(`${first.server.origin}/api/bootstrap`, {
+      headers: clientHeaders(first, oldCookie)
+    })
+    const oldSessionAtNewOrigin = await fetch(`${restarted.server.origin}/api/bootstrap`, {
       headers: clientHeaders(restarted, oldCookie)
     })
 
-    expect(response.status).toBe(401)
+    expect(staleTabResponse.status).toBe(409)
+    await expect(staleTabResponse.json()).resolves.toEqual({
+      error: 'stale-client',
+      reload: true
+    })
+    expect(staleTabResponse.headers.get('cache-control')).toBe('no-store')
+    expect(staleTabResponse.headers.has('set-cookie')).toBe(false)
+    expect(staleTabResponse.headers.has('location')).toBe(false)
+    expect(oldSessionAtNewOrigin.status).toBe(401)
   })
 })
