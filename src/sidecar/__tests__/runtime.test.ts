@@ -116,6 +116,20 @@ describe('startLegacySidecar', () => {
     expect(server.close).toHaveBeenCalledOnce()
   })
 
+  it('reports server creation failures and shuts down with an error', async () => {
+    const parentPort = new FakeParentPort()
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+    dependencies.createSidecarServer.mockImplementation(() => {
+      throw new Error('server creation failed')
+    })
+
+    startLegacySidecar(parentPort)
+    parentPort.send(startCommand)
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(1))
+    expect(parentPort.messages).toEqual([{ type: 'error', message: 'server creation failed' }])
+  })
+
   it('closes the server and tracked resources before stopping', async () => {
     const server = new FakeServer()
     const parentPort = new FakeParentPort()
@@ -127,8 +141,10 @@ describe('startLegacySidecar', () => {
     startLegacySidecar(parentPort)
     parentPort.send(startCommand)
     parentPort.send({ type: 'stop' })
+    parentPort.send({ type: 'stop' })
 
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+    expect(exit).toHaveBeenCalledOnce()
     expect(server.close).toHaveBeenCalledOnce()
     expect(server.closeAllConnections).toHaveBeenCalledOnce()
     expect(removeTrackedChildShutdownHooks).toHaveBeenCalledOnce()
