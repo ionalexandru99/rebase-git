@@ -98,8 +98,10 @@ export function useRepoSessionController(
   const openGenerationRef = useRef(sessionState.openGeneration)
   const errorSequenceRef = useRef(0)
 
-  liveRepoRef.current = sessionState.repoRef
-  liveRepoPath.current = sessionState.repoPath
+  useEffect(() => {
+    liveRepoRef.current = sessionState.repoRef
+    liveRepoPath.current = sessionState.repoPath
+  }, [sessionState.repoRef, sessionState.repoPath])
 
   const setError = useCallback((source: RepoSessionErrorSource, error: string) => {
     const sequence = ++errorSequenceRef.current

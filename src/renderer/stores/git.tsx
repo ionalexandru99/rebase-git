@@ -1,6 +1,6 @@
 import type { RepoRef } from '@common/features/repository-identity'
 import { useQueryClient } from '@tanstack/react-query'
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useLayoutEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   type RepositoryIdentity,
@@ -54,7 +54,9 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const liveRepoRef = session.liveRepoRef
   const liveRepoPath = session.liveRepoPath
   const tabActiveRef = useRef(tabActive)
-  tabActiveRef.current = tabActive
+  useLayoutEffect(() => {
+    tabActiveRef.current = tabActive
+  }, [tabActive])
 
   const openGeneration = session.openGenerationRef
   const mutationCoordinator = useRepoMutationCoordinator()
@@ -174,15 +176,17 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const refreshCaches = (candidate: RepositoryIdentity, caches: readonly RepoCache[]) =>
     Promise.all(caches.map((cache) => refreshMappedCache(candidate, cache)))
 
-  sessionLifecycle.current = {
-    onRepoOpened: (opened, generation) => {
-      const openedRepository = liveRepoRef.current ?? repositoryForPath(opened.path)
-      void refreshCaches(openedRepository, ['status', 'localBranches', 'remoteRefs'])
-      commitHistory.onRepoOpened(opened, generation)
-    },
-    onBeforeRepoClosed: (repoPath) => commitHistory.cancelStream(repoPath),
-    onSessionReset: reset
-  }
+  useLayoutEffect(() => {
+    sessionLifecycle.current = {
+      onRepoOpened: (opened, generation) => {
+        const openedRepository = liveRepoRef.current ?? repositoryForPath(opened.path)
+        void refreshCaches(openedRepository, ['status', 'localBranches', 'remoteRefs'])
+        commitHistory.onRepoOpened(opened, generation)
+      },
+      onBeforeRepoClosed: (repoPath) => commitHistory.cancelStream(repoPath),
+      onSessionReset: reset
+    }
+  })
 
   const actionRunner = useActionRunnerController({
     liveRepoPath,

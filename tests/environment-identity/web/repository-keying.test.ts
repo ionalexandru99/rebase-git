@@ -2,6 +2,7 @@ import { EnvironmentIdSchema } from '@common/features/repository-identity'
 import { parseOrThrow } from '@shared/codec'
 import { PersistedTabsSchema } from '@shared/schemas/ipc'
 import { act, renderHook } from '@testing-library/react'
+import { StrictMode } from 'react'
 import {
   repoQueryKeys,
   repositoryIdentityKey,
@@ -210,7 +211,7 @@ describe('renderer repository keying', () => {
     expect(ownership.hasActiveOpen(canonical)).toBe(false)
   })
 
-  it('replaces a same-path session when its Environment changes', async () => {
+  it('preserves live identity when StrictMode replays an Environment replacement', async () => {
     const environmentA = EnvironmentIdSchema.make('environment-a')
     const environmentB = EnvironmentIdSchema.make('environment-b')
     const repositoryA = { environmentId: environmentA, path: '/same/repository' }
@@ -220,12 +221,16 @@ describe('renderer repository keying', () => {
       result: { path: '/same/repository', remotes: {}, defaultBranch: 'main' }
     })
     const lifecycle = { current: emptyRepoSessionLifecycle }
-    const { result, unmount } = renderHook(() => useRepoSessionController(lifecycle))
+    const { result, unmount } = renderHook(() => useRepoSessionController(lifecycle), {
+      wrapper: StrictMode
+    })
 
     await act(() => result.current.openRepo(repositoryA))
+    expect(result.current.liveRepoRef.current).toEqual(repositoryA)
     await act(() => result.current.openRepo(repositoryB))
 
     expect(result.current.repoRef).toEqual(repositoryB)
+    expect(result.current.liveRepoRef.current).toEqual(repositoryB)
     expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/same/repository', 1)
     unmount()
   })

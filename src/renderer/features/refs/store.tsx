@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -109,7 +110,9 @@ export function useRefsController(deps: RefsDeps): RefsController {
   const repoKeys = repoQueryKeys(repository, { idle: tabId })
 
   const tabActiveRef = useRef(tabActive)
-  tabActiveRef.current = tabActive
+  useLayoutEffect(() => {
+    tabActiveRef.current = tabActive
+  }, [tabActive])
 
   const [fetchTick, setFetchTick] = useState(0)
   const pendingRefresh = useRef<RepoRef | null>(null)

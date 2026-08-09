@@ -31,7 +31,7 @@ describe('browser storage ownership', () => {
   it('contains only allowlisted disposable presentation state', () => {
     for (const [relativePath, allowedKeys] of allowedStorageAccess) {
       const source = readFileSync(path.join(process.cwd(), relativePath), 'utf8')
-      expect(source).toMatch(/localStorage/)
+      expect(source).toMatch(/(?:local|session)Storage/)
       expect(new Set(storageKeysInSource(source))).toEqual(new Set(allowedKeys))
     }
 
