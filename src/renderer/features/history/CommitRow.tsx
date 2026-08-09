@@ -169,7 +169,7 @@ export const CommitRow = memo(function CommitRow(props: CommitRowProps) {
             {subject}
 
             <span
-              data-testid="commit-row-meta"
+              data-testid="commit-row-pinned-meta"
               className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground"
             >
               {avatar}

@@ -148,7 +148,7 @@ test('keeps ref badges out of the pinned commit metadata', async ({ harness }) =
 
   const row = page.getByTestId('commit-row').filter({ hasText: 'initial' })
   const finalBadge = row.getByText(finalBranch, { exact: true })
-  const metadata = row.getByTestId('commit-row-meta')
+  const metadata = row.getByTestId('commit-row-pinned-meta')
   await expect(finalBadge).toBeVisible({ timeout: 10_000 })
   await expect(metadata).toBeVisible()
 

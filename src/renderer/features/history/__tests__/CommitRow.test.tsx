@@ -141,11 +141,12 @@ describe('CommitRow modes', () => {
     expect(screen.getByText('−1')).toBeInTheDocument()
   })
 
-  it('renders single-line modes as a grid', () => {
+  it('keeps single-line modes on one line', () => {
     render(<CommitRow {...rowProps()} mode="wide" />)
 
     expect(screen.getByTestId('commit-row-content')).toHaveClass('grid')
-    expect(screen.getByTestId('commit-row-meta')).toBeInTheDocument()
+    expect(screen.getByTestId('commit-row-pinned-meta')).toBeInTheDocument()
+    expect(screen.queryByTestId('commit-row-meta')).not.toBeInTheDocument()
   })
 
   it('clips a ref-bearing subject to the commit content column', () => {
