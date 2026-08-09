@@ -1,3 +1,4 @@
+import type { RepoRef } from '@common/features/repository-identity'
 import { GitCommitHorizontalIcon } from 'lucide-react'
 import type { UIEvent } from 'react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -46,6 +47,7 @@ interface HistoryViewportProps {
   hasMore?: boolean
   onLoadMore?: () => void
   repoPath?: string | null
+  repository?: RepoRef | null
   visibleSet: Set<string> | null
   mergeSideRanges: ReadonlyMap<string, MergeSideRange>
   onCurrentBranchSet: Set<string> | null
@@ -62,6 +64,7 @@ interface HistoryViewportProps {
 }
 
 export function HistoryViewport(props: HistoryViewportProps) {
+  const repository = props.repository ?? props.repoPath
   const [scrollElement, setScrollElement] = useState<HTMLDivElement>()
   const [mode, setMode] = useState<HistoryListMode>('narrow')
   const metrics = useMemo(
@@ -88,8 +91,8 @@ export function HistoryViewport(props: HistoryViewportProps) {
     setMode(measuredMode)
   }
   const railWidth = historyRailWidth(props.layout.maxLanes, metrics)
-  const commitStats = useCommitStats(props.repoPath, props.orderedShas, startIndex, endIndex)
-  const workingCopy = useWorkingCopy(props.repoPath)
+  const commitStats = useCommitStats(repository, props.orderedShas, startIndex, endIndex)
+  const workingCopy = useWorkingCopy(repository)
   const attachScroll = useCallback(
     (element: HTMLDivElement | null) => {
       if (!element) {
@@ -97,11 +100,11 @@ export function HistoryViewport(props: HistoryViewportProps) {
       }
       setScrollElement(element)
       setScrollRef(element)
-      if (props.repoPath) {
-        element.scrollTop = historyScrollMemory.get(props.repoPath)
+      if (repository) {
+        element.scrollTop = historyScrollMemory.get(repository)
       }
     },
-    [props.repoPath, setScrollRef]
+    [repository, setScrollRef]
   )
 
   const anchoredRowHeight = useRef(metrics.rowHeight)
@@ -118,24 +121,24 @@ export function HistoryViewport(props: HistoryViewportProps) {
     })
     anchoredRowHeight.current = metrics.rowHeight
     scrollElement.scrollTop = anchored
-    if (props.repoPath) {
-      historyScrollMemory.remember(props.repoPath, anchored)
+    if (repository) {
+      historyScrollMemory.remember(repository, anchored)
     }
-  }, [scrollElement, metrics.rowHeight, props.repoPath])
+  }, [scrollElement, metrics.rowHeight, repository])
 
   useEffect(() => {
-    if (!scrollElement || !props.repoPath) {
+    if (!scrollElement || !repository) {
       return
     }
-    const rememberedScrollTop = historyScrollMemory.get(props.repoPath)
+    const rememberedScrollTop = historyScrollMemory.get(repository)
     if (canRestoreHistoryScroll(rememberedScrollTop, totalHeight, scrollElement.clientHeight)) {
       scrollElement.scrollTop = rememberedScrollTop
     }
-  }, [scrollElement, props.repoPath, totalHeight])
+  }, [scrollElement, repository, totalHeight])
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
-    if (props.repoPath && !props.loading) {
-      historyScrollMemory.remember(props.repoPath, event.currentTarget.scrollTop)
+    if (repository && !props.loading) {
+      historyScrollMemory.remember(repository, event.currentTarget.scrollTop)
     }
     onScroll(event)
   }
@@ -150,7 +153,7 @@ export function HistoryViewport(props: HistoryViewportProps) {
         loading: props.loading,
         loadingMore: props.loadingMore,
         canLoadMore: props.onLoadMore !== undefined,
-        repoPath: props.repoPath,
+        repository,
         loadedCount: props.loadedCount
       },
       lastAutoLoadKey.current
@@ -168,7 +171,7 @@ export function HistoryViewport(props: HistoryViewportProps) {
     props.loading,
     props.loadingMore,
     props.onLoadMore,
-    props.repoPath
+    repository
   ])
 
   return (

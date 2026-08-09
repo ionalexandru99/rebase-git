@@ -70,15 +70,13 @@ describe('store schema / defaults parity', () => {
     expect(storeDefaults.updateChannel).toBeNull()
   })
 
-  it('persistedTabRepoPaths items allow null to match its [null] default', () => {
+  it('persistedTabRepoPaths items allow RepoRefs, legacy paths, and null', () => {
     const entry = storeSchema.persistedTabRepoPaths as {
       type?: string
-      items?: { type?: string | string[] }
+      items?: { anyOf?: Array<{ type?: string }> }
     }
     expect(entry.type).toBe('array')
-    const itemTypes = entry.items?.type
-    const itemTypeList = Array.isArray(itemTypes) ? itemTypes : itemTypes ? [itemTypes] : []
-    expect(itemTypeList).toContain('null')
+    expect(entry.items?.anyOf?.map((item) => item.type)).toEqual(['string', 'null', 'object'])
     expect(storeDefaults.persistedTabRepoPaths).toEqual([null])
   })
 

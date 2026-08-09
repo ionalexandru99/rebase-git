@@ -175,12 +175,21 @@ function decodeScopedToggle(
   }
 }
 
-function migrateOneToTwo(value: unknown): ServerProfileState {
+function migrateOneToTwo(
+  value: unknown,
+  runtimeLocalEnvironmentId: EnvironmentId
+): ServerProfileState {
   const previous = Schema.decodeUnknownSync(DataSchemaOneStateSchema)(value) as DataSchemaOneState
-  const localEnvironmentId = previous.environments[0]?.id
-  if (!localEnvironmentId) {
+  const storedLocalEnvironmentId = previous.environments[0]?.id
+  if (!storedLocalEnvironmentId) {
     throw new Error('Schema 1 profile has no local Environment')
   }
+  const remapLocalReference = <Reference extends { readonly environmentId: EnvironmentId }>(
+    reference: Reference
+  ): Reference =>
+    reference.environmentId === storedLocalEnvironmentId
+      ? { ...reference, environmentId: runtimeLocalEnvironmentId }
+      : reference
   const preferences: Record<string, ServerProfileState['repositoryPreferences'][string]> = {}
   const getPreferences = (repository: RepoRef) => {
     const key = repositoryPreferenceKey(repository)
@@ -193,18 +202,18 @@ function migrateOneToTwo(value: unknown): ServerProfileState {
     return created
   }
   for (const [path, listPaneWidth] of Object.entries(previous.listPaneWidths)) {
-    const repository = qualifyPath(localEnvironmentId, path)
+    const repository = qualifyPath(runtimeLocalEnvironmentId, path)
     preferences[repositoryPreferenceKey(repository)] = {
       ...getPreferences(repository),
       listPaneWidth
     }
   }
-  for (const value of previous.sidebarRefTreeToggles) {
-    const scoped = decodeScopedToggle(value)
+  for (const encodedToggle of previous.sidebarRefTreeToggles) {
+    const scoped = decodeScopedToggle(encodedToggle)
     if (!scoped) {
       continue
     }
-    const repository = qualifyPath(localEnvironmentId, scoped.path)
+    const repository = qualifyPath(runtimeLocalEnvironmentId, scoped.path)
     const current = getPreferences(repository)
     preferences[repositoryPreferenceKey(repository)] = {
       ...current,
@@ -213,11 +222,15 @@ function migrateOneToTwo(value: unknown): ServerProfileState {
   }
   return {
     dataSchema: CURRENT_DATA_SCHEMA,
-    environments: previous.environments,
-    workspaces: previous.workspaces,
-    activeWorkspace: previous.activeWorkspace,
-    recents: previous.recents,
-    tabs: previous.tabs,
+    environments: previous.environments.map((environment, index) =>
+      index === 0 ? { ...environment, id: runtimeLocalEnvironmentId } : environment
+    ),
+    workspaces: previous.workspaces.map(remapLocalReference),
+    activeWorkspace: previous.activeWorkspace
+      ? remapLocalReference(previous.activeWorkspace)
+      : null,
+    recents: previous.recents.map(remapLocalReference),
+    tabs: previous.tabs.map((repository) => (repository ? remapLocalReference(repository) : null)),
     activeTabIndex: previous.activeTabIndex,
     settings: previous.settings,
     repositoryPreferences: preferences
@@ -248,7 +261,7 @@ export function migrateProfileState(
     if (dataSchema === 0) {
       migrated = migrateLegacyToOne(migrated, localEnvironmentId)
     } else if (dataSchema === 1) {
-      migrated = migrateOneToTwo(migrated)
+      migrated = migrateOneToTwo(migrated, localEnvironmentId)
     } else {
       throw new Error(`No migration from data schema ${dataSchema}`)
     }

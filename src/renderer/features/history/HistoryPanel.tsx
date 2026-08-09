@@ -1,3 +1,4 @@
+import type { RepoRef } from '@common/features/repository-identity'
 import { useCallback, useMemo } from 'react'
 import type { CommitAction } from '@/lib/git-actions'
 import type { GitLog, GitLogEntry } from '@/types'
@@ -33,6 +34,7 @@ interface HistoryPanelProps {
   onSelectWorkingCopy?: () => void
   workingCopySelected?: boolean
   repoPath?: string | null
+  repository?: RepoRef | null
 }
 
 const EMPTY_COMMITS: GitLogEntry[] = []
@@ -112,6 +114,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
         hasMore={props.hasMore}
         onLoadMore={props.onLoadMore}
         repoPath={props.repoPath}
+        repository={props.repository}
         visibleSet={visibleSet}
         mergeSideRanges={mergeSideRanges}
         onCurrentBranchSet={onCurrentBranchSet}

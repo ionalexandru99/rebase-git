@@ -1,3 +1,5 @@
+import type { RepoRef } from '@common/features/repository-identity'
+
 export interface OpenedRepo {
   path: string
   remotes: Record<string, string>
@@ -14,6 +16,7 @@ export interface RepoSessionError {
 export type RepoSessionErrors = Partial<Record<RepoSessionErrorSource, RepoSessionError>>
 
 export interface RepoSessionState {
+  repoRef: RepoRef | null
   repoPath: string | null
   remotes: Record<string, string>
   defaultBranch: string | undefined
@@ -33,6 +36,7 @@ const errorSourcesByPriority: readonly RepoSessionErrorSource[] = [
 
 export function initialRepoSessionState(openGeneration = 0, resetEpoch = 0): RepoSessionState {
   return {
+    repoRef: null,
     repoPath: null,
     remotes: {},
     defaultBranch: undefined,
@@ -65,10 +69,12 @@ export function failRepoOpening(
 export function completeRepoOpening(
   previous: RepoSessionState,
   opened: OpenedRepo,
+  repoRef: RepoRef,
   openGeneration: number
 ): RepoSessionState {
   return {
     ...previous,
+    repoRef,
     repoPath: opened.path,
     remotes: opened.remotes,
     defaultBranch: opened.defaultBranch,

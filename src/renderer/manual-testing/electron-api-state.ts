@@ -1,5 +1,6 @@
 import type { GitLogEntry, GitStatus, StatusFileCode } from '@shared/schemas/git'
 import { GIT_LOG_REF_SEPARATOR } from '@shared/schemas/git'
+import type { PersistedTabRepository } from '@shared/schemas/ipc'
 
 export interface ManualGitStateOptions {
   onboardingComplete?: boolean
@@ -18,7 +19,7 @@ export interface ManualGitState {
   onboardingComplete: boolean
   listPaneWidths: Record<string, number>
   nextObjectId: number
-  persistedTabs: { tabs: Array<string | null>; activeIndex: number }
+  persistedTabs: { tabs: PersistedTabRepository[]; activeIndex: number }
   pullDivergedStrategy: 'rebase' | 'merge' | null
   reopenRepositoriesOnLaunch: boolean
   updatePreferences: { downloadInBackground: boolean; installOnQuit: boolean }

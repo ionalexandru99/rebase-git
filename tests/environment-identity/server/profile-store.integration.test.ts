@@ -91,9 +91,9 @@ describe('profile store initialization', () => {
         environmentId: localEnvironmentId,
         path: '/workspaces/two'
       })
-      expect(store.state.recents.map((repository) => repository.path)).toEqual([
-        '/repos/alpha',
-        '/repos/beta'
+      expect(store.state.recents).toEqual([
+        { environmentId: localEnvironmentId, path: '/repos/alpha' },
+        { environmentId: localEnvironmentId, path: '/repos/beta' }
       ])
       expect(store.state.tabs).toEqual([
         { environmentId: localEnvironmentId, path: '/repos/beta' },
@@ -128,6 +128,62 @@ describe('profile store initialization', () => {
       ).toBe(original)
       }
     )
+  })
+
+  it('remaps schema 1 local references to the runtime local Environment ID', async () => {
+    const profileDirectory = path.join(temporaryRoot, 'npx-stable')
+    const storedLocalEnvironmentId = 'stored-local' as EnvironmentId
+    const remoteEnvironmentId = 'remote' as EnvironmentId
+    const schemaOne = {
+      dataSchema: 1,
+      environments: [
+        { id: storedLocalEnvironmentId, kind: 'local', name: 'Stored local' },
+        { id: remoteEnvironmentId, kind: 'local', name: 'Remote' }
+      ],
+      workspaces: [
+        { environmentId: storedLocalEnvironmentId, path: '/workspace' },
+        { environmentId: remoteEnvironmentId, path: '/remote-workspace' }
+      ],
+      activeWorkspace: { environmentId: storedLocalEnvironmentId, path: '/workspace' },
+      recents: [
+        { environmentId: storedLocalEnvironmentId, path: '/repository' },
+        { environmentId: remoteEnvironmentId, path: '/remote-repository' }
+      ],
+      tabs: [{ environmentId: storedLocalEnvironmentId, path: '/repository' }],
+      activeTabIndex: 0,
+      settings: {
+        onboardingComplete: true,
+        sidebarOpen: true,
+        sidebarWidth: 244,
+        reopenRepositoriesOnLaunch: true,
+        pullDivergedStrategy: null,
+        updateDownloadInBackground: true,
+        updateInstallOnQuit: true,
+        updateChannel: null
+      },
+      listPaneWidths: { '/repository': 500 },
+      sidebarRefTreeToggles: []
+    }
+    await mkdir(profileDirectory, { recursive: true })
+    await writeFile(path.join(profileDirectory, 'state.json'), `${JSON.stringify(schemaOne)}\n`)
+
+    await withOpenProfile({ profilesRoot: temporaryRoot }, async (store) => {
+      expect(store.state.environments.map((environment) => environment.id)).toEqual([
+        localEnvironmentId,
+        remoteEnvironmentId
+      ])
+      expect(store.state.workspaces).toEqual([
+        { environmentId: localEnvironmentId, path: '/workspace' },
+        { environmentId: remoteEnvironmentId, path: '/remote-workspace' }
+      ])
+      expect(store.state.recents).toEqual([
+        { environmentId: localEnvironmentId, path: '/repository' },
+        { environmentId: remoteEnvironmentId, path: '/remote-repository' }
+      ])
+      expect(store.state.tabs).toEqual([
+        { environmentId: localEnvironmentId, path: '/repository' }
+      ])
+    })
   })
 
   it('opens equal schema without rewriting or creating a backup', async () => {
@@ -224,6 +280,8 @@ describe('profile store initialization', () => {
 
   it('opens an identified isolated profile for a concurrent default launcher', async () => {
     await withOpenProfile({ profilesRoot: temporaryRoot }, async (first) => {
+      const activeLockPath = path.join(first.profile.directory, 'writer.lock')
+      const activeWriterToken = await readFile(activeLockPath, 'utf8')
       await withOpenProfile(
         { profilesRoot: temporaryRoot, isolationId: 'launcher-two' },
         async (second) => {
@@ -233,9 +291,40 @@ describe('profile store initialization', () => {
             isolated: true,
             isolationId: 'launcher-two'
           })
+          expect(await readFile(activeLockPath, 'utf8')).toBe(activeWriterToken)
         }
       )
     })
+  })
+
+  it('recovers a stale writer lock and opens the existing profile state', async () => {
+    let profileDirectory = ''
+    await withOpenProfile({ profilesRoot: temporaryRoot }, async (store) => {
+      profileDirectory = store.profile.directory
+      await Effect.runPromise(
+        store.save({
+          ...store.state,
+          recents: [{ environmentId: localEnvironmentId, path: '/preserved/repository' }],
+          tabs: [{ environmentId: localEnvironmentId, path: '/preserved/repository' }],
+          settings: { ...store.state.settings, sidebarWidth: 411 }
+        })
+      )
+    })
+    await writeFile(path.join(profileDirectory, 'writer.lock'), '2147483647:stale\n')
+
+    await withOpenProfile(
+      { profilesRoot: temporaryRoot, isolationId: 'after-crash' },
+      async (store) => {
+        expect(store.profile.isolated).toBe(false)
+        expect(store.state.recents).toEqual([
+          { environmentId: localEnvironmentId, path: '/preserved/repository' }
+        ])
+        expect(store.state.tabs).toEqual([
+          { environmentId: localEnvironmentId, path: '/preserved/repository' }
+        ])
+        expect(store.state.settings.sidebarWidth).toBe(411)
+      }
+    )
   })
 
   it('isolates a concurrent launcher even when the selected profile is explicit', async () => {

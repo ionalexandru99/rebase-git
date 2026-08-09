@@ -1,3 +1,4 @@
+import type { PersistedTabRepository } from '@shared/schemas/ipc'
 import type { Schema } from 'electron-store'
 
 export interface StoreSchema {
@@ -9,7 +10,7 @@ export interface StoreSchema {
   sidebarOpen: boolean
   sidebarWidth: number
   sidebarRefTreeToggles: string[]
-  persistedTabRepoPaths: (string | null)[]
+  persistedTabRepoPaths: PersistedTabRepository[]
   persistedActiveTabIndex: number
   reopenRepositoriesOnLaunch: boolean
   pullDivergedStrategy: 'rebase' | 'merge' | null
@@ -49,7 +50,24 @@ export const storeSchema: Schema<StoreSchema> = {
   sidebarOpen: { type: 'boolean' },
   sidebarWidth: { type: 'number' },
   sidebarRefTreeToggles: { type: 'array', items: { type: 'string' } },
-  persistedTabRepoPaths: { type: 'array', items: { type: ['string', 'null'] } },
+  persistedTabRepoPaths: {
+    type: 'array',
+    items: {
+      anyOf: [
+        { type: 'string' },
+        { type: 'null' },
+        {
+          type: 'object',
+          properties: {
+            environmentId: { type: 'string', minLength: 1 },
+            path: { type: 'string', minLength: 1 }
+          },
+          required: ['environmentId', 'path'],
+          additionalProperties: false
+        }
+      ]
+    }
+  },
   persistedActiveTabIndex: { type: 'number' },
   reopenRepositoriesOnLaunch: { type: 'boolean' },
   pullDivergedStrategy: { type: ['string', 'null'], enum: ['rebase', 'merge', null] },

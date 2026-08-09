@@ -21,11 +21,12 @@ export const identityQueryKey = (repository: RepoRef | string | null) => {
   return [IDENTITY_QUERY_ROOT, repoRef.environmentId, repoRef.path] as const
 }
 
-export function useIdentity(repoPath: string | null) {
+export function useIdentity(repository: RepoRef | string | null) {
   const queryClient = useQueryClient()
+  const repoPath = repository === null ? null : toRepoRef(repository).path
 
   const query = useQuery<ResolvedIdentity>({
-    queryKey: identityQueryKey(repoPath),
+    queryKey: identityQueryKey(repository),
     queryFn: async () => {
       const { local, global, effective } = unwrapOk(await rpcGetIdentity(repoPath))
       return { local, global, effective }

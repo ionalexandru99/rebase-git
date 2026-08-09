@@ -1,12 +1,19 @@
 import { EnvironmentIdSchema } from '@common/features/repository-identity'
+import { parseOrThrow } from '@shared/codec'
+import { PersistedTabsSchema } from '@shared/schemas/ipc'
 import { act, renderHook } from '@testing-library/react'
 import {
   repoQueryKeys,
-  repositoryIdentityKey
+  repositoryIdentityKey,
+  restorePersistedRepository
 } from '../../../src/renderer/features/repository-identity'
 import { identityQueryKey } from '../../../src/renderer/stores/identity'
 import { useTabs } from '../../../src/renderer/hooks/useTabs'
 import { createRepoSessionOwnership } from '../../../src/renderer/stores/repo-session-ownership'
+import {
+  emptyRepoSessionLifecycle,
+  useRepoSessionController
+} from '../../../src/renderer/stores/repo-session'
 
 describe('renderer repository keying', () => {
   it('never collides equal native paths from different Environments', () => {
@@ -27,6 +34,18 @@ describe('renderer repository keying', () => {
       '/same/repository'
     ])
     expect(repoQueryKeys(repositoryA).status).not.toEqual(repoQueryKeys(repositoryB).status)
+    expect(repoQueryKeys(repositoryA).localBranches).not.toEqual(
+      repoQueryKeys(repositoryB).localBranches
+    )
+    expect(repoQueryKeys(repositoryA).remoteRefs).not.toEqual(
+      repoQueryKeys(repositoryB).remoteRefs
+    )
+    expect(repoQueryKeys(repositoryA).log).not.toEqual(repoQueryKeys(repositoryB).log)
+    expect(repoQueryKeys(repositoryA).stash).not.toEqual(repoQueryKeys(repositoryB).stash)
+    expect(repoQueryKeys(repositoryA).diffRoot).not.toEqual(repoQueryKeys(repositoryB).diffRoot)
+    expect(repoQueryKeys(repositoryA).headCommit).not.toEqual(
+      repoQueryKeys(repositoryB).headCommit
+    )
     expect(identityQueryKey(repositoryA)).not.toEqual(identityQueryKey(repositoryB))
   })
 
@@ -77,6 +96,32 @@ describe('renderer repository keying', () => {
     expect(result.current.tabs).toHaveLength(2)
   })
 
+  it('round-trips same-path repositories from different Environments through persistence', () => {
+    const environmentA = EnvironmentIdSchema.make('environment-a')
+    const environmentB = EnvironmentIdSchema.make('environment-b')
+    const persisted = parseOrThrow(PersistedTabsSchema, {
+      tabs: [
+        { environmentId: environmentA, path: '/same/repository' },
+        { environmentId: environmentB, path: '/same/repository' },
+        '/legacy/repository'
+      ],
+      activeIndex: 1
+    })
+    const { result } = renderHook(() =>
+      useTabs({
+        tabs: persisted.tabs.map(restorePersistedRepository),
+        activeIndex: persisted.activeIndex
+      })
+    )
+
+    expect(result.current.persistedSnapshot.tabs).toEqual([
+      { environmentId: environmentA, path: '/same/repository' },
+      { environmentId: environmentB, path: '/same/repository' },
+      { environmentId: EnvironmentIdSchema.make('local'), path: '/legacy/repository' }
+    ])
+    expect(result.current.activeTabId).toBe(result.current.tabs[1].id)
+  })
+
   it('compares RepoRef fields exactly while retaining legacy path alias reconciliation', () => {
     const environmentId = EnvironmentIdSchema.make('environment-a')
     const canonical = { environmentId, path: '/same/repository' }
@@ -125,5 +170,63 @@ describe('renderer repository keying', () => {
     ownership.endOpen(identityA)
     ownership.releasePendingClose(repositoryA)
     clearTimeout(pendingClose)
+  })
+
+  it('moves open and pending-close ownership to an Agent-canonicalized identity', () => {
+    const ownership = createRepoSessionOwnership()
+    const environmentId = EnvironmentIdSchema.make('environment-a')
+    const requested = { environmentId, path: '/alias/repository' }
+    const canonical = { environmentId, path: '/canonical/repository' }
+    const pendingClose = setTimeout(() => {}, 10)
+    const opening = ownership.beginOpen(requested)
+    ownership.trackPendingClose(requested, pendingClose)
+
+    ownership.rememberCanonicalPath(requested, canonical)
+
+    expect(ownership.hasActiveOpen(requested)).toBe(true)
+    expect(ownership.hasActiveOpen(canonical)).toBe(true)
+    expect(ownership.matchesPendingClose(requested, pendingClose)).toBe(true)
+    expect(ownership.matchesPendingClose(canonical, pendingClose)).toBe(true)
+
+    ownership.endOpen(opening)
+    ownership.releasePendingClose(canonical)
+    expect(ownership.hasActiveOpen(canonical)).toBe(false)
+    clearTimeout(pendingClose)
+  })
+
+  it('releases every concurrent open after Agent canonicalization', () => {
+    const ownership = createRepoSessionOwnership()
+    const environmentId = EnvironmentIdSchema.make('environment-a')
+    const requested = { environmentId, path: '/alias/repository' }
+    const canonical = { environmentId, path: '/canonical/repository' }
+    const firstOpening = ownership.beginOpen(requested)
+    const secondOpening = ownership.beginOpen(requested)
+
+    ownership.rememberCanonicalPath(requested, canonical)
+    ownership.endOpen(firstOpening)
+    expect(ownership.hasActiveOpen(canonical)).toBe(true)
+
+    ownership.endOpen(secondOpening)
+    expect(ownership.hasActiveOpen(canonical)).toBe(false)
+  })
+
+  it('replaces a same-path session when its Environment changes', async () => {
+    const environmentA = EnvironmentIdSchema.make('environment-a')
+    const environmentB = EnvironmentIdSchema.make('environment-b')
+    const repositoryA = { environmentId: environmentA, path: '/same/repository' }
+    const repositoryB = { environmentId: environmentB, path: '/same/repository' }
+    vi.mocked(window.electronAPI.openRepo).mockResolvedValue({
+      _tag: 'Ok',
+      result: { path: '/same/repository', remotes: {}, defaultBranch: 'main' }
+    })
+    const lifecycle = { current: emptyRepoSessionLifecycle }
+    const { result, unmount } = renderHook(() => useRepoSessionController(lifecycle))
+
+    await act(() => result.current.openRepo(repositoryA))
+    await act(() => result.current.openRepo(repositoryB))
+
+    expect(result.current.repoRef).toEqual(repositoryB)
+    expect(window.electronAPI.closeRepo).toHaveBeenCalledWith('/same/repository', 1)
+    unmount()
   })
 })

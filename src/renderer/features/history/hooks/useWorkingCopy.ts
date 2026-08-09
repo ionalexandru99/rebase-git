@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { repoQueryKeys } from '@/features/repository-identity'
+import type { RepositoryIdentity } from '@/features/repository-identity'
+import { repoQueryKeys, toRepoRef } from '@/features/repository-identity'
 import { WARM_REOPEN_GC_TIME_MS } from '@/lib/query-config'
 import { rpcGetStatus, rpcGetWorkingTreeStats } from '@/lib/rpc-client'
 import { unwrapOk } from '@/lib/unwrap-rpc-result'
@@ -12,19 +13,21 @@ export interface WorkingCopyRowData {
   stats: CommitStat | undefined
 }
 
-export function useWorkingCopy(repoPath: string | null | undefined): WorkingCopyRowData {
-  const keys = repoQueryKeys(repoPath, { idle: 'working-copy' })
-  const enabled = Boolean(repoPath)
+export function useWorkingCopy(
+  repository: RepositoryIdentity | null | undefined
+): WorkingCopyRowData {
+  const keys = repoQueryKeys(repository, { idle: 'working-copy' })
+  const enabled = Boolean(repository)
 
   const statusQuery = useQuery({
     queryKey: keys.status,
     enabled,
     gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: async (): Promise<GitStatus> => {
-      if (!repoPath) {
+      if (!repository) {
         throw new Error('No repo open')
       }
-      return unwrapOk(await rpcGetStatus(repoPath)).status
+      return unwrapOk(await rpcGetStatus(toRepoRef(repository).path)).status
     }
   })
 
@@ -33,10 +36,10 @@ export function useWorkingCopy(repoPath: string | null | undefined): WorkingCopy
     enabled,
     gcTime: WARM_REOPEN_GC_TIME_MS,
     queryFn: async (): Promise<CommitStat> => {
-      if (!repoPath) {
+      if (!repository) {
         throw new Error('No repo open')
       }
-      const totals = unwrapOk(await rpcGetWorkingTreeStats(repoPath))
+      const totals = unwrapOk(await rpcGetWorkingTreeStats(toRepoRef(repository).path))
       return { additions: totals.additions, deletions: totals.deletions }
     }
   })

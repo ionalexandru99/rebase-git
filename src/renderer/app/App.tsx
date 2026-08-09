@@ -1,13 +1,16 @@
-import type { PersistedTabs } from '@shared/schemas/ipc'
 import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { PortalContainerProvider } from '../components/ui/portal-container'
 import { Toaster } from '../components/ui/sonner'
 import { OnboardingScreen } from '../features/onboarding/OnboardingScreen'
 import { useOnboarding } from '../features/onboarding/useOnboarding'
-import { repoQueryKeys } from '../features/repository-identity'
+import {
+  type RepositoryIdentity,
+  repoQueryKeys,
+  restorePersistedRepository
+} from '../features/repository-identity'
 import { updatesSection } from '../features/settings/UpdatesSection'
-import { useTabs } from '../hooks/useTabs'
+import { type InitialTabState, useTabs } from '../hooks/useTabs'
 import { hasPendingUpdate, useUpdaterState } from '../hooks/useUpdaterState'
 import { RepoRail } from '../shell/RepoRail'
 import { Titlebar } from '../shell/Titlebar'
@@ -18,14 +21,17 @@ import { TabView } from './TabView'
 
 export default function App() {
   const onboarding = useOnboarding()
-  const [persistedTabs, setPersistedTabs] = useState<PersistedTabs | null>(null)
+  const [persistedTabs, setPersistedTabs] = useState<InitialTabState | null>(null)
   const [onboardingRepoPath, setOnboardingRepoPath] = useState<string | null>(null)
 
   useEffect(() => {
     window.electronAPI
       .getPersistedTabs()
       .then((state) => {
-        setPersistedTabs({ tabs: [...state.tabs], activeIndex: state.activeIndex })
+        setPersistedTabs({
+          tabs: state.tabs.map(restorePersistedRepository),
+          activeIndex: state.activeIndex
+        })
       })
       .catch((error: unknown) => {
         console.error('[app] failed to load persisted tabs', error)
@@ -74,7 +80,7 @@ export default function App() {
 }
 
 interface TabsShellProps {
-  persisted: PersistedTabs
+  persisted: InitialTabState
   onboarding: ReturnType<typeof useOnboarding>
 }
 
@@ -107,12 +113,12 @@ function TabsShell(props: TabsShellProps) {
   }
 
   const dropTabCache = useCallback(
-    (repoPath: string | null) => {
-      if (!repoPath) {
+    (repository: RepositoryIdentity | null) => {
+      if (!repository) {
         return
       }
-      queryClient.removeQueries({ queryKey: repoQueryKeys(repoPath).root })
-      queryClient.removeQueries({ queryKey: identityQueryKey(repoPath) })
+      queryClient.removeQueries({ queryKey: repoQueryKeys(repository).root })
+      queryClient.removeQueries({ queryKey: identityQueryKey(repository) })
     },
     [queryClient]
   )
@@ -144,14 +150,9 @@ function TabsShell(props: TabsShellProps) {
   }, [rescanWorkspace])
 
   useEffect(() => {
-    window.electronAPI
-      .setPersistedTabs({
-        tabs: persistedSnapshot.tabs.map((repository) => repository?.path ?? null),
-        activeIndex: persistedSnapshot.activeIndex
-      })
-      .catch((error: unknown) => {
-        console.warn('[app] failed to persist tab state', error)
-      })
+    window.electronAPI.setPersistedTabs(persistedSnapshot).catch((error: unknown) => {
+      console.warn('[app] failed to persist tab state', error)
+    })
   }, [persistedSnapshot])
 
   useEffect(() => {
@@ -222,7 +223,7 @@ function TabsShell(props: TabsShellProps) {
                 {tabLoaded ? (
                   <ErrorBoundary
                     scope="tab"
-                    onReset={() => dropTabCache(tab.kind === 'new' ? null : tab.repoPath)}
+                    onReset={() => dropTabCache(tab.kind === 'new' ? null : tab.repoRef)}
                   >
                     <TabView
                       tab={tab}

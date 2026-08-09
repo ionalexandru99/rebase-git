@@ -1,7 +1,13 @@
+import type { RepoRef } from '@common/features/repository-identity'
 import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import { repoQueryKeys } from '@/features/repository-identity'
+import {
+  type RepositoryIdentity,
+  repoQueryKeys,
+  repositoryIdentityKey,
+  toRepoRef
+} from '@/features/repository-identity'
 import { useLatestRef } from '@/hooks/useLatestRef'
 import { formatCause } from '@/lib/format-cause'
 import { gitFailureBannerText } from '@/lib/git-report'
@@ -42,8 +48,10 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const sessionLifecycle = useRef<RepoSessionLifecycle>(emptyRepoSessionLifecycle)
   const session = useRepoSessionController(sessionLifecycle)
 
-  const path = session.repoPath
+  const repository = session.repoRef
+  const path = repository?.path ?? null
 
+  const liveRepoRef = session.liveRepoRef
   const liveRepoPath = session.liveRepoPath
   const tabActiveRef = useRef(tabActive)
   tabActiveRef.current = tabActive
@@ -51,13 +59,25 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const openGeneration = session.openGenerationRef
   const mutationCoordinator = useRepoMutationCoordinator()
 
-  const isCurrentRepo = (generation: number, repoPath: string) =>
-    generation === openGeneration.current && liveRepoPath.current === repoPath
+  const repositoryForPath = (repoPath: string): RepoRef => {
+    const current = liveRepoRef.current
+    return current?.path === repoPath ? current : toRepoRef(repoPath)
+  }
+
+  const isCurrentRepo = (generation: number, candidate: RepositoryIdentity) => {
+    const current = liveRepoRef.current
+    return (
+      generation === openGeneration.current &&
+      current !== null &&
+      repositoryIdentityKey(current) === repositoryIdentityKey(candidate)
+    )
+  }
 
   const workingTreeStatus = useWorkingTreeStatusController({
     repoPath: path,
+    repository,
     tabId,
-    liveRepoPath,
+    liveRepoRef,
     openGenerationRef: openGeneration,
     isCurrentRepo,
     setError: session.setError,
@@ -66,31 +86,32 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   })
 
   const commitHistory = useCommitHistoryController({
-    repoPath: path,
+    repository,
     tabId,
     tabActive,
-    liveRepoPath,
+    liveRepoRef,
     openGenerationRef: openGeneration,
     isCurrentRepo,
     setError: session.setError,
     clearError: session.clearError
   })
 
-  const refreshAfterFetch = (repoPath: string): Promise<unknown> =>
+  const refreshAfterFetch = (candidate: RepositoryIdentity): Promise<unknown> =>
     Promise.all([
-      queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).localBranches }),
-      queryClient.invalidateQueries({ queryKey: repoQueryKeys(repoPath).remoteRefs }),
-      commitHistory.restart(repoPath)
+      queryClient.invalidateQueries({ queryKey: repoQueryKeys(candidate).localBranches }),
+      queryClient.invalidateQueries({ queryKey: repoQueryKeys(candidate).remoteRefs }),
+      commitHistory.restart(candidate)
     ])
 
   const refs = useRefsController({
     repoPath: path,
+    repository,
     tabId,
     tabActive,
     remotes: session.remotes,
     defaultBranch: session.defaultBranch,
     statusCurrent: workingTreeStatus.status?.current,
-    liveRepoPath,
+    liveRepoRef,
     openGenerationRef: openGeneration,
     isCurrentRepo,
     mutationCoordinator,
@@ -122,8 +143,11 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     commitHistory.reset()
   }
 
-  const repoCacheQueryKey = (repoPath: string, cache: RepoCache): readonly unknown[] => {
-    const queryKeys = repoQueryKeys(repoPath)
+  const repoCacheQueryKey = (
+    candidate: RepositoryIdentity,
+    cache: RepoCache
+  ): readonly unknown[] => {
+    const queryKeys = repoQueryKeys(candidate)
     switch (cache) {
       case 'status':
         return queryKeys.status
@@ -142,17 +166,18 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
     }
   }
 
-  const refreshMappedCache = (repoPath: string, cache: RepoCache): Promise<unknown> =>
+  const refreshMappedCache = (candidate: RepositoryIdentity, cache: RepoCache): Promise<unknown> =>
     cache === 'log'
-      ? commitHistory.restart(repoPath)
-      : queryClient.invalidateQueries({ queryKey: repoCacheQueryKey(repoPath, cache) })
+      ? commitHistory.restart(candidate)
+      : queryClient.invalidateQueries({ queryKey: repoCacheQueryKey(candidate, cache) })
 
-  const refreshCaches = (repoPath: string, caches: readonly RepoCache[]): Promise<unknown> =>
-    Promise.all(caches.map((cache) => refreshMappedCache(repoPath, cache)))
+  const refreshCaches = (candidate: RepositoryIdentity, caches: readonly RepoCache[]) =>
+    Promise.all(caches.map((cache) => refreshMappedCache(candidate, cache)))
 
   sessionLifecycle.current = {
     onRepoOpened: (opened, generation) => {
-      void refreshCaches(opened.path, ['status', 'localBranches', 'remoteRefs'])
+      const openedRepository = liveRepoRef.current ?? repositoryForPath(opened.path)
+      void refreshCaches(openedRepository, ['status', 'localBranches', 'remoteRefs'])
       commitHistory.onRepoOpened(opened, generation)
     },
     onBeforeRepoClosed: (repoPath) => commitHistory.cancelStream(repoPath),
@@ -162,28 +187,28 @@ function useGitStoreValue(tabId: string, tabActive: boolean) {
   const actionRunner = useActionRunnerController({
     liveRepoPath,
     openGenerationRef: openGeneration,
-    isCurrentRepo,
-    refreshCaches,
+    isCurrentRepo: (generation, repoPath) => isCurrentRepo(generation, repositoryForPath(repoPath)),
+    refreshCaches: (repoPath, caches) => refreshCaches(repositoryForPath(repoPath), caches),
     mutationCoordinator
   })
 
   const latest = useLatestRef({
-    getRepoPath: () => liveRepoPath.current,
+    getRepository: () => liveRepoRef.current,
     isTabActive: () => tabActiveRef.current,
     openRepo: session.openRepo
   })
 
   useEffect(() => {
     const unsubRestarted = window.electronAPI.onSidecarRestarted(() => {
-      const { getRepoPath, openRepo, isTabActive } = latest.current
-      const repoPath = getRepoPath()
-      if (!repoPath) {
+      const { getRepository, openRepo, isTabActive } = latest.current
+      const currentRepository = getRepository()
+      if (!currentRepository) {
         return
       }
       if (isTabActive()) {
         toast.info('Reconnecting git engine…')
       }
-      void openRepo(repoPath)
+      void openRepo(currentRepository)
     })
 
     return () => {
@@ -211,17 +236,17 @@ export function GitStoreProvider(props: GitStoreProviderProps) {
   const { session, workingTreeStatus, commitHistory, refs, actionRunner, repoChangedHandlers } =
     useGitStoreValue(props.tabId, props.tabActive)
   const latestRepoChanged = useLatestRef({
-    repoPath: session.repoPath,
+    repository: session.repoRef,
     handlers: repoChangedHandlers
   })
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onRepoChanged((event) => {
-      const { repoPath, handlers } = latestRepoChanged.current
-      if (event.repoPath !== repoPath) {
+      const { repository, handlers } = latestRepoChanged.current
+      if (event.repoPath !== repository?.path) {
         return
       }
-      void handlers.refreshCaches(event.repoPath, cachesForRepoChange(event.kind))
+      void handlers.refreshCaches(repository, cachesForRepoChange(event.kind))
     })
     return () => unsubscribe?.()
   }, [])

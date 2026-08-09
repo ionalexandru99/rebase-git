@@ -120,8 +120,21 @@ export type UpdatePreferences = typeof UpdatePreferencesSchema.Type
 export const RefTreeTogglesSchema = mutableArray(Schema.String)
 export type RefTreeToggles = typeof RefTreeTogglesSchema.Type
 
+export const PersistedRepoRefSchema = Schema.Struct({
+  environmentId: RequiredString,
+  path: RequiredString
+})
+export type PersistedRepoRef = typeof PersistedRepoRefSchema.Type
+
+export const PersistedTabRepositorySchema = Schema.Union(
+  Schema.String,
+  PersistedRepoRefSchema,
+  Schema.Null
+)
+export type PersistedTabRepository = typeof PersistedTabRepositorySchema.Type
+
 export const PersistedTabsSchema = Schema.Struct({
-  tabs: mutableArray(Schema.NullOr(Schema.String)),
+  tabs: mutableArray(PersistedTabRepositorySchema),
   activeIndex: NonNaNNumber
 })
 export type PersistedTabs = typeof PersistedTabsSchema.Type

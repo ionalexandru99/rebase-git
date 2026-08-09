@@ -41,6 +41,7 @@ export interface ProfileStateStore {
 
 const stateFileName = 'state.json'
 const lockFileName = 'writer.lock'
+const maximumMigrationBackupsPerSchema = 100
 
 function failure(
   reason: ProfileStateFailureReason,
@@ -57,9 +58,28 @@ function stringifyState(state: ServerProfileState): string {
 
 async function writeAtomically(filePath: string, contents: string): Promise<void> {
   const temporaryPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`
-  await writeFile(temporaryPath, contents, { encoding: 'utf8', flag: 'wx' })
   try {
+    const temporaryHandle = await open(temporaryPath, 'wx')
+    try {
+      await temporaryHandle.writeFile(contents, 'utf8')
+      await temporaryHandle.sync()
+    } finally {
+      await temporaryHandle.close()
+    }
     await rename(temporaryPath, filePath)
+    try {
+      const directoryHandle = await open(path.dirname(filePath), 'r')
+      try {
+        await directoryHandle.sync()
+      } finally {
+        await directoryHandle.close()
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (process.platform !== 'win32' || (code !== 'EPERM' && code !== 'EACCES')) {
+        throw error
+      }
+    }
   } catch (error) {
     await rm(temporaryPath, { force: true })
     throw error
@@ -71,7 +91,7 @@ async function writeMigrationBackup(
   sourceDataSchema: number,
   raw: string
 ): Promise<string> {
-  for (let attempt = 0; ; attempt += 1) {
+  for (let attempt = 0; attempt < maximumMigrationBackupsPerSchema; attempt += 1) {
     const suffix = attempt === 0 ? '' : `-${attempt}`
     const backupPath = path.join(
       profileDirectory,
@@ -86,6 +106,7 @@ async function writeMigrationBackup(
       }
     }
   }
+  throw new Error(`Profile has ${maximumMigrationBackupsPerSchema} backups for this schema`)
 }
 
 async function readStateFile(
@@ -151,11 +172,47 @@ function acquireProfileLock(
 ): Effect.Effect<string, ProfileStateFailure, Scope.Scope> {
   const lockPath = path.join(profile.directory, lockFileName)
   const writerToken = `${process.pid}:${randomUUID()}`
+  const removeStaleLock = async (): Promise<boolean> => {
+    let persistedToken: string
+    try {
+      persistedToken = (await readFile(lockPath, 'utf8')).trim()
+    } catch (error) {
+      return (error as NodeJS.ErrnoException).code === 'ENOENT'
+    }
+    const separator = persistedToken.indexOf(':')
+    const writerProcessId = Number(persistedToken.slice(0, separator))
+    if (separator <= 0 || !Number.isSafeInteger(writerProcessId) || writerProcessId <= 0) {
+      return false
+    }
+    try {
+      process.kill(writerProcessId, 0)
+      return false
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+        return false
+      }
+    }
+    if ((await readFile(lockPath, 'utf8').catch(() => '')).trim() !== persistedToken) {
+      return false
+    }
+    await rm(lockPath, { force: true })
+    return true
+  }
+  const createLock = async () => {
+    try {
+      return await open(lockPath, 'wx')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || !(await removeStaleLock())) {
+        throw error
+      }
+      return open(lockPath, 'wx')
+    }
+  }
   return Effect.acquireRelease(
     Effect.tryPromise({
       try: async () => {
         await mkdir(profile.directory, { recursive: true })
-        const handle = await open(lockPath, 'wx')
+        const handle = await createLock()
         try {
           await handle.writeFile(`${writerToken}\n`, 'utf8')
           return handle

@@ -30,6 +30,7 @@ export function createRepoSessionOwnership(
   const pendingCloses = new Map<RepositoryIdentityKey, PendingClose>()
   const canonicalPaths = new Map<RepositoryIdentityKey, RepoRef>()
   const activeOpenRequests = new Map<RepositoryIdentityKey, number>()
+  const canonicalOpenKeys = new Map<RepositoryIdentityKey, RepositoryIdentityKey>()
   let ownerSequence = 0
 
   const resolveRepository = (requestedPath: RepositoryIdentity): RepoRef =>
@@ -47,8 +48,32 @@ export function createRepoSessionOwnership(
       typeof canonicalPath === 'string'
         ? { ...requestedRepoRef, path: canonicalPath }
         : canonicalPath
-    canonicalPaths.set(repositoryIdentityKey(requestedRepoRef), canonicalRepoRef)
-    canonicalPaths.set(repositoryIdentityKey(canonicalRepoRef), canonicalRepoRef)
+    const requestedKey = repositoryIdentityKey(requestedRepoRef)
+    const canonicalKey = repositoryIdentityKey(canonicalRepoRef)
+    canonicalPaths.set(requestedKey, canonicalRepoRef)
+    canonicalPaths.set(canonicalKey, canonicalRepoRef)
+    if (requestedKey === canonicalKey) {
+      return
+    }
+    canonicalOpenKeys.set(requestedKey, canonicalKey)
+    const requestedOpenCount = activeOpenRequests.get(requestedKey)
+    if (requestedOpenCount !== undefined) {
+      activeOpenRequests.delete(requestedKey)
+      activeOpenRequests.set(
+        canonicalKey,
+        requestedOpenCount + (activeOpenRequests.get(canonicalKey) ?? 0)
+      )
+    }
+    const requestedPendingClose = pendingCloses.get(requestedKey)
+    if (requestedPendingClose !== undefined) {
+      pendingCloses.delete(requestedKey)
+      const canonicalPendingClose = pendingCloses.get(canonicalKey)
+      if (canonicalPendingClose === undefined) {
+        pendingCloses.set(canonicalKey, requestedPendingClose)
+      } else if (canonicalPendingClose !== requestedPendingClose) {
+        cancelTimer(requestedPendingClose)
+      }
+    }
   }
 
   const beginOpen = (requestedPath: RepositoryIdentity): RepositoryIdentityKey => {
@@ -58,24 +83,30 @@ export function createRepoSessionOwnership(
   }
 
   const endOpen = (identity: RepositoryIdentityKey): void => {
-    const remaining = (activeOpenRequests.get(identity) ?? 0) - 1
+    const activeIdentity = canonicalOpenKeys.get(identity) ?? identity
+    const remaining = (activeOpenRequests.get(activeIdentity) ?? 0) - 1
     if (remaining > 0) {
-      activeOpenRequests.set(identity, remaining)
+      activeOpenRequests.set(activeIdentity, remaining)
     } else {
-      activeOpenRequests.delete(identity)
+      activeOpenRequests.delete(activeIdentity)
+      for (const [requestedKey, canonicalKey] of canonicalOpenKeys) {
+        if (canonicalKey === activeIdentity) {
+          canonicalOpenKeys.delete(requestedKey)
+        }
+      }
     }
   }
 
   const trackPendingClose = (repository: RepositoryIdentity, pendingClose: PendingClose): void => {
-    pendingCloses.set(repositoryIdentityKey(repository), pendingClose)
+    pendingCloses.set(repositoryIdentityKey(resolveRepository(repository)), pendingClose)
   }
 
   const releasePendingClose = (repository: RepositoryIdentity): void => {
-    pendingCloses.delete(repositoryIdentityKey(repository))
+    pendingCloses.delete(repositoryIdentityKey(resolveRepository(repository)))
   }
 
   const cancelPendingClose = (repository: RepositoryIdentity): void => {
-    const key = repositoryIdentityKey(repository)
+    const key = repositoryIdentityKey(resolveRepository(repository))
     const pendingClose = pendingCloses.get(key)
     if (pendingClose !== undefined) {
       cancelTimer(pendingClose)
@@ -93,7 +124,7 @@ export function createRepoSessionOwnership(
       (activeOpenRequests.get(repositoryIdentityKey(resolveRepository(repository))) ?? 0) > 0,
     trackPendingClose,
     matchesPendingClose: (repository, pendingClose) =>
-      pendingCloses.get(repositoryIdentityKey(repository)) === pendingClose,
+      pendingCloses.get(repositoryIdentityKey(resolveRepository(repository))) === pendingClose,
     releasePendingClose,
     cancelPendingClose
   }
