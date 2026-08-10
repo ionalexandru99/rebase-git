@@ -58,7 +58,7 @@ export const runBrowserCommand: BrowserCommandRunner = (command) =>
         windowsHide: true
       })
     } catch (error) {
-      resume(
+      complete(
         Effect.fail(
           new BrowserCommandFailure({
             executable: command.executable,
@@ -152,14 +152,18 @@ export function openBrowser(
       environment.variables.WSL_DISTRO_NAME !== undefined ||
       environment.release.toLowerCase().includes('microsoft'))
   if (isWsl) {
+    const advertisedReadinessUrl = new URL(request.readinessUrl)
+    const readinessAuthority = advertisedReadinessUrl.host
+    advertisedReadinessUrl.hostname = '127.0.0.1'
     const forwardingVerification = commandRunner({
       executable: 'powershell.exe',
       arguments: [
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        'try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $args[0] | Out-Null } catch { exit 1 }',
-        request.readinessUrl
+        'try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $args[0] -Headers @{ Host = $args[1] } | Out-Null } catch { exit 1 }',
+        advertisedReadinessUrl.href,
+        readinessAuthority
       ]
     })
     return forwardingVerification.pipe(

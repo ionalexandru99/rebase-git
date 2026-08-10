@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   acquireBrowserServer,
+  browserServerFetch,
   type BrowserServerFixture,
   requestHeaders,
   sessionCookie
@@ -18,11 +19,11 @@ describe('Browser Server authentication', () => {
     acquired.push(fixture)
 
     const [first, replay] = await Promise.all([
-      fetch(fixture.server.browserUrl, {
+      browserServerFetch(fixture.server, fixture.server.browserUrl, {
         headers: requestHeaders(fixture.server),
         redirect: 'manual'
       }),
-      fetch(fixture.server.browserUrl, {
+      browserServerFetch(fixture.server, fixture.server.browserUrl, {
         headers: requestHeaders(fixture.server),
         redirect: 'manual'
       })
@@ -44,15 +45,15 @@ describe('Browser Server authentication', () => {
     acquired.push(fixture)
     const additionalBrowserUrl = fixture.server.mintBrowserUrl()
 
-    const initial = await fetch(fixture.server.browserUrl, {
+    const initial = await browserServerFetch(fixture.server, fixture.server.browserUrl, {
       headers: requestHeaders(fixture.server),
       redirect: 'manual'
     })
-    const additional = await fetch(additionalBrowserUrl, {
+    const additional = await browserServerFetch(fixture.server, additionalBrowserUrl, {
       headers: requestHeaders(fixture.server),
       redirect: 'manual'
     })
-    const replay = await fetch(additionalBrowserUrl, {
+    const replay = await browserServerFetch(fixture.server, additionalBrowserUrl, {
       headers: requestHeaders(fixture.server),
       redirect: 'manual'
     })
@@ -66,9 +67,9 @@ describe('Browser Server authentication', () => {
     let now = 1_000
     const fixture = await acquireBrowserServer({ nonceTtlMs: 50, now: () => now })
     acquired.push(fixture)
-    now = 1_051
+    now = 1_050
 
-    const response = await fetch(fixture.server.browserUrl, {
+    const response = await browserServerFetch(fixture.server, fixture.server.browserUrl, {
       headers: requestHeaders(fixture.server),
       redirect: 'manual'
     })
@@ -81,19 +82,19 @@ describe('Browser Server authentication', () => {
     const fixture = await acquireBrowserServer()
     acquired.push(fixture)
 
-    const head = await fetch(fixture.server.browserUrl, {
+    const head = await browserServerFetch(fixture.server, fixture.server.browserUrl, {
       method: 'HEAD',
       headers: requestHeaders(fixture.server),
       redirect: 'manual'
     })
-    const accepted = await fetch(fixture.server.browserUrl, {
+    const accepted = await browserServerFetch(fixture.server, fixture.server.browserUrl, {
       headers: requestHeaders(fixture.server),
       redirect: 'manual'
     })
     const failures: Response[] = []
     for (let index = 0; index < 9; index += 1) {
       failures.push(
-        await fetch(`${fixture.server.origin}/auth/not-a-ticket-${index}`, {
+        await browserServerFetch(fixture.server, `/auth/not-a-ticket-${index}`, {
           headers: requestHeaders(fixture.server),
           redirect: 'manual'
         })

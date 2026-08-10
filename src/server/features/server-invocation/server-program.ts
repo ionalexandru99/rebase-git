@@ -1,4 +1,3 @@
-import os from 'node:os'
 import { Effect } from 'effect4'
 import {
   type BrowserServerFailure,
@@ -50,11 +49,7 @@ export function serverProgram(
   options: ServerInvocationOptions,
   webRoot: string,
   diagnostics: ServerDiagnostics
-): Effect.Effect<
-  void,
-  | import('../browser-server').BrowserServerFailure
-  | import('../browser-server').RendererBuildFailure
-> {
+): Effect.Effect<void, BrowserServerFailure | RendererBuildFailure> {
   return Effect.scoped(
     Effect.gen(function* () {
       const server = yield* startBrowserServer({
@@ -65,10 +60,7 @@ export function serverProgram(
         port: options.port,
         webRoot
       })
-      const browserTicket = new URL(server.browserUrl).pathname.split('/').at(-1)
-      if (browserTicket) {
-        yield* diagnostics.registerSecret(browserTicket)
-      }
+      yield* diagnostics.registerSecret(server.browserTicket)
       yield* diagnostics.record('server-ready', {
         port: server.port,
         readOnly: options.readOnly,
@@ -84,19 +76,10 @@ export function serverProgram(
         yield* writeOutput(`Open ${server.browserUrl}`)
       } else {
         yield* writeOutput(`Opening ${server.browserUrl}`)
-        const browserOpening = yield* openBrowser(
-          {
-            browserUrl: server.browserUrl,
-            readinessUrl: `${server.origin}/.well-known/rebase/health`
-          },
-          {
-            environment: {
-              platform: process.platform,
-              release: os.release(),
-              variables: process.env
-            }
-          }
-        )
+        const browserOpening = yield* openBrowser({
+          browserUrl: server.browserUrl,
+          readinessUrl: `${server.origin}/.well-known/rebase/health`
+        })
         if (browserOpening._tag === 'Instructions') {
           yield* diagnostics.record('browser-open-instructions', {
             reason: browserOpening.reason

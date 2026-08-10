@@ -96,7 +96,10 @@ export function parseServerInvocationOptions(
       if (value === undefined || value.startsWith('--')) {
         return failure('InvalidArguments', '--port requires a value', '--port')
       }
-      port = Number(value)
+      if (!/^\d+$/.test(value)) {
+        return failure('InvalidValue', '--port must be an integer between 1 and 65535', '--port')
+      }
+      port = Number.parseInt(value, 10)
       if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
         return failure('InvalidValue', '--port must be an integer between 1 and 65535', '--port')
       }

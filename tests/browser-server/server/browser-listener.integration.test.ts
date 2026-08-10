@@ -1,8 +1,9 @@
 import { createServer } from 'node:http'
 import { Effect } from 'effect4'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   BrowserServerFailure,
+  type BrowserEnvironmentConnection,
   createFakeEnvironmentConnection,
   startBrowserServer
 } from '../../../src/server/features/browser-server'
@@ -23,14 +24,20 @@ describe('Browser Server loopback listener', () => {
       })
     })
     const webRoot = await createWebBuild()
+    const close = vi.fn()
+    const environmentConnection: BrowserEnvironmentConnection = {
+      loadBootstrap: () =>
+        Effect.succeed({
+          environment: { environmentId: 'local', path: process.cwd() },
+          readOnly: false
+        }),
+      close: () => Effect.sync(close)
+    }
 
     const attempt = Effect.runPromise(
       Effect.scoped(
         startBrowserServer({
-          environmentConnection: createFakeEnvironmentConnection({
-            initialPath: process.cwd(),
-            readOnly: false
-          }),
+          environmentConnection,
           port,
           webRoot
         })
@@ -41,6 +48,7 @@ describe('Browser Server loopback listener', () => {
       _tag: 'BrowserServerFailure',
       message: `Loopback port ${port} is already in use`
     } satisfies Partial<BrowserServerFailure>)
+    expect(close).toHaveBeenCalledOnce()
     await new Promise<void>((resolve) => occupied.close(() => resolve()))
   })
 

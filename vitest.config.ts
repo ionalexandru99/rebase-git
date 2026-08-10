@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  define: {
+    __REBASE_RENDERER_BUILD_ID__: JSON.stringify('renderer-test-build')
+  },
   plugins: [react()],
   resolve: {
     conditions: ['development', 'browser'],

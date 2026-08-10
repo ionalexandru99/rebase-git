@@ -40,15 +40,21 @@ export function createClientSessionAuthority(options: {
 
   return {
     mintBrowserTicket: () => {
+      const mintedAt = options.now()
+      for (const [digest, existingTicket] of browserTickets) {
+        if (existingTicket.expiresAt <= mintedAt) {
+          browserTickets.delete(digest)
+        }
+      }
       const ticket = randomSecret()
-      browserTickets.set(secretDigest(ticket), { expiresAt: options.now() + options.nonceTtlMs })
+      browserTickets.set(secretDigest(ticket), { expiresAt: mintedAt + options.nonceTtlMs })
       return ticket
     },
     exchangeBrowserTicket: (ticket) => {
       const digest = secretDigest(ticket)
       const browserTicket = browserTickets.get(digest)
       browserTickets.delete(digest)
-      if (!browserTicket || browserTicket.expiresAt < options.now()) {
+      if (!browserTicket || browserTicket.expiresAt <= options.now()) {
         return { accepted: false }
       }
       const sessionToken = randomSecret()

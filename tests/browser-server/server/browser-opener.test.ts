@@ -105,8 +105,9 @@ describe('platform browser opener', () => {
           '-NoProfile',
           '-NonInteractive',
           '-Command',
-          'try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $args[0] | Out-Null } catch { exit 1 }',
-          readinessUrl
+          'try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $args[0] -Headers @{ Host = $args[1] } | Out-Null } catch { exit 1 }',
+          'http://127.0.0.1:4312/health',
+          'localhost:4312'
         ]
       },
       {

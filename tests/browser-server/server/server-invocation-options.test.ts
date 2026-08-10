@@ -1,3 +1,4 @@
+import path from 'node:path'
 import {
   parseServerInvocationOptions,
   ServerInvocationOptionsFailure
@@ -27,7 +28,7 @@ describe('Server invocation options', () => {
     expect(result).toEqual({
       _tag: 'Success',
       options: {
-        path: '/workspaces/project',
+        path: path.resolve('/workspaces/rebase', '../project'),
         port: 4312,
         open: 'none',
         readOnly: true
@@ -63,14 +64,17 @@ describe('Server invocation options', () => {
     })
   })
 
-  it.each(['0', '65536', '2.5', 'not-a-port'])('rejects invalid port %s', (port) => {
+  it.each(['0', '65536', '2.5', 'not-a-port', '0x10', '1e3', ' 80', '-1'])(
+    'rejects invalid port %s',
+    (port) => {
     const result = parseServerInvocationOptions(['--port', port], '/workspaces/rebase')
 
     expect(result).toMatchObject({
       _tag: 'Failure',
       failure: { reason: 'InvalidValue', option: '--port' }
     })
-  })
+    }
+  )
 
   it('rejects an unsupported browser opening mode', () => {
     const result = parseServerInvocationOptions(['--open', 'electron'], '/workspaces/rebase')
@@ -99,7 +103,7 @@ describe('Server invocation options', () => {
 
     expect(result).toMatchObject({
       _tag: 'Success',
-      options: { path: '/workspaces/rebase/--repository' }
+      options: { path: path.resolve('/workspaces/rebase', '--repository') }
     })
   })
 })

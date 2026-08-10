@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { Effect, Exit, Scope } from 'effect4'
@@ -25,6 +26,8 @@ export async function createWebBuild(
     '<!doctype html><html><head></head><body><div id="root"></div><script type="module" src="/assets/index-a1b2c3d4.js"></script></body></html>'
   )
   await writeFile(path.join(webRoot, 'assets/index-a1b2c3d4.js'), 'globalThis.REBASE_WEB=true')
+  await writeFile(path.join(webRoot, 'assets/font-a1b2c3d4.woff2'), 'font')
+  await writeFile(path.join(webRoot, 'assets/image-a1b2c3d4.png'), 'image')
   await writeFile(
     path.join(webRoot, 'rebase-manifest.json'),
     JSON.stringify({ rendererBuildId, productVersion })
@@ -63,6 +66,53 @@ export async function acquireBrowserServer(options?: {
 
 export function requestHeaders(server: RunningBrowserServer): Record<string, string> {
   return { Host: server.authority }
+}
+
+export function browserServerFetch(
+  server: Pick<RunningBrowserServer, 'authority' | 'origin' | 'port'>,
+  target: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  const targetUrl = new URL(target, server.origin)
+  const headers = new Headers(init.headers)
+  if (!headers.has('Host')) {
+    headers.set('Host', server.authority)
+  }
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(
+      {
+        headers: Object.fromEntries(headers),
+        host: '127.0.0.1',
+        method: init.method ?? 'GET',
+        path: `${targetUrl.pathname}${targetUrl.search}`,
+        port: server.port
+      },
+      (response) => {
+        const chunks: Buffer[] = []
+        response.on('data', (chunk: Buffer) => chunks.push(chunk))
+        response.once('error', reject)
+        response.once('end', () => {
+          const responseHeaders = new Headers()
+          for (let index = 0; index < response.rawHeaders.length; index += 2) {
+            responseHeaders.append(response.rawHeaders[index], response.rawHeaders[index + 1])
+          }
+          const status = response.statusCode ?? 500
+          const bodyAllowed = init.method !== 'HEAD' && ![204, 205, 304].includes(status)
+          resolve(
+            new Response(bodyAllowed ? Buffer.concat(chunks) : null, {
+              headers: responseHeaders,
+              status
+            })
+          )
+        })
+      }
+    )
+    request.once('error', reject)
+    if (typeof init.body === 'string' || init.body instanceof Uint8Array) {
+      request.write(init.body)
+    }
+    request.end()
+  })
 }
 
 export function sessionCookie(response: Response): string {

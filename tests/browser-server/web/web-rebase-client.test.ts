@@ -45,7 +45,7 @@ describe('WebRebaseClient', () => {
     expect(headers.get('accept')).toBe('application/json')
     expect(headers.get('x-rebase-renderer-build-id')).toBe('renderer-build-a')
     expect(headers.get('x-rebase-server-instance-id')).toBe('server-instance-a')
-    expect(headers.has('x-rebase-csrf')).toBe(false)
+    expect(headers.has('x-rebase-csrf-token')).toBe(false)
     expect(reload).not.toHaveBeenCalled()
   })
 

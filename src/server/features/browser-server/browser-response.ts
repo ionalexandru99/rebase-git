@@ -20,21 +20,29 @@ function applySecurityHeaders(response: ServerResponse): void {
   response.setHeader('X-Content-Type-Options', 'nosniff')
 }
 
+const rendererMimeTypes = new Map([
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.css', 'text/css; charset=utf-8'],
+  ['.svg', 'image/svg+xml'],
+  ['.ico', 'image/x-icon'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.webp', 'image/webp'],
+  ['.avif', 'image/avif'],
+  ['.gif', 'image/gif'],
+  ['.woff2', 'font/woff2'],
+  ['.woff', 'font/woff'],
+  ['.ttf', 'font/ttf'],
+  ['.otf', 'font/otf']
+])
+
 function mimeType(filePath: string): string {
-  if (filePath.endsWith('.js')) {
-    return 'text/javascript; charset=utf-8'
-  }
-  if (filePath.endsWith('.css')) {
-    return 'text/css; charset=utf-8'
-  }
-  if (filePath.endsWith('.svg')) {
-    return 'image/svg+xml'
-  }
-  if (filePath.endsWith('.ico')) {
-    return 'image/x-icon'
-  }
-  if (filePath.endsWith('.json')) {
-    return 'application/json; charset=utf-8'
+  for (const [extension, contentType] of rendererMimeTypes) {
+    if (filePath.endsWith(extension)) {
+      return contentType
+    }
   }
   return 'application/octet-stream'
 }
