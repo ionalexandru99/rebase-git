@@ -8,6 +8,10 @@ import {
 import { Schema } from 'effect4'
 import type { RebaseClient } from './rebase-client'
 
+const decodeClientBootstrap = Schema.decodeUnknownSync(ClientBootstrapSchema, {
+  onExcessProperty: 'error'
+})
+
 interface WebRebaseClientOptions {
   readonly fetch: typeof fetch
   readonly reload: () => void
@@ -31,12 +35,20 @@ export function createWebRebaseClient(options: WebRebaseClientOptions): RebaseCl
     if (method === 'POST' && csrfToken !== null) {
       headers.set(CLIENT_CSRF_HEADER, csrfToken)
     }
-    const response = await options.fetch(path, {
-      method,
-      credentials: 'same-origin',
-      headers,
-      signal
-    })
+    let response: Response
+    try {
+      response = await options.fetch(path, {
+        method,
+        credentials: 'same-origin',
+        headers,
+        signal
+      })
+    } catch (error) {
+      if (signal?.aborted) {
+        throw error
+      }
+      throw new Error('Rebase Server request failed')
+    }
     if (response.status === 401 || response.status === 409) {
       options.reload()
       throw new Error('Rebase client must reload')
@@ -50,7 +62,12 @@ export function createWebRebaseClient(options: WebRebaseClientOptions): RebaseCl
   return {
     loadBootstrap: async (signal) => {
       const response = await request(CLIENT_BOOTSTRAP_PATH, 'GET', signal)
-      const bootstrap = Schema.decodeUnknownSync(ClientBootstrapSchema)(await response.json())
+      let bootstrap: typeof ClientBootstrapSchema.Type
+      try {
+        bootstrap = decodeClientBootstrap(await response.json())
+      } catch {
+        throw new Error('Rebase Server returned an invalid bootstrap response')
+      }
       csrfToken = bootstrap.csrfToken
       return {
         environment: bootstrap.environment,

@@ -180,6 +180,14 @@ describe('Browser Server request security', () => {
     const asset = await browserServerFetch(fixture.server, '/assets/index-a1b2c3d4.js', {
       headers: { ...requestHeaders(fixture.server), Cookie: cookie }
     })
+    const headHtml = await browserServerFetch(fixture.server, '/', {
+      method: 'HEAD',
+      headers: { ...requestHeaders(fixture.server), Cookie: cookie }
+    })
+    const headAsset = await browserServerFetch(fixture.server, '/assets/index-a1b2c3d4.js', {
+      method: 'HEAD',
+      headers: { ...requestHeaders(fixture.server), Cookie: cookie }
+    })
     const font = await browserServerFetch(fixture.server, '/assets/font-a1b2c3d4.woff2', {
       headers: { ...requestHeaders(fixture.server), Cookie: cookie }
     })
@@ -218,6 +226,10 @@ describe('Browser Server request security', () => {
     expect(html.headers.get('content-security-policy')).toContain("default-src 'none'")
     expect(html.headers.get('x-content-type-options')).toBe('nosniff')
     expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(headHtml.headers.get('content-length')).toBe(html.headers.get('content-length'))
+    expect(headAsset.headers.get('content-length')).toBe(asset.headers.get('content-length'))
+    await expect(headHtml.text()).resolves.toBe('')
+    await expect(headAsset.text()).resolves.toBe('')
     expect(font.headers.get('content-type')).toBe('font/woff2')
     expect(image.headers.get('content-type')).toBe('image/png')
     expect(favicon.headers.get('cache-control')).toBe('no-store')

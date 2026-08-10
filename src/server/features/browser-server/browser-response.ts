@@ -97,12 +97,13 @@ export function sendBrowserResponse(
   response: ServerResponse,
   statusCode: number,
   body = '',
-  contentType = 'text/plain; charset=utf-8'
+  contentType = 'text/plain; charset=utf-8',
+  contentLength = Buffer.byteLength(body)
 ): void {
   applySecurityHeaders(response)
   response.statusCode = statusCode
   response.setHeader('Content-Type', contentType)
-  response.setHeader('Content-Length', Buffer.byteLength(body))
+  response.setHeader('Content-Length', contentLength)
   response.end(body)
 }
 
@@ -142,7 +143,7 @@ export function sendRendererFile(
   applySecurityHeaders(response)
   response.statusCode = 200
   response.setHeader('Content-Type', mimeType(filePath))
-  response.setHeader('Content-Length', method === 'HEAD' ? 0 : file.byteLength)
+  response.setHeader('Content-Length', file.byteLength)
   response.end(method === 'HEAD' ? undefined : file)
 }
 
@@ -152,5 +153,11 @@ export function sendRendererHtml(
   html: string
 ): void {
   response.setHeader('Cache-Control', 'no-store')
-  sendBrowserResponse(response, 200, method === 'HEAD' ? '' : html, 'text/html; charset=utf-8')
+  sendBrowserResponse(
+    response,
+    200,
+    method === 'HEAD' ? '' : html,
+    'text/html; charset=utf-8',
+    Buffer.byteLength(html)
+  )
 }

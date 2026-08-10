@@ -142,7 +142,7 @@ export function openBrowser(
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      'Start-Process -FilePath $args[0]',
+      '& { param([string]$BrowserUrl) Start-Process -FilePath $BrowserUrl }',
       request.browserUrl
     ]
   })
@@ -161,7 +161,7 @@ export function openBrowser(
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        'try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $args[0] -Headers @{ Host = $args[1] } | Out-Null } catch { exit 1 }',
+        '& { param([string]$ReadinessUrl, [string]$ReadinessAuthority) try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $ReadinessUrl -Headers @{ Host = $ReadinessAuthority } | Out-Null } catch { exit 1 } }',
         advertisedReadinessUrl.href,
         readinessAuthority
       ]

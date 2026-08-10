@@ -6,9 +6,7 @@ type ServerState =
   | { readonly status: 'connected'; readonly bootstrap: ClientBootstrap }
   | { readonly status: 'failed'; readonly message: string }
 
-function failureMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'The Server did not return a usable response.'
-}
+const SERVER_FAILURE_MESSAGE = 'The Server did not return a usable response.'
 
 export function RebaseServerApp(props: { readonly client: RebaseClient }): React.JSX.Element {
   const [state, setState] = useState<ServerState>({ status: 'loading' })
@@ -17,9 +15,9 @@ export function RebaseServerApp(props: { readonly client: RebaseClient }): React
     const controller = new AbortController()
     props.client.loadBootstrap(controller.signal).then(
       (bootstrap) => setState({ status: 'connected', bootstrap }),
-      (error: unknown) => {
+      () => {
         if (!controller.signal.aborted) {
-          setState({ status: 'failed', message: failureMessage(error) })
+          setState({ status: 'failed', message: SERVER_FAILURE_MESSAGE })
         }
       }
     )
