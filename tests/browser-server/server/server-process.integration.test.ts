@@ -132,7 +132,6 @@ describe('standalone Server process', () => {
     )?.[1]
 
     expect(output).toContain('Rebase Server is ready')
-    expect(output).toContain(`Local Environment: ${expectedInvocationDirectory} (read-only)`)
     expect(browserUrl).toBeDefined()
     expect(child.exitCode).toBeNull()
     const advertisedUrl = new URL(browserUrl!)
@@ -183,10 +182,15 @@ describe('standalone Server process', () => {
     expect(manifestResponse.headers.get('cache-control')).toBe('no-store')
     expect(assetResponse.headers.get('cache-control')).toContain('immutable')
     expect(asset).toContain(manifest.rendererBuildId)
-    await expect(bootstrap.json()).resolves.toMatchObject({
-      environment: { path: expectedInvocationDirectory },
+    const bootstrapState = (await bootstrap.json()) as {
+      readonly environment: { readonly path: string }
+      readonly readOnly: boolean
+    }
+    expect(bootstrapState).toMatchObject({
       readOnly: true
     })
+    expect(await realpath(bootstrapState.environment.path)).toBe(expectedInvocationDirectory)
+    expect(output).toContain(`Local Environment: ${bootstrapState.environment.path} (read-only)`)
     expect(child.exitCode).toBeNull()
 
     const exited = waitForExit(child)
