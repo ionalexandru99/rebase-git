@@ -1,0 +1,1 @@
+declare const __REBASE_RENDERER_BUILD_ID__: string

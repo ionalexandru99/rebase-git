@@ -1,5 +1,5 @@
 {
-  "name": "rebase",
+  "name": "rebase-git",
   "version": "0.0.1",
   "description": "A fast desktop Git client: several repositories in tabs, staging down to single lines, and history that stays responsive in huge repos",
   "main": "./out/main/index.js",
@@ -11,6 +11,9 @@
   },
   "license": "Apache-2.0",
   "private": true,
+  "bin": {
+    "rebase": "./out/server/index.js"
+  },
   "type": "module",
   "packageManager": "pnpm@11.2.2",
   "engines": {

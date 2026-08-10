@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  define: {
+    __REBASE_RENDERER_BUILD_ID__: JSON.stringify('renderer-test-build')
+  },
   plugins: [react()],
   resolve: {
     conditions: ['development', 'browser'],
@@ -19,6 +22,7 @@ export default defineConfig({
     include: [
       'src/web/**/*.test.{ts,tsx}',
       'src/renderer/**/*.test.{ts,tsx}',
+      'tests/browser-server/web/**/*.test.{ts,tsx}',
       'tests/environment-identity/web/**/*.test.{ts,tsx}',
     ],
     setupFiles: ['./src/test/setup.ts'],

@@ -1,23 +1,19 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import '../renderer/index.css'
-import { WebRuntimeUnavailable } from './WebRuntimeUnavailable'
-
-type LoadDesktopRenderer = () => Promise<unknown>
+import {
+  createDocumentRebaseClient,
+  type RebaseClient,
+  RebaseServerApp
+} from './features/server-connection'
 
 export async function startRuntimeRenderer(
   container: HTMLElement,
-  desktopBridge: unknown = Reflect.get(window, 'electronAPI'),
-  loadDesktopRenderer: LoadDesktopRenderer = () => import('../renderer/main')
+  client: RebaseClient = createDocumentRebaseClient(document)
 ): Promise<void> {
-  if (desktopBridge) {
-    await loadDesktopRenderer()
-    return
-  }
-
   createRoot(container).render(
     <StrictMode>
-      <WebRuntimeUnavailable />
+      <RebaseServerApp client={client} />
     </StrictMode>
   )
 }
