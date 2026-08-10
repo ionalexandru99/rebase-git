@@ -29,18 +29,19 @@ describe('startRuntimeRenderer', () => {
     expect(container).toHaveTextContent('Read-only')
   })
 
-  it('shows a browser-safe failure when the Server cannot be reached', async () => {
+  it('shows a browser-safe failure without exposing adapter details', async () => {
     const container = document.createElement('div')
     const disconnectedClient: RebaseClient = {
       loadBootstrap: async () => {
-        throw new Error('Server request failed with status 503')
+        throw new Error('agent credential secret from http://127.0.0.1:43123')
       }
     }
 
     await act(async () => startRuntimeRenderer(container, disconnectedClient))
 
     expect(container).toHaveTextContent('Cannot connect to Rebase Server')
-    expect(container).toHaveTextContent('Server request failed with status 503')
+    expect(container).toHaveTextContent('The Server did not return a usable response.')
+    expect(container).not.toHaveTextContent(/credential|43123/)
   })
 
   it('connects with the document client when no client is supplied', async () => {

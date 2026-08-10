@@ -72,4 +72,25 @@ describe('Browser Server loopback listener', () => {
       message: 'Could not load the exact Web build'
     })
   })
+
+  it('closes the Environment connection when bootstrap fails', async () => {
+    const webRoot = await createWebBuild()
+    const close = vi.fn()
+    const environmentConnection: BrowserEnvironmentConnection = {
+      loadBootstrap: () => Effect.die(new Error('bootstrap failed')),
+      close: () => Effect.sync(close)
+    }
+
+    const exit = await Effect.runPromiseExit(
+      Effect.scoped(
+        startBrowserServer({
+          environmentConnection,
+          webRoot
+        })
+      )
+    )
+
+    expect(exit._tag).toBe('Failure')
+    expect(close).toHaveBeenCalledOnce()
+  })
 })

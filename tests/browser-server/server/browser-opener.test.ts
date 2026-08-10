@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process'
+import { createServer } from 'node:http'
 import { Effect } from 'effect4'
 import {
   type BrowserCommand,
@@ -9,6 +11,13 @@ import {
 
 const browserUrl = 'http://localhost:4312/auth/one-time-nonce'
 const readinessUrl = 'http://localhost:4312/health'
+const localPowerShellExecutable = process.platform === 'win32' ? 'powershell.exe' : 'pwsh'
+const canExecutePowerShell =
+  spawnSync(
+    localPowerShellExecutable,
+    ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'],
+    { stdio: 'ignore' }
+  ).status === 0
 
 function recordingRunner(commands: BrowserCommand[]): BrowserCommandRunner {
   return (command) =>
@@ -50,7 +59,7 @@ describe('platform browser opener', () => {
           '-NoProfile',
           '-NonInteractive',
           '-Command',
-          'Start-Process -FilePath $args[0]',
+          '& { param([string]$BrowserUrl) Start-Process -FilePath $BrowserUrl }',
           browserUrl
         ]
       }
@@ -105,7 +114,7 @@ describe('platform browser opener', () => {
           '-NoProfile',
           '-NonInteractive',
           '-Command',
-          'try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $args[0] -Headers @{ Host = $args[1] } | Out-Null } catch { exit 1 }',
+          '& { param([string]$ReadinessUrl, [string]$ReadinessAuthority) try { Invoke-WebRequest -UseBasicParsing -Method Head -TimeoutSec 3 -Uri $ReadinessUrl -Headers @{ Host = $ReadinessAuthority } | Out-Null } catch { exit 1 } }',
           'http://127.0.0.1:4312/health',
           'localhost:4312'
         ]
@@ -116,12 +125,73 @@ describe('platform browser opener', () => {
           '-NoProfile',
           '-NonInteractive',
           '-Command',
-          'Start-Process -FilePath $args[0]',
+          '& { param([string]$BrowserUrl) Start-Process -FilePath $BrowserUrl }',
           browserUrl
         ]
       }
     ])
   })
+
+  it.runIf(canExecutePowerShell)(
+    'passes WSL forwarding values as executable PowerShell parameters',
+    async () => {
+      let receivedHost: string | undefined
+      const readinessServer = createServer((request, response) => {
+        receivedHost = request.headers.host
+        response.statusCode = 204
+        response.end()
+      })
+      const port = await new Promise<number>((resolve, reject) => {
+        readinessServer.once('error', reject)
+        readinessServer.listen({ host: '127.0.0.1', port: 0 }, () => {
+          const address = readinessServer.address()
+          if (!address || typeof address === 'string') {
+            reject(new TypeError('Expected a TCP listener'))
+            return
+          }
+          resolve(address.port)
+        })
+      })
+      const expectedAuthority = `rebase-parameter-test.localhost:${port}`
+      const commands: BrowserCommand[] = []
+      const commandRunner: BrowserCommandRunner = (command) =>
+        Effect.suspend(() => {
+          commands.push(command)
+          if (command.arguments.some((argument) => argument.includes('Invoke-WebRequest'))) {
+            return runBrowserCommand({
+              ...command,
+              executable: localPowerShellExecutable
+            })
+          }
+          return Effect.void
+        })
+
+      try {
+        const result = await Effect.runPromise(
+          openBrowser(
+            {
+              browserUrl: `http://${expectedAuthority}/auth/a-ticket`,
+              readinessUrl: `http://${expectedAuthority}/health`
+            },
+            {
+              environment: {
+                platform: 'linux',
+                release: '6.6.87.2-microsoft-standard-WSL2',
+                variables: { WSL_DISTRO_NAME: 'Ubuntu' }
+              },
+              commandRunner
+            }
+          )
+        )
+
+        expect(result).toEqual({ _tag: 'Opened' })
+        expect(receivedHost).toBe(expectedAuthority)
+        expect(commands).toHaveLength(2)
+      } finally {
+        await new Promise<void>((resolve) => readinessServer.close(() => resolve()))
+      }
+    }
+  )
 
   it('prints local-forwarding instructions instead of opening from a headless SSH session', async () => {
     const commands: BrowserCommand[] = []

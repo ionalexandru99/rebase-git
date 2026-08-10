@@ -27,6 +27,8 @@ describe('WebRebaseClient', () => {
       serverInstanceId: 'server-instance-a'
     })
 
+    expect(Object.keys(client)).toEqual(['loadBootstrap'])
+
     await expect(client.loadBootstrap(signal)).resolves.toEqual({
       environment: {
         environmentId: 'local',
@@ -46,6 +48,8 @@ describe('WebRebaseClient', () => {
     expect(headers.get('x-rebase-renderer-build-id')).toBe('renderer-build-a')
     expect(headers.get('x-rebase-server-instance-id')).toBe('server-instance-a')
     expect(headers.has('x-rebase-csrf-token')).toBe(false)
+    expect(headers.has('authorization')).toBe(false)
+    expect(headers.has('cookie')).toBe(false)
     expect(reload).not.toHaveBeenCalled()
   })
 
@@ -78,5 +82,63 @@ describe('WebRebaseClient', () => {
     await expect(client.loadBootstrap()).rejects.toThrow('Server request failed with status 503')
     await expect(client.loadBootstrap()).rejects.not.toThrow('agent-token-secret')
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('rejects unexpected Server fields without exposing Agent connection details', async () => {
+    const fetchRequest = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...bootstrapResponse,
+          agentEndpoint: 'http://127.0.0.1:43123',
+          bootstrapSecret: 'agent-bootstrap-secret'
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    )
+    const client = createWebRebaseClient({
+      fetch: fetchRequest,
+      reload: vi.fn(),
+      rendererBuildId: 'renderer-build-a',
+      serverInstanceId: 'server-instance-a'
+    })
+
+    const result = client.loadBootstrap()
+
+    await expect(result).rejects.toThrow('Rebase Server returned an invalid bootstrap response')
+    await expect(result).rejects.not.toThrow(/43123|agent-bootstrap-secret/)
+  })
+
+  it('does not expose malformed bootstrap response data in its failure', async () => {
+    const fetchRequest = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response('{"credential":"agent-session-secret"}', { status: 200 }))
+    const client = createWebRebaseClient({
+      fetch: fetchRequest,
+      reload: vi.fn(),
+      rendererBuildId: 'renderer-build-a',
+      serverInstanceId: 'server-instance-a'
+    })
+
+    const result = client.loadBootstrap()
+
+    await expect(result).rejects.toThrow('Rebase Server returned an invalid bootstrap response')
+    await expect(result).rejects.not.toThrow('agent-session-secret')
+  })
+
+  it('translates transport failures without exposing a Server or Agent URL', async () => {
+    const fetchRequest = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new Error('connect ECONNREFUSED http://127.0.0.1:43123/agent?token=secret'))
+    const client = createWebRebaseClient({
+      fetch: fetchRequest,
+      reload: vi.fn(),
+      rendererBuildId: 'renderer-build-a',
+      serverInstanceId: 'server-instance-a'
+    })
+
+    const result = client.loadBootstrap()
+
+    await expect(result).rejects.toThrow('Rebase Server request failed')
+    await expect(result).rejects.not.toThrow(/127\.0\.0\.1|agent|token/)
   })
 })

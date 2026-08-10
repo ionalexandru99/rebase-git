@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -7,6 +8,10 @@ import { browserServerFetch } from './browser-server-harness'
 
 const children: ChildProcess[] = []
 const repositoryRoot = process.cwd()
+const packageJson = JSON.parse(readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8')) as {
+  readonly bin: { readonly rebase: string }
+}
+const serverExecutable = path.resolve(repositoryRoot, packageJson.bin.rebase)
 
 beforeAll(() => {
   const command = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
@@ -44,7 +49,7 @@ function spawnServer(
 ): ChildProcess {
   const child = spawn(
     process.execPath,
-    [path.join(repositoryRoot, 'out/server/index.js'), ...arguments_],
+    [serverExecutable, ...arguments_],
     {
     cwd: options.cwd,
     env: options.env ?? process.env,
@@ -132,6 +137,7 @@ describe('standalone Server process', () => {
     )?.[1]
 
     expect(output).toContain('Rebase Server is ready')
+    expect(readFileSync(serverExecutable, 'utf8')).toMatch(/^#!\/usr\/bin\/env node/)
     expect(browserUrl).toBeDefined()
     expect(child.exitCode).toBeNull()
     const advertisedUrl = new URL(browserUrl!)
@@ -182,6 +188,7 @@ describe('standalone Server process', () => {
     expect(manifestResponse.headers.get('cache-control')).toBe('no-store')
     expect(assetResponse.headers.get('cache-control')).toContain('immutable')
     expect(asset).toContain(manifest.rendererBuildId)
+    expect(asset).not.toMatch(/agentEndpoint|bootstrapSecret|sessionToken/)
     const bootstrapState = (await bootstrap.json()) as {
       readonly environment: { readonly path: string }
       readonly readOnly: boolean

@@ -86,9 +86,9 @@ export function startBrowserServer(
   options: StartBrowserServerOptions
 ): Effect.Effect<RunningBrowserServer, BrowserServerFailure | RendererBuildFailure, Scope.Scope> {
   return Effect.gen(function* () {
+    yield* Effect.addFinalizer(() => options.environmentConnection.close())
     const rendererBuild = yield* loadRendererBuild(options.webRoot, SERVER_PRODUCT_VERSION)
     const environmentBootstrap = yield* options.environmentConnection.loadBootstrap()
-    yield* Effect.addFinalizer(() => options.environmentConnection.close())
     const server = createServer()
     const port = yield* Effect.acquireRelease(
       Effect.tryPromise({
