@@ -83,7 +83,7 @@ describe('Browser Server authentication', () => {
     acquired.push(fixture)
 
     const head = await browserServerFetch(fixture.server, fixture.server.browserUrl, {
-      method: 'HEAD',
+      method: 'head',
       headers: requestHeaders(fixture.server),
       redirect: 'manual'
     })

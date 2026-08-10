@@ -78,12 +78,13 @@ export function browserServerFetch(
   if (!headers.has('Host')) {
     headers.set('Host', server.authority)
   }
+  const method = init.method?.toUpperCase() ?? 'GET'
   return new Promise((resolve, reject) => {
     const request = httpRequest(
       {
         headers: Object.fromEntries(headers),
         host: '127.0.0.1',
-        method: init.method ?? 'GET',
+        method,
         path: `${targetUrl.pathname}${targetUrl.search}`,
         port: server.port
       },
@@ -97,7 +98,7 @@ export function browserServerFetch(
             responseHeaders.append(response.rawHeaders[index], response.rawHeaders[index + 1])
           }
           const status = response.statusCode ?? 500
-          const bodyAllowed = init.method !== 'HEAD' && ![204, 205, 304].includes(status)
+          const bodyAllowed = method !== 'HEAD' && ![204, 205, 304].includes(status)
           resolve(
             new Response(bodyAllowed ? Buffer.concat(chunks) : null, {
               headers: responseHeaders,
