@@ -206,9 +206,23 @@ describe('standalone Server process', () => {
     })
 
     const output = await waitForOutput(child, /Press Ctrl\+C to stop/)
+    const browserUrl = output.match(
+      /Open (http:\/\/rebase-[a-f0-9]+\.localhost:\d+\/auth\/[A-Za-z0-9_-]+)/
+    )?.[1]
 
-    expect(output).toMatch(/Open http:\/\/rebase-[a-f0-9]+\.localhost:\d+\/auth\//)
+    expect(browserUrl).toBeDefined()
     expect(child.exitCode).toBeNull()
+    const advertisedUrl = new URL(browserUrl!)
+    const health = await browserServerFetch(
+      {
+        authority: advertisedUrl.host,
+        origin: advertisedUrl.origin,
+        port: Number.parseInt(advertisedUrl.port, 10)
+      },
+      '/.well-known/rebase/health',
+      { method: 'HEAD' }
+    )
+    expect(health.status).toBe(204)
 
     const exited = waitForExit(child)
     child.kill('SIGINT')
