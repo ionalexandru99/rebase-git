@@ -1,4 +1,0 @@
-export const LOG_PAGE_SIZE = 2_000
-export const GRAPH_LAYOUT_DEBOUNCE_MS = 250
-export const GRAPH_LAYOUT_MAX_DEBOUNCE_MS = 1_000
-export const GRAPH_LAYOUT_COMMITS_PER_MS = 40
