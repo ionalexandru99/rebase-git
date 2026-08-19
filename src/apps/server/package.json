@@ -6,12 +6,21 @@
   "sideEffects": false,
   "exports": {
     ".": {
+      "rebase-source": "./index.ts",
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "rebase-source": "./*.ts",
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
     }
   },
   "scripts": {
     "build": "tsc -b",
+    "dev": "node --conditions=rebase-source cli.ts serve",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -37,6 +37,8 @@ A user on WSl should not be required to install the electron app on windows and 
 ## General code requirements
 
 - We want the code to be as simple as possible, easy to extend
+- Use workspace package names for imports, including imports within the same package. Do not use relative imports in source or tests.
+- Use Effect for server workflows that own resources, concurrency, or typed failures. Keep pure synchronous logic as plain TypeScript.
 - keyboard shourcuts should be implemented from day 1
 - tests are good, but we don't want to test all the scenarios, especially we don't want to test deleted code. Code is deleted, tests are deleted.
 - we do not create tests for infrastructure
