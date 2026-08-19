@@ -1,10 +1,13 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
+    "jsx": "react-jsx",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "outDir": "./dist",
+    "outDir": "./dist/types",
     "rootDir": ".",
-    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
+    "skipLibCheck": true,
+    "tsBuildInfoFile": "./dist/types/tsconfig.tsbuildinfo",
+    "types": ["vite/client"]
   },
   "include": ["./**/*.ts", "./**/*.tsx"],
   "exclude": ["./dist"],

@@ -7,5 +7,19 @@ engineStrict: true
 allowBuilds:
   msgpackr-extract: false
 
+overrides:
+  vite: 'catalog:'
+  vitest: 'catalog:'
+
 catalog:
   effect: 4.0.0-rc.110
+  vite: npm:@voidzero-dev/vite-plus-core@0.2.9
+  vitest: 4.1.10
+  vite-plus: 0.2.9
+peerDependencyRules:
+  allowAny:
+    - vite
+    - vitest
+  allowedVersions:
+    vite: '*'
+    vitest: '*'
