@@ -1,0 +1,21 @@
+{
+  "name": "@rebase/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rebase/server": "workspace:*",
+    "@rebase/web": "workspace:*"
+  }
+}

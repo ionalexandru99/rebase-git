@@ -1,0 +1,11 @@
+packages:
+  - src/apps/*
+  - src/contracts
+
+engineStrict: true
+
+allowBuilds:
+  msgpackr-extract: false
+
+catalog:
+  effect: 4.0.0-rc.110
