@@ -9,6 +9,11 @@ const testProject = (name: "compatibility" | "integration" | "unit") => ({
 });
 
 export default defineConfig({
+  ssr: {
+    resolve: {
+      conditions: ["rebase-source", "import", "default"],
+    },
+  },
   test: {
     projects: [
       testProject("unit"),
