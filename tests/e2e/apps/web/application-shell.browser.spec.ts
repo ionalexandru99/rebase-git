@@ -4,7 +4,9 @@ test("boots the web application into its technical shell", async ({ page }) => {
   const browserErrors: string[] = [];
 
   page.on("console", (message) => {
-    if (message.type() === "error") browserErrors.push(message.text());
+    if (message.type() === "error") {
+      browserErrors.push(message.text());
+    }
   });
   page.on("pageerror", (error) => browserErrors.push(error.message));
 

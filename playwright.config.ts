@@ -6,7 +6,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   testDir: "tests/e2e",
   webServer: {
-    command: "pnpm dev:web --host 127.0.0.1",
+    command: "pnpm dev:web --host 127.0.0.1 --strictPort",
     reuseExistingServer: !process.env.CI,
     url: "http://127.0.0.1:4173",
   },
