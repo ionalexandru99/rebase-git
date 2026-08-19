@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   type EnvironmentServerOptions,
   startEnvironmentServer,
@@ -103,6 +105,10 @@ function normalizeError(error: unknown) {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-if (import.meta.main) {
+const entryPoint = process.argv[1];
+if (
+  entryPoint &&
+  realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entryPoint)
+) {
   process.exitCode = await Effect.runPromise(runCli());
 }

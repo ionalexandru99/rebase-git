@@ -1,5 +1,9 @@
 import { createServer, type Server } from "node:http";
 import {
+  errorMessage,
+  isFileSystemError,
+} from "@rebase/server/environment-server/error-inspection";
+import {
   acquireRuntimeMarker,
   type RuntimeMarkerError,
 } from "@rebase/server/environment-server/runtime-marker";
@@ -75,8 +79,8 @@ function acquireListener(port = 0) {
 function startListener(
   port: number,
 ): Effect.Effect<RunningListener, EnvironmentServerStartError> {
-  const readiness = { value: false };
   return Effect.gen(function* () {
+    const readiness = { value: false };
     const server = yield* Effect.try({
       try: () =>
         createServer((request, response) => {
@@ -121,7 +125,7 @@ function startListener(
 function listen(server: Server, port = 0) {
   return Effect.callback<void, EnvironmentServerStartError>(
     (resume, signal) => {
-      const failed = (cause: NodeJS.ErrnoException) => {
+      const failed = (cause: unknown) => {
         detach();
         resume(Effect.fail(environmentServerError(cause, port)));
       };
@@ -136,7 +140,11 @@ function listen(server: Server, port = 0) {
 
       server.once("error", failed);
       server.once("listening", listening);
-      server.listen({ exclusive: true, host: loopbackHost, port, signal });
+      try {
+        server.listen({ exclusive: true, host: loopbackHost, port, signal });
+      } catch (cause) {
+        failed(cause);
+      }
 
       return Effect.sync(detach);
     },
@@ -146,10 +154,16 @@ function listen(server: Server, port = 0) {
 function closeServer(server: Server) {
   return Effect.callback<void>((resume) => {
     server.close((error) => {
-      resume(error ? Effect.die(error) : Effect.void);
+      resume(
+        error && !isServerNotRunning(error) ? Effect.die(error) : Effect.void,
+      );
     });
     server.closeAllConnections();
   });
+}
+
+function isServerNotRunning(error: unknown) {
+  return isFileSystemError(error) && error.code === "ERR_SERVER_NOT_RUNNING";
 }
 
 function environmentServerError(cause: unknown, port: number) {
@@ -165,12 +179,4 @@ function listenerErrorMessage(cause: unknown, port: number) {
   }
 
   return `Could not start the Environment server: ${errorMessage(cause)}`;
-}
-
-function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }

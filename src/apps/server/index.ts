@@ -1,3 +1,5 @@
+export { RuntimeMarkerError } from "@rebase/server/environment-server/runtime-marker";
+export { RuntimeRequirementsError } from "@rebase/server/environment-server/runtime-requirements";
 export {
   type EnvironmentServer,
   type EnvironmentServerOptions,

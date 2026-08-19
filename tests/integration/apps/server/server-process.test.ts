@@ -73,13 +73,15 @@ describe("rebase serve", () => {
     }
 
     const processOutput = startCli(["--port", String(address.port)], directory);
-    const exit = await waitForExit(processOutput.child);
-    await new Promise<void>((resolveClosed, rejectClosed) => {
-      occupiedServer.close((error) => {
-        if (error) rejectClosed(error);
-        else resolveClosed();
-      });
-    });
+    const exit = await waitForExit(processOutput.child).finally(
+      () =>
+        new Promise<void>((resolveClosed, rejectClosed) => {
+          occupiedServer.close((error) => {
+            if (error) rejectClosed(error);
+            else resolveClosed();
+          });
+        }),
+    );
 
     expect(exit.code).toBe(1);
     expect(processOutput.stderr()).toContain(

@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import {
+  errorMessage,
+  isFileSystemError,
+} from "@rebase/server/environment-server/error-inspection";
 import { Data, Effect, type Scope } from "effect";
 
 export interface RuntimeMarker {
@@ -27,7 +31,9 @@ export function acquireRuntimeMarker(
   const runtimePath = defaultRuntimePath();
 
   return Effect.acquireRelease(writeRuntimeMarker(runtimePath, marker), () =>
-    removeRuntimeMarker(runtimePath, marker.pid).pipe(Effect.orDie),
+    removeRuntimeMarker(runtimePath, marker.pid).pipe(
+      Effect.catchTag("RuntimeMarkerError", reportCleanupFailure),
+    ),
   ).pipe(Effect.asVoid);
 }
 
@@ -97,6 +103,12 @@ function runtimeMarkerError(cause: unknown) {
   });
 }
 
+function reportCleanupFailure(error: RuntimeMarkerError) {
+  return Effect.sync(() => {
+    process.stderr.write(`${error.message}\n`);
+  });
+}
+
 function isMissingFile(error: unknown) {
   return isFileSystemError(error) && error.code === "ENOENT";
 }
@@ -106,12 +118,4 @@ function isReplaceConflict(error: unknown) {
     isFileSystemError(error) &&
     (error.code === "EEXIST" || error.code === "EPERM")
   );
-}
-
-function isFileSystemError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }
