@@ -1,0 +1,21 @@
+{
+  "name": "rebase-git",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0",
+    "pnpm": "11.22.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "check": "biome check .",
+    "test": "pnpm --recursive --if-present run test",
+    "typecheck": "pnpm --recursive run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.9",
+    "typescript": "7.0.2"
+  }
+}
