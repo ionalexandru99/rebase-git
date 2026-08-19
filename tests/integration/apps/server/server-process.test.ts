@@ -27,7 +27,7 @@ afterEach(async () => {
 
 describe("rebase serve", () => {
   it.each(["SIGINT", "SIGTERM"] as const)(
-    "starts a ready loopback server and shuts down cleanly on %s",
+    "starts a ready loopback server and stops on %s",
     async (signal) => {
       const directory = await createTemporaryDirectory();
       const runtimePath = join(directory, ".rebase", "runtime.json");
@@ -49,13 +49,18 @@ describe("rebase serve", () => {
       expect(processOutput.stdout()).toContain(`Pairing URL: ${origin}/pair`);
 
       processOutput.child.kill(signal);
+      const forceKilledByWindows = process.platform === "win32";
       await expect(waitForExit(processOutput.child)).resolves.toMatchObject({
-        code: 0,
-        signal: null,
+        code: forceKilledByWindows ? null : 0,
+        signal: forceKilledByWindows ? signal : null,
       });
-      await expect(access(runtimePath)).rejects.toMatchObject({
-        code: "ENOENT",
-      });
+      if (forceKilledByWindows) {
+        await expect(access(runtimePath)).resolves.toBeUndefined();
+      } else {
+        await expect(access(runtimePath)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      }
     },
   );
 
