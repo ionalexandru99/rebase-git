@@ -39,7 +39,7 @@ A user on WSl should not be required to install the electron app on windows and 
 - We want the code to be as simple as possible, easy to extend
 - Use workspace package names for imports, including imports within the same package. Do not use relative imports in source or tests.
 - Keep cross-module contracts in domain-specific `*.contract.ts` files, separate from their implementations.
-- Group files by domain and concrete technology. Introduce ports only when a real external boundary or multiple implementations require them.
+- Keep business modules under `features/<feature-name>`. Keep `domain` and `persistence` as sibling top-level layers outside `features`.
 - Treat Drizzle as the standard business-layer data API. Query the context directly and compose business specifications from persistence table mappings. Do not add repositories or column-shape abstractions.
 - Keep Drizzle table mappings, SQLite connection management, and migrations in the persistence layer.
 - Keep orchestration functions short. Extract distinct lifecycle steps and database operations into named functions.

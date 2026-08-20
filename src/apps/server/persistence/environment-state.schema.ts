@@ -1,7 +1,7 @@
 import {
   authorizationRoles,
   operationStatuses,
-} from "@rebase/server/environment-server/domain/environment-state.contract";
+} from "@rebase/server/domain/environment-state.contract";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const environmentTable = sqliteTable("environment", {

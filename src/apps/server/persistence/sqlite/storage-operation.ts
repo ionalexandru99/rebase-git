@@ -1,5 +1,5 @@
-import { errorMessage } from "@rebase/server/environment-server/error-inspection";
-import { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error.contract";
+import { errorMessage } from "@rebase/server/error-inspection";
+import { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { Effect, type Semaphore } from "effect";
 
 export function serializedPromise<A>(

@@ -4,10 +4,10 @@ import { dirname } from "node:path";
 import {
   errorMessage,
   isFileSystemError,
-} from "@rebase/server/environment-server/error-inspection";
-import { RuntimeMarkerError } from "@rebase/server/environment-server/runtime/runtime-errors.contract";
-import type { RuntimeMarker } from "@rebase/server/environment-server/runtime/runtime-marker.contract";
-import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
+} from "@rebase/server/error-inspection";
+import { RuntimeMarkerError } from "@rebase/server/features/environment-server/runtime/runtime-errors.contract";
+import type { RuntimeMarker } from "@rebase/server/features/environment-server/runtime/runtime-marker.contract";
+import { defaultEnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { Effect, type Scope } from "effect";
 
 export function defaultRuntimePath(): string {

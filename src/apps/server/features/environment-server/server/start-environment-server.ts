@@ -1,27 +1,27 @@
+import type { Environment } from "@rebase/server/domain/environment-state.contract";
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,
-} from "@rebase/server/environment-server/business/environment-state.specifications";
-import type { Environment } from "@rebase/server/environment-server/domain/environment-state.contract";
-import { acquireEnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context";
-import type { EnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context.contract";
-import { environmentTable } from "@rebase/server/environment-server/persistence/environment-state.schema";
+} from "@rebase/server/features/environment-server/environment-state.specifications";
 import type {
   RuntimeMarkerError,
   RuntimeRequirementsError,
-} from "@rebase/server/environment-server/runtime/runtime-errors.contract";
-import { acquireRuntimeMarker } from "@rebase/server/environment-server/runtime/runtime-marker";
-import type { RuntimeMarker } from "@rebase/server/environment-server/runtime/runtime-marker.contract";
-import { verifyRuntimeRequirements } from "@rebase/server/environment-server/runtime/runtime-requirements";
-import { acquireEnvironmentListener } from "@rebase/server/environment-server/server/environment-listener";
+} from "@rebase/server/features/environment-server/runtime/runtime-errors.contract";
+import { acquireRuntimeMarker } from "@rebase/server/features/environment-server/runtime/runtime-marker";
+import type { RuntimeMarker } from "@rebase/server/features/environment-server/runtime/runtime-marker.contract";
+import { verifyRuntimeRequirements } from "@rebase/server/features/environment-server/runtime/runtime-requirements";
+import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
 import type {
   EnvironmentListener,
   EnvironmentServer,
   EnvironmentServerOptions,
-} from "@rebase/server/environment-server/server/environment-server.contract";
-import type { EnvironmentServerStartError } from "@rebase/server/environment-server/server/environment-server-error.contract";
-import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
-import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error.contract";
+} from "@rebase/server/features/environment-server/server/environment-server.contract";
+import type { EnvironmentServerStartError } from "@rebase/server/features/environment-server/server/environment-server-error.contract";
+import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
+import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
+import { environmentTable } from "@rebase/server/persistence/environment-state.schema";
+import { defaultEnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths";
+import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { and } from "drizzle-orm";
 import { Effect, type Scope } from "effect";
 

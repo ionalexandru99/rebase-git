@@ -1,8 +1,8 @@
 import { chmodSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { migrateEnvironmentState } from "@rebase/server/environment-server/persistence/sqlite/migrations";
-import { storageSync } from "@rebase/server/environment-server/persistence/sqlite/storage-operation";
-import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
+import { migrateEnvironmentState } from "@rebase/server/persistence/sqlite/migrations";
+import { storageSync } from "@rebase/server/persistence/sqlite/storage-operation";
+import type { EnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths.contract";
 import { Effect } from "effect";
 
 const busyTimeoutMilliseconds = 1_000;
@@ -34,9 +34,6 @@ export function readDatabaseSettings(database: DatabaseSync) {
   const foreignKeys = database.prepare("PRAGMA foreign_keys").get() as {
     foreign_keys: number;
   };
-  const journalMode = database.prepare("PRAGMA journal_mode").get() as {
-    journal_mode: string;
-  };
   const busyTimeout = database.prepare("PRAGMA busy_timeout").get() as {
     timeout: number;
   };
@@ -44,16 +41,31 @@ export function readDatabaseSettings(database: DatabaseSync) {
   return {
     busyTimeout: busyTimeout.timeout,
     foreignKeys: foreignKeys.foreign_keys === 1,
-    journalMode: journalMode.journal_mode,
+    journalMode: readJournalMode(database),
   };
 }
 
 function configureDatabase(database: DatabaseSync) {
   database.exec(`
     PRAGMA busy_timeout = ${busyTimeoutMilliseconds};
-    PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
   `);
+  enableWriteAheadLogging(database);
+}
+
+function enableWriteAheadLogging(database: DatabaseSync) {
+  try {
+    database.exec("PRAGMA journal_mode = WAL;");
+  } catch (error) {
+    if (readJournalMode(database) !== "wal") throw error;
+  }
+}
+
+function readJournalMode(database: DatabaseSync) {
+  const result = database.prepare("PRAGMA journal_mode").get() as {
+    journal_mode: string;
+  };
+  return result.journal_mode;
 }
 
 function restrictDatabasePermissions(path: string) {

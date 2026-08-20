@@ -1,24 +1,24 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { isCurrentEnvironment } from "@rebase/server/environment-server/business/environment-state.specifications";
-import type { EnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context.contract";
-import { environmentTable } from "@rebase/server/environment-server/persistence/environment-state.schema";
+import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
+import { environmentTable } from "@rebase/server/persistence/environment-state.schema";
 import {
   closeEnvironmentDatabase,
   openEnvironmentDatabase,
   readDatabaseSettings,
-} from "@rebase/server/environment-server/persistence/sqlite/database";
+} from "@rebase/server/persistence/sqlite/database";
 import {
   serializedPromise,
   storagePromise,
-} from "@rebase/server/environment-server/persistence/sqlite/storage-operation";
+} from "@rebase/server/persistence/sqlite/storage-operation";
 import {
   defaultEnvironmentPaths,
   prepareEnvironmentDirectories,
-} from "@rebase/server/environment-server/storage/environment-paths";
-import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
-import { ensureServerSecret } from "@rebase/server/environment-server/storage/server-secret";
-import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error.contract";
+} from "@rebase/server/persistence/storage/environment-paths";
+import type { EnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths.contract";
+import { ensureServerSecret } from "@rebase/server/persistence/storage/server-secret";
+import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { Effect, type Scope, Semaphore } from "effect";
 
@@ -63,7 +63,7 @@ function initializeEnvironment(context: EnvironmentContext) {
       const environment = await database
         .select({ id: environmentTable.id })
         .from(environmentTable)
-        .where(isCurrentEnvironment())
+        .where(eq(environmentTable.singleton, 1))
         .get();
       if (environment === undefined) {
         throw new Error("The Environment identity is missing.");

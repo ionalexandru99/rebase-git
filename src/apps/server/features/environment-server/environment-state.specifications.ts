@@ -1,9 +1,9 @@
-import type { OperationStatus } from "@rebase/server/environment-server/domain/environment-state.contract";
+import type { OperationStatus } from "@rebase/server/domain/environment-state.contract";
 import {
   authorizationMetadataTable,
   environmentTable,
   operationActivityTable,
-} from "@rebase/server/environment-server/persistence/environment-state.schema";
+} from "@rebase/server/persistence/environment-state.schema";
 import { eq, isNull } from "drizzle-orm";
 
 export function isCurrentEnvironment() {

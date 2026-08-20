@@ -3,21 +3,21 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { operationActivityLimit } from "@rebase/server/domain/environment-state.contract";
 import {
   hasNoAutomaticPort,
   hasOperationStatus,
   isActiveAuthorization,
   isCurrentEnvironment,
-} from "@rebase/server/environment-server/business/environment-state.specifications";
-import { operationActivityLimit } from "@rebase/server/environment-server/domain/environment-state.contract";
-import { acquireEnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context";
-import type { EnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context.contract";
+} from "@rebase/server/features/environment-server/environment-state.specifications";
+import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
+import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
 import {
   authorizationMetadataTable,
   environmentTable,
   operationActivityTable,
-} from "@rebase/server/environment-server/persistence/environment-state.schema";
-import { environmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
+} from "@rebase/server/persistence/environment-state.schema";
+import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { and, desc, notInArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";

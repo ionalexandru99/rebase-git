@@ -3,9 +3,9 @@ import { chmod, readFile, writeFile } from "node:fs/promises";
 import {
   errorMessage,
   isFileSystemError,
-} from "@rebase/server/environment-server/error-inspection";
-import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
-import { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error.contract";
+} from "@rebase/server/error-inspection";
+import type { EnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths.contract";
+import { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { Effect } from "effect";
 
 export function ensureServerSecret(paths: EnvironmentPaths) {

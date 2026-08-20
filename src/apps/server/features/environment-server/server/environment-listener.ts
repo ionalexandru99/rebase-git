@@ -7,9 +7,9 @@ import {
 import {
   errorMessage,
   isFileSystemError,
-} from "@rebase/server/environment-server/error-inspection";
-import type { EnvironmentListener } from "@rebase/server/environment-server/server/environment-server.contract";
-import { EnvironmentServerStartError } from "@rebase/server/environment-server/server/environment-server-error.contract";
+} from "@rebase/server/error-inspection";
+import type { EnvironmentListener } from "@rebase/server/features/environment-server/server/environment-server.contract";
+import { EnvironmentServerStartError } from "@rebase/server/features/environment-server/server/environment-server-error.contract";
 import { Effect } from "effect";
 
 const loopbackHost = "127.0.0.1";
