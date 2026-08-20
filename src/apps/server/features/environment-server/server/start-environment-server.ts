@@ -40,10 +40,13 @@ export function startEnvironmentServer(
     const paths = defaultEnvironmentPaths();
     const context = yield* acquireEnvironmentContext(paths);
     const environment = yield* readCurrentEnvironment(context);
-    const requestedPort = options.port ?? environment.automaticPort ?? 0;
+    const useAutomaticPort = options.port === undefined || options.port === 0;
+    const requestedPort = useAutomaticPort
+      ? (environment.automaticPort ?? 0)
+      : options.port;
     const listener = yield* acquireEnvironmentListener(requestedPort);
 
-    if (options.port === undefined && environment.automaticPort === null) {
+    if (useAutomaticPort && environment.automaticPort === null) {
       yield* claimAutomaticPort(context, listener.port);
     }
 

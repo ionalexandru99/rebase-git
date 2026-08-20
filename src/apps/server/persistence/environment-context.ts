@@ -10,6 +10,7 @@ import {
 import {
   serializedPromise,
   storagePromise,
+  storageSync,
 } from "@rebase/server/persistence/sqlite/storage-operation";
 import {
   defaultEnvironmentPaths,
@@ -32,7 +33,10 @@ export function acquireEnvironmentContext(
       openEnvironmentDatabase(paths),
       closeEnvironmentDatabase,
     );
-    const context = createEnvironmentContext(database);
+    const context = yield* storageSync(
+      "Could not read Environment state settings",
+      () => createEnvironmentContext(database),
+    );
     yield* initializeEnvironment(context);
     return context;
   });

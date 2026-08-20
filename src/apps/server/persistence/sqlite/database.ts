@@ -3,26 +3,36 @@ import { DatabaseSync } from "node:sqlite";
 import { migrateEnvironmentState } from "@rebase/server/persistence/sqlite/migrations";
 import { storageSync } from "@rebase/server/persistence/sqlite/storage-operation";
 import type { EnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths.contract";
-import { Effect } from "effect";
+import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
+import { drizzle } from "drizzle-orm/node-sqlite";
+import { Effect, Schedule } from "effect";
 
 const busyTimeoutMilliseconds = 1_000;
+const migrationRetryDelay = "10 millis";
+const migrationRetryCount = 10;
 
 export function openEnvironmentDatabase(paths: EnvironmentPaths) {
-  return storageSync("Could not open Environment state", () => {
-    const database = new DatabaseSync(paths.stateDatabase, {
-      allowUnknownNamedParameters: false,
-      enableForeignKeyConstraints: true,
-      timeout: busyTimeoutMilliseconds,
-    });
-    try {
-      configureDatabase(database);
-      migrateEnvironmentState(database);
-      restrictDatabasePermissions(paths.stateDatabase);
+  return Effect.gen(function* () {
+    const database = yield* storageSync(
+      "Could not open Environment state",
+      () =>
+        new DatabaseSync(paths.stateDatabase, {
+          allowUnknownNamedParameters: false,
+          enableForeignKeyConstraints: true,
+          timeout: busyTimeoutMilliseconds,
+        }),
+    );
+
+    return yield* Effect.gen(function* () {
+      yield* storageSync("Could not open Environment state", () =>
+        configureDatabase(database),
+      );
+      yield* migrateDatabase(database);
+      yield* storageSync("Could not open Environment state", () =>
+        restrictDatabasePermissions(paths.stateDatabase),
+      );
       return database;
-    } catch (error) {
-      database.close();
-      throw error;
-    }
+    }).pipe(Effect.onError(() => closeEnvironmentDatabase(database)));
   });
 }
 
@@ -51,6 +61,22 @@ function configureDatabase(database: DatabaseSync) {
     PRAGMA synchronous = NORMAL;
   `);
   enableWriteAheadLogging(database);
+}
+
+function migrateDatabase(database: DatabaseSync) {
+  return storageSync("Could not open Environment state", () =>
+    migrateEnvironmentState(drizzle({ client: database })),
+  ).pipe(
+    Effect.retry({
+      schedule: Schedule.spaced(migrationRetryDelay),
+      times: migrationRetryCount,
+      while: isDatabaseLocked,
+    }),
+  );
+}
+
+function isDatabaseLocked(error: EnvironmentStorageError) {
+  return error.message.includes("database is locked");
 }
 
 function enableWriteAheadLogging(database: DatabaseSync) {

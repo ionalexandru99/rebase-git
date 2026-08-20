@@ -12,9 +12,10 @@
     "pnpm": "11.22.0"
   },
   "scripts": {
-    "build": "tsc -b && pnpm build:web",
+    "build": "tsc -b && pnpm --filter @rebase/server copy:migrations && pnpm build:web",
     "build:web": "pnpm --filter @rebase/web build:web",
     "check": "biome check .",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "dev:server": "node --conditions=rebase-source src/apps/server/cli.ts serve",
     "dev:web": "pnpm --filter @rebase/web dev",
     "test": "pnpm test:unit",
@@ -30,6 +31,7 @@
     "@playwright/test": "1.62.1",
     "@rebase/server": "workspace:*",
     "@types/node": "24.13.3",
+    "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "typescript": "7.0.2",

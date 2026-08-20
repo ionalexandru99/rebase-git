@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { operationActivityLimit } from "@rebase/server/domain/environment-state.contract";
 import {
@@ -19,10 +19,23 @@ import {
 } from "@rebase/server/persistence/environment-state.schema";
 import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { and, desc, notInArray } from "drizzle-orm";
+import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 const directories = new Set<string>();
+const generatedMigrations = readMigrationFiles({
+  migrationsFolder: resolve("src/apps/server/persistence/migrations"),
+});
+const createEnvironmentMigration = generatedMigrations[0];
+const createActivityMigration = generatedMigrations[1];
+
+if (
+  createEnvironmentMigration === undefined ||
+  createActivityMigration === undefined
+) {
+  throw new Error("Expected two generated Environment state migrations.");
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -92,12 +105,20 @@ describe("Environment state", () => {
     expect(
       database
         .prepare(
-          "SELECT version, name, length(checksum) AS checksum_length FROM migration_history ORDER BY version",
+          "SELECT id AS version, name, length(hash) AS checksum_length FROM __drizzle_migrations ORDER BY id",
         )
         .all(),
     ).toEqual([
-      { checksum_length: 64, name: "create_environment", version: 1 },
-      { checksum_length: 64, name: "create_activity", version: 2 },
+      {
+        checksum_length: 64,
+        name: createEnvironmentMigration.name,
+        version: 1,
+      },
+      {
+        checksum_length: 64,
+        name: createActivityMigration.name,
+        version: 2,
+      },
     ]);
     database.close();
 
@@ -121,30 +142,20 @@ describe("Environment state", () => {
     const paths = await createTemporaryPaths();
     await mkdir(paths.stateDirectory, { mode: 0o700, recursive: true });
     const database = new DatabaseSync(paths.stateDatabase);
-    database.exec(`
-      CREATE TABLE migration_history (
-        version INTEGER PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        checksum TEXT NOT NULL,
-        applied_at TEXT NOT NULL
-      ) STRICT;
-      CREATE TABLE environment (
-        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-        id TEXT NOT NULL UNIQUE,
-        automatic_port INTEGER CHECK (automatic_port BETWEEN 1 AND 65535)
-      ) STRICT;
-    `);
+    for (const statement of createEnvironmentMigration.sql) {
+      database.exec(statement);
+    }
+    createMigrationHistory(database);
+    recordMigration(
+      database,
+      generatedMigrationEntry(createEnvironmentMigration, 1),
+    );
     const environmentId = randomUUID();
     database
       .prepare(
         "INSERT INTO environment (singleton, id, automatic_port) VALUES (1, ?, 43123)",
       )
       .run(environmentId);
-    database
-      .prepare(
-        "INSERT INTO migration_history (version, name, checksum, applied_at) VALUES (1, 'create_environment', ?, '2026-08-19T00:00:00.000Z')",
-      )
-      .run("ff4fedc1259d313174a7ac4ba918f52db0d7a89af8021d1b4ae68a90c39f539e");
     database.close();
 
     const state = await Effect.runPromise(
@@ -178,22 +189,28 @@ describe("Environment state", () => {
 
   it("rejects changed and newer migrations", async () => {
     const checksumPaths = await createTemporaryPaths();
-    await seedMigrationHistory(checksumPaths.stateDatabase, {
-      checksum: "changed",
-      name: "create_environment",
-      version: 1,
-    });
+    await seedMigrationHistory(checksumPaths.stateDatabase, [
+      {
+        ...generatedMigrationEntry(createEnvironmentMigration, 1),
+        checksum: "changed",
+      },
+    ]);
 
     await expect(openState(checksumPaths)).rejects.toThrow(
-      'Migration 1 "create_environment" no longer matches its applied checksum.',
+      `Migration 1 "${createEnvironmentMigration.name}" no longer matches its applied checksum.`,
     );
 
     const newerPaths = await createTemporaryPaths();
-    await seedMigrationHistory(newerPaths.stateDatabase, {
-      checksum: "future",
-      name: "future",
-      version: 3,
-    });
+    await seedMigrationHistory(newerPaths.stateDatabase, [
+      generatedMigrationEntry(createEnvironmentMigration, 1),
+      generatedMigrationEntry(createActivityMigration, 2),
+      {
+        checksum: "future",
+        createdAt: createActivityMigration.folderMillis + 1,
+        name: "future",
+        version: 3,
+      },
+    ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
       "The state database is at version 3, but this Rebase build supports version 2.",
@@ -221,7 +238,7 @@ describe("Environment state", () => {
     ).toBeUndefined();
     expect(
       database
-        .prepare("SELECT max(version) AS version FROM migration_history")
+        .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
     ).toEqual({ version: 2 });
     database.close();
@@ -370,29 +387,61 @@ async function createTemporaryPaths() {
 
 async function seedMigrationHistory(
   databasePath: string,
-  migration: { checksum: string; name: string; version: number },
+  migrations: readonly MigrationHistoryEntry[],
 ) {
   await mkdir(dirname(databasePath), { recursive: true });
   const database = new DatabaseSync(databasePath);
+  createMigrationHistory(database);
+  for (const migration of migrations) recordMigration(database, migration);
+  database.close();
+}
+
+interface MigrationHistoryEntry {
+  readonly checksum: string;
+  readonly createdAt: number;
+  readonly name: string;
+  readonly version: number;
+}
+
+function createMigrationHistory(database: DatabaseSync) {
   database.exec(`
-    CREATE TABLE migration_history (
-      version INTEGER PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      checksum TEXT NOT NULL,
-      applied_at TEXT NOT NULL
-    ) STRICT;
+    CREATE TABLE __drizzle_migrations (
+      id INTEGER PRIMARY KEY,
+      hash text NOT NULL,
+      created_at numeric,
+      name text,
+      applied_at TEXT
+    );
   `);
+}
+
+function recordMigration(
+  database: DatabaseSync,
+  migration: MigrationHistoryEntry,
+) {
   database
     .prepare(
-      "INSERT INTO migration_history (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
+      "INSERT INTO __drizzle_migrations (id, hash, created_at, name, applied_at) VALUES (?, ?, ?, ?, ?)",
     )
     .run(
       migration.version,
-      migration.name,
       migration.checksum,
+      migration.createdAt,
+      migration.name,
       "2026-08-19T00:00:00.000Z",
     );
-  database.close();
+}
+
+function generatedMigrationEntry(
+  migration: MigrationMeta,
+  version: number,
+): MigrationHistoryEntry {
+  return {
+    checksum: migration.hash,
+    createdAt: migration.folderMillis,
+    name: migration.name,
+    version,
+  };
 }
 
 function openState(paths: ReturnType<typeof environmentPaths>) {

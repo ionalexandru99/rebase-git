@@ -1,178 +1,85 @@
-import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { runInImmediateTransaction } from "@rebase/server/persistence/sqlite/transaction";
+import { fileURLToPath } from "node:url";
+import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
+import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
+import { migrate } from "drizzle-orm/node-sqlite/migrator";
 
-const migrationDefinitions = [
-  {
-    name: "create_environment",
-    sql: `
-CREATE TABLE environment (
-  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  id TEXT NOT NULL UNIQUE,
-  automatic_port INTEGER CHECK (automatic_port BETWEEN 1 AND 65535)
-) STRICT;
-`,
-  },
-  {
-    name: "create_activity",
-    sql: `
-CREATE TABLE authorization_metadata (
-  id TEXT PRIMARY KEY,
-  label TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('reader', 'contributor', 'maintainer', 'owner')),
-  created_at TEXT NOT NULL,
-  last_seen_at TEXT,
-  revoked_at TEXT
-) STRICT;
-
-CREATE TABLE operation_activity (
-  id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'outcome_unknown')),
-  started_at TEXT NOT NULL,
-  finished_at TEXT
-) STRICT;
-
-CREATE INDEX operation_activity_started_at
-ON operation_activity (started_at DESC, id DESC);
-`,
-  },
-] as const;
-
-const environmentStateMigrations = migrationDefinitions.map(
-  (migration, index) => ({
-    ...migration,
-    checksum: createHash("sha256").update(migration.sql).digest("hex"),
-    version: index + 1,
-  }),
+const migrationsFolder = fileURLToPath(
+  new URL("../migrations", import.meta.url),
 );
+const migrationsTable = "__drizzle_migrations";
 
-export function migrateEnvironmentState(database: DatabaseSync) {
-  createMigrationHistory(database);
-  const applied = readAppliedMigrations(database);
-  validateMigrationHistory(applied);
-  applyPendingMigrations(database, applied.length);
+interface AppliedMigration {
+  readonly hash: string;
+  readonly id: number;
+  readonly name: string;
 }
 
-function createMigrationHistory(database: DatabaseSync) {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS migration_history (
-      version INTEGER PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      checksum TEXT NOT NULL,
-      applied_at TEXT NOT NULL
-    ) STRICT;
-  `);
+export function migrateEnvironmentState(
+  database: NodeSQLiteDatabase & { readonly $client: DatabaseSync },
+) {
+  const localMigrations = readMigrationFiles({ migrationsFolder });
+  const appliedMigrations = readAppliedMigrations(database.$client);
+  validateMigrationHistory(localMigrations, appliedMigrations);
+  if (appliedMigrations.length === localMigrations.length) return;
+
+  try {
+    migrate(database, { migrationsFolder, migrationsTable });
+  } catch (error) {
+    const migrationsAfterFailure = readAppliedMigrations(database.$client);
+    validateMigrationHistory(localMigrations, migrationsAfterFailure);
+    if (migrationsAfterFailure.length !== localMigrations.length) throw error;
+  }
 }
 
 function readAppliedMigrations(database: DatabaseSync) {
+  const tableExists = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(migrationsTable);
+  if (tableExists === undefined) return [];
+
   return database
-    .prepare(
-      "SELECT version, name, checksum FROM migration_history ORDER BY version",
-    )
+    .prepare(`SELECT id, name, hash FROM ${migrationsTable} ORDER BY id`)
     .all()
     .map(parseAppliedMigration);
 }
 
 function validateMigrationHistory(
-  applied: readonly ReturnType<typeof parseAppliedMigration>[],
+  localMigrations: readonly MigrationMeta[],
+  appliedMigrations: readonly AppliedMigration[],
 ) {
-  const latestApplied = applied.at(-1)?.version ?? 0;
-  const latestSupported = environmentStateMigrations.length;
-
-  if (latestApplied > latestSupported) {
-    throw new Error(
-      `The state database is at version ${latestApplied}, but this Rebase build supports version ${latestSupported}.`,
-    );
-  }
-
-  for (const [index, migration] of applied.entries()) {
-    if (migration.version !== index + 1) {
+  for (const [index, applied] of appliedMigrations.entries()) {
+    const expected = localMigrations[index];
+    if (expected === undefined) {
       throw new Error(
-        `The state database has a gap before migration ${migration.version}.`,
+        `The state database is at version ${applied.id}, but this Rebase build supports version ${localMigrations.length}.`,
       );
     }
-
-    assertMigrationMatches(migration, environmentStateMigrations[index]);
-  }
-}
-
-function applyPendingMigrations(database: DatabaseSync, appliedCount: number) {
-  for (const migration of environmentStateMigrations.slice(appliedCount)) {
-    applyMigration(database, migration);
-  }
-}
-
-function applyMigration(
-  database: DatabaseSync,
-  migration: (typeof environmentStateMigrations)[number],
-) {
-  runInImmediateTransaction(database, () => {
-    const applied = readAppliedMigration(database, migration.version);
-    if (applied !== undefined) {
-      assertMigrationMatches(applied, migration);
-      return;
+    if (applied.id !== index + 1 || applied.name !== expected.name) {
+      throw new Error(
+        `Migration ${applied.id} "${applied.name}" does not match the expected migration "${expected.name}".`,
+      );
     }
-
-    database.exec(migration.sql);
-    recordMigration(database, migration);
-  });
-}
-
-function readAppliedMigration(database: DatabaseSync, version: number) {
-  const row = database
-    .prepare(
-      "SELECT version, name, checksum FROM migration_history WHERE version = ?",
-    )
-    .get(version);
-  return row === undefined ? undefined : parseAppliedMigration(row);
-}
-
-function assertMigrationMatches(
-  applied: ReturnType<typeof parseAppliedMigration>,
-  expected: (typeof environmentStateMigrations)[number] | undefined,
-) {
-  if (
-    expected === undefined ||
-    applied.name !== expected.name ||
-    applied.checksum !== expected.checksum
-  ) {
-    throw new Error(
-      `Migration ${applied.version} "${applied.name}" no longer matches its applied checksum.`,
-    );
+    if (applied.hash !== expected.hash) {
+      throw new Error(
+        `Migration ${applied.id} "${applied.name}" no longer matches its applied checksum.`,
+      );
+    }
   }
 }
 
-function recordMigration(
-  database: DatabaseSync,
-  migration: (typeof environmentStateMigrations)[number],
-) {
-  database
-    .prepare(
-      "INSERT INTO migration_history (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
-    )
-    .run(
-      migration.version,
-      migration.name,
-      migration.checksum,
-      new Date().toISOString(),
-    );
-}
-
-function parseAppliedMigration(
-  row: Record<string, string | number | bigint | Uint8Array | null>,
-) {
+function parseAppliedMigration(row: Record<string, unknown>): AppliedMigration {
   if (
-    typeof row.version !== "number" ||
+    typeof row.id !== "number" ||
     typeof row.name !== "string" ||
-    typeof row.checksum !== "string"
+    typeof row.hash !== "string"
   ) {
     throw new Error("The migration history contains an invalid record.");
   }
 
   return {
-    checksum: row.checksum,
+    hash: row.hash,
+    id: row.id,
     name: row.name,
-    version: row.version,
   };
 }
