@@ -3,7 +3,7 @@ import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 const cliPath = resolve("src/apps/server/cli.ts");
 const children = new Set<ChildProcessWithoutNullStreams>();

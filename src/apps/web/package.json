@@ -3,19 +3,73 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./styles.css"
+  ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+      "rebase-source": "./index.ts",
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js",
+      "default": "./dist/types/index.js"
+    },
+    "./technical-shell": {
+      "rebase-source": "./technical-shell.tsx",
+      "types": "./dist/types/technical-shell.d.ts",
+      "import": "./dist/types/technical-shell.js",
+      "default": "./dist/types/technical-shell.js"
+    },
+    "./state/server/server-state-provider": {
+      "rebase-source": "./state/server/server-state-provider.tsx",
+      "types": "./dist/types/state/server/server-state-provider.d.ts",
+      "import": "./dist/types/state/server/server-state-provider.js",
+      "default": "./dist/types/state/server/server-state-provider.js"
+    },
+    "./components/*": {
+      "rebase-source": "./components/*.tsx",
+      "types": "./dist/types/components/*.d.ts",
+      "import": "./dist/types/components/*.js",
+      "default": "./dist/types/components/*.js"
+    },
+    "./hooks/*": {
+      "rebase-source": "./hooks/*.ts",
+      "types": "./dist/types/hooks/*.d.ts",
+      "import": "./dist/types/hooks/*.js",
+      "default": "./dist/types/hooks/*.js"
+    },
+    "./lib/*": {
+      "rebase-source": "./lib/*.ts",
+      "types": "./dist/types/lib/*.d.ts",
+      "import": "./dist/types/lib/*.js",
+      "default": "./dist/types/lib/*.js"
+    },
+    "./styles.css": "./styles.css"
   },
   "scripts": {
     "build": "tsc -b",
+    "build:web": "vp build",
+    "dev": "vp dev --port 4173",
+    "preview": "vp preview --port 4173",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@effect/atom-react": "4.0.0-beta.107",
     "@rebase/contracts": "workspace:*",
-    "effect": "catalog:"
+    "clsx": "2.1.1",
+    "effect": "catalog:",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "scheduler": "0.27.0",
+    "tailwind-merge": "3.6.0",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "tailwindcss": "4.3.3",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

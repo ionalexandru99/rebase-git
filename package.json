@@ -12,15 +12,17 @@
     "pnpm": "11.22.0"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && pnpm build:web",
+    "build:web": "pnpm --filter @rebase/web build:web",
     "check": "biome check .",
     "dev:server": "node --conditions=rebase-source src/apps/server/cli.ts serve",
+    "dev:web": "pnpm --filter @rebase/web dev",
     "test": "pnpm test:unit",
     "test:boundary": "pnpm test:integration && pnpm test:compatibility && pnpm test:e2e",
-    "test:compatibility": "vitest run --project compatibility --passWithNoTests",
-    "test:e2e": "playwright test --pass-with-no-tests",
-    "test:integration": "vitest run --project integration --passWithNoTests",
-    "test:unit": "vitest run --project unit --passWithNoTests",
+    "test:compatibility": "vp test run --project compatibility --passWithNoTests",
+    "test:e2e": "playwright test",
+    "test:integration": "vp test run --project integration --passWithNoTests",
+    "test:unit": "vp test run --project unit --passWithNoTests",
     "typecheck": "pnpm --recursive run typecheck && tsc --project tests/tsconfig.json"
   },
   "devDependencies": {
@@ -29,6 +31,8 @@
     "@playwright/test": "1.62.1",
     "@types/node": "24.13.3",
     "typescript": "7.0.2",
-    "vitest": "4.1.11"
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

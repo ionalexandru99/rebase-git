@@ -3,7 +3,7 @@ import {
   assertSupportedNodeVersion,
   parseGitVersion,
 } from "@rebase/server/environment-server/runtime-requirements";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 describe("runtime requirements", () => {
   it.each(["24.0.0", "24.19.0", "24.99.99"])(
