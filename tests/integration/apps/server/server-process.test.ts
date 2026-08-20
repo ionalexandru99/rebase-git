@@ -323,7 +323,10 @@ function waitForOutput<T>(
 }
 
 function waitForExit(child: ChildProcessWithoutNullStreams) {
-  if (child.exitCode !== null || child.signalCode !== null) {
+  if (
+    (child.exitCode !== null || child.signalCode !== null) &&
+    child.stderr.readableEnded
+  ) {
     return Promise.resolve({ code: child.exitCode, signal: child.signalCode });
   }
 
@@ -333,7 +336,7 @@ function waitForExit(child: ChildProcessWithoutNullStreams) {
         rejectExit(new Error("Timed out waiting for process exit."));
       }, 10_000);
 
-      child.once("exit", (code, signal) => {
+      child.once("close", (code, signal) => {
         clearTimeout(timeout);
         resolveExit({ code, signal });
       });
