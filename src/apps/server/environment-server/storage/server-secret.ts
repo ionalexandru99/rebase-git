@@ -5,7 +5,7 @@ import {
   isFileSystemError,
 } from "@rebase/server/environment-server/error-inspection";
 import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
-import { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
+import { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error.contract";
 import { Effect } from "effect";
 
 export function ensureServerSecret(paths: EnvironmentPaths) {

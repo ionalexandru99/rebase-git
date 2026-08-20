@@ -8,7 +8,7 @@ import type { EnvironmentContext } from "@rebase/server/environment-server/persi
 import type {
   RuntimeMarkerError,
   RuntimeRequirementsError,
-} from "@rebase/server/environment-server/runtime/runtime-errors";
+} from "@rebase/server/environment-server/runtime/runtime-errors.contract";
 import { acquireRuntimeMarker } from "@rebase/server/environment-server/runtime/runtime-marker";
 import type { RuntimeMarker } from "@rebase/server/environment-server/runtime/runtime-marker.contract";
 import { verifyRuntimeRequirements } from "@rebase/server/environment-server/runtime/runtime-requirements";
@@ -18,9 +18,9 @@ import type {
   EnvironmentServer,
   EnvironmentServerOptions,
 } from "@rebase/server/environment-server/server/environment-server.contract";
-import type { EnvironmentServerStartError } from "@rebase/server/environment-server/server/environment-server-error";
+import type { EnvironmentServerStartError } from "@rebase/server/environment-server/server/environment-server-error.contract";
 import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
-import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
+import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error.contract";
 import { and } from "drizzle-orm";
 import { Effect, type Scope } from "effect";
 

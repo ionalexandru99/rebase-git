@@ -18,7 +18,7 @@ import {
 } from "@rebase/server/environment-server/storage/environment-paths";
 import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
 import { ensureServerSecret } from "@rebase/server/environment-server/storage/server-secret";
-import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
+import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error.contract";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { Effect, type Scope, Semaphore } from "effect";
 
