@@ -142,7 +142,9 @@ function applyMigration(database: DatabaseSync, migration: Migration) {
       );
     database.exec("COMMIT");
   } catch (error) {
-    if (database.isTransaction) database.exec("ROLLBACK");
+    if (database.isTransaction) {
+      database.exec("ROLLBACK");
+    }
     throw error;
   }
 }

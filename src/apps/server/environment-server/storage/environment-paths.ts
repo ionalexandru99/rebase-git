@@ -55,7 +55,9 @@ export function prepareEnvironmentDirectories(paths: EnvironmentPaths) {
     try: async () => {
       for (const directory of directories) {
         await mkdir(directory, { mode: 0o700, recursive: true });
-        if (process.platform !== "win32") await chmod(directory, 0o700);
+        if (process.platform !== "win32") {
+          await chmod(directory, 0o700);
+        }
       }
     },
     catch: (cause) =>

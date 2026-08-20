@@ -83,8 +83,11 @@ describe("rebase serve", () => {
       () =>
         new Promise<void>((resolveClosed, rejectClosed) => {
           occupiedServer.close((error) => {
-            if (error) rejectClosed(error);
-            else resolveClosed();
+            if (error) {
+              rejectClosed(error);
+            } else {
+              resolveClosed();
+            }
           });
         }),
     );
@@ -123,11 +126,9 @@ describe("rebase serve", () => {
     first.child.kill("SIGTERM");
     await waitForExit(first.child);
 
-    const explicitPort = await findAvailablePort();
-    const explicit = startCli(["--port", String(explicitPort)], directory);
-    await expect(explicit.waitForListeningUrl()).resolves.toBe(
-      `http://127.0.0.1:${explicitPort}`,
-    );
+    const { explicit, explicitPort, origin } =
+      await startCliOnAvailableExplicitPort(directory);
+    expect(origin).toBe(`http://127.0.0.1:${explicitPort}`);
     expect(readEnvironmentState(statePath)).toEqual(firstState);
     explicit.child.kill("SIGTERM");
     await waitForExit(explicit.child);
@@ -194,11 +195,32 @@ async function findAvailablePort() {
   }
   await new Promise<void>((resolveClosed, rejectClosed) => {
     server.close((error) => {
-      if (error) rejectClosed(error);
-      else resolveClosed();
+      if (error) {
+        rejectClosed(error);
+      } else {
+        resolveClosed();
+      }
     });
   });
   return address.port;
+}
+
+async function startCliOnAvailableExplicitPort(homeDirectory: string) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const explicitPort = await findAvailablePort();
+    const explicit = startCli(["--port", String(explicitPort)], homeDirectory);
+    try {
+      const origin = await explicit.waitForListeningUrl();
+      return { explicit, explicitPort, origin };
+    } catch (error) {
+      await waitForExit(explicit.child);
+      if (!explicit.stderr().includes("already in use") || attempt === 2) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Could not reserve an explicit test port.");
 }
 
 function startCli(
@@ -209,7 +231,9 @@ function startCli(
   const inheritedEnvironment = { ...process.env };
   if (environment.PATH !== undefined) {
     for (const name of Object.keys(inheritedEnvironment)) {
-      if (name.toLowerCase() === "path") delete inheritedEnvironment[name];
+      if (name.toLowerCase() === "path") {
+        delete inheritedEnvironment[name];
+      }
     }
   }
 

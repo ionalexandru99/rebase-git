@@ -78,7 +78,9 @@ function removeRuntimeMarker(runtimePath: string, pid: number) {
 function replaceFile(source: string, destination: string) {
   return fileSystemOperation(() => rename(source, destination)).pipe(
     Effect.catchTag("RuntimeMarkerError", (error) => {
-      if (!isReplaceConflict(error.cause)) return Effect.fail(error);
+      if (!isReplaceConflict(error.cause)) {
+        return Effect.fail(error);
+      }
 
       return Effect.gen(function* () {
         yield* fileSystemOperation(() => rm(destination, { force: true }));

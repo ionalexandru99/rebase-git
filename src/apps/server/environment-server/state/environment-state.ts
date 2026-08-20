@@ -184,7 +184,9 @@ export function acquireEnvironmentState(
               .run(operationActivityLimit);
             database.exec("COMMIT");
           } catch (error) {
-            if (database.isTransaction) database.exec("ROLLBACK");
+            if (database.isTransaction) {
+              database.exec("ROLLBACK");
+            }
             throw error;
           }
         }),
@@ -254,7 +256,9 @@ function openDatabase(paths: EnvironmentPaths) {
         PRAGMA busy_timeout = 250;
       `);
       migrateEnvironmentState(database);
-      if (process.platform !== "win32") chmodSync(paths.stateDatabase, 0o600);
+      if (process.platform !== "win32") {
+        chmodSync(paths.stateDatabase, 0o600);
+      }
       return database;
     } catch (error) {
       database.close();

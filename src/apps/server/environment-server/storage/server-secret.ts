@@ -24,14 +24,18 @@ async function readOrCreateServerSecret(path: string) {
   try {
     secret = await readFile(path, "utf8");
   } catch (error) {
-    if (!isMissingFile(error)) throw error;
+    if (!isMissingFile(error)) {
+      throw error;
+    }
 
     const generated = `${randomBytes(32).toString("base64url")}\n`;
     try {
       await writeFile(path, generated, { flag: "wx", mode: 0o600 });
       secret = generated;
     } catch (writeError) {
-      if (!isExistingFile(writeError)) throw writeError;
+      if (!isExistingFile(writeError)) {
+        throw writeError;
+      }
       secret = await readFile(path, "utf8");
     }
   }
@@ -39,7 +43,9 @@ async function readOrCreateServerSecret(path: string) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(secret.trim())) {
     throw new Error("The server secret is invalid.");
   }
-  if (process.platform !== "win32") await chmod(path, 0o600);
+  if (process.platform !== "win32") {
+    await chmod(path, 0o600);
+  }
   return secret.trim();
 }
 
