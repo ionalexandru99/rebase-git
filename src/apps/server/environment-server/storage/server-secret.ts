@@ -4,7 +4,7 @@ import {
   errorMessage,
   isFileSystemError,
 } from "@rebase/server/environment-server/error-inspection";
-import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
+import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
 import { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
 import { Effect } from "effect";
 

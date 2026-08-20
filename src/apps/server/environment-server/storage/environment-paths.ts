@@ -2,20 +2,9 @@ import { chmod, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { errorMessage } from "@rebase/server/environment-server/error-inspection";
+import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
 import { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
 import { Effect } from "effect";
-
-export interface EnvironmentPaths {
-  readonly cacheDirectory: string;
-  readonly root: string;
-  readonly runtimeDirectory: string;
-  readonly runtimeMarker: string;
-  readonly secretsDirectory: string;
-  readonly serverSecret: string;
-  readonly settingsDirectory: string;
-  readonly stateDatabase: string;
-  readonly stateDirectory: string;
-}
 
 export function defaultEnvironmentPaths() {
   return environmentPaths(join(homedir(), ".rebase"));

@@ -5,16 +5,9 @@ import {
   errorMessage,
   isFileSystemError,
 } from "@rebase/server/environment-server/error-inspection";
+import type { RuntimeMarker } from "@rebase/server/environment-server/runtime-marker.contract";
 import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
 import { Data, Effect, type Scope } from "effect";
-
-export interface RuntimeMarker {
-  readonly host: string;
-  readonly origin: string;
-  readonly pid: number;
-  readonly port: number;
-  readonly startedAt: string;
-}
 
 export class RuntimeMarkerError extends Data.TaggedError("RuntimeMarkerError")<{
   readonly cause: unknown;

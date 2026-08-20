@@ -2,19 +2,22 @@ import { randomUUID } from "node:crypto";
 import { chmodSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { errorMessage } from "@rebase/server/environment-server/error-inspection";
+import type {
+  AuthorizationMetadata,
+  EnvironmentState,
+  OperationActivity,
+} from "@rebase/server/environment-server/state/environment-state.contract";
 import { migrateEnvironmentState } from "@rebase/server/environment-server/state/migrations";
 import {
   authorizationMetadataTable,
-  type authorizationRoles,
   environmentTable,
   operationActivityTable,
-  type operationStatuses,
 } from "@rebase/server/environment-server/state/schema";
-import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
 import {
   defaultEnvironmentPaths,
   prepareEnvironmentDirectories,
 } from "@rebase/server/environment-server/storage/environment-paths";
+import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
 import { ensureServerSecret } from "@rebase/server/environment-server/storage/server-secret";
 import { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -22,54 +25,6 @@ import { drizzle } from "drizzle-orm/node-sqlite";
 import { Effect, type Scope, Semaphore } from "effect";
 
 export const operationActivityLimit = 200;
-
-export type AuthorizationRole = (typeof authorizationRoles)[number];
-
-export interface AuthorizationMetadata {
-  readonly createdAt: string;
-  readonly id: string;
-  readonly label: string;
-  readonly lastSeenAt: string | null;
-  readonly revokedAt: string | null;
-  readonly role: AuthorizationRole;
-}
-
-export type OperationStatus = (typeof operationStatuses)[number];
-
-export interface OperationActivity {
-  readonly finishedAt: string | null;
-  readonly id: string;
-  readonly kind: string;
-  readonly startedAt: string;
-  readonly status: OperationStatus;
-}
-
-export interface EnvironmentState {
-  readonly automaticPort: number | null;
-  readonly databaseSettings: {
-    readonly busyTimeout: number;
-    readonly foreignKeys: boolean;
-    readonly journalMode: string;
-  };
-  readonly environmentId: string;
-  readonly listAuthorizations: Effect.Effect<
-    readonly AuthorizationMetadata[],
-    EnvironmentStorageError
-  >;
-  readonly listOperationActivity: Effect.Effect<
-    readonly OperationActivity[],
-    EnvironmentStorageError
-  >;
-  readonly recordOperationActivity: (
-    activity: OperationActivity,
-  ) => Effect.Effect<void, EnvironmentStorageError>;
-  readonly saveAuthorization: (
-    authorization: AuthorizationMetadata,
-  ) => Effect.Effect<void, EnvironmentStorageError>;
-  readonly selectAutomaticPort: (
-    port: number,
-  ) => Effect.Effect<void, EnvironmentStorageError>;
-}
 
 export function acquireEnvironmentState(
   paths: EnvironmentPaths = defaultEnvironmentPaths(),

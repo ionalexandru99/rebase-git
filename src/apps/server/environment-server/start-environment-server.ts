@@ -1,4 +1,8 @@
 import { createServer, type Server } from "node:http";
+import type {
+  EnvironmentServer,
+  EnvironmentServerOptions,
+} from "@rebase/server/environment-server/environment-server.contract";
 import {
   errorMessage,
   isFileSystemError,
@@ -17,16 +21,6 @@ import type { EnvironmentStorageError } from "@rebase/server/environment-server/
 import { Data, Effect, type Scope } from "effect";
 
 const loopbackHost = "127.0.0.1";
-
-export interface EnvironmentServerOptions {
-  readonly port?: number;
-}
-
-export interface EnvironmentServer {
-  readonly environmentId: string;
-  readonly origin: string;
-  readonly port: number;
-}
 
 export class EnvironmentServerStartError extends Data.TaggedError(
   "EnvironmentServerStartError",
