@@ -6,13 +6,19 @@
   "sideEffects": false,
   "exports": {
     ".": {
+      "rebase-source": "./index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./*": {
+      "rebase-source": "./*.ts",
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
     }
   },
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b --emitDeclarationOnly"
   },
   "dependencies": {
     "effect": "catalog:"

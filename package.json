@@ -29,7 +29,9 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.9",
     "@playwright/test": "1.62.1",
+    "@rebase/contracts": "workspace:*",
     "@rebase/server": "workspace:*",
+    "@rebase/web": "workspace:*",
     "@types/node": "24.13.3",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",

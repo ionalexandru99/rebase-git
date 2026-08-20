@@ -3,11 +3,12 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": ".",
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "types": ["node"]
   },
-  "include": ["./**/*.ts"],
+  "include": ["./**/*.ts", "./package.json"],
   "exclude": ["./dist"],
   "references": [{ "path": "../../contracts" }]
 }
