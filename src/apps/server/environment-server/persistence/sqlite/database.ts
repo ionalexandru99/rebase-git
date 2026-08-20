@@ -1,7 +1,7 @@
 import { chmodSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { migrateEnvironmentState } from "@rebase/server/environment-server/state/sqlite/migrations";
-import { storageSync } from "@rebase/server/environment-server/state/sqlite/storage-operation";
+import { migrateEnvironmentState } from "@rebase/server/environment-server/persistence/sqlite/migrations";
+import { storageSync } from "@rebase/server/environment-server/persistence/sqlite/storage-operation";
 import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
 import { Effect } from "effect";
 

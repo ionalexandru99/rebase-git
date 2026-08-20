@@ -1,3 +1,10 @@
+import { environmentTable } from "@rebase/server/environment-server/domain/environment-state.schema";
+import {
+  hasNoAutomaticPort,
+  isCurrentEnvironment,
+} from "@rebase/server/environment-server/domain/environment-state.specifications";
+import { acquireEnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context";
+import type { EnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context.contract";
 import type {
   RuntimeMarkerError,
   RuntimeRequirementsError,
@@ -12,9 +19,9 @@ import type {
   EnvironmentServerOptions,
 } from "@rebase/server/environment-server/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "@rebase/server/environment-server/server/environment-server-error";
-import { acquireEnvironmentState } from "@rebase/server/environment-server/state/environment-state";
 import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
 import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
+import { and } from "drizzle-orm";
 import { Effect, type Scope } from "effect";
 
 export function startEnvironmentServer(
@@ -30,23 +37,63 @@ export function startEnvironmentServer(
   return Effect.gen(function* () {
     yield* verifyRuntimeRequirements;
     const paths = defaultEnvironmentPaths();
-    const state = yield* acquireEnvironmentState(paths);
-    const requestedPort = options.port ?? state.automaticPort ?? 0;
+    const context = yield* acquireEnvironmentContext(paths);
+    const environment = yield* readCurrentEnvironment(context);
+    const requestedPort = options.port ?? environment.automaticPort ?? 0;
     const listener = yield* acquireEnvironmentListener(requestedPort);
 
-    if (options.port === undefined && state.automaticPort === null) {
-      yield* state.selectAutomaticPort(listener.port);
+    if (options.port === undefined && environment.automaticPort === null) {
+      yield* claimAutomaticPort(context, listener.port);
     }
 
     yield* acquireRuntimeMarker(runtimeMarker(listener), paths.runtimeMarker);
     yield* markListenerReady(listener);
 
     return {
-      environmentId: state.environmentId,
+      environmentId: environment.id,
       origin: listener.origin,
       port: listener.port,
     };
   });
+}
+
+function readCurrentEnvironment(context: EnvironmentContext) {
+  return context.read("Could not read Environment state", async (database) => {
+    const environment = await database
+      .select()
+      .from(environmentTable)
+      .where(isCurrentEnvironment())
+      .get();
+    if (environment === undefined) {
+      throw new Error("The Environment identity is missing.");
+    }
+    return environment;
+  });
+}
+
+function claimAutomaticPort(context: EnvironmentContext, port: number) {
+  return context.write(
+    "Could not save the automatic port",
+    async (database) => {
+      await database
+        .update(environmentTable)
+        .set({ automaticPort: port })
+        .where(and(isCurrentEnvironment(), hasNoAutomaticPort()));
+      const selected = await database
+        .select({ automaticPort: environmentTable.automaticPort })
+        .from(environmentTable)
+        .where(isCurrentEnvironment())
+        .get();
+      if (selected?.automaticPort === null || selected === undefined) {
+        throw new Error("The automatic port was not saved.");
+      }
+      if (selected.automaticPort !== port) {
+        throw new Error(
+          `Another server selected automatic port ${selected.automaticPort}.`,
+        );
+      }
+    },
+  );
 }
 
 function runtimeMarker(listener: EnvironmentListener): RuntimeMarker {

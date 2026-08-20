@@ -5,22 +5,14 @@ import { Effect, type Semaphore } from "effect";
 export function serializedPromise<A>(
   writer: Semaphore.Semaphore,
   message: string,
-  operation: () => PromiseLike<A>,
+  operation: () => A | PromiseLike<A>,
 ) {
   return writer.withPermit(storagePromise(message, operation));
 }
 
-export function serializedSync<A>(
-  writer: Semaphore.Semaphore,
-  message: string,
-  operation: () => A,
-) {
-  return writer.withPermit(storageSync(message, operation));
-}
-
 export function storagePromise<A>(
   message: string,
-  operation: () => PromiseLike<A>,
+  operation: () => A | PromiseLike<A>,
 ) {
   return Effect.tryPromise({
     try: async () => operation(),

@@ -3,11 +3,22 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { operationActivityLimit } from "@rebase/server/environment-server/domain/environment-state.contract";
 import {
-  acquireEnvironmentState,
-  operationActivityLimit,
-} from "@rebase/server/environment-server/state/environment-state";
+  authorizationMetadataTable,
+  environmentTable,
+  operationActivityTable,
+} from "@rebase/server/environment-server/domain/environment-state.schema";
+import {
+  hasNoAutomaticPort,
+  hasOperationStatus,
+  isActiveAuthorization,
+  isCurrentEnvironment,
+} from "@rebase/server/environment-server/domain/environment-state.specifications";
+import { acquireEnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context";
+import type { EnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context.contract";
 import { environmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
+import { and, desc, notInArray } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
@@ -29,11 +40,12 @@ describe("Environment state", () => {
     const first = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* acquireEnvironmentState(paths);
+          const context = yield* acquireEnvironmentContext(paths);
+          const environment = yield* readCurrentEnvironment(context);
           return {
-            automaticPort: state.automaticPort,
-            databaseSettings: state.databaseSettings,
-            environmentId: state.environmentId,
+            automaticPort: environment.automaticPort,
+            databaseSettings: context.databaseSettings,
+            environmentId: environment.id,
           };
         }),
       ),
@@ -43,11 +55,12 @@ describe("Environment state", () => {
     const second = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* acquireEnvironmentState(paths);
+          const context = yield* acquireEnvironmentContext(paths);
+          const environment = yield* readCurrentEnvironment(context);
           return {
-            automaticPort: state.automaticPort,
-            databaseSettings: state.databaseSettings,
-            environmentId: state.environmentId,
+            automaticPort: environment.automaticPort,
+            databaseSettings: context.databaseSettings,
+            environmentId: environment.id,
           };
         }),
       ),
@@ -137,11 +150,20 @@ describe("Environment state", () => {
     const state = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const opened = yield* acquireEnvironmentState(paths);
+          const context = yield* acquireEnvironmentContext(paths);
+          const environment = yield* readCurrentEnvironment(context);
           return {
-            automaticPort: opened.automaticPort,
-            authorizations: yield* opened.listAuthorizations,
-            environmentId: opened.environmentId,
+            automaticPort: environment.automaticPort,
+            authorizations: yield* context.read(
+              "Could not read authorization metadata",
+              (database) =>
+                database
+                  .select()
+                  .from(authorizationMetadataTable)
+                  .where(isActiveAuthorization())
+                  .orderBy(authorizationMetadataTable.createdAt),
+            ),
+            environmentId: environment.id,
           };
         }),
       ),
@@ -210,33 +232,104 @@ describe("Environment state", () => {
     const result = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* acquireEnvironmentState(paths);
-          yield* state.selectAutomaticPort(40123);
-          yield* state.saveAuthorization({
-            createdAt: "2026-08-20T10:00:00.000Z",
-            id: "device-one",
-            label: "Alex's laptop",
-            lastSeenAt: "2026-08-20T11:00:00.000Z",
-            revokedAt: null,
-            role: "owner",
-          });
+          const context = yield* acquireEnvironmentContext(paths);
+          yield* context.write(
+            "Could not save the automatic port",
+            (database) =>
+              database
+                .update(environmentTable)
+                .set({ automaticPort: 40123 })
+                .where(and(isCurrentEnvironment(), hasNoAutomaticPort())),
+          );
+          yield* context.write(
+            "Could not save authorization metadata",
+            (database) =>
+              database
+                .insert(authorizationMetadataTable)
+                .values({
+                  createdAt: "2026-08-20T10:00:00.000Z",
+                  id: "device-one",
+                  label: "Alex's laptop",
+                  lastSeenAt: "2026-08-20T11:00:00.000Z",
+                  revokedAt: null,
+                  role: "owner",
+                })
+                .onConflictDoUpdate({
+                  set: {
+                    createdAt: "2026-08-20T10:00:00.000Z",
+                    label: "Alex's laptop",
+                    lastSeenAt: "2026-08-20T11:00:00.000Z",
+                    revokedAt: null,
+                    role: "owner",
+                  },
+                  target: authorizationMetadataTable.id,
+                }),
+          );
 
           yield* Effect.all(
             Array.from({ length: operationActivityLimit + 50 }, (_, index) =>
-              state.recordOperationActivity({
-                finishedAt: null,
-                id: `operation-${index.toString().padStart(3, "0")}`,
-                kind: "test",
-                startedAt: new Date(index * 1_000).toISOString(),
-                status: "running",
-              }),
+              context.write("Could not save operation activity", (database) =>
+                database.transaction(
+                  (transaction) => {
+                    const activity = {
+                      finishedAt: null,
+                      id: `operation-${index.toString().padStart(3, "0")}`,
+                      kind: "test",
+                      startedAt: new Date(index * 1_000).toISOString(),
+                      status: "running" as const,
+                    };
+                    transaction
+                      .insert(operationActivityTable)
+                      .values(activity)
+                      .onConflictDoUpdate({
+                        set: activity,
+                        target: operationActivityTable.id,
+                      })
+                      .run();
+                    const retainedActivity = transaction
+                      .select({ id: operationActivityTable.id })
+                      .from(operationActivityTable)
+                      .orderBy(
+                        desc(operationActivityTable.startedAt),
+                        desc(operationActivityTable.id),
+                      )
+                      .limit(operationActivityLimit);
+                    transaction
+                      .delete(operationActivityTable)
+                      .where(
+                        notInArray(operationActivityTable.id, retainedActivity),
+                      )
+                      .run();
+                  },
+                  { behavior: "immediate" },
+                ),
+              ),
             ),
             { concurrency: "unbounded" },
           );
 
           return {
-            authorizations: yield* state.listAuthorizations,
-            operations: yield* state.listOperationActivity,
+            authorizations: yield* context.read(
+              "Could not read authorization metadata",
+              (database) =>
+                database
+                  .select()
+                  .from(authorizationMetadataTable)
+                  .where(isActiveAuthorization())
+                  .orderBy(authorizationMetadataTable.createdAt),
+            ),
+            operations: yield* context.read(
+              "Could not read operation activity",
+              (database) =>
+                database
+                  .select()
+                  .from(operationActivityTable)
+                  .where(hasOperationStatus("running"))
+                  .orderBy(
+                    desc(operationActivityTable.startedAt),
+                    desc(operationActivityTable.id),
+                  ),
+            ),
           };
         }),
       ),
@@ -259,8 +352,9 @@ describe("Environment state", () => {
     const reopenedPort = await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* acquireEnvironmentState(paths);
-          return state.automaticPort;
+          const context = yield* acquireEnvironmentContext(paths);
+          const environment = yield* readCurrentEnvironment(context);
+          return environment.automaticPort;
         }),
       ),
     );
@@ -303,6 +397,20 @@ async function seedMigrationHistory(
 
 function openState(paths: ReturnType<typeof environmentPaths>) {
   return Effect.runPromise(
-    Effect.scoped(acquireEnvironmentState(paths).pipe(Effect.asVoid)),
+    Effect.scoped(acquireEnvironmentContext(paths).pipe(Effect.asVoid)),
   );
+}
+
+function readCurrentEnvironment(context: EnvironmentContext) {
+  return context.read("Could not read Environment state", async (database) => {
+    const environment = await database
+      .select()
+      .from(environmentTable)
+      .where(isCurrentEnvironment())
+      .get();
+    if (environment === undefined) {
+      throw new Error("The Environment identity is missing.");
+    }
+    return environment;
+  });
 }

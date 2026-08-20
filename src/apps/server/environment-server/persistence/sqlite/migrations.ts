@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { runInImmediateTransaction } from "@rebase/server/environment-server/state/sqlite/transaction";
+import { runInImmediateTransaction } from "@rebase/server/environment-server/persistence/sqlite/transaction";
 
 const migrationDefinitions = [
   {
