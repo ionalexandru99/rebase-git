@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import {
   errorMessage,
   isFileSystemError,
 } from "@rebase/server/environment-server/error-inspection";
+import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
 import { Data, Effect, type Scope } from "effect";
 
 export interface RuntimeMarker {
@@ -22,14 +22,13 @@ export class RuntimeMarkerError extends Data.TaggedError("RuntimeMarkerError")<{
 }> {}
 
 export function defaultRuntimePath(): string {
-  return join(homedir(), ".rebase", "runtime.json");
+  return defaultEnvironmentPaths().runtimeMarker;
 }
 
 export function acquireRuntimeMarker(
   marker: RuntimeMarker,
+  runtimePath = defaultRuntimePath(),
 ): Effect.Effect<void, RuntimeMarkerError, Scope.Scope> {
-  const runtimePath = defaultRuntimePath();
-
   return Effect.acquireRelease(writeRuntimeMarker(runtimePath, marker), () =>
     removeRuntimeMarker(runtimePath, marker.pid).pipe(
       Effect.catchTag("RuntimeMarkerError", reportCleanupFailure),

@@ -11,6 +11,9 @@ import {
   type RuntimeRequirementsError,
   verifyRuntimeRequirements,
 } from "@rebase/server/environment-server/runtime-requirements";
+import { acquireEnvironmentState } from "@rebase/server/environment-server/state/environment-state";
+import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
+import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
 import { Data, Effect, type Scope } from "effect";
 
 const loopbackHost = "127.0.0.1";
@@ -20,6 +23,7 @@ export interface EnvironmentServerOptions {
 }
 
 export interface EnvironmentServer {
+  readonly environmentId: string;
   readonly origin: string;
   readonly port: number;
 }
@@ -31,7 +35,9 @@ export class EnvironmentServerStartError extends Data.TaggedError(
   readonly message: string;
 }> {}
 
-interface RunningListener extends EnvironmentServer {
+interface RunningListener {
+  readonly origin: string;
+  readonly port: number;
   readonly readiness: { value: boolean };
   readonly server: Server;
 }
@@ -40,20 +46,33 @@ export function startEnvironmentServer(
   options: EnvironmentServerOptions = {},
 ): Effect.Effect<
   EnvironmentServer,
-  EnvironmentServerStartError | RuntimeMarkerError | RuntimeRequirementsError,
+  | EnvironmentServerStartError
+  | EnvironmentStorageError
+  | RuntimeMarkerError
+  | RuntimeRequirementsError,
   Scope.Scope
 > {
   return Effect.gen(function* () {
     yield* verifyRuntimeRequirements;
-    const listener = yield* acquireListener(options.port);
+    const paths = defaultEnvironmentPaths();
+    const state = yield* acquireEnvironmentState(paths);
+    const requestedPort = options.port ?? state.automaticPort ?? 0;
+    const listener = yield* acquireListener(requestedPort);
 
-    yield* acquireRuntimeMarker({
-      host: loopbackHost,
-      origin: listener.origin,
-      pid: process.pid,
-      port: listener.port,
-      startedAt: new Date().toISOString(),
-    });
+    if (options.port === undefined && state.automaticPort === null) {
+      yield* state.selectAutomaticPort(listener.port);
+    }
+
+    yield* acquireRuntimeMarker(
+      {
+        host: loopbackHost,
+        origin: listener.origin,
+        pid: process.pid,
+        port: listener.port,
+        startedAt: new Date().toISOString(),
+      },
+      paths.runtimeMarker,
+    );
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         listener.readiness.value = false;
@@ -64,6 +83,7 @@ export function startEnvironmentServer(
     });
 
     return {
+      environmentId: state.environmentId,
       origin: listener.origin,
       port: listener.port,
     };

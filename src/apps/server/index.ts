@@ -6,3 +6,4 @@ export {
   EnvironmentServerStartError,
   startEnvironmentServer,
 } from "@rebase/server/environment-server/start-environment-server";
+export { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";

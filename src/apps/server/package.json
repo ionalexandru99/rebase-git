@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@rebase/contracts": "workspace:*",
+    "drizzle-orm": "1.0.0-rc.5-169397b",
     "effect": "catalog:"
   }
 }

@@ -1,4 +1,6 @@
-export function TechnicalShell() {
+import type { JSX } from "react";
+
+export function TechnicalShell(): JSX.Element {
   return (
     <main className="min-h-svh bg-background p-6 text-foreground">
       <h1 className="text-xl font-semibold">Rebase</h1>

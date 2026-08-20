@@ -26,13 +26,14 @@
     "typecheck": "pnpm --recursive run typecheck && tsc --project tests/tsconfig.json"
   },
   "devDependencies": {
-    "@rebase/server": "workspace:*",
     "@biomejs/biome": "2.5.9",
     "@playwright/test": "1.62.1",
+    "@rebase/server": "workspace:*",
     "@types/node": "24.13.3",
+    "effect": "catalog:",
     "typescript": "7.0.2",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
   }
 }
