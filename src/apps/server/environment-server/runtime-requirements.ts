@@ -1,15 +1,9 @@
 import { execFile } from "node:child_process";
-import { Data, Effect } from "effect";
+import { RuntimeRequirementsError } from "@rebase/server/environment-server/runtime-requirements-error";
+import { Effect } from "effect";
 
 const requiredNodeMajor = 24;
 const minimumGitVersion = [2, 34, 0] as const;
-
-export class RuntimeRequirementsError extends Data.TaggedError(
-  "RuntimeRequirementsError",
-)<{
-  readonly cause: unknown;
-  readonly message: string;
-}> {}
 
 export const verifyRuntimeRequirements = Effect.gen(function* () {
   yield* captureRequirement(() =>

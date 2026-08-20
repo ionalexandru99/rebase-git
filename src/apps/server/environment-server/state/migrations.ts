@@ -1,18 +1,10 @@
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-
-interface Migration {
-  readonly checksum: string;
-  readonly name: string;
-  readonly sql: string;
-  readonly version: number;
-}
-
-interface AppliedMigration {
-  readonly checksum: string;
-  readonly name: string;
-  readonly version: number;
-}
+import type {
+  AppliedMigration,
+  Migration,
+} from "@rebase/server/environment-server/state/migration.contract";
+import { runInImmediateTransaction } from "@rebase/server/environment-server/state/run-in-immediate-transaction";
 
 const migrationDefinitions = [
   {
@@ -59,6 +51,13 @@ export const environmentStateMigrations: readonly Migration[] =
   }));
 
 export function migrateEnvironmentState(database: DatabaseSync) {
+  createMigrationHistory(database);
+  const applied = readAppliedMigrations(database);
+  validateMigrationHistory(applied);
+  applyPendingMigrations(database, applied.length);
+}
+
+function createMigrationHistory(database: DatabaseSync) {
   database.exec(`
     CREATE TABLE IF NOT EXISTS migration_history (
       version INTEGER PRIMARY KEY,
@@ -67,13 +66,18 @@ export function migrateEnvironmentState(database: DatabaseSync) {
       applied_at TEXT NOT NULL
     ) STRICT;
   `);
+}
 
-  const applied = database
+function readAppliedMigrations(database: DatabaseSync) {
+  return database
     .prepare(
       "SELECT version, name, checksum FROM migration_history ORDER BY version",
     )
     .all()
     .map(parseAppliedMigration);
+}
+
+function validateMigrationHistory(applied: readonly AppliedMigration[]) {
   const latestApplied = applied.at(-1)?.version ?? 0;
   const latestSupported = environmentStateMigrations.length;
 
@@ -90,63 +94,64 @@ export function migrateEnvironmentState(database: DatabaseSync) {
       );
     }
 
-    const expected = environmentStateMigrations[index];
-    if (
-      expected === undefined ||
-      migration.name !== expected.name ||
-      migration.checksum !== expected.checksum
-    ) {
-      throw new Error(
-        `Migration ${migration.version} "${migration.name}" no longer matches its applied checksum.`,
-      );
-    }
+    assertMigrationMatches(migration, environmentStateMigrations[index]);
   }
+}
 
-  for (const migration of environmentStateMigrations.slice(applied.length)) {
+function applyPendingMigrations(database: DatabaseSync, appliedCount: number) {
+  for (const migration of environmentStateMigrations.slice(appliedCount)) {
     applyMigration(database, migration);
   }
 }
 
 function applyMigration(database: DatabaseSync, migration: Migration) {
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    const applied = database
-      .prepare(
-        "SELECT version, name, checksum FROM migration_history WHERE version = ?",
-      )
-      .get(migration.version);
+  runInImmediateTransaction(database, () => {
+    const applied = readAppliedMigration(database, migration.version);
     if (applied !== undefined) {
-      const current = parseAppliedMigration(applied);
-      if (
-        current.name !== migration.name ||
-        current.checksum !== migration.checksum
-      ) {
-        throw new Error(
-          `Migration ${current.version} "${current.name}" no longer matches its applied checksum.`,
-        );
-      }
-      database.exec("COMMIT");
+      assertMigrationMatches(applied, migration);
       return;
     }
 
     database.exec(migration.sql);
-    database
-      .prepare(
-        "INSERT INTO migration_history (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
-      )
-      .run(
-        migration.version,
-        migration.name,
-        migration.checksum,
-        new Date().toISOString(),
-      );
-    database.exec("COMMIT");
-  } catch (error) {
-    if (database.isTransaction) {
-      database.exec("ROLLBACK");
-    }
-    throw error;
+    recordMigration(database, migration);
+  });
+}
+
+function readAppliedMigration(database: DatabaseSync, version: number) {
+  const row = database
+    .prepare(
+      "SELECT version, name, checksum FROM migration_history WHERE version = ?",
+    )
+    .get(version);
+  return row === undefined ? undefined : parseAppliedMigration(row);
+}
+
+function assertMigrationMatches(
+  applied: AppliedMigration,
+  expected: Migration | undefined,
+) {
+  if (
+    expected === undefined ||
+    applied.name !== expected.name ||
+    applied.checksum !== expected.checksum
+  ) {
+    throw new Error(
+      `Migration ${applied.version} "${applied.name}" no longer matches its applied checksum.`,
+    );
   }
+}
+
+function recordMigration(database: DatabaseSync, migration: Migration) {
+  database
+    .prepare(
+      "INSERT INTO migration_history (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(
+      migration.version,
+      migration.name,
+      migration.checksum,
+      new Date().toISOString(),
+    );
 }
 
 function parseAppliedMigration(

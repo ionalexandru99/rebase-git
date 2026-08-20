@@ -1,40 +1,19 @@
-import { createServer, type Server } from "node:http";
+import { acquireEnvironmentListener } from "@rebase/server/environment-server/environment-listener";
+import type { EnvironmentListener } from "@rebase/server/environment-server/environment-listener.contract";
 import type {
   EnvironmentServer,
   EnvironmentServerOptions,
 } from "@rebase/server/environment-server/environment-server.contract";
-import {
-  errorMessage,
-  isFileSystemError,
-} from "@rebase/server/environment-server/error-inspection";
-import {
-  acquireRuntimeMarker,
-  type RuntimeMarkerError,
-} from "@rebase/server/environment-server/runtime-marker";
-import {
-  type RuntimeRequirementsError,
-  verifyRuntimeRequirements,
-} from "@rebase/server/environment-server/runtime-requirements";
+import type { EnvironmentServerStartError } from "@rebase/server/environment-server/environment-server-start-error";
+import { acquireRuntimeMarker } from "@rebase/server/environment-server/runtime-marker";
+import type { RuntimeMarker } from "@rebase/server/environment-server/runtime-marker.contract";
+import type { RuntimeMarkerError } from "@rebase/server/environment-server/runtime-marker-error";
+import { verifyRuntimeRequirements } from "@rebase/server/environment-server/runtime-requirements";
+import type { RuntimeRequirementsError } from "@rebase/server/environment-server/runtime-requirements-error";
 import { acquireEnvironmentState } from "@rebase/server/environment-server/state/environment-state";
 import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
 import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
-import { Data, Effect, type Scope } from "effect";
-
-const loopbackHost = "127.0.0.1";
-
-export class EnvironmentServerStartError extends Data.TaggedError(
-  "EnvironmentServerStartError",
-)<{
-  readonly cause: unknown;
-  readonly message: string;
-}> {}
-
-interface RunningListener {
-  readonly origin: string;
-  readonly port: number;
-  readonly readiness: { value: boolean };
-  readonly server: Server;
-}
+import { Effect, type Scope } from "effect";
 
 export function startEnvironmentServer(
   options: EnvironmentServerOptions = {},
@@ -51,30 +30,14 @@ export function startEnvironmentServer(
     const paths = defaultEnvironmentPaths();
     const state = yield* acquireEnvironmentState(paths);
     const requestedPort = options.port ?? state.automaticPort ?? 0;
-    const listener = yield* acquireListener(requestedPort);
+    const listener = yield* acquireEnvironmentListener(requestedPort);
 
     if (options.port === undefined && state.automaticPort === null) {
       yield* state.selectAutomaticPort(listener.port);
     }
 
-    yield* acquireRuntimeMarker(
-      {
-        host: loopbackHost,
-        origin: listener.origin,
-        pid: process.pid,
-        port: listener.port,
-        startedAt: new Date().toISOString(),
-      },
-      paths.runtimeMarker,
-    );
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        listener.readiness.value = false;
-      }),
-    );
-    yield* Effect.sync(() => {
-      listener.readiness.value = true;
-    });
+    yield* acquireRuntimeMarker(runtimeMarker(listener), paths.runtimeMarker);
+    yield* markListenerReady(listener);
 
     return {
       environmentId: state.environmentId,
@@ -84,113 +47,25 @@ export function startEnvironmentServer(
   });
 }
 
-function acquireListener(port = 0) {
-  return Effect.acquireRelease(startListener(port), (listener) =>
-    closeServer(listener.server),
-  );
+function runtimeMarker(listener: EnvironmentListener): RuntimeMarker {
+  return {
+    host: listener.host,
+    origin: listener.origin,
+    pid: process.pid,
+    port: listener.port,
+    startedAt: new Date().toISOString(),
+  };
 }
 
-function startListener(
-  port: number,
-): Effect.Effect<RunningListener, EnvironmentServerStartError> {
+function markListenerReady(listener: EnvironmentListener) {
   return Effect.gen(function* () {
-    const readiness = { value: false };
-    const server = yield* Effect.try({
-      try: () =>
-        createServer((request, response) => {
-          if (request.method === "GET" && request.url === "/health") {
-            response.writeHead(readiness.value ? 200 : 503, {
-              "content-type": "application/json; charset=utf-8",
-            });
-            response.end(
-              JSON.stringify({
-                status: readiness.value ? "ready" : "starting",
-              }),
-            );
-            return;
-          }
-
-          response.writeHead(404).end();
-        }),
-      catch: (cause) => environmentServerError(cause, port),
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        listener.readiness.value = false;
+      }),
+    );
+    yield* Effect.sync(() => {
+      listener.readiness.value = true;
     });
-
-    yield* listen(server, port);
-
-    const address = server.address();
-    if (address === null || typeof address === "string") {
-      return yield* Effect.fail(
-        environmentServerError(
-          new Error("The HTTP listener has no TCP address."),
-          port,
-        ),
-      );
-    }
-
-    return {
-      origin: `http://${loopbackHost}:${address.port}`,
-      port: address.port,
-      readiness,
-      server,
-    };
   });
-}
-
-function listen(server: Server, port = 0) {
-  return Effect.callback<void, EnvironmentServerStartError>(
-    (resume, signal) => {
-      const failed = (cause: unknown) => {
-        detach();
-        resume(Effect.fail(environmentServerError(cause, port)));
-      };
-      const listening = () => {
-        detach();
-        resume(Effect.void);
-      };
-      const detach = () => {
-        server.off("error", failed);
-        server.off("listening", listening);
-      };
-
-      server.once("error", failed);
-      server.once("listening", listening);
-      try {
-        server.listen({ exclusive: true, host: loopbackHost, port, signal });
-      } catch (cause) {
-        failed(cause);
-      }
-
-      return Effect.sync(detach);
-    },
-  );
-}
-
-function closeServer(server: Server) {
-  return Effect.callback<void>((resume) => {
-    server.close((error) => {
-      resume(
-        error && !isServerNotRunning(error) ? Effect.die(error) : Effect.void,
-      );
-    });
-    server.closeAllConnections();
-  });
-}
-
-function isServerNotRunning(error: unknown) {
-  return isFileSystemError(error) && error.code === "ERR_SERVER_NOT_RUNNING";
-}
-
-function environmentServerError(cause: unknown, port: number) {
-  return new EnvironmentServerStartError({
-    cause,
-    message: listenerErrorMessage(cause, port),
-  });
-}
-
-function listenerErrorMessage(cause: unknown, port: number) {
-  if (isFileSystemError(cause) && cause.code === "EADDRINUSE" && port !== 0) {
-    return `Port ${port} is already in use on ${loopbackHost}.`;
-  }
-
-  return `Could not start the Environment server: ${errorMessage(cause)}`;
 }
