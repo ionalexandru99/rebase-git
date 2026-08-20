@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { environmentTable } from "@rebase/server/environment-server/state/schema";
+import { environmentTable } from "@rebase/server/environment-server/state/sqlite/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
 

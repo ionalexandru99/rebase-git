@@ -38,7 +38,8 @@ A user on WSl should not be required to install the electron app on windows and 
 
 - We want the code to be as simple as possible, easy to extend
 - Use workspace package names for imports, including imports within the same package. Do not use relative imports in source or tests.
-- Keep contracts in domain-specific `*.contract.ts` files, separate from their implementations.
+- Keep cross-module contracts in domain-specific `*.contract.ts` files, separate from their implementations.
+- Group files by domain and concrete technology. Introduce ports only when a real external boundary or multiple implementations require them.
 - Keep orchestration functions short. Extract distinct lifecycle steps and database operations into named functions.
 - Use Effect for server workflows that own resources, concurrency, or typed failures. Keep pure synchronous logic as plain TypeScript.
 - keyboard shourcuts should be implemented from day 1

@@ -1,27 +1,27 @@
 import type { DatabaseSync } from "node:sqlite";
+import type { EnvironmentState } from "@rebase/server/environment-server/state/environment-state.contract";
 import {
   listAuthorizationMetadata,
   saveAuthorizationMetadata,
-} from "@rebase/server/environment-server/state/authorization-metadata";
+} from "@rebase/server/environment-server/state/sqlite/authorization";
 import {
   closeEnvironmentDatabase,
   openEnvironmentDatabase,
   readDatabaseSettings,
-} from "@rebase/server/environment-server/state/environment-database";
+} from "@rebase/server/environment-server/state/sqlite/database";
 import {
   initializeEnvironmentRecord,
   selectAutomaticPort,
-} from "@rebase/server/environment-server/state/environment-record";
-import type { EnvironmentState } from "@rebase/server/environment-server/state/environment-state.contract";
+} from "@rebase/server/environment-server/state/sqlite/environment";
 import {
   listOperationActivity,
   saveOperationActivity,
-} from "@rebase/server/environment-server/state/operation-activity";
+} from "@rebase/server/environment-server/state/sqlite/operation-activity";
 import {
   serializedPromise,
   serializedSync,
   storagePromise,
-} from "@rebase/server/environment-server/state/storage-operation";
+} from "@rebase/server/environment-server/state/sqlite/storage-operation";
 import {
   defaultEnvironmentPaths,
   prepareEnvironmentDirectories,
@@ -32,7 +32,7 @@ import type { EnvironmentStorageError } from "@rebase/server/environment-server/
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { Effect, type Scope, Semaphore } from "effect";
 
-export { operationActivityLimit } from "@rebase/server/environment-server/state/operation-activity";
+export { operationActivityLimit } from "@rebase/server/environment-server/state/sqlite/operation-activity";
 
 export function acquireEnvironmentState(
   paths: EnvironmentPaths = defaultEnvironmentPaths(),

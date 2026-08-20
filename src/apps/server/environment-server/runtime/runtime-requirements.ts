@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { RuntimeRequirementsError } from "@rebase/server/environment-server/runtime-requirements-error";
+import { RuntimeRequirementsError } from "@rebase/server/environment-server/runtime/runtime-errors";
 import { Effect } from "effect";
 
 const requiredNodeMajor = 24;

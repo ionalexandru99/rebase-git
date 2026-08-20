@@ -5,8 +5,8 @@ import {
   errorMessage,
   isFileSystemError,
 } from "@rebase/server/environment-server/error-inspection";
-import type { RuntimeMarker } from "@rebase/server/environment-server/runtime-marker.contract";
-import { RuntimeMarkerError } from "@rebase/server/environment-server/runtime-marker-error";
+import { RuntimeMarkerError } from "@rebase/server/environment-server/runtime/runtime-errors";
+import type { RuntimeMarker } from "@rebase/server/environment-server/runtime/runtime-marker.contract";
 import { defaultEnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
 import { Effect, type Scope } from "effect";
 

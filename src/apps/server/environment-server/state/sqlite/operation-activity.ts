@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { OperationActivity } from "@rebase/server/environment-server/state/environment-state.contract";
-import { runInImmediateTransaction } from "@rebase/server/environment-server/state/run-in-immediate-transaction";
-import { operationActivityTable } from "@rebase/server/environment-server/state/schema";
+import { operationActivityTable } from "@rebase/server/environment-server/state/sqlite/schema";
+import { runInImmediateTransaction } from "@rebase/server/environment-server/state/sqlite/transaction";
 import { desc } from "drizzle-orm";
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
 

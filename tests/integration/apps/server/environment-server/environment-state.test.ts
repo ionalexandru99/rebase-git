@@ -58,7 +58,7 @@ describe("Environment state", () => {
     );
     expect(second).toEqual(first);
     expect(first.databaseSettings).toEqual({
-      busyTimeout: 250,
+      busyTimeout: 1_000,
       foreignKeys: true,
       journalMode: "wal",
     });

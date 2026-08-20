@@ -1,5 +1,5 @@
 import type { AuthorizationMetadata } from "@rebase/server/environment-server/state/environment-state.contract";
-import { authorizationMetadataTable } from "@rebase/server/environment-server/state/schema";
+import { authorizationMetadataTable } from "@rebase/server/environment-server/state/sqlite/schema";
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
 
 export function listAuthorizationMetadata(database: NodeSQLiteDatabase) {

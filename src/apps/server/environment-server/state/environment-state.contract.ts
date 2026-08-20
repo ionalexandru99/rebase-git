@@ -1,7 +1,7 @@
 import type {
   authorizationRoles,
   operationStatuses,
-} from "@rebase/server/environment-server/state/schema";
+} from "@rebase/server/environment-server/state/sqlite/schema";
 import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
 import type { Effect } from "effect";
 

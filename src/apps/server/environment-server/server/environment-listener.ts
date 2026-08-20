@@ -4,12 +4,12 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import type { EnvironmentListener } from "@rebase/server/environment-server/environment-listener.contract";
-import { EnvironmentServerStartError } from "@rebase/server/environment-server/environment-server-start-error";
 import {
   errorMessage,
   isFileSystemError,
 } from "@rebase/server/environment-server/error-inspection";
+import type { EnvironmentListener } from "@rebase/server/environment-server/server/environment-server.contract";
+import { EnvironmentServerStartError } from "@rebase/server/environment-server/server/environment-server-error";
 import { Effect } from "effect";
 
 const loopbackHost = "127.0.0.1";

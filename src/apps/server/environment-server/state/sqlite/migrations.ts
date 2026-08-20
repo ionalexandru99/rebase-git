@@ -1,10 +1,6 @@
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type {
-  AppliedMigration,
-  Migration,
-} from "@rebase/server/environment-server/state/migration.contract";
-import { runInImmediateTransaction } from "@rebase/server/environment-server/state/run-in-immediate-transaction";
+import { runInImmediateTransaction } from "@rebase/server/environment-server/state/sqlite/transaction";
 
 const migrationDefinitions = [
   {
@@ -43,12 +39,13 @@ ON operation_activity (started_at DESC, id DESC);
   },
 ] as const;
 
-export const environmentStateMigrations: readonly Migration[] =
-  migrationDefinitions.map((migration, index) => ({
+const environmentStateMigrations = migrationDefinitions.map(
+  (migration, index) => ({
     ...migration,
     checksum: createHash("sha256").update(migration.sql).digest("hex"),
     version: index + 1,
-  }));
+  }),
+);
 
 export function migrateEnvironmentState(database: DatabaseSync) {
   createMigrationHistory(database);
@@ -77,7 +74,9 @@ function readAppliedMigrations(database: DatabaseSync) {
     .map(parseAppliedMigration);
 }
 
-function validateMigrationHistory(applied: readonly AppliedMigration[]) {
+function validateMigrationHistory(
+  applied: readonly ReturnType<typeof parseAppliedMigration>[],
+) {
   const latestApplied = applied.at(-1)?.version ?? 0;
   const latestSupported = environmentStateMigrations.length;
 
@@ -104,7 +103,10 @@ function applyPendingMigrations(database: DatabaseSync, appliedCount: number) {
   }
 }
 
-function applyMigration(database: DatabaseSync, migration: Migration) {
+function applyMigration(
+  database: DatabaseSync,
+  migration: (typeof environmentStateMigrations)[number],
+) {
   runInImmediateTransaction(database, () => {
     const applied = readAppliedMigration(database, migration.version);
     if (applied !== undefined) {
@@ -127,8 +129,8 @@ function readAppliedMigration(database: DatabaseSync, version: number) {
 }
 
 function assertMigrationMatches(
-  applied: AppliedMigration,
-  expected: Migration | undefined,
+  applied: ReturnType<typeof parseAppliedMigration>,
+  expected: (typeof environmentStateMigrations)[number] | undefined,
 ) {
   if (
     expected === undefined ||
@@ -141,7 +143,10 @@ function assertMigrationMatches(
   }
 }
 
-function recordMigration(database: DatabaseSync, migration: Migration) {
+function recordMigration(
+  database: DatabaseSync,
+  migration: (typeof environmentStateMigrations)[number],
+) {
   database
     .prepare(
       "INSERT INTO migration_history (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
@@ -156,7 +161,7 @@ function recordMigration(database: DatabaseSync, migration: Migration) {
 
 function parseAppliedMigration(
   row: Record<string, string | number | bigint | Uint8Array | null>,
-): AppliedMigration {
+) {
   if (
     typeof row.version !== "number" ||
     typeof row.name !== "string" ||

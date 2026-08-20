@@ -1,16 +1,18 @@
 import { chmodSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { migrateEnvironmentState } from "@rebase/server/environment-server/state/migrations";
-import { storageSync } from "@rebase/server/environment-server/state/storage-operation";
+import { migrateEnvironmentState } from "@rebase/server/environment-server/state/sqlite/migrations";
+import { storageSync } from "@rebase/server/environment-server/state/sqlite/storage-operation";
 import type { EnvironmentPaths } from "@rebase/server/environment-server/storage/environment-paths.contract";
 import { Effect } from "effect";
+
+const busyTimeoutMilliseconds = 1_000;
 
 export function openEnvironmentDatabase(paths: EnvironmentPaths) {
   return storageSync("Could not open Environment state", () => {
     const database = new DatabaseSync(paths.stateDatabase, {
       allowUnknownNamedParameters: false,
       enableForeignKeyConstraints: true,
-      timeout: 250,
+      timeout: busyTimeoutMilliseconds,
     });
     try {
       configureDatabase(database);
@@ -48,9 +50,9 @@ export function readDatabaseSettings(database: DatabaseSync) {
 
 function configureDatabase(database: DatabaseSync) {
   database.exec(`
+    PRAGMA busy_timeout = ${busyTimeoutMilliseconds};
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
-    PRAGMA busy_timeout = 250;
   `);
 }
 
