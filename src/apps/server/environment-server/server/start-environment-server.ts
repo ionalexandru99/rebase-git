@@ -1,10 +1,11 @@
-import { environmentTable } from "@rebase/server/environment-server/domain/environment-state.schema";
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,
-} from "@rebase/server/environment-server/domain/environment-state.specifications";
+} from "@rebase/server/environment-server/business/environment-state.specifications";
+import type { Environment } from "@rebase/server/environment-server/domain/environment-state.contract";
 import { acquireEnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context";
 import type { EnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context.contract";
+import { environmentTable } from "@rebase/server/environment-server/persistence/environment-state.schema";
 import type {
   RuntimeMarkerError,
   RuntimeRequirementsError,
@@ -62,12 +63,12 @@ function readCurrentEnvironment(context: EnvironmentContext) {
     const environment = await database
       .select()
       .from(environmentTable)
-      .where(isCurrentEnvironment())
+      .where(isCurrentEnvironment(environmentTable))
       .get();
     if (environment === undefined) {
       throw new Error("The Environment identity is missing.");
     }
-    return environment;
+    return environment satisfies Environment;
   });
 }
 
@@ -78,11 +79,16 @@ function claimAutomaticPort(context: EnvironmentContext, port: number) {
       await database
         .update(environmentTable)
         .set({ automaticPort: port })
-        .where(and(isCurrentEnvironment(), hasNoAutomaticPort()));
+        .where(
+          and(
+            isCurrentEnvironment(environmentTable),
+            hasNoAutomaticPort(environmentTable),
+          ),
+        );
       const selected = await database
         .select({ automaticPort: environmentTable.automaticPort })
         .from(environmentTable)
-        .where(isCurrentEnvironment())
+        .where(isCurrentEnvironment(environmentTable))
         .get();
       if (selected?.automaticPort === null || selected === undefined) {
         throw new Error("The automatic port was not saved.");

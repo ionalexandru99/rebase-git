@@ -7,6 +7,11 @@ export const authorizationRoles = [
 
 export type AuthorizationRole = (typeof authorizationRoles)[number];
 
+export interface Environment {
+  readonly automaticPort: number | null;
+  readonly id: string;
+}
+
 export interface AuthorizationMetadata {
   readonly createdAt: string;
   readonly id: string;

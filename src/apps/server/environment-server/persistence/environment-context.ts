@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { environmentTable } from "@rebase/server/environment-server/domain/environment-state.schema";
-import { isCurrentEnvironment } from "@rebase/server/environment-server/domain/environment-state.specifications";
+import { isCurrentEnvironment } from "@rebase/server/environment-server/business/environment-state.specifications";
 import type { EnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context.contract";
+import { environmentTable } from "@rebase/server/environment-server/persistence/environment-state.schema";
 import {
   closeEnvironmentDatabase,
   openEnvironmentDatabase,
@@ -63,7 +63,7 @@ function initializeEnvironment(context: EnvironmentContext) {
       const environment = await database
         .select({ id: environmentTable.id })
         .from(environmentTable)
-        .where(isCurrentEnvironment())
+        .where(isCurrentEnvironment(environmentTable))
         .get();
       if (environment === undefined) {
         throw new Error("The Environment identity is missing.");

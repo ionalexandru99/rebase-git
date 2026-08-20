@@ -3,20 +3,20 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { operationActivityLimit } from "@rebase/server/environment-server/domain/environment-state.contract";
-import {
-  authorizationMetadataTable,
-  environmentTable,
-  operationActivityTable,
-} from "@rebase/server/environment-server/domain/environment-state.schema";
 import {
   hasNoAutomaticPort,
   hasOperationStatus,
   isActiveAuthorization,
   isCurrentEnvironment,
-} from "@rebase/server/environment-server/domain/environment-state.specifications";
+} from "@rebase/server/environment-server/business/environment-state.specifications";
+import { operationActivityLimit } from "@rebase/server/environment-server/domain/environment-state.contract";
 import { acquireEnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context";
 import type { EnvironmentContext } from "@rebase/server/environment-server/persistence/environment-context.contract";
+import {
+  authorizationMetadataTable,
+  environmentTable,
+  operationActivityTable,
+} from "@rebase/server/environment-server/persistence/environment-state.schema";
 import { environmentPaths } from "@rebase/server/environment-server/storage/environment-paths";
 import { and, desc, notInArray } from "drizzle-orm";
 import { Effect } from "effect";
@@ -160,7 +160,7 @@ describe("Environment state", () => {
                 database
                   .select()
                   .from(authorizationMetadataTable)
-                  .where(isActiveAuthorization())
+                  .where(isActiveAuthorization(authorizationMetadataTable))
                   .orderBy(authorizationMetadataTable.createdAt),
             ),
             environmentId: environment.id,
@@ -239,7 +239,12 @@ describe("Environment state", () => {
               database
                 .update(environmentTable)
                 .set({ automaticPort: 40123 })
-                .where(and(isCurrentEnvironment(), hasNoAutomaticPort())),
+                .where(
+                  and(
+                    isCurrentEnvironment(environmentTable),
+                    hasNoAutomaticPort(environmentTable),
+                  ),
+                ),
           );
           yield* context.write(
             "Could not save authorization metadata",
@@ -315,7 +320,7 @@ describe("Environment state", () => {
                 database
                   .select()
                   .from(authorizationMetadataTable)
-                  .where(isActiveAuthorization())
+                  .where(isActiveAuthorization(authorizationMetadataTable))
                   .orderBy(authorizationMetadataTable.createdAt),
             ),
             operations: yield* context.read(
@@ -324,7 +329,7 @@ describe("Environment state", () => {
                 database
                   .select()
                   .from(operationActivityTable)
-                  .where(hasOperationStatus("running"))
+                  .where(hasOperationStatus(operationActivityTable, "running"))
                   .orderBy(
                     desc(operationActivityTable.startedAt),
                     desc(operationActivityTable.id),
@@ -406,7 +411,7 @@ function readCurrentEnvironment(context: EnvironmentContext) {
     const environment = await database
       .select()
       .from(environmentTable)
-      .where(isCurrentEnvironment())
+      .where(isCurrentEnvironment(environmentTable))
       .get();
     if (environment === undefined) {
       throw new Error("The Environment identity is missing.");
