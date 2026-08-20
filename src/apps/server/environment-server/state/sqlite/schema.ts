@@ -1,20 +1,8 @@
+import {
+  authorizationRoles,
+  operationStatuses,
+} from "@rebase/server/environment-server/state/environment-state.contract";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-
-export const authorizationRoles = [
-  "reader",
-  "contributor",
-  "maintainer",
-  "owner",
-] as const;
-
-export const operationStatuses = [
-  "queued",
-  "running",
-  "succeeded",
-  "failed",
-  "cancelled",
-  "outcome_unknown",
-] as const;
 
 export const environmentTable = sqliteTable("environment", {
   automaticPort: integer("automatic_port"),

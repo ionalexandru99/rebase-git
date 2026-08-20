@@ -1,9 +1,12 @@
-import type {
-  authorizationRoles,
-  operationStatuses,
-} from "@rebase/server/environment-server/state/sqlite/schema";
 import type { EnvironmentStorageError } from "@rebase/server/environment-server/storage/storage-error";
 import type { Effect } from "effect";
+
+export const authorizationRoles = [
+  "reader",
+  "contributor",
+  "maintainer",
+  "owner",
+] as const;
 
 export type AuthorizationRole = (typeof authorizationRoles)[number];
 
@@ -15,6 +18,15 @@ export interface AuthorizationMetadata {
   readonly revokedAt: string | null;
   readonly role: AuthorizationRole;
 }
+
+export const operationStatuses = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "outcome_unknown",
+] as const;
 
 export type OperationStatus = (typeof operationStatuses)[number];
 
