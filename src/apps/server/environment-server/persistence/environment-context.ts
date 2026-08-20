@@ -63,7 +63,7 @@ function initializeEnvironment(context: EnvironmentContext) {
       const environment = await database
         .select({ id: environmentTable.id })
         .from(environmentTable)
-        .where(isCurrentEnvironment(environmentTable))
+        .where(isCurrentEnvironment())
         .get();
       if (environment === undefined) {
         throw new Error("The Environment identity is missing.");

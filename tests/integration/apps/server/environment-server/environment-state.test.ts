@@ -160,7 +160,7 @@ describe("Environment state", () => {
                 database
                   .select()
                   .from(authorizationMetadataTable)
-                  .where(isActiveAuthorization(authorizationMetadataTable))
+                  .where(isActiveAuthorization())
                   .orderBy(authorizationMetadataTable.createdAt),
             ),
             environmentId: environment.id,
@@ -239,12 +239,7 @@ describe("Environment state", () => {
               database
                 .update(environmentTable)
                 .set({ automaticPort: 40123 })
-                .where(
-                  and(
-                    isCurrentEnvironment(environmentTable),
-                    hasNoAutomaticPort(environmentTable),
-                  ),
-                ),
+                .where(and(isCurrentEnvironment(), hasNoAutomaticPort())),
           );
           yield* context.write(
             "Could not save authorization metadata",
@@ -320,7 +315,7 @@ describe("Environment state", () => {
                 database
                   .select()
                   .from(authorizationMetadataTable)
-                  .where(isActiveAuthorization(authorizationMetadataTable))
+                  .where(isActiveAuthorization())
                   .orderBy(authorizationMetadataTable.createdAt),
             ),
             operations: yield* context.read(
@@ -329,7 +324,7 @@ describe("Environment state", () => {
                 database
                   .select()
                   .from(operationActivityTable)
-                  .where(hasOperationStatus(operationActivityTable, "running"))
+                  .where(hasOperationStatus("running"))
                   .orderBy(
                     desc(operationActivityTable.startedAt),
                     desc(operationActivityTable.id),
@@ -411,7 +406,7 @@ function readCurrentEnvironment(context: EnvironmentContext) {
     const environment = await database
       .select()
       .from(environmentTable)
-      .where(isCurrentEnvironment(environmentTable))
+      .where(isCurrentEnvironment())
       .get();
     if (environment === undefined) {
       throw new Error("The Environment identity is missing.");

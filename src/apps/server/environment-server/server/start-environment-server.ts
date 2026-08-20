@@ -63,7 +63,7 @@ function readCurrentEnvironment(context: EnvironmentContext) {
     const environment = await database
       .select()
       .from(environmentTable)
-      .where(isCurrentEnvironment(environmentTable))
+      .where(isCurrentEnvironment())
       .get();
     if (environment === undefined) {
       throw new Error("The Environment identity is missing.");
@@ -79,16 +79,11 @@ function claimAutomaticPort(context: EnvironmentContext, port: number) {
       await database
         .update(environmentTable)
         .set({ automaticPort: port })
-        .where(
-          and(
-            isCurrentEnvironment(environmentTable),
-            hasNoAutomaticPort(environmentTable),
-          ),
-        );
+        .where(and(isCurrentEnvironment(), hasNoAutomaticPort()));
       const selected = await database
         .select({ automaticPort: environmentTable.automaticPort })
         .from(environmentTable)
-        .where(isCurrentEnvironment(environmentTable))
+        .where(isCurrentEnvironment())
         .get();
       if (selected?.automaticPort === null || selected === undefined) {
         throw new Error("The automatic port was not saved.");
