@@ -2,10 +2,8 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import {
-  type EnvironmentServerOptions,
-  startEnvironmentServer,
-} from "@rebase/server/environment-server/start-environment-server";
+import type { EnvironmentServerOptions } from "@rebase/server/features/environment-server/server/environment-server.contract";
+import { startEnvironmentServer } from "@rebase/server/features/environment-server/server/start-environment-server";
 import { Deferred, Effect } from "effect";
 
 const usage = "Usage: rebase serve [--port <1-65535>]";

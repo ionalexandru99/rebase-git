@@ -1,35 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import {
   errorMessage,
   isFileSystemError,
-} from "@rebase/server/environment-server/error-inspection";
-import { Data, Effect, type Scope } from "effect";
-
-export interface RuntimeMarker {
-  readonly host: string;
-  readonly origin: string;
-  readonly pid: number;
-  readonly port: number;
-  readonly startedAt: string;
-}
-
-export class RuntimeMarkerError extends Data.TaggedError("RuntimeMarkerError")<{
-  readonly cause: unknown;
-  readonly message: string;
-}> {}
+} from "@rebase/server/error-inspection";
+import { RuntimeMarkerError } from "@rebase/server/features/environment-server/runtime/runtime-errors.contract";
+import type { RuntimeMarker } from "@rebase/server/features/environment-server/runtime/runtime-marker.contract";
+import { defaultEnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths";
+import { Effect, type Scope } from "effect";
 
 export function defaultRuntimePath(): string {
-  return join(homedir(), ".rebase", "runtime.json");
+  return defaultEnvironmentPaths().runtimeMarker;
 }
 
 export function acquireRuntimeMarker(
   marker: RuntimeMarker,
+  runtimePath = defaultRuntimePath(),
 ): Effect.Effect<void, RuntimeMarkerError, Scope.Scope> {
-  const runtimePath = defaultRuntimePath();
-
   return Effect.acquireRelease(writeRuntimeMarker(runtimePath, marker), () =>
     removeRuntimeMarker(runtimePath, marker.pid).pipe(
       Effect.catchTag("RuntimeMarkerError", reportCleanupFailure),
@@ -79,7 +67,9 @@ function removeRuntimeMarker(runtimePath: string, pid: number) {
 function replaceFile(source: string, destination: string) {
   return fileSystemOperation(() => rename(source, destination)).pipe(
     Effect.catchTag("RuntimeMarkerError", (error) => {
-      if (!isReplaceConflict(error.cause)) return Effect.fail(error);
+      if (!isReplaceConflict(error.cause)) {
+        return Effect.fail(error);
+      }
 
       return Effect.gen(function* () {
         yield* fileSystemOperation(() => rm(destination, { force: true }));

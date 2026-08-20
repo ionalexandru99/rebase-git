@@ -2,7 +2,7 @@ import {
   assertSupportedGitVersion,
   assertSupportedNodeVersion,
   parseGitVersion,
-} from "@rebase/server/environment-server/runtime-requirements";
+} from "@rebase/server/features/environment-server/runtime/runtime-requirements";
 import { describe, expect, it } from "vite-plus/test";
 
 describe("runtime requirements", () => {

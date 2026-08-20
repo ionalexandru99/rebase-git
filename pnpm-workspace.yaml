@@ -5,6 +5,7 @@ packages:
 engineStrict: true
 
 allowBuilds:
+  esbuild: true
   msgpackr-extract: false
 
 overrides:
@@ -12,6 +13,8 @@ overrides:
   vitest: 'catalog:'
 
 catalog:
+  drizzle-kit: 1.0.0-rc.5-ab785fc
+  drizzle-orm: 1.0.0-rc.5-169397b
   effect: 4.0.0-rc.110
   vite: npm:@voidzero-dev/vite-plus-core@0.2.9
   vitest: 4.1.10

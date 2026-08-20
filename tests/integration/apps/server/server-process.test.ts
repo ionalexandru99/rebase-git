@@ -3,6 +3,7 @@ import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 const cliPath = resolve("src/apps/server/cli.ts");
@@ -30,7 +31,7 @@ describe("rebase serve", () => {
     "starts a ready loopback server and stops on %s",
     async (signal) => {
       const directory = await createTemporaryDirectory();
-      const runtimePath = join(directory, ".rebase", "runtime.json");
+      const runtimePath = join(directory, ".rebase", "runtime", "runtime.json");
       const processOutput = startCli([], directory);
       const origin = await processOutput.waitForListeningUrl();
 
@@ -66,7 +67,7 @@ describe("rebase serve", () => {
 
   it("fails clearly when an explicit port is occupied", async () => {
     const directory = await createTemporaryDirectory();
-    const runtimePath = join(directory, ".rebase", "runtime.json");
+    const runtimePath = join(directory, ".rebase", "runtime", "runtime.json");
     const occupiedServer = createServer();
     await new Promise<void>((resolveListening) => {
       occupiedServer.listen(0, "127.0.0.1", resolveListening);
@@ -82,8 +83,11 @@ describe("rebase serve", () => {
       () =>
         new Promise<void>((resolveClosed, rejectClosed) => {
           occupiedServer.close((error) => {
-            if (error) rejectClosed(error);
-            else resolveClosed();
+            if (error) {
+              rejectClosed(error);
+            } else {
+              resolveClosed();
+            }
           });
         }),
     );
@@ -98,7 +102,7 @@ describe("rebase serve", () => {
 
   it("fails before reporting ready when Git is unavailable", async () => {
     const directory = await createTemporaryDirectory();
-    const runtimePath = join(directory, ".rebase", "runtime.json");
+    const runtimePath = join(directory, ".rebase", "runtime", "runtime.json");
     const processOutput = startCli([], directory, { PATH: directory });
 
     const exit = await waitForExit(processOutput.child);
@@ -110,7 +114,114 @@ describe("rebase serve", () => {
     expect(processOutput.stdout()).not.toContain("Listening URL:");
     await expect(access(runtimePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  it("reuses its automatic port without letting an override replace it", async () => {
+    const directory = await createTemporaryDirectory();
+    const statePath = join(directory, ".rebase", "state", "state.sqlite");
+
+    const first = startCli([], directory);
+    const firstOrigin = await first.waitForListeningUrl();
+    const automaticPort = Number(new URL(firstOrigin).port);
+    const firstState = readEnvironmentState(statePath);
+    first.child.kill("SIGTERM");
+    await waitForExit(first.child);
+
+    const { explicit, explicitPort, origin } =
+      await startCliOnAvailableExplicitPort(directory);
+    expect(origin).toBe(`http://127.0.0.1:${explicitPort}`);
+    expect(readEnvironmentState(statePath)).toEqual(firstState);
+    explicit.child.kill("SIGTERM");
+    await waitForExit(explicit.child);
+
+    const restarted = startCli([], directory);
+    await expect(restarted.waitForListeningUrl()).resolves.toBe(
+      `http://127.0.0.1:${automaticPort}`,
+    );
+    expect(readEnvironmentState(statePath)).toEqual(firstState);
+    restarted.child.kill("SIGTERM");
+    await waitForExit(restarted.child);
+  });
+
+  it("coordinates concurrent first starts against one state database", async () => {
+    const directory = await createTemporaryDirectory();
+    const attempts = [startCli([], directory), startCli([], directory)];
+
+    const outcomes = await Promise.allSettled(
+      attempts.map((attempt) => attempt.waitForListeningUrl()),
+    );
+    const winnerIndex = outcomes.findIndex(
+      (outcome) => outcome.status === "fulfilled",
+    );
+    expect(winnerIndex).toBeGreaterThanOrEqual(0);
+    expect(
+      outcomes.filter((outcome) => outcome.status === "fulfilled"),
+    ).toHaveLength(1);
+
+    const loserIndex = winnerIndex === 0 ? 1 : 0;
+    const winner = attempts[winnerIndex];
+    const loser = attempts[loserIndex];
+    if (winner === undefined || loser === undefined) {
+      throw new Error("Expected two server attempts.");
+    }
+
+    await expect(waitForExit(loser.child)).resolves.toMatchObject({ code: 1 });
+    expect(loser.stderr()).toMatch(
+      /already in use|Another server selected automatic port/,
+    );
+    expect(loser.stderr()).not.toContain("migration");
+
+    winner.child.kill("SIGTERM");
+    await waitForExit(winner.child);
+  });
 });
+
+function readEnvironmentState(path: string) {
+  const database = new DatabaseSync(path, { readOnly: true });
+  const environment = database
+    .prepare("SELECT id, automatic_port AS automaticPort FROM environment")
+    .get();
+  database.close();
+  return environment;
+}
+
+async function findAvailablePort() {
+  const server = createServer();
+  await new Promise<void>((resolveListening) => {
+    server.listen(0, "127.0.0.1", resolveListening);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("Expected the port probe to have a TCP address.");
+  }
+  await new Promise<void>((resolveClosed, rejectClosed) => {
+    server.close((error) => {
+      if (error) {
+        rejectClosed(error);
+      } else {
+        resolveClosed();
+      }
+    });
+  });
+  return address.port;
+}
+
+async function startCliOnAvailableExplicitPort(homeDirectory: string) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const explicitPort = await findAvailablePort();
+    const explicit = startCli(["--port", String(explicitPort)], homeDirectory);
+    try {
+      const origin = await explicit.waitForListeningUrl();
+      return { explicit, explicitPort, origin };
+    } catch (error) {
+      await waitForExit(explicit.child);
+      if (!explicit.stderr().includes("already in use") || attempt === 2) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Could not reserve an explicit test port.");
+}
 
 function startCli(
   arguments_: string[],
@@ -120,7 +231,9 @@ function startCli(
   const inheritedEnvironment = { ...process.env };
   if (environment.PATH !== undefined) {
     for (const name of Object.keys(inheritedEnvironment)) {
-      if (name.toLowerCase() === "path") delete inheritedEnvironment[name];
+      if (name.toLowerCase() === "path") {
+        delete inheritedEnvironment[name];
+      }
     }
   }
 
@@ -210,7 +323,10 @@ function waitForOutput<T>(
 }
 
 function waitForExit(child: ChildProcessWithoutNullStreams) {
-  if (child.exitCode !== null || child.signalCode !== null) {
+  if (
+    (child.exitCode !== null || child.signalCode !== null) &&
+    child.stderr.readableEnded
+  ) {
     return Promise.resolve({ code: child.exitCode, signal: child.signalCode });
   }
 
@@ -220,7 +336,7 @@ function waitForExit(child: ChildProcessWithoutNullStreams) {
         rejectExit(new Error("Timed out waiting for process exit."));
       }, 10_000);
 
-      child.once("exit", (code, signal) => {
+      child.once("close", (code, signal) => {
         clearTimeout(timeout);
         resolveExit({ code, signal });
       });

@@ -19,12 +19,14 @@
     }
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && pnpm copy:migrations",
+    "copy:migrations": "node --input-type=module -e \"import { cpSync, rmSync } from 'node:fs'; const target = 'dist/persistence/migrations'; rmSync(target, { force: true, recursive: true }); cpSync('persistence/migrations', target, { recursive: true });\"",
     "dev": "node --conditions=rebase-source cli.ts serve",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@rebase/contracts": "workspace:*",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:"
   }
 }
