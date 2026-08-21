@@ -15,7 +15,7 @@
     "pnpm": "11.22.0"
   },
   "scripts": {
-    "build": "tsc -b && pnpm --filter @rebase/server copy:migrations && pnpm --filter @rebase/desktop bundle:preload && pnpm build:web",
+    "build": "tsc -b && pnpm --filter @rebase/server copy:migrations && pnpm --filter @rebase/desktop bundle:preload && pnpm --filter @rebase/desktop copy:assets && pnpm build:web",
     "build:web": "pnpm --filter @rebase/web build:web",
     "check": "biome check .",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",

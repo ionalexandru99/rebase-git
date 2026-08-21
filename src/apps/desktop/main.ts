@@ -13,7 +13,7 @@ import type {
 import { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
 
 let desktopApplication: DesktopApplication | undefined;
-const desktopIconPath = join(app.getAppPath(), "build", "icon.png");
+const desktopIconPath = join(app.getAppPath(), "assets", "icon.png");
 
 const host: DesktopApplicationHost = {
   platform: process.platform,
