@@ -6,14 +6,14 @@ import {
   EnvironmentServerMessage,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
+import { Cause, Effect, Option, Queue, Schema } from "effect";
 import {
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
   environmentResponseError,
-} from "@rebase/web/state/server/environment-connection/environment-connection-errors";
-import type { NegotiatedEnvironment } from "@rebase/web/state/server/environment-connection/websocket/environment-protocol-connection.contract";
-import type { EnvironmentSocketEvent } from "@rebase/web/state/server/environment-connection/websocket/environment-socket.contract";
-import { Cause, Effect, Option, Queue, Schema } from "effect";
+} from "#web/features/environment-connection/environment-connection-errors";
+import type { NegotiatedEnvironment } from "#web/features/environment-connection/environment-protocol-connection.contract";
+import type { EnvironmentSocketEvent } from "#web/features/environment-connection/websocket/environment-socket.contract";
 
 export function acquireEnvironmentSocket(socketUrl: URL, signal: AbortSignal) {
   return Effect.acquireRelease(

@@ -1,5 +1,5 @@
-import { advanceEnvironmentSequence } from "@rebase/web/state/server/environment-connection/websocket/environment-sequence";
 import { describe, expect, it } from "vite-plus/test";
+import { advanceEnvironmentSequence } from "#web/features/environment-connection/websocket/environment-sequence";
 
 describe("Environment event sequence", () => {
   it("accepts consecutive events and ignores already observed events", () => {

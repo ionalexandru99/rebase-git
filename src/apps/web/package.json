@@ -6,6 +6,20 @@
   "sideEffects": [
     "./styles.css"
   ],
+  "imports": {
+    "#web/*": {
+      "rebase-source": "./*.ts",
+      "types": "./dist/types/*.d.ts",
+      "import": "./dist/types/*.js",
+      "default": "./dist/types/*.js"
+    },
+    "#web-ui/*": {
+      "rebase-source": "./*.tsx",
+      "types": "./dist/types/*.d.ts",
+      "import": "./dist/types/*.js",
+      "default": "./dist/types/*.js"
+    }
+  },
   "exports": {
     ".": {
       "rebase-source": "./index.ts",
@@ -13,47 +27,11 @@
       "import": "./dist/types/index.js",
       "default": "./dist/types/index.js"
     },
-    "./technical-shell": {
-      "rebase-source": "./technical-shell.tsx",
-      "types": "./dist/types/technical-shell.d.ts",
-      "import": "./dist/types/technical-shell.js",
-      "default": "./dist/types/technical-shell.js"
-    },
-    "./state/server/server-state-provider": {
-      "rebase-source": "./state/server/server-state-provider.tsx",
-      "types": "./dist/types/state/server/server-state-provider.d.ts",
-      "import": "./dist/types/state/server/server-state-provider.js",
-      "default": "./dist/types/state/server/server-state-provider.js"
-    },
-    "./state/server/environment-connection": {
-      "rebase-source": "./state/server/environment-connection/index.ts",
-      "types": "./dist/types/state/server/environment-connection/index.d.ts",
-      "import": "./dist/types/state/server/environment-connection/index.js",
-      "default": "./dist/types/state/server/environment-connection/index.js"
-    },
-    "./state/server/environment-connection/*": {
-      "rebase-source": "./state/server/environment-connection/*.ts",
-      "types": "./dist/types/state/server/environment-connection/*.d.ts",
-      "import": "./dist/types/state/server/environment-connection/*.js",
-      "default": "./dist/types/state/server/environment-connection/*.js"
-    },
-    "./components/*": {
-      "rebase-source": "./components/*.tsx",
-      "types": "./dist/types/components/*.d.ts",
-      "import": "./dist/types/components/*.js",
-      "default": "./dist/types/components/*.js"
-    },
-    "./hooks/*": {
-      "rebase-source": "./hooks/*.ts",
-      "types": "./dist/types/hooks/*.d.ts",
-      "import": "./dist/types/hooks/*.js",
-      "default": "./dist/types/hooks/*.js"
-    },
-    "./lib/*": {
-      "rebase-source": "./lib/*.ts",
-      "types": "./dist/types/lib/*.d.ts",
-      "import": "./dist/types/lib/*.js",
-      "default": "./dist/types/lib/*.js"
+    "./features/environment-connection": {
+      "rebase-source": "./features/environment-connection/index.ts",
+      "types": "./dist/types/features/environment-connection/index.d.ts",
+      "import": "./dist/types/features/environment-connection/index.js",
+      "default": "./dist/types/features/environment-connection/index.js"
     },
     "./styles.css": "./styles.css"
   },
@@ -65,15 +43,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/atom-react": "4.0.0-beta.107",
     "@rebase/contracts": "workspace:*",
     "clsx": "2.1.1",
     "effect": "catalog:",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "scheduler": "0.27.0",
-    "tailwind-merge": "3.6.0",
-    "zustand": "5.0.15"
+    "tailwind-merge": "3.6.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",

@@ -1,6 +1,6 @@
-import type { EnvironmentConnectionFailure } from "@rebase/web/state/server/environment-connection/environment-connection-errors";
-import type { EnvironmentProtocolConnection } from "@rebase/web/state/server/environment-connection/websocket/environment-protocol-connection.contract";
 import { Deferred, Effect, Ref } from "effect";
+import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 
 export interface EnvironmentConnectionState {
   readonly currentSequence: number;

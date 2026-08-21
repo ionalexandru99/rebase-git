@@ -1,14 +1,14 @@
-import type { EnvironmentConnectionFailure } from "@rebase/web/state/server/environment-connection/environment-connection-errors";
-import { environmentResponseError } from "@rebase/web/state/server/environment-connection/environment-connection-errors";
+import { Deferred, Effect, Fiber, Ref } from "effect";
+import { describe, expect, it } from "vite-plus/test";
+import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
+import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import {
   createEnvironmentConnectionState,
   terminateEnvironmentConnection,
   updateEnvironmentSequence,
   waitForEnvironmentSequence,
-} from "@rebase/web/state/server/environment-connection/websocket/environment-connection-state";
-import type { EnvironmentProtocolConnection } from "@rebase/web/state/server/environment-connection/websocket/environment-protocol-connection.contract";
-import { Deferred, Effect, Fiber, Ref } from "effect";
-import { describe, expect, it } from "vite-plus/test";
+} from "#web/features/environment-connection/websocket/environment-connection-state";
 
 describe("Environment connection state", () => {
   it("returns the current sequence immediately when the target was observed", async () => {

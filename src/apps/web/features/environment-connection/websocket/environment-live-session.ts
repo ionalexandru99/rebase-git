@@ -2,17 +2,17 @@ import {
   type EnvironmentServerMessage,
   SnapshotApplied,
 } from "@rebase/contracts";
-import { environmentResponseError } from "@rebase/web/state/server/environment-connection/environment-connection-errors";
-import { fetchEnvironmentSnapshotWithinLimitEffect } from "@rebase/web/state/server/environment-connection/http/environment-http-client";
-import { updateEnvironmentSequence } from "@rebase/web/state/server/environment-connection/websocket/environment-connection-state";
-import type { EnvironmentLiveSession } from "@rebase/web/state/server/environment-connection/websocket/environment-live-session.contract";
-import type { NegotiatedEnvironment } from "@rebase/web/state/server/environment-connection/websocket/environment-protocol-connection.contract";
-import { advanceEnvironmentSequence } from "@rebase/web/state/server/environment-connection/websocket/environment-sequence";
+import { Effect, Queue, Ref } from "effect";
+import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
+import type { NegotiatedEnvironment } from "#web/features/environment-connection/environment-protocol-connection.contract";
+import { fetchEnvironmentSnapshotWithinLimitEffect } from "#web/features/environment-connection/http/environment-http-client";
+import { updateEnvironmentSequence } from "#web/features/environment-connection/websocket/environment-connection-state";
+import type { EnvironmentLiveSession } from "#web/features/environment-connection/websocket/environment-live-session.contract";
+import { advanceEnvironmentSequence } from "#web/features/environment-connection/websocket/environment-sequence";
 import {
   decodeEnvironmentServerMessage,
   sendEnvironmentSocketMessage,
-} from "@rebase/web/state/server/environment-connection/websocket/environment-socket";
-import { Effect, Queue, Ref } from "effect";
+} from "#web/features/environment-connection/websocket/environment-socket";
 
 type EnvironmentCapabilityName =
   NegotiatedEnvironment["capabilities"][number]["name"];

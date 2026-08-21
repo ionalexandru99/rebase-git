@@ -5,12 +5,12 @@ import {
   type EnvironmentSnapshot,
   EnvironmentSnapshot as EnvironmentSnapshotSchema,
 } from "@rebase/contracts";
+import { Effect, Schema } from "effect";
 import {
   type EnvironmentResponseError,
   environmentResponseError,
-} from "@rebase/web/state/server/environment-connection/environment-connection-errors";
-import { readBoundedEnvironmentResponseBody } from "@rebase/web/state/server/environment-connection/http/environment-http-response-body";
-import { Effect, Schema } from "effect";
+} from "#web/features/environment-connection/environment-connection-errors";
+import { readBoundedEnvironmentResponseBody } from "#web/features/environment-connection/http/environment-http-response-body";
 
 export function fetchEnvironmentDiscovery(
   origin: string,

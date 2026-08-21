@@ -6,4 +6,4 @@ export {
   EnvironmentResponseError,
   fetchEnvironmentDiscovery,
   fetchEnvironmentSnapshot,
-} from "@rebase/web/state/server/environment-connection/websocket/environment-protocol-client";
+} from "#web/features/environment-connection/environment-protocol-client";

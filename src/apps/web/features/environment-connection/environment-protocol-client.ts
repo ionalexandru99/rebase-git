@@ -3,31 +3,31 @@ import {
   type EnvironmentDiscovery,
   type EnvironmentHello,
 } from "@rebase/contracts";
+import { Deferred, Effect, Ref } from "effect";
 import {
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
   EnvironmentResponseError,
   environmentResponseError,
-} from "@rebase/web/state/server/environment-connection/environment-connection-errors";
+} from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import {
   fetchEnvironmentDiscovery,
   fetchEnvironmentDiscoveryEffect,
   fetchEnvironmentSnapshot,
-} from "@rebase/web/state/server/environment-connection/http/environment-http-client";
+} from "#web/features/environment-connection/http/environment-http-client";
 import {
   createEnvironmentConnectionState,
   type EnvironmentConnectionState,
   terminateEnvironmentConnection,
   waitForEnvironmentSequence,
-} from "@rebase/web/state/server/environment-connection/websocket/environment-connection-state";
-import { processEnvironmentServerMessages } from "@rebase/web/state/server/environment-connection/websocket/environment-live-session";
-import type { EnvironmentProtocolConnection } from "@rebase/web/state/server/environment-connection/websocket/environment-protocol-connection.contract";
+} from "#web/features/environment-connection/websocket/environment-connection-state";
+import { processEnvironmentServerMessages } from "#web/features/environment-connection/websocket/environment-live-session";
 import {
   acquireEnvironmentSocket,
   acquireEnvironmentSocketEvents,
   readEnvironmentHelloResult,
-} from "@rebase/web/state/server/environment-connection/websocket/environment-socket";
-import { Deferred, Effect, Ref } from "effect";
+} from "#web/features/environment-connection/websocket/environment-socket";
 
 export {
   EnvironmentHelloRejected,

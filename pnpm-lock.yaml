@@ -97,9 +97,6 @@ importers:
 
   src/apps/web:
     dependencies:
-      '@effect/atom-react':
-        specifier: 4.0.0-beta.107
-        version: 4.0.0-beta.107(effect@4.0.0-rc.110)(react@19.2.8)(scheduler@0.27.0)
       '@rebase/contracts':
         specifier: workspace:*
         version: link:../../contracts
@@ -115,15 +112,9 @@ importers:
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
-      scheduler:
-        specifier: 0.27.0
-        version: 0.27.0
       tailwind-merge:
         specifier: 3.6.0
         version: 3.6.0
-      zustand:
-        specifier: 5.0.15
-        version: 5.0.15(@types/react@19.2.18)(react@19.2.8)
     devDependencies:
       '@tailwindcss/vite':
         specifier: 4.3.3
@@ -229,13 +220,6 @@ packages:
 
   '@drizzle-team/brocli@0.12.0':
     resolution: {integrity: sha512-mlUE+rZ8CatQekLhnaiN91Iemdd+e2gFKooGlnRB3oPTL3VghLfX24dx7HrzMNeC1JrIB/0kpsfyty3f5HNfxQ==}
-
-  '@effect/atom-react@4.0.0-beta.107':
-    resolution: {integrity: sha512-dSx8Mmgge8oy3On8k95V3dyaRo9od8Eg0our56PIrTlRZBBRLXM2vc/X7GsxAYtHs2PMracVFUJqizXCcPsCyQ==}
-    peerDependencies:
-      effect: ^4.0.0-beta.107
-      react: '>=19.2.7 <20.0.0'
-      scheduler: '>=0.27.0 <0.28.0'
 
   '@esbuild/aix-ppc64@0.25.12':
     resolution: {integrity: sha512-Hhmwd6CInZ3dwpuGTF8fJG6yoWmsToE+vYgD4nytZVxcu1ulHpUQRAB1UJ8+N1Am3Mz4+xOByoQoSZf4D+CpkA==}
@@ -1929,24 +1913,6 @@ packages:
   yuku-parser@0.5.48:
     resolution: {integrity: sha512-OWBfhrpgK9+/4+IXG9oT8Bao4AhViQA7vdyNNH7EUg8dQYgwa70XtIBWTpCEme1P1ECyoDNYkn0wT63f8XRcVA==}
 
-  zustand@5.0.15:
-    resolution: {integrity: sha512-MpSEjRiBkA9crSYeOUH32rJC7SVqAbm0Fqcqge/bUi2PPoLcBWKOsG+C8mevmpr8TwXHBVkChbbJiyvkE+i/3A==}
-    engines: {node: '>=12.20.0'}
-    peerDependencies:
-      '@types/react': '>=18.0.0'
-      immer: '>=9.0.6'
-      react: '>=18.0.0'
-      use-sync-external-store: '>=1.2.0'
-    peerDependenciesMeta:
-      '@types/react':
-        optional: true
-      immer:
-        optional: true
-      react:
-        optional: true
-      use-sync-external-store:
-        optional: true
-
 snapshots:
 
   '@babel/code-frame@7.29.7':
@@ -1997,12 +1963,6 @@ snapshots:
   '@blazediff/core@1.9.1': {}
 
   '@drizzle-team/brocli@0.12.0': {}
-
-  '@effect/atom-react@4.0.0-beta.107(effect@4.0.0-rc.110)(react@19.2.8)(scheduler@0.27.0)':
-    dependencies:
-      effect: 4.0.0-rc.110
-      react: 19.2.8
-      scheduler: 0.27.0
 
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
@@ -3156,8 +3116,3 @@ snapshots:
       '@yuku-parser/binding-linux-x64-musl': 0.5.48
       '@yuku-parser/binding-win32-arm64': 0.5.48
       '@yuku-parser/binding-win32-x64': 0.5.48
-
-  zustand@5.0.15(@types/react@19.2.18)(react@19.2.8):
-    optionalDependencies:
-      '@types/react': 19.2.18
-      react: 19.2.8

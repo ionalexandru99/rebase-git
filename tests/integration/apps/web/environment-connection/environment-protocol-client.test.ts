@@ -14,7 +14,7 @@ import {
   EnvironmentResponseError,
   fetchEnvironmentDiscovery,
   fetchEnvironmentSnapshot,
-} from "@rebase/web/state/server/environment-connection";
+} from "@rebase/web/features/environment-connection";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 

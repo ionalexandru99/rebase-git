@@ -1,7 +1,6 @@
-import { ServerStateProvider } from "@rebase/web/state/server/server-state-provider";
-import { TechnicalShell } from "@rebase/web/technical-shell";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { TechnicalShell } from "#web-ui/technical-shell";
 import "@rebase/web/styles.css";
 
 const rootElement = document.getElementById("root");
@@ -12,8 +11,6 @@ if (!(rootElement instanceof HTMLElement)) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <ServerStateProvider>
-      <TechnicalShell />
-    </ServerStateProvider>
+    <TechnicalShell />
   </StrictMode>,
 );

@@ -37,9 +37,10 @@ A user on WSl should not be required to install the electron app on windows and 
 ## General code requirements
 
 - We want the code to be as simple as possible, easy to extend
-- Use workspace package names for imports, including imports within the same package. Do not use relative imports in source or tests.
+- Use workspace package names for cross-package imports. Within the web package and its focused tests, use the configured private `#web/*` and `#web-ui/*` aliases for implementation imports. Do not use relative imports in source or tests, and do not expose implementation wildcards through package `exports` solely to resolve internal modules.
 - Keep cross-module contracts in domain-specific `*.contract.ts` files, separate from their implementations.
 - Keep business modules under `features/<feature-name>`. Keep `domain` and `persistence` as sibling top-level layers outside `features`.
+- Name browser feature folders after the browser responsibility. Do not mirror backend ownership with paths such as `state/server` for frontend clients.
 - Treat Drizzle as the standard business-layer data API. Query the context directly and compose business specifications from persistence table mappings. Do not add repositories or column-shape abstractions.
 - Keep Drizzle table mappings, SQLite connection management, and migrations in the persistence layer. Generate schema migrations with Drizzle Kit instead of writing them by hand.
 - Keep functions readable at a glance. When a function mixes orchestration with a distinct validation, state transition, lifecycle step, handler, or database operation, extract that work into a purpose-named function so the caller reads as a sequence of steps. Use judgment instead of a line-count limit, and do not create trivial pass-through helpers.
