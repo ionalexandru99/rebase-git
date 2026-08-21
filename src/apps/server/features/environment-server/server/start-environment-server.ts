@@ -1,4 +1,5 @@
 import type { Environment } from "@rebase/server/domain/environment-state.contract";
+import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,
@@ -22,6 +23,7 @@ import type { EnvironmentContext } from "@rebase/server/persistence/environment-
 import { environmentTable } from "@rebase/server/persistence/environment-state.schema";
 import { defaultEnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
+import { productVersion } from "@rebase/server/product-version";
 import { and } from "drizzle-orm";
 import { Effect, type Scope } from "effect";
 
@@ -44,7 +46,13 @@ export function startEnvironmentServer(
     const requestedPort = useAutomaticPort
       ? (environment.automaticPort ?? 0)
       : options.port;
-    const listener = yield* acquireEnvironmentListener(requestedPort);
+    const events = createEnvironmentEventPublisher();
+    const listener = yield* acquireEnvironmentListener({
+      environmentId: environment.id,
+      events,
+      port: requestedPort,
+      productVersion,
+    });
 
     if (useAutomaticPort && environment.automaticPort === null) {
       yield* claimAutomaticPort(context, listener.port);

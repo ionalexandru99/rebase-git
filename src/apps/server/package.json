@@ -11,6 +11,7 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./package.json": "./package.json",
     "./*": {
       "rebase-source": "./*.ts",
       "types": "./dist/*.d.ts",
@@ -27,6 +28,10 @@
   "dependencies": {
     "@rebase/contracts": "workspace:*",
     "drizzle-orm": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1"
   }
 }

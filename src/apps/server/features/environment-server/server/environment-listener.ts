@@ -1,31 +1,51 @@
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer, type Server } from "node:http";
+import { createCurrentEnvironmentDiscovery } from "@rebase/contracts";
 import {
   errorMessage,
   isFileSystemError,
 } from "@rebase/server/error-inspection";
-import type { EnvironmentListener } from "@rebase/server/features/environment-server/server/environment-server.contract";
+import type {
+  EnvironmentTransportState,
+  RunEnvironmentEffect,
+} from "@rebase/server/features/environment-connection/environment-connection.contract";
+import { createEnvironmentHttpHandler } from "@rebase/server/features/environment-connection/http/environment-http-handler";
+import { attachEnvironmentWebSocketServer } from "@rebase/server/features/environment-connection/websocket/environment-websocket-server";
+import type { EnvironmentListenerOptions } from "@rebase/server/features/environment-server/server/environment-server.contract";
 import { EnvironmentServerStartError } from "@rebase/server/features/environment-server/server/environment-server-error.contract";
-import { Effect } from "effect";
+import { Effect, FiberSet } from "effect";
 
 const loopbackHost = "127.0.0.1";
 
-export function acquireEnvironmentListener(port = 0) {
-  return Effect.acquireRelease(startListener(port), (listener) =>
-    closeServer(listener.server),
-  );
-}
-
-function startListener(
-  port: number,
-): Effect.Effect<EnvironmentListener, EnvironmentServerStartError> {
+export function acquireEnvironmentListener(
+  options: EnvironmentListenerOptions,
+) {
   return Effect.gen(function* () {
+    const port = options.port ?? 0;
     const readiness = { value: false };
-    const server = yield* createHttpServer(readiness, port);
+    const state: EnvironmentTransportState = {
+      discovery: createCurrentEnvironmentDiscovery(
+        options.environmentId,
+        options.productVersion,
+      ),
+      events: options.events,
+    };
+    const runFork = yield* FiberSet.makeRuntime<never, void, never>();
+    const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {
+      runFork(effect, signal === undefined ? undefined : { signal });
+    };
+    const server = yield* Effect.acquireRelease(
+      createHttpServer(readiness, state, port, runEnvironmentEffect),
+      (acquiredServer) =>
+        Effect.promise(() => closeServer(acquiredServer)).pipe(Effect.orDie),
+    );
+    yield* Effect.acquireRelease(
+      Effect.try({
+        try: () =>
+          attachEnvironmentWebSocketServer(server, state, runEnvironmentEffect),
+        catch: (cause) => environmentServerError(cause, port),
+      }),
+      (webSockets) => Effect.promise(webSockets.close).pipe(Effect.orDie),
+    );
     yield* listen(server, port);
     const listeningPort = yield* readListeningPort(server, port);
 
@@ -39,30 +59,24 @@ function startListener(
   });
 }
 
-function createHttpServer(readiness: { value: boolean }, port: number) {
+function createHttpServer(
+  readiness: { value: boolean },
+  state: EnvironmentTransportState,
+  port: number,
+  runEnvironmentEffect: RunEnvironmentEffect,
+) {
   return Effect.try({
     try: () =>
-      createServer((request, response) =>
-        respondToRequest(request, response, readiness.value),
+      createServer(
+        { maxHeaderSize: 16_384 },
+        createEnvironmentHttpHandler(
+          state,
+          () => readiness.value,
+          runEnvironmentEffect,
+        ),
       ),
     catch: (cause) => environmentServerError(cause, port),
   });
-}
-
-function respondToRequest(
-  request: IncomingMessage,
-  response: ServerResponse,
-  ready: boolean,
-) {
-  if (request.method !== "GET" || request.url !== "/health") {
-    response.writeHead(404).end();
-    return;
-  }
-
-  response.writeHead(ready ? 200 : 503, {
-    "content-type": "application/json; charset=utf-8",
-  });
-  response.end(JSON.stringify({ status: ready ? "ready" : "starting" }));
 }
 
 function readListeningPort(server: Server, requestedPort: number) {
@@ -108,11 +122,13 @@ function listen(server: Server, port: number) {
 }
 
 function closeServer(server: Server) {
-  return Effect.callback<void>((resume) => {
+  return new Promise<void>((resolveClosed, rejectClosed) => {
     server.close((error) => {
-      resume(
-        error && !isServerNotRunning(error) ? Effect.die(error) : Effect.void,
-      );
+      if (error && !isServerNotRunning(error)) {
+        rejectClosed(error);
+      } else {
+        resolveClosed();
+      }
     });
     server.closeAllConnections();
   });

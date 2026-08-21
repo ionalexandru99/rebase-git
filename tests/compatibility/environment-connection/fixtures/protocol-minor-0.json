@@ -1,0 +1,76 @@
+{
+  "discovery": {
+    "environmentId": "00000000-0000-4000-8000-000000000001",
+    "productVersion": "0.0.0",
+    "protocol": {
+      "major": 1,
+      "minor": 0,
+      "minimumSupportedMinor": 0
+    },
+    "capabilities": [
+      {
+        "name": "environment-events",
+        "version": 1,
+        "introducedInMinor": 0
+      }
+    ],
+    "limits": {
+      "helloTimeoutMilliseconds": 5000,
+      "maxHttpRequestBytes": 65536,
+      "maxHttpResponseBytes": 65536,
+      "maxWebSocketRequestBytes": 16384,
+      "maxWebSocketResponseBytes": 16384,
+      "maxQueuedEvents": 128,
+      "maxQueuedEventBytes": 262144,
+      "maxCapturedOutputBytes": 1048576
+    },
+    "routes": {
+      "snapshot": "/api/environment/snapshot",
+      "live": "/api/environment/live"
+    }
+  },
+  "hello": {
+    "_tag": "Hello",
+    "productVersion": "0.0.0",
+    "protocol": {
+      "major": 1,
+      "minor": 0,
+      "minimumSupportedMinor": 0
+    },
+    "capabilities": [
+      {
+        "name": "environment-events",
+        "version": 1,
+        "introducedInMinor": 0
+      }
+    ],
+    "receiveLimits": {
+      "maxHttpResponseBytes": 65536,
+      "maxWebSocketResponseBytes": 16384,
+      "maxCapturedOutputBytes": 1048576
+    }
+  },
+  "accepted": {
+    "_tag": "HelloAccepted",
+    "environmentId": "00000000-0000-4000-8000-000000000001",
+    "protocol": { "major": 1, "minor": 0 },
+    "capabilities": [
+      {
+        "name": "environment-events",
+        "version": 1,
+        "introducedInMinor": 0
+      }
+    ],
+    "limits": {
+      "helloTimeoutMilliseconds": 5000,
+      "maxHttpRequestBytes": 65536,
+      "maxHttpResponseBytes": 65536,
+      "maxWebSocketRequestBytes": 16384,
+      "maxWebSocketResponseBytes": 16384,
+      "maxQueuedEvents": 128,
+      "maxQueuedEventBytes": 262144,
+      "maxCapturedOutputBytes": 1048576
+    },
+    "currentSequence": 0
+  }
+}

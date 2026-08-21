@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { EnvironmentDiscovery } from "@rebase/contracts";
+import { Schema } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 const cliPath = resolve("src/apps/server/cli.ts");
@@ -40,6 +42,16 @@ describe("rebase serve", () => {
       const response = await fetch(`${origin}/health`);
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ status: "ready" });
+
+      const discoveryResponse = await fetch(`${origin}/api/discovery`);
+      const discovery = Schema.decodeUnknownSync(EnvironmentDiscovery)(
+        await discoveryResponse.json(),
+      );
+      expect(discovery.environmentId).toBe(
+        readEnvironmentState(
+          join(directory, ".rebase", "state", "state.sqlite"),
+        )?.id,
+      );
 
       const runtime = JSON.parse(await readFile(runtimePath, "utf8"));
       expect(runtime).toMatchObject({

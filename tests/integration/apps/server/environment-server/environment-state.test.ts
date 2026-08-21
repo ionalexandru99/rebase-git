@@ -250,104 +250,10 @@ describe("Environment state", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const context = yield* acquireEnvironmentContext(paths);
-          yield* context.write(
-            "Could not save the automatic port",
-            (database) =>
-              database
-                .update(environmentTable)
-                .set({ automaticPort: 40123 })
-                .where(and(isCurrentEnvironment(), hasNoAutomaticPort())),
-          );
-          yield* context.write(
-            "Could not save authorization metadata",
-            (database) =>
-              database
-                .insert(authorizationMetadataTable)
-                .values({
-                  createdAt: "2026-08-20T10:00:00.000Z",
-                  id: "device-one",
-                  label: "Alex's laptop",
-                  lastSeenAt: "2026-08-20T11:00:00.000Z",
-                  revokedAt: null,
-                  role: "owner",
-                })
-                .onConflictDoUpdate({
-                  set: {
-                    createdAt: "2026-08-20T10:00:00.000Z",
-                    label: "Alex's laptop",
-                    lastSeenAt: "2026-08-20T11:00:00.000Z",
-                    revokedAt: null,
-                    role: "owner",
-                  },
-                  target: authorizationMetadataTable.id,
-                }),
-          );
-
-          yield* Effect.all(
-            Array.from({ length: operationActivityLimit + 50 }, (_, index) =>
-              context.write("Could not save operation activity", (database) =>
-                database.transaction(
-                  (transaction) => {
-                    const activity = {
-                      finishedAt: null,
-                      id: `operation-${index.toString().padStart(3, "0")}`,
-                      kind: "test",
-                      startedAt: new Date(index * 1_000).toISOString(),
-                      status: "running" as const,
-                    };
-                    transaction
-                      .insert(operationActivityTable)
-                      .values(activity)
-                      .onConflictDoUpdate({
-                        set: activity,
-                        target: operationActivityTable.id,
-                      })
-                      .run();
-                    const retainedActivity = transaction
-                      .select({ id: operationActivityTable.id })
-                      .from(operationActivityTable)
-                      .orderBy(
-                        desc(operationActivityTable.startedAt),
-                        desc(operationActivityTable.id),
-                      )
-                      .limit(operationActivityLimit);
-                    transaction
-                      .delete(operationActivityTable)
-                      .where(
-                        notInArray(operationActivityTable.id, retainedActivity),
-                      )
-                      .run();
-                  },
-                  { behavior: "immediate" },
-                ),
-              ),
-            ),
-            { concurrency: "unbounded" },
-          );
-
-          return {
-            authorizations: yield* context.read(
-              "Could not read authorization metadata",
-              (database) =>
-                database
-                  .select()
-                  .from(authorizationMetadataTable)
-                  .where(isActiveAuthorization())
-                  .orderBy(authorizationMetadataTable.createdAt),
-            ),
-            operations: yield* context.read(
-              "Could not read operation activity",
-              (database) =>
-                database
-                  .select()
-                  .from(operationActivityTable)
-                  .where(hasOperationStatus("running"))
-                  .orderBy(
-                    desc(operationActivityTable.startedAt),
-                    desc(operationActivityTable.id),
-                  ),
-            ),
-          };
+          yield* saveAutomaticPort(context);
+          yield* saveAuthorizationMetadata(context);
+          yield* saveConcurrentOperationActivity(context);
+          return yield* readActiveMetadata(context);
         }),
       ),
     );
@@ -366,18 +272,124 @@ describe("Environment state", () => {
     expect(result.operations[0]?.id).toBe("operation-249");
     expect(result.operations.at(-1)?.id).toBe("operation-050");
 
-    const reopenedPort = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const context = yield* acquireEnvironmentContext(paths);
-          const environment = yield* readCurrentEnvironment(context);
-          return environment.automaticPort;
-        }),
-      ),
-    );
+    const reopenedPort = await readAutomaticPort(paths);
     expect(reopenedPort).toBe(40123);
   });
 });
+
+function saveAutomaticPort(context: EnvironmentContext) {
+  return context.write("Could not save the automatic port", (database) =>
+    database
+      .update(environmentTable)
+      .set({ automaticPort: 40123 })
+      .where(and(isCurrentEnvironment(), hasNoAutomaticPort())),
+  );
+}
+
+function saveAuthorizationMetadata(context: EnvironmentContext) {
+  const authorizationChanges = {
+    createdAt: "2026-08-20T10:00:00.000Z",
+    label: "Alex's laptop",
+    lastSeenAt: "2026-08-20T11:00:00.000Z",
+    revokedAt: null,
+    role: "owner" as const,
+  };
+  return context.write("Could not save authorization metadata", (database) =>
+    database
+      .insert(authorizationMetadataTable)
+      .values({ id: "device-one", ...authorizationChanges })
+      .onConflictDoUpdate({
+        set: authorizationChanges,
+        target: authorizationMetadataTable.id,
+      }),
+  );
+}
+
+function saveConcurrentOperationActivity(context: EnvironmentContext) {
+  return Effect.all(
+    Array.from({ length: operationActivityLimit + 50 }, (_, index) =>
+      saveOperationActivity(context, index),
+    ),
+    { concurrency: "unbounded" },
+  );
+}
+
+function saveOperationActivity(context: EnvironmentContext, index: number) {
+  return context.write("Could not save operation activity", (database) =>
+    database.transaction(
+      (transaction) => {
+        const activity = {
+          finishedAt: null,
+          id: `operation-${index.toString().padStart(3, "0")}`,
+          kind: "test",
+          startedAt: new Date(index * 1_000).toISOString(),
+          status: "running" as const,
+        };
+        transaction
+          .insert(operationActivityTable)
+          .values(activity)
+          .onConflictDoUpdate({
+            set: activity,
+            target: operationActivityTable.id,
+          })
+          .run();
+        const retainedActivity = transaction
+          .select({ id: operationActivityTable.id })
+          .from(operationActivityTable)
+          .orderBy(
+            desc(operationActivityTable.startedAt),
+            desc(operationActivityTable.id),
+          )
+          .limit(operationActivityLimit);
+        transaction
+          .delete(operationActivityTable)
+          .where(notInArray(operationActivityTable.id, retainedActivity))
+          .run();
+      },
+      { behavior: "immediate" },
+    ),
+  );
+}
+
+function readActiveMetadata(context: EnvironmentContext) {
+  return Effect.gen(function* () {
+    return {
+      authorizations: yield* context.read(
+        "Could not read authorization metadata",
+        (database) =>
+          database
+            .select()
+            .from(authorizationMetadataTable)
+            .where(isActiveAuthorization())
+            .orderBy(authorizationMetadataTable.createdAt),
+      ),
+      operations: yield* context.read(
+        "Could not read operation activity",
+        (database) =>
+          database
+            .select()
+            .from(operationActivityTable)
+            .where(hasOperationStatus("running"))
+            .orderBy(
+              desc(operationActivityTable.startedAt),
+              desc(operationActivityTable.id),
+            ),
+      ),
+    };
+  });
+}
+
+function readAutomaticPort(paths: ReturnType<typeof environmentPaths>) {
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const context = yield* acquireEnvironmentContext(paths);
+        const environment = yield* readCurrentEnvironment(context);
+        return environment.automaticPort;
+      }),
+    ),
+  );
+}
 
 async function createTemporaryPaths() {
   const directory = await mkdtemp(join(tmpdir(), "rebase state șț "));
