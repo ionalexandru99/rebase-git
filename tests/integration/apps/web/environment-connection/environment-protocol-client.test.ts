@@ -1,4 +1,9 @@
-import { createCurrentEnvironmentHello } from "@rebase/contracts";
+import { createServer, type ServerResponse } from "node:http";
+import {
+  createCurrentEnvironmentDiscovery,
+  createCurrentEnvironmentHello,
+  currentTransportLimits,
+} from "@rebase/contracts";
 import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import type { EnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher.contract";
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
@@ -14,6 +19,10 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
+const encodedSnapshot = JSON.stringify({ environmentId, sequence: 0 });
+const oversizedSnapshot = Buffer.from(
+  encodedSnapshot.padEnd(currentTransportLimits.maxHttpResponseBytes + 1),
+);
 
 describe("browser Environment protocol client", () => {
   it("discovers, negotiates, and snapshots one Environment", async () => {
@@ -105,6 +114,21 @@ describe("browser Environment protocol client", () => {
       connection.close();
     });
   });
+
+  it.each([
+    ["declared", writeDeclaredOversizedSnapshot],
+    ["streamed", writeStreamedOversizedSnapshot],
+  ])("rejects a %s HTTP response above the client limit", async (_, write) => {
+    await withSnapshotResponse(write, async (origin) => {
+      const discovery = createCurrentEnvironmentDiscovery(
+        environmentId,
+        "0.0.0",
+      );
+      await expect(fetchEnvironmentSnapshot(origin, discovery)).rejects.toEqual(
+        new EnvironmentResponseError({ responseTag: "Snapshot" }),
+      );
+    });
+  });
 });
 
 function withListener(
@@ -123,5 +147,51 @@ function withListener(
         yield* Effect.promise(() => run(listener.origin, events));
       }),
     ),
+  );
+}
+
+async function withSnapshotResponse(
+  write: (response: ServerResponse) => void,
+  run: (origin: string) => Promise<void>,
+) {
+  const server = createServer((_, response) => write(response));
+  await new Promise<void>((resolveListening) => {
+    server.listen(0, "127.0.0.1", resolveListening);
+  });
+
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("Expected the test HTTP server to have a TCP address.");
+  }
+
+  try {
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolveClosed, rejectClosed) => {
+      server.close((error) => {
+        if (error === undefined) {
+          resolveClosed();
+        } else {
+          rejectClosed(error);
+        }
+      });
+    });
+  }
+}
+
+function writeDeclaredOversizedSnapshot(response: ServerResponse) {
+  response.writeHead(200, {
+    "content-length": oversizedSnapshot.byteLength,
+  });
+  response.end(oversizedSnapshot);
+}
+
+function writeStreamedOversizedSnapshot(response: ServerResponse) {
+  response.writeHead(200);
+  response.write(
+    oversizedSnapshot.subarray(0, currentTransportLimits.maxHttpResponseBytes),
+  );
+  response.end(
+    oversizedSnapshot.subarray(currentTransportLimits.maxHttpResponseBytes),
   );
 }

@@ -46,17 +46,42 @@ function runSession(socket: WebSocket, state: EnvironmentTransportState) {
     const writer = yield* createEnvironmentWebSocketWriter(socket, state);
     const runSessionEffect = yield* FiberSet.makeRuntime<never, void, never>();
     const hello = yield* readHello(messages, state);
-    const result = negotiateEnvironmentHello(
-      state.discovery,
+    const result = yield* negotiateSession(state, hello);
+    const supportsResnapshot = yield* initializeNegotiatedSession(
+      socket,
+      state,
+      runSessionEffect,
+      writer,
       hello,
-      state.events.currentSequence(),
+      result,
     );
-    if (result._tag === "HelloRejected") {
-      return yield* Effect.fail(
-        new EnvironmentWebSocketSessionRejected({ result }),
-      );
-    }
+    yield* processClientMessages(messages, writer, state, supportsResnapshot);
+  });
+}
 
+function negotiateSession(
+  state: EnvironmentTransportState,
+  hello: EnvironmentHello,
+) {
+  const result = negotiateEnvironmentHello(
+    state.discovery,
+    hello,
+    state.events.currentSequence(),
+  );
+  return result._tag === "HelloRejected"
+    ? Effect.fail(new EnvironmentWebSocketSessionRejected({ result }))
+    : Effect.succeed(result);
+}
+
+function initializeNegotiatedSession(
+  socket: WebSocket,
+  state: EnvironmentTransportState,
+  runSessionEffect: (effect: Effect.Effect<void, never, never>) => unknown,
+  writer: EnvironmentWebSocketWriter,
+  hello: EnvironmentHello,
+  result: HelloAccepted,
+) {
+  return Effect.gen(function* () {
     const capabilities = new Set(
       result.capabilities.map((capability) => capability.name),
     );
@@ -74,26 +99,50 @@ function runSession(socket: WebSocket, state: EnvironmentTransportState) {
     }
     yield* enqueueInitialResnapshot(writer.enqueue, hello, result, state);
     yield* writer.flush;
+    return supportsResnapshot;
+  });
+}
 
+function processClientMessages(
+  messages: Queue.Dequeue<
+    EnvironmentSocketMessage,
+    EnvironmentWebSocketSessionClosed
+  >,
+  writer: EnvironmentWebSocketWriter,
+  state: EnvironmentTransportState,
+  supportsResnapshot: boolean,
+) {
+  return Effect.gen(function* () {
     while (true) {
       const message = decodeSocketMessage(yield* Queue.take(messages));
-      if (message === undefined) {
-        return yield* rejectSession("InvalidMessage");
-      }
-      if (message._tag === "Hello") {
-        return yield* rejectSession("HandshakeAlreadyCompleted");
-      }
-      if (!supportsResnapshot) {
-        return yield* rejectSession("InvalidMessage");
-      }
+      yield* handleClientMessage(message, writer, state, supportsResnapshot);
+    }
+  });
+}
 
-      if (!(yield* writer.acknowledgeSnapshot(message.sequence))) {
-        yield* writer.send({
-          _tag: "ResnapshotRequired",
-          currentSequence: state.events.currentSequence(),
-          reason: "SequenceGap",
-        });
-      }
+function handleClientMessage(
+  message: typeof EnvironmentClientMessage.Type | undefined,
+  writer: EnvironmentWebSocketWriter,
+  state: EnvironmentTransportState,
+  supportsResnapshot: boolean,
+) {
+  if (message === undefined) {
+    return rejectSession("InvalidMessage");
+  }
+  if (message._tag === "Hello") {
+    return rejectSession("HandshakeAlreadyCompleted");
+  }
+  if (!supportsResnapshot) {
+    return rejectSession("InvalidMessage");
+  }
+
+  return Effect.gen(function* () {
+    if (!(yield* writer.acknowledgeSnapshot(message.sequence))) {
+      yield* writer.send({
+        _tag: "ResnapshotRequired",
+        currentSequence: state.events.currentSequence(),
+        reason: "SequenceGap",
+      });
     }
   });
 }

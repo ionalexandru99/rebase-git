@@ -60,92 +60,124 @@ export function createEnvironmentWebSocketWriter(
       supportsResnapshot: false,
     });
     const sendPermit = yield* Semaphore.make(1);
-
-    const flush = sendPermit.withPermit(
-      Effect.gen(function* () {
-        while (true) {
-          if (socket.readyState !== WebSocket.OPEN) {
-            return yield* Effect.fail(
-              new EnvironmentWebSocketWriteError({
-                closeCode: 1011,
-                reason: "WebSocketNotOpen",
-              }),
-            );
-          }
-          const next = yield* Ref.modify(writerState, (current) => {
-            const dequeued = dequeueOutgoingMessage(current.queue);
-            return [dequeued.message, { ...current, queue: dequeued.queue }];
-          });
-          if (next === undefined) {
-            return;
-          }
-
-          yield* sendWebSocketMessage(socket, next);
-        }
-      }),
-    );
-
+    const flush = flushOutgoingMessages(socket, writerState, sendPermit);
     const enqueue = (message: EnvironmentServerMessage) =>
-      Effect.gen(function* () {
-        const result = yield* Ref.modify(writerState, (current) =>
-          enqueueMessage(current, message, state.events.currentSequence()),
-        );
-        if (result._tag === "Rejected") {
-          return yield* result.error;
-        }
-        if (result._tag === "Ignored") {
-          return false;
-        }
-        return true;
-      });
-
+      enqueueServerMessage(writerState, state, message);
     const send = (message: EnvironmentServerMessage) =>
-      Effect.gen(function* () {
-        if (yield* enqueue(message)) {
-          yield* flush;
-        }
-      });
-
-    const acknowledgeSnapshot = (sequence: number) =>
-      sendPermit.withPermit(
-        Ref.modify(writerState, (current) => {
-          if (
-            current.requiredSnapshotSequence !== sequence ||
-            sequence !== state.events.currentSequence() ||
-            current.queue.messages.length > 0
-          ) {
-            return [false, current];
-          }
-
-          return [
-            true,
-            {
-              ...current,
-              queue: resetOutgoingMessageQueue(),
-              requiredSnapshotSequence: undefined,
-            },
-          ];
-        }),
-      );
-
-    const setNegotiatedContract = (
-      negotiatedLimits: TransportLimits,
-      negotiatedSupportsResnapshot: boolean,
-    ) =>
-      Ref.update(writerState, (current) => ({
-        ...current,
-        limits: negotiatedLimits,
-        supportsResnapshot: negotiatedSupportsResnapshot,
-      }));
+      sendServerMessage(enqueue, flush, message);
 
     return {
-      acknowledgeSnapshot,
+      acknowledgeSnapshot: (sequence) =>
+        acknowledgeSnapshot(writerState, state, sendPermit, sequence),
       enqueue,
       flush,
       send,
-      setNegotiatedContract,
+      setNegotiatedContract: (limits, supportsResnapshot) =>
+        setNegotiatedContract(writerState, limits, supportsResnapshot),
     } satisfies EnvironmentWebSocketWriter;
   });
+}
+
+function flushOutgoingMessages(
+  socket: WebSocket,
+  writerState: Ref.Ref<WriterState>,
+  sendPermit: Semaphore.Semaphore,
+) {
+  return sendPermit.withPermit(
+    Effect.gen(function* () {
+      while (true) {
+        if (socket.readyState !== WebSocket.OPEN) {
+          return yield* Effect.fail(
+            new EnvironmentWebSocketWriteError({
+              closeCode: 1011,
+              reason: "WebSocketNotOpen",
+            }),
+          );
+        }
+        const next = yield* dequeueServerMessage(writerState);
+        if (next === undefined) {
+          return;
+        }
+
+        yield* sendWebSocketMessage(socket, next);
+      }
+    }),
+  );
+}
+
+function dequeueServerMessage(writerState: Ref.Ref<WriterState>) {
+  return Ref.modify(writerState, (current) => {
+    const dequeued = dequeueOutgoingMessage(current.queue);
+    return [dequeued.message, { ...current, queue: dequeued.queue }];
+  });
+}
+
+function enqueueServerMessage(
+  writerState: Ref.Ref<WriterState>,
+  transportState: EnvironmentTransportState,
+  message: EnvironmentServerMessage,
+) {
+  return Effect.gen(function* () {
+    const result = yield* Ref.modify(writerState, (current) =>
+      enqueueMessage(current, message, transportState.events.currentSequence()),
+    );
+    if (result._tag === "Rejected") {
+      return yield* result.error;
+    }
+    return result._tag === "Enqueued";
+  });
+}
+
+function sendServerMessage(
+  enqueue: EnvironmentWebSocketWriter["enqueue"],
+  flush: EnvironmentWebSocketWriter["flush"],
+  message: EnvironmentServerMessage,
+) {
+  return Effect.gen(function* () {
+    if (yield* enqueue(message)) {
+      yield* flush;
+    }
+  });
+}
+
+function acknowledgeSnapshot(
+  writerState: Ref.Ref<WriterState>,
+  transportState: EnvironmentTransportState,
+  sendPermit: Semaphore.Semaphore,
+  sequence: number,
+) {
+  return sendPermit.withPermit(
+    Ref.modify(writerState, (current) => {
+      if (
+        current.requiredSnapshotSequence !== sequence ||
+        sequence !== transportState.events.currentSequence() ||
+        current.queue.messages.length > 0
+      ) {
+        return [false, current];
+      }
+
+      return [
+        true,
+        {
+          ...current,
+          queue: resetOutgoingMessageQueue(),
+          requiredSnapshotSequence: undefined,
+        },
+      ];
+    }),
+  );
+}
+
+function setNegotiatedContract(
+  writerState: Ref.Ref<WriterState>,
+  limits: TransportLimits,
+  supportsResnapshot: boolean,
+) {
+  return Ref.update(writerState, (current) => ({
+    ...current,
+    limits,
+    supportsResnapshot,
+  }));
 }
 
 function enqueueMessage(

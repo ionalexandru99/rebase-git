@@ -12,11 +12,8 @@ import {
   environmentResponseError,
 } from "@rebase/web/state/server/environment-connection/environment-connection-errors";
 import type { NegotiatedEnvironment } from "@rebase/web/state/server/environment-connection/websocket/environment-protocol-connection.contract";
+import type { EnvironmentSocketEvent } from "@rebase/web/state/server/environment-connection/websocket/environment-socket.contract";
 import { Cause, Effect, Option, Queue, Schema } from "effect";
-
-export type EnvironmentSocketEvent =
-  | { readonly _tag: "Message"; readonly event: MessageEvent }
-  | { readonly _tag: "Open" };
 
 export function acquireEnvironmentSocket(socketUrl: URL, signal: AbortSignal) {
   return Effect.acquireRelease(
@@ -49,41 +46,15 @@ export function acquireEnvironmentSocketEvents(
       EnvironmentSocketEvent,
       EnvironmentConnectionFailure
     >(discovery.limits.maxQueuedEvents);
+    const handlers = createEnvironmentSocketEventHandlers(socket, events);
     yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const fail = (error: EnvironmentConnectionFailure) => {
-          Queue.failCauseUnsafe(events, Cause.fail(error));
-        };
-        const opened = () => {
-          Queue.offerUnsafe(events, { _tag: "Open" });
-        };
-        const received = (event: MessageEvent) => {
-          if (!Queue.offerUnsafe(events, { _tag: "Message", event })) {
-            fail(environmentResponseError("WebSocket"));
-            socket.close();
-          }
-        };
-        const failed = () => fail(environmentResponseError("WebSocket"));
-        const aborted = () => fail(environmentResponseError("WebSocket"));
-
-        socket.addEventListener("open", opened);
-        socket.addEventListener("message", received);
-        socket.addEventListener("error", failed);
-        socket.addEventListener("close", failed);
-        signal.addEventListener("abort", aborted, { once: true });
-        if (signal.aborted) {
-          aborted();
-        }
-        return { aborted, failed, opened, received };
-      }),
-      ({ aborted, failed, opened, received }) =>
-        Effect.sync(() => {
-          socket.removeEventListener("open", opened);
-          socket.removeEventListener("message", received);
-          socket.removeEventListener("error", failed);
-          socket.removeEventListener("close", failed);
-          signal.removeEventListener("abort", aborted);
-        }).pipe(Effect.andThen(Queue.shutdown(events))),
+      Effect.sync(() =>
+        attachEnvironmentSocketHandlers(socket, signal, handlers),
+      ),
+      () =>
+        Effect.sync(() =>
+          detachEnvironmentSocketHandlers(socket, signal, handlers),
+        ).pipe(Effect.andThen(Queue.shutdown(events))),
     );
     return events;
   });
@@ -96,22 +67,11 @@ export function readEnvironmentHelloResult(
   discovery: EnvironmentDiscovery,
 ) {
   return Effect.gen(function* () {
-    const received = yield* Effect.gen(function* () {
-      const opened = yield* Queue.take(events);
-      if (opened._tag !== "Open") {
-        return yield* Effect.fail(environmentResponseError("WebSocket"));
-      }
-      yield* sendEnvironmentSocketMessage(
-        socket,
-        EnvironmentHelloSchema,
-        hello,
-      );
-      const response = yield* Queue.take(events);
-      if (response._tag !== "Message") {
-        return yield* Effect.fail(environmentResponseError("WebSocket"));
-      }
-      return response.event;
-    }).pipe(Effect.timeoutOption(discovery.limits.helloTimeoutMilliseconds));
+    const received = yield* exchangeEnvironmentHello(
+      socket,
+      events,
+      hello,
+    ).pipe(Effect.timeoutOption(discovery.limits.helloTimeoutMilliseconds));
     if (Option.isNone(received)) {
       return yield* Effect.fail(environmentResponseError("WebSocket"));
     }
@@ -130,6 +90,82 @@ export function readEnvironmentHelloResult(
       return yield* Effect.fail(environmentResponseError("WebSocket"));
     }
     return parsed;
+  });
+}
+
+function createEnvironmentSocketEventHandlers(
+  socket: WebSocket,
+  events: Queue.Queue<EnvironmentSocketEvent, EnvironmentConnectionFailure>,
+): EnvironmentSocketEventHandlers {
+  const fail = () => failEnvironmentSocketEvents(events);
+  return {
+    aborted: fail,
+    failed: fail,
+    opened: () => {
+      Queue.offerUnsafe(events, { _tag: "Open" });
+    },
+    received: (event) => {
+      if (!Queue.offerUnsafe(events, { _tag: "Message", event })) {
+        fail();
+        socket.close();
+      }
+    },
+  };
+}
+
+function failEnvironmentSocketEvents(
+  events: Queue.Queue<EnvironmentSocketEvent, EnvironmentConnectionFailure>,
+) {
+  Queue.failCauseUnsafe(
+    events,
+    Cause.fail(environmentResponseError("WebSocket")),
+  );
+}
+
+function attachEnvironmentSocketHandlers(
+  socket: WebSocket,
+  signal: AbortSignal,
+  handlers: EnvironmentSocketEventHandlers,
+) {
+  socket.addEventListener("open", handlers.opened);
+  socket.addEventListener("message", handlers.received);
+  socket.addEventListener("error", handlers.failed);
+  socket.addEventListener("close", handlers.failed);
+  signal.addEventListener("abort", handlers.aborted, { once: true });
+  if (signal.aborted) {
+    handlers.aborted();
+  }
+}
+
+function detachEnvironmentSocketHandlers(
+  socket: WebSocket,
+  signal: AbortSignal,
+  handlers: EnvironmentSocketEventHandlers,
+) {
+  socket.removeEventListener("open", handlers.opened);
+  socket.removeEventListener("message", handlers.received);
+  socket.removeEventListener("error", handlers.failed);
+  socket.removeEventListener("close", handlers.failed);
+  signal.removeEventListener("abort", handlers.aborted);
+}
+
+function exchangeEnvironmentHello(
+  socket: WebSocket,
+  events: Queue.Dequeue<EnvironmentSocketEvent, EnvironmentConnectionFailure>,
+  hello: EnvironmentHello,
+) {
+  return Effect.gen(function* () {
+    const opened = yield* Queue.take(events);
+    if (opened._tag !== "Open") {
+      return yield* Effect.fail(environmentResponseError("WebSocket"));
+    }
+
+    yield* sendEnvironmentSocketMessage(socket, EnvironmentHelloSchema, hello);
+    const response = yield* Queue.take(events);
+    if (response._tag !== "Message") {
+      return yield* Effect.fail(environmentResponseError("WebSocket"));
+    }
+    return response.event;
   });
 }
 
@@ -189,4 +225,11 @@ function isNegotiatedResultValid(
     JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(expected)) ===
       JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(result))
   );
+}
+
+interface EnvironmentSocketEventHandlers {
+  readonly aborted: () => void;
+  readonly failed: () => void;
+  readonly opened: () => void;
+  readonly received: (event: MessageEvent) => void;
 }

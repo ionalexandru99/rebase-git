@@ -18,33 +18,51 @@ export function createEnvironmentHttpHandler(
   runEnvironmentEffect: RunEnvironmentEffect,
 ) {
   return (request: IncomingMessage, response: ServerResponse) => {
-    const abortController = new AbortController();
-    const abort = () => abortController.abort();
-    request.once("aborted", abort);
-    response.once("close", abort);
-
+    const lifetime = startHttpRequestLifetime(request, response);
     runEnvironmentEffect(
-      respondToEnvironmentRequest(request, response, state, ready()).pipe(
-        Effect.catch((bodyFailure) =>
-          Effect.sync(() =>
-            writeJson(
-              response,
-              bodyFailure.status,
-              EnvironmentHttpFailure,
-              bodyFailure.failure,
-            ),
-          ),
-        ),
-        Effect.ensuring(
-          Effect.sync(() => {
-            request.off("aborted", abort);
-            response.off("close", abort);
-          }),
-        ),
+      createEnvironmentHttpResponse(request, response, state, ready()).pipe(
+        Effect.ensuring(Effect.sync(lifetime.release)),
       ),
-      abortController.signal,
+      lifetime.signal,
     );
   };
+}
+
+function startHttpRequestLifetime(
+  request: IncomingMessage,
+  response: ServerResponse,
+): HttpRequestLifetime {
+  const abortController = new AbortController();
+  const abort = () => abortController.abort();
+  request.once("aborted", abort);
+  response.once("close", abort);
+  return {
+    release: () => {
+      request.off("aborted", abort);
+      response.off("close", abort);
+    },
+    signal: abortController.signal,
+  };
+}
+
+function createEnvironmentHttpResponse(
+  request: IncomingMessage,
+  response: ServerResponse,
+  state: EnvironmentTransportState,
+  ready: boolean,
+) {
+  return respondToEnvironmentRequest(request, response, state, ready).pipe(
+    Effect.catch((bodyFailure) =>
+      Effect.sync(() =>
+        writeJson(
+          response,
+          bodyFailure.status,
+          EnvironmentHttpFailure,
+          bodyFailure.failure,
+        ),
+      ),
+    ),
+  );
 }
 
 function respondToEnvironmentRequest(
@@ -114,4 +132,9 @@ function writeJsonValue(
     "content-type": "application/json; charset=utf-8",
   });
   response.end(JSON.stringify(value));
+}
+
+interface HttpRequestLifetime {
+  readonly release: () => void;
+  readonly signal: AbortSignal;
 }

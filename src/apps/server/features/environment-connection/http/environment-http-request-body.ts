@@ -14,25 +14,33 @@ export function readEnvironmentHttpRequestBody(request: IncomingMessage) {
       receivedBytes: 0,
     };
     const finish = finishBodyRead(resume);
-    const rejectOversizedPayload = () => {
-      rejectPayloadTooLarge(request, finish);
-    };
-    const receive = (chunk: Buffer) =>
-      receiveBodyChunk(state, chunk, rejectOversizedPayload);
-    const end = () => completeBodyRead(state, finish);
-    const rejectInvalidMessage = () => {
-      finish(Effect.fail(invalidMessageFailure()));
-    };
-    const handlers = { end, receive, rejectInvalidMessage };
+    const handlers = createBodyHandlers(request, state, finish);
 
     if (declaredBodyLength(request) > maximumRequestBytes) {
-      rejectOversizedPayload();
+      rejectPayloadTooLarge(request, finish);
       return;
     }
 
     attachBodyHandlers(request, handlers);
     return Effect.sync(() => detachBodyHandlers(request, handlers));
   });
+}
+
+function createBodyHandlers(
+  request: IncomingMessage,
+  state: BodyReadState,
+  finish: FinishBodyRead,
+): BodyHandlers {
+  return {
+    end: () => completeBodyRead(state, finish),
+    receive: (chunk) =>
+      receiveBodyChunk(state, chunk, () =>
+        rejectPayloadTooLarge(request, finish),
+      ),
+    rejectInvalidMessage: () => {
+      finish(Effect.fail(invalidMessageFailure()));
+    },
+  };
 }
 
 function finishBodyRead(
