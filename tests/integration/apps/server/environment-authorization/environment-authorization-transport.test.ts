@@ -43,7 +43,7 @@ describe("Environment authorization transport", () => {
       await expect(
         exchangeEnvironmentPairingFromClient(origin, {
           label: "Browser client",
-          pairingMaterial: "invalid-pairing-material-that-is-long-enough",
+          pairingMaterial: "123-456",
         }),
       ).rejects.toEqual(
         new EnvironmentAuthorizationRejected({

@@ -36,6 +36,7 @@ describe("Environment authorization", () => {
       const pairing = await run(
         authorization.createPairing({ capabilities: [], role: "owner" }),
       );
+      expect(pairing.material).toMatch(/^\d{3}-\d{3}$/);
       const exchanged = await run(
         authorization.exchangePairing({
           label: "Alex's workstation",

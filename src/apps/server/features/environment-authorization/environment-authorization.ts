@@ -17,6 +17,7 @@ import type {
 import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   createDeviceCredential,
+  createPairingCode,
   createSecretMaterial,
   digestSecretMaterial,
   verifyDeviceCredential,
@@ -70,7 +71,7 @@ function createPairing(
 ) {
   const now = clock.now().getTime();
   removeOldMaterial(pairings, now);
-  const material = createSecretMaterial();
+  const material = createAvailablePairingCode(pairings);
   const expiresAt = now + pairingLifetimeMilliseconds;
   pairings.set(digestSecretMaterial(material), {
     capabilities: capabilitiesForRole(pairing.role, pairing.capabilities),
@@ -79,6 +80,14 @@ function createPairing(
     used: false,
   });
   return { expiresAt: new Date(expiresAt).toISOString(), material };
+}
+
+function createAvailablePairingCode(pairings: Map<string, PairingEntry>) {
+  let code = createPairingCode();
+  while (pairings.has(digestSecretMaterial(code))) {
+    code = createPairingCode();
+  }
+  return code;
 }
 
 function exchangePairing(

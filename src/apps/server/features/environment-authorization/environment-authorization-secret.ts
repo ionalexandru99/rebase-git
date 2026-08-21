@@ -2,6 +2,7 @@ import {
   createHash,
   createHmac,
   randomBytes,
+  randomInt,
   timingSafeEqual,
 } from "node:crypto";
 
@@ -51,6 +52,11 @@ export function verifyDeviceCredential(
 
 export function createSecretMaterial() {
   return randomBytes(32).toString("base64url");
+}
+
+export function createPairingCode() {
+  const digits = randomInt(1_000_000).toString().padStart(6, "0");
+  return `${digits.slice(0, 3)}-${digits.slice(3)}`;
 }
 
 export function digestSecretMaterial(material: string) {
