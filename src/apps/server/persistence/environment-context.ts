@@ -28,27 +28,31 @@ export function acquireEnvironmentContext(
 ): Effect.Effect<EnvironmentContext, EnvironmentStorageError, Scope.Scope> {
   return Effect.gen(function* () {
     yield* prepareEnvironmentDirectories(paths);
-    yield* ensureServerSecret(paths);
+    const serverSecret = yield* ensureServerSecret(paths);
     const database = yield* Effect.acquireRelease(
       openEnvironmentDatabase(paths),
       closeEnvironmentDatabase,
     );
     const context = yield* storageSync(
       "Could not read Environment state settings",
-      () => createEnvironmentContext(database),
+      () => createEnvironmentContext(database, serverSecret),
     );
     yield* initializeEnvironment(context);
     return context;
   });
 }
 
-function createEnvironmentContext(database: DatabaseSync): EnvironmentContext {
+function createEnvironmentContext(
+  database: DatabaseSync,
+  serverSecret: string,
+): EnvironmentContext {
   const drizzleDatabase = drizzle({ client: database });
   const writer = Semaphore.makeUnsafe(1);
 
   return {
     database: drizzleDatabase,
     databaseSettings: readDatabaseSettings(database),
+    serverSecret,
     read: (message, operation) =>
       storagePromise(message, () => operation(drizzleDatabase)),
     write: (message, operation) =>

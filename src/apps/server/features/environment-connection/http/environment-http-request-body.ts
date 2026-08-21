@@ -1,16 +1,13 @@
 import type { IncomingMessage } from "node:http";
-import {
-  currentTransportLimits,
-  type EnvironmentHttpFailure,
-} from "@rebase/contracts";
+import { currentTransportLimits } from "@rebase/contracts";
 import { Effect } from "effect";
 
 const maximumRequestBytes = currentTransportLimits.maxHttpRequestBytes;
 
 export function readEnvironmentHttpRequestBody(request: IncomingMessage) {
-  return Effect.callback<void, HttpBodyFailure>((resume) => {
+  return Effect.callback<Buffer, EnvironmentHttpBodyError>((resume) => {
     const state: BodyReadState = {
-      hasBody: declaredBodyLength(request) > 0,
+      chunks: [],
       receivedBytes: 0,
     };
     const finish = finishBodyRead(resume);
@@ -44,10 +41,10 @@ function createBodyHandlers(
 }
 
 function finishBodyRead(
-  resume: (effect: Effect.Effect<void, HttpBodyFailure>) => void,
+  resume: (effect: Effect.Effect<Buffer, EnvironmentHttpBodyError>) => void,
 ) {
   let settled = false;
-  return (effect: Effect.Effect<void, HttpBodyFailure>) => {
+  return (effect: Effect.Effect<Buffer, EnvironmentHttpBodyError>) => {
     if (settled) {
       return;
     }
@@ -69,15 +66,16 @@ function receiveBodyChunk(
   chunk: Buffer,
   rejectPayload: () => void,
 ) {
-  state.hasBody = true;
   state.receivedBytes += chunk.byteLength;
   if (state.receivedBytes > maximumRequestBytes) {
     rejectPayload();
+    return;
   }
+  state.chunks.push(chunk);
 }
 
 function completeBodyRead(state: BodyReadState, finish: FinishBodyRead) {
-  finish(state.hasBody ? Effect.fail(invalidMessageFailure()) : Effect.void);
+  finish(Effect.succeed(Buffer.concat(state.chunks, state.receivedBytes)));
 }
 
 function attachBodyHandlers(request: IncomingMessage, handlers: BodyHandlers) {
@@ -98,25 +96,19 @@ function declaredBodyLength(request: IncomingMessage) {
   return Number(request.headers["content-length"] ?? 0);
 }
 
-function invalidMessageFailure(): HttpBodyFailure {
-  return {
-    failure: { _tag: "InvalidMessage" },
-    status: 400,
-  };
+function invalidMessageFailure() {
+  return new EnvironmentHttpBodyError({ _tag: "InvalidMessage" });
 }
 
-function payloadTooLargeFailure(): HttpBodyFailure {
-  return {
-    failure: {
-      _tag: "PayloadTooLarge",
-      limitBytes: maximumRequestBytes,
-    },
-    status: 413,
-  };
+function payloadTooLargeFailure() {
+  return new EnvironmentHttpBodyError({
+    _tag: "PayloadTooLarge",
+    limitBytes: maximumRequestBytes,
+  });
 }
 
 interface BodyReadState {
-  hasBody: boolean;
+  readonly chunks: Buffer[];
   receivedBytes: number;
 }
 
@@ -126,9 +118,21 @@ interface BodyHandlers {
   readonly rejectInvalidMessage: () => void;
 }
 
-type FinishBodyRead = (effect: Effect.Effect<void, HttpBodyFailure>) => void;
+type FinishBodyRead = (
+  effect: Effect.Effect<Buffer, EnvironmentHttpBodyError>,
+) => void;
 
-interface HttpBodyFailure {
-  readonly failure: typeof EnvironmentHttpFailure.Type;
-  readonly status: 400 | 413;
+export class EnvironmentHttpBodyError {
+  readonly _tag = "EnvironmentHttpBodyError";
+  readonly failure:
+    | { readonly _tag: "InvalidMessage" }
+    | { readonly _tag: "PayloadTooLarge"; readonly limitBytes: number };
+
+  constructor(
+    failure:
+      | { readonly _tag: "InvalidMessage" }
+      | { readonly _tag: "PayloadTooLarge"; readonly limitBytes: number },
+  ) {
+    this.failure = failure;
+  }
 }

@@ -88,6 +88,7 @@ function recoverEnvironmentSnapshot(
     const snapshot = yield* fetchEnvironmentSnapshotWithinLimitEffect(
       session.origin,
       session.discovery,
+      session.credential,
       Math.min(
         session.negotiated.limits.maxHttpResponseBytes,
         session.hello.receiveLimits.maxHttpResponseBytes,

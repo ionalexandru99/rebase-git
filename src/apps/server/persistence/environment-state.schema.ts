@@ -1,15 +1,18 @@
+import {
+  environmentAccessCapabilities,
+  environmentAuthorizationRoles,
+} from "@rebase/contracts";
 import { sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
-import {
-  authorizationRoles,
-  operationStatuses,
-} from "#server/domain/environment-state.contract";
+import { operationStatuses } from "#server/domain/environment-state.contract";
 
 export const environmentTable = sqliteTable(
   "environment",
@@ -35,12 +38,38 @@ export const authorizationMetadataTable = sqliteTable(
     label: text("label").notNull(),
     lastSeenAt: text("last_seen_at"),
     revokedAt: text("revoked_at"),
-    role: text("role", { enum: authorizationRoles }).notNull(),
+    role: text("role", { enum: environmentAuthorizationRoles }).notNull(),
   },
   (authorization) => [
     check(
       "authorization_metadata_role_check",
-      sql`${authorization.role} IN (${sql.raw(sqlValues(authorizationRoles))})`,
+      sql`${authorization.role} IN (${sql.raw(sqlValues(environmentAuthorizationRoles))})`,
+    ),
+  ],
+);
+
+export const authorizationCapabilityTable = sqliteTable(
+  "authorization_capability",
+  {
+    authorizationId: text("authorization_id").notNull(),
+    capability: text("capability", {
+      enum: environmentAccessCapabilities,
+    }).notNull(),
+  },
+  (authorizationCapability) => [
+    primaryKey({
+      columns: [
+        authorizationCapability.authorizationId,
+        authorizationCapability.capability,
+      ],
+    }),
+    foreignKey({
+      columns: [authorizationCapability.authorizationId],
+      foreignColumns: [authorizationMetadataTable.id],
+    }).onDelete("cascade"),
+    check(
+      "authorization_capability_value_check",
+      sql`${authorizationCapability.capability} IN (${sql.raw(sqlValues(environmentAccessCapabilities))})`,
     ),
   ],
 );

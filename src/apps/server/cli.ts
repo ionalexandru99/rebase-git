@@ -56,9 +56,7 @@ function serve(options: EnvironmentServerOptions) {
 
       yield* Effect.sync(() => {
         process.stdout.write(`Listening URL: ${server.origin}\n`);
-        process.stdout.write(
-          `Pairing URL: ${server.origin}/pair (coming soon)\n`,
-        );
+        process.stdout.write(`Pairing URL: ${server.pairingUrl}\n`);
       });
       yield* Deferred.await(shutdown);
     }),

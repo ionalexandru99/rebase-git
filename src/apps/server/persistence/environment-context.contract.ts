@@ -9,6 +9,7 @@ export interface EnvironmentContext {
     readonly foreignKeys: boolean;
     readonly journalMode: string;
   };
+  readonly serverSecret: string;
   readonly read: <Value>(
     message: string,
     operation: (database: NodeSQLiteDatabase) => PromiseLike<Value> | Value,

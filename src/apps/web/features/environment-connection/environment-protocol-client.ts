@@ -15,6 +15,7 @@ import {
   fetchEnvironmentDiscovery,
   fetchEnvironmentDiscoveryEffect,
   fetchEnvironmentSnapshot,
+  mintEnvironmentWebSocketTicketEffect,
 } from "#web/features/environment-connection/http/environment-http-client";
 import {
   createEnvironmentConnectionState,
@@ -41,9 +42,10 @@ export function connectCurrentEnvironment(
   origin: string,
   productVersion: string,
   options: {
+    readonly credential: string;
     readonly lastObservedSequence?: number;
     readonly signal?: AbortSignal;
-  } = {},
+  },
 ) {
   return Effect.runPromise(
     Effect.gen(function* () {
@@ -55,6 +57,7 @@ export function connectCurrentEnvironment(
           productVersion,
           options.lastObservedSequence,
         ),
+        options.credential,
         options.signal,
       );
     }),
@@ -66,10 +69,11 @@ export function connectEnvironment(
   origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
+  credential: string,
   signal?: AbortSignal,
 ): Promise<EnvironmentProtocolConnection> {
   return Effect.runPromise(
-    startEnvironmentConnection(origin, discovery, hello, signal),
+    startEnvironmentConnection(origin, discovery, hello, credential, signal),
     signal === undefined ? undefined : { signal },
   );
 }
@@ -78,6 +82,7 @@ function startEnvironmentConnection(
   origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
+  credential: string,
   externalSignal?: AbortSignal,
 ) {
   return Effect.gen(function* () {
@@ -101,6 +106,7 @@ function startEnvironmentConnection(
       origin,
       discovery,
       hello,
+      credential,
       signal,
       closeController,
       connected,
@@ -126,6 +132,7 @@ function runEnvironmentConnection(
   origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
+  credential: string,
   signal: AbortSignal,
   closeController: AbortController,
   connected: Deferred.Deferred<
@@ -135,8 +142,14 @@ function runEnvironmentConnection(
   state: Ref.Ref<EnvironmentConnectionState>,
 ) {
   return Effect.gen(function* () {
+    const ticket = yield* mintEnvironmentWebSocketTicketEffect(
+      origin,
+      credential,
+      signal,
+    );
     const socketUrl = new URL(discovery.routes.live, normalizeOrigin(origin));
     socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+    socketUrl.searchParams.set("ticket", ticket.ticket);
     const socket = yield* acquireEnvironmentSocket(socketUrl, signal);
     const events = yield* acquireEnvironmentSocketEvents(
       socket,
@@ -159,6 +172,7 @@ function runEnvironmentConnection(
     );
     yield* processEnvironmentServerMessages({
       discovery,
+      credential,
       events,
       hello,
       negotiated,

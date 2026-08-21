@@ -4,7 +4,11 @@ import { Data } from "effect";
 export class EnvironmentResponseError extends Data.TaggedError(
   "EnvironmentResponseError",
 )<{
-  readonly responseTag: "Discovery" | "Snapshot" | "WebSocket";
+  readonly responseTag:
+    | "Authorization"
+    | "Discovery"
+    | "Snapshot"
+    | "WebSocket";
 }> {}
 
 export class EnvironmentHelloRejected extends Data.TaggedError(

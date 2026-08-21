@@ -1,11 +1,9 @@
-export const authorizationRoles = [
-  "reader",
-  "contributor",
-  "maintainer",
-  "owner",
-] as const;
+import type {
+  EnvironmentAccessCapability,
+  EnvironmentAuthorizationRole,
+} from "@rebase/contracts";
 
-export type AuthorizationRole = (typeof authorizationRoles)[number];
+export type AuthorizationRole = EnvironmentAuthorizationRole;
 
 export interface Environment {
   readonly automaticPort: number | null;
@@ -19,6 +17,11 @@ export interface AuthorizationMetadata {
   readonly lastSeenAt: string | null;
   readonly revokedAt: string | null;
   readonly role: AuthorizationRole;
+}
+
+export interface AuthorizationCapability {
+  readonly authorizationId: string;
+  readonly capability: EnvironmentAccessCapability;
 }
 
 export const operationStatuses = [
