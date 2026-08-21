@@ -37,7 +37,7 @@ A user on WSl should not be required to install the electron app on windows and 
 ## General code requirements
 
 - We want the code to be as simple as possible, easy to extend
-- Use workspace package names for cross-package imports. Within the web package and its focused tests, use the configured private `#web/*` and `#web-ui/*` aliases for implementation imports. Do not use relative imports in source or tests, and do not expose implementation wildcards through package `exports` solely to resolve internal modules.
+- Use workspace package names for cross-package imports. Within a package, use its configured private aliases such as `#server/*`, `#web/*`, `#web-ui/*`, and `#desktop/*` for implementation imports. Do not use relative imports in source or tests, and do not expose implementation wildcards through package `exports` solely to resolve internal modules.
 - Keep cross-module contracts in domain-specific `*.contract.ts` files, separate from their implementations.
 - Keep business modules under `features/<feature-name>`. Keep `domain` and `persistence` as sibling top-level layers outside `features`.
 - Name browser feature folders after the browser responsibility. Do not mirror backend ownership with paths such as `state/server` for frontend clients.

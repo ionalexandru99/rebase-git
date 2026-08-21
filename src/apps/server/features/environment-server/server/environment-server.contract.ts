@@ -1,5 +1,5 @@
 import type { Server as HttpServer } from "node:http";
-import type { EnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher.contract";
+import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
 
 export interface EnvironmentServerOptions {
   readonly port?: number;

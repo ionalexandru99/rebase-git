@@ -1,6 +1,6 @@
-import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
 import type { Effect } from "effect";
+import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export interface EnvironmentContext {
   readonly database: NodeSQLiteDatabase;

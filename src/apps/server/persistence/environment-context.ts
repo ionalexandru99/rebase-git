@@ -1,27 +1,27 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
-import { environmentTable } from "@rebase/server/persistence/environment-state.schema";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-sqlite";
+import { Effect, type Scope, Semaphore } from "effect";
+import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import { environmentTable } from "#server/persistence/environment-state.schema";
 import {
   closeEnvironmentDatabase,
   openEnvironmentDatabase,
   readDatabaseSettings,
-} from "@rebase/server/persistence/sqlite/database";
+} from "#server/persistence/sqlite/database";
 import {
   serializedPromise,
   storagePromise,
   storageSync,
-} from "@rebase/server/persistence/sqlite/storage-operation";
+} from "#server/persistence/sqlite/storage-operation";
 import {
   defaultEnvironmentPaths,
   prepareEnvironmentDirectories,
-} from "@rebase/server/persistence/storage/environment-paths";
-import type { EnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths.contract";
-import { ensureServerSecret } from "@rebase/server/persistence/storage/server-secret";
-import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
-import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-sqlite";
-import { Effect, type Scope, Semaphore } from "effect";
+} from "#server/persistence/storage/environment-paths";
+import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
+import { ensureServerSecret } from "#server/persistence/storage/server-secret";
+import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function acquireEnvironmentContext(
   paths: EnvironmentPaths = defaultEnvironmentPaths(),

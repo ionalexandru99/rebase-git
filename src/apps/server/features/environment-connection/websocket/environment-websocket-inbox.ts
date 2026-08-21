@@ -1,7 +1,7 @@
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
-import { EnvironmentWebSocketSessionClosed } from "@rebase/server/features/environment-connection/websocket/environment-websocket-error.contract";
 import { Cause, Effect, Queue } from "effect";
 import type { RawData, WebSocket } from "ws";
+import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
+import { EnvironmentWebSocketSessionClosed } from "#server/features/environment-connection/websocket/environment-websocket-error.contract";
 
 export interface EnvironmentSocketMessage {
   readonly data: RawData;

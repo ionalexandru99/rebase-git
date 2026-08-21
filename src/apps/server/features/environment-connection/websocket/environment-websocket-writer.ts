@@ -3,8 +3,10 @@ import {
   EnvironmentServerMessage as EnvironmentServerMessageSchema,
   type TransportLimits,
 } from "@rebase/contracts";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
-import { EnvironmentWebSocketWriteError } from "@rebase/server/features/environment-connection/websocket/environment-websocket-error.contract";
+import { Effect, Ref, Schema, Semaphore } from "effect";
+import { WebSocket } from "ws";
+import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
+import { EnvironmentWebSocketWriteError } from "#server/features/environment-connection/websocket/environment-websocket-error.contract";
 import {
   createOutgoingMessageQueue,
   dequeueOutgoingMessage,
@@ -12,9 +14,7 @@ import {
   type OutgoingMessageQueue,
   replaceWithResnapshotMessage,
   resetOutgoingMessageQueue,
-} from "@rebase/server/features/environment-connection/websocket/outgoing-message-queue";
-import { Effect, Ref, Schema, Semaphore } from "effect";
-import { WebSocket } from "ws";
+} from "#server/features/environment-connection/websocket/outgoing-message-queue";
 
 export interface EnvironmentWebSocketWriter {
   readonly acknowledgeSnapshot: (

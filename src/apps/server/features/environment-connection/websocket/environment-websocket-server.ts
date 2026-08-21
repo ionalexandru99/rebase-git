@@ -1,12 +1,12 @@
 import type { Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { currentTransportLimits, environmentLivePath } from "@rebase/contracts";
+import { WebSocketServer } from "ws";
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
-} from "@rebase/server/features/environment-connection/environment-connection.contract";
-import { runEnvironmentWebSocketSession } from "@rebase/server/features/environment-connection/websocket/environment-websocket-session";
-import { WebSocketServer } from "ws";
+} from "#server/features/environment-connection/environment-connection.contract";
+import { runEnvironmentWebSocketSession } from "#server/features/environment-connection/websocket/environment-websocket-session";
 
 export function attachEnvironmentWebSocketServer(
   server: Server,
