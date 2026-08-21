@@ -5,80 +5,120 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 
+const maximumRequestBytes = currentTransportLimits.maxHttpRequestBytes;
+
 export function readEnvironmentHttpRequestBody(request: IncomingMessage) {
   return Effect.callback<void, HttpBodyFailure>((resume) => {
-    let receivedBytes = 0;
-    let hasBody = Number(request.headers["content-length"] ?? 0) > 0;
-    let settled = false;
-
-    const finish = (effect: Effect.Effect<void, HttpBodyFailure>) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      detach();
-      resume(effect);
+    const state: BodyReadState = {
+      hasBody: declaredBodyLength(request) > 0,
+      receivedBytes: 0,
     };
+    const finish = finishBodyRead(resume);
     const rejectOversizedPayload = () => {
-      finish(
-        Effect.fail({
-          failure: {
-            _tag: "PayloadTooLarge",
-            limitBytes: currentTransportLimits.maxHttpRequestBytes,
-          },
-          status: 413,
-        }),
-      );
-      request.resume();
+      rejectPayloadTooLarge(request, finish);
     };
-    const receive = (chunk: Buffer) => {
-      hasBody = true;
-      receivedBytes += chunk.byteLength;
-      if (receivedBytes > currentTransportLimits.maxHttpRequestBytes) {
-        rejectOversizedPayload();
-      }
-    };
-    const end = () => {
-      finish(
-        hasBody
-          ? Effect.fail({
-              failure: { _tag: "InvalidMessage" },
-              status: 400,
-            })
-          : Effect.void,
-      );
-    };
+    const receive = (chunk: Buffer) =>
+      receiveBodyChunk(state, chunk, rejectOversizedPayload);
+    const end = () => completeBodyRead(state, finish);
     const rejectInvalidMessage = () => {
-      finish(
-        Effect.fail({
-          failure: { _tag: "InvalidMessage" },
-          status: 400,
-        }),
-      );
+      finish(Effect.fail(invalidMessageFailure()));
     };
-    const detach = () => {
-      request.off("data", receive);
-      request.off("end", end);
-      request.off("aborted", rejectInvalidMessage);
-      request.off("error", rejectInvalidMessage);
-    };
+    const handlers = { end, receive, rejectInvalidMessage };
 
-    if (
-      Number(request.headers["content-length"] ?? 0) >
-      currentTransportLimits.maxHttpRequestBytes
-    ) {
+    if (declaredBodyLength(request) > maximumRequestBytes) {
       rejectOversizedPayload();
       return;
     }
 
-    request.on("data", receive);
-    request.on("end", end);
-    request.on("aborted", rejectInvalidMessage);
-    request.on("error", rejectInvalidMessage);
-
-    return Effect.sync(detach);
+    attachBodyHandlers(request, handlers);
+    return Effect.sync(() => detachBodyHandlers(request, handlers));
   });
 }
+
+function finishBodyRead(
+  resume: (effect: Effect.Effect<void, HttpBodyFailure>) => void,
+) {
+  let settled = false;
+  return (effect: Effect.Effect<void, HttpBodyFailure>) => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    resume(effect);
+  };
+}
+
+function rejectPayloadTooLarge(
+  request: IncomingMessage,
+  finish: FinishBodyRead,
+) {
+  finish(Effect.fail(payloadTooLargeFailure()));
+  request.resume();
+}
+
+function receiveBodyChunk(
+  state: BodyReadState,
+  chunk: Buffer,
+  rejectPayload: () => void,
+) {
+  state.hasBody = true;
+  state.receivedBytes += chunk.byteLength;
+  if (state.receivedBytes > maximumRequestBytes) {
+    rejectPayload();
+  }
+}
+
+function completeBodyRead(state: BodyReadState, finish: FinishBodyRead) {
+  finish(state.hasBody ? Effect.fail(invalidMessageFailure()) : Effect.void);
+}
+
+function attachBodyHandlers(request: IncomingMessage, handlers: BodyHandlers) {
+  request.on("data", handlers.receive);
+  request.on("end", handlers.end);
+  request.on("aborted", handlers.rejectInvalidMessage);
+  request.on("error", handlers.rejectInvalidMessage);
+}
+
+function detachBodyHandlers(request: IncomingMessage, handlers: BodyHandlers) {
+  request.off("data", handlers.receive);
+  request.off("end", handlers.end);
+  request.off("aborted", handlers.rejectInvalidMessage);
+  request.off("error", handlers.rejectInvalidMessage);
+}
+
+function declaredBodyLength(request: IncomingMessage) {
+  return Number(request.headers["content-length"] ?? 0);
+}
+
+function invalidMessageFailure(): HttpBodyFailure {
+  return {
+    failure: { _tag: "InvalidMessage" },
+    status: 400,
+  };
+}
+
+function payloadTooLargeFailure(): HttpBodyFailure {
+  return {
+    failure: {
+      _tag: "PayloadTooLarge",
+      limitBytes: maximumRequestBytes,
+    },
+    status: 413,
+  };
+}
+
+interface BodyReadState {
+  hasBody: boolean;
+  receivedBytes: number;
+}
+
+interface BodyHandlers {
+  readonly end: () => void;
+  readonly receive: (chunk: Buffer) => void;
+  readonly rejectInvalidMessage: () => void;
+}
+
+type FinishBodyRead = (effect: Effect.Effect<void, HttpBodyFailure>) => void;
 
 interface HttpBodyFailure {
   readonly failure: typeof EnvironmentHttpFailure.Type;
