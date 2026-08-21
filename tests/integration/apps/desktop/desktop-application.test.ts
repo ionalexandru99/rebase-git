@@ -2,6 +2,7 @@ import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  type DesktopApplication,
   type DesktopApplicationHost,
   type DesktopWindowOptions,
   startDesktopApplication,
@@ -27,6 +28,7 @@ describe("Electron application", () => {
     const previousUserProfile = process.env.USERPROFILE;
     process.env.HOME = homeDirectory;
     process.env.USERPROFILE = homeDirectory;
+    let application: DesktopApplication | undefined;
 
     try {
       const renderer = {
@@ -35,7 +37,7 @@ describe("Electron application", () => {
       };
       const host = new TestDesktopHost();
       let serverStarts = 0;
-      const application = await startDesktopApplication({
+      application = await startDesktopApplication({
         host,
         renderer,
         startEnvironment: async () => {
@@ -72,8 +74,12 @@ describe("Electron application", () => {
         access(join(homeDirectory, ".rebase", "runtime", "runtime.json")),
       ).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
-      restoreEnvironmentVariable("HOME", previousHome);
-      restoreEnvironmentVariable("USERPROFILE", previousUserProfile);
+      try {
+        await application?.stop();
+      } finally {
+        restoreEnvironmentVariable("HOME", previousHome);
+        restoreEnvironmentVariable("USERPROFILE", previousUserProfile);
+      }
     }
   });
 });

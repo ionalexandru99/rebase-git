@@ -4,6 +4,7 @@ export {
 } from "#desktop/features/desktop-application/desktop-application";
 export type {
   DesktopApplicationHost,
+  DesktopApplicationOptions,
   DesktopQuitEvent,
   DesktopRenderer,
   DesktopWindowOptions,

@@ -35,7 +35,7 @@ app.on("window-all-closed", () => {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     const shutdown = desktopApplication?.stop() ?? Promise.resolve();
-    void shutdown.finally(() => app.exit(0)).catch(reportStartupFailure);
+    void shutdown.then(() => app.exit(0), reportStartupFailure);
   });
 }
 
@@ -102,6 +102,7 @@ function resolveRenderer(
 
 function reportStartupFailure(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
+  process.exitCode = 1;
   dialog.showErrorBox("Rebase could not start", message);
   app.quit();
 }
