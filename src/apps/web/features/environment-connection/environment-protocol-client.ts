@@ -5,6 +5,7 @@ import {
 } from "@rebase/contracts";
 import { Deferred, Effect, Ref } from "effect";
 import {
+  EnvironmentAuthorizationRejected,
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
   EnvironmentResponseError,
@@ -31,6 +32,7 @@ import {
 } from "#web/features/environment-connection/websocket/environment-socket";
 
 export {
+  EnvironmentAuthorizationRejected,
   EnvironmentHelloRejected,
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,

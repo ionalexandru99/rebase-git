@@ -128,7 +128,9 @@ function requireMethod(
   response: ServerResponse,
   method: string,
 ) {
-  if (request.method === method) return Effect.void;
+  if (request.method === method) {
+    return Effect.void;
+  }
   return Effect.sync(() =>
     response.writeHead(405, { allow: method }).end(),
   ).pipe(Effect.andThen(Effect.interrupt));

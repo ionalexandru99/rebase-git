@@ -16,7 +16,9 @@ export function validateRequestOrigin(
   required: boolean,
 ) {
   const origin = request.headers.origin;
-  if (origin === undefined && !required) return Effect.void;
+  if (origin === undefined && !required) {
+    return Effect.void;
+  }
   return origin === expectedRequestOrigin(request)
     ? Effect.void
     : failAuthorization({ _tag: "InvalidOrigin" });

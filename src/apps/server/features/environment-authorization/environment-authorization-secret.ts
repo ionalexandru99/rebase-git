@@ -21,7 +21,9 @@ export function verifyDeviceCredential(
   serverSecret: string,
   credential: string | undefined,
 ) {
-  if (credential === undefined) return undefined;
+  if (credential === undefined) {
+    return undefined;
+  }
   const [product, version, authorizationId, secret, signature, excess] =
     credential.split(".");
   if (

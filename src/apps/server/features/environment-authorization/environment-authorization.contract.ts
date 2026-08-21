@@ -74,3 +74,9 @@ export class EnvironmentAuthorizationError {
     this.failure = failure;
   }
 }
+
+export function isEnvironmentAuthorizationError(
+  value: unknown,
+): value is EnvironmentAuthorizationError {
+  return value instanceof EnvironmentAuthorizationError;
+}

@@ -1,6 +1,7 @@
 export {
   connectCurrentEnvironment,
   connectEnvironment,
+  EnvironmentAuthorizationRejected,
   EnvironmentHelloRejected,
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,

@@ -17,7 +17,9 @@ import { acquireEnvironmentContext } from "@rebase/server/persistence/environmen
 import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import {
   connectCurrentEnvironment,
+  EnvironmentAuthorizationRejected,
   exchangeEnvironmentPairing as exchangeEnvironmentPairingFromClient,
+  fetchEnvironmentDiscovery,
   fetchEnvironmentSnapshot,
 } from "@rebase/web/features/environment-connection";
 import { Effect } from "effect";
@@ -38,6 +40,18 @@ afterEach(async () => {
 describe("Environment authorization transport", () => {
   it("connects the browser client with the exchanged device credential", async () => {
     await withAuthorizedListener(async ({ authorization, origin }) => {
+      await expect(
+        exchangeEnvironmentPairingFromClient(origin, {
+          label: "Browser client",
+          pairingMaterial: "invalid-pairing-material-that-is-long-enough",
+        }),
+      ).rejects.toEqual(
+        new EnvironmentAuthorizationRejected({
+          failure: { _tag: "InvalidPairing" },
+          status: 401,
+        }),
+      );
+
       const pairing = await run(
         authorization.createPairing({ capabilities: [], role: "viewer" }),
       );
@@ -128,6 +142,15 @@ describe("Environment authorization transport", () => {
         body: { _tag: "RevokedGrant" },
         status: 401,
       });
+      const discovery = await fetchEnvironmentDiscovery(origin);
+      await expect(
+        fetchEnvironmentSnapshot(origin, discovery, viewer.credential),
+      ).rejects.toEqual(
+        new EnvironmentAuthorizationRejected({
+          failure: { _tag: "RevokedGrant" },
+          status: 401,
+        }),
+      );
       const revokedTicket = await postEmpty(
         origin,
         EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path,

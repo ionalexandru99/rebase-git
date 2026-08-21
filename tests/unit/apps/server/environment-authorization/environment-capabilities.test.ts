@@ -40,4 +40,18 @@ describe("Environment authorization roles", () => {
       ),
     ).toEqual(expected);
   });
+
+  it("deduplicates custom capabilities", () => {
+    expect(
+      capabilitiesForRole("custom", [
+        "repository.read",
+        "repository.read",
+        "repository.write",
+      ]),
+    ).toEqual(["repository.read", "repository.write"]);
+  });
+
+  it("allows a custom role without capabilities", () => {
+    expect(capabilitiesForRole("custom", [])).toEqual([]);
+  });
 });

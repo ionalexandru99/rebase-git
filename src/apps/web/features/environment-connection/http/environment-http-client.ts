@@ -1,6 +1,7 @@
 import {
   currentClientReceiveLimits,
   EnvironmentAuthorizationHttpApi,
+  EnvironmentAuthorizationHttpFailure,
   EnvironmentDiscovery,
   EnvironmentHttpApi,
   EnvironmentPairingExchanged,
@@ -11,6 +12,7 @@ import {
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
 import {
+  EnvironmentAuthorizationRejected,
   type EnvironmentResponseError,
   environmentResponseError,
 } from "#web/features/environment-connection/environment-connection-errors";
@@ -192,13 +194,7 @@ function fetchResponse(
             : AbortSignal.any([effectSignal, externalSignal]),
       }),
     catch: () => environmentResponseError(responseTag),
-  }).pipe(
-    Effect.flatMap((response) =>
-      response.ok
-        ? Effect.succeed(response)
-        : Effect.fail(environmentResponseError(responseTag)),
-    ),
-  );
+  });
 }
 
 function authenticatedHeaders(credential: string) {
@@ -212,15 +208,33 @@ function decodeResponse<S extends Schema.ConstraintDecoder<unknown, never>>(
   responseTag: EnvironmentResponseError["responseTag"],
 ) {
   return Effect.scoped(
-    readBoundedEnvironmentResponseBody(response, byteLimit),
-  ).pipe(
-    Effect.flatMap((encoded) =>
-      Effect.try({
-        try: () => Schema.decodeUnknownSync(schema)(JSON.parse(encoded)),
+    Effect.gen(function* () {
+      const encoded = yield* readBoundedEnvironmentResponseBody(
+        response,
+        byteLimit,
+      ).pipe(Effect.mapError(() => environmentResponseError(responseTag)));
+      const json = yield* Effect.try({
+        try: () => JSON.parse(encoded) as unknown,
         catch: () => environmentResponseError(responseTag),
-      }),
-    ),
-    Effect.mapError(() => environmentResponseError(responseTag)),
+      });
+      if (!response.ok) {
+        const failure = yield* Effect.try({
+          try: () =>
+            Schema.decodeUnknownSync(EnvironmentAuthorizationHttpFailure)(json),
+          catch: () => environmentResponseError(responseTag),
+        });
+        return yield* Effect.fail(
+          new EnvironmentAuthorizationRejected({
+            failure,
+            status: response.status,
+          }),
+        );
+      }
+      return yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(schema)(json),
+        catch: () => environmentResponseError(responseTag),
+      });
+    }),
   );
 }
 

@@ -1,9 +1,12 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { currentTransportLimits, environmentLivePath } from "@rebase/contracts";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { WebSocketServer } from "ws";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import {
+  type EnvironmentAuthorization,
+  isEnvironmentAuthorizationError,
+} from "#server/features/environment-authorization/environment-authorization.contract";
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
@@ -52,8 +55,8 @@ export function attachEnvironmentWebSocketServer(
           });
         });
       }).pipe(
-        Effect.catch((error) =>
-          Effect.sync(() => rejectUpgrade(socket, error)),
+        Effect.catchCause((cause) =>
+          Effect.sync(() => rejectUpgrade(socket, Cause.squash(cause))),
         ),
       ),
     );
@@ -78,22 +81,13 @@ function readUpgradeUrl(request: IncomingMessage) {
 }
 
 function rejectUpgrade(socket: Duplex, error: unknown) {
-  const authorizationError =
-    typeof error === "object" &&
-    error !== null &&
-    "_tag" in error &&
-    error._tag === "EnvironmentAuthorizationError" &&
-    "failure" in error
-      ? error
-      : undefined;
+  const authorizationError = isEnvironmentAuthorizationError(error)
+    ? error
+    : undefined;
   const status =
     authorizationError === undefined
       ? 503
-      : authorizationFailureStatus(
-          authorizationError.failure as Parameters<
-            typeof authorizationFailureStatus
-          >[0],
-        );
+      : authorizationFailureStatus(authorizationError.failure);
   const body = JSON.stringify(
     authorizationError === undefined
       ? { _tag: "EnvironmentUnavailable" }

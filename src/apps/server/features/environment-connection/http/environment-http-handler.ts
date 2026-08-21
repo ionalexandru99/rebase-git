@@ -157,8 +157,9 @@ function respondToEnvironmentRequest(
         body,
         authorization,
       )
-    )
+    ) {
       return;
+    }
 
     response.writeHead(404).end();
   });
@@ -169,7 +170,9 @@ function requireMethod(
   response: ServerResponse,
   method: string,
 ) {
-  if (request.method === method) return Effect.void;
+  if (request.method === method) {
+    return Effect.void;
+  }
   return Effect.sync(() =>
     response.writeHead(405, { allow: method }).end(),
   ).pipe(Effect.andThen(Effect.interrupt));
@@ -188,7 +191,9 @@ function writeEnvironmentHttpError(
     | EnvironmentHttpBodyError
     | EnvironmentStorageError,
 ) {
-  if (response.writableEnded) return;
+  if (response.writableEnded) {
+    return;
+  }
   if (error._tag === "EnvironmentAuthorizationError") {
     writeJson(
       response,
