@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { RuntimeRequirementsError } from "@rebase/server/features/environment-server/runtime/runtime-errors.contract";
 import { Effect } from "effect";
+import { RuntimeRequirementsError } from "#server/features/environment-server/runtime/runtime-errors.contract";
 
 const requiredNodeMajor = 24;
 const minimumGitVersion = [2, 34, 0] as const;

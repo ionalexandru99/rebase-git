@@ -1,7 +1,3 @@
-import {
-  authorizationRoles,
-  operationStatuses,
-} from "@rebase/server/domain/environment-state.contract";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -10,6 +6,10 @@ import {
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
+import {
+  authorizationRoles,
+  operationStatuses,
+} from "#server/domain/environment-state.contract";
 
 export const environmentTable = sqliteTable(
   "environment",

@@ -6,23 +6,23 @@ import {
   type HelloAccepted,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
+import { Effect, FiberSet, Option, Queue, Schema } from "effect";
+import type { WebSocket } from "ws";
+import { WebSocket as WebSocketState } from "ws";
+import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
 import {
   type EnvironmentWebSocketSessionClosed,
   EnvironmentWebSocketSessionRejected,
   type EnvironmentWebSocketWriteError,
-} from "@rebase/server/features/environment-connection/websocket/environment-websocket-error.contract";
+} from "#server/features/environment-connection/websocket/environment-websocket-error.contract";
 import {
   acquireEnvironmentWebSocketInbox,
   type EnvironmentSocketMessage,
-} from "@rebase/server/features/environment-connection/websocket/environment-websocket-inbox";
+} from "#server/features/environment-connection/websocket/environment-websocket-inbox";
 import {
   createEnvironmentWebSocketWriter,
   type EnvironmentWebSocketWriter,
-} from "@rebase/server/features/environment-connection/websocket/environment-websocket-writer";
-import { Effect, FiberSet, Option, Queue, Schema } from "effect";
-import type { WebSocket } from "ws";
-import { WebSocket as WebSocketState } from "ws";
+} from "#server/features/environment-connection/websocket/environment-websocket-writer";
 
 export function runEnvironmentWebSocketSession(
   socket: WebSocket,

@@ -1,12 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { chmod, readFile, writeFile } from "node:fs/promises";
-import {
-  errorMessage,
-  isFileSystemError,
-} from "@rebase/server/error-inspection";
-import type { EnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths.contract";
-import { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { Effect } from "effect";
+import { errorMessage, isFileSystemError } from "#server/error-inspection";
+import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
+import { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function ensureServerSecret(paths: EnvironmentPaths) {
   return Effect.tryPromise({

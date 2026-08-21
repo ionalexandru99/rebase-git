@@ -1,11 +1,11 @@
 import { chmodSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { migrateEnvironmentState } from "@rebase/server/persistence/sqlite/migrations";
-import { storageSync } from "@rebase/server/persistence/sqlite/storage-operation";
-import type { EnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths.contract";
-import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { Effect, Schedule } from "effect";
+import { migrateEnvironmentState } from "#server/persistence/sqlite/migrations";
+import { storageSync } from "#server/persistence/sqlite/storage-operation";
+import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
+import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 const busyTimeoutMilliseconds = 1_000;
 const migrationRetryDelay = "10 millis";

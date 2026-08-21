@@ -1,10 +1,10 @@
 import { chmod, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { errorMessage } from "@rebase/server/error-inspection";
-import type { EnvironmentPaths } from "@rebase/server/persistence/storage/environment-paths.contract";
-import { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { Effect } from "effect";
+import { errorMessage } from "#server/error-inspection";
+import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
+import { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function defaultEnvironmentPaths() {
   return environmentPaths(join(homedir(), ".rebase"));

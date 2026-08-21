@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
+  "imports": {
+    "#server/*": {
+      "rebase-source": "./*.ts",
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
   "exports": {
     ".": {
       "rebase-source": "./index.ts",
@@ -23,7 +31,7 @@
     "build": "tsc -b && pnpm copy:migrations",
     "copy:migrations": "node --input-type=module -e \"import { cpSync, rmSync } from 'node:fs'; const target = 'dist/persistence/migrations'; rmSync(target, { force: true, recursive: true }); cpSync('persistence/migrations', target, { recursive: true });\"",
     "dev": "node --conditions=rebase-source cli.ts serve",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b --emitDeclarationOnly"
   },
   "dependencies": {
     "@rebase/contracts": "workspace:*",

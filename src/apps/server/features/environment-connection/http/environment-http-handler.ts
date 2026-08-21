@@ -5,12 +5,12 @@ import {
   EnvironmentHttpFailure,
   EnvironmentSnapshot,
 } from "@rebase/contracts";
+import { Effect, Schema } from "effect";
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
-} from "@rebase/server/features/environment-connection/environment-connection.contract";
-import { readEnvironmentHttpRequestBody } from "@rebase/server/features/environment-connection/http/environment-http-request-body";
-import { Effect, Schema } from "effect";
+} from "#server/features/environment-connection/environment-connection.contract";
+import { readEnvironmentHttpRequestBody } from "#server/features/environment-connection/http/environment-http-request-body";
 
 export function createEnvironmentHttpHandler(
   state: EnvironmentTransportState,

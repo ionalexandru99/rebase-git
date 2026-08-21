@@ -1,4 +1,4 @@
-import type { EnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher.contract";
+import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
 
 export function createEnvironmentEventPublisher(): EnvironmentEventPublisher {
   let sequence = 0;
