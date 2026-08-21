@@ -16,7 +16,7 @@ import {
   readBearerCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
-import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body";
+import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body.contract";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
 export function respondToEnvironmentAuthorizationRequest(
@@ -139,7 +139,11 @@ function requireMethod(
 function requireEmptyBody(body: Buffer) {
   return body.byteLength === 0
     ? Effect.void
-    : Effect.fail(new EnvironmentHttpBodyError({ _tag: "InvalidMessage" }));
+    : Effect.fail(
+        new EnvironmentHttpBodyError({
+          failure: { _tag: "InvalidMessage" },
+        }),
+      );
 }
 
 function decodeRequestBody<S extends Schema.ConstraintDecoder<unknown, never>>(
@@ -151,6 +155,7 @@ function decodeRequestBody<S extends Schema.ConstraintDecoder<unknown, never>>(
       Schema.decodeUnknownSync(schema)(JSON.parse(body.toString("utf8")), {
         onExcessProperty: "error",
       }),
-    catch: () => new EnvironmentHttpBodyError({ _tag: "InvalidMessage" }),
+    catch: () =>
+      new EnvironmentHttpBodyError({ failure: { _tag: "InvalidMessage" } }),
   });
 }

@@ -144,6 +144,26 @@ describe("browser Environment protocol client", () => {
       );
     });
   });
+
+  it("rejects failures that do not belong to the snapshot route", async () => {
+    await withSnapshotResponse(
+      (response) => {
+        response.writeHead(401, { "content-type": "application/json" });
+        response.end(JSON.stringify({ _tag: "InvalidPairing" }));
+      },
+      async (origin) => {
+        const discovery = createCurrentEnvironmentDiscovery(
+          environmentId,
+          "0.0.0",
+        );
+        await expect(
+          fetchEnvironmentSnapshot(origin, discovery, credential),
+        ).rejects.toEqual(
+          new EnvironmentResponseError({ responseTag: "Snapshot" }),
+        );
+      },
+    );
+  });
 });
 
 function withListener(

@@ -132,10 +132,34 @@ export const EnvironmentAuthorizationFailure = Schema.Union([
 export type EnvironmentAuthorizationFailure =
   typeof EnvironmentAuthorizationFailure.Type;
 
-export const EnvironmentAuthorizationHttpFailure = Schema.Union([
-  EnvironmentAuthorizationFailure,
+export const EnvironmentGrantHttpFailure = Schema.Union([
+  InvalidHost,
+  InvalidOrigin,
+  InvalidGrant,
+  ExpiredGrant,
+  RevokedGrant,
+  CapabilityDenied,
   InvalidMessage,
   PayloadTooLarge,
+]);
+export type EnvironmentGrantHttpFailure =
+  typeof EnvironmentGrantHttpFailure.Type;
+
+export const EnvironmentPairingExchangeHttpFailure = Schema.Union([
+  InvalidHost,
+  InvalidOrigin,
+  InvalidPairing,
+  ExpiredPairing,
+  PairingAlreadyUsed,
+  InvalidMessage,
+  PayloadTooLarge,
+]);
+export type EnvironmentPairingExchangeHttpFailure =
+  typeof EnvironmentPairingExchangeHttpFailure.Type;
+
+export const EnvironmentAuthorizationHttpFailure = Schema.Union([
+  EnvironmentGrantHttpFailure,
+  EnvironmentPairingExchangeHttpFailure,
 ]);
 export type EnvironmentAuthorizationHttpFailure =
   typeof EnvironmentAuthorizationHttpFailure.Type;
@@ -150,8 +174,8 @@ export const environmentAuthorizationRevocationPath =
 
 export const EnvironmentAuthorizationHttpApi = {
   createPairing: {
-    failure: EnvironmentAuthorizationHttpFailure,
-    failureStatuses: [400, 401, 403, 409, 410, 413] as const,
+    failure: EnvironmentGrantHttpFailure,
+    failureStatuses: [400, 401, 403, 410, 413] as const,
     method: "POST",
     path: environmentPairingsPath,
     request: CreateEnvironmentPairing,
@@ -159,7 +183,7 @@ export const EnvironmentAuthorizationHttpApi = {
     successStatus: 201,
   },
   exchangePairing: {
-    failure: EnvironmentAuthorizationHttpFailure,
+    failure: EnvironmentPairingExchangeHttpFailure,
     failureStatuses: [400, 401, 403, 409, 410, 413] as const,
     method: "POST",
     path: environmentPairingExchangePath,
@@ -168,16 +192,16 @@ export const EnvironmentAuthorizationHttpApi = {
     successStatus: 201,
   },
   mintWebSocketTicket: {
-    failure: EnvironmentAuthorizationHttpFailure,
-    failureStatuses: [400, 401, 403, 409, 410, 413] as const,
+    failure: EnvironmentGrantHttpFailure,
+    failureStatuses: [400, 401, 403, 410, 413] as const,
     method: "POST",
     path: environmentWebSocketTicketsPath,
     success: EnvironmentWebSocketTicket,
     successStatus: 201,
   },
   revokeAuthorization: {
-    failure: EnvironmentAuthorizationHttpFailure,
-    failureStatuses: [400, 401, 403, 409, 410, 413] as const,
+    failure: EnvironmentGrantHttpFailure,
+    failureStatuses: [400, 401, 403, 410, 413] as const,
     method: "POST",
     path: environmentAuthorizationRevocationPath,
     request: RevokeEnvironmentAuthorization,

@@ -1,7 +1,7 @@
 import {
   currentClientReceiveLimits,
   EnvironmentAuthorizationHttpApi,
-  EnvironmentAuthorizationHttpFailure,
+  type EnvironmentAuthorizationHttpFailure,
   EnvironmentDiscovery,
   EnvironmentHttpApi,
   EnvironmentPairingExchanged,
@@ -38,6 +38,7 @@ export function fetchEnvironmentDiscoveryEffect(origin: string) {
     return yield* decodeResponse(
       response,
       EnvironmentDiscovery,
+      EnvironmentHttpApi.discovery.failure,
       currentClientReceiveLimits.maxHttpResponseBytes,
       "Discovery",
     );
@@ -110,6 +111,7 @@ export function fetchEnvironmentSnapshotWithinLimitEffect(
     const snapshot = yield* decodeResponse(
       response,
       EnvironmentSnapshotSchema,
+      EnvironmentHttpApi.snapshot.failure,
       maxResponseBytes,
       "Snapshot",
     );
@@ -141,6 +143,7 @@ export function exchangeEnvironmentPairing(
       return yield* decodeResponse(
         response,
         EnvironmentPairingExchanged,
+        EnvironmentAuthorizationHttpApi.exchangePairing.failure,
         currentClientReceiveLimits.maxHttpResponseBytes,
         "Authorization",
       );
@@ -168,6 +171,7 @@ export function mintEnvironmentWebSocketTicketEffect(
     return yield* decodeResponse(
       response,
       EnvironmentWebSocketTicket,
+      EnvironmentAuthorizationHttpApi.mintWebSocketTicket.failure,
       currentClientReceiveLimits.maxHttpResponseBytes,
       "Authorization",
     );
@@ -201,9 +205,16 @@ function authenticatedHeaders(credential: string) {
   return { authorization: `Bearer ${credential}` };
 }
 
-function decodeResponse<S extends Schema.ConstraintDecoder<unknown, never>>(
+function decodeResponse<
+  S extends Schema.ConstraintDecoder<unknown, never>,
+  F extends Schema.ConstraintDecoder<
+    EnvironmentAuthorizationHttpFailure,
+    never
+  >,
+>(
   response: Response,
   schema: S,
+  failureSchema: F,
   byteLimit: number,
   responseTag: EnvironmentResponseError["responseTag"],
 ) {
@@ -219,8 +230,7 @@ function decodeResponse<S extends Schema.ConstraintDecoder<unknown, never>>(
       });
       if (!response.ok) {
         const failure = yield* Effect.try({
-          try: () =>
-            Schema.decodeUnknownSync(EnvironmentAuthorizationHttpFailure)(json),
+          try: () => Schema.decodeUnknownSync(failureSchema)(json),
           catch: () => environmentResponseError(responseTag),
         });
         return yield* Effect.fail(

@@ -1,7 +1,4 @@
-import type {
-  EnvironmentAccessCapability,
-  EnvironmentAuthorizationRole,
-} from "@rebase/contracts";
+import type { EnvironmentAuthorizationRole } from "@rebase/contracts";
 
 export type AuthorizationRole = EnvironmentAuthorizationRole;
 
@@ -17,11 +14,6 @@ export interface AuthorizationMetadata {
   readonly lastSeenAt: string | null;
   readonly revokedAt: string | null;
   readonly role: AuthorizationRole;
-}
-
-export interface AuthorizationCapability {
-  readonly authorizationId: string;
-  readonly capability: EnvironmentAccessCapability;
 }
 
 export const operationStatuses = [

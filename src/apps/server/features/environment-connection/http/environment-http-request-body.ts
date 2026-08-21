@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import { currentTransportLimits } from "@rebase/contracts";
 import { Effect } from "effect";
+import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body.contract";
 
 const maximumRequestBytes = currentTransportLimits.maxHttpRequestBytes;
 
@@ -97,13 +98,17 @@ function declaredBodyLength(request: IncomingMessage) {
 }
 
 function invalidMessageFailure() {
-  return new EnvironmentHttpBodyError({ _tag: "InvalidMessage" });
+  return new EnvironmentHttpBodyError({
+    failure: { _tag: "InvalidMessage" },
+  });
 }
 
 function payloadTooLargeFailure() {
   return new EnvironmentHttpBodyError({
-    _tag: "PayloadTooLarge",
-    limitBytes: maximumRequestBytes,
+    failure: {
+      _tag: "PayloadTooLarge",
+      limitBytes: maximumRequestBytes,
+    },
   });
 }
 
@@ -121,18 +126,3 @@ interface BodyHandlers {
 type FinishBodyRead = (
   effect: Effect.Effect<Buffer, EnvironmentHttpBodyError>,
 ) => void;
-
-export class EnvironmentHttpBodyError {
-  readonly _tag = "EnvironmentHttpBodyError";
-  readonly failure:
-    | { readonly _tag: "InvalidMessage" }
-    | { readonly _tag: "PayloadTooLarge"; readonly limitBytes: number };
-
-  constructor(
-    failure:
-      | { readonly _tag: "InvalidMessage" }
-      | { readonly _tag: "PayloadTooLarge"; readonly limitBytes: number },
-  ) {
-    this.failure = failure;
-  }
-}

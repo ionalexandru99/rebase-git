@@ -7,6 +7,7 @@ export {
 export {
   createCurrentEnvironmentDiscovery,
   EnvironmentDiscovery,
+  EnvironmentDiscoveryHttpFailure,
   EnvironmentHttpApi,
   EnvironmentHttpFailure,
   EnvironmentSnapshot,

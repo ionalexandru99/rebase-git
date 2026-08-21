@@ -22,10 +22,8 @@ import {
   validateRequestHost,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
-import {
-  EnvironmentHttpBodyError,
-  readEnvironmentHttpRequestBody,
-} from "#server/features/environment-connection/http/environment-http-request-body";
+import { readEnvironmentHttpRequestBody } from "#server/features/environment-connection/http/environment-http-request-body";
+import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body.contract";
 import {
   writeJson,
   writeJsonValue,
@@ -181,7 +179,11 @@ function requireMethod(
 function requireEmptyBody(body: Buffer) {
   return body.byteLength === 0
     ? Effect.void
-    : Effect.fail(new EnvironmentHttpBodyError({ _tag: "InvalidMessage" }));
+    : Effect.fail(
+        new EnvironmentHttpBodyError({
+          failure: { _tag: "InvalidMessage" },
+        }),
+      );
 }
 
 function writeEnvironmentHttpError(

@@ -7,7 +7,7 @@ import type {
   EnvironmentPairingExchanged,
   ExchangeEnvironmentPairing,
 } from "@rebase/contracts";
-import type { Effect } from "effect";
+import { Data, type Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export interface EnvironmentPairingMaterial {
@@ -66,14 +66,11 @@ export interface EnvironmentAuthorizationOptions {
   readonly clock?: EnvironmentAuthorizationClock;
 }
 
-export class EnvironmentAuthorizationError {
-  readonly _tag = "EnvironmentAuthorizationError";
+export class EnvironmentAuthorizationError extends Data.TaggedError(
+  "EnvironmentAuthorizationError",
+)<{
   readonly failure: EnvironmentAuthorizationFailure;
-
-  constructor(failure: EnvironmentAuthorizationFailure) {
-    this.failure = failure;
-  }
-}
+}> {}
 
 export function isEnvironmentAuthorizationError(
   value: unknown,

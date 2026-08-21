@@ -369,7 +369,7 @@ function authorizationSuccess(authorization: EnvironmentDeviceAuthorization) {
 }
 
 function failAuthorization(failure: EnvironmentAuthorizationFailure) {
-  return Effect.fail(new EnvironmentAuthorizationError(failure));
+  return Effect.fail(new EnvironmentAuthorizationError({ failure }));
 }
 
 const systemClock: EnvironmentAuthorizationClock = {

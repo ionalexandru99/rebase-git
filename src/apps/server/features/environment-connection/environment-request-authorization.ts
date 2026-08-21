@@ -59,5 +59,5 @@ export function authorizationFailureStatus(
 }
 
 function failAuthorization(failure: EnvironmentAuthorizationFailure) {
-  return Effect.fail(new EnvironmentAuthorizationError(failure));
+  return Effect.fail(new EnvironmentAuthorizationError({ failure }));
 }
