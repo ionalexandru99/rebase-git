@@ -7,8 +7,8 @@ import type {
   EnvironmentPairingExchanged,
   ExchangeEnvironmentPairing,
 } from "@rebase/contracts";
-import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import type { Effect } from "effect";
+import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export interface EnvironmentPairingMaterial {
   readonly expiresAt: string;

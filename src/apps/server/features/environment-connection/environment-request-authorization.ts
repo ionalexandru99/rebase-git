@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import type { EnvironmentAuthorizationFailure } from "@rebase/contracts";
-import { EnvironmentAuthorizationError } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
 import { Effect } from "effect";
+import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function validateRequestHost(request: IncomingMessage) {
   const port = request.socket.localPort;

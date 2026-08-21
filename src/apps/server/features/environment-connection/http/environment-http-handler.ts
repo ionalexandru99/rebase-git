@@ -6,7 +6,7 @@ import {
   EnvironmentHttpFailure,
   EnvironmentSnapshot,
 } from "@rebase/contracts";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import type {
   EnvironmentAuthorization,
   EnvironmentAuthorizationError,

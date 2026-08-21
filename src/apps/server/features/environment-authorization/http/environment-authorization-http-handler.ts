@@ -9,15 +9,15 @@ import {
   ExchangeEnvironmentPairing,
   RevokeEnvironmentAuthorization,
 } from "@rebase/contracts";
-import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
+import { Effect, Schema } from "effect";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   expectedRequestOrigin,
   readBearerCredential,
   validateRequestOrigin,
-} from "@rebase/server/features/environment-connection/environment-request-authorization";
-import { EnvironmentHttpBodyError } from "@rebase/server/features/environment-connection/http/environment-http-request-body";
-import { writeJson } from "@rebase/server/features/environment-connection/http/environment-http-response";
-import { Effect, Schema } from "effect";
+} from "#server/features/environment-connection/environment-request-authorization";
+import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body";
+import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
 export function respondToEnvironmentAuthorizationRequest(
   request: IncomingMessage,

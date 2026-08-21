@@ -7,26 +7,26 @@ import type {
   EnvironmentDeviceAuthorization,
   ExchangeEnvironmentPairing,
 } from "@rebase/contracts";
+import { eq } from "drizzle-orm";
+import { Effect } from "effect";
 import type {
   EnvironmentAuthorization,
   EnvironmentAuthorizationClock,
   EnvironmentAuthorizationOptions,
-} from "@rebase/server/features/environment-authorization/environment-authorization.contract";
-import { EnvironmentAuthorizationError } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
+} from "#server/features/environment-authorization/environment-authorization.contract";
+import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   createDeviceCredential,
   createSecretMaterial,
   digestSecretMaterial,
   verifyDeviceCredential,
-} from "@rebase/server/features/environment-authorization/environment-authorization-secret";
-import { capabilitiesForRole } from "@rebase/server/features/environment-authorization/environment-capabilities";
-import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
+} from "#server/features/environment-authorization/environment-authorization-secret";
+import { capabilitiesForRole } from "#server/features/environment-authorization/environment-capabilities";
+import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import {
   authorizationCapabilityTable,
   authorizationMetadataTable,
-} from "@rebase/server/persistence/environment-state.schema";
-import { eq } from "drizzle-orm";
-import { Effect } from "effect";
+} from "#server/persistence/environment-state.schema";
 
 const pairingLifetimeMilliseconds = 10 * 60 * 1_000;
 const ticketLifetimeMilliseconds = 30 * 1_000;
