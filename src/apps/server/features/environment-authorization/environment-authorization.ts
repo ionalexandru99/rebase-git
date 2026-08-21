@@ -102,36 +102,44 @@ function exchangePairing(
       role: pairing.role,
     } satisfies EnvironmentDeviceAuthorization;
 
-    yield* context.write("Could not save device authorization", (database) =>
-      database.transaction(
-        (transaction) => {
-          transaction
-            .insert(authorizationMetadataTable)
-            .values({
-              createdAt: now.toISOString(),
-              id: authorization.id,
-              label: authorization.label,
-              role: authorization.role,
-            })
-            .run();
-          if (
-            authorization.role === "custom" &&
-            authorization.capabilities.length > 0
-          ) {
+    yield* context
+      .write("Could not save device authorization", (database) =>
+        database.transaction(
+          (transaction) => {
             transaction
-              .insert(authorizationCapabilityTable)
-              .values(
-                authorization.capabilities.map((capability) => ({
-                  authorizationId: authorization.id,
-                  capability,
-                })),
-              )
+              .insert(authorizationMetadataTable)
+              .values({
+                createdAt: now.toISOString(),
+                id: authorization.id,
+                label: authorization.label,
+                role: authorization.role,
+              })
               .run();
-          }
-        },
-        { behavior: "immediate" },
-      ),
-    );
+            if (
+              authorization.role === "custom" &&
+              authorization.capabilities.length > 0
+            ) {
+              transaction
+                .insert(authorizationCapabilityTable)
+                .values(
+                  authorization.capabilities.map((capability) => ({
+                    authorizationId: authorization.id,
+                    capability,
+                  })),
+                )
+                .run();
+            }
+          },
+          { behavior: "immediate" },
+        ),
+      )
+      .pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => {
+            pairing.used = false;
+          }),
+        ),
+      );
 
     return {
       authorization,
@@ -298,6 +306,14 @@ function consumeTicket(
     clock,
     stored.authorizationId,
     "environment.read",
+  ).pipe(
+    Effect.tapError((error) =>
+      error._tag === "EnvironmentStorageError"
+        ? Effect.sync(() => {
+            stored.used = false;
+          })
+        : Effect.void,
+    ),
   );
 }
 

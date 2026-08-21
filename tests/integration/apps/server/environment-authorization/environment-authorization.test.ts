@@ -14,6 +14,7 @@ import { acquireEnvironmentContext } from "@rebase/server/persistence/environmen
 import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
 import { authorizationMetadataTable } from "@rebase/server/persistence/environment-state.schema";
 import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
+import { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -164,6 +165,35 @@ describe("Environment authorization", () => {
       );
     });
   });
+
+  it("allows retrying one-time material after storage failures", async () => {
+    await withAuthorization(async ({ clock, context }) => {
+      const failing = createFailingContext(context);
+      const authorization = createEnvironmentAuthorization(
+        failing.context,
+        context.serverSecret,
+        { clock },
+      );
+      const pairing = await run(
+        authorization.createPairing({ capabilities: [], role: "owner" }),
+      );
+      const exchange = {
+        label: "Owner",
+        pairingMaterial: pairing.material,
+      };
+
+      failing.failNextWrite("Could not save device authorization");
+      await expectStorageFailure(authorization.exchangePairing(exchange));
+      const owner = await run(authorization.exchangePairing(exchange));
+
+      const ticket = await run(authorization.mintTicket(owner.credential));
+      failing.failNextWrite("Could not authenticate device authorization");
+      await expectStorageFailure(authorization.consumeTicket(ticket.ticket));
+      await expect(
+        run(authorization.consumeTicket(ticket.ticket)),
+      ).resolves.toMatchObject({ id: owner.authorization.id });
+    });
+  });
 });
 
 function withAuthorization(
@@ -218,6 +248,12 @@ async function expectFailure(
   });
 }
 
+async function expectStorageFailure(effect: Effect.Effect<unknown, unknown>) {
+  await expect(run(effect)).rejects.toMatchObject({
+    _tag: "EnvironmentStorageError",
+  });
+}
+
 function run<Value, Error>(effect: Effect.Effect<Value, Error>) {
   return Effect.runPromise(effect);
 }
@@ -244,6 +280,36 @@ async function readDurableState(databasePath: string) {
     } catch {}
   }
   return Buffer.concat(contents).toString("utf8");
+}
+
+function createFailingContext(context: EnvironmentContext) {
+  let nextFailure: string | undefined;
+  return {
+    context: {
+      ...context,
+      write: <Value>(
+        message: string,
+        operation: Parameters<EnvironmentContext["write"]>[1],
+      ) => {
+        if (message === nextFailure) {
+          nextFailure = undefined;
+          return Effect.fail(
+            new EnvironmentStorageError({
+              cause: new Error("Injected storage failure"),
+              message,
+            }),
+          );
+        }
+        return context.write(message, operation) as Effect.Effect<
+          Value,
+          EnvironmentStorageError
+        >;
+      },
+    } satisfies EnvironmentContext,
+    failNextWrite: (message: string) => {
+      nextFailure = message;
+    },
+  };
 }
 
 interface AuthorizationFixture {
