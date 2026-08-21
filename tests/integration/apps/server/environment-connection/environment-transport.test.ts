@@ -259,6 +259,19 @@ describe("Environment transport", () => {
     });
   });
 
+  it("rejects a non-empty HTTP body as an invalid message", async () => {
+    await withListener(async (origin) => {
+      const response = await sendChunkedBody(
+        `${origin}${environmentDiscoveryPath}`,
+        1,
+      );
+      expect(response).toEqual({
+        body: { _tag: "InvalidMessage" },
+        status: 400,
+      });
+    });
+  });
+
   it("rejects a streaming HTTP body before the sender finishes it", async () => {
     await withListener(async (origin) => {
       const response = await sendUnfinishedChunkedBody(

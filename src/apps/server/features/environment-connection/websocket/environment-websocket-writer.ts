@@ -4,119 +4,251 @@ import {
   type TransportLimits,
 } from "@rebase/contracts";
 import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
+import { EnvironmentWebSocketWriteError } from "@rebase/server/features/environment-connection/websocket/environment-websocket-error.contract";
 import {
   createOutgoingMessageQueue,
   dequeueOutgoingMessage,
   enqueueOutgoingMessage,
+  type OutgoingMessageQueue,
   replaceWithResnapshotMessage,
   resetOutgoingMessageQueue,
 } from "@rebase/server/features/environment-connection/websocket/outgoing-message-queue";
-import { Schema } from "effect";
+import { Effect, Ref, Schema, Semaphore } from "effect";
 import { WebSocket } from "ws";
+
+export interface EnvironmentWebSocketWriter {
+  readonly acknowledgeSnapshot: (
+    sequence: number,
+  ) => Effect.Effect<boolean, EnvironmentWebSocketWriteError>;
+  readonly send: (
+    message: EnvironmentServerMessage,
+  ) => Effect.Effect<void, EnvironmentWebSocketWriteError>;
+  readonly enqueue: (
+    message: EnvironmentServerMessage,
+  ) => Effect.Effect<boolean, EnvironmentWebSocketWriteError>;
+  readonly flush: Effect.Effect<void, EnvironmentWebSocketWriteError>;
+  readonly setNegotiatedContract: (
+    negotiatedLimits: TransportLimits,
+    negotiatedSupportsResnapshot: boolean,
+  ) => Effect.Effect<void>;
+}
+
+interface WriterState {
+  readonly limits: TransportLimits;
+  readonly queue: OutgoingMessageQueue;
+  readonly requiredSnapshotSequence: number | undefined;
+  readonly supportsResnapshot: boolean;
+}
+
+type EnqueueResult =
+  | { readonly _tag: "Enqueued" }
+  | { readonly _tag: "Ignored" }
+  | {
+      readonly _tag: "Rejected";
+      readonly error: EnvironmentWebSocketWriteError;
+    };
 
 export function createEnvironmentWebSocketWriter(
   socket: WebSocket,
   state: EnvironmentTransportState,
 ) {
-  let queue = createOutgoingMessageQueue();
-  let limits = state.discovery.limits;
-  let requiredSnapshotSequence: number | undefined;
-  let sending = false;
-  let supportsResnapshot = false;
+  return Effect.gen(function* () {
+    const writerState = yield* Ref.make<WriterState>({
+      limits: state.discovery.limits,
+      queue: createOutgoingMessageQueue(),
+      requiredSnapshotSequence: undefined,
+      supportsResnapshot: false,
+    });
+    const sendPermit = yield* Semaphore.make(1);
 
-  const send = (message: EnvironmentServerMessage) => {
-    if (
-      message._tag === "EnvironmentChanged" &&
-      requiredSnapshotSequence !== undefined
-    ) {
-      requiredSnapshotSequence = Math.max(
-        requiredSnapshotSequence,
-        message.sequence,
-      );
-      return;
-    }
+    const flush = sendPermit.withPermit(
+      Effect.gen(function* () {
+        while (true) {
+          if (socket.readyState !== WebSocket.OPEN) {
+            return yield* Effect.fail(
+              new EnvironmentWebSocketWriteError({
+                closeCode: 1011,
+                reason: "WebSocketNotOpen",
+              }),
+            );
+          }
+          const next = yield* Ref.modify(writerState, (current) => {
+            const dequeued = dequeueOutgoingMessage(current.queue);
+            return [dequeued.message, { ...current, queue: dequeued.queue }];
+          });
+          if (next === undefined) {
+            return;
+          }
 
-    const encoded = JSON.stringify(
-      Schema.encodeSync(EnvironmentServerMessageSchema)(message),
+          yield* sendWebSocketMessage(socket, next);
+        }
+      }),
     );
-    if (Buffer.byteLength(encoded) > limits.maxWebSocketResponseBytes) {
-      socket.close(1009, "PayloadTooLarge");
-      return;
-    }
 
-    if (message._tag === "ResnapshotRequired") {
-      requiredSnapshotSequence = message.currentSequence;
-      if (queue.overflowed) {
-        queue = replaceWithResnapshotMessage(queue, encoded);
-        drain();
-        return;
-      }
-    }
+    const enqueue = (message: EnvironmentServerMessage) =>
+      Effect.gen(function* () {
+        const result = yield* Ref.modify(writerState, (current) =>
+          enqueueMessage(current, message, state.events.currentSequence()),
+        );
+        if (result._tag === "Rejected") {
+          return yield* result.error;
+        }
+        if (result._tag === "Ignored") {
+          return false;
+        }
+        return true;
+      });
 
-    const overflowSequence = state.events.currentSequence();
-    const overflow = encodeMessage({
-      _tag: "ResnapshotRequired" as const,
-      currentSequence: overflowSequence,
-      reason: "OutgoingQueueOverflow" as const,
+    const send = (message: EnvironmentServerMessage) =>
+      Effect.gen(function* () {
+        if (yield* enqueue(message)) {
+          yield* flush;
+        }
+      });
+
+    const acknowledgeSnapshot = (sequence: number) =>
+      sendPermit.withPermit(
+        Ref.modify(writerState, (current) => {
+          if (
+            current.requiredSnapshotSequence !== sequence ||
+            sequence !== state.events.currentSequence() ||
+            current.queue.messages.length > 0
+          ) {
+            return [false, current];
+          }
+
+          return [
+            true,
+            {
+              ...current,
+              queue: resetOutgoingMessageQueue(),
+              requiredSnapshotSequence: undefined,
+            },
+          ];
+        }),
+      );
+
+    const setNegotiatedContract = (
+      negotiatedLimits: TransportLimits,
+      negotiatedSupportsResnapshot: boolean,
+    ) =>
+      Ref.update(writerState, (current) => ({
+        ...current,
+        limits: negotiatedLimits,
+        supportsResnapshot: negotiatedSupportsResnapshot,
+      }));
+
+    return {
+      acknowledgeSnapshot,
+      enqueue,
+      flush,
+      send,
+      setNegotiatedContract,
+    } satisfies EnvironmentWebSocketWriter;
+  });
+}
+
+function enqueueMessage(
+  state: WriterState,
+  message: EnvironmentServerMessage,
+  currentSequence: number,
+): readonly [EnqueueResult, WriterState] {
+  if (
+    message._tag === "EnvironmentChanged" &&
+    state.requiredSnapshotSequence !== undefined
+  ) {
+    return [
+      { _tag: "Ignored" },
+      {
+        ...state,
+        requiredSnapshotSequence: Math.max(
+          state.requiredSnapshotSequence,
+          message.sequence,
+        ),
+      },
+    ];
+  }
+
+  const encoded = encodeMessage(message);
+  if (Buffer.byteLength(encoded) > state.limits.maxWebSocketResponseBytes) {
+    return [
+      {
+        _tag: "Rejected",
+        error: new EnvironmentWebSocketWriteError({
+          closeCode: 1009,
+          reason: "PayloadTooLarge",
+        }),
+      },
+      state,
+    ];
+  }
+
+  if (message._tag === "ResnapshotRequired" && state.queue.overflowed) {
+    return [
+      { _tag: "Enqueued" },
+      {
+        ...state,
+        queue: replaceWithResnapshotMessage(state.queue, encoded),
+        requiredSnapshotSequence: message.currentSequence,
+      },
+    ];
+  }
+
+  const overflow = encodeMessage({
+    _tag: "ResnapshotRequired",
+    currentSequence,
+    reason: "OutgoingQueueOverflow",
+  });
+  const queue = enqueueOutgoingMessage(
+    state.queue,
+    encoded,
+    overflow,
+    state.limits,
+  );
+  const overflowed = !state.queue.overflowed && queue.overflowed;
+  if (overflowed && !state.supportsResnapshot) {
+    return [
+      {
+        _tag: "Rejected",
+        error: new EnvironmentWebSocketWriteError({
+          closeCode: 1013,
+          reason: "OutgoingQueueOverflow",
+        }),
+      },
+      { ...state, queue },
+    ];
+  }
+
+  return [
+    { _tag: "Enqueued" },
+    {
+      ...state,
+      queue,
+      requiredSnapshotSequence:
+        message._tag === "ResnapshotRequired"
+          ? message.currentSequence
+          : overflowed
+            ? currentSequence
+            : state.requiredSnapshotSequence,
+    },
+  ];
+}
+
+function sendWebSocketMessage(socket: WebSocket, message: string) {
+  return Effect.callback<void, EnvironmentWebSocketWriteError>((resume) => {
+    socket.send(message, (error) => {
+      resume(
+        error == null
+          ? Effect.void
+          : Effect.fail(
+              new EnvironmentWebSocketWriteError({
+                closeCode: 1011,
+                reason: "WebSocketWriteFailed",
+              }),
+            ),
+      );
     });
-    const wasOverflowed = queue.overflowed;
-    queue = enqueueOutgoingMessage(queue, encoded, overflow, limits);
-    if (!wasOverflowed && queue.overflowed) {
-      if (!supportsResnapshot) {
-        socket.close(1013, "OutgoingQueueOverflow");
-        return;
-      }
-      requiredSnapshotSequence = overflowSequence;
-    }
-    drain();
-  };
-
-  const drain = () => {
-    if (sending || socket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    const next = dequeueOutgoingMessage(queue);
-    queue = next.queue;
-    if (next.message === undefined) {
-      return;
-    }
-
-    sending = true;
-    socket.send(next.message, (error) => {
-      sending = false;
-      if (error) {
-        socket.terminate();
-        return;
-      }
-      drain();
-    });
-  };
-
-  const acknowledgeSnapshot = (sequence: number) => {
-    if (
-      requiredSnapshotSequence !== sequence ||
-      sequence !== state.events.currentSequence() ||
-      sending ||
-      queue.messages.length > 0
-    ) {
-      return false;
-    }
-
-    queue = resetOutgoingMessageQueue();
-    requiredSnapshotSequence = undefined;
-    return true;
-  };
-
-  const setNegotiatedContract = (
-    negotiatedLimits: TransportLimits,
-    negotiatedSupportsResnapshot: boolean,
-  ) => {
-    limits = negotiatedLimits;
-    supportsResnapshot = negotiatedSupportsResnapshot;
-  };
-
-  return { acknowledgeSnapshot, send, setNegotiatedContract };
+  });
 }
 
 function encodeMessage(message: EnvironmentServerMessage) {

@@ -2,46 +2,50 @@ import {
   createCurrentEnvironmentHello,
   type EnvironmentDiscovery,
   type EnvironmentHello,
-  EnvironmentHelloResult,
-  EnvironmentHello as EnvironmentHelloSchema,
-  EnvironmentServerMessage,
-  negotiateEnvironmentHello,
   SnapshotApplied,
 } from "@rebase/contracts";
 import {
+  type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
   EnvironmentResponseError,
   environmentResponseError,
 } from "@rebase/web/state/server/environment-connection/environment-connection-errors";
 import {
   fetchEnvironmentDiscovery,
+  fetchEnvironmentDiscoveryEffect,
   fetchEnvironmentSnapshot,
-  fetchEnvironmentSnapshotWithinLimit,
+  fetchEnvironmentSnapshotWithinLimitEffect,
 } from "@rebase/web/state/server/environment-connection/http/environment-http-client";
+import {
+  createEnvironmentConnectionState,
+  type EnvironmentConnectionState,
+  terminateEnvironmentConnection,
+  updateEnvironmentSequence,
+  waitForEnvironmentSequence,
+} from "@rebase/web/state/server/environment-connection/websocket/environment-connection-state";
+import type {
+  EnvironmentProtocolConnection,
+  NegotiatedEnvironment,
+} from "@rebase/web/state/server/environment-connection/websocket/environment-protocol-connection.contract";
 import { advanceEnvironmentSequence } from "@rebase/web/state/server/environment-connection/websocket/environment-sequence";
-import { Schema } from "effect";
+import {
+  acquireEnvironmentSocket,
+  acquireEnvironmentSocketEvents,
+  decodeEnvironmentServerMessage,
+  readEnvironmentHelloResult,
+  sendEnvironmentSocketMessage,
+} from "@rebase/web/state/server/environment-connection/websocket/environment-socket";
+import { Deferred, Effect, Queue, Ref } from "effect";
 
 export {
   EnvironmentHelloRejected,
+  type EnvironmentProtocolConnection,
   EnvironmentResponseError,
   fetchEnvironmentDiscovery,
   fetchEnvironmentSnapshot,
 };
 
-type NegotiatedEnvironment = Exclude<
-  typeof EnvironmentHelloResult.Type,
-  { readonly _tag: "HelloRejected" }
->;
-
-export interface EnvironmentProtocolConnection {
-  readonly close: () => void;
-  readonly currentSequence: () => number;
-  readonly discovery: EnvironmentDiscovery;
-  readonly negotiated: NegotiatedEnvironment;
-  readonly waitForSequence: (sequence: number) => Promise<number>;
-}
-
-export async function connectCurrentEnvironment(
+export function connectCurrentEnvironment(
   origin: string,
   productVersion: string,
   options: {
@@ -49,12 +53,20 @@ export async function connectCurrentEnvironment(
     readonly signal?: AbortSignal;
   } = {},
 ) {
-  const discovery = await fetchEnvironmentDiscovery(origin, options.signal);
-  return connectEnvironment(
-    origin,
-    discovery,
-    createCurrentEnvironmentHello(productVersion, options.lastObservedSequence),
-    options.signal,
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const discovery = yield* fetchEnvironmentDiscoveryEffect(origin);
+      return yield* startEnvironmentConnection(
+        origin,
+        discovery,
+        createCurrentEnvironmentHello(
+          productVersion,
+          options.lastObservedSequence,
+        ),
+        options.signal,
+      );
+    }),
+    options.signal === undefined ? undefined : { signal: options.signal },
   );
 }
 
@@ -64,214 +76,190 @@ export function connectEnvironment(
   hello: EnvironmentHello,
   signal?: AbortSignal,
 ): Promise<EnvironmentProtocolConnection> {
-  const socketUrl = new URL(discovery.routes.live, normalizeOrigin(origin));
-  socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(socketUrl);
+  return Effect.runPromise(
+    startEnvironmentConnection(origin, discovery, hello, signal),
+    signal === undefined ? undefined : { signal },
+  );
+}
 
-  return new Promise((resolveConnection, rejectConnection) => {
-    let active = false;
-    let currentSequence = hello.lastObservedSequence ?? 0;
-    let negotiated: NegotiatedEnvironment | undefined;
-    let supportsEnvironmentEvents = false;
-    let supportsResnapshot = false;
-    let recovery: Promise<void> | undefined;
-    let messagePipeline = Promise.resolve();
-    let terminalFailure: unknown;
-    const sequenceWaiters = new Set<SequenceWaiter>();
+function startEnvironmentConnection(
+  origin: string,
+  discovery: EnvironmentDiscovery,
+  hello: EnvironmentHello,
+  externalSignal?: AbortSignal,
+) {
+  return Effect.gen(function* () {
+    const connected = yield* Deferred.make<
+      EnvironmentProtocolConnection,
+      EnvironmentConnectionFailure
+    >();
+    const state = yield* createEnvironmentConnectionState(
+      hello.lastObservedSequence ?? 0,
+    );
+    const terminalFailure = yield* Ref.make<EnvironmentConnectionFailure>(
+      environmentResponseError("WebSocket"),
+    );
+    const closeController = new AbortController();
+    const signal =
+      externalSignal === undefined
+        ? closeController.signal
+        : AbortSignal.any([externalSignal, closeController.signal]);
 
-    const fail = (error: unknown) => {
-      if (terminalFailure !== undefined) {
-        return;
-      }
-      terminalFailure = error;
-      if (!active) {
-        rejectConnection(error);
-      }
-      for (const waiter of sequenceWaiters) {
-        waiter.reject(error);
-      }
-      sequenceWaiters.clear();
-      cleanup();
-      socket.close();
-    };
-    const opened = () => {
-      const encoded = Schema.encodeSync(EnvironmentHelloSchema)(hello);
-      socket.send(JSON.stringify(encoded));
-    };
-    const received = (event: MessageEvent) => {
-      messagePipeline = messagePipeline.then(() => handleMessage(event));
-      void messagePipeline.catch(fail);
-    };
-    const handleMessage = async (event: MessageEvent) => {
-      if (typeof event.data !== "string") {
-        throw environmentResponseError("WebSocket");
-      }
+    yield* runEnvironmentConnection(
+      origin,
+      discovery,
+      hello,
+      signal,
+      closeController,
+      connected,
+      state,
+    ).pipe(
+      Effect.catch((failure) => Ref.set(terminalFailure, failure)),
+      Effect.ensuring(
+        Ref.get(terminalFailure).pipe(
+          Effect.flatMap((failure) =>
+            terminateEnvironmentConnection(connected, state, failure),
+          ),
+        ),
+      ),
+      Effect.scoped,
+      Effect.forkDetach,
+    );
 
-      const byteLimit =
-        negotiated?.limits.maxWebSocketResponseBytes ??
-        hello.receiveLimits.maxWebSocketResponseBytes;
-      if (new TextEncoder().encode(event.data).byteLength > byteLimit) {
-        throw environmentResponseError("WebSocket");
-      }
+    return yield* Deferred.await(connected);
+  });
+}
 
-      const parsed: unknown = JSON.parse(event.data);
-      if (!active) {
-        const result = Schema.decodeUnknownSync(EnvironmentHelloResult)(parsed);
-        if (result._tag === "HelloRejected") {
-          throw new EnvironmentHelloRejected({ failure: result.failure });
-        }
-        assertNegotiatedResult(discovery, hello, result);
-        active = true;
-        negotiated = result;
-        supportsEnvironmentEvents = result.capabilities.some(
-          (capability) => capability.name === "environment-events",
-        );
-        supportsResnapshot = result.capabilities.some(
-          (capability) => capability.name === "sequence-resnapshot",
-        );
-        currentSequence = supportsResnapshot
-          ? (hello.lastObservedSequence ?? result.currentSequence)
-          : result.currentSequence;
-        clearTimeout(timeout);
-        resolveConnection({
-          close: () => fail(environmentResponseError("WebSocket")),
-          currentSequence: () => currentSequence,
-          discovery,
-          negotiated: result,
-          waitForSequence,
-        });
-        return;
-      }
+function runEnvironmentConnection(
+  origin: string,
+  discovery: EnvironmentDiscovery,
+  hello: EnvironmentHello,
+  signal: AbortSignal,
+  closeController: AbortController,
+  connected: Deferred.Deferred<
+    EnvironmentProtocolConnection,
+    EnvironmentConnectionFailure
+  >,
+  state: Ref.Ref<EnvironmentConnectionState>,
+) {
+  return Effect.gen(function* () {
+    const socketUrl = new URL(discovery.routes.live, normalizeOrigin(origin));
+    socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+    const socket = yield* acquireEnvironmentSocket(socketUrl, signal);
+    const events = yield* acquireEnvironmentSocketEvents(
+      socket,
+      signal,
+      discovery,
+    );
+    const negotiated = yield* readEnvironmentHelloResult(
+      socket,
+      events,
+      hello,
+      discovery,
+    );
+    const supportsEnvironmentEvents = negotiated.capabilities.some(
+      (capability) => capability.name === "environment-events",
+    );
+    const supportsResnapshot = negotiated.capabilities.some(
+      (capability) => capability.name === "sequence-resnapshot",
+    );
+    yield* Ref.update(state, (current) => ({
+      ...current,
+      currentSequence: supportsResnapshot
+        ? (hello.lastObservedSequence ?? negotiated.currentSequence)
+        : negotiated.currentSequence,
+    }));
+    yield* Deferred.succeed(connected, {
+      close: () => closeController.abort(environmentResponseError("WebSocket")),
+      currentSequence: () => Ref.getUnsafe(state).currentSequence,
+      discovery,
+      negotiated,
+      waitForSequence: (sequence) =>
+        Effect.runPromise(waitForEnvironmentSequence(state, sequence)),
+    });
 
-      const message = Schema.decodeUnknownSync(EnvironmentServerMessage)(
-        parsed,
+    while (true) {
+      const event = yield* Queue.take(events);
+      if (event._tag !== "Message") {
+        return yield* Effect.fail(environmentResponseError("WebSocket"));
+      }
+      const message = yield* decodeEnvironmentServerMessage(
+        event.event,
+        hello,
+        negotiated,
       );
       if (message._tag === "EnvironmentChanged") {
         if (!supportsEnvironmentEvents) {
-          throw environmentResponseError("WebSocket");
+          return yield* Effect.fail(environmentResponseError("WebSocket"));
         }
         const advanced = advanceEnvironmentSequence(
-          currentSequence,
+          Ref.getUnsafe(state).currentSequence,
           message.sequence,
         );
         if (advanced._tag === "SequenceAccepted") {
-          currentSequence = advanced.sequence;
-          resolveWaiters(sequenceWaiters, currentSequence);
-        } else if (advanced._tag === "ResnapshotRequired") {
-          await recoverSnapshot(message.sequence);
-        }
-        return;
-      }
-      if (message._tag === "ResnapshotRequired") {
-        if (!supportsResnapshot) {
-          throw environmentResponseError("WebSocket");
-        }
-        await recoverSnapshot(message.currentSequence);
-        return;
-      }
-      throw environmentResponseError("WebSocket");
-    };
-    const waitForSequence = (sequence: number) => {
-      if (terminalFailure !== undefined) {
-        return Promise.reject(terminalFailure);
-      }
-      if (currentSequence >= sequence) {
-        return Promise.resolve(currentSequence);
-      }
-      return new Promise<number>((resolve, reject) => {
-        sequenceWaiters.add({ reject, resolve, sequence });
-      });
-    };
-    const recoverSnapshot = (minimumSequence: number) => {
-      const snapshotLimit = Math.min(
-        negotiated?.limits.maxHttpResponseBytes ??
-          discovery.limits.maxHttpResponseBytes,
-        hello.receiveLimits.maxHttpResponseBytes,
-      );
-      recovery ??= fetchEnvironmentSnapshotWithinLimit(
-        origin,
-        discovery,
-        snapshotLimit,
-        signal,
-      )
-        .then((snapshot) => {
-          if (snapshot.sequence < minimumSequence) {
-            throw environmentResponseError("Snapshot");
-          }
-          currentSequence = snapshot.sequence;
-          const applied: typeof SnapshotApplied.Type = {
-            _tag: "SnapshotApplied",
-            sequence: snapshot.sequence,
-          };
-          socket.send(
-            JSON.stringify(Schema.encodeSync(SnapshotApplied)(applied)),
+          yield* updateEnvironmentSequence(state, advanced.sequence);
+        } else {
+          yield* recoverEnvironmentSnapshot(
+            socket,
+            state,
+            origin,
+            discovery,
+            hello,
+            negotiated,
+            message.sequence,
+            signal,
           );
-          resolveWaiters(sequenceWaiters, currentSequence);
-        })
-        .finally(() => {
-          recovery = undefined;
-        });
-      return recovery;
-    };
-    const failed = () => fail(environmentResponseError("WebSocket"));
-    const aborted = () =>
-      fail(signal?.reason ?? new DOMException("Aborted", "AbortError"));
-    const timeout = setTimeout(
-      failed,
-      discovery.limits.helloTimeoutMilliseconds,
-    );
-    const cleanup = () => {
-      clearTimeout(timeout);
-      socket.removeEventListener("open", opened);
-      socket.removeEventListener("message", received);
-      socket.removeEventListener("error", failed);
-      socket.removeEventListener("close", failed);
-      signal?.removeEventListener("abort", aborted);
-    };
-
-    socket.addEventListener("open", opened);
-    socket.addEventListener("message", received);
-    socket.addEventListener("error", failed);
-    socket.addEventListener("close", failed);
-    signal?.addEventListener("abort", aborted, { once: true });
-    if (signal?.aborted) {
-      aborted();
+        }
+      } else if (message._tag === "ResnapshotRequired") {
+        if (!supportsResnapshot) {
+          return yield* Effect.fail(environmentResponseError("WebSocket"));
+        }
+        yield* recoverEnvironmentSnapshot(
+          socket,
+          state,
+          origin,
+          discovery,
+          hello,
+          negotiated,
+          message.currentSequence,
+          signal,
+        );
+      } else {
+        return yield* Effect.fail(environmentResponseError("WebSocket"));
+      }
     }
   });
 }
 
-interface SequenceWaiter {
-  readonly reject: (error: unknown) => void;
-  readonly resolve: (sequence: number) => void;
-  readonly sequence: number;
-}
-
-function resolveWaiters(waiters: Set<SequenceWaiter>, sequence: number) {
-  for (const waiter of waiters) {
-    if (waiter.sequence <= sequence) {
-      waiter.resolve(sequence);
-      waiters.delete(waiter);
-    }
-  }
-}
-
-function assertNegotiatedResult(
+function recoverEnvironmentSnapshot(
+  socket: WebSocket,
+  state: Ref.Ref<EnvironmentConnectionState>,
+  origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
-  result: NegotiatedEnvironment,
+  negotiated: NegotiatedEnvironment,
+  minimumSequence: number,
+  signal: AbortSignal,
 ) {
-  const expected = negotiateEnvironmentHello(
-    discovery,
-    hello,
-    result.currentSequence,
-  );
-  if (
-    expected._tag !== "HelloAccepted" ||
-    JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(expected)) !==
-      JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(result))
-  ) {
-    throw environmentResponseError("WebSocket");
-  }
+  return Effect.gen(function* () {
+    const snapshot = yield* fetchEnvironmentSnapshotWithinLimitEffect(
+      origin,
+      discovery,
+      Math.min(
+        negotiated.limits.maxHttpResponseBytes,
+        hello.receiveLimits.maxHttpResponseBytes,
+      ),
+      signal,
+    );
+    if (snapshot.sequence < minimumSequence) {
+      return yield* Effect.fail(environmentResponseError("Snapshot"));
+    }
+    yield* updateEnvironmentSequence(state, snapshot.sequence);
+    yield* sendEnvironmentSocketMessage(socket, SnapshotApplied, {
+      _tag: "SnapshotApplied",
+      sequence: snapshot.sequence,
+    });
+  });
 }
 
 function normalizeOrigin(origin: string) {

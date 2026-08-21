@@ -4,12 +4,15 @@ import {
   errorMessage,
   isFileSystemError,
 } from "@rebase/server/error-inspection";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
+import type {
+  EnvironmentTransportState,
+  RunEnvironmentEffect,
+} from "@rebase/server/features/environment-connection/environment-connection.contract";
 import { createEnvironmentHttpHandler } from "@rebase/server/features/environment-connection/http/environment-http-handler";
 import { attachEnvironmentWebSocketServer } from "@rebase/server/features/environment-connection/websocket/environment-websocket-server";
 import type { EnvironmentListenerOptions } from "@rebase/server/features/environment-server/server/environment-server.contract";
 import { EnvironmentServerStartError } from "@rebase/server/features/environment-server/server/environment-server-error.contract";
-import { Effect } from "effect";
+import { Effect, FiberSet } from "effect";
 
 const loopbackHost = "127.0.0.1";
 
@@ -26,13 +29,21 @@ export function acquireEnvironmentListener(
       ),
       events: options.events,
     };
+    const runFork = yield* FiberSet.makeRuntime<never, void, never>();
+    const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {
+      runFork(effect, signal === undefined ? undefined : { signal });
+    };
     const server = yield* Effect.acquireRelease(
-      createHttpServer(readiness, state, port),
+      createHttpServer(readiness, state, port, runEnvironmentEffect),
       (acquiredServer) =>
         Effect.promise(() => closeServer(acquiredServer)).pipe(Effect.orDie),
     );
     yield* Effect.acquireRelease(
-      Effect.sync(() => attachEnvironmentWebSocketServer(server, state)),
+      Effect.try({
+        try: () =>
+          attachEnvironmentWebSocketServer(server, state, runEnvironmentEffect),
+        catch: (cause) => environmentServerError(cause, port),
+      }),
       (webSockets) => Effect.promise(webSockets.close).pipe(Effect.orDie),
     );
     yield* listen(server, port);
@@ -52,12 +63,17 @@ function createHttpServer(
   readiness: { value: boolean },
   state: EnvironmentTransportState,
   port: number,
+  runEnvironmentEffect: RunEnvironmentEffect,
 ) {
   return Effect.try({
     try: () =>
       createServer(
         { maxHeaderSize: 16_384 },
-        createEnvironmentHttpHandler(state, () => readiness.value),
+        createEnvironmentHttpHandler(
+          state,
+          () => readiness.value,
+          runEnvironmentEffect,
+        ),
       ),
     catch: (cause) => environmentServerError(cause, port),
   });

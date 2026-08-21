@@ -1,13 +1,17 @@
 import type { Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { currentTransportLimits, environmentLivePath } from "@rebase/contracts";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
-import { startEnvironmentWebSocketSession } from "@rebase/server/features/environment-connection/websocket/environment-websocket-session";
+import type {
+  EnvironmentTransportState,
+  RunEnvironmentEffect,
+} from "@rebase/server/features/environment-connection/environment-connection.contract";
+import { runEnvironmentWebSocketSession } from "@rebase/server/features/environment-connection/websocket/environment-websocket-session";
 import { WebSocketServer } from "ws";
 
 export function attachEnvironmentWebSocketServer(
   server: Server,
   state: EnvironmentTransportState,
+  runEnvironmentEffect: RunEnvironmentEffect,
 ) {
   const webSocketServer = new WebSocketServer({
     clientTracking: true,
@@ -32,7 +36,7 @@ export function attachEnvironmentWebSocketServer(
 
   server.on("upgrade", upgrade);
   webSocketServer.on("connection", (socket) => {
-    startEnvironmentWebSocketSession(socket, state);
+    runEnvironmentEffect(runEnvironmentWebSocketSession(socket, state));
   });
 
   return {

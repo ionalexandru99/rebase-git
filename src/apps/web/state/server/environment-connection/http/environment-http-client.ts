@@ -9,34 +9,51 @@ import {
   type EnvironmentResponseError,
   environmentResponseError,
 } from "@rebase/web/state/server/environment-connection/environment-connection-errors";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
-export async function fetchEnvironmentDiscovery(
+export function fetchEnvironmentDiscovery(
   origin: string,
   signal?: AbortSignal,
 ) {
-  const response = await fetch(
-    new URL(EnvironmentHttpApi.discovery.path, normalizeOrigin(origin)),
-    { method: EnvironmentHttpApi.discovery.method, signal: signal ?? null },
-  );
-  if (!response.ok) {
-    throw environmentResponseError("Discovery");
-  }
-
-  return decodeResponse(
-    response,
-    EnvironmentDiscovery,
-    currentClientReceiveLimits.maxHttpResponseBytes,
-    "Discovery",
+  return Effect.runPromise(
+    fetchEnvironmentDiscoveryEffect(origin),
+    signal === undefined ? undefined : { signal },
   );
 }
 
-export async function fetchEnvironmentSnapshot(
+export function fetchEnvironmentDiscoveryEffect(origin: string) {
+  return Effect.gen(function* () {
+    const response = yield* fetchResponse(
+      new URL(EnvironmentHttpApi.discovery.path, normalizeOrigin(origin)),
+      EnvironmentHttpApi.discovery.method,
+      "Discovery",
+    );
+    return yield* decodeResponse(
+      response,
+      EnvironmentDiscovery,
+      currentClientReceiveLimits.maxHttpResponseBytes,
+      "Discovery",
+    );
+  });
+}
+
+export function fetchEnvironmentSnapshot(
   origin: string,
   discovery: EnvironmentDiscovery,
   signal?: AbortSignal,
 ): Promise<EnvironmentSnapshot> {
-  return fetchEnvironmentSnapshotWithinLimit(
+  return Effect.runPromise(
+    fetchEnvironmentSnapshotEffect(origin, discovery),
+    signal === undefined ? undefined : { signal },
+  );
+}
+
+export function fetchEnvironmentSnapshotEffect(
+  origin: string,
+  discovery: EnvironmentDiscovery,
+  signal?: AbortSignal,
+) {
+  return fetchEnvironmentSnapshotWithinLimitEffect(
     origin,
     discovery,
     Math.min(
@@ -47,78 +64,137 @@ export async function fetchEnvironmentSnapshot(
   );
 }
 
-export async function fetchEnvironmentSnapshotWithinLimit(
+export function fetchEnvironmentSnapshotWithinLimit(
   origin: string,
   discovery: EnvironmentDiscovery,
   maxResponseBytes: number,
   signal?: AbortSignal,
 ) {
-  const response = await fetch(
-    new URL(EnvironmentHttpApi.snapshot.path, normalizeOrigin(origin)),
-    { method: EnvironmentHttpApi.snapshot.method, signal: signal ?? null },
+  return Effect.runPromise(
+    fetchEnvironmentSnapshotWithinLimitEffect(
+      origin,
+      discovery,
+      maxResponseBytes,
+    ),
+    signal === undefined ? undefined : { signal },
   );
-  if (!response.ok) {
-    throw environmentResponseError("Snapshot");
-  }
-
-  const snapshot = await decodeResponse(
-    response,
-    EnvironmentSnapshotSchema,
-    maxResponseBytes,
-    "Snapshot",
-  );
-  if (snapshot.environmentId !== discovery.environmentId) {
-    throw environmentResponseError("Snapshot");
-  }
-  return snapshot;
 }
 
-async function decodeResponse<
-  S extends Schema.ConstraintDecoder<unknown, never>,
->(
+export function fetchEnvironmentSnapshotWithinLimitEffect(
+  origin: string,
+  discovery: EnvironmentDiscovery,
+  maxResponseBytes: number,
+  signal?: AbortSignal,
+) {
+  return Effect.gen(function* () {
+    const response = yield* fetchResponse(
+      new URL(EnvironmentHttpApi.snapshot.path, normalizeOrigin(origin)),
+      EnvironmentHttpApi.snapshot.method,
+      "Snapshot",
+      signal,
+    );
+    const snapshot = yield* decodeResponse(
+      response,
+      EnvironmentSnapshotSchema,
+      maxResponseBytes,
+      "Snapshot",
+    );
+    if (snapshot.environmentId !== discovery.environmentId) {
+      return yield* Effect.fail(environmentResponseError("Snapshot"));
+    }
+    return snapshot;
+  });
+}
+
+function fetchResponse(
+  url: URL,
+  method: string,
+  responseTag: EnvironmentResponseError["responseTag"],
+  externalSignal?: AbortSignal,
+) {
+  return Effect.tryPromise({
+    try: (effectSignal) =>
+      fetch(url, {
+        method,
+        signal:
+          externalSignal === undefined
+            ? effectSignal
+            : AbortSignal.any([effectSignal, externalSignal]),
+      }),
+    catch: () => environmentResponseError(responseTag),
+  }).pipe(
+    Effect.flatMap((response) =>
+      response.ok
+        ? Effect.succeed(response)
+        : Effect.fail(environmentResponseError(responseTag)),
+    ),
+  );
+}
+
+function decodeResponse<S extends Schema.ConstraintDecoder<unknown, never>>(
   response: Response,
   schema: S,
   byteLimit: number,
   responseTag: EnvironmentResponseError["responseTag"],
-): Promise<S["Type"]> {
-  try {
-    const encoded = await readBoundedResponse(response, byteLimit);
-    return Schema.decodeUnknownSync(schema)(JSON.parse(encoded));
-  } catch {
-    throw environmentResponseError(responseTag);
-  }
+) {
+  return Effect.scoped(readBoundedResponse(response, byteLimit)).pipe(
+    Effect.flatMap((encoded) =>
+      Effect.try({
+        try: () => Schema.decodeUnknownSync(schema)(JSON.parse(encoded)),
+        catch: () => environmentResponseError(responseTag),
+      }),
+    ),
+    Effect.mapError(() => environmentResponseError(responseTag)),
+  );
 }
 
-async function readBoundedResponse(response: Response, byteLimit: number) {
-  const declaredLength = Number(response.headers.get("content-length") ?? 0);
-  if (declaredLength > byteLimit || response.body === null) {
-    throw new Error("Response exceeds the protocol limit.");
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  while (true) {
-    const next = await reader.read();
-    if (next.done) {
-      break;
+function readBoundedResponse(response: Response, byteLimit: number) {
+  return Effect.gen(function* () {
+    const bodyStream = response.body;
+    const declaredLength = Number(response.headers.get("content-length") ?? 0);
+    if (bodyStream === null) {
+      return yield* Effect.fail(new ResponseLimitExceeded());
     }
-    byteLength += next.value.byteLength;
-    if (byteLength > byteLimit) {
-      await reader.cancel();
-      throw new Error("Response exceeds the protocol limit.");
+    if (declaredLength > byteLimit) {
+      yield* Effect.tryPromise(() => bodyStream.cancel()).pipe(Effect.ignore);
+      return yield* Effect.fail(new ResponseLimitExceeded());
     }
-    chunks.push(next.value);
-  }
 
-  const body = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(body);
+    const reader = yield* Effect.acquireRelease(
+      Effect.sync(() => bodyStream.getReader()),
+      (acquiredReader) =>
+        Effect.tryPromise(() => acquiredReader.cancel()).pipe(
+          Effect.ignore,
+          Effect.andThen(
+            Effect.try(() => acquiredReader.releaseLock()).pipe(Effect.ignore),
+          ),
+        ),
+    );
+    const chunks: Uint8Array[] = [];
+    let byteLength = 0;
+    while (true) {
+      const next = yield* Effect.tryPromise(() => reader.read());
+      if (next.done) {
+        break;
+      }
+      byteLength += next.value.byteLength;
+      if (byteLength > byteLimit) {
+        return yield* Effect.fail(new ResponseLimitExceeded());
+      }
+      chunks.push(next.value);
+    }
+
+    const body = new Uint8Array(byteLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(body);
+  });
 }
+
+class ResponseLimitExceeded extends Error {}
 
 function normalizeOrigin(origin: string) {
   return origin.endsWith("/") ? origin : `${origin}/`;

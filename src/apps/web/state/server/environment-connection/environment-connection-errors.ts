@@ -13,6 +13,10 @@ export class EnvironmentHelloRejected extends Data.TaggedError(
   readonly failure: EnvironmentTransportFailure;
 }> {}
 
+export type EnvironmentConnectionFailure =
+  | EnvironmentHelloRejected
+  | EnvironmentResponseError;
+
 export function environmentResponseError(
   responseTag: EnvironmentResponseError["responseTag"],
 ) {
