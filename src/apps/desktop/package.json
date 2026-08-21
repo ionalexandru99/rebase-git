@@ -22,8 +22,9 @@
     }
   },
   "scripts": {
-    "build": "tsc -b && pnpm bundle:preload",
+    "build": "tsc -b && pnpm bundle:preload && pnpm copy:assets",
     "bundle:preload": "esbuild preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.cjs",
+    "copy:assets": "node --input-type=module -e \"import { cpSync, rmSync } from 'node:fs'; const target = 'dist/assets'; rmSync(target, { force: true, recursive: true }); cpSync('assets', target, { recursive: true });\"",
     "start": "cross-env ELECTRON_RUN_AS_NODE= electron dist/main.js",
     "typecheck": "tsc --noEmit"
   },

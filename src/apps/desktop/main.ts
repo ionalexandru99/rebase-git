@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog } from "electron";
 import {
@@ -12,6 +13,7 @@ import type {
 import { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
 
 let desktopApplication: DesktopApplication | undefined;
+const desktopIconPath = join(app.getAppPath(), "assets", "icon.png");
 
 const host: DesktopApplicationHost = {
   platform: process.platform,
@@ -41,6 +43,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 try {
   await app.whenReady();
+  app.dock?.setIcon(desktopIconPath);
   desktopApplication = await startDesktopApplication({
     host,
     renderer: resolveRenderer(process.argv, import.meta.url),
@@ -54,6 +57,7 @@ async function openWindow(options: DesktopWindowOptions) {
   const window = new BrowserWindow({
     backgroundColor: "#000000",
     height: 800,
+    icon: desktopIconPath,
     show: false,
     webPreferences: {
       additionalArguments: [
