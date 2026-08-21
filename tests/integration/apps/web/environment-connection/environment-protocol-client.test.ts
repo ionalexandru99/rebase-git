@@ -4,6 +4,7 @@ import {
   createCurrentEnvironmentHello,
   currentTransportLimits,
 } from "@rebase/contracts";
+import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import type { EnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher.contract";
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
@@ -19,6 +20,8 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
+const credential = "test-device-credential";
+const testAuthorization = createTestAuthorization();
 const encodedSnapshot = JSON.stringify({ environmentId, sequence: 0 });
 const oversizedSnapshot = Buffer.from(
   encodedSnapshot.padEnd(currentTransportLimits.maxHttpResponseBytes + 1),
@@ -27,14 +30,16 @@ const oversizedSnapshot = Buffer.from(
 describe("browser Environment protocol client", () => {
   it("discovers, negotiates, and snapshots one Environment", async () => {
     await withListener(async (origin, events) => {
-      const connection = await connectCurrentEnvironment(origin, "0.0.0");
+      const connection = await connectCurrentEnvironment(origin, "0.0.0", {
+        credential,
+      });
       expect(connection.negotiated).toMatchObject({
         _tag: "HelloAccepted",
         environmentId,
       });
 
       await expect(
-        fetchEnvironmentSnapshot(origin, connection.discovery),
+        fetchEnvironmentSnapshot(origin, connection.discovery, credential),
       ).resolves.toEqual({ environmentId, sequence: 0 });
 
       const changed = connection.waitForSequence(1);
@@ -49,12 +54,15 @@ describe("browser Environment protocol client", () => {
 
   it("fetches a fresh snapshot after reconnecting across a sequence gap", async () => {
     await withListener(async (origin, events) => {
-      const initial = await connectCurrentEnvironment(origin, "0.0.0");
+      const initial = await connectCurrentEnvironment(origin, "0.0.0", {
+        credential,
+      });
       initial.close();
       events.publishChanged();
       events.publishChanged();
 
       const recovered = await connectCurrentEnvironment(origin, "0.0.0", {
+        credential,
         lastObservedSequence: 0,
       });
       events.publishChanged();
@@ -77,7 +85,7 @@ describe("browser Environment protocol client", () => {
       };
 
       await expect(
-        connectEnvironment(origin, discovery, incompatibleHello),
+        connectEnvironment(origin, discovery, incompatibleHello, credential),
       ).rejects.toEqual(
         new EnvironmentHelloRejected({
           failure: {
@@ -105,7 +113,12 @@ describe("browser Environment protocol client", () => {
         ],
         protocol: { major: 1, minor: 0, minimumSupportedMinor: 0 },
       };
-      const connection = await connectEnvironment(origin, discovery, hello);
+      const connection = await connectEnvironment(
+        origin,
+        discovery,
+        hello,
+        credential,
+      );
       expect(connection.currentSequence()).toBe(0);
 
       const changed = connection.waitForSequence(1);
@@ -124,10 +137,32 @@ describe("browser Environment protocol client", () => {
         environmentId,
         "0.0.0",
       );
-      await expect(fetchEnvironmentSnapshot(origin, discovery)).rejects.toEqual(
+      await expect(
+        fetchEnvironmentSnapshot(origin, discovery, credential),
+      ).rejects.toEqual(
         new EnvironmentResponseError({ responseTag: "Snapshot" }),
       );
     });
+  });
+
+  it("rejects failures that do not belong to the snapshot route", async () => {
+    await withSnapshotResponse(
+      (response) => {
+        response.writeHead(401, { "content-type": "application/json" });
+        response.end(JSON.stringify({ _tag: "InvalidPairing" }));
+      },
+      async (origin) => {
+        const discovery = createCurrentEnvironmentDiscovery(
+          environmentId,
+          "0.0.0",
+        );
+        await expect(
+          fetchEnvironmentSnapshot(origin, discovery, credential),
+        ).rejects.toEqual(
+          new EnvironmentResponseError({ responseTag: "Snapshot" }),
+        );
+      },
+    );
   });
 });
 
@@ -139,6 +174,7 @@ function withListener(
       Effect.gen(function* () {
         const events = createEnvironmentEventPublisher();
         const listener = yield* acquireEnvironmentListener({
+          authorization: testAuthorization,
           environmentId,
           events,
           productVersion: "0.0.0",
@@ -148,6 +184,36 @@ function withListener(
       }),
     ),
   );
+}
+
+function createTestAuthorization(): EnvironmentAuthorization {
+  const authorization = {
+    capabilities: ["environment.read" as const],
+    id: "00000000-0000-4000-8000-000000000002",
+    label: "Test device",
+    role: "custom" as const,
+  };
+  return {
+    authorize: () => Effect.succeed(authorization),
+    consumeTicket: () => Effect.succeed(authorization),
+    createPairing: () =>
+      Effect.succeed({
+        expiresAt: "2026-08-21T12:10:00.000Z",
+        material: "test-pairing-material-000000000000000000000",
+      }),
+    exchangePairing: () =>
+      Effect.succeed({ authorization, credential: "test-credential-material" }),
+    mintTicket: () =>
+      Effect.succeed({
+        expiresAt: "2026-08-21T12:00:30.000Z",
+        ticket: "test-ticket-material-0000000000000000000000000",
+      }),
+    revoke: (_, authorizationId) =>
+      Effect.succeed({
+        authorizationId,
+        revokedAt: "2026-08-21T12:00:00.000Z",
+      }),
+  };
 }
 
 async function withSnapshotResponse(

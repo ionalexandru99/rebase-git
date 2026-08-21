@@ -8,8 +8,8 @@ import type { EnvironmentPaths } from "#server/persistence/storage/environment-p
 import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 const busyTimeoutMilliseconds = 1_000;
-const migrationRetryDelay = "10 millis";
-const migrationRetryCount = 10;
+const databaseLockRetryDelay = "10 millis";
+const databaseLockRetryCount = 10;
 
 export function openEnvironmentDatabase(paths: EnvironmentPaths) {
   return Effect.gen(function* () {
@@ -26,7 +26,7 @@ export function openEnvironmentDatabase(paths: EnvironmentPaths) {
     return yield* Effect.gen(function* () {
       yield* storageSync("Could not open Environment state", () =>
         configureDatabase(database),
-      );
+      ).pipe(retryDatabaseLock);
       yield* migrateDatabase(database);
       yield* storageSync("Could not open Environment state", () =>
         restrictDatabasePermissions(paths.stateDatabase),
@@ -66,10 +66,16 @@ function configureDatabase(database: DatabaseSync) {
 function migrateDatabase(database: DatabaseSync) {
   return storageSync("Could not open Environment state", () =>
     migrateEnvironmentState(drizzle({ client: database })),
-  ).pipe(
+  ).pipe(retryDatabaseLock);
+}
+
+function retryDatabaseLock<Value>(
+  effect: Effect.Effect<Value, EnvironmentStorageError>,
+) {
+  return effect.pipe(
     Effect.retry({
-      schedule: Schedule.spaced(migrationRetryDelay),
-      times: migrationRetryCount,
+      schedule: Schedule.spaced(databaseLockRetryDelay),
+      times: databaseLockRetryCount,
       while: isDatabaseLocked,
     }),
   );

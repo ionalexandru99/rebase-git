@@ -6,6 +6,7 @@ import type { EnvironmentConnectionState } from "#web/features/environment-conne
 import type { EnvironmentSocketEvent } from "#web/features/environment-connection/websocket/environment-socket.contract";
 
 export interface EnvironmentLiveSession {
+  readonly credential: string;
   readonly discovery: EnvironmentDiscovery;
   readonly events: Queue.Dequeue<
     EnvironmentSocketEvent,

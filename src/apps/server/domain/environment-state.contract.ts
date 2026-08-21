@@ -1,11 +1,6 @@
-export const authorizationRoles = [
-  "reader",
-  "contributor",
-  "maintainer",
-  "owner",
-] as const;
+import type { EnvironmentAuthorizationRole } from "@rebase/contracts";
 
-export type AuthorizationRole = (typeof authorizationRoles)[number];
+export type AuthorizationRole = EnvironmentAuthorizationRole;
 
 export interface Environment {
   readonly automaticPort: number | null;

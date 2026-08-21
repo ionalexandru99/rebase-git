@@ -31,14 +31,25 @@ export function acquireEnvironmentListener(
       runFork(effect, signal === undefined ? undefined : { signal });
     };
     const server = yield* Effect.acquireRelease(
-      createHttpServer(readiness, state, port, runEnvironmentEffect),
+      createHttpServer(
+        readiness,
+        state,
+        options.authorization,
+        port,
+        runEnvironmentEffect,
+      ),
       (acquiredServer) =>
         Effect.promise(() => closeServer(acquiredServer)).pipe(Effect.orDie),
     );
     yield* Effect.acquireRelease(
       Effect.try({
         try: () =>
-          attachEnvironmentWebSocketServer(server, state, runEnvironmentEffect),
+          attachEnvironmentWebSocketServer(
+            server,
+            state,
+            options.authorization,
+            runEnvironmentEffect,
+          ),
         catch: (cause) => environmentServerError(cause, port),
       }),
       (webSockets) => Effect.promise(webSockets.close).pipe(Effect.orDie),
@@ -59,6 +70,7 @@ export function acquireEnvironmentListener(
 function createHttpServer(
   readiness: { value: boolean },
   state: EnvironmentTransportState,
+  authorization: EnvironmentListenerOptions["authorization"],
   port: number,
   runEnvironmentEffect: RunEnvironmentEffect,
 ) {
@@ -68,6 +80,7 @@ function createHttpServer(
         { maxHeaderSize: 16_384 },
         createEnvironmentHttpHandler(
           state,
+          authorization,
           () => readiness.value,
           runEnvironmentEffect,
         ),

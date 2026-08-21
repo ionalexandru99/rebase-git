@@ -1,4 +1,8 @@
 import {
+  EnvironmentGrantHttpFailure,
+  InvalidHost,
+} from "@rebase/contracts/environment-authorization/environment-authorization.contract";
+import {
   currentTransportLimits,
   TransportLimits,
 } from "@rebase/contracts/environment-connection/environment-transport-limits.contract";
@@ -47,18 +51,26 @@ export const EnvironmentHttpFailure = Schema.Union([
 
 export type EnvironmentHttpFailure = typeof EnvironmentHttpFailure.Type;
 
+export const EnvironmentDiscoveryHttpFailure = Schema.Union([
+  EnvironmentHttpFailure,
+  InvalidHost,
+]);
+
+export type EnvironmentDiscoveryHttpFailure =
+  typeof EnvironmentDiscoveryHttpFailure.Type;
+
 export const EnvironmentHttpApi = {
   discovery: {
-    failure: EnvironmentHttpFailure,
-    failureStatuses: [400, 413] as const,
+    failure: EnvironmentDiscoveryHttpFailure,
+    failureStatuses: [400, 403, 413] as const,
     method: "GET",
     path: environmentDiscoveryPath,
     success: EnvironmentDiscovery,
     successStatus: 200,
   },
   snapshot: {
-    failure: EnvironmentHttpFailure,
-    failureStatuses: [400, 413] as const,
+    failure: EnvironmentGrantHttpFailure,
+    failureStatuses: [400, 401, 403, 410, 413] as const,
     method: "GET",
     path: environmentSnapshotPath,
     success: EnvironmentSnapshot,

@@ -29,12 +29,14 @@ const generatedMigrations = readMigrationFiles({
 });
 const createEnvironmentMigration = generatedMigrations[0];
 const createActivityMigration = generatedMigrations[1];
+const createAuthorizationCapabilitiesMigration = generatedMigrations[2];
 
 if (
   createEnvironmentMigration === undefined ||
-  createActivityMigration === undefined
+  createActivityMigration === undefined ||
+  createAuthorizationCapabilitiesMigration === undefined
 ) {
-  throw new Error("Expected two generated Environment state migrations.");
+  throw new Error("Expected three generated Environment state migrations.");
 }
 
 afterEach(async () => {
@@ -119,6 +121,11 @@ describe("Environment state", () => {
         name: createActivityMigration.name,
         version: 2,
       },
+      {
+        checksum_length: 64,
+        name: createAuthorizationCapabilitiesMigration.name,
+        version: 3,
+      },
     ]);
     database.close();
 
@@ -138,11 +145,14 @@ describe("Environment state", () => {
     }
   });
 
-  it("upgrades a version-one database", async () => {
+  it("upgrades a version-two database", async () => {
     const paths = await createTemporaryPaths();
     await mkdir(paths.stateDirectory, { mode: 0o700, recursive: true });
     const database = new DatabaseSync(paths.stateDatabase);
     for (const statement of createEnvironmentMigration.sql) {
+      database.exec(statement);
+    }
+    for (const statement of createActivityMigration.sql) {
       database.exec(statement);
     }
     createMigrationHistory(database);
@@ -150,12 +160,21 @@ describe("Environment state", () => {
       database,
       generatedMigrationEntry(createEnvironmentMigration, 1),
     );
+    recordMigration(
+      database,
+      generatedMigrationEntry(createActivityMigration, 2),
+    );
     const environmentId = randomUUID();
     database
       .prepare(
         "INSERT INTO environment (singleton, id, automatic_port) VALUES (1, ?, 43123)",
       )
       .run(environmentId);
+    database
+      .prepare(
+        "INSERT INTO authorization_metadata (id, label, role, created_at) VALUES (?, ?, 'reader', ?)",
+      )
+      .run("legacy-device", "Legacy device", "2026-08-20T10:00:00.000Z");
     database.close();
 
     const state = await Effect.runPromise(
@@ -182,7 +201,16 @@ describe("Environment state", () => {
 
     expect(state).toEqual({
       automaticPort: 43123,
-      authorizations: [],
+      authorizations: [
+        {
+          createdAt: "2026-08-20T10:00:00.000Z",
+          id: "legacy-device",
+          label: "Legacy device",
+          lastSeenAt: null,
+          revokedAt: null,
+          role: "viewer",
+        },
+      ],
       environmentId,
     });
   });
@@ -204,16 +232,17 @@ describe("Environment state", () => {
     await seedMigrationHistory(newerPaths.stateDatabase, [
       generatedMigrationEntry(createEnvironmentMigration, 1),
       generatedMigrationEntry(createActivityMigration, 2),
+      generatedMigrationEntry(createAuthorizationCapabilitiesMigration, 3),
       {
         checksum: "future",
-        createdAt: createActivityMigration.folderMillis + 1,
+        createdAt: createAuthorizationCapabilitiesMigration.folderMillis + 1,
         name: "future",
-        version: 3,
+        version: 4,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 3, but this Rebase build supports version 2.",
+      "The state database is at version 4, but this Rebase build supports version 3.",
     );
   });
 
@@ -240,7 +269,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 2 });
+    ).toEqual({ version: 3 });
     database.close();
   });
 

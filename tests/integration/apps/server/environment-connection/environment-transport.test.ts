@@ -10,6 +10,7 @@ import {
   environmentLivePath,
   environmentSnapshotPath,
 } from "@rebase/contracts";
+import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import type { EnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher.contract";
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
@@ -17,6 +18,7 @@ import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
+const testAuthorization = createTestAuthorization();
 
 describe("Environment transport", () => {
   it("serves typed discovery and a bounded base snapshot", async () => {
@@ -303,6 +305,7 @@ function withListener(
       Effect.gen(function* () {
         const events = createEnvironmentEventPublisher();
         const listener = yield* acquireEnvironmentListener({
+          authorization: testAuthorization,
           environmentId,
           events,
           productVersion: "0.0.0",
@@ -317,7 +320,7 @@ function withListener(
 function openWebSocket(origin: string) {
   return new Promise<WebSocket>((resolveOpen, rejectOpen) => {
     const socket = new WebSocket(
-      `${origin.replace("http://", "ws://")}${environmentLivePath}`,
+      `${origin.replace("http://", "ws://")}${environmentLivePath}?ticket=test-ticket`,
     );
     socket.addEventListener("open", () => resolveOpen(socket), { once: true });
     socket.addEventListener(
@@ -328,6 +331,36 @@ function openWebSocket(origin: string) {
       },
     );
   });
+}
+
+function createTestAuthorization(): EnvironmentAuthorization {
+  const authorization = {
+    capabilities: ["environment.read" as const],
+    id: "00000000-0000-4000-8000-000000000002",
+    label: "Test device",
+    role: "custom" as const,
+  };
+  return {
+    authorize: () => Effect.succeed(authorization),
+    consumeTicket: () => Effect.succeed(authorization),
+    createPairing: () =>
+      Effect.succeed({
+        expiresAt: "2026-08-21T12:10:00.000Z",
+        material: "test-pairing-material-000000000000000000000",
+      }),
+    exchangePairing: () =>
+      Effect.succeed({ authorization, credential: "test-credential-material" }),
+    mintTicket: () =>
+      Effect.succeed({
+        expiresAt: "2026-08-21T12:00:30.000Z",
+        ticket: "test-ticket",
+      }),
+    revoke: (_, authorizationId) =>
+      Effect.succeed({
+        authorizationId,
+        revokedAt: "2026-08-21T12:00:00.000Z",
+      }),
+  };
 }
 
 function nextTextMessage(socket: WebSocket) {

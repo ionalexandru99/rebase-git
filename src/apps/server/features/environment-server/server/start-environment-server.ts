@@ -1,6 +1,7 @@
 import { and } from "drizzle-orm";
 import { Effect, type Scope } from "effect";
 import type { Environment } from "#server/domain/environment-state.contract";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import {
   hasNoAutomaticPort,
@@ -42,12 +43,17 @@ export function startEnvironmentServer(
     const paths = defaultEnvironmentPaths();
     const context = yield* acquireEnvironmentContext(paths);
     const environment = yield* readCurrentEnvironment(context);
+    const authorization = createEnvironmentAuthorization(
+      context,
+      context.serverSecret,
+    );
     const useAutomaticPort = options.port === undefined || options.port === 0;
     const requestedPort = useAutomaticPort
       ? (environment.automaticPort ?? 0)
       : options.port;
     const events = createEnvironmentEventPublisher();
     const listener = yield* acquireEnvironmentListener({
+      authorization,
       environmentId: environment.id,
       events,
       port: requestedPort,
@@ -59,11 +65,16 @@ export function startEnvironmentServer(
     }
 
     yield* acquireRuntimeMarker(runtimeMarker(listener), paths.runtimeMarker);
+    const pairing = yield* authorization.createPairing({
+      capabilities: [],
+      role: "owner",
+    });
     yield* markListenerReady(listener);
 
     return {
       environmentId: environment.id,
       origin: listener.origin,
+      pairingUrl: `${listener.origin}/pair#${pairing.material}`,
       port: listener.port,
     };
   });
