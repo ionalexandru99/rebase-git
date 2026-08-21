@@ -39,6 +39,7 @@ const SecretMaterial = Schema.String.check(
   Schema.isMinLength(32),
   Schema.isMaxLength(512),
 );
+const PairingCode = Schema.String.check(Schema.isPattern(/^\d{3}-\d{3}$/));
 const DeviceLabel = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(128),
@@ -60,7 +61,7 @@ export const EnvironmentPairingCreated = Schema.Struct({
 export type EnvironmentPairingCreated = typeof EnvironmentPairingCreated.Type;
 
 export const ExchangeEnvironmentPairing = Schema.Struct({
-  pairingMaterial: SecretMaterial,
+  pairingMaterial: PairingCode,
   label: DeviceLabel,
 });
 export type ExchangeEnvironmentPairing = typeof ExchangeEnvironmentPairing.Type;
