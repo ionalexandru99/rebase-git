@@ -26,7 +26,7 @@ export function openEnvironmentDatabase(paths: EnvironmentPaths) {
     return yield* Effect.gen(function* () {
       yield* storageSync("Could not open Environment state", () =>
         configureDatabase(database),
-      );
+      ).pipe(retryDatabaseLock);
       yield* migrateDatabase(database);
       yield* storageSync("Could not open Environment state", () =>
         restrictDatabasePermissions(paths.stateDatabase),
@@ -66,7 +66,13 @@ function configureDatabase(database: DatabaseSync) {
 function migrateDatabase(database: DatabaseSync) {
   return storageSync("Could not open Environment state", () =>
     migrateEnvironmentState(drizzle({ client: database })),
-  ).pipe(
+  ).pipe(retryDatabaseLock);
+}
+
+function retryDatabaseLock<Value>(
+  effect: Effect.Effect<Value, EnvironmentStorageError>,
+) {
+  return effect.pipe(
     Effect.retry({
       schedule: Schedule.spaced(migrationRetryDelay),
       times: migrationRetryCount,
