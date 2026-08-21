@@ -8,8 +8,8 @@ import type { EnvironmentPaths } from "#server/persistence/storage/environment-p
 import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 const busyTimeoutMilliseconds = 1_000;
-const migrationRetryDelay = "10 millis";
-const migrationRetryCount = 10;
+const databaseLockRetryDelay = "10 millis";
+const databaseLockRetryCount = 10;
 
 export function openEnvironmentDatabase(paths: EnvironmentPaths) {
   return Effect.gen(function* () {
@@ -74,8 +74,8 @@ function retryDatabaseLock<Value>(
 ) {
   return effect.pipe(
     Effect.retry({
-      schedule: Schedule.spaced(migrationRetryDelay),
-      times: migrationRetryCount,
+      schedule: Schedule.spaced(databaseLockRetryDelay),
+      times: databaseLockRetryCount,
       while: isDatabaseLocked,
     }),
   );
