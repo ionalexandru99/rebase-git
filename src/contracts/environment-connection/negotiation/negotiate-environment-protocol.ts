@@ -1,10 +1,10 @@
-import type { EnvironmentDiscovery } from "@rebase/contracts/environment-connection/environment-discovery.contract";
+import type { TransportLimits } from "@rebase/contracts/environment-connection/environment-transport-limits.contract";
+import type { EnvironmentDiscovery } from "@rebase/contracts/environment-connection/http/environment-discovery.contract";
+import type { EnvironmentCapability } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
 import type {
   EnvironmentHello,
   EnvironmentHelloResult,
-} from "@rebase/contracts/environment-connection/live-connection.contract";
-import type { EnvironmentCapability } from "@rebase/contracts/environment-connection/protocol.contract";
-import type { TransportLimits } from "@rebase/contracts/environment-connection/transport-limits.contract";
+} from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
 
 export function negotiateEnvironmentHello(
   discovery: EnvironmentDiscovery,

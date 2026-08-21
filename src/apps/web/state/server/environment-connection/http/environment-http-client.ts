@@ -8,7 +8,7 @@ import {
 import {
   type EnvironmentResponseError,
   environmentResponseError,
-} from "@rebase/web/state/server/environment-connection-errors";
+} from "@rebase/web/state/server/environment-connection/environment-connection-errors";
 import { Schema } from "effect";
 
 export async function fetchEnvironmentDiscovery(

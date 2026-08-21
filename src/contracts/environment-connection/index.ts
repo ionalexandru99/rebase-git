@@ -1,4 +1,10 @@
 export {
+  ClientReceiveLimits,
+  currentClientReceiveLimits,
+  currentTransportLimits,
+  TransportLimits,
+} from "@rebase/contracts/environment-connection/environment-transport-limits.contract";
+export {
   createCurrentEnvironmentDiscovery,
   EnvironmentDiscovery,
   EnvironmentHttpApi,
@@ -7,7 +13,16 @@ export {
   environmentDiscoveryPath,
   environmentLivePath,
   environmentSnapshotPath,
-} from "@rebase/contracts/environment-connection/environment-discovery.contract";
+} from "@rebase/contracts/environment-connection/http/environment-discovery.contract";
+export {
+  currentEnvironmentCapabilities,
+  currentEnvironmentProtocol,
+  EnvironmentCapabilities,
+  EnvironmentCapability,
+  ProductVersionSchema,
+  ProtocolRange,
+} from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
+export { negotiateEnvironmentHello } from "@rebase/contracts/environment-connection/negotiation/negotiate-environment-protocol";
 export {
   createCurrentEnvironmentHello,
   EnvironmentChanged,
@@ -22,19 +37,4 @@ export {
   PayloadTooLarge,
   ResnapshotRequired,
   SnapshotApplied,
-} from "@rebase/contracts/environment-connection/live-connection.contract";
-export {
-  currentEnvironmentCapabilities,
-  currentEnvironmentProtocol,
-  EnvironmentCapabilities,
-  EnvironmentCapability,
-  ProductVersionSchema,
-  ProtocolRange,
-} from "@rebase/contracts/environment-connection/protocol.contract";
-export { negotiateEnvironmentHello } from "@rebase/contracts/environment-connection/protocol-compatibility";
-export {
-  ClientReceiveLimits,
-  currentClientReceiveLimits,
-  currentTransportLimits,
-  TransportLimits,
-} from "@rebase/contracts/environment-connection/transport-limits.contract";
+} from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";

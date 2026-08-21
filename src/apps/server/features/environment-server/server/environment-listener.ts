@@ -4,9 +4,9 @@ import {
   errorMessage,
   isFileSystemError,
 } from "@rebase/server/error-inspection";
-import { createEnvironmentHttpHandler } from "@rebase/server/features/environment-connection/environment-http-handler";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-transport.contract";
-import { attachEnvironmentWebSocketServer } from "@rebase/server/features/environment-connection/environment-websocket-server";
+import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
+import { createEnvironmentHttpHandler } from "@rebase/server/features/environment-connection/http/environment-http-handler";
+import { attachEnvironmentWebSocketServer } from "@rebase/server/features/environment-connection/websocket/environment-websocket-server";
 import type { EnvironmentListenerOptions } from "@rebase/server/features/environment-server/server/environment-server.contract";
 import { EnvironmentServerStartError } from "@rebase/server/features/environment-server/server/environment-server-error.contract";
 import { Effect } from "effect";

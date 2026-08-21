@@ -1,18 +1,18 @@
 import {
-  InvalidMessage,
-  PayloadTooLarge,
-} from "@rebase/contracts/environment-connection/live-connection.contract";
+  currentTransportLimits,
+  TransportLimits,
+} from "@rebase/contracts/environment-connection/environment-transport-limits.contract";
 import {
   currentEnvironmentCapabilities,
   currentEnvironmentProtocol,
   EnvironmentCapabilities,
   ProductVersionSchema,
   ProtocolRange,
-} from "@rebase/contracts/environment-connection/protocol.contract";
+} from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
 import {
-  currentTransportLimits,
-  TransportLimits,
-} from "@rebase/contracts/environment-connection/transport-limits.contract";
+  InvalidMessage,
+  PayloadTooLarge,
+} from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
 import { Schema } from "effect";
 
 export const environmentDiscoveryPath = "/api/discovery";

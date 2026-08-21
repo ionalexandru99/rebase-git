@@ -3,14 +3,14 @@ import {
   EnvironmentServerMessage as EnvironmentServerMessageSchema,
   type TransportLimits,
 } from "@rebase/contracts";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-transport.contract";
+import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
 import {
   createOutgoingMessageQueue,
   dequeueOutgoingMessage,
   enqueueOutgoingMessage,
   replaceWithResnapshotMessage,
   resetOutgoingMessageQueue,
-} from "@rebase/server/features/environment-connection/outgoing-message-queue";
+} from "@rebase/server/features/environment-connection/websocket/outgoing-message-queue";
 import { Schema } from "effect";
 import { WebSocket } from "ws";
 

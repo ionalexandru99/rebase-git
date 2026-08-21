@@ -1,5 +1,5 @@
 import type { Environment } from "@rebase/server/domain/environment-state.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/environment-event-publisher";
+import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,

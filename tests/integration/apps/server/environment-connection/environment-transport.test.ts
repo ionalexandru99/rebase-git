@@ -10,8 +10,8 @@ import {
   environmentLivePath,
   environmentSnapshotPath,
 } from "@rebase/contracts";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/environment-event-publisher";
-import type { EnvironmentEventPublisher } from "@rebase/server/features/environment-connection/environment-event-publisher.contract";
+import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
+import type { EnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher.contract";
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
 import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";

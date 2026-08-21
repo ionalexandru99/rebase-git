@@ -6,7 +6,7 @@ import {
   EnvironmentHttpFailure,
   EnvironmentSnapshot,
 } from "@rebase/contracts";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-transport.contract";
+import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
 import { Schema } from "effect";
 
 export function createEnvironmentHttpHandler(

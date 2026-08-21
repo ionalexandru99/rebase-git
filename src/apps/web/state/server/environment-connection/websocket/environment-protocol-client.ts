@@ -12,13 +12,13 @@ import {
   EnvironmentHelloRejected,
   EnvironmentResponseError,
   environmentResponseError,
-} from "@rebase/web/state/server/environment-connection-errors";
+} from "@rebase/web/state/server/environment-connection/environment-connection-errors";
 import {
   fetchEnvironmentDiscovery,
   fetchEnvironmentSnapshot,
   fetchEnvironmentSnapshotWithinLimit,
-} from "@rebase/web/state/server/environment-http-client";
-import { advanceEnvironmentSequence } from "@rebase/web/state/server/environment-sequence";
+} from "@rebase/web/state/server/environment-connection/http/environment-http-client";
+import { advanceEnvironmentSequence } from "@rebase/web/state/server/environment-connection/websocket/environment-sequence";
 import { Schema } from "effect";
 
 export {

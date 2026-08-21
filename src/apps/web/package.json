@@ -25,29 +25,17 @@
       "import": "./dist/types/state/server/server-state-provider.js",
       "default": "./dist/types/state/server/server-state-provider.js"
     },
-    "./state/server/environment-sequence": {
-      "rebase-source": "./state/server/environment-sequence.ts",
-      "types": "./dist/types/state/server/environment-sequence.d.ts",
-      "import": "./dist/types/state/server/environment-sequence.js",
-      "default": "./dist/types/state/server/environment-sequence.js"
+    "./state/server/environment-connection": {
+      "rebase-source": "./state/server/environment-connection/index.ts",
+      "types": "./dist/types/state/server/environment-connection/index.d.ts",
+      "import": "./dist/types/state/server/environment-connection/index.js",
+      "default": "./dist/types/state/server/environment-connection/index.js"
     },
-    "./state/server/environment-connection-errors": {
-      "rebase-source": "./state/server/environment-connection-errors.ts",
-      "types": "./dist/types/state/server/environment-connection-errors.d.ts",
-      "import": "./dist/types/state/server/environment-connection-errors.js",
-      "default": "./dist/types/state/server/environment-connection-errors.js"
-    },
-    "./state/server/environment-http-client": {
-      "rebase-source": "./state/server/environment-http-client.ts",
-      "types": "./dist/types/state/server/environment-http-client.d.ts",
-      "import": "./dist/types/state/server/environment-http-client.js",
-      "default": "./dist/types/state/server/environment-http-client.js"
-    },
-    "./state/server/environment-protocol-client": {
-      "rebase-source": "./state/server/environment-protocol-client.ts",
-      "types": "./dist/types/state/server/environment-protocol-client.d.ts",
-      "import": "./dist/types/state/server/environment-protocol-client.js",
-      "default": "./dist/types/state/server/environment-protocol-client.js"
+    "./state/server/environment-connection/*": {
+      "rebase-source": "./state/server/environment-connection/*.ts",
+      "types": "./dist/types/state/server/environment-connection/*.d.ts",
+      "import": "./dist/types/state/server/environment-connection/*.js",
+      "default": "./dist/types/state/server/environment-connection/*.js"
     },
     "./components/*": {
       "rebase-source": "./components/*.tsx",

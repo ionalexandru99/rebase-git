@@ -3,8 +3,8 @@ import {
   EnvironmentHelloResult,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-transport.contract";
-import { createEnvironmentWebSocketWriter } from "@rebase/server/features/environment-connection/environment-websocket-writer";
+import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
+import { createEnvironmentWebSocketWriter } from "@rebase/server/features/environment-connection/websocket/environment-websocket-writer";
 import { Schema } from "effect";
 import type { RawData, WebSocket } from "ws";
 

@@ -2,9 +2,9 @@ import {
   createCurrentEnvironmentDiscovery,
   currentTransportLimits,
 } from "@rebase/contracts";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/environment-event-publisher";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-transport.contract";
-import { createEnvironmentWebSocketWriter } from "@rebase/server/features/environment-connection/environment-websocket-writer";
+import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
+import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
+import { createEnvironmentWebSocketWriter } from "@rebase/server/features/environment-connection/websocket/environment-websocket-writer";
 import { describe, expect, it } from "vite-plus/test";
 
 describe("Environment WebSocket writer", () => {
