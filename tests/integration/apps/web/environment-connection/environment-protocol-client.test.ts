@@ -10,6 +10,7 @@ import type { EnvironmentEventPublisher } from "@rebase/server/features/environm
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
 import {
   connectCurrentEnvironment,
+  connectCurrentEnvironmentEffect,
   connectEnvironment,
   EnvironmentHelloRejected,
   EnvironmentResponseError,
@@ -42,11 +43,16 @@ describe("browser Environment protocol client", () => {
         fetchEnvironmentSnapshot(origin, connection.discovery, credential),
       ).resolves.toEqual({ environmentId, sequence: 0 });
 
-      const changed = connection.waitForSequence(1);
+      const changed = Effect.runPromise(connection.waitForSequence(1));
       events.publishChanged();
       await expect(changed).resolves.toBe(1);
       connection.close();
-      await expect(connection.waitForSequence(2)).rejects.toEqual(
+      await expect(Effect.runPromise(connection.closed)).resolves.toEqual(
+        new EnvironmentResponseError({ responseTag: "WebSocket" }),
+      );
+      await expect(
+        Effect.runPromise(connection.waitForSequence(2)),
+      ).rejects.toEqual(
         new EnvironmentResponseError({ responseTag: "WebSocket" }),
       );
     });
@@ -66,13 +72,52 @@ describe("browser Environment protocol client", () => {
         lastObservedSequence: 0,
       });
       events.publishChanged();
-      await expect(recovered.waitForSequence(3)).resolves.toBe(3);
+      await expect(
+        Effect.runPromise(recovered.waitForSequence(3)),
+      ).resolves.toBe(3);
       expect(recovered.currentSequence()).toBe(3);
 
-      const resumed = recovered.waitForSequence(4);
+      const resumed = Effect.runPromise(recovered.waitForSequence(4));
       events.publishChanged();
       await expect(resumed).resolves.toBe(4);
       recovered.close();
+    });
+  });
+
+  it("closes an Effect connection when its scope ends", async () => {
+    await withListener(async (origin) => {
+      const closed = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const connection = yield* connectCurrentEnvironmentEffect(
+              origin,
+              "0.0.0",
+              { credential },
+            );
+            return connection.closed;
+          }),
+        ),
+      );
+
+      await expect(Effect.runPromise(closed)).resolves.toEqual(
+        new EnvironmentResponseError({ responseTag: "WebSocket" }),
+      );
+    });
+  });
+
+  it("closes a Promise connection when its signal is aborted", async () => {
+    await withListener(async (origin) => {
+      const controller = new AbortController();
+      const connection = await connectCurrentEnvironment(origin, "0.0.0", {
+        credential,
+        signal: controller.signal,
+      });
+
+      controller.abort();
+
+      await expect(Effect.runPromise(connection.closed)).resolves.toEqual(
+        new EnvironmentResponseError({ responseTag: "WebSocket" }),
+      );
     });
   });
 
@@ -121,7 +166,7 @@ describe("browser Environment protocol client", () => {
       );
       expect(connection.currentSequence()).toBe(0);
 
-      const changed = connection.waitForSequence(1);
+      const changed = Effect.runPromise(connection.waitForSequence(1));
       events.publishChanged();
       await expect(changed).resolves.toBe(1);
       connection.close();

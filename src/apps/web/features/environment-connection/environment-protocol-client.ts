@@ -50,21 +50,52 @@ export function connectCurrentEnvironment(
   },
 ) {
   return Effect.runPromise(
-    Effect.gen(function* () {
-      const discovery = yield* fetchEnvironmentDiscoveryEffect(origin);
-      return yield* startEnvironmentConnection(
-        origin,
-        discovery,
-        createCurrentEnvironmentHello(
-          productVersion,
-          options.lastObservedSequence,
-        ),
-        options.credential,
-        options.signal,
-      );
-    }),
+    openCurrentEnvironmentConnection(
+      origin,
+      productVersion,
+      options,
+      options.signal,
+    ),
     options.signal === undefined ? undefined : { signal: options.signal },
   );
+}
+
+export function connectCurrentEnvironmentEffect(
+  origin: string,
+  productVersion: string,
+  options: {
+    readonly credential: string;
+    readonly lastObservedSequence?: number;
+  },
+) {
+  return Effect.acquireRelease(
+    openCurrentEnvironmentConnection(origin, productVersion, options),
+    closeEnvironmentConnection,
+  );
+}
+
+function openCurrentEnvironmentConnection(
+  origin: string,
+  productVersion: string,
+  options: {
+    readonly credential: string;
+    readonly lastObservedSequence?: number;
+  },
+  signal?: AbortSignal,
+) {
+  return Effect.gen(function* () {
+    const discovery = yield* fetchEnvironmentDiscoveryEffect(origin);
+    return yield* startEnvironmentConnection(
+      origin,
+      discovery,
+      createCurrentEnvironmentHello(
+        productVersion,
+        options.lastObservedSequence,
+      ),
+      options.credential,
+      signal,
+    );
+  });
 }
 
 export function connectEnvironment(
@@ -75,8 +106,43 @@ export function connectEnvironment(
   signal?: AbortSignal,
 ): Promise<EnvironmentProtocolConnection> {
   return Effect.runPromise(
-    startEnvironmentConnection(origin, discovery, hello, credential, signal),
+    openEnvironmentConnection(origin, discovery, hello, credential, signal),
     signal === undefined ? undefined : { signal },
+  );
+}
+
+export function connectEnvironmentEffect(
+  origin: string,
+  discovery: EnvironmentDiscovery,
+  hello: EnvironmentHello,
+  credential: string,
+) {
+  return Effect.acquireRelease(
+    openEnvironmentConnection(origin, discovery, hello, credential),
+    closeEnvironmentConnection,
+  );
+}
+
+function openEnvironmentConnection(
+  origin: string,
+  discovery: EnvironmentDiscovery,
+  hello: EnvironmentHello,
+  credential: string,
+  signal?: AbortSignal,
+) {
+  return startEnvironmentConnection(
+    origin,
+    discovery,
+    hello,
+    credential,
+    signal,
+  );
+}
+
+function closeEnvironmentConnection(connection: EnvironmentProtocolConnection) {
+  return Effect.sync(connection.close).pipe(
+    Effect.andThen(connection.closed),
+    Effect.asVoid,
   );
 }
 
@@ -92,6 +158,7 @@ function startEnvironmentConnection(
       EnvironmentProtocolConnection,
       EnvironmentConnectionFailure
     >();
+    const closed = yield* Deferred.make<EnvironmentConnectionFailure>();
     const state = yield* createEnvironmentConnectionState(
       hello.lastObservedSequence ?? 0,
     );
@@ -112,6 +179,7 @@ function startEnvironmentConnection(
       signal,
       closeController,
       connected,
+      closed,
       state,
     ).pipe(
       Effect.catch((failure) => Ref.set(terminalFailure, failure)),
@@ -123,10 +191,17 @@ function startEnvironmentConnection(
         ),
       ),
       Effect.scoped,
+      Effect.ensuring(
+        Ref.get(terminalFailure).pipe(
+          Effect.flatMap((failure) => Deferred.succeed(closed, failure)),
+        ),
+      ),
       Effect.forkDetach,
     );
 
-    return yield* Deferred.await(connected);
+    return yield* Deferred.await(connected).pipe(
+      Effect.onInterrupt(() => Effect.sync(() => closeController.abort())),
+    );
   });
 }
 
@@ -141,6 +216,7 @@ function runEnvironmentConnection(
     EnvironmentProtocolConnection,
     EnvironmentConnectionFailure
   >,
+  closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
 ) {
   return Effect.gen(function* () {
@@ -167,6 +243,7 @@ function runEnvironmentConnection(
     yield* initializeEnvironmentSequence(state, hello, negotiated);
     yield* publishEnvironmentConnection(
       connected,
+      closed,
       state,
       discovery,
       negotiated,
@@ -207,6 +284,7 @@ function publishEnvironmentConnection(
     EnvironmentProtocolConnection,
     EnvironmentConnectionFailure
   >,
+  closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
   discovery: EnvironmentDiscovery,
   negotiated: EnvironmentProtocolConnection["negotiated"],
@@ -214,11 +292,11 @@ function publishEnvironmentConnection(
 ) {
   return Deferred.succeed(connected, {
     close: () => closeController.abort(environmentResponseError("WebSocket")),
+    closed: Deferred.await(closed),
     currentSequence: () => Ref.getUnsafe(state).currentSequence,
     discovery,
     negotiated,
-    waitForSequence: (sequence) =>
-      Effect.runPromise(waitForEnvironmentSequence(state, sequence)),
+    waitForSequence: (sequence) => waitForEnvironmentSequence(state, sequence),
   });
 }
 

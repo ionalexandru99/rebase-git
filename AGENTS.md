@@ -44,7 +44,7 @@ A user on WSl should not be required to install the electron app on windows and 
 - Treat Drizzle as the standard business-layer data API. Query the context directly and compose business specifications from persistence table mappings. Do not add repositories or column-shape abstractions.
 - Keep Drizzle table mappings, SQLite connection management, and migrations in the persistence layer. Generate schema migrations with Drizzle Kit instead of writing them by hand.
 - Keep functions readable at a glance. When a function mixes orchestration with a distinct validation, state transition, lifecycle step, handler, or database operation, extract that work into a purpose-named function so the caller reads as a sequence of steps. Use judgment instead of a line-count limit, and do not create trivial pass-through helpers.
-- Use Effect for server workflows that own resources, concurrency, or typed failures. Keep pure synchronous logic as plain TypeScript.
+- Use Effect to keep asynchronous workflows with resources, concurrency, cancellation, or typed failures consistent. Prefer plain TypeScript when it is simpler. Do not complicate a workflow or add library abstractions only to use Effect.
 - keyboard shourcuts should be implemented from day 1
 - tests are good, but we don't want to test all the scenarios, especially we don't want to test deleted code. Code is deleted, tests are deleted.
 - Do not unit test infrastructure implementation details. Use focused integration tests when an issue requires verification of critical persistence guarantees such as migrations, permissions, database pragmas, or cross-process concurrency.
