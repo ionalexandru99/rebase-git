@@ -92,6 +92,7 @@ function startEnvironmentConnection(
       EnvironmentProtocolConnection,
       EnvironmentConnectionFailure
     >();
+    const closed = yield* Deferred.make<EnvironmentConnectionFailure>();
     const state = yield* createEnvironmentConnectionState(
       hello.lastObservedSequence ?? 0,
     );
@@ -112,13 +113,16 @@ function startEnvironmentConnection(
       signal,
       closeController,
       connected,
+      closed,
       state,
     ).pipe(
       Effect.catch((failure) => Ref.set(terminalFailure, failure)),
       Effect.ensuring(
         Ref.get(terminalFailure).pipe(
           Effect.flatMap((failure) =>
-            terminateEnvironmentConnection(connected, state, failure),
+            terminateEnvironmentConnection(connected, state, failure).pipe(
+              Effect.andThen(Deferred.succeed(closed, failure)),
+            ),
           ),
         ),
       ),
@@ -141,6 +145,7 @@ function runEnvironmentConnection(
     EnvironmentProtocolConnection,
     EnvironmentConnectionFailure
   >,
+  closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
 ) {
   return Effect.gen(function* () {
@@ -167,6 +172,7 @@ function runEnvironmentConnection(
     yield* initializeEnvironmentSequence(state, hello, negotiated);
     yield* publishEnvironmentConnection(
       connected,
+      closed,
       state,
       discovery,
       negotiated,
@@ -207,6 +213,7 @@ function publishEnvironmentConnection(
     EnvironmentProtocolConnection,
     EnvironmentConnectionFailure
   >,
+  closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
   discovery: EnvironmentDiscovery,
   negotiated: EnvironmentProtocolConnection["negotiated"],
@@ -214,6 +221,7 @@ function publishEnvironmentConnection(
 ) {
   return Deferred.succeed(connected, {
     close: () => closeController.abort(environmentResponseError("WebSocket")),
+    closed: Effect.runPromise(Deferred.await(closed)),
     currentSequence: () => Ref.getUnsafe(state).currentSequence,
     discovery,
     negotiated,

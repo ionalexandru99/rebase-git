@@ -15,6 +15,9 @@ test("boots the web application into its technical shell", async ({ page }) => {
   await expect(
     page.getByRole("heading", { level: 1, name: "Rebase" }),
   ).toBeVisible();
-  await expect(page.getByText("Web client ready.")).toBeVisible();
+  await expect(page.getByText("Pairing required")).toBeVisible();
+  await expect(
+    page.getByText("Open the pairing URL printed by the local Rebase process."),
+  ).toBeVisible();
   expect(browserErrors).toEqual([]);
 });

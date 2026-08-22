@@ -46,6 +46,9 @@ describe("browser Environment protocol client", () => {
       events.publishChanged();
       await expect(changed).resolves.toBe(1);
       connection.close();
+      await expect(connection.closed).resolves.toEqual(
+        new EnvironmentResponseError({ responseTag: "WebSocket" }),
+      );
       await expect(connection.waitForSequence(2)).rejects.toEqual(
         new EnvironmentResponseError({ responseTag: "WebSocket" }),
       );

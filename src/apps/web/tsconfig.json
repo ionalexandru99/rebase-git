@@ -9,7 +9,7 @@
     "tsBuildInfoFile": "./dist/types/tsconfig.tsbuildinfo",
     "types": ["vite/client"]
   },
-  "include": ["./**/*.ts", "./**/*.tsx"],
+  "include": ["./**/*.ts", "./**/*.tsx", "./package.json"],
   "exclude": ["./dist"],
   "references": [{ "path": "../../contracts" }]
 }
