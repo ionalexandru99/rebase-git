@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "tsc -b && pnpm --filter @rebase/server prepare:dist && pnpm --filter @rebase/desktop bundle:preload && pnpm --filter @rebase/desktop copy:assets && pnpm build:web",
-    "build:desktop-package": "node packaging/build-desktop.ts",
+    "build:desktop-package": "pnpm build:web && node packaging/build-desktop.ts",
     "build:package": "tsc -b src/contracts src/apps/server && node packaging/build.ts",
     "build:web": "pnpm --filter @rebase/web build:web",
     "check": "biome check .",

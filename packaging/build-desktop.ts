@@ -1,9 +1,6 @@
-import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
-import { promisify } from "node:util";
 import { build } from "esbuild";
 
-const execute = promisify(execFile);
 const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
   readonly version: string;
 };
@@ -11,17 +8,6 @@ const outputDirectory = "src/apps/desktop/dist/package";
 const productVersion = process.env.RELEASE_VERSION ?? packageMetadata.version;
 
 await rm(outputDirectory, { force: true, recursive: true });
-await execute(
-  process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-  ["--filter", "@rebase/web", "build:web"],
-  {
-    env: {
-      ...process.env,
-      REBASE_PRODUCT_VERSION: productVersion,
-    },
-  },
-);
-
 await mkdir(outputDirectory, { recursive: true });
 await Promise.all([
   cp("src/apps/desktop/assets", `${outputDirectory}/assets`, {
