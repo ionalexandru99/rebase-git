@@ -41,7 +41,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-try {
+void start().catch(reportStartupFailure);
+
+async function start() {
   await app.whenReady();
   app.dock?.setIcon(desktopIconPath);
   desktopApplication = await startDesktopApplication({
@@ -49,8 +51,6 @@ try {
     renderer: resolveRenderer(process.argv, import.meta.url),
     startEnvironment: startManagedEnvironmentServer,
   });
-} catch (error) {
-  reportStartupFailure(error);
 }
 
 async function openWindow(options: DesktopWindowOptions) {
