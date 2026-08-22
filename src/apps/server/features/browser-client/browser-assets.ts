@@ -17,7 +17,9 @@ export function respondWithBrowserAsset(
   assetsRoot: string,
 ) {
   const asset = resolveBrowserAsset(request.url, assetsRoot);
-  if (asset === undefined) return Effect.succeed(false);
+  if (asset === undefined) {
+    return Effect.succeed(false);
+  }
 
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { allow: "GET, HEAD" }).end();
@@ -33,14 +35,17 @@ export function respondWithBrowserAsset(
       );
       response.end(request.method === "HEAD" ? undefined : content);
     } catch (error) {
-      const status = isMissingFile(error) ? 404 : 500;
+      const status = isMissingAsset(error) ? 404 : 500;
       response.writeHead(status).end();
     }
     return true;
   });
 }
 
-function resolveBrowserAsset(url: string | undefined, assetsRoot: string) {
+export function resolveBrowserAsset(
+  url: string | undefined,
+  assetsRoot: string,
+) {
   let pathname: string;
   try {
     pathname = decodeURIComponent(
@@ -51,7 +56,9 @@ function resolveBrowserAsset(url: string | undefined, assetsRoot: string) {
   }
 
   const relativePath = browserAssetPath(pathname);
-  if (relativePath === undefined) return undefined;
+  if (relativePath === undefined) {
+    return undefined;
+  }
 
   const path = resolve(assetsRoot, relativePath);
   const pathFromRoot = relative(resolve(assetsRoot), path);
@@ -67,11 +74,14 @@ function resolveBrowserAsset(url: string | undefined, assetsRoot: string) {
   };
 }
 
-function browserAssetPath(pathname: string) {
+export function browserAssetPath(pathname: string) {
   if (pathname === "/" || pathname === "/pair" || pathname === "/pair/") {
     return "index.html";
   }
-  if (pathname === "/favicon.svg" || pathname.startsWith("/assets/")) {
+  if (
+    pathname === "/favicon.svg" ||
+    (pathname.startsWith("/assets/") && pathname !== "/assets/")
+  ) {
     return pathname.slice(1);
   }
   return undefined;
@@ -87,11 +97,11 @@ function browserAssetHeaders(extension: string, cache: boolean) {
   };
 }
 
-function isMissingFile(error: unknown) {
+function isMissingAsset(error: unknown) {
   return (
     error !== null &&
     typeof error === "object" &&
     "code" in error &&
-    error.code === "ENOENT"
+    (error.code === "ENOENT" || error.code === "EISDIR")
   );
 }

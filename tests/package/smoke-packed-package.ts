@@ -1,5 +1,5 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import process from "node:process";
@@ -16,6 +16,7 @@ const artifact = await findArtifact(resolve(process.argv[2] ?? "."));
 const temporaryRoot = await mkdtemp(join(tmpdir(), "rebase-package-"));
 const installRoot = join(temporaryRoot, "install");
 const homeRoot = join(temporaryRoot, "home");
+await mkdir(homeRoot);
 
 try {
   await run(
@@ -57,7 +58,9 @@ try {
 }
 
 async function findArtifact(path: string) {
-  if ((await stat(path)).isFile()) return path;
+  if ((await stat(path)).isFile()) {
+    return path;
+  }
 
   const artifacts = (await readdir(path))
     .filter((name) => /^rebase-git-.*\.tgz$/.test(name))
@@ -108,7 +111,18 @@ async function verifyPackageContents(packageRoot: string) {
       readFile(join(packageRoot, "dist", file), "utf8"),
     ),
   );
-  if (executables.some((executable) => executable.includes(process.cwd()))) {
+  const workspacePaths = [
+    process.cwd(),
+    process.cwd().replaceAll("\\", "/"),
+    process.cwd().replaceAll("\\", "\\\\"),
+  ];
+  if (
+    executables.some((executable) =>
+      workspacePaths.some((workspacePath) =>
+        executable.includes(workspacePath),
+      ),
+    )
+  ) {
     throw new Error("The executable contains the source workspace path.");
   }
 }
@@ -219,7 +233,9 @@ async function stopServer(child: RunningProcess, home: string) {
     }
     process.kill(marker.pid, "SIGTERM");
   } catch (error) {
-    if (child.exitCode === null) child.kill("SIGTERM");
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+    }
     if (
       !(
         error &&

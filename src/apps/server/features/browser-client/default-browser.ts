@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { release } from "node:os";
 
 export function openDefaultBrowser(url: string) {
-  if (process.env.BROWSER === "none") return;
+  if (process.env.BROWSER === "none") {
+    return;
+  }
 
   try {
     const invocation = browserInvocation(url);

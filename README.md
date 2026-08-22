@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="src/apps/desktop/assets/icon.png" alt="" width="128" height="128">
+  <img src="https://raw.githubusercontent.com/ionalexandru99/rebase-git/main/src/apps/desktop/assets/icon.png" alt="" width="128" height="128">
   <h1>Rebase</h1>
   <p><strong>A fast local Git client for macOS, Windows, and Linux.</strong></p>
 </div>

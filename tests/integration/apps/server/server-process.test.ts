@@ -255,6 +255,7 @@ function startCli(
     {
       env: {
         ...inheritedEnvironment,
+        BROWSER: "none",
         HOME: homeDirectory,
         USERPROFILE: homeDirectory,
         ...environment,
