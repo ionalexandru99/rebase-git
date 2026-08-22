@@ -386,6 +386,7 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Smoke-test clean registry installation
+        shell: bash
         env:
           RELEASE_VERSION: ${{ needs.package.outputs.version }}
         run: node tests/package/smoke-packed-package.ts "npm:rebase-git@$RELEASE_VERSION"
