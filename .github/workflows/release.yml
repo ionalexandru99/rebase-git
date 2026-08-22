@@ -29,6 +29,9 @@ jobs:
     name: Build package
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
     outputs:
       artifact: ${{ steps.release.outputs.artifact }}
       channel: ${{ steps.request.outputs.channel }}
@@ -61,6 +64,7 @@ jobs:
         shell: bash
         env:
           CHANNEL: ${{ inputs.channel }}
+          GH_TOKEN: ${{ github.token }}
           PUBLISH: ${{ inputs.publish }}
           RELEASE_SHA: ${{ github.sha }}
           RUN_NUMBER: ${{ github.run_number }}
@@ -73,12 +77,14 @@ jobs:
           fi
 
           if [[ "$PUBLISH" == "true" && "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "Stable releases must run from main. Current ref: $GITHUB_REF" >&2
+            echo "Published releases must run from main. Current ref: $GITHUB_REF" >&2
             exit 1
           fi
 
           if [[ "$CHANNEL" == "nightly" ]]; then
-            version="$base_version-nightly.$(date -u +%Y%m%d).$RUN_NUMBER"
+            created_at=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+            run_date="${created_at%%T*}"
+            version="$base_version-nightly.${run_date//-/}.$RUN_NUMBER"
             dist_tag="nightly"
             name="Rebase Nightly $version (${RELEASE_SHA:0:12})"
             prerelease="true"
@@ -271,7 +277,9 @@ jobs:
         if: steps.registry.outputs.publish == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish "package-artifact/${{ needs.package.outputs.artifact }}" --access public --provenance --tag "${{ needs.package.outputs.dist_tag }}"
+          NPM_TAG: ${{ needs.package.outputs.dist_tag }}
+          RELEASE_ARTIFACT: ${{ needs.package.outputs.artifact }}
+        run: npm publish "package-artifact/$RELEASE_ARTIFACT" --access public --provenance --tag "$NPM_TAG"
 
       - name: Verify npm metadata
         shell: bash
@@ -340,7 +348,7 @@ jobs:
           RELEASE_TAG: ${{ needs.package.outputs.tag }}
         run: |
           tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)
-          release=$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease,tagName --jq '[.tagName, .isDraft, .isPrerelease] | @tsv')
+          release=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,tagName --jq '[.tagName, .isDraft, .isPrerelease] | @tsv')
           if [[ "$tag_sha" != "$EXPECTED_SHA" ]]; then
             echo "Git tag $RELEASE_TAG resolves to $tag_sha instead of $EXPECTED_SHA." >&2
             exit 1
@@ -378,4 +386,6 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Smoke-test clean registry installation
-        run: node tests/package/smoke-packed-package.ts "npm:rebase-git@${{ needs.package.outputs.version }}"
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: node tests/package/smoke-packed-package.ts "npm:rebase-git@$RELEASE_VERSION"
