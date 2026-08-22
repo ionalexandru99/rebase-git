@@ -12,7 +12,7 @@ interface CommandOutput {
   readonly stdout: string;
 }
 
-const artifact = await findArtifact(resolve(process.argv[2] ?? "."));
+const installSource = await resolveInstallSource(process.argv[2] ?? ".");
 const temporaryRoot = await mkdtemp(join(tmpdir(), "rebase-package-"));
 const installRoot = join(temporaryRoot, "install");
 const homeRoot = join(temporaryRoot, "home");
@@ -28,14 +28,14 @@ try {
       "--no-fund",
       "--prefix",
       installRoot,
-      artifact,
+      installSource,
     ],
     temporaryRoot,
   );
 
   const packageRoot = join(installRoot, "node_modules", "rebase-git");
   await verifyPackageContents(packageRoot);
-  await verifyVersionCommands(installRoot);
+  await verifyVersionCommands(installRoot, packageRoot);
   await verifyServer(
     npxCommand(),
     ["--offline", "--no-install", "rebase-git"],
@@ -55,6 +55,13 @@ try {
   );
 } finally {
   await rm(temporaryRoot, { force: true, recursive: true });
+}
+
+async function resolveInstallSource(source: string) {
+  if (source.startsWith("npm:")) {
+    return source.slice("npm:".length);
+  }
+  return findArtifact(resolve(source));
 }
 
 async function findArtifact(path: string) {
@@ -127,13 +134,16 @@ async function verifyPackageContents(packageRoot: string) {
   }
 }
 
-async function verifyVersionCommands(installRoot: string) {
+async function verifyVersionCommands(installRoot: string, packageRoot: string) {
+  const packageMetadata = JSON.parse(
+    await readFile(join(packageRoot, "package.json"), "utf8"),
+  ) as { readonly version: string };
   const npxVersion = await run(
     npxCommand(),
     ["--offline", "--no-install", "rebase-git", "--version"],
     installRoot,
   );
-  assertVersionOutput(npxVersion.stdout);
+  assertVersionOutput(npxVersion.stdout, packageMetadata.version);
 
   const cliPath = join(
     installRoot,
@@ -147,11 +157,11 @@ async function verifyVersionCommands(installRoot: string) {
     [cliPath, "--version"],
     installRoot,
   );
-  assertVersionOutput(installedVersion.stdout);
+  assertVersionOutput(installedVersion.stdout, packageMetadata.version);
 }
 
-function assertVersionOutput(output: string) {
-  if (!/^Rebase \d+\.\d+\.\d+(?:-[^\s]+)?$/m.test(output)) {
+function assertVersionOutput(output: string, expectedVersion: string) {
+  if (!output.split(/\r?\n/).includes(`Rebase ${expectedVersion}`)) {
     throw new Error(`The product version is missing from:\n${output}`);
   }
   if (!/^Environment protocol \d+\.\d+ \(minimum \d+\.\d+\)$/m.test(output)) {
