@@ -42,6 +42,7 @@ describe("rebase serve", () => {
       const response = await fetch(`${origin}/health`);
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ status: "ready" });
+      await verifyBrowserAssets(origin);
 
       const discoveryResponse = await fetch(`${origin}/api/discovery`);
       const discovery = Schema.decodeUnknownSync(EnvironmentDiscovery)(
@@ -194,6 +195,45 @@ function readEnvironmentState(path: string) {
     .get();
   database.close();
   return environment;
+}
+
+async function verifyBrowserAssets(origin: string) {
+  const entryResponse = await fetch(`${origin}/pair`);
+  expect(entryResponse.status).toBe(200);
+  expect(entryResponse.headers.get("cache-control")).toBe("no-store");
+  expect(entryResponse.headers.get("content-type")).toBe(
+    "text/html; charset=utf-8",
+  );
+
+  const entry = await entryResponse.text();
+  const assetReference = entry.match(
+    /(?:href|src)="([^"]*assets\/[^"]+)"/,
+  )?.[1];
+  if (assetReference === undefined) {
+    throw new Error("Expected the browser entry point to reference an asset.");
+  }
+
+  const assetResponse = await fetch(
+    new URL(assetReference, `${origin}/pair`).href,
+  );
+  expect(assetResponse.status).toBe(200);
+  expect(assetResponse.headers.get("cache-control")).toBe(
+    "public, max-age=31536000, immutable",
+  );
+
+  const headResponse = await fetch(`${origin}/pair`, { method: "HEAD" });
+  expect(headResponse.status).toBe(200);
+  await expect(headResponse.text()).resolves.toBe("");
+
+  const rejectedMethodResponse = await fetch(`${origin}/pair`, {
+    method: "POST",
+  });
+  expect(rejectedMethodResponse.status).toBe(405);
+  expect(rejectedMethodResponse.headers.get("allow")).toBe("GET, HEAD");
+
+  expect((await fetch(`${origin}/favicon.svg`)).status).toBe(200);
+  expect((await fetch(`${origin}/assets/missing.js`)).status).toBe(404);
+  expect((await fetch(`${origin}/assets/`)).status).toBe(404);
 }
 
 async function findAvailablePort() {
