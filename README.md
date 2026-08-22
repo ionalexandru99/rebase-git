@@ -52,36 +52,6 @@ pnpm dev:electron
 
 Every other command lives in `package.json`.
 
-## Release the local package
-
-The next local package version is `0.0.2`. The `Release local package` GitHub Actions workflow reads
-the `MAJOR.MINOR.PATCH` version committed in `package.json`. A nightly publishes
-`0.0.2-nightly.YYYYMMDD.RUN` under npm's `nightly` tag and creates a matching GitHub prerelease. A
-stable release publishes `0.0.2` under npm's `latest` tag and creates `v0.0.2` as the latest GitHub
-release. Nightly notes compare with the previous nightly. Stable notes always compare with the
-previous stable, so intervening nightlies do not shorten the stable changelog. Publishing only runs
-from `main`. Published versions and tags are immutable.
-
-Add one Actions repository secret before the first release:
-
-- `NPM_TOKEN`: a granular npm access token with read/write access to all packages and bypass 2FA
-  enabled. All-packages access is needed for the first publish because `rebase-git` does not exist in
-  npm yet. Use the shortest practical expiration and replace this token with npm trusted publishing
-  after the package exists.
-
-The workflow uses GitHub's OIDC identity to attach npm provenance. `GITHUB_TOKEN` creates the tag and
-release, so it does not need another repository secret.
-
-Select the `nightly` or `stable` channel and run the workflow with `publish` disabled first. This
-builds, packs, and smoke-tests the resolved version on Linux, macOS, and Windows without changing npm
-or GitHub. Run the same channel again with `publish` enabled from `main` after the dry run passes.
-Bump `package.json` in a reviewed commit before starting the next release line.
-
-The npm publish job finishes before the GitHub release job. If a later job fails, use GitHub's
-`Re-run failed jobs` action on the same workflow run. A retry only accepts an existing npm version
-when its integrity matches the artifact saved by that run. If npm does not contain the version, rerun
-the workflow. Never change or delete an existing npm version or Git tag to recover a release.
-
 ## Contributing
 
 Issues and pull requests are welcome in
