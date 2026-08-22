@@ -1,8 +1,9 @@
+import { Effect, Fiber, Result } from "effect";
 import {
   EnvironmentAuthorizationRejected,
+  type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
 } from "#web/features/environment-connection/environment-connection-errors";
-import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import type {
   LocalEnvironmentSession,
   LocalEnvironmentSessionOptions,
@@ -18,29 +19,23 @@ export function createLocalEnvironmentSession(
     pairingMaterial === undefined
       ? { _tag: "PairingRequired" }
       : { _tag: "Authorizing" };
-  let runId = 0;
-  let running = false;
   let credential: string | undefined;
-  let activeConnection: EnvironmentProtocolConnection | undefined;
-  let controller: AbortController | undefined;
+  let fiber: Fiber.Fiber<void, never> | undefined;
+  let running = false;
 
-  const publish = (next: LocalEnvironmentSessionState) => {
-    state = next;
-    for (const listener of listeners) listener();
-  };
+  const publish: PublishState = (next) =>
+    Effect.sync(() => {
+      state = next;
+      for (const listener of listeners) listener();
+    });
 
-  const isCurrentRun = (currentRunId: number) =>
-    running && currentRunId === runId;
-
-  const stop = () => {
-    if (!running) return;
-    running = false;
-    runId += 1;
-    controller?.abort();
-    controller = undefined;
-    activeConnection?.close();
-    activeConnection = undefined;
-  };
+  const runSession = Effect.gen(function* () {
+    if (credential === undefined) {
+      if (pairingMaterial === undefined) return;
+      credential = yield* exchangePairing(options, pairingMaterial, publish);
+    }
+    yield* maintainConnection(options, credential, publish);
+  });
 
   const start = () => {
     if (
@@ -51,93 +46,24 @@ export function createLocalEnvironmentSession(
     }
 
     running = true;
-    const currentRunId = ++runId;
-    controller = new AbortController();
-    void runSession(currentRunId, controller.signal).catch(() => undefined);
+    fiber = Effect.runFork(
+      runSession.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            running = false;
+            fiber = undefined;
+          }),
+        ),
+      ),
+    );
   };
 
-  const runSession = async (currentRunId: number, signal: AbortSignal) => {
-    if (credential === undefined) {
-      if (pairingMaterial === undefined) return;
-      publish({ _tag: "Authorizing" });
-      try {
-        const exchanged = await options.gateway.exchangePairing(
-          pairingMaterial,
-          signal,
-        );
-        if (!isCurrentRun(currentRunId)) return;
-        credential = exchanged.credential;
-        options.pairingSucceeded?.();
-      } catch (failure) {
-        if (!isCurrentRun(currentRunId)) return;
-        const terminal = terminalState(failure);
-        if (terminal !== undefined) {
-          publish(terminal);
-          running = false;
-          return;
-        }
-        await reconnectAfter(currentRunId, signal, 1);
-        if (isCurrentRun(currentRunId)) {
-          void runSession(currentRunId, signal);
-        }
-        return;
-      }
+  const stop = () => {
+    if (!running) return;
+    const activeFiber = fiber;
+    if (activeFiber !== undefined) {
+      Effect.runFork(Fiber.interrupt(activeFiber));
     }
-
-    let reconnectAttempt = 0;
-    let lastObservedSequence: number | undefined;
-    while (isCurrentRun(currentRunId)) {
-      publish(
-        reconnectAttempt === 0
-          ? { _tag: "Connecting" }
-          : { _tag: "Reconnecting", attempt: reconnectAttempt },
-      );
-
-      try {
-        const connection = await options.gateway.connect(
-          credential,
-          lastObservedSequence,
-          signal,
-        );
-        if (!isCurrentRun(currentRunId)) {
-          connection.close();
-          return;
-        }
-
-        activeConnection = connection;
-        reconnectAttempt = 0;
-        publish({
-          _tag: "Connected",
-          environmentId: connection.negotiated.environmentId,
-        });
-        const failure = await connection.closed;
-        lastObservedSequence = connection.currentSequence();
-        activeConnection = undefined;
-        if (!isCurrentRun(currentRunId)) return;
-        throw failure;
-      } catch (failure) {
-        if (!isCurrentRun(currentRunId)) return;
-        const terminal = terminalState(failure);
-        if (terminal !== undefined) {
-          publish(terminal);
-          running = false;
-          return;
-        }
-      }
-
-      reconnectAttempt += 1;
-      await reconnectAfter(currentRunId, signal, reconnectAttempt);
-    }
-  };
-
-  const reconnectAfter = async (
-    currentRunId: number,
-    signal: AbortSignal,
-    attempt: number,
-  ) => {
-    publish({ _tag: "Reconnecting", attempt });
-    await (options.waitBeforeReconnect ?? waitBeforeReconnect)(attempt, signal);
-    if (!isCurrentRun(currentRunId)) return;
   };
 
   return {
@@ -151,8 +77,102 @@ export function createLocalEnvironmentSession(
   };
 }
 
+function exchangePairing(
+  options: LocalEnvironmentSessionOptions,
+  pairingMaterial: string,
+  publish: PublishState,
+): Effect.Effect<string> {
+  return Effect.gen(function* () {
+    let attempt = 0;
+    while (true) {
+      yield* attempt === 0
+        ? publish({ _tag: "Authorizing" })
+        : reconnectAfter(options, publish, attempt);
+      const exchanged = yield* Effect.result(
+        options.gateway.exchangePairing(pairingMaterial),
+      );
+      if (Result.isSuccess(exchanged)) {
+        options.pairingSucceeded?.();
+        return exchanged.success.credential;
+      }
+
+      const terminal = terminalState(exchanged.failure);
+      if (terminal !== undefined) {
+        yield* publish(terminal);
+        return yield* Effect.interrupt;
+      }
+      attempt += 1;
+    }
+  });
+}
+
+function maintainConnection(
+  options: LocalEnvironmentSessionOptions,
+  credential: string,
+  publish: PublishState,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    let attempt = 0;
+    let lastObservedSequence: number | undefined;
+    while (true) {
+      yield* attempt === 0
+        ? publish({ _tag: "Connecting" })
+        : reconnectAfter(options, publish, attempt);
+      const connection = yield* Effect.result(
+        Effect.scoped(
+          options.gateway.connect(credential, lastObservedSequence).pipe(
+            Effect.flatMap((active) =>
+              publish({
+                _tag: "Connected",
+                environmentId: active.negotiated.environmentId,
+              }).pipe(
+                Effect.andThen(
+                  active.closed.pipe(
+                    Effect.map((failure) => ({
+                      failure,
+                      lastObservedSequence: active.currentSequence(),
+                    })),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      const failure = Result.isFailure(connection)
+        ? connection.failure
+        : connection.success.failure;
+      const terminal = terminalState(failure);
+      if (terminal !== undefined) {
+        yield* publish(terminal);
+        return yield* Effect.interrupt;
+      }
+
+      if (Result.isSuccess(connection)) {
+        lastObservedSequence = connection.success.lastObservedSequence;
+        attempt = 1;
+      } else {
+        attempt += 1;
+      }
+    }
+  });
+}
+
+function reconnectAfter(
+  options: LocalEnvironmentSessionOptions,
+  publish: PublishState,
+  attempt: number,
+) {
+  const delay = Math.min(250 * 2 ** (attempt - 1), 5_000);
+  return publish({ _tag: "Reconnecting", attempt }).pipe(
+    Effect.andThen(
+      options.waitBeforeReconnect?.(attempt) ?? Effect.sleep(delay),
+    ),
+  );
+}
+
 function terminalState(
-  failure: unknown,
+  failure: EnvironmentConnectionFailure,
 ): LocalEnvironmentSessionState | undefined {
   if (failure instanceof EnvironmentAuthorizationRejected) {
     return { _tag: "AuthorizationFailed", failure };
@@ -176,15 +196,6 @@ function protocolMismatchMessage(failure: EnvironmentHelloRejected) {
   return "This browser client cannot use the local Rebase protocol. Reload the page, then update the local package if the mismatch remains.";
 }
 
-function waitBeforeReconnect(attempt: number, signal: AbortSignal) {
-  const delay = Math.min(250 * 2 ** (attempt - 1), 5_000);
-  return new Promise<void>((resolve) => {
-    const finish = () => {
-      window.clearTimeout(timeout);
-      signal.removeEventListener("abort", finish);
-      resolve();
-    };
-    const timeout = window.setTimeout(finish, delay);
-    signal.addEventListener("abort", finish, { once: true });
-  });
-}
+type PublishState = (
+  state: LocalEnvironmentSessionState,
+) => Effect.Effect<void>;

@@ -128,28 +128,35 @@ export function exchangeEnvironmentPairing(
   signal?: AbortSignal,
 ) {
   return Effect.runPromise(
-    Effect.gen(function* () {
-      const response = yield* fetchResponse(
-        new URL(
-          EnvironmentAuthorizationHttpApi.exchangePairing.path,
-          normalizeOrigin(origin),
-        ),
-        EnvironmentAuthorizationHttpApi.exchangePairing.method,
-        "Authorization",
-        signal,
-        { "content-type": "application/json" },
-        JSON.stringify(Schema.encodeSync(ExchangeEnvironmentPairing)(exchange)),
-      );
-      return yield* decodeResponse(
-        response,
-        EnvironmentPairingExchanged,
-        EnvironmentAuthorizationHttpApi.exchangePairing.failure,
-        currentClientReceiveLimits.maxHttpResponseBytes,
-        "Authorization",
-      );
-    }),
+    exchangeEnvironmentPairingEffect(origin, exchange),
     signal === undefined ? undefined : { signal },
   );
+}
+
+export function exchangeEnvironmentPairingEffect(
+  origin: string,
+  exchange: typeof ExchangeEnvironmentPairing.Type,
+) {
+  return Effect.gen(function* () {
+    const response = yield* fetchResponse(
+      new URL(
+        EnvironmentAuthorizationHttpApi.exchangePairing.path,
+        normalizeOrigin(origin),
+      ),
+      EnvironmentAuthorizationHttpApi.exchangePairing.method,
+      "Authorization",
+      undefined,
+      { "content-type": "application/json" },
+      JSON.stringify(Schema.encodeSync(ExchangeEnvironmentPairing)(exchange)),
+    );
+    return yield* decodeResponse(
+      response,
+      EnvironmentPairingExchanged,
+      EnvironmentAuthorizationHttpApi.exchangePairing.failure,
+      currentClientReceiveLimits.maxHttpResponseBytes,
+      "Authorization",
+    );
+  });
 }
 
 export function mintEnvironmentWebSocketTicketEffect(

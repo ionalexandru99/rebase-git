@@ -1,6 +1,6 @@
 import {
-  connectCurrentEnvironment,
-  exchangeEnvironmentPairing,
+  connectCurrentEnvironmentEffect,
+  exchangeEnvironmentPairingEffect,
 } from "#web/features/environment-connection/index";
 import { createLocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session";
 import type { LocalEnvironmentGateway } from "#web/features/local-environment-session/local-environment-session.contract";
@@ -9,18 +9,16 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
   const origin = window.location.origin;
   const pairingMaterial = readPairingMaterial(window.location);
   const gateway: LocalEnvironmentGateway = {
-    connect: (credential, lastObservedSequence, signal) =>
-      connectCurrentEnvironment(origin, productVersion, {
+    connect: (credential, lastObservedSequence) =>
+      connectCurrentEnvironmentEffect(origin, productVersion, {
         credential,
         ...(lastObservedSequence === undefined ? {} : { lastObservedSequence }),
-        signal,
       }),
-    exchangePairing: (material, signal) =>
-      exchangeEnvironmentPairing(
-        origin,
-        { label: "Rebase browser", pairingMaterial: material },
-        signal,
-      ),
+    exchangePairing: (material) =>
+      exchangeEnvironmentPairingEffect(origin, {
+        label: "Rebase browser",
+        pairingMaterial: material,
+      }),
   };
 
   return createLocalEnvironmentSession({

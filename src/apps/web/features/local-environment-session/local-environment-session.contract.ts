@@ -1,4 +1,8 @@
-import type { EnvironmentAuthorizationRejected } from "#web/features/environment-connection/environment-connection-errors";
+import type { Effect, Scope } from "effect";
+import type {
+  EnvironmentAuthorizationRejected,
+  EnvironmentConnectionFailure,
+} from "#web/features/environment-connection/environment-connection-errors";
 import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 
 export type LocalEnvironmentSessionState =
@@ -33,20 +37,22 @@ export interface LocalEnvironmentGateway {
   readonly connect: (
     credential: string,
     lastObservedSequence: number | undefined,
-    signal: AbortSignal,
-  ) => Promise<EnvironmentProtocolConnection>;
+  ) => Effect.Effect<
+    EnvironmentProtocolConnection,
+    EnvironmentConnectionFailure,
+    Scope.Scope
+  >;
   readonly exchangePairing: (
     pairingMaterial: string,
-    signal: AbortSignal,
-  ) => Promise<{ readonly credential: string }>;
+  ) => Effect.Effect<
+    { readonly credential: string },
+    EnvironmentConnectionFailure
+  >;
 }
 
 export interface LocalEnvironmentSessionOptions {
   readonly gateway: LocalEnvironmentGateway;
   readonly pairingMaterial: string | undefined;
   readonly pairingSucceeded?: () => void;
-  readonly waitBeforeReconnect?: (
-    attempt: number,
-    signal: AbortSignal,
-  ) => Promise<void>;
+  readonly waitBeforeReconnect?: (attempt: number) => Effect.Effect<void>;
 }

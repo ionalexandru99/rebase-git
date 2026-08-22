@@ -8,6 +8,7 @@ import {
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,
 } from "@rebase/web/features/environment-connection";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createLocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session";
 import type {
@@ -33,11 +34,10 @@ describe("local Environment session", () => {
     expect(gateway.connect).toHaveBeenCalledWith(
       "device-credential",
       undefined,
-      expect.any(AbortSignal),
     );
     expect(pairingSucceeded).toHaveBeenCalledOnce();
     session.stop();
-    expect(connection.close).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(connection.close).toHaveBeenCalledOnce());
   });
 
   it("owns one reconnect after the active connection closes", async () => {
@@ -45,7 +45,9 @@ describe("local Environment session", () => {
     const reconnected = createConnection(8);
     const gateway = createGateway(initial, reconnected);
     const reconnect = deferred<void>();
-    const waitBeforeReconnect = vi.fn(() => reconnect.promise);
+    const waitBeforeReconnect = vi.fn(() =>
+      Effect.promise(() => reconnect.promise),
+    );
     const session = createLocalEnvironmentSession({
       gateway,
       pairingMaterial: "123-456",
@@ -62,29 +64,26 @@ describe("local Environment session", () => {
 
     reconnect.resolve();
     await expectState(session.getSnapshot, "Connected");
-    expect(gateway.connect).toHaveBeenNthCalledWith(
-      2,
-      "device-credential",
-      7,
-      expect.any(AbortSignal),
-    );
+    expect(gateway.connect).toHaveBeenNthCalledWith(2, "device-credential", 7);
     expect(waitBeforeReconnect).toHaveBeenCalledOnce();
     session.stop();
   });
 
   it("stops on a protocol mismatch without starting a retry loop", async () => {
     const gateway = createGateway();
-    gateway.connect.mockRejectedValue(
-      new EnvironmentHelloRejected({
-        failure: {
-          _tag: "ProtocolMajorMismatch",
-          clientMajor: 1,
-          requiredUpdate: "client",
-          serverMajor: 2,
-        },
-      }),
+    gateway.connect.mockReturnValue(
+      Effect.fail(
+        new EnvironmentHelloRejected({
+          failure: {
+            _tag: "ProtocolMajorMismatch",
+            clientMajor: 1,
+            requiredUpdate: "client",
+            serverMajor: 2,
+          },
+        }),
+      ),
     );
-    const waitBeforeReconnect = vi.fn(() => Promise.resolve());
+    const waitBeforeReconnect = vi.fn(() => Effect.void);
     const session = createLocalEnvironmentSession({
       gateway,
       pairingMaterial: "123-456",
@@ -103,15 +102,17 @@ describe("local Environment session", () => {
 function createGateway(...connections: ReturnType<typeof createConnection>[]) {
   const remaining = [...connections];
   return {
-    connect: vi.fn<LocalEnvironmentGateway["connect"]>(async () => {
+    connect: vi.fn<LocalEnvironmentGateway["connect"]>(() => {
       const connection = remaining.shift();
       if (connection === undefined) {
-        throw new Error("No test connection is available.");
+        return Effect.die("No test connection is available.");
       }
-      return connection;
+      return Effect.acquireRelease(Effect.succeed(connection), (active) =>
+        Effect.sync(active.close),
+      );
     }),
-    exchangePairing: vi.fn<LocalEnvironmentGateway["exchangePairing"]>(
-      async () => ({ credential: "device-credential" }),
+    exchangePairing: vi.fn<LocalEnvironmentGateway["exchangePairing"]>(() =>
+      Effect.succeed({ credential: "device-credential" }),
     ),
   } satisfies LocalEnvironmentGateway & {
     connect: ReturnType<typeof vi.fn<LocalEnvironmentGateway["connect"]>>;
@@ -137,12 +138,12 @@ function createConnection(currentSequence = 0) {
   }
   return {
     close: vi.fn(),
-    closed: disconnect.promise,
+    closed: Effect.promise(() => disconnect.promise),
     currentSequence: () => currentSequence,
     disconnect,
     discovery,
     negotiated,
-    waitForSequence: vi.fn(async (sequence: number) => sequence),
+    waitForSequence: vi.fn((sequence: number) => Effect.succeed(sequence)),
   } satisfies EnvironmentProtocolConnection & {
     readonly disconnect: ReturnType<typeof deferred<EnvironmentResponseError>>;
   };
