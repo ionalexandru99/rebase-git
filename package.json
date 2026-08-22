@@ -1,21 +1,37 @@
 {
   "name": "rebase-git",
   "version": "0.0.0",
-  "private": true,
+  "description": "A fast local Git client for the browser and desktop.",
+  "author": "Alexandru Ion <ionalexandru99@users.noreply.github.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ionalexandru99/rebase-git.git"
+  },
+  "homepage": "https://github.com/ionalexandru99/rebase-git#readme",
+  "bugs": {
+    "url": "https://github.com/ionalexandru99/rebase-git/issues"
+  },
   "type": "module",
-  "imports": {
-    "#web/*": "./src/apps/web/*.ts"
-  },
   "bin": {
-    "rebase": "./src/apps/server/dist/cli.js"
+    "rebase": "./dist/cli.js",
+    "rebase-git": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "packageManager": "pnpm@11.22.0",
   "engines": {
-    "node": ">=24.0.0 <25.0.0",
-    "pnpm": "11.22.0"
+    "node": ">=24.0.0 <25.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -b && pnpm --filter @rebase/server prepare:dist && pnpm --filter @rebase/desktop bundle:preload && pnpm --filter @rebase/desktop copy:assets && pnpm build:web",
+    "build:package": "tsc -b src/contracts src/apps/server && node packaging/build.ts",
     "build:web": "pnpm --filter @rebase/web build:web",
     "check": "biome check .",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
@@ -28,7 +44,13 @@
     "test:e2e": "playwright test",
     "test:integration": "vp test run --project integration --passWithNoTests",
     "test:unit": "vp test run --project unit --passWithNoTests",
-    "typecheck": "pnpm --recursive run typecheck && tsc --project tests/tsconfig.json"
+    "typecheck": "pnpm --recursive run typecheck && tsc --project packaging/tsconfig.json && tsc --project tests/tsconfig.json",
+    "prepack": "pnpm build:package"
+  },
+  "dependencies": {
+    "drizzle-orm": "1.0.0-rc.5-169397b",
+    "effect": "4.0.0-rc.110",
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.9",
@@ -40,8 +62,7 @@
     "@types/node": "24.13.3",
     "concurrently": "10.0.5",
     "drizzle-kit": "catalog:",
-    "drizzle-orm": "catalog:",
-    "effect": "catalog:",
+    "esbuild": "0.28.2",
     "typescript": "7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:",

@@ -54,6 +54,9 @@ export function startEnvironmentServer(
     const events = createEnvironmentEventPublisher();
     const listener = yield* acquireEnvironmentListener({
       authorization,
+      ...(options.browserAssetsRoot === undefined
+        ? {}
+        : { browserAssetsRoot: options.browserAssetsRoot }),
       environmentId: environment.id,
       events,
       port: requestedPort,

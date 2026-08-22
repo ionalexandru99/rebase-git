@@ -49,6 +49,19 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Pack local application
+        run: |
+          mkdir package-artifact
+          npm pack --pack-destination package-artifact
+
+      - name: Upload local application
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-package
+          path: package-artifact/rebase-git-*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
   integration:
     name: Integration (${{ matrix.name }})
     needs: quality
@@ -85,6 +98,41 @@ jobs:
 
       - name: Run integration tests
         run: pnpm test:integration
+
+  package-smoke:
+    name: Package smoke (${{ matrix.name }})
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-latest
+          - name: macOS
+            runner: macos-latest
+          - name: Windows
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
+      - name: Download local application
+        uses: actions/download-artifact@v8
+        with:
+          name: npm-package
+          path: package-artifact
+
+      - name: Smoke-test clean npm installation
+        run: node tests/package/smoke-packed-package.ts package-artifact
 
   complete-tests:
     name: Complete tests

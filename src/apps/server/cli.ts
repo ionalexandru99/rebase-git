@@ -1,16 +1,22 @@
 #!/usr/bin/env node
 
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { currentEnvironmentProtocol } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
+import { openDefaultBrowser } from "#server/features/browser-client/default-browser";
 import type { EnvironmentServerOptions } from "#server/features/environment-server/server/environment-server.contract";
 import { startEnvironmentServer } from "#server/features/environment-server/server/start-environment-server";
+import { productVersion } from "#server/product-version";
 
-const usage = "Usage: rebase serve [--port <1-65535>]";
+const usage = "Usage: rebase [serve] [--port <1-65535>]";
 
 export function runCli(arguments_ = process.argv.slice(2)) {
   if (arguments_.includes("--help") || arguments_.includes("-h")) {
     return writeOutput(usage).pipe(Effect.as(0));
+  }
+  if (arguments_.includes("--version") || arguments_.includes("-v")) {
+    return writeOutput(versionOutput()).pipe(Effect.as(0));
   }
 
   const program = Effect.try({
@@ -25,11 +31,20 @@ export function runCli(arguments_ = process.argv.slice(2)) {
   });
 }
 
+export async function main() {
+  process.exitCode = await Effect.runPromise(runCli());
+}
+
 function parseServeArguments(arguments_: string[]): EnvironmentServerOptions {
-  const [command, ...options] = arguments_;
+  const normalizedArguments =
+    arguments_.length === 0 || arguments_[0] === "--port"
+      ? ["serve", ...arguments_]
+      : arguments_;
+  const [command, ...options] = normalizedArguments;
   if (command !== "serve") throw new Error(usage);
 
-  if (options.length === 0) return {};
+  const browserAssetsRoot = resolveBrowserAssetsRoot();
+  if (options.length === 0) return { browserAssetsRoot };
   if (options.length !== 2 || options[0] !== "--port" || !options[1]) {
     throw new Error(usage);
   }
@@ -41,7 +56,7 @@ function parseServeArguments(arguments_: string[]): EnvironmentServerOptions {
     );
   }
 
-  return { port };
+  return { browserAssetsRoot, port };
 }
 
 function serve(options: EnvironmentServerOptions) {
@@ -57,6 +72,7 @@ function serve(options: EnvironmentServerOptions) {
       yield* Effect.sync(() => {
         process.stdout.write(`Listening URL: ${server.origin}\n`);
         process.stdout.write(`Pairing URL: ${server.pairingUrl}\n`);
+        openDefaultBrowser(server.pairingUrl);
       });
       yield* Deferred.await(shutdown);
     }),
@@ -101,10 +117,33 @@ function normalizeError(error: unknown) {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+function resolveBrowserAssetsRoot() {
+  const candidates = [
+    new URL("./web", import.meta.url),
+    new URL("../web/dist/web", import.meta.url),
+    new URL("../../web/dist/web", import.meta.url),
+  ];
+  const root = candidates.find((candidate) => existsSync(candidate));
+  if (root === undefined) {
+    throw new Error(
+      "Browser assets are missing. Reinstall Rebase or rebuild the web client.",
+    );
+  }
+  return fileURLToPath(root);
+}
+
+function versionOutput() {
+  const protocol = currentEnvironmentProtocol;
+  return [
+    `Rebase ${productVersion}`,
+    `Environment protocol ${protocol.major}.${protocol.minor} (minimum ${protocol.major}.${protocol.minimumSupportedMinor})`,
+  ].join("\n");
+}
+
 const entryPoint = process.argv[1];
 if (
   entryPoint &&
   realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entryPoint)
 ) {
-  process.exitCode = await Effect.runPromise(runCli());
+  await main();
 }
