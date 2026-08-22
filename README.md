@@ -18,8 +18,8 @@ Install Node.js 24 and Git 2.34 or newer, then run:
 npx rebase-git@latest
 ```
 
-Rebase listens on `127.0.0.1`, prints the local and pairing URLs, and tries to open the pairing URL in
-your default browser. It does not expose a remote-listening option.
+Rebase listens on `127.0.0.1`, prints the local and pairing URLs, and tries to open the UI in your
+default browser. It does not expose a remote-listening option.
 
 To install the command instead:
 
