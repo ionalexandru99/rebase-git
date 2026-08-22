@@ -1,6 +1,6 @@
 {
   "name": "rebase-git",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "A fast local Git client for the browser and desktop.",
   "author": "Alexandru Ion <ionalexandru99@users.noreply.github.com>",
   "license": "Apache-2.0",
