@@ -58,7 +58,9 @@ The next local package version is `0.0.2`. The `Release local package` GitHub Ac
 the `MAJOR.MINOR.PATCH` version committed in `package.json`. A nightly publishes
 `0.0.2-nightly.YYYYMMDD.RUN` under npm's `nightly` tag and creates a matching GitHub prerelease. A
 stable release publishes `0.0.2` under npm's `latest` tag and creates `v0.0.2` as the latest GitHub
-release. Publishing only runs from `main`. Published versions and tags are immutable.
+release. Nightly notes compare with the previous nightly. Stable notes always compare with the
+previous stable, so intervening nightlies do not shorten the stable changelog. Publishing only runs
+from `main`. Published versions and tags are immutable.
 
 Add one Actions repository secret before the first release:
 

@@ -36,6 +36,7 @@ jobs:
       integrity: ${{ steps.release.outputs.integrity }}
       name: ${{ steps.request.outputs.name }}
       prerelease: ${{ steps.request.outputs.prerelease }}
+      previous_tag: ${{ steps.request.outputs.previous_tag }}
       tag: ${{ steps.request.outputs.tag }}
       version: ${{ steps.request.outputs.version }}
     steps:
@@ -92,6 +93,21 @@ jobs:
           fi
 
           tag="v$version"
+          previous_tag=""
+          while IFS= read -r candidate; do
+            if [[ "$candidate" == "$tag" ]]; then
+              continue
+            fi
+            if [[ "$CHANNEL" == "nightly" && "$candidate" == v*-nightly.* ]]; then
+              previous_tag="$candidate"
+              break
+            fi
+            if [[ "$CHANNEL" == "stable" && "$candidate" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              previous_tag="$candidate"
+              break
+            fi
+          done < <(git tag --sort=-version:refname)
+
           if tag_sha=$(git rev-list -n 1 "$tag" 2>/dev/null); then
             if [[ "$RUN_ATTEMPT" == "1" || "$tag_sha" != "$RELEASE_SHA" ]]; then
               echo "Git tag $tag already resolves to $tag_sha." >&2
@@ -118,6 +134,7 @@ jobs:
             echo "dist_tag=$dist_tag"
             echo "name=$name"
             echo "prerelease=$prerelease"
+            echo "previous_tag=$previous_tag"
             echo "tag=$tag"
             echo "version=$version"
           } >> "$GITHUB_OUTPUT"
@@ -306,6 +323,7 @@ jobs:
             npm package: `rebase-git@${{ needs.package.outputs.version }}`
             npm integrity: `${{ needs.package.outputs.integrity }}`
           generate_release_notes: true
+          previous_tag: ${{ needs.package.outputs.previous_tag }}
           prerelease: ${{ needs.package.outputs.prerelease }}
           make_latest: ${{ needs.package.outputs.channel == 'stable' }}
           files: |
