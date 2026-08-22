@@ -33,3 +33,4 @@ export {
   RevokeEnvironmentAuthorization,
   TicketAlreadyUsed,
 } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
+export type { EnvironmentBootstrap } from "@rebase/contracts/environment-authorization/environment-bootstrap.contract";

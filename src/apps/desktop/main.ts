@@ -63,6 +63,7 @@ async function openWindow(options: DesktopWindowOptions) {
     webPreferences: {
       additionalArguments: [
         `--rebase-environment-origin=${options.environmentOrigin}`,
+        `--rebase-pairing-material=${options.pairingMaterial}`,
       ],
       contextIsolation: true,
       nodeIntegration: false,
@@ -72,6 +73,7 @@ async function openWindow(options: DesktopWindowOptions) {
     width: 1200,
   });
 
+  configureEnvironmentWebSocketOrigin(window, options.environmentOrigin);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.once("ready-to-show", () => window.show());
 
@@ -85,6 +87,33 @@ async function openWindow(options: DesktopWindowOptions) {
     window.destroy();
     throw error;
   }
+}
+
+function configureEnvironmentWebSocketOrigin(
+  window: BrowserWindow,
+  environmentOrigin: string,
+) {
+  const webSocketOrigin = new URL(environmentOrigin);
+  webSocketOrigin.protocol =
+    webSocketOrigin.protocol === "https:" ? "wss:" : "ws:";
+
+  window.webContents.session.webRequest.onBeforeSendHeaders(
+    { types: ["webSocket"], urls: ["<all_urls>"] },
+    (details, callback) => {
+      if (new URL(details.url).origin !== webSocketOrigin.origin) {
+        callback({ requestHeaders: details.requestHeaders });
+        return;
+      }
+
+      const requestHeaders = { ...details.requestHeaders };
+      const existingOrigin = Object.keys(requestHeaders).find(
+        (header) => header.toLowerCase() === "origin",
+      );
+      if (existingOrigin !== undefined) delete requestHeaders[existingOrigin];
+      requestHeaders.Origin = environmentOrigin;
+      callback({ requestHeaders });
+    },
+  );
 }
 
 function resolveRenderer(

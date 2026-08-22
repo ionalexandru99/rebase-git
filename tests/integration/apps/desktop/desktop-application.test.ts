@@ -48,6 +48,7 @@ describe("Electron application", () => {
       const firstWindow = host.windows[0];
 
       expect(firstWindow).toMatchObject({ renderer });
+      expect(firstWindow?.pairingMaterial).toMatch(/^\d{3}-\d{3}$/);
       expect(serverStarts).toBe(1);
       await expect(
         fetch(`${firstWindow?.environmentOrigin}/health`),
@@ -61,6 +62,9 @@ describe("Electron application", () => {
       expect(host.windows).toHaveLength(2);
       expect(host.windows[1]?.environmentOrigin).toBe(
         firstWindow?.environmentOrigin,
+      );
+      expect(host.windows[1]?.pairingMaterial).toBe(
+        firstWindow?.pairingMaterial,
       );
       expect(serverStarts).toBe(1);
 

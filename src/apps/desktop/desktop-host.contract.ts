@@ -1,9 +1,3 @@
-export interface DesktopHostBridge {
-  readonly environmentOrigin: string;
-}
+import type { EnvironmentBootstrap } from "@rebase/contracts";
 
-declare global {
-  interface Window {
-    readonly rebaseHost?: DesktopHostBridge;
-  }
-}
+export type DesktopHostBridge = EnvironmentBootstrap;

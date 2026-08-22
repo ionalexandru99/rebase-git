@@ -91,6 +91,9 @@ importers:
 
   src/apps/desktop:
     dependencies:
+      '@rebase/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@rebase/server':
         specifier: workspace:*
         version: link:../server
