@@ -213,9 +213,9 @@ async function verifyBrowserAssets(origin: string) {
     throw new Error("Expected the browser entry point to reference an asset.");
   }
 
-  const assetResponse = await fetch(
-    new URL(assetReference, `${origin}/pair`).href,
-  );
+  const assetUrl = new URL(assetReference, `${origin}/pair`);
+  expect(assetUrl.origin).toBe(origin);
+  const assetResponse = await fetch(assetUrl);
   expect(assetResponse.status).toBe(200);
   expect(assetResponse.headers.get("cache-control")).toBe(
     "public, max-age=31536000, immutable",
