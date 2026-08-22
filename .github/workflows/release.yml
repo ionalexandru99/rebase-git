@@ -1,32 +1,61 @@
-name: Release local package
+name: Release
 
 on:
+  schedule:
+    - cron: "0 */3 * * *"
   workflow_dispatch:
     inputs:
       channel:
         description: Release channel
         required: true
-        default: nightly
+        default: stable
         type: choice
         options:
-          - nightly
           - stable
-      publish:
-        description: Publish to npm and create the GitHub release
-        required: true
-        default: false
-        type: boolean
+          - nightly
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-local
+  group: release
   cancel-in-progress: false
 
 jobs:
+  check-nightly-changes:
+    name: Check for changes since last nightly
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_changes: ${{ steps.changes.outputs.has_changes }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: changes
+        name: Compare with last nightly
+        shell: bash
+        run: |
+          previous_tag=$(git for-each-ref --count=1 --sort=-version:refname --format='%(refname:short)' 'refs/tags/v*-nightly.*')
+          if [[ -z "$previous_tag" ]]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previous_sha=$(git rev-parse "$previous_tag^{commit}")
+          [[ "$previous_sha" == "$GITHUB_SHA" ]] && has_changes=false || has_changes=true
+          echo "has_changes=$has_changes" >> "$GITHUB_OUTPUT"
+
   package:
     name: Build package
+    needs: check-nightly-changes
+    if: |
+      !failure() && !cancelled() &&
+      (github.event_name != 'schedule' || needs.check-nightly-changes.outputs.has_changes == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -63,9 +92,8 @@ jobs:
         name: Validate release request
         shell: bash
         env:
-          CHANNEL: ${{ inputs.channel }}
+          CHANNEL: ${{ github.event_name == 'schedule' && 'nightly' || inputs.channel }}
           GH_TOKEN: ${{ github.token }}
-          PUBLISH: ${{ inputs.publish }}
           RELEASE_SHA: ${{ github.sha }}
           RUN_NUMBER: ${{ github.run_number }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -76,8 +104,8 @@ jobs:
             exit 1
           fi
 
-          if [[ "$PUBLISH" == "true" && "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "Published releases must run from main. Current ref: $GITHUB_REF" >&2
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Releases must run from main. Current ref: $GITHUB_REF" >&2
             exit 1
           fi
 
@@ -158,7 +186,7 @@ jobs:
         run: pnpm test:unit
 
       - id: release
-        name: Pack local application
+        name: Pack package
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.request.outputs.version }}
@@ -222,7 +250,6 @@ jobs:
   publish-npm:
     name: Publish npm package
     needs: [package, smoke]
-    if: inputs.publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -279,7 +306,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ needs.package.outputs.dist_tag }}
           RELEASE_ARTIFACT: ${{ needs.package.outputs.artifact }}
-        run: npm publish "package-artifact/$RELEASE_ARTIFACT" --access public --provenance --tag "$NPM_TAG"
+        run: npm publish "./package-artifact/$RELEASE_ARTIFACT" --access public --provenance --tag "$NPM_TAG"
 
       - name: Verify npm metadata
         shell: bash
@@ -323,8 +350,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: ${{ needs.package.outputs.name }}
           body: |
-            This release runs Rebase locally through `npx`. It contains the local Environment server and browser client. It has no Git product features yet.
-
             Run `npx rebase-git@${{ needs.package.outputs.version }}` with Node.js 24 and Git 2.34 or newer.
 
             Source commit: `${{ github.sha }}`
