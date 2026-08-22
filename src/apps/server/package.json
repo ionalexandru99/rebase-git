@@ -28,8 +28,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -b && pnpm copy:migrations",
-    "copy:migrations": "node --input-type=module -e \"import { cpSync, rmSync } from 'node:fs'; const target = 'dist/persistence/migrations'; rmSync(target, { force: true, recursive: true }); cpSync('persistence/migrations', target, { recursive: true });\"",
+    "build": "tsc -b && pnpm prepare:dist",
+    "prepare:dist": "node --input-type=module -e \"import { cpSync, rmSync } from 'node:fs'; rmSync('dist/package.json', { force: true }); const migrations = 'dist/persistence/migrations'; rmSync(migrations, { force: true, recursive: true }); cpSync('persistence/migrations', migrations, { recursive: true });\"",
     "dev": "node --conditions=rebase-source cli.ts serve",
     "typecheck": "tsc -b --emitDeclarationOnly"
   },
