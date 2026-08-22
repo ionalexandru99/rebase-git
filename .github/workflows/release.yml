@@ -1,0 +1,264 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "!v*-nightly.*"
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        required: false
+        default: stable
+        type: choice
+        options:
+          - stable
+          - nightly
+      version:
+        description: Stable version, such as 0.1.0 or v0.1.0
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    name: Check nightly changes
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: check
+        name: Compare with the last nightly
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          last_tag=$(git tag --list 'v*-nightly.*' --sort=-creatordate | head -n 1)
+          if [[ -z "$last_tag" || "$(git rev-parse "$last_tag^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  package:
+    name: Build package
+    needs: changes
+    if: needs.changes.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      channel: ${{ steps.release.outputs.channel }}
+      name: ${{ steps.release.outputs.name }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - id: release
+        name: Resolve release version
+        shell: bash
+        env:
+          DISPATCH_CHANNEL: ${{ inputs.channel }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          RELEASE_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          current_version=$(node -p "require('./package.json').version")
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" || ( "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${DISPATCH_CHANNEL:-stable}" == "nightly" ) ]]; then
+            stable_version="${current_version%%[-+]*}"
+            if [[ ! "$stable_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              echo "Invalid package version: $current_version" >&2
+              exit 1
+            fi
+            next_patch="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+            version="$next_patch-nightly.$(date -u +%Y%m%d).$RUN_NUMBER"
+            echo "channel=nightly" >> "$GITHUB_OUTPUT"
+            echo "name=Rebase Nightly $version (${RELEASE_SHA:0:12})" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+              raw_version="$GITHUB_REF_NAME"
+            else
+              raw_version="${DISPATCH_VERSION:-$current_version}"
+            fi
+            version="${raw_version#v}"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Invalid stable version: $raw_version" >&2
+              exit 1
+            fi
+            echo "channel=stable" >> "$GITHUB_OUTPUT"
+            echo "name=Rebase v$version" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          npm pkg set "version=$version"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check formatting and linting
+        run: pnpm check
+
+      - name: Check types
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        run: pnpm test:unit
+
+      - name: Pack local application
+        run: |
+          mkdir package-artifact
+          npm pack --pack-destination package-artifact
+
+      - name: Upload package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: npm-package
+          path: package-artifact/rebase-git-*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  smoke:
+    name: Smoke ${{ matrix.name }}
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-latest
+          - name: macOS
+            runner: macos-latest
+          - name: Windows
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+
+      - name: Download package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: npm-package
+          path: package-artifact
+
+      - name: Smoke-test clean npm installation
+        run: node tests/package/smoke-packed-package.ts package-artifact
+
+  publish:
+    name: Publish GitHub release
+    needs: [package, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: npm-package
+          path: package-artifact
+
+      - name: Publish release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ needs.package.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.package.outputs.name }}
+          generate_release_notes: true
+          prerelease: ${{ needs.package.outputs.prerelease }}
+          make_latest: ${{ needs.package.outputs.channel == 'stable' }}
+          files: package-artifact/rebase-git-*.tgz
+          fail_on_unmatched_files: true
+
+  finalize:
+    name: Save stable version
+    needs: [package, publish]
+    if: needs.package.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+
+      - name: Update package version
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: npm pkg set "version=$RELEASE_VERSION"
+
+      - name: Commit package version
+        env:
+          RELEASE_TAG: ${{ needs.package.outputs.tag }}
+        shell: bash
+        run: |
+          if git diff --quiet -- package.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): prepare $RELEASE_TAG"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            if [[ "$attempt" == "3" ]]; then
+              exit 1
+            fi
+            git fetch origin main
+            git rebase origin/main
+          done

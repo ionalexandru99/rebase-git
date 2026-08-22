@@ -37,6 +37,7 @@ export function acquireEnvironmentListener(
         options.authorization,
         port,
         runEnvironmentEffect,
+        options.browserAssetsRoot,
       ),
       (acquiredServer) =>
         Effect.promise(() => closeServer(acquiredServer)).pipe(Effect.orDie),
@@ -73,6 +74,7 @@ function createHttpServer(
   authorization: EnvironmentListenerOptions["authorization"],
   port: number,
   runEnvironmentEffect: RunEnvironmentEffect,
+  browserAssetsRoot?: string,
 ) {
   return Effect.try({
     try: () =>
@@ -83,6 +85,7 @@ function createHttpServer(
           authorization,
           () => readiness.value,
           runEnvironmentEffect,
+          browserAssetsRoot,
         ),
       ),
     catch: (cause) => environmentServerError(cause, port),

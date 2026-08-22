@@ -3,6 +3,7 @@ import type { EnvironmentAuthorization } from "#server/features/environment-auth
 import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
 
 export interface EnvironmentServerOptions {
+  readonly browserAssetsRoot?: string;
   readonly port?: number;
 }
 
@@ -23,6 +24,7 @@ export interface EnvironmentListener {
 
 export interface EnvironmentListenerOptions {
   readonly authorization: EnvironmentAuthorization;
+  readonly browserAssetsRoot?: string;
   readonly environmentId: string;
   readonly events: EnvironmentEventPublisher;
   readonly port?: number;

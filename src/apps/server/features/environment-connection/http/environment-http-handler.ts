@@ -7,6 +7,7 @@ import {
   EnvironmentSnapshot,
 } from "@rebase/contracts";
 import { Effect } from "effect";
+import { respondWithBrowserAsset } from "#server/features/browser-client/browser-assets";
 import type {
   EnvironmentAuthorization,
   EnvironmentAuthorizationError,
@@ -35,6 +36,7 @@ export function createEnvironmentHttpHandler(
   authorization: EnvironmentAuthorization,
   ready: () => boolean,
   runEnvironmentEffect: RunEnvironmentEffect,
+  browserAssetsRoot?: string,
 ) {
   return (request: IncomingMessage, response: ServerResponse) => {
     const lifetime = startHttpRequestLifetime(request, response);
@@ -45,6 +47,7 @@ export function createEnvironmentHttpHandler(
         state,
         authorization,
         ready(),
+        browserAssetsRoot,
       ).pipe(Effect.ensuring(Effect.sync(lifetime.release))),
       lifetime.signal,
     );
@@ -74,6 +77,7 @@ function createEnvironmentHttpResponse(
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
   ready: boolean,
+  browserAssetsRoot?: string,
 ) {
   return respondToEnvironmentRequest(
     request,
@@ -81,6 +85,7 @@ function createEnvironmentHttpResponse(
     state,
     authorization,
     ready,
+    browserAssetsRoot,
   ).pipe(
     Effect.catch((error) =>
       Effect.sync(() => writeEnvironmentHttpError(response, error)),
@@ -94,6 +99,7 @@ function respondToEnvironmentRequest(
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
   ready: boolean,
+  browserAssetsRoot?: string,
 ) {
   return Effect.gen(function* () {
     if (request.url === "/health") {
@@ -106,6 +112,12 @@ function respondToEnvironmentRequest(
     }
 
     yield* validateRequestHost(request);
+    if (
+      browserAssetsRoot !== undefined &&
+      (yield* respondWithBrowserAsset(request, response, browserAssetsRoot))
+    ) {
+      return;
+    }
     const body = yield* readEnvironmentHttpRequestBody(request);
 
     if (request.url === EnvironmentHttpApi.discovery.path) {

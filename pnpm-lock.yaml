@@ -26,6 +26,16 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      drizzle-orm:
+        specifier: 1.0.0-rc.5-169397b
+        version: 1.0.0-rc.5-169397b(effect@4.0.0-rc.110)
+      effect:
+        specifier: 4.0.0-rc.110
+        version: 4.0.0-rc.110
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
     devDependencies:
       '@biomejs/biome':
         specifier: 2.5.9
@@ -54,12 +64,9 @@ importers:
       drizzle-kit:
         specifier: 'catalog:'
         version: 1.0.0-rc.5-ab785fc
-      drizzle-orm:
-        specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(effect@4.0.0-rc.110)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.110
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       typescript:
         specifier: 7.0.2
         version: 7.0.2

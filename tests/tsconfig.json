@@ -5,6 +5,9 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
+    "paths": {
+      "#web/*": ["./../src/apps/web/*.ts", "./../src/apps/web/*.tsx"]
+    },
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"]
   },

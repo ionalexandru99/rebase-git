@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 
 const testProject = (name: "compatibility" | "integration" | "unit") => ({
@@ -10,6 +11,11 @@ const testProject = (name: "compatibility" | "integration" | "unit") => ({
 });
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
+    },
+  },
   ssr: {
     resolve: {
       conditions: ["rebase-source", "import", "default"],

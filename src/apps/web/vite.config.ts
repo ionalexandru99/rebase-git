@@ -7,7 +7,7 @@ export default defineConfig({
   base: "./",
   define: {
     "import.meta.env.REBASE_PRODUCT_VERSION": JSON.stringify(
-      packageMetadata.version,
+      process.env.REBASE_PRODUCT_VERSION ?? packageMetadata.version,
     ),
   },
   plugins: [react(), tailwindcss()],

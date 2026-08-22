@@ -1,12 +1,11 @@
+import { existsSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import type { NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
 import { migrate } from "drizzle-orm/node-sqlite/migrator";
 
-const migrationsFolder = fileURLToPath(
-  new URL("../migrations", import.meta.url),
-);
+const migrationsFolder = resolveMigrationsFolder();
 const migrationsTable = "__drizzle_migrations";
 
 interface AppliedMigration {
@@ -82,4 +81,16 @@ function parseAppliedMigration(row: Record<string, unknown>): AppliedMigration {
     id: row.id,
     name: row.name,
   };
+}
+
+function resolveMigrationsFolder() {
+  const candidates = [
+    new URL("./migrations", import.meta.url),
+    new URL("../migrations", import.meta.url),
+  ];
+  const folder = candidates.find((candidate) => existsSync(candidate));
+  if (folder === undefined) {
+    throw new Error("Rebase database migrations are missing.");
+  }
+  return fileURLToPath(folder);
 }
