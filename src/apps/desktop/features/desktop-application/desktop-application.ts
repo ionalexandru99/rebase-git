@@ -40,6 +40,7 @@ export class DesktopApplication {
 
     await this.host.openWindow({
       environmentOrigin: this.environment.origin,
+      pairingMaterial: new URL(this.environment.pairingUrl).hash.slice(1),
       renderer: this.renderer,
     });
   }

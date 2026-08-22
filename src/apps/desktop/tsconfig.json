@@ -7,5 +7,9 @@
   },
   "include": ["./**/*.ts"],
   "exclude": ["./dist"],
-  "references": [{ "path": "../server" }, { "path": "../web" }]
+  "references": [
+    { "path": "../../contracts" },
+    { "path": "../server" },
+    { "path": "../web" }
+  ]
 }

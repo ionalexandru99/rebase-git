@@ -29,6 +29,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@rebase/contracts": "workspace:*",
     "@rebase/server": "workspace:*",
     "@rebase/web": "workspace:*",
     "effect": "catalog:"
