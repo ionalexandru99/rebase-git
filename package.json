@@ -31,6 +31,7 @@
   },
   "scripts": {
     "build": "tsc -b && pnpm --filter @rebase/server prepare:dist && pnpm --filter @rebase/desktop bundle:preload && pnpm --filter @rebase/desktop copy:assets && pnpm build:web",
+    "build:desktop-package": "node packaging/build-desktop.ts",
     "build:package": "tsc -b src/contracts src/apps/server && node packaging/build.ts",
     "build:web": "pnpm --filter @rebase/web build:web",
     "check": "biome check .",
@@ -62,6 +63,8 @@
     "@types/node": "24.13.3",
     "concurrently": "10.0.5",
     "drizzle-kit": "catalog:",
+    "electron": "43.4.1",
+    "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
     "typescript": "7.0.2",
     "vite": "catalog:",

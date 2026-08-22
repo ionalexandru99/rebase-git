@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog } from "electron";
 import {
@@ -13,7 +12,9 @@ import type {
 import { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
 
 let desktopApplication: DesktopApplication | undefined;
-const desktopIconPath = join(app.getAppPath(), "assets", "icon.png");
+const desktopIconPath = fileURLToPath(
+  new URL("./assets/icon.png", import.meta.url),
+);
 
 const host: DesktopApplicationHost = {
   platform: process.platform,
@@ -100,7 +101,11 @@ function resolveRenderer(
 
   return {
     type: "file",
-    path: fileURLToPath(new URL("../../web/dist/web/index.html", moduleUrl)),
+    path: fileURLToPath(
+      process.env.NODE_ENV === "production"
+        ? new URL("./web/index.html", moduleUrl)
+        : new URL("../../web/dist/web/index.html", moduleUrl),
+    ),
   };
 }
 

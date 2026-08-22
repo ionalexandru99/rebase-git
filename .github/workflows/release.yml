@@ -1,8 +1,12 @@
 name: Release
 
 on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "!v*-nightly.*"
   schedule:
-    - cron: "0 */3 * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       channel:
@@ -13,6 +17,10 @@ on:
         options:
           - stable
           - nightly
+      version:
+        description: Release version, such as 0.0.2 or v0.1.0
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -99,8 +107,11 @@ jobs:
         name: Validate release request
         shell: bash
         env:
-          CHANNEL: ${{ github.event_name == 'schedule' && 'nightly' || inputs.channel }}
+          CHANNEL: ${{ github.event_name == 'schedule' && 'nightly' || inputs.channel || 'stable' }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
           RELEASE_SHA: ${{ github.sha }}
           RUN_NUMBER: ${{ github.run_number }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -111,7 +122,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+          if [[ "$EVENT_NAME" != "push" && "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "Releases must run from main. Current ref: $GITHUB_REF" >&2
             exit 1
           fi
@@ -124,9 +135,27 @@ jobs:
             name="Rebase Nightly $version (${RELEASE_SHA:0:12})"
             prerelease="true"
           elif [[ "$CHANNEL" == "stable" ]]; then
-            version="$base_version"
+            if [[ "$EVENT_NAME" == "push" ]]; then
+              version="${REF_NAME#v}"
+            else
+              version="${DISPATCH_VERSION#v}"
+              version="${version:-$base_version}"
+            fi
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Stable release version must use MAJOR.MINOR.PATCH: $version" >&2
+              exit 1
+            fi
             dist_tag="latest"
-            name="Rebase v$version"
+            major="${version%%.*}"
+            remainder="${version#*.}"
+            minor="${remainder%%.*}"
+            if (( major >= 1 )); then
+              name="Rebase v$version"
+            elif (( minor >= 1 )); then
+              name="Rebase Beta v$version"
+            else
+              name="Rebase Alpha v$version"
+            fi
             prerelease="false"
           else
             echo "Unknown release channel: $CHANNEL" >&2
@@ -150,11 +179,15 @@ jobs:
           done < <(git tag --sort=-version:refname)
 
           if tag_sha=$(git rev-list -n 1 "$tag" 2>/dev/null); then
-            if [[ "$RUN_ATTEMPT" == "1" || "$tag_sha" != "$RELEASE_SHA" ]]; then
+            if [[ "$tag_sha" != "$RELEASE_SHA" ]]; then
               echo "Git tag $tag already resolves to $tag_sha." >&2
               exit 1
             fi
-            echo "Retrying the release that created $tag at $tag_sha."
+            if [[ "$EVENT_NAME" != "push" && "$RUN_ATTEMPT" == "1" ]]; then
+              echo "Git tag $tag already exists." >&2
+              exit 1
+            fi
+            echo "Using the existing $tag at $tag_sha."
           fi
 
           registry_error=$(mktemp)
@@ -254,9 +287,119 @@ jobs:
       - name: Smoke-test clean package installation
         run: node tests/package/smoke-packed-package.ts package-artifact
 
+  desktop:
+    name: Build desktop (${{ matrix.name }})
+    needs: package
+    if: ${{ !failure() && !cancelled() && needs.package.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-latest
+            platform: mac
+            arch: arm64
+          - name: macOS x64
+            runner: macos-15-intel
+            platform: mac
+            arch: x64
+          - name: Linux x64
+            runner: ubuntu-latest
+            platform: linux
+            arch: x64
+          - name: Windows x64
+            runner: windows-latest
+            platform: win
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      HAS_MACOS_CERT: ${{ secrets.MACOS_CERTIFICATE != '' }}
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop application
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: pnpm build:desktop-package
+
+      - name: Package desktop application
+        shell: bash
+        env:
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '' && 'true' || 'false' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || '' }}
+          RELEASE_CHANNEL: ${{ needs.package.outputs.channel }}
+        run: |
+          publish_channel_args=()
+          if [[ "$RELEASE_CHANNEL" == "nightly" ]]; then
+            publish_channel_args=(--config.publish.channel=nightly)
+          fi
+          pnpm exec electron-builder \
+            --config electron-builder.config.js \
+            --${{ matrix.platform }} \
+            --${{ matrix.arch }} \
+            --config.extraMetadata.version="${{ needs.package.outputs.version }}" \
+            "${publish_channel_args[@]}" \
+            --publish never
+
+      - name: Verify signature and notarization
+        if: ${{ matrix.platform == 'mac' && env.HAS_MACOS_CERT == 'true' }}
+        shell: bash
+        run: |
+          app=$(find release -maxdepth 2 -name '*.app' | head -n 1)
+          if [[ -z "$app" ]]; then
+            echo "No .app bundle found under release/." >&2
+            exit 1
+          fi
+          codesign --verify --strict --verbose=2 "$app"
+          codesign -dvvv "$app"
+          spctl --assess --type execute -vvv "$app"
+          xcrun stapler validate "$app"
+          for dmg in release/*.dmg; do
+            xcrun stapler validate "$dmg"
+            spctl --assess --type open --context context:primary-signature -vvv "$dmg"
+          done
+
+      - name: Upload desktop package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/*.exe
+            release/*.blockmap
+            release/latest*.yml
+            release/nightly*.yml
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
   publish-npm:
     name: Publish npm package
-    needs: [package, smoke]
+    needs: [package, smoke, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -338,7 +481,7 @@ jobs:
 
   publish-github:
     name: Publish GitHub release
-    needs: [package, publish-npm]
+    needs: [package, desktop, publish-npm]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -350,7 +493,25 @@ jobs:
           name: npm-package
           path: package-artifact
 
-      - name: Create release at the workflow commit
+      - name: Download desktop packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: desktop-*
+          path: desktop-artifacts
+
+      - name: Assemble desktop release assets
+        shell: bash
+        run: |
+          mkdir desktop-release
+          mac_manifest=$(basename "$(find desktop-artifacts/desktop-mac-arm64 -name '*-mac.yml')")
+          yq eval-all '. as $item ireduce ({}; . *+ $item) | .files |= unique_by(.url)' \
+            "desktop-artifacts/desktop-mac-arm64/$mac_manifest" \
+            "desktop-artifacts/desktop-mac-x64/$mac_manifest" \
+            > "desktop-release/$mac_manifest"
+          find desktop-artifacts -type f ! -name '*-mac.yml' -exec mv {} desktop-release/ \;
+
+      - id: draft
+        name: Stage draft release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ needs.package.outputs.tag }}
@@ -364,12 +525,29 @@ jobs:
             npm integrity: `${{ needs.package.outputs.integrity }}`
           generate_release_notes: true
           previous_tag: ${{ needs.package.outputs.previous_tag }}
+          draft: true
           prerelease: ${{ needs.package.outputs.prerelease }}
-          make_latest: ${{ needs.package.outputs.channel == 'stable' }}
           files: |
+            desktop-release/*.dmg
+            desktop-release/*.zip
+            desktop-release/*.AppImage
+            desktop-release/*.deb
+            desktop-release/*.exe
+            desktop-release/*.blockmap
+            desktop-release/*.yml
             package-artifact/${{ needs.package.outputs.artifact }}
             package-artifact/${{ needs.package.outputs.artifact }}.sha256
           fail_on_unmatched_files: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAKE_LATEST: ${{ needs.package.outputs.channel == 'stable' }}
+          RELEASE_ID: ${{ steps.draft.outputs.id }}
+        run: |
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F draft=false \
+            -f make_latest="$MAKE_LATEST"
 
       - name: Verify GitHub release metadata
         shell: bash
@@ -422,3 +600,52 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.package.outputs.version }}
         run: node tests/package/smoke-packed-package.ts "npm:rebase-git@$RELEASE_VERSION"
+
+  finalize:
+    name: Finalize stable release version
+    needs: [package, publish-github]
+    if: ${{ !failure() && !cancelled() && needs.package.outputs.channel == 'stable' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+
+      - name: Update package version
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: npm pkg set "version=$RELEASE_VERSION"
+
+      - name: Commit package version
+        env:
+          RELEASE_TAG: ${{ needs.package.outputs.tag }}
+        shell: bash
+        run: |
+          if git diff --quiet -- package.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): prepare $RELEASE_TAG"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            if [[ "$attempt" == "3" ]]; then
+              exit 1
+            fi
+            git fetch origin main
+            git rebase origin/main
+          done

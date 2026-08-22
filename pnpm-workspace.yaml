@@ -5,6 +5,7 @@ packages:
 engineStrict: true
 
 allowBuilds:
+  electron-winstaller: true
   esbuild: true
   msgpackr-extract: false
 
