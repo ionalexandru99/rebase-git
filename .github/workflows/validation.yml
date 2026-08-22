@@ -96,6 +96,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build browser client
+        run: pnpm build:web
+
       - name: Run integration tests
         run: pnpm test:integration
 
