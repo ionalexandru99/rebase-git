@@ -1,0 +1,57 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "26119487-7320-4b1d-9e41-2ea33c7e5bd0",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "ddl": [
+    {
+      "name": "environment",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "automatic_port",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "singleton",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "columns": ["singleton"],
+      "nameExplicit": false,
+      "name": "environment_pk",
+      "table": "environment",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "environment_id_unique",
+      "entityType": "uniques",
+      "table": "environment"
+    }
+  ],
+  "renames": []
+}

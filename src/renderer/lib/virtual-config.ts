@@ -1,5 +1,0 @@
-export const HISTORY_OVERSCAN = 8
-export const HISTORY_LOAD_MORE_THRESHOLD_ROWS = 3
-export const REF_TREE_OVERSCAN = 10
-export const STATUS_FILE_ROW_HEIGHT = 32
-export const STATUS_FILE_OVERSCAN = 8

@@ -1,0 +1,45 @@
+{
+  "name": "@rebase/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "imports": {
+    "#server/*": {
+      "rebase-source": "./*.ts",
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "rebase-source": "./index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./*": {
+      "rebase-source": "./*.ts",
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b && pnpm prepare:dist",
+    "prepare:dist": "node --input-type=module -e \"import { cpSync, rmSync } from 'node:fs'; rmSync('dist/package.json', { force: true }); const migrations = 'dist/persistence/migrations'; rmSync(migrations, { force: true, recursive: true }); cpSync('persistence/migrations', migrations, { recursive: true });\"",
+    "dev": "node --conditions=rebase-source cli.ts serve",
+    "typecheck": "tsc -b --emitDeclarationOnly"
+  },
+  "dependencies": {
+    "@rebase/contracts": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1"
+  }
+}

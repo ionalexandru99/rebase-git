@@ -1,0 +1,41 @@
+{
+  "name": "@rebase/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/main.js",
+  "imports": {
+    "#desktop/*": {
+      "rebase-source": "./*.ts",
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "rebase-source": "./index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b && pnpm bundle:preload && pnpm copy:assets",
+    "bundle:preload": "esbuild preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.cjs",
+    "copy:assets": "node --input-type=module -e \"import { cpSync, rmSync } from 'node:fs'; const target = 'dist/assets'; rmSync(target, { force: true, recursive: true }); cpSync('assets', target, { recursive: true });\"",
+    "start": "cross-env ELECTRON_RUN_AS_NODE= electron dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rebase/server": "workspace:*",
+    "@rebase/web": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "cross-env": "10.1.0",
+    "electron": "43.4.1",
+    "esbuild": "0.28.2"
+  }
+}

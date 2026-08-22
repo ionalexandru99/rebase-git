@@ -1,74 +1,28 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
-  "vcs": {
-    "enabled": true,
-    "clientKind": "git",
-    "useIgnoreFile": true
-  },
+  "$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
   "files": {
-    "ignoreUnknown": false,
-    "includes": [
-      "src/**/*",
-      "electron-builder.config.js",
-      "electron.vite.config.ts",
-      "vite.runtime.config.ts",
-      "vite.web.config.ts",
-      "vitest.server.config.ts",
-      "biome.json",
-      "package.json",
-      "tsconfig.json",
-      "tsconfig.node.json",
-      "!!**/.claude",
-      "!!**/node_modules",
-      "!!**/out",
-      "!!**/release"
-    ]
+    "includes": ["**", "!**/dist", "!**/node_modules", "!tests/.artifacts"]
   },
   "formatter": {
     "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineEnding": "lf",
-    "lineWidth": 100
-  },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true,
-      "correctness": {
-        "useExhaustiveDependencies": {
-          "level": "error",
-          "options": {
-            "hooks": [{ "name": "useLatestRef", "stableResult": true }]
-          }
-        }
-      },
-      "suspicious": {
-        "noConsole": "off"
-      },
-      "style": {
-        "useImportType": "error",
-        "useBlockStatements": "error"
-      }
-    }
+    "indentStyle": "space"
   },
   "css": {
     "parser": {
       "tailwindDirectives": true
-    },
-    "formatter": {
-      "enabled": true
-    },
-    "linter": {
-      "enabled": true
     }
   },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "single",
-      "jsxQuoteStyle": "double",
-      "trailingCommas": "none",
-      "semicolons": "asNeeded"
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
     }
   }
 }

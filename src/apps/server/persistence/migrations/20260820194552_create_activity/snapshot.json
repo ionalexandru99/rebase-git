@@ -1,0 +1,231 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "745ef59e-23f4-4250-b774-ee3c01efcd93",
+  "prevIds": ["26119487-7320-4b1d-9e41-2ea33c7e5bd0"],
+  "ddl": [
+    {
+      "name": "authorization_metadata",
+      "entityType": "tables"
+    },
+    {
+      "name": "environment",
+      "entityType": "tables"
+    },
+    {
+      "name": "operation_activity",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "label",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_seen_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revoked_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "role",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "automatic_port",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "singleton",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "finished_at",
+      "entityType": "columns",
+      "table": "operation_activity"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "operation_activity"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "operation_activity"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "table": "operation_activity"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "operation_activity"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "authorization_metadata_pk",
+      "table": "authorization_metadata",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["singleton"],
+      "nameExplicit": false,
+      "name": "environment_pk",
+      "table": "environment",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "operation_activity_pk",
+      "table": "operation_activity",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "\"started_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "\"id\" DESC",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "operation_activity_started_at",
+      "entityType": "indexes",
+      "table": "operation_activity"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "environment_id_unique",
+      "entityType": "uniques",
+      "table": "environment"
+    },
+    {
+      "value": "\"role\" IN ('reader', 'contributor', 'maintainer', 'owner')",
+      "name": "authorization_metadata_role_check",
+      "entityType": "checks",
+      "table": "authorization_metadata"
+    },
+    {
+      "value": "\"automatic_port\" BETWEEN 1 AND 65535",
+      "name": "environment_automatic_port_check",
+      "entityType": "checks",
+      "table": "environment"
+    },
+    {
+      "value": "\"singleton\" = 1",
+      "name": "environment_singleton_check",
+      "entityType": "checks",
+      "table": "environment"
+    },
+    {
+      "value": "\"status\" IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'outcome_unknown')",
+      "name": "operation_activity_status_check",
+      "entityType": "checks",
+      "table": "operation_activity"
+    }
+  ],
+  "renames": []
+}

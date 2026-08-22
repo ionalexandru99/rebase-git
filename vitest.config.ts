@@ -1,41 +1,31 @@
-import path from 'node:path'
-import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "vite-plus";
+
+const testProject = (name: "compatibility" | "integration" | "unit") => ({
+  extends: true as const,
+  test: {
+    environment: "node" as const,
+    include: [`tests/${name}/**/*.test.ts`],
+    name,
+  },
+});
 
 export default defineConfig({
-  define: {
-    __REBASE_RENDERER_BUILD_ID__: JSON.stringify('renderer-test-build')
-  },
-  plugins: [react()],
   resolve: {
-    conditions: ['development', 'browser'],
     alias: {
-      '@': path.resolve(__dirname, './src/renderer'),
-      '@common': path.resolve(__dirname, './src/common'),
-      '@shared': path.resolve(__dirname, './src/shared'),
+      "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
+    },
+  },
+  ssr: {
+    resolve: {
+      conditions: ["rebase-source", "import", "default"],
     },
   },
   test: {
-    name: 'renderer',
-    environment: 'happy-dom',
-    globals: true,
-    include: [
-      'src/web/**/*.test.{ts,tsx}',
-      'src/renderer/**/*.test.{ts,tsx}',
-      'tests/browser-server/web/**/*.test.{ts,tsx}',
-      'tests/environment-identity/web/**/*.test.{ts,tsx}',
+    projects: [
+      testProject("unit"),
+      testProject("integration"),
+      testProject("compatibility"),
     ],
-    setupFiles: ['./src/test/setup.ts'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'html'],
-      reportsDirectory: './coverage/renderer',
-      include: ['src/renderer/**'],
-    },
-    server: {
-      deps: {
-        inline: [/react/, /@testing-library\/react/, /sonner/, /lucide-react/],
-      },
-    },
   },
-})
+});

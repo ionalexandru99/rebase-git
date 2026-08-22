@@ -1,386 +1,392 @@
-name: Release
+name: Release local package
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
-      - '!v*-nightly.*'
-  schedule:
-    - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       channel:
         description: Release channel
-        required: false
-        default: stable
+        required: true
+        default: nightly
         type: choice
         options:
-          - stable
           - nightly
-      version:
-        description: Release version, such as 0.0.1 or v0.1.0
-        required: false
-        type: string
+          - stable
+      publish:
+        description: Publish to npm and create the GitHub release
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: release
+  group: release-local
   cancel-in-progress: false
 
 jobs:
-  check-changes:
-    name: Check for changes since last nightly
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    outputs:
-      has_changes: ${{ steps.check.outputs.has_changes }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - id: check
-        name: Compare HEAD to last nightly tag
-        shell: bash
-        run: |
-          last_nightly_tag=$(git tag --list 'v*-nightly.*' --sort=-creatordate | head -n 1)
-          if [[ -z "$last_nightly_tag" ]]; then
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          last_nightly_sha=$(git rev-parse "$last_nightly_tag^{commit}")
-          head_sha=$(git rev-parse HEAD)
-          if [[ "$last_nightly_sha" == "$head_sha" ]]; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          fi
-
-  preflight:
-    name: Preflight
-    needs: check-changes
-    if: |
-      !failure() && !cancelled() &&
-      (github.event_name != 'schedule' || needs.check-changes.outputs.has_changes == 'true')
+  package:
+    name: Build package
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
     outputs:
-      version: ${{ steps.release.outputs.version }}
-      tag: ${{ steps.release.outputs.tag }}
-      release_name: ${{ steps.release.outputs.name }}
-      is_prerelease: ${{ steps.release.outputs.is_prerelease }}
-      make_latest: ${{ steps.release.outputs.make_latest }}
-      release_channel: ${{ steps.release.outputs.release_channel }}
-      ref: ${{ github.sha }}
+      artifact: ${{ steps.release.outputs.artifact }}
+      channel: ${{ steps.request.outputs.channel }}
+      dist_tag: ${{ steps.request.outputs.dist_tag }}
+      integrity: ${{ steps.release.outputs.integrity }}
+      name: ${{ steps.request.outputs.name }}
+      prerelease: ${{ steps.request.outputs.prerelease }}
+      previous_tag: ${{ steps.request.outputs.previous_tag }}
+      tag: ${{ steps.request.outputs.tag }}
+      version: ${{ steps.request.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version-file: package.json
-          package-manager-cache: false
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Enable pnpm
-        run: corepack enable pnpm
+      - id: request
+        name: Validate release request
+        shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ inputs.publish }}
+          RELEASE_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          base_version=$(node -p "require('./package.json').version")
+          if [[ ! "$base_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "package.json version must use MAJOR.MINOR.PATCH without a prerelease suffix." >&2
+            exit 1
+          fi
 
-      - name: Resolve pnpm store
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+          if [[ "$PUBLISH" == "true" && "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Published releases must run from main. Current ref: $GITHUB_REF" >&2
+            exit 1
+          fi
 
-      - uses: actions/cache@v5
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          if [[ "$CHANNEL" == "nightly" ]]; then
+            created_at=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+            run_date="${created_at%%T*}"
+            version="$base_version-nightly.${run_date//-/}.$RUN_NUMBER"
+            dist_tag="nightly"
+            name="Rebase Nightly $version (${RELEASE_SHA:0:12})"
+            prerelease="true"
+          elif [[ "$CHANNEL" == "stable" ]]; then
+            version="$base_version"
+            dist_tag="latest"
+            name="Rebase v$version"
+            prerelease="false"
+          else
+            echo "Unknown release channel: $CHANNEL" >&2
+            exit 1
+          fi
+
+          tag="v$version"
+          previous_tag=""
+          while IFS= read -r candidate; do
+            if [[ "$candidate" == "$tag" ]]; then
+              continue
+            fi
+            if [[ "$CHANNEL" == "nightly" && "$candidate" == v*-nightly.* ]]; then
+              previous_tag="$candidate"
+              break
+            fi
+            if [[ "$CHANNEL" == "stable" && "$candidate" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              previous_tag="$candidate"
+              break
+            fi
+          done < <(git tag --sort=-version:refname)
+
+          if tag_sha=$(git rev-list -n 1 "$tag" 2>/dev/null); then
+            if [[ "$RUN_ATTEMPT" == "1" || "$tag_sha" != "$RELEASE_SHA" ]]; then
+              echo "Git tag $tag already resolves to $tag_sha." >&2
+              exit 1
+            fi
+            echo "Retrying the release that created $tag at $tag_sha."
+          fi
+
+          registry_error=$(mktemp)
+          if registry_version=$(npm view "rebase-git@$version" version 2>"$registry_error"); then
+            if [[ "$RUN_ATTEMPT" == "1" ]]; then
+              echo "npm already contains rebase-git@$registry_version. Published versions are immutable." >&2
+              exit 1
+            fi
+            echo "npm already contains rebase-git@$registry_version. The publish job will verify its integrity."
+          elif ! grep -q "E404" "$registry_error"; then
+            cat "$registry_error" >&2
+            exit 1
+          fi
+
+          npm pkg set "version=$version"
+          {
+            echo "channel=$CHANNEL"
+            echo "dist_tag=$dist_tag"
+            echo "name=$name"
+            echo "prerelease=$prerelease"
+            echo "previous_tag=$previous_tag"
+            echo "tag=$tag"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - id: release
-        name: Resolve release
-        env:
-          DISPATCH_CHANNEL: ${{ github.event.inputs.channel }}
-          DISPATCH_VERSION: ${{ github.event.inputs.version }}
-          NIGHTLY_RUN_NUMBER: ${{ github.run_number }}
-          NIGHTLY_SHA: ${{ github.sha }}
-        run: |
-          if [[ "$GITHUB_EVENT_NAME" == "schedule" || ( "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${DISPATCH_CHANNEL:-stable}" == "nightly" ) ]]; then
-            nightly_date=$(date -u +%Y%m%d)
-            current_version=$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")
-            stable_version="${current_version%%[-+]*}"
-            if [[ ! "$stable_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-              echo "Invalid package version: $current_version" >&2
-              exit 1
-            fi
-            base_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
-            version="$base_version-nightly.$nightly_date.$NIGHTLY_RUN_NUMBER"
-            short_sha="${NIGHTLY_SHA:0:12}"
-            echo "base_version=$base_version" >> "$GITHUB_OUTPUT"
-            echo "version=$version" >> "$GITHUB_OUTPUT"
-            echo "tag=v$version" >> "$GITHUB_OUTPUT"
-            echo "name=Rebase Nightly $version ($short_sha)" >> "$GITHUB_OUTPUT"
-            echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
-            echo "release_channel=nightly" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "make_latest=false" >> "$GITHUB_OUTPUT"
-          else
-            raw_version="${DISPATCH_VERSION:-$GITHUB_REF_NAME}"
-            version="${raw_version#v}"
-            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "Invalid release version: $raw_version" >&2
-              exit 1
-            fi
-
-            major="${version%%.*}"
-            remainder="${version#*.}"
-            minor="${remainder%%.*}"
-            if (( major >= 1 )); then
-              release_name="Rebase v$version"
-            elif (( minor >= 1 )); then
-              release_name="Rebase Beta v$version"
-            else
-              release_name="Rebase Alpha v$version"
-            fi
-            is_prerelease=false
-            make_latest=true
-
-            echo "release_channel=stable" >> "$GITHUB_OUTPUT"
-            echo "version=$version" >> "$GITHUB_OUTPUT"
-            echo "tag=v$version" >> "$GITHUB_OUTPUT"
-            echo "name=$release_name" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
-            echo "make_latest=$make_latest" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check
+      - name: Check formatting and linting
         run: pnpm check
 
-      - name: Typecheck
+      - name: Check types
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test:renderer && pnpm test:main && pnpm test:main:integration && pnpm test:sidecar
+      - name: Run unit tests
+        run: pnpm test:unit
 
-  build:
-    name: Build ${{ matrix.label }}
-    needs: preflight
-    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
-    env:
-      HAS_MACOS_CERT: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      - id: release
+        name: Pack local application
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.request.outputs.version }}
+        run: |
+          mkdir package-artifact
+          npm pack --pack-destination package-artifact
+
+          artifact="rebase-git-$RELEASE_VERSION.tgz"
+          integrity=$(node --input-type=module -e \
+            "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; process.stdout.write('sha512-' + createHash('sha512').update(readFileSync('package-artifact/$artifact')).digest('base64'))")
+          (cd package-artifact && sha256sum "$artifact" > "$artifact.sha256")
+
+          {
+            echo "artifact=$artifact"
+            echo "integrity=$integrity"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: npm-package
+          path: package-artifact/rebase-git-*
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke:
+    name: Smoke packed package (${{ matrix.name }})
+    needs: package
     strategy:
       fail-fast: false
       matrix:
         include:
-          - label: macOS arm64
-            runner: macos-latest
-            platform: mac
-            arch: arm64
-          - label: macOS x64
-            runner: macos-15-intel
-            platform: mac
-            arch: x64
-          - label: Linux x64
+          - name: Linux
             runner: ubuntu-latest
-            platform: linux
-            arch: x64
-          - label: Windows x64
+          - name: macOS
+            runner: macos-latest
+          - name: Windows
             runner: windows-latest
-            platform: win
-            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.preflight.outputs.ref }}
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version-file: package.json
-          package-manager-cache: false
+          node-version-file: .node-version
 
-      - name: Enable pnpm
-        run: corepack enable pnpm
-
-      - name: Resolve pnpm store
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v5
+      - name: Download package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          name: npm-package
+          path: package-artifact
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Smoke-test clean package installation
+        run: node tests/package/smoke-packed-package.ts package-artifact
 
-      - name: Build application
-        run: pnpm build
+  publish-npm:
+    name: Publish npm package
+    needs: [package, smoke]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
-      - name: Package application
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          registry-url: https://registry.npmjs.org
+
+      - name: Download package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: npm-package
+          path: package-artifact
+
+      - id: registry
+        name: Check npm version
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '' && 'true' || 'false' }}
-          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
-          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
-          RELEASE_CHANNEL: ${{ needs.preflight.outputs.release_channel }}
+          EXPECTED_INTEGRITY: ${{ needs.package.outputs.integrity }}
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
-          publish_channel_args=()
-          if [[ "$RELEASE_CHANNEL" == "nightly" ]]; then
-            publish_channel_args=(--config.publish.channel=nightly)
-          fi
-          pnpm exec electron-builder \
-            --config electron-builder.config.js \
-            --${{ matrix.platform }} \
-            --${{ matrix.arch }} \
-            --config.extraMetadata.version="${{ needs.preflight.outputs.version }}" \
-            "${publish_channel_args[@]}" \
-            --publish never
-
-      - name: Verify signature and notarization
-        if: ${{ matrix.platform == 'mac' && env.HAS_MACOS_CERT == 'true' }}
-        run: |
-          app=$(find release -maxdepth 2 -name '*.app' | head -n 1)
-          if [[ -z "$app" ]]; then
-            echo "No .app bundle found under release/" >&2
+          registry_error=$(mktemp)
+          if published_integrity=$(npm view "rebase-git@$RELEASE_VERSION" dist.integrity 2>"$registry_error"); then
+            if [[ "$RUN_ATTEMPT" == "1" ]]; then
+              echo "npm already contains rebase-git@$RELEASE_VERSION. Published versions are immutable." >&2
+              exit 1
+            fi
+            if [[ "$published_integrity" != "$EXPECTED_INTEGRITY" ]]; then
+              echo "npm contains a different artifact for rebase-git@$RELEASE_VERSION." >&2
+              exit 1
+            fi
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "The retry found the exact package artifact in npm."
+          elif grep -q "E404" "$registry_error"; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            cat "$registry_error" >&2
             exit 1
           fi
-          codesign --verify --strict --verbose=2 "$app"
-          codesign -dvvv "$app"
-          spctl --assess --type execute -vvv "$app"
-          xcrun stapler validate "$app"
-          for dmg in release/*.dmg; do
-            xcrun stapler validate "$dmg"
-            spctl --assess --type open --context context:primary-signature -vvv "$dmg"
+
+      - name: Publish with provenance
+        if: steps.registry.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TAG: ${{ needs.package.outputs.dist_tag }}
+          RELEASE_ARTIFACT: ${{ needs.package.outputs.artifact }}
+        run: npm publish "package-artifact/$RELEASE_ARTIFACT" --access public --provenance --tag "$NPM_TAG"
+
+      - name: Verify npm metadata
+        shell: bash
+        env:
+          EXPECTED_INTEGRITY: ${{ needs.package.outputs.integrity }}
+          NPM_TAG: ${{ needs.package.outputs.dist_tag }}
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          for _ in {1..12}; do
+            published_version=$(npm view "rebase-git@$RELEASE_VERSION" version 2>/dev/null || true)
+            tagged_version=$(npm view rebase-git "dist-tags.$NPM_TAG" 2>/dev/null || true)
+            published_integrity=$(npm view "rebase-git@$RELEASE_VERSION" dist.integrity 2>/dev/null || true)
+            provenance=$(npm view "rebase-git@$RELEASE_VERSION" dist.attestations.provenance.predicateType 2>/dev/null || true)
+            if [[ "$published_version" == "$RELEASE_VERSION" && "$tagged_version" == "$RELEASE_VERSION" && "$published_integrity" == "$EXPECTED_INTEGRITY" && "$provenance" == "https://slsa.dev/provenance/v1" ]]; then
+              exit 0
+            fi
+            sleep 5
           done
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/*.AppImage
-            release/*.deb
-            release/*.exe
-            release/*.blockmap
-            release/latest*.yml
-            release/nightly*.yml
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
+          echo "npm metadata did not converge to the expected version, dist-tag, integrity, and provenance." >&2
+          exit 1
 
-  release:
+  publish-github:
     name: Publish GitHub release
-    needs: [preflight, build]
-    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.build.result == 'success' }}
+    needs: [package, publish-npm]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - name: Download package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: desktop-*
-          path: artifacts
+          name: npm-package
+          path: package-artifact
 
-      - name: Assemble release assets
-        shell: bash
-        run: |
-          mkdir release-assets
-          mac_manifest=$(basename "$(find artifacts/desktop-mac-arm64 -name '*-mac.yml')")
-          yq eval-all '. as $item ireduce ({}; . *+ $item) | .files |= unique_by(.url)' \
-            "artifacts/desktop-mac-arm64/$mac_manifest" \
-            "artifacts/desktop-mac-x64/$mac_manifest" \
-            > "release-assets/$mac_manifest"
-          find artifacts -type f ! -name '*-mac.yml' -exec mv {} release-assets/ \;
-
-      - name: Stage draft release
-        id: draft
-        uses: softprops/action-gh-release@v2
+      - name: Create release at the workflow commit
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          tag_name: ${{ needs.preflight.outputs.tag }}
-          target_commitish: ${{ needs.preflight.outputs.ref }}
-          name: ${{ needs.preflight.outputs.release_name }}
+          tag_name: ${{ needs.package.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ needs.package.outputs.name }}
+          body: |
+            This release runs Rebase locally through `npx`. It contains the local Environment server and browser client. It has no Git product features yet.
+
+            Run `npx rebase-git@${{ needs.package.outputs.version }}` with Node.js 24 and Git 2.34 or newer.
+
+            Source commit: `${{ github.sha }}`
+            npm package: `rebase-git@${{ needs.package.outputs.version }}`
+            npm integrity: `${{ needs.package.outputs.integrity }}`
           generate_release_notes: true
-          draft: true
-          prerelease: ${{ needs.preflight.outputs.is_prerelease }}
+          previous_tag: ${{ needs.package.outputs.previous_tag }}
+          prerelease: ${{ needs.package.outputs.prerelease }}
+          make_latest: ${{ needs.package.outputs.channel == 'stable' }}
           files: |
-            release-assets/*.dmg
-            release-assets/*.zip
-            release-assets/*.AppImage
-            release-assets/*.deb
-            release-assets/*.exe
-            release-assets/*.blockmap
-            release-assets/*.yml
+            package-artifact/${{ needs.package.outputs.artifact }}
+            package-artifact/${{ needs.package.outputs.artifact }}.sha256
           fail_on_unmatched_files: true
 
-      - name: Publish release
+      - name: Verify GitHub release metadata
+        shell: bash
         env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_PRERELEASE: ${{ needs.package.outputs.prerelease }}
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ steps.draft.outputs.id }}
-          MAKE_LATEST: ${{ needs.preflight.outputs.make_latest }}
+          RELEASE_TAG: ${{ needs.package.outputs.tag }}
         run: |
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-            -F draft=false \
-            -f make_latest="$MAKE_LATEST"
-
-  finalize:
-    name: Finalize release version
-    needs: [preflight, release]
-    if: ${{ !failure() && !cancelled() && needs.release.result == 'success' && needs.preflight.outputs.release_channel == 'stable' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: main
-          fetch-depth: 0
-          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: package.json
-          package-manager-cache: false
-
-      - name: Update package version
-        env:
-          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
-        run: |
-          node --input-type=module -e "import { readFileSync, writeFileSync } from 'node:fs'; const packageJson = JSON.parse(readFileSync('package.json', 'utf8')); packageJson.version = process.env.RELEASE_VERSION; writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n')"
-
-      - name: Commit version
-        env:
-          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
-        run: |
-          if git diff --quiet -- package.json; then
-            exit 0
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)
+          release=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,tagName --jq '[.tagName, .isDraft, .isPrerelease] | @tsv')
+          if [[ "$tag_sha" != "$EXPECTED_SHA" ]]; then
+            echo "Git tag $RELEASE_TAG resolves to $tag_sha instead of $EXPECTED_SHA." >&2
+            exit 1
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          git commit -m "chore(release): prepare $RELEASE_TAG"
-          for attempt in 1 2 3; do
-            if git push origin HEAD:main; then
-              exit 0
-            fi
-            if [[ "$attempt" == "3" ]]; then
-              exit 1
-            fi
-            git fetch origin main
-            git rebase origin/main
-          done
+          if [[ "$release" != "$RELEASE_TAG"$'\tfalse\t'"$EXPECTED_PRERELEASE" ]]; then
+            echo "GitHub release metadata does not match the selected channel: $release" >&2
+            exit 1
+          fi
+
+  verify-registry:
+    name: Smoke published package (${{ matrix.name }})
+    needs: [package, publish-github]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-latest
+          - name: macOS
+            runner: macos-latest
+          - name: Windows
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          registry-url: https://registry.npmjs.org
+
+      - name: Smoke-test clean registry installation
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: node tests/package/smoke-packed-package.ts "npm:rebase-git@$RELEASE_VERSION"

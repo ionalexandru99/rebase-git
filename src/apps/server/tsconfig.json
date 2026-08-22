@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["./dist", "./package-cli.ts"],
+  "references": [{ "path": "../../contracts" }]
+}

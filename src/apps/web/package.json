@@ -1,0 +1,62 @@
+{
+  "name": "@rebase/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "./styles.css"
+  ],
+  "imports": {
+    "#web/*": {
+      "rebase-source": "./*.ts",
+      "types": "./dist/types/*.d.ts",
+      "import": "./dist/types/*.js",
+      "default": "./dist/types/*.js"
+    },
+    "#web-ui/*": {
+      "rebase-source": "./*.tsx",
+      "types": "./dist/types/*.d.ts",
+      "import": "./dist/types/*.js",
+      "default": "./dist/types/*.js"
+    }
+  },
+  "exports": {
+    ".": {
+      "rebase-source": "./index.ts",
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js",
+      "default": "./dist/types/index.js"
+    },
+    "./features/environment-connection": {
+      "rebase-source": "./features/environment-connection/index.ts",
+      "types": "./dist/types/features/environment-connection/index.d.ts",
+      "import": "./dist/types/features/environment-connection/index.js",
+      "default": "./dist/types/features/environment-connection/index.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "build:web": "vp build",
+    "dev": "vp dev --port 4173",
+    "preview": "vp preview --port 4173",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rebase/contracts": "workspace:*",
+    "clsx": "2.1.1",
+    "effect": "catalog:",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "tailwindcss": "4.3.3",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

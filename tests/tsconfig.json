@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "paths": {
+      "#web/*": ["./../src/apps/web/*.ts", "./../src/apps/web/*.tsx"]
+    },
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["../playwright.config.ts", "../vitest.config.ts", "./**/*.ts"]
+}
