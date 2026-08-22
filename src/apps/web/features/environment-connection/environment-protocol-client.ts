@@ -50,7 +50,12 @@ export function connectCurrentEnvironment(
   },
 ) {
   return Effect.runPromise(
-    openCurrentEnvironmentConnection(origin, productVersion, options),
+    openCurrentEnvironmentConnection(
+      origin,
+      productVersion,
+      options,
+      options.signal,
+    ),
     options.signal === undefined ? undefined : { signal: options.signal },
   );
 }
@@ -76,6 +81,7 @@ function openCurrentEnvironmentConnection(
     readonly credential: string;
     readonly lastObservedSequence?: number;
   },
+  signal?: AbortSignal,
 ) {
   return Effect.gen(function* () {
     const discovery = yield* fetchEnvironmentDiscoveryEffect(origin);
@@ -87,6 +93,7 @@ function openCurrentEnvironmentConnection(
         options.lastObservedSequence,
       ),
       options.credential,
+      signal,
     );
   });
 }
@@ -99,7 +106,7 @@ export function connectEnvironment(
   signal?: AbortSignal,
 ): Promise<EnvironmentProtocolConnection> {
   return Effect.runPromise(
-    openEnvironmentConnection(origin, discovery, hello, credential),
+    openEnvironmentConnection(origin, discovery, hello, credential, signal),
     signal === undefined ? undefined : { signal },
   );
 }
@@ -121,8 +128,15 @@ function openEnvironmentConnection(
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
   credential: string,
+  signal?: AbortSignal,
 ) {
-  return startEnvironmentConnection(origin, discovery, hello, credential);
+  return startEnvironmentConnection(
+    origin,
+    discovery,
+    hello,
+    credential,
+    signal,
+  );
 }
 
 function closeEnvironmentConnection(connection: EnvironmentProtocolConnection) {
@@ -137,6 +151,7 @@ function startEnvironmentConnection(
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
   credential: string,
+  externalSignal?: AbortSignal,
 ) {
   return Effect.gen(function* () {
     const connected = yield* Deferred.make<
@@ -151,13 +166,17 @@ function startEnvironmentConnection(
       environmentResponseError("WebSocket"),
     );
     const closeController = new AbortController();
+    const signal =
+      externalSignal === undefined
+        ? closeController.signal
+        : AbortSignal.any([externalSignal, closeController.signal]);
 
     yield* runEnvironmentConnection(
       origin,
       discovery,
       hello,
       credential,
-      closeController.signal,
+      signal,
       closeController,
       connected,
       closed,

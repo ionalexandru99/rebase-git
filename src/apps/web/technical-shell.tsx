@@ -15,7 +15,11 @@ export function TechnicalShell({
   return (
     <main className="min-h-svh bg-background p-6 text-foreground">
       <h1 className="text-xl font-semibold">Rebase</h1>
-      <section className="mt-4" data-connection-state={state._tag}>
+      <section
+        className="mt-4"
+        data-connection-state={state._tag}
+        role="status"
+      >
         <h2 className="text-sm font-medium">{status.title}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{status.detail}</p>
       </section>

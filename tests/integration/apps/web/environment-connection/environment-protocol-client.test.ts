@@ -105,6 +105,22 @@ describe("browser Environment protocol client", () => {
     });
   });
 
+  it("closes a Promise connection when its signal is aborted", async () => {
+    await withListener(async (origin) => {
+      const controller = new AbortController();
+      const connection = await connectCurrentEnvironment(origin, "0.0.0", {
+        credential,
+        signal: controller.signal,
+      });
+
+      controller.abort();
+
+      await expect(Effect.runPromise(connection.closed)).resolves.toEqual(
+        new EnvironmentResponseError({ responseTag: "WebSocket" }),
+      );
+    });
+  });
+
   it("exposes a tagged protocol rejection", async () => {
     await withListener(async (origin) => {
       const discovery = await fetchEnvironmentDiscovery(origin);
