@@ -9,14 +9,16 @@ const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
 const outputDirectory = "src/apps/desktop/dist/package";
 const productVersion = process.env.RELEASE_VERSION ?? packageMetadata.version;
 const execute = promisify(execFile);
+const packageManagerCommand =
+  process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
+const packageManagerArguments =
+  process.platform === "win32"
+    ? ["/d", "/c", "pnpm.cmd", "build:web"]
+    : ["build:web"];
 
-await execute(
-  process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-  ["build:web"],
-  {
-    env: { ...process.env, REBASE_PRODUCT_VERSION: productVersion },
-  },
-);
+await execute(packageManagerCommand, packageManagerArguments, {
+  env: { ...process.env, REBASE_PRODUCT_VERSION: productVersion },
+});
 
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });

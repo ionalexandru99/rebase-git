@@ -15,6 +15,13 @@ For Windows we expect the application to work also on WSL.
 
 The application should also be able to connect to any remote environment via SSH and communicate the repository changes without any issues.
 
+### Cross-platform scripts
+
+- Treat build, packaging, and release scripts as native Linux, macOS, and Windows code. A successful Linux build does not prove that a script works on Windows.
+- Node cannot execute `.cmd` or `.bat` shims directly with `execFile` or `spawn` without a shell. On Windows, invoke the shim through `process.env.ComSpec ?? "cmd.exe"` with `/d /c`, or execute a native binary instead. Pass release values through the child-process `env` option and keep command arguments separate from those values.
+- When a change adds, removes, or reorders a subprocess in a cross-platform packaging path, the validation matrix must run that exact command on Windows before the release workflow uses it. `pnpm build:web` and an npm package smoke test do not cover `pnpm build:desktop-package`.
+- Before restoring code removed by a `fix(...)` commit, inspect why it was removed. Preserve the fixed invariant even when the newer feature needs a different implementation.
+
 ## Performance
 
 Performance is one of the corner stones of the application. Speed is the non negotiable aspect of the app. If it is not fast it is bad.
