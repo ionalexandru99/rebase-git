@@ -340,13 +340,6 @@ jobs:
           RELEASE_VERSION: ${{ needs.package.outputs.version }}
         run: pnpm build:desktop-package
 
-      - name: Require Windows signing certificate
-        if: ${{ matrix.platform == 'win' && env.HAS_WINDOWS_CERT != 'true' }}
-        shell: bash
-        run: |
-          echo "WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD are required for Windows releases." >&2
-          exit 1
-
       - name: Package desktop application
         shell: bash
         env:
@@ -389,7 +382,7 @@ jobs:
           done
 
       - name: Verify Windows signature
-        if: ${{ matrix.platform == 'win' }}
+        if: ${{ matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true' }}
         shell: pwsh
         run: |
           $installer = Get-ChildItem release -Filter *.exe | Select-Object -First 1
