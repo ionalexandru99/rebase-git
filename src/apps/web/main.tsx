@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/features/local-environment-session/browser-local-environment-session";
-import { TechnicalShell } from "#web-ui/technical-shell";
+import { ApplicationShell } from "#web-ui/features/application-shell/application-shell";
 import "@rebase/web/styles.css";
 
 const rootElement = document.getElementById("root");
@@ -17,6 +17,6 @@ session.start();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <TechnicalShell session={session} />
+    <ApplicationShell session={session} />
   </StrictMode>,
 );
