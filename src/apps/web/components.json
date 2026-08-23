@@ -1,6 +1,6 @@
 {
   "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "new-york",
+  "style": "base-mira",
   "rsc": false,
   "tsx": true,
   "tailwind": {
@@ -10,12 +10,16 @@
     "cssVariables": true,
     "prefix": ""
   },
-  "iconLibrary": "lucide",
+  "iconLibrary": "tabler",
+  "rtl": false,
   "aliases": {
-    "components": "@rebase/web/components",
-    "ui": "@rebase/web/components/ui",
-    "hooks": "@rebase/web/hooks",
-    "lib": "@rebase/web/lib",
-    "utils": "@rebase/web/lib/utils"
-  }
+    "components": "#web-ui/components",
+    "ui": "#web-ui/components/ui",
+    "hooks": "#web/hooks",
+    "lib": "#web/lib",
+    "utils": "#web/lib/utils"
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {}
 }
