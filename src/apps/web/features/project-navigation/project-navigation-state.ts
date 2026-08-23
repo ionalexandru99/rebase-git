@@ -15,6 +15,19 @@ export function environmentRepositories(
   }));
 }
 
+export function filterEnvironmentRepositories(
+  environment: ProjectNavigationEnvironment,
+  query: string,
+): readonly ProjectNavigationRepositoryItem[] {
+  const repositories = environmentRepositories(environment);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return normalizedQuery.length === 0
+    ? repositories
+    : repositories.filter((repository) =>
+        repository.name.toLocaleLowerCase().includes(normalizedQuery),
+      );
+}
+
 export function setEnvironmentAvailability(
   state: ProjectNavigationState,
   environmentId: string,

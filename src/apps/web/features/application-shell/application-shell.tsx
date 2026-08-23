@@ -1,4 +1,11 @@
-import { type JSX, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type JSX,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { environmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
 import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
@@ -58,13 +65,44 @@ export function ApplicationShell({
       ? { ...currentNavigation, environments: [] }
       : currentNavigation;
 
-  const setCollapsed = (collapsed: boolean) => {
+  const setCollapsed = useCallback((collapsed: boolean) => {
     setNavigation((current) =>
       current.sidebarCollapsed === collapsed
         ? current
         : setProjectSidebarCollapsed(current, collapsed),
     );
-  };
+  }, []);
+  const collapseSidebar = useCallback(() => {
+    sidebarRef.current?.collapse();
+    setCollapsed(true);
+  }, [setCollapsed]);
+  const expandSidebar = useCallback(() => {
+    sidebarRef.current?.expand();
+    setCollapsed(false);
+  }, [setCollapsed]);
+
+  useEffect(() => {
+    const toggleSidebar = (event: KeyboardEvent) => {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.shiftKey ||
+        event.key.toLowerCase() !== "b"
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      if (sidebarRef.current?.isCollapsed()) {
+        expandSidebar();
+      } else {
+        collapseSidebar();
+      }
+    };
+
+    window.addEventListener("keydown", toggleSidebar);
+    return () => window.removeEventListener("keydown", toggleSidebar);
+  }, [collapseSidebar, expandSidebar]);
 
   return (
     <TooltipProvider>
@@ -91,15 +129,9 @@ export function ApplicationShell({
               panelRef={sidebarRef}
             >
               <ProjectsSidebar
-                collapse={() => {
-                  sidebarRef.current?.collapse();
-                  setCollapsed(true);
-                }}
+                collapse={collapseSidebar}
                 environmentStatus={environmentStatus}
-                expand={() => {
-                  sidebarRef.current?.expand();
-                  setCollapsed(false);
-                }}
+                expand={expandSidebar}
                 navigation={visibleNavigation}
                 toggleEnvironment={(environmentId) =>
                   setNavigation((current) =>

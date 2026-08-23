@@ -67,3 +67,22 @@ test("collapses and restores the project sidebar", async ({ page }) => {
     page.getByRole("heading", { level: 1, name: "Projects" }),
   ).toBeVisible();
 });
+
+test("controls project navigation from the keyboard", async ({ page }) => {
+  await page.goto("/");
+
+  const filter = page.getByRole("textbox", { name: "Filter open projects" });
+  await filter.fill("rebase");
+  await expect(filter).toHaveValue("rebase");
+
+  await page.keyboard.press("Control+b");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Projects" }),
+  ).not.toBeVisible();
+
+  await page.keyboard.press("Control+b");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Projects" }),
+  ).toBeVisible();
+  await expect(filter).toHaveValue("rebase");
+});

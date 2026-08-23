@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
 import {
   environmentRepositories,
+  filterEnvironmentRepositories,
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
   toggleEnvironment,
@@ -35,6 +36,17 @@ describe("project navigation state", () => {
       expanded: false,
       repositories: [{ id: "payments" }, { id: "worker" }],
     });
+  });
+
+  it("filters repositories by name without changing the navigation state", () => {
+    const state = navigationState();
+    const environment = state.environments[0] ?? unreachable();
+
+    expect(filterEnvironmentRepositories(environment, "WORK")).toEqual([
+      { disabled: false, id: "worker", name: "worker" },
+    ]);
+    expect(filterEnvironmentRepositories(environment, "  ")).toHaveLength(2);
+    expect(environment.repositories).toHaveLength(2);
   });
 
   it("collapses the Projects sidebar without changing Environment expansion or selection", () => {

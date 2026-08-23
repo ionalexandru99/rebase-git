@@ -8,10 +8,10 @@ import {
   IconSettings,
   IconX,
 } from "@tabler/icons-react";
-import type { JSX } from "react";
+import { type JSX, useState } from "react";
 import type { EnvironmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
 import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
-import { environmentRepositories } from "#web/features/project-navigation/project-navigation-state";
+import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state";
 import { Button } from "#web-ui/components/ui/button";
 import {
   Collapsible,
@@ -38,6 +38,8 @@ export function ProjectsSidebar({
   readonly navigation: ProjectNavigationState;
   readonly toggleEnvironment: (environmentId: string) => void;
 }): JSX.Element {
+  const [filterQuery, setFilterQuery] = useState("");
+
   return (
     <nav
       aria-label="Projects"
@@ -47,13 +49,16 @@ export function ProjectsSidebar({
         <CollapsedProjectsSidebar
           environmentStatus={environmentStatus}
           expand={expand}
+          filterQuery={filterQuery}
           navigation={navigation}
         />
       ) : (
         <ExpandedProjectsSidebar
           collapse={collapse}
           environmentStatus={environmentStatus}
+          filterQuery={filterQuery}
           navigation={navigation}
+          setFilterQuery={setFilterQuery}
           toggleEnvironment={toggleEnvironment}
         />
       )}
@@ -64,12 +69,16 @@ export function ProjectsSidebar({
 function ExpandedProjectsSidebar({
   collapse,
   environmentStatus,
+  filterQuery,
   navigation,
+  setFilterQuery,
   toggleEnvironment,
 }: {
   readonly collapse: () => void;
   readonly environmentStatus: EnvironmentSessionPresentation;
+  readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;
+  readonly setFilterQuery: (query: string) => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }) {
   return (
@@ -99,7 +108,9 @@ function ExpandedProjectsSidebar({
         <Input
           aria-label="Filter open projects"
           className="pl-9"
+          onChange={(event) => setFilterQuery(event.target.value)}
           placeholder="Filter open projects..."
+          value={filterQuery}
         />
       </div>
       <div
@@ -153,25 +164,27 @@ function ExpandedProjectsSidebar({
                 </span>
               </div>
               <CollapsibleContent>
-                {environmentRepositories(environment).map((repository) => (
-                  <button
-                    className="grid h-11 w-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)_1.375rem] items-center gap-2.5 rounded-lg px-2.5 text-left text-base text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-45"
-                    disabled={repository.disabled}
-                    key={repository.id}
-                    type="button"
-                  >
-                    <span className="grid size-7.5 shrink-0 place-items-center rounded-md bg-secondary text-sm font-semibold">
-                      {repositoryInitials(repository.name)}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">
-                      {repository.name}
-                    </span>
-                    <IconX
-                      aria-hidden="true"
-                      className="size-4 text-muted-foreground"
-                    />
-                  </button>
-                ))}
+                {filterEnvironmentRepositories(environment, filterQuery).map(
+                  (repository) => (
+                    <button
+                      className="grid h-11 w-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)_1.375rem] items-center gap-2.5 rounded-lg px-2.5 text-left text-base text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-45"
+                      disabled={repository.disabled}
+                      key={repository.id}
+                      type="button"
+                    >
+                      <span className="grid size-7.5 shrink-0 place-items-center rounded-md bg-secondary text-sm font-semibold">
+                        {repositoryInitials(repository.name)}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {repository.name}
+                      </span>
+                      <IconX
+                        aria-hidden="true"
+                        className="size-4 text-muted-foreground"
+                      />
+                    </button>
+                  ),
+                )}
               </CollapsibleContent>
             </Collapsible>
           ))}
@@ -185,10 +198,12 @@ function ExpandedProjectsSidebar({
 function CollapsedProjectsSidebar({
   environmentStatus,
   expand,
+  filterQuery,
   navigation,
 }: {
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly expand: () => void;
+  readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;
 }) {
   return (
@@ -238,16 +253,18 @@ function CollapsedProjectsSidebar({
                 </TooltipTrigger>
                 <TooltipContent side="right">{environmentLabel}</TooltipContent>
               </Tooltip>
-              {environmentRepositories(environment).map((repository) => (
-                <span
-                  className="grid size-11 place-items-center rounded-lg bg-secondary text-sm font-semibold text-sidebar-foreground data-[disabled=true]:opacity-45"
-                  data-disabled={repository.disabled}
-                  key={repository.id}
-                  title={`${repository.name} · ${environment.name}`}
-                >
-                  {repositoryInitials(repository.name)}
-                </span>
-              ))}
+              {filterEnvironmentRepositories(environment, filterQuery).map(
+                (repository) => (
+                  <span
+                    className="grid size-11 place-items-center rounded-lg bg-secondary text-sm font-semibold text-sidebar-foreground data-[disabled=true]:opacity-45"
+                    data-disabled={repository.disabled}
+                    key={repository.id}
+                    title={`${repository.name} · ${environment.name}`}
+                  >
+                    {repositoryInitials(repository.name)}
+                  </span>
+                ),
+              )}
             </div>
           );
         })}
