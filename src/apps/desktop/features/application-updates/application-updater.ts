@@ -19,12 +19,11 @@ export function createApplicationUpdater(
     status: options.packaged ? { _tag: "Idle" } : { _tag: "Unavailable" },
   };
   let downloadingVersion: string | undefined;
-  let settingsQueue = Promise.resolve();
+  let commandQueue = Promise.resolve();
   const listeners = new Set<(snapshot: DesktopUpdateSnapshot) => void>();
 
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = false;
-  updater.allowDowngrade = false;
   configureReleaseChannel(updater, snapshot.settings.releaseChannel);
 
   const publish = (next: DesktopUpdateSnapshot) => {
@@ -91,11 +90,11 @@ export function createApplicationUpdater(
     }
   };
 
-  const updateSettings = <Result>(
+  const enqueueCommand = <Result>(
     operation: () => Promise<Result>,
   ): Promise<Result> => {
-    const result = settingsQueue.then(operation, operation);
-    settingsQueue = result.then(
+    const result = commandQueue.then(operation, operation);
+    commandQueue = result.then(
       () => undefined,
       () => undefined,
     );
@@ -113,7 +112,7 @@ export function createApplicationUpdater(
   };
 
   return {
-    checkForUpdates,
+    checkForUpdates: () => enqueueCommand(checkForUpdates),
     getSnapshot: () => snapshot,
     installUpdate: () => {
       if (snapshot.status._tag !== "Ready") return;
@@ -125,7 +124,7 @@ export function createApplicationUpdater(
       }
     },
     selectReleaseChannel: (releaseChannel) =>
-      updateSettings(async () => {
+      enqueueCommand(async () => {
         if (releaseChannel === snapshot.settings.releaseChannel) return;
         if (
           isUpdateActive(snapshot.status) ||
@@ -141,16 +140,18 @@ export function createApplicationUpdater(
         publishStatus(
           options.packaged ? { _tag: "Idle" } : { _tag: "Unavailable" },
         );
-        if (settings.checkAutomatically) void checkForUpdates();
+        if (settings.checkAutomatically) await checkForUpdates();
       }),
     setCheckAutomatically: (checkAutomatically) =>
-      updateSettings(async () => {
+      enqueueCommand(async () => {
         if (checkAutomatically === snapshot.settings.checkAutomatically) return;
         await saveSettings({ ...snapshot.settings, checkAutomatically });
-        if (checkAutomatically) void checkForUpdates();
+        if (checkAutomatically) await checkForUpdates();
       }),
     start: async () => {
-      if (snapshot.settings.checkAutomatically) await checkForUpdates();
+      if (snapshot.settings.checkAutomatically) {
+        await enqueueCommand(checkForUpdates);
+      }
     },
     subscribe: (listener) => {
       listeners.add(listener);
@@ -172,6 +173,7 @@ function configureReleaseChannel(
   channel: ReleaseChannel,
 ) {
   updater.channel = channel === "stable" ? "latest" : "nightly";
+  updater.allowDowngrade = false;
   updater.allowPrerelease = channel === "nightly";
 }
 

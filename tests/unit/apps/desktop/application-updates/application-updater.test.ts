@@ -176,16 +176,57 @@ describe("desktop application updater", () => {
       _tag: "Checking",
     });
   });
+
+  it("queues update checks behind release channel writes", async () => {
+    const updater = createTestUpdater();
+    const settingsWrite = Promise.withResolvers<void>();
+    const saveStarted = Promise.withResolvers<void>();
+    const applicationUpdater = createApplicationUpdater(updater, {
+      packaged: true,
+      saveSettings: async () => {
+        saveStarted.resolve();
+        await settingsWrite.promise;
+      },
+      settings: {
+        checkAutomatically: false,
+        releaseChannel: "stable",
+      },
+    });
+
+    const channelChange = applicationUpdater.selectReleaseChannel("nightly");
+    await saveStarted.promise;
+    const updateCheck = applicationUpdater.checkForUpdates();
+    expect(updater.checkForUpdates).not.toHaveBeenCalled();
+
+    settingsWrite.resolve();
+    await Promise.all([channelChange, updateCheck]);
+
+    expect(updater.channel).toBe("nightly");
+    expect(updater.checkForUpdates).toHaveBeenCalledOnce();
+  });
 });
 
 function createTestUpdater() {
   const listeners = new Map<string, Array<(value?: unknown) => void>>();
+  let allowDowngrade = false;
+  let channel: string | null = null;
   return {
-    allowDowngrade: false,
+    get allowDowngrade() {
+      return allowDowngrade;
+    },
+    set allowDowngrade(value) {
+      allowDowngrade = value;
+    },
     allowPrerelease: false,
     autoDownload: false,
     autoInstallOnAppQuit: true,
-    channel: null,
+    get channel() {
+      return channel;
+    },
+    set channel(value) {
+      channel = value;
+      allowDowngrade = true;
+    },
     checkForUpdates: vi.fn((): Promise<unknown> => Promise.resolve()),
     emit(event: string, value?: unknown) {
       for (const listener of listeners.get(event) ?? []) listener(value);

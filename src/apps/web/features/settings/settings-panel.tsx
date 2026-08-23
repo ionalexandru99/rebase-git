@@ -26,9 +26,11 @@ export function SettingsPanel({
     }
 
     let active = true;
+    let receivedSubscriptionSnapshot = false;
     setUpdateLoadError(undefined);
     const unsubscribe = desktopUpdates.subscribe((snapshot) => {
       if (active) {
+        receivedSubscriptionSnapshot = true;
         setUpdateLoadError(undefined);
         setUpdateSnapshot(snapshot);
       }
@@ -36,13 +38,13 @@ export function SettingsPanel({
     void desktopUpdates
       .getSnapshot()
       .then((snapshot) => {
-        if (active) {
+        if (active && !receivedSubscriptionSnapshot) {
           setUpdateLoadError(undefined);
           setUpdateSnapshot(snapshot);
         }
       })
       .catch((error: unknown) => {
-        if (active) {
+        if (active && !receivedSubscriptionSnapshot) {
           setUpdateLoadError(
             error instanceof Error
               ? error.message

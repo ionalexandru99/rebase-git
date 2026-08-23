@@ -1,21 +1,23 @@
 import { Select } from "@base-ui/react/select";
-import type {
-  DesktopUpdateSnapshot,
-  DesktopUpdates,
-  ReleaseChannel,
+import {
+  type DesktopUpdateSnapshot,
+  type DesktopUpdates,
+  type ReleaseChannel,
+  releaseChannels as releaseChannelValues,
 } from "@rebase/contracts";
 import { IconChevronDown } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
 import { Button } from "#web-ui/components/ui/button";
 import { Switch } from "#web-ui/components/ui/switch";
 
-const releaseChannels = [
-  { label: "Stable", value: "stable" },
-  { label: "Nightly", value: "nightly" },
-] as const satisfies ReadonlyArray<{
-  readonly label: string;
-  readonly value: ReleaseChannel;
-}>;
+const releaseChannelLabels: Record<ReleaseChannel, string> = {
+  nightly: "Nightly",
+  stable: "Stable",
+};
+const releaseChannels = releaseChannelValues.map((value) => ({
+  label: releaseChannelLabels[value],
+  value,
+}));
 
 const unavailableSnapshot: DesktopUpdateSnapshot = {
   settings: {
