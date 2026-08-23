@@ -1,9 +1,14 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
 
 test("pairs the packaged renderer with its managed Environment", async () => {
+  const packageMetadata = JSON.parse(
+    await readFile("package.json", "utf8"),
+  ) as {
+    readonly version: string;
+  };
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -33,6 +38,19 @@ test("pairs the packaged renderer with its managed Environment", async () => {
         "data-connection-state",
         "Connected",
       );
+      await window.getByRole("button", { name: "Settings" }).click();
+      await expect(
+        window.getByText(packageMetadata.version, { exact: true }),
+      ).toBeVisible();
+      await expect(
+        window.getByRole("combobox", { name: "Release channel" }),
+      ).toBeEnabled();
+      await expect(
+        window.getByRole("switch", { name: "Check automatically" }),
+      ).toBeEnabled();
+      await expect(
+        window.getByRole("button", { name: "Update now" }),
+      ).toBeVisible();
     } finally {
       await application.close();
     }

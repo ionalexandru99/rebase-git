@@ -1,5 +1,10 @@
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog } from "electron";
+import electronUpdater, { type AppUpdater } from "electron-updater";
+import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store";
+import { createApplicationUpdater } from "#desktop/features/application-updates/application-updater";
+import { registerApplicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc";
 import {
   type DesktopApplication,
   startDesktopApplication,
@@ -47,11 +52,25 @@ void start().catch(reportStartupFailure);
 async function start() {
   await app.whenReady();
   app.dock?.setIcon(desktopIconPath);
+  const updateSettings = createApplicationUpdateSettingsStore(
+    join(app.getPath("userData"), "update-settings.json"),
+  );
+  const applicationUpdater = createApplicationUpdater(getAutoUpdater(), {
+    packaged: app.isPackaged,
+    saveSettings: updateSettings.write,
+    settings: await updateSettings.read(),
+  });
+  registerApplicationUpdaterIpc(applicationUpdater);
   desktopApplication = await startDesktopApplication({
     host,
-    renderer: resolveRenderer(process.argv, import.meta.url),
+    renderer: resolveRenderer(process.argv, import.meta.url, app.isPackaged),
     startEnvironment: startManagedEnvironmentServer,
   });
+  void applicationUpdater.start();
+}
+
+function getAutoUpdater(): AppUpdater {
+  return electronUpdater.autoUpdater;
 }
 
 async function openWindow(options: DesktopWindowOptions) {
@@ -74,6 +93,7 @@ async function openWindow(options: DesktopWindowOptions) {
   });
 
   configureEnvironmentWebSocketOrigin(window, options.environmentOrigin);
+  preventUntrustedNavigation(window, options.renderer);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.once("ready-to-show", () => window.show());
 
@@ -87,6 +107,28 @@ async function openWindow(options: DesktopWindowOptions) {
     window.destroy();
     throw error;
   }
+}
+
+function preventUntrustedNavigation(
+  window: BrowserWindow,
+  renderer: DesktopRenderer,
+) {
+  const guardNavigation = (event: Electron.Event, target: string) => {
+    if (!isTrustedRendererLocation(renderer, target)) event.preventDefault();
+  };
+  window.webContents.on("will-navigate", guardNavigation);
+  window.webContents.on("will-redirect", guardNavigation);
+}
+
+function isTrustedRendererLocation(renderer: DesktopRenderer, target: string) {
+  const targetUrl = new URL(target);
+  if (renderer.type === "url") {
+    return targetUrl.origin === new URL(renderer.url).origin;
+  }
+  return (
+    targetUrl.protocol === "file:" &&
+    fileURLToPath(targetUrl) === resolve(renderer.path)
+  );
 }
 
 function configureEnvironmentWebSocketOrigin(
@@ -119,12 +161,13 @@ function configureEnvironmentWebSocketOrigin(
 function resolveRenderer(
   arguments_: readonly string[],
   moduleUrl: string,
+  packaged: boolean,
 ): DesktopRenderer {
   const rendererUrl = arguments_
     .find((argument) => argument.startsWith("--renderer-url="))
     ?.slice("--renderer-url=".length);
 
-  if (rendererUrl !== undefined) {
+  if (rendererUrl !== undefined && !packaged) {
     return { type: "url", url: new URL(rendererUrl).href };
   }
 

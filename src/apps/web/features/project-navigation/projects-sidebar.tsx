@@ -30,12 +30,14 @@ export function ProjectsSidebar({
   environmentStatus,
   expand,
   navigation,
+  openSettings,
   toggleEnvironment,
 }: {
   readonly collapse: () => void;
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly expand: () => void;
   readonly navigation: ProjectNavigationState;
+  readonly openSettings: () => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }): JSX.Element {
   const [filterQuery, setFilterQuery] = useState("");
@@ -43,7 +45,7 @@ export function ProjectsSidebar({
   return (
     <nav
       aria-label="Projects"
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
+      className="flex h-full min-h-0 flex-col overflow-hidden border-sidebar-border/50 border-r bg-sidebar text-sidebar-foreground"
     >
       {navigation.sidebarCollapsed ? (
         <CollapsedProjectsSidebar
@@ -51,6 +53,7 @@ export function ProjectsSidebar({
           expand={expand}
           filterQuery={filterQuery}
           navigation={navigation}
+          openSettings={openSettings}
         />
       ) : (
         <ExpandedProjectsSidebar
@@ -58,6 +61,7 @@ export function ProjectsSidebar({
           environmentStatus={environmentStatus}
           filterQuery={filterQuery}
           navigation={navigation}
+          openSettings={openSettings}
           setFilterQuery={setFilterQuery}
           toggleEnvironment={toggleEnvironment}
         />
@@ -71,6 +75,7 @@ function ExpandedProjectsSidebar({
   environmentStatus,
   filterQuery,
   navigation,
+  openSettings,
   setFilterQuery,
   toggleEnvironment,
 }: {
@@ -78,6 +83,7 @@ function ExpandedProjectsSidebar({
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;
+  readonly openSettings: () => void;
   readonly setFilterQuery: (query: string) => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }) {
@@ -96,22 +102,29 @@ function ExpandedProjectsSidebar({
           <IconLayoutSidebarLeftCollapse aria-hidden="true" />
         </Button>
       </div>
-      <Button className="mx-3 mt-3 justify-center" variant="outline">
-        <IconFolderPlus aria-hidden="true" data-icon="inline-start" />
-        Open project
-      </Button>
-      <div className="relative mx-3 mt-2 mb-1.5">
-        <IconSearch
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          aria-label="Filter open projects"
-          className="pl-9"
-          onChange={(event) => setFilterQuery(event.target.value)}
-          placeholder="Filter open projects..."
-          value={filterQuery}
-        />
+      <div className="mx-3 mt-3 mb-1.5 flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <IconSearch
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Filter open projects"
+            className="pl-9"
+            onChange={(event) => setFilterQuery(event.target.value)}
+            placeholder="Filter open projects"
+            value={filterQuery}
+          />
+        </div>
+        <Button
+          aria-label="Open project"
+          className="!size-7.5 shrink-0 border-0"
+          size="icon"
+          title="Open project"
+          variant="ghost"
+        >
+          <IconFolderPlus aria-hidden="true" />
+        </Button>
       </div>
       <div
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
@@ -190,7 +203,7 @@ function ExpandedProjectsSidebar({
           ))}
         </div>
       </div>
-      <SidebarSettings />
+      <SidebarSettings openSettings={openSettings} />
     </>
   );
 }
@@ -200,11 +213,13 @@ function CollapsedProjectsSidebar({
   expand,
   filterQuery,
   navigation,
+  openSettings,
 }: {
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly expand: () => void;
   readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;
+  readonly openSettings: () => void;
 }) {
   return (
     <>
@@ -221,7 +236,7 @@ function CollapsedProjectsSidebar({
       <Tooltip>
         <TooltipTrigger
           aria-label="Open project"
-          className="mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md border border-sidebar-border text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+          className="mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
         >
           <IconFolderPlus aria-hidden="true" className="size-5" />
         </TooltipTrigger>
@@ -269,15 +284,17 @@ function CollapsedProjectsSidebar({
           );
         })}
       </div>
-      <SidebarSettings collapsed />
+      <SidebarSettings collapsed openSettings={openSettings} />
     </>
   );
 }
 
 function SidebarSettings({
   collapsed = false,
+  openSettings,
 }: {
   readonly collapsed?: boolean;
+  readonly openSettings: () => void;
 }) {
   if (collapsed) {
     return (
@@ -285,6 +302,7 @@ function SidebarSettings({
         <TooltipTrigger
           aria-label="Settings"
           className="mx-auto mb-3 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+          onClick={openSettings}
         >
           <IconSettings aria-hidden="true" className="size-5" />
         </TooltipTrigger>
@@ -295,6 +313,7 @@ function SidebarSettings({
   return (
     <Button
       className="mx-3 mb-2 h-10 justify-between px-2 text-muted-foreground"
+      onClick={openSettings}
       variant="ghost"
     >
       Settings

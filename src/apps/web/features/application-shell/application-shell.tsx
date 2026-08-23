@@ -1,3 +1,4 @@
+import type { DesktopUpdates } from "@rebase/contracts";
 import {
   type JSX,
   useCallback,
@@ -23,6 +24,7 @@ import {
 import { TooltipProvider } from "#web-ui/components/ui/tooltip";
 import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-sidebar";
 import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
+import { SettingsPanel } from "#web-ui/features/settings/settings-panel";
 
 const localEnvironmentId = "local-environment";
 const projectSidebarSize = {
@@ -33,8 +35,12 @@ const projectSidebarSize = {
 } as const;
 
 export function ApplicationShell({
+  desktopUpdates,
+  productVersion,
   session,
 }: {
+  readonly desktopUpdates: DesktopUpdates | undefined;
+  readonly productVersion: string;
   readonly session: LocalEnvironmentSession;
 }): JSX.Element {
   const sessionState = useSyncExternalStore(
@@ -43,6 +49,7 @@ export function ApplicationShell({
   );
   const environmentStatus = environmentSessionPresentation(sessionState);
   const sidebarRef = useRef<PanelImperativeHandle>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [navigation, setNavigation] = useState<ProjectNavigationState>(() => ({
     environments: [
       {
@@ -82,15 +89,24 @@ export function ApplicationShell({
   }, [setCollapsed]);
 
   useEffect(() => {
-    const toggleSidebar = (event: KeyboardEvent) => {
-      if (
-        !(event.ctrlKey || event.metaKey) ||
-        event.altKey ||
-        event.shiftKey ||
-        event.key.toLowerCase() !== "b"
-      ) {
+    const handleApplicationShortcut = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && settingsOpen) {
+        event.preventDefault();
+        setSettingsOpen(false);
         return;
       }
+
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
+        return;
+      }
+
+      if (event.key === ",") {
+        event.preventDefault();
+        setSettingsOpen(true);
+        return;
+      }
+
+      if (event.key.toLowerCase() !== "b" || settingsOpen) return;
 
       event.preventDefault();
       if (sidebarRef.current?.isCollapsed()) {
@@ -100,9 +116,10 @@ export function ApplicationShell({
       }
     };
 
-    window.addEventListener("keydown", toggleSidebar);
-    return () => window.removeEventListener("keydown", toggleSidebar);
-  }, [collapseSidebar, expandSidebar]);
+    window.addEventListener("keydown", handleApplicationShortcut);
+    return () =>
+      window.removeEventListener("keydown", handleApplicationShortcut);
+  }, [collapseSidebar, expandSidebar, settingsOpen]);
 
   return (
     <TooltipProvider>
@@ -111,40 +128,54 @@ export function ApplicationShell({
           aria-label="Rebase application"
           className="h-full overflow-hidden bg-background"
         >
-          <ResizablePanelGroup
-            className="h-full min-h-0"
-            orientation="horizontal"
-          >
-            <ResizablePanel
-              collapsedSize={projectSidebarSize.collapsed}
-              collapsible
-              defaultSize={projectSidebarSize.default}
-              groupResizeBehavior="preserve-pixel-size"
-              id="projects"
-              maxSize={projectSidebarSize.max}
-              minSize={projectSidebarSize.min}
-              onResize={() =>
-                setCollapsed(sidebarRef.current?.isCollapsed() ?? false)
-              }
-              panelRef={sidebarRef}
+          <div className={`h-full ${settingsOpen ? "hidden" : ""}`}>
+            <ResizablePanelGroup
+              className="h-full min-h-0"
+              orientation="horizontal"
             >
-              <ProjectsSidebar
-                collapse={collapseSidebar}
-                environmentStatus={environmentStatus}
-                expand={expandSidebar}
-                navigation={visibleNavigation}
-                toggleEnvironment={(environmentId) =>
-                  setNavigation((current) =>
-                    toggleEnvironment(current, environmentId),
-                  )
+              <ResizablePanel
+                collapsedSize={projectSidebarSize.collapsed}
+                collapsible
+                defaultSize={projectSidebarSize.default}
+                groupResizeBehavior="preserve-pixel-size"
+                id="projects"
+                maxSize={projectSidebarSize.max}
+                minSize={projectSidebarSize.min}
+                onResize={() =>
+                  setCollapsed(sidebarRef.current?.isCollapsed() ?? false)
                 }
-              />
-            </ResizablePanel>
-            <ResizableHandle className="bg-transparent after:w-2 focus-visible:ring-primary/40" />
-            <ResizablePanel id="repository" minSize="40%">
-              <RepositoryWorkspace />
-            </ResizablePanel>
-          </ResizablePanelGroup>
+                panelRef={sidebarRef}
+              >
+                <ProjectsSidebar
+                  collapse={collapseSidebar}
+                  environmentStatus={environmentStatus}
+                  expand={expandSidebar}
+                  navigation={visibleNavigation}
+                  openSettings={() => setSettingsOpen(true)}
+                  toggleEnvironment={(environmentId) =>
+                    setNavigation((current) =>
+                      toggleEnvironment(current, environmentId),
+                    )
+                  }
+                />
+              </ResizablePanel>
+              <ResizableHandle className="bg-transparent after:w-2 focus-visible:ring-primary/40" />
+              <ResizablePanel
+                className="rounded-none"
+                id="repository"
+                minSize="40%"
+              >
+                <RepositoryWorkspace />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+          {settingsOpen ? (
+            <SettingsPanel
+              closeSettings={() => setSettingsOpen(false)}
+              desktopUpdates={desktopUpdates}
+              productVersion={productVersion}
+            />
+          ) : null}
         </section>
       </div>
     </TooltipProvider>

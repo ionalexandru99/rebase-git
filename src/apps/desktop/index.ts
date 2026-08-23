@@ -1,3 +1,9 @@
+export { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store";
+export { createApplicationUpdater } from "#desktop/features/application-updates/application-updater";
+export type {
+  ApplicationUpdater,
+  DesktopAutoUpdater,
+} from "#desktop/features/application-updates/application-updater.contract";
 export {
   type DesktopApplication,
   startDesktopApplication,
