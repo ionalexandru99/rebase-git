@@ -346,9 +346,9 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ (matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '') || (matrix.platform == 'win' && secrets.WINDOWS_CERTIFICATE != '') }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || matrix.platform == 'win' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
-          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || matrix.platform == 'win' && secrets.WINDOWS_CERTIFICATE || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ (matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '') || (matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true') }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true' && secrets.WINDOWS_CERTIFICATE || '' }}
           RELEASE_CHANNEL: ${{ needs.package.outputs.channel }}
         run: |
           publish_channel_args=()
