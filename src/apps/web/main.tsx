@@ -10,13 +10,16 @@ if (!(rootElement instanceof HTMLElement)) {
   throw new Error('The web application requires an element with id "root".');
 }
 
-const session = createBrowserLocalEnvironmentSession(
-  import.meta.env.REBASE_PRODUCT_VERSION,
-);
+const productVersion = import.meta.env.REBASE_PRODUCT_VERSION;
+const session = createBrowserLocalEnvironmentSession(productVersion);
 session.start();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <ApplicationShell session={session} />
+    <ApplicationShell
+      desktopUpdates={window.rebaseHost?.updates}
+      productVersion={productVersion}
+      session={session}
+    />
   </StrictMode>,
 );

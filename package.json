@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "tsc -b && pnpm --filter @rebase/server prepare:dist && pnpm --filter @rebase/desktop bundle:preload && pnpm --filter @rebase/desktop copy:assets && pnpm build:web",
-    "build:desktop-package": "pnpm build:web && node packaging/build-desktop.ts",
+    "build:desktop-package": "node packaging/build-desktop.ts",
     "build:package": "tsc -b src/contracts src/apps/server && node packaging/build.ts",
     "build:web": "pnpm --filter @rebase/web build:web",
     "check": "biome check .",
@@ -43,6 +43,7 @@
     "test:boundary": "pnpm test:integration && pnpm test:compatibility && pnpm test:e2e",
     "test:compatibility": "vp test run --project compatibility --passWithNoTests",
     "test:e2e": "pnpm build:desktop-package && playwright test",
+    "test:e2e:packaged": "pnpm build:desktop-package && electron-builder --config electron-builder.config.js --dir --linux --x64 && REBASE_PACKAGED_EXECUTABLE=release/linux-unpacked/rebase-git playwright test --project packaged-electron",
     "test:integration": "vp test run --project integration --passWithNoTests",
     "test:unit": "vp test run --project unit --passWithNoTests",
     "typecheck": "pnpm --recursive run typecheck && tsc --project packaging/tsconfig.json && tsc --project tests/tsconfig.json",

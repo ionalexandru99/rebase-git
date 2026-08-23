@@ -170,3 +170,6 @@ jobs:
 
       - name: Run end-to-end tests
         run: xvfb-run --auto-servernum pnpm test:e2e
+
+      - name: Run packaged Electron test
+        run: xvfb-run --auto-servernum pnpm test:e2e:packaged

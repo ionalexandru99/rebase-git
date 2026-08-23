@@ -46,6 +46,10 @@ test("boots into the empty project shell", async ({ page }) => {
   await expect(
     page.getByRole("main", { name: "Repository workspace" }),
   ).toBeVisible();
+  await expect(projects).toHaveCSS("border-right-width", "1px");
+  await expect(
+    page.getByRole("main", { name: "Repository workspace" }),
+  ).toHaveCSS("border-top-left-radius", "0px");
   await expect(page.locator("html")).toHaveCSS("font-family", /Inter Variable/);
   expect(browserErrors).toEqual([]);
 });
@@ -85,4 +89,113 @@ test("controls project navigation from the keyboard", async ({ page }) => {
     page.getByRole("heading", { level: 1, name: "Projects" }),
   ).toBeVisible();
   await expect(filter).toHaveValue("rebase");
+});
+
+test("opens and navigates settings", async ({ page }) => {
+  await page.goto("/");
+
+  const projectFilter = page.getByRole("textbox", {
+    name: "Filter open projects",
+  });
+  await projectFilter.fill("rebase");
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  const settings = page.getByRole("navigation", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  await expect(settings).toHaveCSS("border-right-width", "1px");
+  await expect(page.getByRole("main", { name: "Settings content" })).toHaveCSS(
+    "border-top-left-radius",
+    "0px",
+  );
+  await expect(
+    settings.getByRole("button", { name: "General", exact: true }),
+  ).toBeVisible();
+  await expect(
+    settings.getByRole("button", { name: "Keyboard shortcuts" }),
+  ).toBeVisible();
+  await expect(settings.getByRole("button", { name: "Git" })).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Appearance" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "General" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "About" }),
+  ).toBeVisible();
+  await expect(page.getByText("Source code")).toHaveCount(0);
+  await expect(page.getByText("License", { exact: true })).toHaveCount(0);
+  const releaseChannel = page.getByRole("combobox", {
+    name: "Release channel",
+  });
+  await expect(releaseChannel).toHaveText("Stable");
+  await expect(releaseChannel).toBeDisabled();
+  await expect(
+    page.getByRole("switch", { name: "Check automatically" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Check for updates" }),
+  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Update now" })).toBeDisabled();
+  await expect(
+    page.getByText("Update checks are available in the Electron app."),
+  ).toBeVisible();
+
+  const search = settings.getByRole("textbox", { name: "Search settings" });
+  await search.fill("keyboard");
+  await expect(
+    settings.getByRole("button", { name: "General", exact: true }),
+  ).toHaveCount(0);
+  await search.clear();
+
+  await settings.getByRole("button", { name: "Keyboard shortcuts" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Keyboard shortcuts" }),
+  ).toBeVisible();
+  await settings.getByRole("button", { name: "General", exact: true }).click();
+  await expect(releaseChannel).toHaveText("Stable");
+
+  await page.setViewportSize({ height: 720, width: 640 });
+  const settingsContent = page.getByRole("main", { name: "Settings content" });
+  const contentWidths = await settingsContent.evaluate((element) => ({
+    client: element.clientWidth,
+    scroll: element.scrollWidth,
+  }));
+  expect(contentWidths.scroll).toBe(contentWidths.client);
+  const updatesTitle = await page
+    .getByRole("heading", { level: 3, name: "Updates" })
+    .boundingBox();
+  const checkButton = await page
+    .getByRole("button", { name: "Check for updates" })
+    .boundingBox();
+  expect(checkButton?.y).toBeGreaterThan(
+    (updatesTitle?.y ?? 0) + (updatesTitle?.height ?? 0),
+  );
+
+  const back = settings.getByRole("button", { name: "Back" });
+  await expect(back).toBeVisible();
+  await expect(settings.locator('[data-slot="settings-back"]')).toHaveCSS(
+    "border-top-width",
+    "0px",
+  );
+  await back.click();
+
+  await expect(
+    page.getByRole("navigation", { name: "Projects" }),
+  ).toBeVisible();
+  await expect(projectFilter).toHaveValue("rebase");
+});
+
+test("controls settings from the keyboard", async ({ page }) => {
+  await page.goto("/");
+
+  await page.keyboard.press("Control+Comma");
+  await expect(
+    page.getByRole("navigation", { name: "Settings" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("navigation", { name: "Projects" }),
+  ).toBeVisible();
 });

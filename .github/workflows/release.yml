@@ -315,6 +315,7 @@ jobs:
     timeout-minutes: 60
     env:
       HAS_MACOS_CERT: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
     steps:
       - name: Check out release commit
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -339,15 +340,22 @@ jobs:
           RELEASE_VERSION: ${{ needs.package.outputs.version }}
         run: pnpm build:desktop-package
 
+      - name: Require Windows signing certificate
+        if: ${{ matrix.platform == 'win' && env.HAS_WINDOWS_CERT != 'true' }}
+        shell: bash
+        run: |
+          echo "WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD are required for Windows releases." >&2
+          exit 1
+
       - name: Package desktop application
         shell: bash
         env:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '' && 'true' || 'false' }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
-          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ (matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '') || (matrix.platform == 'win' && secrets.WINDOWS_CERTIFICATE != '') }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || matrix.platform == 'win' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || matrix.platform == 'win' && secrets.WINDOWS_CERTIFICATE || '' }}
           RELEASE_CHANNEL: ${{ needs.package.outputs.channel }}
         run: |
           publish_channel_args=()
@@ -379,6 +387,19 @@ jobs:
             xcrun stapler validate "$dmg"
             spctl --assess --type open --context context:primary-signature -vvv "$dmg"
           done
+
+      - name: Verify Windows signature
+        if: ${{ matrix.platform == 'win' }}
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release -Filter *.exe | Select-Object -First 1
+          if ($null -eq $installer) {
+            throw "No Windows installer found under release/."
+          }
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          if ($signature.Status -ne "Valid") {
+            throw "Windows installer signature is $($signature.Status)."
+          }
 
       - name: Upload desktop package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

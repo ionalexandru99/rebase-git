@@ -1,4 +1,6 @@
+import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import { promisify } from "node:util";
 import { build } from "esbuild";
 
 const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
@@ -6,6 +8,15 @@ const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
 };
 const outputDirectory = "src/apps/desktop/dist/package";
 const productVersion = process.env.RELEASE_VERSION ?? packageMetadata.version;
+const execute = promisify(execFile);
+
+await execute(
+  process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+  ["build:web"],
+  {
+    env: { ...process.env, REBASE_PRODUCT_VERSION: productVersion },
+  },
+);
 
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });
@@ -20,6 +31,9 @@ await Promise.all([
   ),
   cp("src/apps/web/dist/web", `${outputDirectory}/web`, { recursive: true }),
   build({
+    banner: {
+      js: 'import { createRequire as createNodeRequire } from "node:module"; const require = createNodeRequire(import.meta.url);',
+    },
     bundle: true,
     conditions: ["rebase-source", "node", "import"],
     define: {
@@ -36,6 +50,7 @@ await Promise.all([
   }),
   build({
     bundle: true,
+    conditions: ["rebase-source", "node", "import"],
     entryPoints: ["src/apps/desktop/preload.ts"],
     external: ["electron"],
     format: "cjs",
