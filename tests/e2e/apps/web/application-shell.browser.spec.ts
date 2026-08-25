@@ -43,15 +43,43 @@ test("boots into the empty project shell", async ({ page }) => {
   const projectList = projects.locator('[data-slot="project-list-scroll"]');
   await expect(projectList).toHaveCSS("overflow-x", "hidden");
   await expect(projectList).toHaveCSS("overflow-y", "auto");
+  const openProject = page.getByRole("main", { name: "Open project" });
+  await expect(openProject).toBeVisible();
   await expect(
-    page.getByRole("main", { name: "Repository workspace" }),
+    openProject.getByRole("heading", { level: 1, name: "Open project" }),
   ).toBeVisible();
-  await expect(projects).toHaveCSS("border-right-width", "1px");
   await expect(
-    page.getByRole("main", { name: "Repository workspace" }),
-  ).toHaveCSS("border-top-left-radius", "0px");
+    openProject.getByRole("searchbox", { name: "Search repositories" }),
+  ).toBeFocused();
+  await expect(
+    openProject.getByRole("button", { name: "Browse files" }),
+  ).toBeDisabled();
+  await expect(
+    openProject.getByRole("button", {
+      name: /Open a repository from your file system/,
+    }),
+  ).toBeDisabled();
+  await expect(openProject.getByText("Recent", { exact: true })).toHaveCount(0);
+  await expect(projects).toHaveCSS("border-right-width", "1px");
+  await expect(openProject).toHaveCSS("border-top-left-radius", "0px");
   await expect(page.locator("html")).toHaveCSS("font-family", /Inter Variable/);
   expect(browserErrors).toEqual([]);
+});
+
+test("opens the project launcher from both sidebar modes", async ({ page }) => {
+  await page.goto("/");
+
+  const search = page.getByRole("searchbox", { name: "Search repositories" });
+  const projectFilter = page.getByRole("textbox", {
+    name: "Filter open projects",
+  });
+  await projectFilter.focus();
+  await page.getByRole("button", { name: "Open project" }).click();
+  await expect(search).toBeFocused();
+
+  await page.getByRole("button", { name: "Collapse Projects sidebar" }).click();
+  await page.getByRole("button", { name: "Open project" }).click();
+  await expect(search).toBeFocused();
 });
 
 test("collapses and restores the project sidebar", async ({ page }) => {
@@ -89,6 +117,14 @@ test("controls project navigation from the keyboard", async ({ page }) => {
     page.getByRole("heading", { level: 1, name: "Projects" }),
   ).toBeVisible();
   await expect(filter).toHaveValue("rebase");
+
+  await page.keyboard.press("Control+Shift+f");
+  await expect(filter).toBeFocused();
+
+  await page.keyboard.press("Control+Shift+o");
+  await expect(
+    page.getByRole("searchbox", { name: "Search repositories" }),
+  ).toBeFocused();
 });
 
 test("opens and navigates settings", async ({ page }) => {

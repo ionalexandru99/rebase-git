@@ -20,11 +20,56 @@ export function KeyboardShortcutsSettings(): JSX.Element {
         </h2>
         <div className="mt-3 space-y-1">
           <ShortcutRow
+            keys={[commandKey, "Shift", "O"]}
+            label="Show Open Project"
+          />
+          <ShortcutRow
+            keys={[commandKey, "O"]}
+            label="Browse for a repository"
+          />
+          <ShortcutRow
+            keys={[commandKey, "W"]}
+            label="Close active repository"
+          />
+          <ShortcutRow
             keys={[commandKey, "B"]}
             label="Toggle project sidebar"
           />
+          <ShortcutRow
+            keys={[commandKey, "Shift", "F"]}
+            label="Focus sidebar filter"
+          />
           <ShortcutRow keys={[commandKey, ","]} label="Open settings" />
-          <ShortcutRow keys={["Esc"]} label="Close settings" />
+          <ShortcutRow keys={["Esc"]} label="Close the active panel" />
+        </div>
+      </section>
+
+      <section aria-labelledby="list-shortcuts" className="mt-10">
+        <h2 className="text-lg font-semibold" id="list-shortcuts">
+          Search and lists
+        </h2>
+        <div className="mt-3 space-y-1">
+          <ShortcutRow
+            keys={[commandKey, "F"]}
+            label="Focus the current search"
+          />
+          <ShortcutRow keys={["↑", "↓"]} label="Move through results" />
+          <ShortcutRow keys={["Enter"]} label="Open the active result" />
+        </div>
+      </section>
+
+      <section aria-labelledby="folder-shortcuts" className="mt-10">
+        <h2 className="text-lg font-semibold" id="folder-shortcuts">
+          Folder picker
+        </h2>
+        <div className="mt-3 space-y-1">
+          <ShortcutRow keys={["←"]} label="Open the parent folder" />
+          <ShortcutRow keys={["→"]} label="Enter the selected folder" />
+          <ShortcutRow keys={["Alt", "↑"]} label="Open the parent folder" />
+          <ShortcutRow
+            keys={[commandKey, "Enter"]}
+            label="Open the selected repository"
+          />
         </div>
       </section>
     </div>

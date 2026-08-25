@@ -1,19 +1,23 @@
 import type { DesktopUpdates } from "@rebase/contracts";
+import { IconDeviceLaptop } from "@tabler/icons-react";
 import {
   type JSX,
   useCallback,
-  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { environmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
+import { useApplicationShortcuts } from "#web/features/application-shell/use-application-shortcuts";
+import { useProjectRepositoryActions } from "#web/features/application-shell/use-project-repository-actions";
 import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
+import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
 import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
 import {
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
+  showOpenProject,
   toggleEnvironment,
 } from "#web/features/project-navigation/project-navigation-state";
 import {
@@ -22,7 +26,9 @@ import {
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
 import { TooltipProvider } from "#web-ui/components/ui/tooltip";
+import { OpenProjectScreen } from "#web-ui/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-sidebar";
+import { RepositoryFolderPicker } from "#web-ui/features/repository-folder-picker/repository-folder-picker";
 import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
 import { SettingsPanel } from "#web-ui/features/settings/settings-panel";
 
@@ -47,9 +53,15 @@ export function ApplicationShell({
     session.subscribe,
     session.getSnapshot,
   );
+  const repositoryCatalog = useSyncExternalStore(
+    session.repositoryCatalog.subscribe,
+    session.repositoryCatalog.getSnapshot,
+  );
   const environmentStatus = environmentSessionPresentation(sessionState);
   const sidebarRef = useRef<PanelImperativeHandle>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openProjectRequest, setOpenProjectRequest] = useState(0);
+  const [sidebarFilterRequest, setSidebarFilterRequest] = useState(0);
   const [navigation, setNavigation] = useState<ProjectNavigationState>(() => ({
     environments: [
       {
@@ -62,6 +74,7 @@ export function ApplicationShell({
     ],
     selectedRepositoryId: undefined,
     sidebarCollapsed: false,
+    workspaceView: "open-project",
   }));
   const currentNavigation = navigationWithAvailability(
     navigation,
@@ -71,6 +84,24 @@ export function ApplicationShell({
     sessionState._tag === "PairingRequired"
       ? { ...currentNavigation, environments: [] }
       : currentNavigation;
+  const openProjectEnvironments: readonly OpenProjectEnvironment[] =
+    visibleNavigation.environments
+      .filter((environment) => environment.id === localEnvironmentId)
+      .map((environment) => ({
+        availability: environment.availability,
+        icon: IconDeviceLaptop,
+        iconColor: "var(--primary)",
+        id: environment.id,
+        name: environment.name,
+        repositories: repositoryCatalog.repositories.map((repository) => ({
+          environmentId: environment.id,
+          id: repository.id,
+          lastOpenedAt: repository.lastOpenedAt,
+          name: repository.name,
+          path: repository.path,
+        })),
+        status: environmentStatus.status,
+      }));
 
   const setCollapsed = useCallback((collapsed: boolean) => {
     setNavigation((current) =>
@@ -87,39 +118,55 @@ export function ApplicationShell({
     sidebarRef.current?.expand();
     setCollapsed(false);
   }, [setCollapsed]);
+  const showOpenProjectScreen = useCallback(() => {
+    setNavigation((current) => showOpenProject(current));
+    setOpenProjectRequest((current) => current + 1);
+  }, []);
+  const {
+    browseRepository,
+    closeSelectedRepository,
+    closeSidebarRepository,
+    copyRepositoryPath,
+    expandedEnvironmentIds,
+    folderPickerOpen,
+    listRepositoryDirectory,
+    openRepositoryFromFolder,
+    removeRepository,
+    revealRepository,
+    selectOpenProjectRepository,
+    selectSidebarRepository,
+    setEnvironmentExpanded,
+    setFolderPickerOpen,
+  } = useProjectRepositoryActions({
+    availability: environmentStatus.availability,
+    environmentId: localEnvironmentId,
+    session,
+    setNavigation,
+  });
+  const toggleSidebar = useCallback(() => {
+    if (sidebarRef.current?.isCollapsed()) expandSidebar();
+    else collapseSidebar();
+  }, [collapseSidebar, expandSidebar]);
+  const focusSidebarFilter = useCallback(() => {
+    setSettingsOpen(false);
+    expandSidebar();
+    setSidebarFilterRequest((current) => current + 1);
+  }, [expandSidebar]);
 
-  useEffect(() => {
-    const handleApplicationShortcut = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && settingsOpen) {
-        event.preventDefault();
-        setSettingsOpen(false);
-        return;
-      }
-
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
-        return;
-      }
-
-      if (event.key === ",") {
-        event.preventDefault();
-        setSettingsOpen(true);
-        return;
-      }
-
-      if (event.key.toLowerCase() !== "b" || settingsOpen) return;
-
-      event.preventDefault();
-      if (sidebarRef.current?.isCollapsed()) {
-        expandSidebar();
-      } else {
-        collapseSidebar();
-      }
-    };
-
-    window.addEventListener("keydown", handleApplicationShortcut);
-    return () =>
-      window.removeEventListener("keydown", handleApplicationShortcut);
-  }, [collapseSidebar, expandSidebar, settingsOpen]);
+  useApplicationShortcuts({
+    availability: environmentStatus.availability,
+    closeSelectedRepository,
+    folderPickerOpen,
+    focusSidebarFilter,
+    hasSelectedRepository:
+      navigation.workspaceView === "repository" &&
+      navigation.selectedRepositoryId !== undefined,
+    openFolderPicker: browseRepository,
+    openSettings: setSettingsOpen,
+    settingsOpen,
+    showOpenProject: showOpenProjectScreen,
+    toggleSidebar,
+  });
 
   return (
     <TooltipProvider>
@@ -147,11 +194,15 @@ export function ApplicationShell({
                 panelRef={sidebarRef}
               >
                 <ProjectsSidebar
+                  closeRepository={closeSidebarRepository}
                   collapse={collapseSidebar}
                   environmentStatus={environmentStatus}
                   expand={expandSidebar}
+                  filterRequest={sidebarFilterRequest}
                   navigation={visibleNavigation}
+                  openProject={showOpenProjectScreen}
                   openSettings={() => setSettingsOpen(true)}
+                  selectRepository={selectSidebarRepository}
                   toggleEnvironment={(environmentId) =>
                     setNavigation((current) =>
                       toggleEnvironment(current, environmentId),
@@ -165,7 +216,27 @@ export function ApplicationShell({
                 id="repository"
                 minSize="40%"
               >
-                <RepositoryWorkspace />
+                {navigation.workspaceView === "open-project" ? (
+                  <OpenProjectScreen
+                    browseAvailable={
+                      environmentStatus.availability === "available"
+                    }
+                    environments={openProjectEnvironments}
+                    expandedEnvironmentIds={expandedEnvironmentIds}
+                    key={openProjectRequest}
+                    onBrowse={browseRepository}
+                    onCopyPath={copyRepositoryPath}
+                    onEnvironmentOpenChange={setEnvironmentExpanded}
+                    onOpenRepository={selectOpenProjectRepository}
+                    onRemoveRepository={removeRepository}
+                    onRevealRepository={revealRepository}
+                    revealAvailable={
+                      window.rebaseHost?.revealRepository !== undefined
+                    }
+                  />
+                ) : (
+                  <RepositoryWorkspace />
+                )}
               </ResizablePanel>
             </ResizablePanelGroup>
           </div>
@@ -176,6 +247,13 @@ export function ApplicationShell({
               productVersion={productVersion}
             />
           ) : null}
+          <RepositoryFolderPicker
+            environments={openProjectEnvironments}
+            listDirectory={listRepositoryDirectory}
+            onOpenChange={setFolderPickerOpen}
+            onOpenRepository={openRepositoryFromFolder}
+            open={folderPickerOpen}
+          />
         </section>
       </div>
     </TooltipProvider>

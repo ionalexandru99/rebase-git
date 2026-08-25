@@ -20,7 +20,10 @@ export interface ProjectNavigationState {
   readonly environments: readonly ProjectNavigationEnvironment[];
   readonly selectedRepositoryId: string | undefined;
   readonly sidebarCollapsed: boolean;
+  readonly workspaceView: ProjectWorkspaceView;
 }
+
+export type ProjectWorkspaceView = "open-project" | "repository";
 
 export interface ProjectNavigationRepositoryItem
   extends ProjectNavigationRepository {

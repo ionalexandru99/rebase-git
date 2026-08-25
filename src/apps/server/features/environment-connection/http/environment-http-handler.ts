@@ -1,12 +1,22 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   EnvironmentAuthorizationFailure,
+  EnvironmentDirectoryRejected,
   EnvironmentDiscovery,
   EnvironmentHttpApi,
   EnvironmentHttpFailure,
   EnvironmentSnapshot,
+  RepositoryCatalogOperationFailure,
 } from "@rebase/contracts";
 import { Effect } from "effect";
+import type {
+  EnvironmentFilesystem,
+  EnvironmentFilesystemError,
+} from "#server/domain/environment-filesystem.contract";
+import type {
+  RepositoryCatalog,
+  RepositoryCatalogError,
+} from "#server/domain/repository-catalog.contract";
 import { respondWithBrowserAsset } from "#server/features/browser-client/browser-assets";
 import type {
   EnvironmentAuthorization,
@@ -29,11 +39,15 @@ import {
   writeJson,
   writeJsonValue,
 } from "#server/features/environment-connection/http/environment-http-response";
+import { respondToEnvironmentFilesystemRequest } from "#server/features/environment-filesystem/http/environment-filesystem-http-handler";
+import { respondToRepositoryCatalogRequest } from "#server/features/repository-catalog/http/repository-catalog-http-handler";
 import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function createEnvironmentHttpHandler(
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
+  catalog: EnvironmentListenerRepositoryCatalog,
+  filesystem: EnvironmentListenerFilesystem,
   ready: () => boolean,
   runEnvironmentEffect: RunEnvironmentEffect,
   browserAssetsRoot?: string,
@@ -46,6 +60,8 @@ export function createEnvironmentHttpHandler(
         response,
         state,
         authorization,
+        catalog,
+        filesystem,
         ready(),
         browserAssetsRoot,
       ).pipe(Effect.ensuring(Effect.sync(lifetime.release))),
@@ -76,6 +92,8 @@ function createEnvironmentHttpResponse(
   response: ServerResponse,
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
+  catalog: EnvironmentListenerRepositoryCatalog,
+  filesystem: EnvironmentListenerFilesystem,
   ready: boolean,
   browserAssetsRoot?: string,
 ) {
@@ -84,6 +102,8 @@ function createEnvironmentHttpResponse(
     response,
     state,
     authorization,
+    catalog,
+    filesystem,
     ready,
     browserAssetsRoot,
   ).pipe(
@@ -98,6 +118,8 @@ function respondToEnvironmentRequest(
   response: ServerResponse,
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
+  catalog: EnvironmentListenerRepositoryCatalog,
+  filesystem: EnvironmentListenerFilesystem,
   ready: boolean,
   browserAssetsRoot?: string,
 ) {
@@ -171,6 +193,32 @@ function respondToEnvironmentRequest(
       return;
     }
 
+    if (
+      filesystem !== undefined &&
+      (yield* respondToEnvironmentFilesystemRequest(
+        request,
+        response,
+        body,
+        authorization,
+        filesystem,
+      ))
+    ) {
+      return;
+    }
+
+    if (
+      catalog !== undefined &&
+      (yield* respondToRepositoryCatalogRequest(
+        request,
+        response,
+        body,
+        authorization,
+        catalog,
+      ))
+    ) {
+      return;
+    }
+
     response.writeHead(404).end();
   });
 }
@@ -202,7 +250,9 @@ function writeEnvironmentHttpError(
   response: ServerResponse,
   error:
     | EnvironmentAuthorizationError
+    | EnvironmentFilesystemError
     | EnvironmentHttpBodyError
+    | RepositoryCatalogError
     | EnvironmentStorageError,
 ) {
   if (response.writableEnded) {
@@ -226,10 +276,58 @@ function writeEnvironmentHttpError(
     );
     return;
   }
+  if (error._tag === "EnvironmentFilesystemError") {
+    writeJson(
+      response,
+      environmentFilesystemFailureStatus(error),
+      EnvironmentDirectoryRejected,
+      error.failure,
+    );
+    return;
+  }
+  if (error._tag === "RepositoryCatalogError") {
+    writeJson(
+      response,
+      repositoryCatalogFailureStatus(error),
+      RepositoryCatalogOperationFailure,
+      error.failure,
+    );
+    return;
+  }
   response.writeHead(500).end();
+}
+
+function environmentFilesystemFailureStatus(error: EnvironmentFilesystemError) {
+  switch (error.failure.reason) {
+    case "MalformedPath":
+      return 400;
+    case "NotFound":
+      return 404;
+    case "InspectionFailed":
+    case "NotDirectory":
+    case "PermissionDenied":
+      return 422;
+  }
+}
+
+function repositoryCatalogFailureStatus(error: RepositoryCatalogError) {
+  if (error.failure._tag === "RepositoryMissing") return 404;
+  switch (error.failure.reason) {
+    case "MalformedPath":
+      return 400;
+    case "NotFound":
+      return 404;
+    case "InspectionFailed":
+    case "NotDirectory":
+    case "NotRepository":
+      return 422;
+  }
 }
 
 interface HttpRequestLifetime {
   readonly release: () => void;
   readonly signal: AbortSignal;
 }
+
+type EnvironmentListenerRepositoryCatalog = RepositoryCatalog | undefined;
+type EnvironmentListenerFilesystem = EnvironmentFilesystem | undefined;

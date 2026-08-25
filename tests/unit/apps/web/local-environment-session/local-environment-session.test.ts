@@ -10,21 +10,26 @@ import {
 } from "@rebase/web/features/environment-connection";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
+import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
 import { createLocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session";
 import type {
   LocalEnvironmentGateway,
   LocalEnvironmentSessionState,
 } from "#web/features/local-environment-session/local-environment-session.contract";
+import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 
 describe("local Environment session", () => {
   it("exchanges the pairing material and opens the initial connection", async () => {
     const connection = createConnection();
     const gateway = createGateway(connection);
+    const repositoryCatalogGateway = createRepositoryCatalogGateway();
     const pairingSucceeded = vi.fn();
     const session = createLocalEnvironmentSession({
+      filesystemGateway: createFilesystemGateway(),
       gateway,
       pairingMaterial: "123-456",
       pairingSucceeded,
+      repositoryCatalogGateway,
     });
 
     session.start();
@@ -36,6 +41,9 @@ describe("local Environment session", () => {
       undefined,
     );
     expect(pairingSucceeded).toHaveBeenCalledOnce();
+    expect(repositoryCatalogGateway.list).toHaveBeenCalledWith(
+      "device-credential",
+    );
     session.stop();
     await vi.waitFor(() => expect(connection.close).toHaveBeenCalledOnce());
   });
@@ -44,13 +52,16 @@ describe("local Environment session", () => {
     const initial = createConnection(7);
     const reconnected = createConnection(8);
     const gateway = createGateway(initial, reconnected);
+    const repositoryCatalogGateway = createRepositoryCatalogGateway();
     const reconnect = deferred<void>();
     const waitBeforeReconnect = vi.fn(() =>
       Effect.promise(() => reconnect.promise),
     );
     const session = createLocalEnvironmentSession({
+      filesystemGateway: createFilesystemGateway(),
       gateway,
       pairingMaterial: "123-456",
+      repositoryCatalogGateway,
       waitBeforeReconnect,
     });
 
@@ -66,6 +77,7 @@ describe("local Environment session", () => {
     await expectState(session.getSnapshot, "Connected");
     expect(gateway.connect).toHaveBeenNthCalledWith(2, "device-credential", 7);
     expect(waitBeforeReconnect).toHaveBeenCalledOnce();
+    expect(repositoryCatalogGateway.list).toHaveBeenCalledTimes(2);
     session.stop();
   });
 
@@ -84,9 +96,12 @@ describe("local Environment session", () => {
       ),
     );
     const waitBeforeReconnect = vi.fn(() => Effect.void);
+    const repositoryCatalogGateway = createRepositoryCatalogGateway();
     const session = createLocalEnvironmentSession({
+      filesystemGateway: createFilesystemGateway(),
       gateway,
       pairingMaterial: "123-456",
+      repositoryCatalogGateway,
       waitBeforeReconnect,
     });
 
@@ -95,6 +110,7 @@ describe("local Environment session", () => {
 
     expect(gateway.connect).toHaveBeenCalledOnce();
     expect(waitBeforeReconnect).not.toHaveBeenCalled();
+    expect(repositoryCatalogGateway.list).not.toHaveBeenCalled();
     session.stop();
   });
 });
@@ -120,6 +136,29 @@ function createGateway(...connections: ReturnType<typeof createConnection>[]) {
       typeof vi.fn<LocalEnvironmentGateway["exchangePairing"]>
     >;
   };
+}
+
+function createRepositoryCatalogGateway() {
+  return {
+    list: vi.fn<RepositoryCatalogGateway["list"]>(() => Effect.succeed([])),
+    recordOpened: vi.fn<RepositoryCatalogGateway["recordOpened"]>(() =>
+      Effect.die("The test does not open repositories."),
+    ),
+    remember: vi.fn<RepositoryCatalogGateway["remember"]>(() =>
+      Effect.die("The test does not remember repositories."),
+    ),
+    remove: vi.fn<RepositoryCatalogGateway["remove"]>(() =>
+      Effect.die("The test does not remove repositories."),
+    ),
+  } satisfies RepositoryCatalogGateway;
+}
+
+function createFilesystemGateway() {
+  return {
+    listDirectory: vi.fn<EnvironmentFilesystemGateway["listDirectory"]>(() =>
+      Effect.die("The test does not browse the filesystem."),
+    ),
+  } satisfies EnvironmentFilesystemGateway;
 }
 
 function createConnection(currentSequence = 0) {
