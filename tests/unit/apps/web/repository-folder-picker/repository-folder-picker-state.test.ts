@@ -24,11 +24,11 @@ describe("repository folder picker state", () => {
   });
 
   it("uses compact modified-date labels", () => {
-    const now = new Date("2026-08-25T12:00:00.000Z");
-    expect(modifiedDateLabel("2026-08-25T08:00:00.000Z", now)).toBe("Today");
-    expect(modifiedDateLabel("2026-08-24T08:00:00.000Z", now)).toBe(
-      "Yesterday",
-    );
+    const now = new Date(2026, 7, 25, 12);
+    const today = new Date(2026, 7, 25, 8).toISOString();
+    const yesterday = new Date(2026, 7, 24, 8).toISOString();
+    expect(modifiedDateLabel(today, now)).toBe("Today");
+    expect(modifiedDateLabel(yesterday, now)).toBe("Yesterday");
   });
 
   it("explains Git validation only after selection", () => {

@@ -1,16 +1,10 @@
-import type { DesktopUpdates, EnvironmentBootstrap } from "@rebase/contracts";
+import type { DesktopHostBridge } from "@rebase/contracts";
 
-export type { EnvironmentBootstrap } from "@rebase/contracts";
-
-export interface RepositoryFilesystemHost {
-  revealRepository(path: string): Promise<void>;
-}
-
-export interface DesktopHostBridge
-  extends EnvironmentBootstrap,
-    RepositoryFilesystemHost {
-  readonly updates: DesktopUpdates;
-}
+export type {
+  DesktopHostBridge,
+  EnvironmentBootstrap,
+  RepositoryFilesystemHost,
+} from "@rebase/contracts";
 
 declare global {
   interface Window {

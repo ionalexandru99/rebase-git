@@ -1,10 +1,10 @@
 import type {
+  DesktopHostBridge,
   DesktopUpdateSnapshot,
   DesktopUpdates,
   ReleaseChannel,
 } from "@rebase/contracts";
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopHostBridge } from "#desktop/desktop-host.contract";
 import { applicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc.contract";
 import { repositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.contract";
 

@@ -1,5 +1,5 @@
 export type {
   DesktopHostBridge,
   RepositoryFilesystemHost,
-} from "#web/features/local-environment-session/environment-bootstrap.contract";
+} from "@rebase/contracts";
 export { ApplicationShell } from "#web-ui/features/application-shell/application-shell";

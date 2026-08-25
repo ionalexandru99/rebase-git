@@ -196,9 +196,24 @@ function fileSystemRejectionReason(cause: unknown) {
 
 function gitRejectionReason(cause: unknown) {
   const code = fileSystemErrorCode(cause);
-  return code === "ENOENT" || code === "ETIMEDOUT" || code === "ABORT_ERR"
+  return code === "ENOENT" ||
+    code === "ETIMEDOUT" ||
+    code === "ABORT_ERR" ||
+    code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ||
+    childProcessTimedOut(cause)
     ? ("InspectionFailed" as const)
     : ("NotRepository" as const);
+}
+
+function childProcessTimedOut(cause: unknown) {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    "killed" in cause &&
+    cause.killed === true &&
+    "code" in cause &&
+    cause.code === null
+  );
 }
 
 function fileSystemErrorCode(cause: unknown) {

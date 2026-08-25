@@ -92,21 +92,23 @@ export function ApplicationShell({
       ? { ...currentNavigation, environments: [] }
       : currentNavigation;
   const openProjectEnvironments: readonly OpenProjectEnvironment[] =
-    visibleNavigation.environments.map((environment) => ({
-      availability: environment.availability,
-      icon: IconDeviceLaptop,
-      iconColor: "var(--primary)",
-      id: environment.id,
-      name: environment.name,
-      repositories: repositoryCatalog.repositories.map((repository) => ({
-        environmentId: environment.id,
-        id: repository.id,
-        lastOpenedAt: repository.lastOpenedAt,
-        name: repository.name,
-        path: repository.path,
-      })),
-      status: environmentStatus.status,
-    }));
+    visibleNavigation.environments
+      .filter((environment) => environment.id === localEnvironmentId)
+      .map((environment) => ({
+        availability: environment.availability,
+        icon: IconDeviceLaptop,
+        iconColor: "var(--primary)",
+        id: environment.id,
+        name: environment.name,
+        repositories: repositoryCatalog.repositories.map((repository) => ({
+          environmentId: environment.id,
+          id: repository.id,
+          lastOpenedAt: repository.lastOpenedAt,
+          name: repository.name,
+          path: repository.path,
+        })),
+        status: environmentStatus.status,
+      }));
 
   const setCollapsed = useCallback((collapsed: boolean) => {
     setNavigation((current) =>

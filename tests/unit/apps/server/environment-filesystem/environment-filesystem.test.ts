@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { currentTransportLimits } from "@rebase/contracts";
 import { createEnvironmentFilesystem } from "@rebase/server/features/environment-filesystem/environment-filesystem";
 import { Effect } from "effect";
@@ -40,7 +40,7 @@ describe("Environment filesystem", () => {
       { kind: "Markdown", name: "notes.md", type: "file" },
     ]);
     expect(listing.breadcrumbs.at(-1)).toEqual({
-      name: root.split("/").at(-1),
+      name: basename(root),
       path: root,
     });
     expect(listing.breadcrumbs[0]?.name).not.toBe("/");
