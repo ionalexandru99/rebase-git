@@ -2,9 +2,18 @@ import {
   connectCurrentEnvironmentEffect,
   exchangeEnvironmentPairingEffect,
 } from "#web/features/environment-connection/index";
+import { listEnvironmentDirectoryEffect } from "#web/features/environment-filesystem/environment-filesystem-client";
+import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
 import type { EnvironmentBootstrap } from "#web/features/local-environment-session/environment-bootstrap.contract";
 import { createLocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session";
 import type { LocalEnvironmentGateway } from "#web/features/local-environment-session/local-environment-session.contract";
+import {
+  listEnvironmentRepositoriesEffect,
+  recordEnvironmentRepositoryOpenedEffect,
+  rememberEnvironmentRepositoryEffect,
+  removeEnvironmentRepositoryEffect,
+} from "#web/features/repository-catalog/repository-catalog-client";
+import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 
 export function createBrowserLocalEnvironmentSession(productVersion: string) {
   const bootstrap = resolveLocalEnvironmentBootstrap(
@@ -29,10 +38,45 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
         pairingMaterial: material,
       }),
   };
+  const repositoryCatalogGateway: RepositoryCatalogGateway = {
+    list: (credential) =>
+      listEnvironmentRepositoriesEffect(
+        bootstrap.environmentOrigin,
+        credential,
+      ),
+    recordOpened: (credential, repositoryId) =>
+      recordEnvironmentRepositoryOpenedEffect(
+        bootstrap.environmentOrigin,
+        credential,
+        repositoryId,
+      ),
+    remember: (credential, path) =>
+      rememberEnvironmentRepositoryEffect(
+        bootstrap.environmentOrigin,
+        credential,
+        path,
+      ),
+    remove: (credential, repositoryId) =>
+      removeEnvironmentRepositoryEffect(
+        bootstrap.environmentOrigin,
+        credential,
+        repositoryId,
+      ),
+  };
+  const filesystemGateway: EnvironmentFilesystemGateway = {
+    listDirectory: (credential, path) =>
+      listEnvironmentDirectoryEffect(
+        bootstrap.environmentOrigin,
+        credential,
+        path,
+      ),
+  };
 
   return createLocalEnvironmentSession({
+    filesystemGateway,
     gateway,
     pairingMaterial: bootstrap.pairingMaterial,
+    repositoryCatalogGateway,
     ...(window.rebaseHost === undefined
       ? { pairingSucceeded: clearPairingMaterial }
       : {}),

@@ -1,7 +1,11 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { _electron as electron, expect, test } from "@playwright/test";
+
+const execFileAsync = promisify(execFile);
 
 test("pairs the packaged renderer with its managed Environment", async () => {
   const packageMetadata = JSON.parse(
@@ -10,6 +14,9 @@ test("pairs the packaged renderer with its managed Environment", async () => {
     readonly version: string;
   };
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
+  const repositoryPath = join(testHome, "rebase-test");
+  await mkdir(repositoryPath);
+  await execFileAsync("git", ["init", repositoryPath]);
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
       (entry): entry is [string, string] => entry[1] !== undefined,
@@ -38,7 +45,80 @@ test("pairs the packaged renderer with its managed Environment", async () => {
         "data-connection-state",
         "Connected",
       );
-      await window.getByRole("button", { name: "Settings" }).click();
+      await window.keyboard.press("Control+o");
+      const picker = window.getByRole("dialog", { name: "Choose repository" });
+      await expect(picker).toBeVisible();
+      await expect(
+        picker.getByRole("button", { name: "Select Environment" }),
+      ).toHaveText("Local Environment");
+      await expect(
+        picker.getByRole("button", { name: "Parent directory" }),
+      ).toBeEnabled();
+      await expect(
+        picker.getByRole("button", { name: "Open repository" }),
+      ).toBeDisabled();
+
+      await picker.getByRole("button", { name: /rebase-test/ }).click();
+      await expect(
+        picker.getByRole("button", { name: "Open repository" }),
+      ).toBeEnabled();
+      await window.keyboard.press("Control+Enter");
+      await expect(picker).not.toBeVisible();
+
+      const projects = window.getByRole("navigation", { name: "Projects" });
+      const connectionStatus = projects.getByRole("status");
+      await expect(connectionStatus).toHaveText("Available");
+      await expect(connectionStatus).toHaveClass(/sr-only/);
+      await expect(
+        projects.getByRole("button", { name: "Close rebase-test" }),
+      ).toBeVisible();
+
+      await window.keyboard.press("Control+b");
+      await expect(
+        projects.getByRole("button", { name: "rebase-test" }),
+      ).toBeVisible();
+      await projects
+        .getByRole("button", {
+          name: "Collapse Local Environment, Available",
+        })
+        .click();
+      await expect(
+        projects.getByRole("button", { name: "rebase-test" }),
+      ).not.toBeVisible();
+      await projects
+        .getByRole("button", {
+          name: "Expand Local Environment, Available",
+        })
+        .click();
+      await expect(
+        projects.getByRole("button", { name: "rebase-test" }),
+      ).toBeVisible();
+      await window.keyboard.press("Control+b");
+
+      await projects.getByRole("button", { name: "Close rebase-test" }).click();
+      const openProject = window.getByRole("main", { name: "Open project" });
+      await expect(openProject).toBeVisible();
+      const recentRepository = openProject
+        .getByRole("option")
+        .filter({ hasText: "rebase-test" })
+        .first();
+      await expect(recentRepository).toBeVisible();
+
+      await recentRepository.click();
+      await window.keyboard.press("Control+w");
+      await expect(openProject).toBeVisible();
+
+      await window.keyboard.press("Control+Shift+f");
+      await expect(
+        projects.getByRole("textbox", { name: "Filter open projects" }),
+      ).toBeFocused();
+
+      await window.keyboard.press("Control+Shift+o");
+      await expect(
+        openProject.getByRole("searchbox", { name: "Search repositories" }),
+      ).toBeFocused();
+
+      await window.keyboard.press("Control+Comma");
       await expect(
         window.getByText(packageMetadata.version, { exact: true }),
       ).toBeVisible();

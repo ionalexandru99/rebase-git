@@ -30,13 +30,15 @@ const generatedMigrations = readMigrationFiles({
 const createEnvironmentMigration = generatedMigrations[0];
 const createActivityMigration = generatedMigrations[1];
 const createAuthorizationCapabilitiesMigration = generatedMigrations[2];
+const createRepositoryCatalogMigration = generatedMigrations[3];
 
 if (
   createEnvironmentMigration === undefined ||
   createActivityMigration === undefined ||
-  createAuthorizationCapabilitiesMigration === undefined
+  createAuthorizationCapabilitiesMigration === undefined ||
+  createRepositoryCatalogMigration === undefined
 ) {
-  throw new Error("Expected three generated Environment state migrations.");
+  throw new Error("Expected four generated Environment state migrations.");
 }
 
 afterEach(async () => {
@@ -125,6 +127,11 @@ describe("Environment state", () => {
         checksum_length: 64,
         name: createAuthorizationCapabilitiesMigration.name,
         version: 3,
+      },
+      {
+        checksum_length: 64,
+        name: createRepositoryCatalogMigration.name,
+        version: 4,
       },
     ]);
     database.close();
@@ -233,16 +240,17 @@ describe("Environment state", () => {
       generatedMigrationEntry(createEnvironmentMigration, 1),
       generatedMigrationEntry(createActivityMigration, 2),
       generatedMigrationEntry(createAuthorizationCapabilitiesMigration, 3),
+      generatedMigrationEntry(createRepositoryCatalogMigration, 4),
       {
         checksum: "future",
-        createdAt: createAuthorizationCapabilitiesMigration.folderMillis + 1,
+        createdAt: createRepositoryCatalogMigration.folderMillis + 1,
         name: "future",
-        version: 4,
+        version: 5,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 4, but this Rebase build supports version 3.",
+      "The state database is at version 5, but this Rebase build supports version 4.",
     );
   });
 
@@ -269,7 +277,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 3 });
+    ).toEqual({ version: 4 });
     database.close();
   });
 

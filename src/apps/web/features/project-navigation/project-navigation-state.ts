@@ -1,6 +1,7 @@
 import type {
   EnvironmentAvailability,
   ProjectNavigationEnvironment,
+  ProjectNavigationRepository,
   ProjectNavigationRepositoryItem,
   ProjectNavigationState,
 } from "#web/features/project-navigation/project-navigation.contract";
@@ -54,6 +55,89 @@ export function setProjectSidebarCollapsed(
   sidebarCollapsed: boolean,
 ): ProjectNavigationState {
   return { ...state, sidebarCollapsed };
+}
+
+export function showOpenProject(
+  state: ProjectNavigationState,
+): ProjectNavigationState {
+  return state.workspaceView === "open-project"
+    ? state
+    : { ...state, workspaceView: "open-project" };
+}
+
+export function openProjectRepository(
+  state: ProjectNavigationState,
+  environmentId: string,
+  repository: ProjectNavigationRepository,
+): ProjectNavigationState {
+  const environment = state.environments.find(
+    (environment) => environment.id === environmentId,
+  );
+  if (environment?.availability !== "available") return state;
+
+  return {
+    ...state,
+    environments: state.environments.map((environment) =>
+      environment.id === environmentId
+        ? addRepositoryOnce(environment, repository)
+        : environment,
+    ),
+    selectedRepositoryId: repository.id,
+    workspaceView: "repository",
+  };
+}
+
+export function removeProjectRepository(
+  state: ProjectNavigationState,
+  environmentId: string,
+  repositoryId: string,
+): ProjectNavigationState {
+  const environment = state.environments.find(
+    (current) => current.id === environmentId,
+  );
+  if (
+    environment === undefined ||
+    !environment.repositories.some(
+      (repository) => repository.id === repositoryId,
+    )
+  ) {
+    return state;
+  }
+
+  const selectedRepositoryRemoved = state.selectedRepositoryId === repositoryId;
+  return {
+    ...state,
+    environments: state.environments.map((current) =>
+      current.id === environmentId
+        ? {
+            ...current,
+            repositories: current.repositories.filter(
+              (repository) => repository.id !== repositoryId,
+            ),
+          }
+        : current,
+    ),
+    selectedRepositoryId: selectedRepositoryRemoved
+      ? undefined
+      : state.selectedRepositoryId,
+    workspaceView: selectedRepositoryRemoved
+      ? "open-project"
+      : state.workspaceView,
+  };
+}
+
+function addRepositoryOnce(
+  environment: ProjectNavigationEnvironment,
+  repository: ProjectNavigationRepository,
+): ProjectNavigationEnvironment {
+  return environment.repositories.some(
+    (current) => current.id === repository.id,
+  )
+    ? environment
+    : {
+        ...environment,
+        repositories: [...environment.repositories, repository],
+      };
 }
 
 function updateEnvironment(

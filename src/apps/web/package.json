@@ -33,6 +33,18 @@
       "import": "./dist/types/features/environment-connection/index.js",
       "default": "./dist/types/features/environment-connection/index.js"
     },
+    "./features/environment-filesystem": {
+      "rebase-source": "./features/environment-filesystem/index.ts",
+      "types": "./dist/types/features/environment-filesystem/index.d.ts",
+      "import": "./dist/types/features/environment-filesystem/index.js",
+      "default": "./dist/types/features/environment-filesystem/index.js"
+    },
+    "./features/repository-catalog": {
+      "rebase-source": "./features/repository-catalog/index.ts",
+      "types": "./dist/types/features/repository-catalog/index.d.ts",
+      "import": "./dist/types/features/repository-catalog/index.js",
+      "default": "./dist/types/features/repository-catalog/index.js"
+    },
     "./styles.css": "./styles.css"
   },
   "scripts": {

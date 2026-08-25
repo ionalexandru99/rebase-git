@@ -8,9 +8,12 @@ import {
   IconSettings,
   IconX,
 } from "@tabler/icons-react";
-import { type JSX, useState } from "react";
+import { type JSX, type RefObject, useEffect, useRef, useState } from "react";
 import type { EnvironmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
-import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
+import type {
+  ProjectNavigationRepository,
+  ProjectNavigationState,
+} from "#web/features/project-navigation/project-navigation.contract";
 import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state";
 import { Button } from "#web-ui/components/ui/button";
 import {
@@ -26,21 +29,42 @@ import {
 } from "#web-ui/components/ui/tooltip";
 
 export function ProjectsSidebar({
+  closeRepository,
   collapse,
   environmentStatus,
   expand,
+  filterRequest,
   navigation,
+  openProject,
   openSettings,
+  selectRepository,
   toggleEnvironment,
 }: {
+  readonly closeRepository: (
+    environmentId: string,
+    repository: ProjectNavigationRepository,
+  ) => void;
   readonly collapse: () => void;
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly expand: () => void;
+  readonly filterRequest: number;
   readonly navigation: ProjectNavigationState;
+  readonly openProject: () => void;
   readonly openSettings: () => void;
+  readonly selectRepository: (
+    environmentId: string,
+    repository: ProjectNavigationRepository,
+  ) => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }): JSX.Element {
   const [filterQuery, setFilterQuery] = useState("");
+  const filterInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (filterRequest === 0) return;
+    filterInputRef.current?.focus();
+    filterInputRef.current?.select();
+  }, [filterRequest]);
 
   return (
     <nav
@@ -53,15 +77,22 @@ export function ProjectsSidebar({
           expand={expand}
           filterQuery={filterQuery}
           navigation={navigation}
+          openProject={openProject}
           openSettings={openSettings}
+          selectRepository={selectRepository}
+          toggleEnvironment={toggleEnvironment}
         />
       ) : (
         <ExpandedProjectsSidebar
+          closeRepository={closeRepository}
           collapse={collapse}
           environmentStatus={environmentStatus}
           filterQuery={filterQuery}
+          filterInputRef={filterInputRef}
           navigation={navigation}
+          openProject={openProject}
           openSettings={openSettings}
+          selectRepository={selectRepository}
           setFilterQuery={setFilterQuery}
           toggleEnvironment={toggleEnvironment}
         />
@@ -71,19 +102,33 @@ export function ProjectsSidebar({
 }
 
 function ExpandedProjectsSidebar({
+  closeRepository,
   collapse,
   environmentStatus,
   filterQuery,
+  filterInputRef,
   navigation,
+  openProject,
   openSettings,
+  selectRepository,
   setFilterQuery,
   toggleEnvironment,
 }: {
+  readonly closeRepository: (
+    environmentId: string,
+    repository: ProjectNavigationRepository,
+  ) => void;
   readonly collapse: () => void;
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly filterQuery: string;
+  readonly filterInputRef: RefObject<HTMLInputElement | null>;
   readonly navigation: ProjectNavigationState;
+  readonly openProject: () => void;
   readonly openSettings: () => void;
+  readonly selectRepository: (
+    environmentId: string,
+    repository: ProjectNavigationRepository,
+  ) => void;
   readonly setFilterQuery: (query: string) => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }) {
@@ -95,8 +140,10 @@ function ExpandedProjectsSidebar({
         </h1>
         <Button
           aria-label="Collapse Projects sidebar"
+          aria-keyshortcuts="Control+B Meta+B"
           onClick={collapse}
           size="icon"
+          title="Collapse Projects sidebar (Ctrl/⌘ B)"
           variant="ghost"
         >
           <IconLayoutSidebarLeftCollapse aria-hidden="true" />
@@ -110,17 +157,25 @@ function ExpandedProjectsSidebar({
           />
           <Input
             aria-label="Filter open projects"
+            aria-keyshortcuts="Control+Shift+F Meta+Shift+F"
             className="pl-9"
             onChange={(event) => setFilterQuery(event.target.value)}
             placeholder="Filter open projects"
+            ref={filterInputRef}
+            title="Filter open projects (Ctrl/⌘ Shift F)"
             value={filterQuery}
           />
         </div>
         <Button
+          aria-current={
+            navigation.workspaceView === "open-project" ? "page" : undefined
+          }
           aria-label="Open project"
-          className="!size-7.5 shrink-0 border-0"
+          aria-keyshortcuts="Control+Shift+O Meta+Shift+O"
+          className={`!size-7.5 shrink-0 border-0 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
+          onClick={openProject}
           size="icon"
-          title="Open project"
+          title="Open project (Ctrl/⌘ Shift O)"
           variant="ghost"
         >
           <IconFolderPlus aria-hidden="true" />
@@ -167,35 +222,58 @@ function ExpandedProjectsSidebar({
                   {environment.name}
                 </span>
                 <span
-                  className={`shrink-0 truncate text-sm ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+                  className={
+                    environmentStatus.availability === "available"
+                      ? "sr-only"
+                      : `shrink-0 truncate text-sm ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`
+                  }
                   data-connection-state={environmentStatus.connectionState}
                   role="status"
                 >
-                  {environmentStatus.availability === "available"
-                    ? environment.repositories.length
-                    : environmentStatus.status}
+                  {environmentStatus.status}
                 </span>
               </div>
               <CollapsibleContent>
                 {filterEnvironmentRepositories(environment, filterQuery).map(
                   (repository) => (
-                    <button
-                      className="grid h-11 w-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)_1.375rem] items-center gap-2.5 rounded-lg px-2.5 text-left text-base text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-45"
-                      disabled={repository.disabled}
+                    <div
+                      className={`group grid h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.875rem] items-center rounded-lg pr-1.5 pl-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
                       key={repository.id}
-                      type="button"
                     >
-                      <span className="grid size-7.5 shrink-0 place-items-center rounded-md bg-secondary text-sm font-semibold">
-                        {repositoryInitials(repository.name)}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">
-                        {repository.name}
-                      </span>
-                      <IconX
-                        aria-hidden="true"
-                        className="size-4 text-muted-foreground"
-                      />
-                    </button>
+                      <button
+                        aria-current={
+                          navigation.workspaceView === "repository" &&
+                          navigation.selectedRepositoryId === repository.id
+                            ? "page"
+                            : undefined
+                        }
+                        aria-label={`Open ${repository.name}`}
+                        className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)] items-center gap-2.5 text-left text-base outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-45"
+                        disabled={repository.disabled}
+                        onClick={() =>
+                          selectRepository(environment.id, repository)
+                        }
+                        type="button"
+                      >
+                        <span className="grid size-7.5 shrink-0 place-items-center rounded-md bg-secondary text-sm font-semibold">
+                          {repositoryInitials(repository.name)}
+                        </span>
+                        <span className="min-w-0 truncate">
+                          {repository.name}
+                        </span>
+                      </button>
+                      <button
+                        aria-label={`Close ${repository.name}`}
+                        className="grid size-7.5 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+                        onClick={() =>
+                          closeRepository(environment.id, repository)
+                        }
+                        title={`Close ${repository.name}`}
+                        type="button"
+                      >
+                        <IconX aria-hidden="true" className="size-4" />
+                      </button>
+                    </div>
                   ),
                 )}
               </CollapsibleContent>
@@ -213,21 +291,32 @@ function CollapsedProjectsSidebar({
   expand,
   filterQuery,
   navigation,
+  openProject,
   openSettings,
+  selectRepository,
+  toggleEnvironment,
 }: {
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly expand: () => void;
   readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;
+  readonly openProject: () => void;
   readonly openSettings: () => void;
+  readonly selectRepository: (
+    environmentId: string,
+    repository: ProjectNavigationRepository,
+  ) => void;
+  readonly toggleEnvironment: (environmentId: string) => void;
 }) {
   return (
     <>
       <Tooltip>
         <TooltipTrigger
           aria-label="Expand Projects sidebar"
+          aria-keyshortcuts="Control+B Meta+B"
           className="mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
           onClick={expand}
+          title="Expand Projects sidebar (Ctrl/⌘ B)"
         >
           <IconLayoutSidebarLeftExpand aria-hidden="true" className="size-5" />
         </TooltipTrigger>
@@ -235,8 +324,14 @@ function CollapsedProjectsSidebar({
       </Tooltip>
       <Tooltip>
         <TooltipTrigger
+          aria-current={
+            navigation.workspaceView === "open-project" ? "page" : undefined
+          }
           aria-label="Open project"
-          className="mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+          aria-keyshortcuts="Control+Shift+O Meta+Shift+O"
+          className={`mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
+          onClick={openProject}
+          title="Open project (Ctrl/⌘ Shift O)"
         >
           <IconFolderPlus aria-hidden="true" className="size-5" />
         </TooltipTrigger>
@@ -253,7 +348,7 @@ function CollapsedProjectsSidebar({
           </span>
         ) : null}
         {navigation.environments.map((environment) => {
-          const environmentLabel = `${environment.name}, ${environmentStatus.status}`;
+          const environmentLabel = `${environment.expanded ? "Collapse" : "Expand"} ${environment.name}, ${environmentStatus.status}`;
           return (
             <div
               className="grid justify-items-center gap-1.5"
@@ -261,25 +356,40 @@ function CollapsedProjectsSidebar({
             >
               <Tooltip>
                 <TooltipTrigger
+                  aria-expanded={environment.expanded}
                   aria-label={environmentLabel}
-                  className={`grid h-9 w-11 place-items-center rounded-md outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+                  className={`grid size-10 place-items-center rounded-md outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+                  onClick={() => toggleEnvironment(environment.id)}
                 >
                   <IconDeviceLaptop aria-hidden="true" className="size-5" />
                 </TooltipTrigger>
                 <TooltipContent side="right">{environmentLabel}</TooltipContent>
               </Tooltip>
-              {filterEnvironmentRepositories(environment, filterQuery).map(
-                (repository) => (
-                  <span
-                    className="grid size-11 place-items-center rounded-lg bg-secondary text-sm font-semibold text-sidebar-foreground data-[disabled=true]:opacity-45"
-                    data-disabled={repository.disabled}
-                    key={repository.id}
-                    title={`${repository.name} · ${environment.name}`}
-                  >
-                    {repositoryInitials(repository.name)}
-                  </span>
-                ),
-              )}
+              {environment.expanded
+                ? filterEnvironmentRepositories(environment, filterQuery).map(
+                    (repository) => (
+                      <button
+                        aria-current={
+                          navigation.workspaceView === "repository" &&
+                          navigation.selectedRepositoryId === repository.id
+                            ? "page"
+                            : undefined
+                        }
+                        aria-label={repository.name}
+                        className={`grid size-10 place-items-center rounded-md bg-secondary text-sm font-semibold text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-45 ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent" : ""}`}
+                        disabled={repository.disabled}
+                        key={repository.id}
+                        onClick={() =>
+                          selectRepository(environment.id, repository)
+                        }
+                        title={`${repository.name} · ${environment.name}`}
+                        type="button"
+                      >
+                        {repositoryInitials(repository.name)}
+                      </button>
+                    ),
+                  )
+                : null}
             </div>
           );
         })}
@@ -301,8 +411,10 @@ function SidebarSettings({
       <Tooltip>
         <TooltipTrigger
           aria-label="Settings"
+          aria-keyshortcuts="Control+, Meta+,"
           className="mx-auto mb-3 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
           onClick={openSettings}
+          title="Settings (Ctrl/⌘ ,)"
         >
           <IconSettings aria-hidden="true" className="size-5" />
         </TooltipTrigger>
@@ -312,8 +424,10 @@ function SidebarSettings({
   }
   return (
     <Button
+      aria-keyshortcuts="Control+, Meta+,"
       className="mx-3 mb-2 h-10 justify-between px-2 text-muted-foreground"
       onClick={openSettings}
+      title="Settings (Ctrl/⌘ ,)"
       variant="ghost"
     >
       Settings

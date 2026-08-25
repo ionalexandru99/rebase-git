@@ -3,6 +3,7 @@ import { Effect, type Scope } from "effect";
 import type { Environment } from "#server/domain/environment-state.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,
@@ -21,6 +22,7 @@ import type {
   EnvironmentServerOptions,
 } from "#server/features/environment-server/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { environmentTable } from "#server/persistence/environment-state.schema";
@@ -42,6 +44,7 @@ export function startEnvironmentServer(
     yield* verifyRuntimeRequirements;
     const paths = defaultEnvironmentPaths();
     const context = yield* acquireEnvironmentContext(paths);
+    const catalog = createRepositoryCatalog(context);
     const environment = yield* readCurrentEnvironment(context);
     const authorization = createEnvironmentAuthorization(
       context,
@@ -54,11 +57,13 @@ export function startEnvironmentServer(
     const events = createEnvironmentEventPublisher();
     const listener = yield* acquireEnvironmentListener({
       authorization,
+      catalog,
       ...(options.browserAssetsRoot === undefined
         ? {}
         : { browserAssetsRoot: options.browserAssetsRoot }),
       environmentId: environment.id,
       events,
+      filesystem: createEnvironmentFilesystem(),
       port: requestedPort,
       productVersion,
     });

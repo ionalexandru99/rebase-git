@@ -17,3 +17,8 @@ export type {
 } from "#desktop/features/desktop-application/desktop-application.contract";
 export { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
 export type { ManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor.contract";
+export { createRepositoryFilesystem } from "#desktop/features/repository-filesystem/repository-filesystem";
+export type {
+  RepositoryFilesystem,
+  RepositoryFilesystemPlatform,
+} from "#desktop/features/repository-filesystem/repository-filesystem.contract";

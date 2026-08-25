@@ -6,10 +6,13 @@ import type {
 import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopHostBridge } from "#desktop/desktop-host.contract";
 import { applicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc.contract";
+import { repositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.contract";
 
 const host = Object.freeze({
   environmentOrigin: readRequiredArgument("--rebase-environment-origin="),
   pairingMaterial: readRequiredArgument("--rebase-pairing-material="),
+  revealRepository: (path: string) =>
+    ipcRenderer.invoke(repositoryFilesystemIpc.revealRepository, path),
   updates: createDesktopUpdatesBridge(),
 }) satisfies DesktopHostBridge;
 contextBridge.exposeInMainWorld("rebaseHost", host);

@@ -95,6 +95,32 @@ export const operationActivityTable = sqliteTable(
   ],
 );
 
+export const repositoryCatalogTable = sqliteTable(
+  "repository_catalog",
+  {
+    addedAt: text("added_at").notNull(),
+    id: text("id").primaryKey(),
+    lastOpenedAt: text("last_opened_at").notNull(),
+    name: text("name").notNull(),
+    path: text("path").notNull().unique(),
+  },
+  (repository) => [
+    check(
+      "repository_catalog_name_check",
+      sql`length(${repository.name}) BETWEEN 1 AND 255`,
+    ),
+    check(
+      "repository_catalog_path_check",
+      sql`length(${repository.path}) BETWEEN 1 AND 4096`,
+    ),
+    index("repository_catalog_last_opened_at").on(
+      sql`${repository.lastOpenedAt} DESC`,
+      sql`${repository.id} DESC`,
+    ),
+    index("repository_catalog_name").on(repository.name, repository.path),
+  ],
+);
+
 function sqlValues(values: readonly string[]) {
   return values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", ");
 }

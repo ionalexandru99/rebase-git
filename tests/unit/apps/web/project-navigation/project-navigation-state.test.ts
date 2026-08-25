@@ -3,8 +3,11 @@ import type { ProjectNavigationState } from "#web/features/project-navigation/pr
 import {
   environmentRepositories,
   filterEnvironmentRepositories,
+  openProjectRepository,
+  removeProjectRepository,
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
+  showOpenProject,
   toggleEnvironment,
 } from "#web/features/project-navigation/project-navigation-state";
 
@@ -57,7 +60,95 @@ describe("project navigation state", () => {
     expect(collapsed).toMatchObject({
       selectedRepositoryId: "payments",
       sidebarCollapsed: true,
+      workspaceView: "repository",
       environments: [{ expanded: true }],
+    });
+  });
+
+  it("shows Open project without clearing the selected repository", () => {
+    const state = navigationState();
+
+    const openProject = showOpenProject(state);
+
+    expect(openProject).toMatchObject({
+      selectedRepositoryId: "payments",
+      workspaceView: "open-project",
+    });
+    expect(openProject.environments).toBe(state.environments);
+  });
+
+  it("selects an open repository without adding a duplicate sidebar item", () => {
+    const state = showOpenProject(navigationState());
+
+    const selected = openProjectRepository(state, "office", {
+      id: "worker",
+      name: "worker",
+    });
+
+    expect(selected).toMatchObject({
+      selectedRepositoryId: "worker",
+      workspaceView: "repository",
+    });
+    expect(selected.environments[0]?.repositories).toEqual([
+      { id: "payments", name: "payments" },
+      { id: "worker", name: "worker" },
+    ]);
+  });
+
+  it("adds a newly opened repository to its Environment once", () => {
+    const state = showOpenProject(navigationState());
+
+    const selected = openProjectRepository(state, "office", {
+      id: "api",
+      name: "api",
+    });
+    const selectedAgain = openProjectRepository(selected, "office", {
+      id: "api",
+      name: "api",
+    });
+
+    expect(selectedAgain.environments[0]?.repositories).toEqual([
+      { id: "payments", name: "payments" },
+      { id: "worker", name: "worker" },
+      { id: "api", name: "api" },
+    ]);
+  });
+
+  it("does not open repositories from an unavailable Environment", () => {
+    const state = showOpenProject(
+      setEnvironmentAvailability(navigationState(), "office", "unavailable"),
+    );
+
+    const selected = openProjectRepository(state, "office", {
+      id: "api",
+      name: "api",
+    });
+
+    expect(selected).toBe(state);
+  });
+
+  it("removes an open repository and clears its selection", () => {
+    const state = navigationState();
+
+    const removed = removeProjectRepository(state, "office", "payments");
+
+    expect(removed).toMatchObject({
+      selectedRepositoryId: undefined,
+      workspaceView: "open-project",
+    });
+    expect(removed.environments[0]?.repositories).toEqual([
+      { id: "worker", name: "worker" },
+    ]);
+  });
+
+  it("removes another open repository without clearing the selection", () => {
+    const state = navigationState();
+
+    const removed = removeProjectRepository(state, "office", "worker");
+
+    expect(removed).toMatchObject({
+      selectedRepositoryId: "payments",
+      workspaceView: "repository",
     });
   });
 });
@@ -78,6 +169,7 @@ function navigationState(): ProjectNavigationState {
     ],
     selectedRepositoryId: "payments",
     sidebarCollapsed: false,
+    workspaceView: "repository",
   };
 }
 

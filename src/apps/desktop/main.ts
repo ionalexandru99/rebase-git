@@ -15,6 +15,8 @@ import type {
   DesktopWindowOptions,
 } from "#desktop/features/desktop-application/desktop-application.contract";
 import { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
+import { createElectronRepositoryFilesystem } from "#desktop/features/repository-filesystem/electron-repository-filesystem";
+import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc";
 
 let desktopApplication: DesktopApplication | undefined;
 const desktopIconPath = fileURLToPath(
@@ -61,6 +63,7 @@ async function start() {
     settings: await updateSettings.read(),
   });
   registerApplicationUpdaterIpc(applicationUpdater);
+  registerRepositoryFilesystemIpc(createElectronRepositoryFilesystem());
   desktopApplication = await startDesktopApplication({
     host,
     renderer: resolveRenderer(process.argv, import.meta.url, app.isPackaged),

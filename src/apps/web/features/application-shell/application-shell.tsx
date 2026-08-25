@@ -1,4 +1,5 @@
 import type { DesktopUpdates } from "@rebase/contracts";
+import { IconDeviceLaptop } from "@tabler/icons-react";
 import {
   type JSX,
   useCallback,
@@ -10,10 +11,17 @@ import {
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { environmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
 import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
+import type {
+  OpenProjectEnvironment,
+  OpenProjectRepository,
+} from "#web/features/open-project/open-project.contract";
 import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
 import {
+  openProjectRepository,
+  removeProjectRepository,
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
+  showOpenProject,
   toggleEnvironment,
 } from "#web/features/project-navigation/project-navigation-state";
 import {
@@ -22,7 +30,9 @@ import {
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
 import { TooltipProvider } from "#web-ui/components/ui/tooltip";
+import { OpenProjectScreen } from "#web-ui/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-sidebar";
+import { RepositoryFolderPicker } from "#web-ui/features/repository-folder-picker/repository-folder-picker";
 import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
 import { SettingsPanel } from "#web-ui/features/settings/settings-panel";
 
@@ -47,9 +57,18 @@ export function ApplicationShell({
     session.subscribe,
     session.getSnapshot,
   );
+  const repositoryCatalog = useSyncExternalStore(
+    session.repositoryCatalog.subscribe,
+    session.repositoryCatalog.getSnapshot,
+  );
   const environmentStatus = environmentSessionPresentation(sessionState);
   const sidebarRef = useRef<PanelImperativeHandle>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [openProjectRequest, setOpenProjectRequest] = useState(0);
+  const [sidebarFilterRequest, setSidebarFilterRequest] = useState(0);
+  const [expandedOpenProjectEnvironments, setExpandedOpenProjectEnvironments] =
+    useState<ReadonlySet<string>>(() => new Set([localEnvironmentId]));
   const [navigation, setNavigation] = useState<ProjectNavigationState>(() => ({
     environments: [
       {
@@ -62,6 +81,7 @@ export function ApplicationShell({
     ],
     selectedRepositoryId: undefined,
     sidebarCollapsed: false,
+    workspaceView: "open-project",
   }));
   const currentNavigation = navigationWithAvailability(
     navigation,
@@ -71,6 +91,22 @@ export function ApplicationShell({
     sessionState._tag === "PairingRequired"
       ? { ...currentNavigation, environments: [] }
       : currentNavigation;
+  const openProjectEnvironments: readonly OpenProjectEnvironment[] =
+    visibleNavigation.environments.map((environment) => ({
+      availability: environment.availability,
+      icon: IconDeviceLaptop,
+      iconColor: "var(--primary)",
+      id: environment.id,
+      name: environment.name,
+      repositories: repositoryCatalog.repositories.map((repository) => ({
+        environmentId: environment.id,
+        id: repository.id,
+        lastOpenedAt: repository.lastOpenedAt,
+        name: repository.name,
+        path: repository.path,
+      })),
+      status: environmentStatus.status,
+    }));
 
   const setCollapsed = useCallback((collapsed: boolean) => {
     setNavigation((current) =>
@@ -87,26 +123,206 @@ export function ApplicationShell({
     sidebarRef.current?.expand();
     setCollapsed(false);
   }, [setCollapsed]);
+  const showOpenProjectScreen = useCallback(() => {
+    setNavigation((current) => showOpenProject(current));
+    setOpenProjectRequest((current) => current + 1);
+  }, []);
+  const selectOpenProjectRepository = useCallback(
+    (repository: OpenProjectRepository) => {
+      if (environmentStatus.availability !== "available") return;
+
+      void session.repositoryCatalog
+        .recordOpened(repository.id)
+        .catch(() => undefined);
+      setNavigation((current) =>
+        openProjectRepository(
+          navigationWithAvailability(current, environmentStatus.availability),
+          repository.environmentId,
+          {
+            id: repository.id,
+            name: repository.name,
+          },
+        ),
+      );
+    },
+    [environmentStatus.availability, session.repositoryCatalog],
+  );
+  const browseRepository = useCallback(() => {
+    if (environmentStatus.availability !== "available") return;
+    setFolderPickerOpen(true);
+  }, [environmentStatus.availability]);
+  const listRepositoryDirectory = useCallback(
+    (environmentId: string, path?: string) => {
+      if (environmentId !== localEnvironmentId) {
+        return Promise.reject(new Error("The Environment is unavailable."));
+      }
+      return session.filesystem.listDirectory(path);
+    },
+    [session.filesystem],
+  );
+  const openRepositoryFromFolder = useCallback(
+    async (environmentId: string, path: string) => {
+      if (
+        environmentId !== localEnvironmentId ||
+        environmentStatus.availability !== "available"
+      ) {
+        throw new Error("The Environment is unavailable.");
+      }
+      const remembered = await session.repositoryCatalog.remember(path);
+      setNavigation((current) =>
+        openProjectRepository(
+          navigationWithAvailability(current, environmentStatus.availability),
+          environmentId,
+          {
+            id: remembered.id,
+            name: remembered.name,
+          },
+        ),
+      );
+    },
+    [environmentStatus.availability, session.repositoryCatalog],
+  );
+  const copyRepositoryPath = useCallback(
+    (repository: OpenProjectRepository) => {
+      void navigator.clipboard
+        .writeText(repository.path)
+        .catch(() => undefined);
+    },
+    [],
+  );
+  const revealRepository = useCallback((repository: OpenProjectRepository) => {
+    void window.rebaseHost
+      ?.revealRepository(repository.path)
+      .catch(() => undefined);
+  }, []);
+  const selectSidebarRepository = useCallback(
+    (
+      environmentId: string,
+      repository: ProjectNavigationState["environments"][number]["repositories"][number],
+    ) => {
+      if (environmentStatus.availability !== "available") return;
+
+      void session.repositoryCatalog
+        .recordOpened(repository.id)
+        .catch(() => undefined);
+      setNavigation((current) =>
+        openProjectRepository(
+          navigationWithAvailability(current, environmentStatus.availability),
+          environmentId,
+          repository,
+        ),
+      );
+    },
+    [environmentStatus.availability, session.repositoryCatalog],
+  );
+  const closeSidebarRepository = useCallback(
+    (environmentId: string, repository: { readonly id: string }) => {
+      setNavigation((current) =>
+        removeProjectRepository(current, environmentId, repository.id),
+      );
+    },
+    [],
+  );
+  const closeSelectedRepository = useCallback(() => {
+    setNavigation((current) => {
+      if (current.selectedRepositoryId === undefined) return current;
+      const environment = current.environments.find((candidate) =>
+        candidate.repositories.some(
+          (repository) => repository.id === current.selectedRepositoryId,
+        ),
+      );
+      return environment === undefined
+        ? current
+        : removeProjectRepository(
+            current,
+            environment.id,
+            current.selectedRepositoryId,
+          );
+    });
+  }, []);
+  const removeRepository = useCallback(
+    (repository: OpenProjectRepository) => {
+      void session.repositoryCatalog
+        .remove(repository.id)
+        .then(() =>
+          setNavigation((current) =>
+            removeProjectRepository(
+              current,
+              repository.environmentId,
+              repository.id,
+            ),
+          ),
+        )
+        .catch(() => undefined);
+    },
+    [session.repositoryCatalog],
+  );
+  const setOpenProjectEnvironmentExpanded = useCallback(
+    (environmentId: string, open: boolean) => {
+      setExpandedOpenProjectEnvironments((current) => {
+        const next = new Set(current);
+        if (open) next.add(environmentId);
+        else next.delete(environmentId);
+        return next;
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     const handleApplicationShortcut = (event: KeyboardEvent) => {
+      if (folderPickerOpen) return;
+
       if (event.key === "Escape" && settingsOpen) {
         event.preventDefault();
         setSettingsOpen(false);
         return;
       }
 
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
         return;
       }
 
-      if (event.key === ",") {
+      const key = event.key.toLocaleLowerCase();
+      if (key === "," && !event.shiftKey) {
         event.preventDefault();
         setSettingsOpen(true);
         return;
       }
 
-      if (event.key.toLowerCase() !== "b" || settingsOpen) return;
+      if (key === "o") {
+        event.preventDefault();
+        setSettingsOpen(false);
+        if (event.shiftKey) {
+          showOpenProjectScreen();
+        } else if (environmentStatus.availability === "available") {
+          setFolderPickerOpen(true);
+        } else {
+          showOpenProjectScreen();
+        }
+        return;
+      }
+
+      if (key === "w" && !event.shiftKey) {
+        if (
+          navigation.workspaceView === "repository" &&
+          navigation.selectedRepositoryId !== undefined
+        ) {
+          event.preventDefault();
+          closeSelectedRepository();
+        }
+        return;
+      }
+
+      if (key === "f" && event.shiftKey) {
+        event.preventDefault();
+        setSettingsOpen(false);
+        expandSidebar();
+        setSidebarFilterRequest((current) => current + 1);
+        return;
+      }
+
+      if (key !== "b" || event.shiftKey || settingsOpen) return;
 
       event.preventDefault();
       if (sidebarRef.current?.isCollapsed()) {
@@ -119,7 +335,17 @@ export function ApplicationShell({
     window.addEventListener("keydown", handleApplicationShortcut);
     return () =>
       window.removeEventListener("keydown", handleApplicationShortcut);
-  }, [collapseSidebar, expandSidebar, settingsOpen]);
+  }, [
+    closeSelectedRepository,
+    collapseSidebar,
+    environmentStatus.availability,
+    expandSidebar,
+    folderPickerOpen,
+    navigation.selectedRepositoryId,
+    navigation.workspaceView,
+    settingsOpen,
+    showOpenProjectScreen,
+  ]);
 
   return (
     <TooltipProvider>
@@ -147,11 +373,15 @@ export function ApplicationShell({
                 panelRef={sidebarRef}
               >
                 <ProjectsSidebar
+                  closeRepository={closeSidebarRepository}
                   collapse={collapseSidebar}
                   environmentStatus={environmentStatus}
                   expand={expandSidebar}
+                  filterRequest={sidebarFilterRequest}
                   navigation={visibleNavigation}
+                  openProject={showOpenProjectScreen}
                   openSettings={() => setSettingsOpen(true)}
+                  selectRepository={selectSidebarRepository}
                   toggleEnvironment={(environmentId) =>
                     setNavigation((current) =>
                       toggleEnvironment(current, environmentId),
@@ -165,7 +395,27 @@ export function ApplicationShell({
                 id="repository"
                 minSize="40%"
               >
-                <RepositoryWorkspace />
+                {navigation.workspaceView === "open-project" ? (
+                  <OpenProjectScreen
+                    browseAvailable={
+                      environmentStatus.availability === "available"
+                    }
+                    environments={openProjectEnvironments}
+                    expandedEnvironmentIds={expandedOpenProjectEnvironments}
+                    key={openProjectRequest}
+                    onBrowse={browseRepository}
+                    onCopyPath={copyRepositoryPath}
+                    onEnvironmentOpenChange={setOpenProjectEnvironmentExpanded}
+                    onOpenRepository={selectOpenProjectRepository}
+                    onRemoveRepository={removeRepository}
+                    onRevealRepository={revealRepository}
+                    revealAvailable={
+                      window.rebaseHost?.revealRepository !== undefined
+                    }
+                  />
+                ) : (
+                  <RepositoryWorkspace />
+                )}
               </ResizablePanel>
             </ResizablePanelGroup>
           </div>
@@ -176,6 +426,13 @@ export function ApplicationShell({
               productVersion={productVersion}
             />
           ) : null}
+          <RepositoryFolderPicker
+            environments={openProjectEnvironments}
+            listDirectory={listRepositoryDirectory}
+            onOpenChange={setFolderPickerOpen}
+            onOpenRepository={openRepositoryFromFolder}
+            open={folderPickerOpen}
+          />
         </section>
       </div>
     </TooltipProvider>
