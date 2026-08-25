@@ -45,7 +45,7 @@ export function useProjectRepositoryActions({
         .catch(() => undefined);
       setNavigation((current) =>
         openProjectRepository(
-          withAvailability(current, environmentId, availability),
+          setEnvironmentAvailability(current, environmentId, availability),
           selectedEnvironmentId,
           repository,
         ),
@@ -85,7 +85,7 @@ export function useProjectRepositoryActions({
       const remembered = await session.repositoryCatalog.remember(path);
       setNavigation((current) =>
         openProjectRepository(
-          withAvailability(current, environmentId, availability),
+          setEnvironmentAvailability(current, environmentId, availability),
           selectedEnvironmentId,
           {
             id: remembered.id,
@@ -188,12 +188,4 @@ export function useProjectRepositoryActions({
     setEnvironmentExpanded,
     setFolderPickerOpen,
   };
-}
-
-function withAvailability(
-  navigation: ProjectNavigationState,
-  environmentId: string,
-  availability: EnvironmentAvailability,
-) {
-  return setEnvironmentAvailability(navigation, environmentId, availability);
 }
