@@ -52,7 +52,11 @@ A user on WSl should not be required to install the electron app on windows and 
 - Keep Drizzle table mappings, SQLite connection management, and migrations in the persistence layer. Generate schema migrations with Drizzle Kit instead of writing them by hand.
 - Keep functions readable at a glance. When a function mixes orchestration with a distinct validation, state transition, lifecycle step, handler, or database operation, extract that work into a purpose-named function so the caller reads as a sequence of steps. Use judgment instead of a line-count limit, and do not create trivial pass-through helpers.
 - Use Effect to keep asynchronous workflows with resources, concurrency, cancellation, or typed failures consistent. Prefer plain TypeScript when it is simpler. Do not complicate a workflow or add library abstractions only to use Effect.
-- keyboard shourcuts should be implemented from day 1
+- Give every meaningful application action keyboard access from day one. Frequent application actions should have configurable shortcuts; local control behavior should use standard accessible keyboard interaction instead of configurable bindings.
+- Implement natural action pairs together when both make sense, including add/remove, open/close, expand/collapse, previous/next, and show/hide.
+- Buttons, menus, and shortcuts for the same action must execute the same command or handler. Shortcut labels, tooltips, and accessibility metadata must derive from the configured binding.
+- Persist shortcut changes in the local client across restarts. Shortcut behavior must work in Electron and browser clients on Linux, macOS, and Windows.
+- Cover shortcut matching and persistence with focused unit and integration tests. Cover user-facing editing and restart persistence with E2E tests.
 - tests are good, but we don't want to test all the scenarios, especially we don't want to test deleted code. Code is deleted, tests are deleted.
 - Do not unit test infrastructure implementation details. Use focused integration tests when an issue requires verification of critical persistence guarantees such as migrations, permissions, database pragmas, or cross-process concurrency.
 - generating scripts to solve something without first investigating if it can be done without scripts is not permitted.

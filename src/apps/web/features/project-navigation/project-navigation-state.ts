@@ -126,6 +126,39 @@ export function removeProjectRepository(
   };
 }
 
+export function selectProjectRepositoryByOffset(
+  state: ProjectNavigationState,
+  offset: -1 | 1,
+): ProjectNavigationState {
+  const repositories = selectableRepositories(state);
+  if (repositories.length === 0) return state;
+  const selectedIndex = repositories.findIndex(
+    (repository) => repository.id === state.selectedRepositoryId,
+  );
+  const nextIndex =
+    selectedIndex < 0
+      ? offset > 0
+        ? 0
+        : repositories.length - 1
+      : (selectedIndex + offset + repositories.length) % repositories.length;
+  const selected = repositories[nextIndex];
+  return selected === undefined
+    ? state
+    : selectExistingRepository(state, selected.id);
+}
+
+export function selectProjectRepositoryByPosition(
+  state: ProjectNavigationState,
+  position: number,
+): ProjectNavigationState {
+  const repositories = selectableRepositories(state);
+  const selected =
+    position === 9 ? repositories.at(-1) : repositories[position - 1];
+  return selected === undefined
+    ? state
+    : selectExistingRepository(state, selected.id);
+}
+
 function addRepositoryOnce(
   environment: ProjectNavigationEnvironment,
   repository: ProjectNavigationRepository,
@@ -137,6 +170,26 @@ function addRepositoryOnce(
     : {
         ...environment,
         repositories: [...environment.repositories, repository],
+      };
+}
+
+function selectableRepositories(state: ProjectNavigationState) {
+  return state.environments.flatMap((environment) =>
+    environment.availability === "available" ? environment.repositories : [],
+  );
+}
+
+function selectExistingRepository(
+  state: ProjectNavigationState,
+  repositoryId: string,
+): ProjectNavigationState {
+  return state.selectedRepositoryId === repositoryId &&
+    state.workspaceView === "repository"
+    ? state
+    : {
+        ...state,
+        selectedRepositoryId: repositoryId,
+        workspaceView: "repository",
       };
 }
 

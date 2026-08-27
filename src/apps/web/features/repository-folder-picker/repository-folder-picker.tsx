@@ -9,6 +9,12 @@ import {
   useState,
 } from "react";
 import { EnvironmentFilesystemRejected } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
+import {
+  keyboardShortcutAria,
+  keyboardShortcutLabel,
+  keyboardShortcutTitle,
+  matchesKeyboardShortcut,
+} from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { RepositoryFolderPickerProps } from "#web/features/repository-folder-picker/repository-folder-picker.contract";
 import {
   filterDirectoryEntries,
@@ -23,6 +29,7 @@ import {
   DialogTitle,
 } from "#web-ui/components/ui/dialog";
 import { Input } from "#web-ui/components/ui/input";
+import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { RepositoryDirectoryList } from "#web-ui/features/repository-folder-picker/repository-directory-list";
 import { RepositoryFolderPickerEnvironmentSelect } from "#web-ui/features/repository-folder-picker/repository-folder-picker-environment-select";
 
@@ -33,6 +40,7 @@ export function RepositoryFolderPicker({
   onOpenRepository,
   open,
 }: RepositoryFolderPickerProps): JSX.Element | null {
+  const { bindings, platform } = useKeyboardShortcuts();
   const [environmentId, setEnvironmentId] = useState<string>();
   const [directory, setDirectory] = useState<EnvironmentDirectory>();
   const [selectedPath, setSelectedPath] = useState<string>();
@@ -147,14 +155,23 @@ export function RepositoryFolderPicker({
   };
 
   const handlePickerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.defaultPrevented) return;
-    const command = event.ctrlKey || event.metaKey;
-    const key = event.key.toLocaleLowerCase();
+    if (event.defaultPrevented || event.nativeEvent.isComposing) return;
 
-    if (command && key === "f" && !event.altKey && !event.shiftKey) {
+    if (matchesKeyboardShortcut(event, bindings["search.focus"], platform)) {
       event.preventDefault();
       setSearching(true);
       searchRef.current?.select();
+      return;
+    }
+    if (
+      matchesKeyboardShortcut(
+        event,
+        bindings["projects.closeActiveRepository"],
+        platform,
+      )
+    ) {
+      event.preventDefault();
+      onOpenChange(false);
       return;
     }
     if (event.altKey && event.key === "ArrowUp") {
@@ -163,19 +180,26 @@ export function RepositoryFolderPicker({
       navigate(directory.parentPath);
       return;
     }
-    if (command && event.key === "Enter") {
+    if (
+      matchesKeyboardShortcut(
+        event,
+        bindings["repositoryPicker.openSelectedRepository"],
+        platform,
+      )
+    ) {
       if (selectedPath === undefined || opening || loading) return;
       event.preventDefault();
       void openRepository();
       return;
     }
-    if (command && key === "w") {
-      event.preventDefault();
-      onOpenChange(false);
-      return;
-    }
-    if (command && key === "o") event.preventDefault();
   };
+
+  const closeShortcut = bindings["projects.closeActiveRepository"];
+  const focusSearchShortcut = bindings["search.focus"];
+  const openRepositoryShortcut =
+    bindings["repositoryPicker.openSelectedRepository"];
+  const closeShortcutAria = keyboardShortcutAria(closeShortcut, platform);
+  const closeShortcutLabel = keyboardShortcutLabel(closeShortcut, platform);
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -197,8 +221,13 @@ export function RepositoryFolderPicker({
           />
           <DialogClose
             aria-label="Close"
-            aria-keyshortcuts="Escape Control+W Meta+W"
+            aria-keyshortcuts={
+              closeShortcutAria === undefined
+                ? "Escape"
+                : `Escape ${closeShortcutAria}`
+            }
             className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+            title={keyboardShortcutTitle("Close", closeShortcut, platform)}
           >
             <IconX aria-hidden="true" className="size-4" />
           </DialogClose>
@@ -224,7 +253,10 @@ export function RepositoryFolderPicker({
           {searching ? (
             <Input
               aria-label="Filter current directory"
-              aria-keyshortcuts="Control+F Meta+F"
+              aria-keyshortcuts={keyboardShortcutAria(
+                focusSearchShortcut,
+                platform,
+              )}
               className="h-8 bg-white/[.03] sm:h-8"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Filter current directory"
@@ -259,13 +291,20 @@ export function RepositoryFolderPicker({
             aria-label={
               searching ? "Close directory filter" : "Filter current directory"
             }
-            aria-keyshortcuts="Control+F Meta+F"
+            aria-keyshortcuts={keyboardShortcutAria(
+              focusSearchShortcut,
+              platform,
+            )}
             onClick={() => {
               setSearching((current) => !current);
               if (searching) setQuery("");
             }}
             size="icon-sm"
-            title="Filter current directory (Ctrl/⌘ F)"
+            title={keyboardShortcutTitle(
+              "Filter current directory",
+              focusSearchShortcut,
+              platform,
+            )}
             type="button"
             variant="ghost"
           >
@@ -310,19 +349,30 @@ export function RepositoryFolderPicker({
             ) : null}
           </div>
           <DialogClose
-            aria-keyshortcuts="Escape Control+W Meta+W"
+            aria-keyshortcuts={
+              closeShortcutAria === undefined
+                ? "Escape"
+                : `Escape ${closeShortcutAria}`
+            }
             className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white/[.03] px-3 text-xs font-medium text-foreground/80 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 max-[540px]:hidden"
-            title="Cancel (Esc)"
+            title={`Cancel (Esc${closeShortcutLabel.length === 0 ? "" : `, ${closeShortcutLabel}`})`}
           >
             Cancel
           </DialogClose>
           <Button
-            aria-keyshortcuts="Control+Enter Meta+Enter"
+            aria-keyshortcuts={keyboardShortcutAria(
+              openRepositoryShortcut,
+              platform,
+            )}
             className="h-8 px-3 text-xs sm:h-8"
             disabled={selectedPath === undefined || opening || loading}
             onClick={() => void openRepository()}
             type="button"
-            title="Open repository (Ctrl/⌘ Enter)"
+            title={keyboardShortcutTitle(
+              "Open repository",
+              openRepositoryShortcut,
+              platform,
+            )}
           >
             {opening ? "Opening…" : "Open repository"}
           </Button>
