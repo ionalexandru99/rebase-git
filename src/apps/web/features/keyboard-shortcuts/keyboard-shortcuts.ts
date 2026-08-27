@@ -75,6 +75,13 @@ export const keyboardShortcutCommands = [
   ),
   {
     contexts: ["application"],
+    defaultBinding: { key: "b", modifiers: ["Mod", "Shift"] },
+    group: "Branches",
+    id: "branches.focusSidebar",
+    label: "Focus Branches sidebar",
+  },
+  {
+    contexts: ["application"],
     defaultBinding: { key: ",", modifiers: ["Mod"] },
     group: "Navigation",
     id: "settings.open",

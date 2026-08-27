@@ -12,6 +12,10 @@ import type {
   RepositoryCatalogController,
   RepositoryCatalogGateway,
 } from "#web/features/repository-catalog/repository-catalog-controller.contract";
+import type {
+  RepositoryRefsController,
+  RepositoryRefsGateway,
+} from "#web/features/repository-refs/repository-refs-controller.contract";
 
 export type LocalEnvironmentSessionState =
   | { readonly _tag: "PairingRequired" }
@@ -38,6 +42,7 @@ export interface LocalEnvironmentSession {
   readonly filesystem: EnvironmentFilesystemController;
   readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly repositoryCatalog: RepositoryCatalogController;
+  readonly repositoryRefs: RepositoryRefsController;
   readonly start: () => void;
   readonly stop: () => void;
   readonly subscribe: (listener: () => void) => () => void;
@@ -66,5 +71,6 @@ export interface LocalEnvironmentSessionOptions {
   readonly pairingMaterial: string | undefined;
   readonly pairingSucceeded?: () => void;
   readonly repositoryCatalogGateway: RepositoryCatalogGateway;
+  readonly repositoryRefsGateway: RepositoryRefsGateway;
   readonly waitBeforeReconnect?: (attempt: number) => Effect.Effect<void>;
 }

@@ -66,7 +66,7 @@ describe("Environment filesystem", () => {
   it("keeps large listings within the HTTP response limit", async () => {
     const root = await createTemporaryDirectory();
     await Promise.all(
-      Array.from({ length: 180 }, (_, index) =>
+      Array.from({ length: 520 }, (_, index) =>
         writeFile(
           join(root, `${String(index).padStart(3, "0")}-${"x".repeat(180)}.md`),
           "notes",
@@ -78,6 +78,7 @@ describe("Environment filesystem", () => {
     const listing = await Effect.runPromise(filesystem.listDirectory());
 
     expect(listing.truncated).toBe(true);
+    expect(listing.entries).toHaveLength(500);
     expect(Buffer.byteLength(JSON.stringify(listing))).toBeLessThanOrEqual(
       currentTransportLimits.maxHttpResponseBytes,
     );

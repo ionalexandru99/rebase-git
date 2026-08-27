@@ -263,7 +263,7 @@ test("edits and persists keyboard shortcuts", async ({ page }) => {
   await expect(popover.getByRole("button", { name: "Replace" })).toBeVisible();
   await expect(popover.getByRole("button", { name: "Save" })).not.toBeVisible();
 
-  await page.keyboard.press("Control+Shift+b");
+  await page.keyboard.press("Control+Shift+k");
   await expect(popover.getByRole("status")).not.toBeVisible();
   await popover.getByRole("button", { name: "Save" }).click();
   await expect(editToggle).toContainText("Shift");
@@ -272,11 +272,11 @@ test("edits and persists keyboard shortcuts", async ({ page }) => {
   ).toBeVisible();
 
   await page.keyboard.press("Escape");
-  await page.keyboard.press("Control+Shift+b");
+  await page.keyboard.press("Control+Shift+k");
   await expect(
     page.getByRole("heading", { level: 1, name: "Projects" }),
   ).not.toBeVisible();
-  await page.keyboard.press("Control+Shift+b");
+  await page.keyboard.press("Control+Shift+k");
   await expect(
     page.getByRole("heading", { level: 1, name: "Projects" }),
   ).toBeVisible();

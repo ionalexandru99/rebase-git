@@ -4,6 +4,7 @@ import {
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
 } from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
 import type {
   LocalEnvironmentSession,
@@ -11,6 +12,7 @@ import type {
   LocalEnvironmentSessionState,
 } from "#web/features/local-environment-session/local-environment-session.contract";
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
+import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 
 export function createLocalEnvironmentSession(
   options: LocalEnvironmentSessionOptions,
@@ -20,6 +22,9 @@ export function createLocalEnvironmentSession(
   );
   const filesystemSession = createEnvironmentFilesystemController(
     options.filesystemGateway,
+  );
+  const repositoryRefsSession = createRepositoryRefsController(
+    options.repositoryRefsGateway,
   );
   const listeners = new Set<() => void>();
   const pairingMaterial = options.pairingMaterial;
@@ -44,10 +49,12 @@ export function createLocalEnvironmentSession(
     }
     repositoryCatalogSession.authorize(credential);
     filesystemSession.authorize(credential);
+    repositoryRefsSession.authorize(credential);
     yield* maintainConnection(
       options,
       credential,
       repositoryCatalogSession.controller,
+      repositoryRefsSession.controller,
       publish,
     );
   });
@@ -85,6 +92,7 @@ export function createLocalEnvironmentSession(
     filesystem: filesystemSession.controller,
     getSnapshot: () => state,
     repositoryCatalog: repositoryCatalogSession.controller,
+    repositoryRefs: repositoryRefsSession.controller,
     start,
     stop,
     subscribe: (listener) => {
@@ -127,6 +135,7 @@ function maintainConnection(
   options: LocalEnvironmentSessionOptions,
   credential: string,
   repositoryCatalog: LocalEnvironmentSession["repositoryCatalog"],
+  repositoryRefs: LocalEnvironmentSession["repositoryRefs"],
   publish: PublishState,
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
@@ -141,6 +150,7 @@ function maintainConnection(
           options.gateway.connect(credential, lastObservedSequence).pipe(
             Effect.flatMap((active) =>
               refreshRepositoryCatalog(repositoryCatalog).pipe(
+                Effect.andThen(Effect.sync(repositoryRefs.invalidate)),
                 Effect.andThen(
                   publish({
                     _tag: "Connected",
@@ -148,7 +158,13 @@ function maintainConnection(
                   }),
                 ),
                 Effect.andThen(
-                  active.closed.pipe(
+                  Effect.raceFirst(
+                    active.closed,
+                    observeEnvironmentChanges(
+                      active,
+                      repositoryRefs.invalidate,
+                    ),
+                  ).pipe(
                     Effect.map((failure) => ({
                       failure,
                       lastObservedSequence: active.currentSequence(),
@@ -185,6 +201,20 @@ function refreshRepositoryCatalog(
   return Effect.promise(() =>
     repositoryCatalog.refresh().catch(() => undefined),
   );
+}
+
+function observeEnvironmentChanges(
+  connection: EnvironmentProtocolConnection,
+  onChange: () => void,
+): Effect.Effect<never> {
+  return Effect.gen(function* () {
+    let observed = connection.currentSequence();
+    while (true) {
+      const reached = yield* connection.waitForSequence(observed + 1);
+      observed = Math.max(reached, observed + 1);
+      onChange();
+    }
+  }).pipe(Effect.catch(() => Effect.never));
 }
 
 function reconnectAfter(

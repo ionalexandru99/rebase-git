@@ -6,6 +6,12 @@ import { Data, type Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export interface RepositoryCatalog {
+  readonly find: (
+    repositoryId: string,
+  ) => Effect.Effect<
+    RepositoryCatalogEntry | undefined,
+    EnvironmentStorageError
+  >;
   readonly list: () => Effect.Effect<
     readonly RepositoryCatalogEntry[],
     EnvironmentStorageError

@@ -22,6 +22,7 @@ export const keyboardShortcutCommandIds = [
   "projects.selectRepository7",
   "projects.selectRepository8",
   "projects.selectRepository9",
+  "branches.focusSidebar",
   "settings.open",
   "search.focus",
   "repositoryPicker.openSelectedRepository",
@@ -34,6 +35,7 @@ export type KeyboardShortcutContext = "application" | "repository-picker";
 
 export type KeyboardShortcutGroup =
   | "Navigation"
+  | "Branches"
   | "Search and lists"
   | "Folder picker";
 
