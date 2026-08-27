@@ -41,21 +41,29 @@ export function checkoutRepositoryRef(
       };
     }
 
-    const stashed = yield* stashLocalChanges(git, worktree.path, target);
-    yield* runCheckout(git, worktree.path, target).pipe(
-      Effect.tapError(() =>
-        stashed
-          ? restoreStash(git, worktree.path).pipe(Effect.ignore)
-          : Effect.void,
-      ),
+    const stash = yield* Effect.uninterruptible(
+      checkoutWithAutoStash(git, worktree.path, target),
     );
-    const stash = stashed
-      ? (yield* restoreStash(git, worktree.path))
-        ? "restored"
-        : "kept"
-      : "none";
     const head = yield* readCheckedOutHead(git, repositoryPath, worktree.path);
     return { head, stash, worktreePath: worktree.path };
+  });
+}
+
+function checkoutWithAutoStash(
+  git: GitCommandRunner,
+  directory: string,
+  target: CheckoutTarget,
+): Effect.Effect<RepositoryCheckedOut["stash"], RepositoryRefsError> {
+  return Effect.gen(function* () {
+    const stashed = yield* stashLocalChanges(git, directory, target);
+    if (!stashed) {
+      yield* runCheckout(git, directory, target);
+      return "none";
+    }
+    yield* runCheckout(git, directory, target).pipe(
+      Effect.tapError(() => restoreStash(git, directory).pipe(Effect.ignore)),
+    );
+    return (yield* restoreStash(git, directory)) ? "restored" : "kept";
   });
 }
 
@@ -83,26 +91,37 @@ function resolveTarget(
   git: GitCommandRunner,
   directory: string,
   target: RepositoryRefTarget,
-): Effect.Effect<RepositoryRefTarget, RepositoryRefsError> {
+): Effect.Effect<CheckoutTarget, RepositoryRefsError> {
   if (target._tag !== "RemoteBranch") return Effect.succeed(target);
-  return runGit(git, directory, [
-    "show-ref",
-    "--verify",
-    "--quiet",
-    `refs/heads/${target.name}`,
-  ]).pipe(
-    Effect.map((output) =>
-      output.exitCode === 0
-        ? ({ _tag: "LocalBranch", name: target.name } as const)
-        : target,
-    ),
-  );
+  return Effect.gen(function* () {
+    const local = yield* runGit(git, directory, [
+      "show-ref",
+      "--verify",
+      "--quiet",
+      `refs/heads/${target.name}`,
+    ]);
+    if (local.exitCode !== 0) return target;
+    const upstream = yield* runGit(git, directory, [
+      "rev-parse",
+      "--abbrev-ref",
+      "--quiet",
+      `${target.name}@{upstream}`,
+    ]);
+    const tracked = upstream.exitCode === 0 ? upstream.stdout.trim() : "";
+    return tracked.length === 0 || tracked === `${target.remote}/${target.name}`
+      ? { _tag: "LocalBranch", name: target.name }
+      : {
+          _tag: "DetachedRemoteBranch",
+          name: target.name,
+          remote: target.remote,
+        };
+  });
 }
 
 function rejectBranchCheckedOutElsewhere(
   worktrees: readonly RepositoryWorktree[],
   worktree: RepositoryWorktree,
-  target: RepositoryRefTarget,
+  target: CheckoutTarget,
 ) {
   if (target._tag !== "LocalBranch") return Effect.void;
   const elsewhere = worktrees.find(
@@ -123,7 +142,7 @@ function rejectBranchCheckedOutElsewhere(
 function stashLocalChanges(
   git: GitCommandRunner,
   directory: string,
-  target: RepositoryRefTarget,
+  target: CheckoutTarget,
 ) {
   return Effect.gen(function* () {
     const status = yield* runGit(git, directory, [
@@ -159,7 +178,7 @@ function stashLocalChanges(
 function runCheckout(
   git: GitCommandRunner,
   directory: string,
-  target: RepositoryRefTarget,
+  target: CheckoutTarget,
 ) {
   return runGit(git, directory, checkoutArguments(target)).pipe(
     Effect.flatMap((output) =>
@@ -170,7 +189,7 @@ function runCheckout(
   );
 }
 
-function checkoutArguments(target: RepositoryRefTarget): readonly string[] {
+function checkoutArguments(target: CheckoutTarget): readonly string[] {
   switch (target._tag) {
     case "LocalBranch":
       return ["checkout", target.name];
@@ -182,10 +201,24 @@ function checkoutArguments(target: RepositoryRefTarget): readonly string[] {
         "--track",
         `${target.remote}/${target.name}`,
       ];
+    case "DetachedRemoteBranch":
+      return [
+        "checkout",
+        "--detach",
+        `refs/remotes/${target.remote}/${target.name}`,
+      ];
     case "Tag":
       return ["checkout", "--detach", `refs/tags/${target.name}`];
   }
 }
+
+type CheckoutTarget =
+  | RepositoryRefTarget
+  | {
+      readonly _tag: "DetachedRemoteBranch";
+      readonly name: string;
+      readonly remote: string;
+    };
 
 function restoreStash(git: GitCommandRunner, directory: string) {
   return runGit(git, directory, ["stash", "pop"]).pipe(

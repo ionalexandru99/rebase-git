@@ -9,13 +9,16 @@ import {
   type BranchesSidebarSectionRow,
   localBranchesSectionId,
   type RefSelection,
-  remoteSectionId,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
 
 export const defaultExpandedSections: ReadonlySet<string> = new Set([
   localBranchesSectionId,
 ]);
+
+export function remoteSectionId(remote: string): string {
+  return `remote:${remote}`;
+}
 
 export function buildBranchesSidebarRows(
   refs: RepositoryRefs,
@@ -105,7 +108,12 @@ export function resolveRefSelection(
   target: RepositoryRefTarget,
 ): RefSelection {
   if (target._tag === "RemoteBranch") {
-    return refs.branches.some((branch) => branch.name === target.name)
+    return refs.branches.some(
+      (branch) =>
+        branch.name === target.name &&
+        (branch.upstream === undefined ||
+          branch.upstream.name === `${target.remote}/${target.name}`),
+    )
       ? resolveRefSelection(refs, activeWorktreePath, {
           _tag: "LocalBranch",
           name: target.name,

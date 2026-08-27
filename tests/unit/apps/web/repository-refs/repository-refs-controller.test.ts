@@ -149,7 +149,7 @@ describe("repository refs controller", () => {
   });
 
   it("reports unavailability before authorization without calling the gateway", async () => {
-    const gateway = createGateway();
+    const gateway = createGateway({ [alphaId]: refs(alphaId) });
     const session = createRepositoryRefsController(gateway);
 
     session.controller.select(alphaId);
@@ -160,6 +160,11 @@ describe("repository refs controller", () => {
       status: "error",
     });
     expect(gateway.read).not.toHaveBeenCalled();
+
+    session.authorize("private-credential");
+    session.controller.invalidate();
+    await whenReady(session.controller);
+    expect(gateway.read).toHaveBeenCalledTimes(1);
   });
 });
 

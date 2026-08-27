@@ -49,8 +49,13 @@ export function useRepositoryRefsActions({
 
   const selectRef = useCallback(
     (target: RepositoryRefTarget) => {
-      if (selectedRepositoryId === undefined || selectedRefs === undefined)
+      if (
+        selectedRepositoryId === undefined ||
+        selectedRefs === undefined ||
+        refs.checkingOut
+      ) {
         return;
+      }
       const selection = resolveRefSelection(
         selectedRefs,
         activeWorktreePath,
@@ -70,6 +75,7 @@ export function useRepositoryRefsActions({
     },
     [
       activeWorktreePath,
+      refs.checkingOut,
       selectedRefs,
       selectedRepositoryId,
       session.repositoryRefs,

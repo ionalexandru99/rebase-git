@@ -35,12 +35,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
 
   const load = (repositoryId: string, loadGeneration: number) => {
     invalidated = false;
-    const authorizedCredential = credential;
-    if (authorizedCredential === undefined) {
-      publish(withError(snapshot, new RepositoryRefsUnavailable()));
-      return Promise.resolve();
-    }
-    return Effect.runPromise(gateway.read(authorizedCredential, repositoryId))
+    return readRefs(repositoryId)
       .then(
         (refs) => {
           cache.set(repositoryId, refs);
@@ -60,6 +55,11 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
         }
       });
   };
+
+  const readRefs = (repositoryId: string) =>
+    credential === undefined
+      ? Promise.reject(new RepositoryRefsUnavailable())
+      : Effect.runPromise(gateway.read(credential, repositoryId));
 
   const startLoad = () => {
     const repositoryId = snapshot.repositoryId;

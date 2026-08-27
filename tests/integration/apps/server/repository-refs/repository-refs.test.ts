@@ -178,6 +178,31 @@ describe("repository refs", () => {
     );
   });
 
+  it("detaches on a remote branch when the local branch tracks another remote", async () => {
+    const fixture = await createFixture();
+    await git(
+      fixture.repositoryPath,
+      "remote",
+      "add",
+      "upstream",
+      fixture.originPath,
+    );
+    await git(fixture.repositoryPath, "fetch", "upstream");
+
+    const result = await withRefsService(fixture, ({ refs, repositoryId }) =>
+      refs.checkout({
+        repositoryId,
+        target: { _tag: "RemoteBranch", name: "feature", remote: "upstream" },
+        worktreePath: fixture.repositoryPath,
+      }),
+    );
+
+    expect(result.head.branch).toBeUndefined();
+    await expect(
+      git(fixture.repositoryPath, "rev-parse", "upstream/feature"),
+    ).resolves.toBe(`${result.head.commit}\n`);
+  });
+
   it("returns typed failures for unknown repositories, worktrees, and refs", async () => {
     const fixture = await createFixture();
     const missingId = "00000000-0000-4000-8000-000000000099";

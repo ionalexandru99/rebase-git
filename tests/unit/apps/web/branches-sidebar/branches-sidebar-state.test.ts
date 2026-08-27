@@ -82,6 +82,16 @@ describe("branches sidebar state", () => {
     expect(
       resolveRefSelection(current, mainPath, {
         _tag: "RemoteBranch",
+        name: "main",
+        remote: "upstream",
+      }),
+    ).toEqual({
+      _tag: "Checkout",
+      target: { _tag: "RemoteBranch", name: "main", remote: "upstream" },
+    });
+    expect(
+      resolveRefSelection(current, mainPath, {
+        _tag: "RemoteBranch",
         name: "release",
         remote: "upstream",
       }),
