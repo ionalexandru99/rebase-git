@@ -113,6 +113,24 @@ describe("rebase serve", () => {
     await expect(access(runtimePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("binds an explicit host and rejects hostnames and unspecified addresses", async () => {
+    const directory = await createTemporaryDirectory();
+    const bound = startCli(["--host", "127.0.0.1"], directory);
+    const origin = await bound.waitForListeningUrl();
+    expect(origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    bound.child.kill("SIGTERM");
+    await waitForExit(bound.child);
+
+    for (const host of ["example.com", "0.0.0.0"]) {
+      const rejected = startCli(["--host", host], directory);
+      const exit = await waitForExit(rejected.child);
+      expect(exit.code).toBe(1);
+      expect(rejected.stderr()).toContain(
+        `Host must be "lan", "tailscale", or a specific IPv4 or IPv6 address of this machine. Found "${host}".`,
+      );
+    }
+  });
+
   it("fails before reporting ready when Git is unavailable", async () => {
     const directory = await createTemporaryDirectory();
     const runtimePath = join(directory, ".rebase", "runtime", "runtime.json");
