@@ -78,6 +78,7 @@ export function startEnvironmentServer(
       environmentId: environment.id,
       events,
       filesystem: createEnvironmentFilesystem(),
+      ...(options.host === undefined ? {} : { host: options.host }),
       port: requestedPort,
       productVersion,
       refs,

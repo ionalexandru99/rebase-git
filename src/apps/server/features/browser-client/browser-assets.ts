@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
 import { Effect } from "effect";
+import { formatHostAddress } from "#server/features/environment-connection/environment-request-authorization";
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
@@ -31,7 +32,11 @@ export function respondWithBrowserAsset(
       const content = await readFile(asset.path);
       response.writeHead(
         200,
-        browserAssetHeaders(asset.extension, asset.cache),
+        browserAssetHeaders(
+          asset.extension,
+          asset.cache,
+          formatHostAddress(request.socket.localAddress ?? "127.0.0.1"),
+        ),
       );
       response.end(request.method === "HEAD" ? undefined : content);
     } catch (error) {
@@ -87,11 +92,14 @@ export function browserAssetPath(pathname: string) {
   return undefined;
 }
 
-function browserAssetHeaders(extension: string, cache: boolean) {
+function browserAssetHeaders(
+  extension: string,
+  cache: boolean,
+  webSocketHost: string,
+) {
   return {
     "cache-control": cache ? "public, max-age=31536000, immutable" : "no-store",
-    "content-security-policy":
-      "default-src 'self'; base-uri 'none'; connect-src 'self' ws://127.0.0.1:*; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'",
+    "content-security-policy": `default-src 'self'; base-uri 'none'; connect-src 'self' ws://${webSocketHost}:*; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'`,
     "content-type": contentTypes[extension] ?? "application/octet-stream",
     "x-content-type-options": "nosniff",
   };

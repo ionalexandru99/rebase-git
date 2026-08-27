@@ -7,6 +7,7 @@ import type { EnvironmentEventPublisher } from "#server/features/environment-con
 
 export interface EnvironmentServerOptions {
   readonly browserAssetsRoot?: string;
+  readonly host?: string;
   readonly port?: number;
 }
 
@@ -32,6 +33,7 @@ export interface EnvironmentListenerOptions {
   readonly environmentId: string;
   readonly events: EnvironmentEventPublisher;
   readonly filesystem?: EnvironmentFilesystem;
+  readonly host?: string;
   readonly port?: number;
   readonly productVersion: string;
   readonly refs?: RepositoryRefsService;

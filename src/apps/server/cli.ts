@@ -6,10 +6,12 @@ import { currentEnvironmentProtocol } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
 import { openDefaultBrowser } from "#server/features/browser-client/default-browser";
 import type { EnvironmentServerOptions } from "#server/features/environment-server/server/environment-server.contract";
+import { resolveHostAddress } from "#server/features/environment-server/server/host-address";
 import { startEnvironmentServer } from "#server/features/environment-server/server/start-environment-server";
 import { productVersion } from "#server/product-version";
 
-const usage = "Usage: rebase [serve] [--port <1-65535>]";
+const usage =
+  "Usage: rebase [serve] [--host <ip-address|lan|tailscale>] [--port <1-65535>]";
 
 export function runCli(arguments_ = process.argv.slice(2)) {
   if (arguments_.includes("--help") || arguments_.includes("-h")) {
@@ -37,26 +39,33 @@ export async function main() {
 
 function parseServeArguments(arguments_: string[]): EnvironmentServerOptions {
   const normalizedArguments =
-    arguments_.length === 0 || arguments_[0] === "--port"
+    arguments_.length === 0 || arguments_[0]?.startsWith("--")
       ? ["serve", ...arguments_]
       : arguments_;
   const [command, ...options] = normalizedArguments;
   if (command !== "serve") throw new Error(usage);
 
-  const browserAssetsRoot = resolveBrowserAssetsRoot();
-  if (options.length === 0) return { browserAssetsRoot };
-  if (options.length !== 2 || options[0] !== "--port" || !options[1]) {
-    throw new Error(usage);
+  const serveOptions: { host?: string; port?: number } = {};
+  for (let index = 0; index < options.length; index += 2) {
+    const flag = options[index];
+    const value = options[index + 1];
+    if (!value) throw new Error(usage);
+    if (flag === "--port") serveOptions.port = parsePort(value);
+    else if (flag === "--host") serveOptions.host = resolveHostAddress(value);
+    else throw new Error(usage);
   }
 
-  const port = Number(options[1]);
+  return { browserAssetsRoot: resolveBrowserAssetsRoot(), ...serveOptions };
+}
+
+function parsePort(value: string) {
+  const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(
-      `Port must be an integer between 1 and 65535. Found "${options[1]}".`,
+      `Port must be an integer between 1 and 65535. Found "${value}".`,
     );
   }
-
-  return { browserAssetsRoot, port };
+  return port;
 }
 
 function serve(options: EnvironmentServerOptions) {

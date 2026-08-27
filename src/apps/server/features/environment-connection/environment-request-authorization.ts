@@ -1,12 +1,12 @@
 import type { IncomingMessage } from "node:http";
+import { isIPv4 } from "node:net";
 import type { EnvironmentAuthorizationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
 import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function validateRequestHost(request: IncomingMessage) {
-  const port = request.socket.localPort;
-  const expectedHost = port === undefined ? undefined : `127.0.0.1:${port}`;
-  return request.headers.host === expectedHost
+  const expectedHost = listeningHost(request);
+  return expectedHost !== undefined && request.headers.host === expectedHost
     ? Effect.void
     : failAuthorization({ _tag: "InvalidHost" });
 }
@@ -25,7 +25,22 @@ export function validateRequestOrigin(
 }
 
 export function expectedRequestOrigin(request: IncomingMessage) {
-  return `http://127.0.0.1:${request.socket.localPort ?? 0}`;
+  return `http://${listeningHost(request) ?? "127.0.0.1:0"}`;
+}
+
+export function formatHostAddress(address: string) {
+  const unmapped =
+    address.startsWith("::ffff:") && isIPv4(address.slice("::ffff:".length))
+      ? address.slice("::ffff:".length)
+      : address;
+  return unmapped.includes(":") ? `[${unmapped}]` : unmapped;
+}
+
+function listeningHost(request: IncomingMessage) {
+  const { localAddress, localPort } = request.socket;
+  return localAddress === undefined || localPort === undefined
+    ? undefined
+    : `${formatHostAddress(localAddress)}:${localPort}`;
 }
 
 export function readBearerCredential(request: IncomingMessage) {

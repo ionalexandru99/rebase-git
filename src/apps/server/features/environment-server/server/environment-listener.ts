@@ -6,6 +6,7 @@ import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
 } from "#server/features/environment-connection/environment-connection.contract";
+import { formatHostAddress } from "#server/features/environment-connection/environment-request-authorization";
 import { createEnvironmentHttpHandler } from "#server/features/environment-connection/http/environment-http-handler";
 import { attachEnvironmentWebSocketServer } from "#server/features/environment-connection/websocket/environment-websocket-server";
 import type { EnvironmentListenerOptions } from "#server/features/environment-server/server/environment-server.contract";
@@ -17,6 +18,7 @@ export function acquireEnvironmentListener(
   options: EnvironmentListenerOptions,
 ) {
   return Effect.gen(function* () {
+    const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
     const readiness = { value: false };
     const state: EnvironmentTransportState = {
@@ -38,6 +40,7 @@ export function acquireEnvironmentListener(
         options.catalog,
         options.filesystem,
         options.refs,
+        host,
         port,
         runEnvironmentEffect,
         options.browserAssetsRoot,
@@ -54,16 +57,16 @@ export function acquireEnvironmentListener(
             options.authorization,
             runEnvironmentEffect,
           ),
-        catch: (cause) => environmentServerError(cause, port),
+        catch: (cause) => environmentServerError(cause, host, port),
       }),
       (webSockets) => Effect.promise(webSockets.close).pipe(Effect.orDie),
     );
-    yield* listen(server, port);
-    const listeningPort = yield* readListeningPort(server, port);
+    yield* listen(server, host, port);
+    const listeningPort = yield* readListeningPort(server, host, port);
 
     return {
-      host: loopbackHost,
-      origin: `http://${loopbackHost}:${listeningPort}`,
+      host,
+      origin: `http://${formatHostAddress(host)}:${listeningPort}`,
       port: listeningPort,
       readiness,
       server,
@@ -78,6 +81,7 @@ function createHttpServer(
   catalog: EnvironmentListenerOptions["catalog"],
   filesystem: EnvironmentListenerOptions["filesystem"],
   refs: EnvironmentListenerOptions["refs"],
+  host: string,
   port: number,
   runEnvironmentEffect: RunEnvironmentEffect,
   browserAssetsRoot?: string,
@@ -97,11 +101,15 @@ function createHttpServer(
           browserAssetsRoot,
         ),
       ),
-    catch: (cause) => environmentServerError(cause, port),
+    catch: (cause) => environmentServerError(cause, host, port),
   });
 }
 
-function readListeningPort(server: Server, requestedPort: number) {
+function readListeningPort(
+  server: Server,
+  host: string,
+  requestedPort: number,
+) {
   return Effect.try({
     try: () => {
       const address = server.address();
@@ -110,16 +118,16 @@ function readListeningPort(server: Server, requestedPort: number) {
       }
       return address.port;
     },
-    catch: (cause) => environmentServerError(cause, requestedPort),
+    catch: (cause) => environmentServerError(cause, host, requestedPort),
   });
 }
 
-function listen(server: Server, port: number) {
+function listen(server: Server, host: string, port: number) {
   return Effect.callback<void, EnvironmentServerStartError>(
     (resume, signal) => {
       const failed = (cause: unknown) => {
         detach();
-        resume(Effect.fail(environmentServerError(cause, port)));
+        resume(Effect.fail(environmentServerError(cause, host, port)));
       };
       const listening = () => {
         detach();
@@ -133,7 +141,7 @@ function listen(server: Server, port: number) {
       server.once("error", failed);
       server.once("listening", listening);
       try {
-        server.listen({ exclusive: true, host: loopbackHost, port, signal });
+        server.listen({ exclusive: true, host, port, signal });
       } catch (cause) {
         failed(cause);
       }
@@ -160,16 +168,19 @@ function isServerNotRunning(error: unknown) {
   return isFileSystemError(error) && error.code === "ERR_SERVER_NOT_RUNNING";
 }
 
-function environmentServerError(cause: unknown, port: number) {
+function environmentServerError(cause: unknown, host: string, port: number) {
   return new EnvironmentServerStartError({
     cause,
-    message: listenerErrorMessage(cause, port),
+    message: listenerErrorMessage(cause, host, port),
   });
 }
 
-function listenerErrorMessage(cause: unknown, port: number) {
+function listenerErrorMessage(cause: unknown, host: string, port: number) {
   if (isFileSystemError(cause) && cause.code === "EADDRINUSE" && port !== 0) {
-    return `Port ${port} is already in use on ${loopbackHost}.`;
+    return `Port ${port} is already in use on ${host}.`;
+  }
+  if (isFileSystemError(cause) && cause.code === "EADDRNOTAVAIL") {
+    return `Address ${host} is not available on this machine.`;
   }
 
   return `Could not start the Environment server: ${errorMessage(cause)}`;
