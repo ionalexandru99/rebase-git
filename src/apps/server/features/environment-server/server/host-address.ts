@@ -1,10 +1,15 @@
-import { isIP, isIPv4 } from "node:net";
+import { BlockList, isIP, isIPv4 } from "node:net";
 import { networkInterfaces } from "node:os";
+import {
+  type HostAlias,
+  hostAliases,
+  type NetworkAddresses,
+} from "#server/features/environment-server/server/host-address.contract";
 
-export const hostAliases = ["lan", "tailscale"] as const;
-export type HostAlias = (typeof hostAliases)[number];
-
-const unspecifiedAddresses = new Set(["0.0.0.0", "::"]);
+const unspecifiedAddresses = new BlockList();
+unspecifiedAddresses.addAddress("0.0.0.0");
+unspecifiedAddresses.addAddress("::", "ipv6");
+unspecifiedAddresses.addAddress("::ffff:0.0.0.0", "ipv6");
 
 export function resolveHostAddress(
   requested: string,
@@ -19,7 +24,7 @@ export function resolveHostAddress(
     }
     return address;
   }
-  if (isIP(requested) === 0 || unspecifiedAddresses.has(requested)) {
+  if (!isSpecificAddress(requested)) {
     throw new Error(
       `Host must be "lan", "tailscale", or a specific IPv4 or IPv6 address of this machine. Found "${requested}".`,
     );
@@ -29,6 +34,12 @@ export function resolveHostAddress(
 
 export function isHostAlias(value: string): value is HostAlias {
   return (hostAliases as readonly string[]).includes(value);
+}
+
+function isSpecificAddress(value: string) {
+  const family = isIP(value);
+  if (family === 0) return false;
+  return !unspecifiedAddresses.check(value, family === 6 ? "ipv6" : "ipv4");
 }
 
 const addressMatchers: Record<HostAlias, (address: string) => boolean> = {
@@ -69,11 +80,3 @@ function isCarrierGradeNatAddress(address: string) {
 function octets(address: string) {
   return address.split(".").map(Number);
 }
-
-export type NetworkAddresses = Readonly<
-  Record<
-    string,
-    | readonly { readonly address: string; readonly internal: boolean }[]
-    | undefined
-  >
->;

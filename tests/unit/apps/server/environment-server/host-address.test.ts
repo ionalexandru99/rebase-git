@@ -21,9 +21,18 @@ describe("host address", () => {
     expect(() => resolveHostAddress("example.com", interfaces)).toThrow(
       /Host must be/,
     );
-    expect(() => resolveHostAddress("0.0.0.0", interfaces)).toThrow(
-      /Host must be/,
-    );
+    for (const unspecified of [
+      "0.0.0.0",
+      "::",
+      "::0",
+      "0:0:0:0:0:0:0:0",
+      "::ffff:0.0.0.0",
+    ]) {
+      expect(() => resolveHostAddress(unspecified, interfaces)).toThrow(
+        /Host must be/,
+      );
+    }
+    expect(resolveHostAddress("::1", interfaces)).toBe("::1");
     expect(() =>
       resolveHostAddress("tailscale", { lo: interfaces.lo }),
     ).toThrow("No tailscale IPv4 address was found on this machine.");
