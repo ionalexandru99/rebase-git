@@ -175,6 +175,45 @@ describe("repository refs controller", () => {
     expect(session.controller.getSnapshot().checkingOut).toBe(false);
   });
 
+  it("keeps a finishing checkout from touching another repository's snapshot", async () => {
+    const pending = Deferred.makeUnsafe<RepositoryCheckedOut>();
+    const gateway = createGateway({
+      [alphaId]: refs(alphaId),
+      [bravoId]: refs(bravoId),
+    });
+    gateway.checkout.mockImplementationOnce(() => Deferred.await(pending));
+    const session = createRepositoryRefsController(gateway);
+    session.authorize("private-credential");
+    session.controller.select(alphaId);
+    await whenReady(session.controller);
+
+    const first = session.controller.checkout("/repo", {
+      _tag: "LocalBranch",
+      name: "feature",
+    });
+    session.controller.select(bravoId);
+    await whenReady(session.controller);
+    await expect(
+      session.controller.checkout("/repo", {
+        _tag: "LocalBranch",
+        name: "main",
+      }),
+    ).rejects.toBeInstanceOf(RepositoryRefsBusy);
+    Deferred.doneUnsafe(pending, Effect.succeed(checkedOut));
+    await first;
+
+    expect(session.controller.getSnapshot()).toMatchObject({
+      checkingOut: false,
+      refs: refs(bravoId),
+      repositoryId: bravoId,
+    });
+    session.controller.select(alphaId);
+    expect(session.controller.getSnapshot().refs?.branches).toEqual([
+      { name: "main" },
+      { name: "feature", worktreePath: "/repo" },
+    ]);
+  });
+
   it("reports unavailability before authorization without calling the gateway", async () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
     const session = createRepositoryRefsController(gateway);

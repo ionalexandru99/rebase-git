@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "@rebase/server/adapters/local-git/local-repository-watcher";
+import type { GitCommandRunner } from "@rebase/server/domain/git-command.contract";
 import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
 import { acquireRepositoryChangePublisher } from "@rebase/server/features/repository-refs/repository-change-publisher";
@@ -155,6 +156,58 @@ describe("repository refs", { timeout: 30_000 }, () => {
     await expect(
       git(fixture.repositoryPath, "stash", "list", "--format=%s"),
     ).resolves.toBe("On main: user stash\n");
+  });
+
+  it("restores its own auto-stash when a foreign stash lands right after it", async () => {
+    const fixture = await createFixture();
+    await writeFile(join(fixture.repositoryPath, "README.md"), "mine");
+    const local = createLocalGitCommandRunner();
+    const racing: GitCommandRunner = {
+      run: (command) =>
+        local.run(command).pipe(
+          Effect.tap(() =>
+            command.arguments[0] === "stash" && command.arguments[1] === "push"
+              ? Effect.promise(async () => {
+                  await writeFile(
+                    join(fixture.repositoryPath, "notes.md"),
+                    "theirs",
+                  );
+                  await git(
+                    fixture.repositoryPath,
+                    "stash",
+                    "push",
+                    "-u",
+                    "-m",
+                    "foreign",
+                  );
+                })
+              : Effect.void,
+          ),
+        ),
+    };
+
+    const result = await withRefsService(
+      fixture,
+      ({ refs, repositoryId }) =>
+        refs.checkout({
+          repositoryId,
+          target: { _tag: "LocalBranch", name: "feature" },
+          worktreePath: fixture.repositoryPath,
+        }),
+      createEnvironmentEventPublisher(),
+      racing,
+    );
+
+    expect(result).toMatchObject({
+      head: { branch: "feature" },
+      stash: "restored",
+    });
+    await expect(
+      readFile(join(fixture.repositoryPath, "README.md"), "utf8"),
+    ).resolves.toBe("mine");
+    await expect(
+      git(fixture.repositoryPath, "stash", "list", "--format=%s"),
+    ).resolves.toBe("On main: foreign\n");
   });
 
   it("refuses to check out a branch that another worktree holds", async () => {
@@ -312,6 +365,7 @@ function withRefsService<Value, Failure>(
     readonly repositoryId: string;
   }) => Effect.Effect<Value, Failure>,
   events = createEnvironmentEventPublisher(),
+  git = createLocalGitCommandRunner(),
 ) {
   return Effect.runPromise(
     Effect.scoped(
@@ -321,7 +375,6 @@ function withRefsService<Value, Failure>(
         );
         const catalog = createRepositoryCatalog(context);
         const remembered = yield* catalog.remember(fixture.repositoryPath);
-        const git = createLocalGitCommandRunner();
         const refs = createRepositoryRefsService({
           catalog,
           changes: yield* acquireRepositoryChangePublisher(

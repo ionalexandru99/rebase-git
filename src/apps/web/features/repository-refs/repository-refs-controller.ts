@@ -28,6 +28,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   let generation = 0;
   let loading: Promise<void> | undefined;
   let invalidated = false;
+  let checkoutInFlight = false;
 
   const publish = (next: RepositoryRefsSnapshot) => {
     snapshot = next;
@@ -82,7 +83,8 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
     if (repositoryId === undefined || authorizedCredential === undefined) {
       throw new RepositoryRefsUnavailable();
     }
-    if (snapshot.checkingOut) throw new RepositoryRefsBusy();
+    if (checkoutInFlight) throw new RepositoryRefsBusy();
+    checkoutInFlight = true;
     publish({ ...withoutCheckoutError(snapshot), checkingOut: true });
     try {
       const result = await Effect.runPromise(
@@ -98,16 +100,22 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
           ? undefined
           : applyRepositoryCheckout(cached, result);
       if (refs !== undefined) cache.set(repositoryId, refs);
-      publish(
-        refs === undefined || snapshot.repositoryId !== repositoryId
-          ? { ...snapshot, checkingOut: false }
-          : { ...withRefs(snapshot, refs), checkingOut: false },
-      );
+      if (snapshot.repositoryId === repositoryId) {
+        publish(
+          refs === undefined
+            ? { ...snapshot, checkingOut: false }
+            : { ...withRefs(snapshot, refs), checkingOut: false },
+        );
+      }
       return result;
     } catch (error) {
       const checkoutError = normalizeControllerError(error);
-      publish({ ...snapshot, checkingOut: false, checkoutError });
+      if (snapshot.repositoryId === repositoryId) {
+        publish({ ...snapshot, checkingOut: false, checkoutError });
+      }
       throw checkoutError;
+    } finally {
+      checkoutInFlight = false;
     }
   };
 

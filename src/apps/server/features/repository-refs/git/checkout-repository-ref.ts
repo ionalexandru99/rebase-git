@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   CheckoutRepositoryRef,
   RepositoryCheckedOut,
@@ -157,15 +158,16 @@ function stashLocalChanges(
     }
     if (status.stdout.length === 0) return undefined;
 
+    const token = `rebase-auto-stash:${randomUUID()}`;
     const stash = yield* runGit(git, directory, [
       "stash",
       "push",
       "--include-untracked",
       "--message",
-      `Rebase auto-stash before checking out ${target.name}`,
+      `${token} before checking out ${target.name}`,
     ]);
-    const created = yield* runGit(git, directory, ["rev-parse", "refs/stash"]);
-    if (stash.exitCode !== 0 || created.exitCode !== 0) {
+    const entry = yield* findStash(git, directory, token);
+    if (stash.exitCode !== 0 || entry === undefined) {
       return yield* Effect.fail(
         repositoryRefsFailure({
           _tag: "CheckoutRejected",
@@ -174,8 +176,21 @@ function stashLocalChanges(
         }),
       );
     }
-    return created.stdout.trim();
+    return token;
   });
+}
+
+function findStash(git: GitCommandRunner, directory: string, token: string) {
+  return runGit(git, directory, ["stash", "list", "--format=%H%x00%s"]).pipe(
+    Effect.map((listed) => {
+      const lines = listed.stdout.split("\n");
+      const index = lines.findIndex((line) =>
+        line.split("\0")[1]?.includes(token),
+      );
+      const commit = lines[index]?.split("\0")[0];
+      return index < 0 || commit === undefined ? undefined : { commit, index };
+    }),
+  );
 }
 
 function runCheckout(
@@ -223,26 +238,25 @@ type CheckoutTarget =
       readonly remote: string;
     };
 
-function restoreStash(git: GitCommandRunner, directory: string, stash: string) {
+function restoreStash(git: GitCommandRunner, directory: string, token: string) {
   return Effect.gen(function* () {
-    const applied = yield* runGit(git, directory, ["stash", "apply", stash]);
-    if (applied.exitCode !== 0) return false;
-    yield* dropStash(git, directory, stash);
-    return true;
-  });
-}
-
-function dropStash(git: GitCommandRunner, directory: string, stash: string) {
-  return Effect.gen(function* () {
-    const listed = yield* runGit(git, directory, [
+    const entry = yield* findStash(git, directory, token);
+    if (entry === undefined) return false;
+    const applied = yield* runGit(git, directory, [
       "stash",
-      "list",
-      "--format=%H",
+      "apply",
+      entry.commit,
     ]);
-    const index = listed.stdout.split("\n").indexOf(stash);
-    if (index >= 0) {
-      yield* runGit(git, directory, ["stash", "drop", `stash@{${index}}`]);
+    if (applied.exitCode !== 0) return false;
+    const current = yield* findStash(git, directory, token);
+    if (current !== undefined) {
+      yield* runGit(git, directory, [
+        "stash",
+        "drop",
+        `stash@{${current.index}}`,
+      ]);
     }
+    return true;
   });
 }
 
