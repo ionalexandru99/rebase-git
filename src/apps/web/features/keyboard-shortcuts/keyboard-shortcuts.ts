@@ -122,6 +122,9 @@ export function keyboardShortcutFromInput(
 export function keyboardShortcutValidationError(
   binding: KeyboardShortcutBinding,
 ): string | undefined {
+  if (isModifierKey(binding.key)) {
+    return "Use a non-modifier key.";
+  }
   if (binding.key.length === 1 && binding.modifiers.length === 0) {
     return "Add a modifier to use a letter, number, or symbol.";
   }
@@ -334,7 +337,7 @@ function displayKey(key: string): string {
 }
 
 function isModifierKey(key: string): boolean {
-  return ["Alt", "AltGraph", "Control", "Meta", "Shift"].includes(key);
+  return ["Alt", "AltGraph", "Control", "Meta", "Mod", "Shift"].includes(key);
 }
 
 function isKeyboardShortcutModifier(

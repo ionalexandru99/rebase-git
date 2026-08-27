@@ -73,6 +73,10 @@ describe("keyboard shortcut store", () => {
             key: "p",
             modifiers: ["Mod", "Shift"],
           },
+          "projects.showOpenProject": {
+            key: "Shift",
+            modifiers: ["Mod"],
+          },
           "projects.browseRepository": { key: 12, modifiers: ["Mod"] },
           "removed.command": { key: "x", modifiers: ["Mod"] },
         },
@@ -89,6 +93,10 @@ describe("keyboard shortcut store", () => {
     expect(store.getSnapshot().bindings["projects.browseRepository"]).toEqual({
       key: "o",
       modifiers: ["Mod"],
+    });
+    expect(store.getSnapshot().bindings["projects.showOpenProject"]).toEqual({
+      key: "o",
+      modifiers: ["Mod", "Shift"],
     });
     expect(store.getSnapshot().modifiedCommandIds).toEqual([
       "projects.toggleSidebar",

@@ -55,6 +55,9 @@ describe("keyboard shortcuts", () => {
   });
 
   it("rejects unmodified printable and control keys", () => {
+    expect(
+      keyboardShortcutValidationError({ key: "Shift", modifiers: ["Mod"] }),
+    ).toBe("Use a non-modifier key.");
     expect(keyboardShortcutValidationError({ key: "r", modifiers: [] })).toBe(
       "Add a modifier to use a letter, number, or symbol.",
     );
