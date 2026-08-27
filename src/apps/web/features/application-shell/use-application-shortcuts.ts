@@ -18,6 +18,7 @@ export function useApplicationShortcuts({
   availability,
   closeSelectedRepository,
   folderPickerOpen,
+  focusBranchesSidebar,
   focusSidebarFilter,
   hasSelectedRepository,
   openFolderPicker,
@@ -33,6 +34,7 @@ export function useApplicationShortcuts({
   readonly availability: EnvironmentAvailability;
   readonly closeSelectedRepository: () => void;
   readonly folderPickerOpen: boolean;
+  readonly focusBranchesSidebar: () => void;
   readonly focusSidebarFilter: () => void;
   readonly hasSelectedRepository: boolean;
   readonly openFolderPicker: () => void;
@@ -63,6 +65,7 @@ export function useApplicationShortcuts({
       ],
       ["projects.focusFilter", true, focusSidebarFilter],
       ["projects.toggleSidebar", true, toggleSidebar],
+      ["branches.focusSidebar", hasSelectedRepository, focusBranchesSidebar],
       [
         "projects.selectPreviousRepository",
         selectableRepositoryCount > 0,
@@ -113,6 +116,7 @@ export function useApplicationShortcuts({
     bindings,
     closeSelectedRepository,
     folderPickerOpen,
+    focusBranchesSidebar,
     focusSidebarFilter,
     hasSelectedRepository,
     openFolderPicker,

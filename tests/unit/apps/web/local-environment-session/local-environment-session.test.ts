@@ -17,6 +17,7 @@ import type {
   LocalEnvironmentSessionState,
 } from "#web/features/local-environment-session/local-environment-session.contract";
 import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
+import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 
 describe("local Environment session", () => {
   it("exchanges the pairing material and opens the initial connection", async () => {
@@ -30,6 +31,7 @@ describe("local Environment session", () => {
       pairingMaterial: "123-456",
       pairingSucceeded,
       repositoryCatalogGateway,
+      repositoryRefsGateway: createRepositoryRefsGateway(),
     });
 
     session.start();
@@ -62,6 +64,7 @@ describe("local Environment session", () => {
       gateway,
       pairingMaterial: "123-456",
       repositoryCatalogGateway,
+      repositoryRefsGateway: createRepositoryRefsGateway(),
       waitBeforeReconnect,
     });
 
@@ -102,6 +105,7 @@ describe("local Environment session", () => {
       gateway,
       pairingMaterial: "123-456",
       repositoryCatalogGateway,
+      repositoryRefsGateway: createRepositoryRefsGateway(),
       waitBeforeReconnect,
     });
 
@@ -153,6 +157,17 @@ function createRepositoryCatalogGateway() {
   } satisfies RepositoryCatalogGateway;
 }
 
+function createRepositoryRefsGateway() {
+  return {
+    checkout: vi.fn<RepositoryRefsGateway["checkout"]>(() =>
+      Effect.die("The test does not check out refs."),
+    ),
+    read: vi.fn<RepositoryRefsGateway["read"]>(() =>
+      Effect.die("The test does not read refs."),
+    ),
+  } satisfies RepositoryRefsGateway;
+}
+
 function createFilesystemGateway() {
   return {
     listDirectory: vi.fn<EnvironmentFilesystemGateway["listDirectory"]>(() =>
@@ -182,7 +197,7 @@ function createConnection(currentSequence = 0) {
     disconnect,
     discovery,
     negotiated,
-    waitForSequence: vi.fn((sequence: number) => Effect.succeed(sequence)),
+    waitForSequence: vi.fn(() => Effect.never),
   } satisfies EnvironmentProtocolConnection & {
     readonly disconnect: ReturnType<typeof deferred<EnvironmentResponseError>>;
   };

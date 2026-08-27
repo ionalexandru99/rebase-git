@@ -20,6 +20,7 @@ export function createRepositoryCatalog(
   context: EnvironmentContext,
 ): RepositoryCatalog {
   return {
+    find: (repositoryId) => findRepository(context, repositoryId),
     list: () => listRepositories(context),
     recordOpened: (repositoryId) =>
       recordRepositoryOpened(context, repositoryId),
@@ -37,6 +38,16 @@ function listRepositories(context: EnvironmentContext) {
         asc(repositoryCatalogTable.name),
         asc(repositoryCatalogTable.path),
       ),
+  );
+}
+
+function findRepository(context: EnvironmentContext, repositoryId: string) {
+  return context.read("Could not read repository", (database) =>
+    database
+      .select()
+      .from(repositoryCatalogTable)
+      .where(eq(repositoryCatalogTable.id, repositoryId))
+      .get(),
   );
 }
 

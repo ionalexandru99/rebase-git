@@ -14,6 +14,11 @@ import {
   removeEnvironmentRepositoryEffect,
 } from "#web/features/repository-catalog/repository-catalog-client";
 import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
+import {
+  checkoutRepositoryRefEffect,
+  readRepositoryRefsEffect,
+} from "#web/features/repository-refs/repository-refs-client";
+import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 
 export function createBrowserLocalEnvironmentSession(productVersion: string) {
   const bootstrap = resolveLocalEnvironmentBootstrap(
@@ -63,6 +68,20 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
         repositoryId,
       ),
   };
+  const repositoryRefsGateway: RepositoryRefsGateway = {
+    checkout: (credential, command) =>
+      checkoutRepositoryRefEffect(
+        bootstrap.environmentOrigin,
+        credential,
+        command,
+      ),
+    read: (credential, repositoryId) =>
+      readRepositoryRefsEffect(
+        bootstrap.environmentOrigin,
+        credential,
+        repositoryId,
+      ),
+  };
   const filesystemGateway: EnvironmentFilesystemGateway = {
     listDirectory: (credential, path) =>
       listEnvironmentDirectoryEffect(
@@ -77,6 +96,7 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
     gateway,
     pairingMaterial: bootstrap.pairingMaterial,
     repositoryCatalogGateway,
+    repositoryRefsGateway,
     ...(window.rebaseHost === undefined
       ? { pairingSucceeded: clearPairingMaterial }
       : {}),

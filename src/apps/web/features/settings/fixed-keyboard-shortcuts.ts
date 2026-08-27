@@ -8,6 +8,18 @@ export interface FixedKeyboardShortcut {
 
 export const fixedKeyboardShortcuts: readonly FixedKeyboardShortcut[] = [
   { group: "Navigation", keys: ["Esc"], label: "Close the active panel" },
+  { group: "Branches", keys: ["/"], label: "Filter branches" },
+  { group: "Branches", keys: ["↑", "↓"], label: "Move through branches" },
+  {
+    group: "Branches",
+    keys: ["←", "→"],
+    label: "Collapse or expand a section",
+  },
+  {
+    group: "Branches",
+    keys: ["Enter"],
+    label: "Check out the selected branch or tag",
+  },
   {
     group: "Search and lists",
     keys: ["↑", "↓"],

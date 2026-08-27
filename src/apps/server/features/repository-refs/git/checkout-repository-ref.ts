@@ -1,0 +1,219 @@
+import type {
+  CheckoutRepositoryRef,
+  RepositoryCheckedOut,
+  RepositoryRefTarget,
+  RepositoryWorktree,
+} from "@rebase/contracts";
+import { Effect } from "effect";
+import type {
+  GitCommandOutput,
+  GitCommandRunner,
+} from "#server/domain/git-command.contract";
+import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
+import {
+  canonicalizeWorktrees,
+  readWorktrees,
+} from "#server/features/repository-refs/git/read-repository-refs";
+import {
+  checkoutFailure,
+  failureDetail,
+  gitCommandFailed,
+  repositoryRefsFailure,
+} from "#server/features/repository-refs/git/repository-refs-failures";
+
+const checkoutTimeoutMilliseconds = 60_000;
+
+export function checkoutRepositoryRef(
+  git: GitCommandRunner,
+  repositoryPath: string,
+  command: CheckoutRepositoryRef,
+): Effect.Effect<RepositoryCheckedOut, RepositoryRefsError> {
+  return Effect.gen(function* () {
+    const worktrees = yield* readCanonicalWorktrees(git, repositoryPath);
+    const worktree = yield* requireWorktree(worktrees, command.worktreePath);
+    const target = yield* resolveTarget(git, worktree.path, command.target);
+    yield* rejectBranchCheckedOutElsewhere(worktrees, worktree, target);
+    if (target._tag === "LocalBranch" && worktree.head.branch === target.name) {
+      return {
+        head: worktree.head,
+        stash: "none",
+        worktreePath: worktree.path,
+      };
+    }
+
+    const stashed = yield* stashLocalChanges(git, worktree.path, target);
+    yield* runCheckout(git, worktree.path, target).pipe(
+      Effect.tapError(() =>
+        stashed
+          ? restoreStash(git, worktree.path).pipe(Effect.ignore)
+          : Effect.void,
+      ),
+    );
+    const stash = stashed
+      ? (yield* restoreStash(git, worktree.path))
+        ? "restored"
+        : "kept"
+      : "none";
+    const head = yield* readCheckedOutHead(git, repositoryPath, worktree.path);
+    return { head, stash, worktreePath: worktree.path };
+  });
+}
+
+function readCanonicalWorktrees(git: GitCommandRunner, repositoryPath: string) {
+  return readWorktrees(git, repositoryPath).pipe(
+    Effect.flatMap(canonicalizeWorktrees),
+  );
+}
+
+function requireWorktree(
+  worktrees: readonly RepositoryWorktree[],
+  worktreePath: string,
+) {
+  const worktree = worktrees.find(
+    (candidate) => candidate.path === worktreePath,
+  );
+  return worktree === undefined
+    ? Effect.fail(
+        repositoryRefsFailure({ _tag: "WorktreeMissing", worktreePath }),
+      )
+    : Effect.succeed(worktree);
+}
+
+function resolveTarget(
+  git: GitCommandRunner,
+  directory: string,
+  target: RepositoryRefTarget,
+): Effect.Effect<RepositoryRefTarget, RepositoryRefsError> {
+  if (target._tag !== "RemoteBranch") return Effect.succeed(target);
+  return runGit(git, directory, [
+    "show-ref",
+    "--verify",
+    "--quiet",
+    `refs/heads/${target.name}`,
+  ]).pipe(
+    Effect.map((output) =>
+      output.exitCode === 0
+        ? ({ _tag: "LocalBranch", name: target.name } as const)
+        : target,
+    ),
+  );
+}
+
+function rejectBranchCheckedOutElsewhere(
+  worktrees: readonly RepositoryWorktree[],
+  worktree: RepositoryWorktree,
+  target: RepositoryRefTarget,
+) {
+  if (target._tag !== "LocalBranch") return Effect.void;
+  const elsewhere = worktrees.find(
+    (candidate) =>
+      candidate.path !== worktree.path && candidate.head.branch === target.name,
+  );
+  return elsewhere === undefined
+    ? Effect.void
+    : Effect.fail(
+        repositoryRefsFailure({
+          _tag: "BranchCheckedOutElsewhere",
+          name: target.name,
+          worktreePath: elsewhere.path,
+        }),
+      );
+}
+
+function stashLocalChanges(
+  git: GitCommandRunner,
+  directory: string,
+  target: RepositoryRefTarget,
+) {
+  return Effect.gen(function* () {
+    const status = yield* runGit(git, directory, [
+      "status",
+      "--porcelain",
+      "-z",
+    ]);
+    if (status.exitCode !== 0) {
+      return yield* Effect.fail(checkoutFailure(status.stderr, target.name));
+    }
+    if (status.stdout.length === 0) return false;
+
+    const stash = yield* runGit(git, directory, [
+      "stash",
+      "push",
+      "--include-untracked",
+      "--message",
+      `Rebase auto-stash before checking out ${target.name}`,
+    ]);
+    if (stash.exitCode !== 0) {
+      return yield* Effect.fail(
+        repositoryRefsFailure({
+          _tag: "CheckoutRejected",
+          detail: failureDetail(stash.stderr),
+          reason: "StashFailed",
+        }),
+      );
+    }
+    return true;
+  });
+}
+
+function runCheckout(
+  git: GitCommandRunner,
+  directory: string,
+  target: RepositoryRefTarget,
+) {
+  return runGit(git, directory, checkoutArguments(target)).pipe(
+    Effect.flatMap((output) =>
+      output.exitCode === 0
+        ? Effect.void
+        : Effect.fail(checkoutFailure(output.stderr, target.name)),
+    ),
+  );
+}
+
+function checkoutArguments(target: RepositoryRefTarget): readonly string[] {
+  switch (target._tag) {
+    case "LocalBranch":
+      return ["checkout", target.name];
+    case "RemoteBranch":
+      return [
+        "checkout",
+        "-b",
+        target.name,
+        "--track",
+        `${target.remote}/${target.name}`,
+      ];
+    case "Tag":
+      return ["checkout", "--detach", `refs/tags/${target.name}`];
+  }
+}
+
+function restoreStash(git: GitCommandRunner, directory: string) {
+  return runGit(git, directory, ["stash", "pop"]).pipe(
+    Effect.map((output) => output.exitCode === 0),
+  );
+}
+
+function readCheckedOutHead(
+  git: GitCommandRunner,
+  repositoryPath: string,
+  worktreePath: string,
+) {
+  return readCanonicalWorktrees(git, repositoryPath).pipe(
+    Effect.flatMap((worktrees) => requireWorktree(worktrees, worktreePath)),
+    Effect.map((worktree) => worktree.head),
+  );
+}
+
+function runGit(
+  git: GitCommandRunner,
+  directory: string,
+  arguments_: readonly string[],
+): Effect.Effect<GitCommandOutput, RepositoryRefsError> {
+  return git
+    .run({
+      arguments: arguments_,
+      directory,
+      timeoutMilliseconds: checkoutTimeoutMilliseconds,
+    })
+    .pipe(Effect.mapError(gitCommandFailed));
+}

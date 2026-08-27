@@ -1,5 +1,7 @@
 import { and } from "drizzle-orm";
 import { Effect, type Scope } from "effect";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import type { Environment } from "#server/domain/environment-state.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
@@ -23,6 +25,8 @@ import type {
 } from "#server/features/environment-server/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
+import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { environmentTable } from "#server/persistence/environment-state.schema";
@@ -55,6 +59,16 @@ export function startEnvironmentServer(
       ? (environment.automaticPort ?? 0)
       : options.port;
     const events = createEnvironmentEventPublisher();
+    const git = createLocalGitCommandRunner();
+    const refs = createRepositoryRefsService({
+      catalog,
+      changes: yield* acquireRepositoryChangePublisher(
+        git,
+        createLocalRepositoryWatcher(),
+        events,
+      ),
+      git,
+    });
     const listener = yield* acquireEnvironmentListener({
       authorization,
       catalog,
@@ -66,6 +80,7 @@ export function startEnvironmentServer(
       filesystem: createEnvironmentFilesystem(),
       port: requestedPort,
       productVersion,
+      refs,
     });
 
     if (useAutomaticPort && environment.automaticPort === null) {

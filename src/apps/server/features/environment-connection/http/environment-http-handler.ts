@@ -7,6 +7,7 @@ import {
   EnvironmentHttpFailure,
   EnvironmentSnapshot,
   RepositoryCatalogOperationFailure,
+  RepositoryRefsOperationFailure,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type {
@@ -17,6 +18,10 @@ import type {
   RepositoryCatalog,
   RepositoryCatalogError,
 } from "#server/domain/repository-catalog.contract";
+import type {
+  RepositoryRefsError,
+  RepositoryRefsService,
+} from "#server/domain/repository-refs.contract";
 import { respondWithBrowserAsset } from "#server/features/browser-client/browser-assets";
 import type {
   EnvironmentAuthorization,
@@ -41,6 +46,7 @@ import {
 } from "#server/features/environment-connection/http/environment-http-response";
 import { respondToEnvironmentFilesystemRequest } from "#server/features/environment-filesystem/http/environment-filesystem-http-handler";
 import { respondToRepositoryCatalogRequest } from "#server/features/repository-catalog/http/repository-catalog-http-handler";
+import { respondToRepositoryRefsRequest } from "#server/features/repository-refs/http/repository-refs-http-handler";
 import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function createEnvironmentHttpHandler(
@@ -48,6 +54,7 @@ export function createEnvironmentHttpHandler(
   authorization: EnvironmentAuthorization,
   catalog: EnvironmentListenerRepositoryCatalog,
   filesystem: EnvironmentListenerFilesystem,
+  refs: EnvironmentListenerRepositoryRefs,
   ready: () => boolean,
   runEnvironmentEffect: RunEnvironmentEffect,
   browserAssetsRoot?: string,
@@ -62,6 +69,7 @@ export function createEnvironmentHttpHandler(
         authorization,
         catalog,
         filesystem,
+        refs,
         ready(),
         browserAssetsRoot,
       ).pipe(Effect.ensuring(Effect.sync(lifetime.release))),
@@ -94,6 +102,7 @@ function createEnvironmentHttpResponse(
   authorization: EnvironmentAuthorization,
   catalog: EnvironmentListenerRepositoryCatalog,
   filesystem: EnvironmentListenerFilesystem,
+  refs: EnvironmentListenerRepositoryRefs,
   ready: boolean,
   browserAssetsRoot?: string,
 ) {
@@ -104,6 +113,7 @@ function createEnvironmentHttpResponse(
     authorization,
     catalog,
     filesystem,
+    refs,
     ready,
     browserAssetsRoot,
   ).pipe(
@@ -120,6 +130,7 @@ function respondToEnvironmentRequest(
   authorization: EnvironmentAuthorization,
   catalog: EnvironmentListenerRepositoryCatalog,
   filesystem: EnvironmentListenerFilesystem,
+  refs: EnvironmentListenerRepositoryRefs,
   ready: boolean,
   browserAssetsRoot?: string,
 ) {
@@ -219,6 +230,19 @@ function respondToEnvironmentRequest(
       return;
     }
 
+    if (
+      refs !== undefined &&
+      (yield* respondToRepositoryRefsRequest(
+        request,
+        response,
+        body,
+        authorization,
+        refs,
+      ))
+    ) {
+      return;
+    }
+
     response.writeHead(404).end();
   });
 }
@@ -253,6 +277,7 @@ function writeEnvironmentHttpError(
     | EnvironmentFilesystemError
     | EnvironmentHttpBodyError
     | RepositoryCatalogError
+    | RepositoryRefsError
     | EnvironmentStorageError,
 ) {
   if (response.writableEnded) {
@@ -294,6 +319,15 @@ function writeEnvironmentHttpError(
     );
     return;
   }
+  if (error._tag === "RepositoryRefsError") {
+    writeJson(
+      response,
+      repositoryRefsFailureStatus(error),
+      RepositoryRefsOperationFailure,
+      error.failure,
+    );
+    return;
+  }
   response.writeHead(500).end();
 }
 
@@ -324,6 +358,20 @@ function repositoryCatalogFailureStatus(error: RepositoryCatalogError) {
   }
 }
 
+function repositoryRefsFailureStatus(error: RepositoryRefsError) {
+  switch (error.failure._tag) {
+    case "RepositoryMissing":
+    case "WorktreeMissing":
+    case "RefMissing":
+      return 404;
+    case "BranchCheckedOutElsewhere":
+    case "CheckoutRejected":
+      return 409;
+    case "GitFailed":
+      return 422;
+  }
+}
+
 interface HttpRequestLifetime {
   readonly release: () => void;
   readonly signal: AbortSignal;
@@ -331,3 +379,4 @@ interface HttpRequestLifetime {
 
 type EnvironmentListenerRepositoryCatalog = RepositoryCatalog | undefined;
 type EnvironmentListenerFilesystem = EnvironmentFilesystem | undefined;
+type EnvironmentListenerRepositoryRefs = RepositoryRefsService | undefined;

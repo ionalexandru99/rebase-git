@@ -11,6 +11,7 @@ import type { PanelImperativeHandle } from "react-resizable-panels";
 import { environmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
 import { useApplicationShortcuts } from "#web/features/application-shell/use-application-shortcuts";
 import { useProjectRepositoryActions } from "#web/features/application-shell/use-project-repository-actions";
+import { useRepositoryRefsActions } from "#web/features/application-shell/use-repository-refs-actions";
 import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
 import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
 import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
@@ -145,6 +146,18 @@ export function ApplicationShell({
     session,
     setNavigation,
   });
+  const {
+    activeWorktreePath,
+    branchesFocusRequest,
+    focusBranchesSidebar,
+    refs: repositoryRefs,
+    retryRefs,
+    selectRef,
+  } = useRepositoryRefsActions({
+    repositories: repositoryCatalog.repositories,
+    selectedRepositoryId: navigation.selectedRepositoryId,
+    session,
+  });
   const toggleSidebar = useCallback(() => {
     if (sidebarRef.current?.isCollapsed()) expandSidebar();
     else collapseSidebar();
@@ -196,6 +209,7 @@ export function ApplicationShell({
     availability: environmentStatus.availability,
     closeSelectedRepository,
     folderPickerOpen,
+    focusBranchesSidebar,
     focusSidebarFilter,
     hasSelectedRepository:
       navigation.workspaceView === "repository" &&
@@ -279,7 +293,13 @@ export function ApplicationShell({
                     }
                   />
                 ) : (
-                  <RepositoryWorkspace />
+                  <RepositoryWorkspace
+                    activeWorktreePath={activeWorktreePath}
+                    branchesFocusRequest={branchesFocusRequest}
+                    refs={repositoryRefs}
+                    retryRefs={retryRefs}
+                    selectRef={selectRef}
+                  />
                 )}
               </ResizablePanel>
             </ResizablePanelGroup>

@@ -6,7 +6,8 @@
       "!**/dist",
       "!**/node_modules",
       "!release",
-      "!tests/.artifacts"
+      "!tests/.artifacts",
+      "!.plans"
     ]
   },
   "formatter": {

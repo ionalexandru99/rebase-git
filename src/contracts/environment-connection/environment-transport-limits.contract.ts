@@ -35,7 +35,7 @@ export const currentTransportLimits = {
   helloTimeoutMilliseconds: 5_000,
   maxCapturedOutputBytes: 1_048_576,
   maxHttpRequestBytes: 65_536,
-  maxHttpResponseBytes: 65_536,
+  maxHttpResponseBytes: 1_048_576,
   maxQueuedEventBytes: 262_144,
   maxQueuedEvents: 128,
   maxWebSocketRequestBytes: 16_384,
