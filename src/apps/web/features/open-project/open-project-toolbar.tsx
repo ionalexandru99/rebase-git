@@ -3,10 +3,11 @@ import type { JSX, KeyboardEvent, RefObject } from "react";
 import {
   keyboardShortcutAria,
   keyboardShortcutLabel,
+  keyboardShortcutTitle,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
-import { useKeyboardShortcuts } from "#web/features/keyboard-shortcuts/use-keyboard-shortcuts";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
+import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 
 export function OpenProjectToolbar({
   activeDescendant,
@@ -25,10 +26,10 @@ export function OpenProjectToolbar({
   readonly onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   readonly query: string;
 }): JSX.Element {
-  const { bindings } = useKeyboardShortcuts();
+  const { bindings, platform } = useKeyboardShortcuts();
   const focusSearchShortcut = bindings["search.focus"];
   const browseShortcut = bindings["projects.browseRepository"];
-  const focusSearchAria = keyboardShortcutAria(focusSearchShortcut);
+  const focusSearchAria = keyboardShortcutAria(focusSearchShortcut, platform);
 
   return (
     <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] gap-2.5 bg-repository pt-1 pb-3 max-[650px]:grid-cols-1">
@@ -54,16 +55,16 @@ export function OpenProjectToolbar({
         />
         {focusSearchShortcut === null ? null : (
           <kbd className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 font-mono text-[.67rem] text-muted-foreground/65">
-            {keyboardShortcutLabel(focusSearchShortcut)}
+            {keyboardShortcutLabel(focusSearchShortcut, platform)}
           </kbd>
         )}
       </div>
       <Button
-        aria-keyshortcuts={keyboardShortcutAria(browseShortcut)}
+        aria-keyshortcuts={keyboardShortcutAria(browseShortcut, platform)}
         className="h-8 gap-[.45rem] px-3 text-[.8rem] font-medium sm:h-8 max-[650px]:w-full"
         disabled={!browseAvailable}
         onClick={onBrowse}
-        title={`Browse files${shortcutTitleSuffix(browseShortcut)}`}
+        title={keyboardShortcutTitle("Browse files", browseShortcut, platform)}
         type="button"
       >
         <IconFolder aria-hidden="true" />
@@ -71,11 +72,4 @@ export function OpenProjectToolbar({
       </Button>
     </div>
   );
-}
-
-function shortcutTitleSuffix(
-  binding: Parameters<typeof keyboardShortcutLabel>[0],
-): string {
-  const label = keyboardShortcutLabel(binding);
-  return label.length === 0 ? "" : ` (${label})`;
 }

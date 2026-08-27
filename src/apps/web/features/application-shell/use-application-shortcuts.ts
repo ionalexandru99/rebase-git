@@ -1,12 +1,18 @@
 import { useEffect } from "react";
 import {
-  isEditableShortcutTarget,
-  keyboardShortcutPlatform,
   matchesKeyboardShortcut,
+  repositorySelectionCommandId,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { KeyboardShortcutCommandId } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
-import { useKeyboardShortcuts } from "#web/features/keyboard-shortcuts/use-keyboard-shortcuts";
+import { repositorySelectionPositions } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
 import type { EnvironmentAvailability } from "#web/features/project-navigation/project-navigation.contract";
+import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
+
+type ShortcutCommand = readonly [
+  commandId: KeyboardShortcutCommandId,
+  enabled: boolean,
+  action: () => void,
+];
 
 export function useApplicationShortcuts({
   availability,
@@ -39,9 +45,45 @@ export function useApplicationShortcuts({
   readonly showOpenProject: () => void;
   readonly toggleSidebar: () => void;
 }) {
-  const { bindings } = useKeyboardShortcuts();
+  const { bindings, platform } = useKeyboardShortcuts();
 
   useEffect(() => {
+    const commands: readonly ShortcutCommand[] = [
+      ["settings.open", true, () => openSettings(true)],
+      ["projects.showOpenProject", true, showOpenProject],
+      [
+        "projects.browseRepository",
+        availability === "available",
+        openFolderPicker,
+      ],
+      [
+        "projects.closeActiveRepository",
+        hasSelectedRepository,
+        closeSelectedRepository,
+      ],
+      ["projects.focusFilter", true, focusSidebarFilter],
+      ["projects.toggleSidebar", true, toggleSidebar],
+      [
+        "projects.selectPreviousRepository",
+        selectableRepositoryCount > 0,
+        selectPreviousRepository,
+      ],
+      [
+        "projects.selectNextRepository",
+        selectableRepositoryCount > 0,
+        selectNextRepository,
+      ],
+      ...repositorySelectionPositions.map(
+        (position): ShortcutCommand => [
+          repositorySelectionCommandId(position),
+          position === 9
+            ? selectableRepositoryCount > 0
+            : position <= selectableRepositoryCount,
+          () => selectRepositoryByPosition(position),
+        ],
+      ),
+    ];
+
     const handleApplicationShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing) return;
       if (folderPickerOpen) return;
@@ -51,83 +93,16 @@ export function useApplicationShortcuts({
         openSettings(false);
         return;
       }
+      if (settingsOpen) return;
 
-      if (settingsOpen || isEditableShortcutTarget(event.target)) return;
-      const execute = (
-        commandId: KeyboardShortcutCommandId,
-        enabled: boolean,
-        action: () => void,
-      ) => {
-        if (
-          !enabled ||
-          !matchesKeyboardShortcut(
-            event,
-            bindings[commandId],
-            keyboardShortcutPlatform(),
-          )
-        ) {
-          return false;
-        }
-        event.preventDefault();
-        action();
-        return true;
-      };
-
-      if (execute("settings.open", true, () => openSettings(true))) return;
-      if (execute("projects.showOpenProject", true, showOpenProject)) return;
-      if (
-        execute(
-          "projects.browseRepository",
-          availability === "available",
-          openFolderPicker,
-        )
-      ) {
-        return;
-      }
-      if (
-        execute(
-          "projects.closeActiveRepository",
-          hasSelectedRepository,
-          closeSelectedRepository,
-        )
-      ) {
-        return;
-      }
-      if (execute("projects.focusFilter", true, focusSidebarFilter)) return;
-      if (execute("projects.toggleSidebar", true, toggleSidebar)) return;
-      if (
-        execute(
-          "projects.selectPreviousRepository",
-          selectableRepositoryCount > 0,
-          selectPreviousRepository,
-        )
-      ) {
-        return;
-      }
-      if (
-        execute(
-          "projects.selectNextRepository",
-          selectableRepositoryCount > 0,
-          selectNextRepository,
-        )
-      ) {
-        return;
-      }
-      for (let position = 1; position <= 9; position += 1) {
-        const commandId =
-          `projects.selectRepository${position}` as KeyboardShortcutCommandId;
-        const available =
-          position === 9
-            ? selectableRepositoryCount > 0
-            : position <= selectableRepositoryCount;
-        if (
-          execute(commandId, available, () =>
-            selectRepositoryByPosition(position),
-          )
-        ) {
-          return;
-        }
-      }
+      const matched = commands.find(
+        ([commandId, enabled]) =>
+          enabled &&
+          matchesKeyboardShortcut(event, bindings[commandId], platform),
+      );
+      if (matched === undefined) return;
+      event.preventDefault();
+      matched[2]();
     };
 
     window.addEventListener("keydown", handleApplicationShortcut);
@@ -142,6 +117,7 @@ export function useApplicationShortcuts({
     hasSelectedRepository,
     openFolderPicker,
     openSettings,
+    platform,
     selectNextRepository,
     selectPreviousRepository,
     selectRepositoryByPosition,

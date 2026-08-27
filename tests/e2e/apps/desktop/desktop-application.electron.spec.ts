@@ -45,9 +45,6 @@ test("pairs the packaged renderer with its managed Environment", async () => {
         "data-connection-state",
         "Connected",
       );
-      await window
-        .getByRole("searchbox", { name: "Search repositories" })
-        .blur();
       await window.keyboard.press("Control+o");
       const picker = window.getByRole("dialog", { name: "Choose repository" });
       await expect(picker).toBeVisible();
@@ -111,25 +108,16 @@ test("pairs the packaged renderer with its managed Environment", async () => {
       await window.keyboard.press("Control+w");
       await expect(openProject).toBeVisible();
 
-      await openProject
-        .getByRole("searchbox", { name: "Search repositories" })
-        .blur();
       await window.keyboard.press("Control+Shift+f");
       await expect(
         projects.getByRole("textbox", { name: "Filter open projects" }),
       ).toBeFocused();
 
-      await projects
-        .getByRole("textbox", { name: "Filter open projects" })
-        .blur();
       await window.keyboard.press("Control+Shift+o");
       await expect(
         openProject.getByRole("searchbox", { name: "Search repositories" }),
       ).toBeFocused();
 
-      await openProject
-        .getByRole("searchbox", { name: "Search repositories" })
-        .blur();
       await window.keyboard.press("Control+Comma");
       await expect(
         window.getByText(packageMetadata.version, { exact: true }),

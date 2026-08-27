@@ -12,11 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  keyboardShortcutPlatform,
-  matchesKeyboardShortcut,
-} from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
-import { useKeyboardShortcuts } from "#web/features/keyboard-shortcuts/use-keyboard-shortcuts";
+import { matchesKeyboardShortcut } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type {
   OpenProjectRepository,
   OpenProjectScreenProps,
@@ -27,6 +23,7 @@ import {
   keyboardRepositoryItems,
   recentRepositoryItems,
 } from "#web/features/open-project/open-project-state";
+import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { OpenProjectToolbar } from "#web-ui/features/open-project/open-project-toolbar";
 import { RecentRepositories } from "#web-ui/features/open-project/recent-repositories";
 import { RepositoryEnvironmentGroup } from "#web-ui/features/open-project/repository-environment-group";
@@ -45,7 +42,7 @@ export function OpenProjectScreen({
   onRevealRepository,
   revealAvailable,
 }: OpenProjectScreenProps): JSX.Element {
-  const { bindings } = useKeyboardShortcuts();
+  const { bindings, platform } = useKeyboardShortcuts();
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string>();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -98,11 +95,7 @@ export function OpenProjectScreen({
         !active ||
         event.defaultPrevented ||
         event.isComposing ||
-        !matchesKeyboardShortcut(
-          event,
-          bindings["search.focus"],
-          keyboardShortcutPlatform(),
-        )
+        !matchesKeyboardShortcut(event, bindings["search.focus"], platform)
       ) {
         return;
       }
@@ -114,7 +107,7 @@ export function OpenProjectScreen({
 
     window.addEventListener("keydown", focusSearch);
     return () => window.removeEventListener("keydown", focusSearch);
-  }, [active, bindings]);
+  }, [active, bindings, platform]);
 
   const openRepository = useCallback(
     (repository: OpenProjectRepository) => onOpenRepository(repository),

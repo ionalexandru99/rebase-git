@@ -133,7 +133,7 @@ export function selectProjectRepositoryByOffset(
   const repositories = selectableRepositories(state);
   if (repositories.length === 0) return state;
   const selectedIndex = repositories.findIndex(
-    ({ repository }) => repository.id === state.selectedRepositoryId,
+    (repository) => repository.id === state.selectedRepositoryId,
   );
   const nextIndex =
     selectedIndex < 0
@@ -144,7 +144,7 @@ export function selectProjectRepositoryByOffset(
   const selected = repositories[nextIndex];
   return selected === undefined
     ? state
-    : selectExistingRepository(state, selected.repository.id);
+    : selectExistingRepository(state, selected.id);
 }
 
 export function selectProjectRepositoryByPosition(
@@ -156,7 +156,7 @@ export function selectProjectRepositoryByPosition(
     position === 9 ? repositories.at(-1) : repositories[position - 1];
   return selected === undefined
     ? state
-    : selectExistingRepository(state, selected.repository.id);
+    : selectExistingRepository(state, selected.id);
 }
 
 function addRepositoryOnce(
@@ -175,11 +175,7 @@ function addRepositoryOnce(
 
 function selectableRepositories(state: ProjectNavigationState) {
   return state.environments.flatMap((environment) =>
-    environment.availability === "available"
-      ? environment.repositories.map((repository) => ({
-          repository,
-        }))
-      : [],
+    environment.availability === "available" ? environment.repositories : [],
   );
 }
 

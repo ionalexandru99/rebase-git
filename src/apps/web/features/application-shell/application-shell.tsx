@@ -154,44 +154,35 @@ export function ApplicationShell({
     expandSidebar();
     setSidebarFilterRequest((current) => current + 1);
   }, [expandSidebar]);
-  const selectPreviousRepository = useCallback(() => {
-    setNavigation((current) =>
-      selectProjectRepositoryByOffset(
-        setEnvironmentAvailability(
-          current,
-          localEnvironmentId,
-          environmentStatus.availability,
-        ),
-        -1,
-      ),
-    );
-  }, [environmentStatus.availability]);
-  const selectNextRepository = useCallback(() => {
-    setNavigation((current) =>
-      selectProjectRepositoryByOffset(
-        setEnvironmentAvailability(
-          current,
-          localEnvironmentId,
-          environmentStatus.availability,
-        ),
-        1,
-      ),
-    );
-  }, [environmentStatus.availability]);
-  const selectRepositoryByPosition = useCallback(
-    (position: number) => {
+  const updateNavigation = useCallback(
+    (update: (current: ProjectNavigationState) => ProjectNavigationState) =>
       setNavigation((current) =>
-        selectProjectRepositoryByPosition(
-          setEnvironmentAvailability(
-            current,
-            localEnvironmentId,
-            environmentStatus.availability,
-          ),
-          position,
+        update(
+          navigationWithAvailability(current, environmentStatus.availability),
         ),
-      );
-    },
+      ),
     [environmentStatus.availability],
+  );
+  const selectPreviousRepository = useCallback(
+    () =>
+      updateNavigation((current) =>
+        selectProjectRepositoryByOffset(current, -1),
+      ),
+    [updateNavigation],
+  );
+  const selectNextRepository = useCallback(
+    () =>
+      updateNavigation((current) =>
+        selectProjectRepositoryByOffset(current, 1),
+      ),
+    [updateNavigation],
+  );
+  const selectRepositoryByPosition = useCallback(
+    (position: number) =>
+      updateNavigation((current) =>
+        selectProjectRepositoryByPosition(current, position),
+      ),
+    [updateNavigation],
   );
   const selectableRepositoryCount = visibleNavigation.environments.reduce(
     (count, environment) =>

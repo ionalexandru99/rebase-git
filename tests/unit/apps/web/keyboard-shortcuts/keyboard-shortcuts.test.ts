@@ -2,8 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   defaultKeyboardShortcutBindings,
   findKeyboardShortcutConflict,
+  keyboardShortcutBindingsEqual,
   keyboardShortcutFromInput,
   keyboardShortcutValidationError,
+  keyboardShortcutWarning,
   matchesKeyboardShortcut,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { KeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
@@ -102,6 +104,33 @@ describe("keyboard shortcuts", () => {
         "mac",
       ),
     ).toBe(true);
+  });
+
+  it("compares bindings regardless of modifier order", () => {
+    expect(
+      keyboardShortcutBindingsEqual(
+        { key: "o", modifiers: ["Shift", "Mod"] },
+        { key: "o", modifiers: ["Mod", "Shift"] },
+      ),
+    ).toBe(true);
+    expect(
+      keyboardShortcutBindingsEqual(
+        { key: "o", modifiers: ["Mod"] },
+        { key: "o", modifiers: ["Mod", "Shift"] },
+      ),
+    ).toBe(false);
+  });
+
+  it("warns about shortcuts the browser or text editing may claim", () => {
+    expect(
+      keyboardShortcutWarning({ key: "1", modifiers: ["Alt"] }, "browser"),
+    ).toBe("Your browser may use this shortcut for navigation.");
+    expect(
+      keyboardShortcutWarning({ key: "1", modifiers: ["Alt"] }, "desktop"),
+    ).toBeUndefined();
+    expect(
+      keyboardShortcutWarning({ key: "c", modifiers: ["Mod"] }, "desktop"),
+    ).toBe("This shortcut is commonly used while editing text.");
   });
 
   it("reports conflicts only when command contexts overlap", () => {

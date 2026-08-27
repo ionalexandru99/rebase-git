@@ -1,95 +1,99 @@
 import type {
   KeyboardShortcutBinding,
   KeyboardShortcutBindings,
+  KeyboardShortcutClient,
   KeyboardShortcutCommand,
   KeyboardShortcutCommandId,
   KeyboardShortcutInput,
   KeyboardShortcutModifier,
   KeyboardShortcutPlatform,
+  RepositorySelectionPosition,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
+import { repositorySelectionPositions } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
 
 export const keyboardShortcutCommands = [
-  command(
-    "projects.showOpenProject",
-    "Show Open Project",
-    "Navigation",
-    ["application"],
-    "o",
-    ["Mod", "Shift"],
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "o", modifiers: ["Mod", "Shift"] },
+    group: "Navigation",
+    id: "projects.showOpenProject",
+    label: "Show Open Project",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "o", modifiers: ["Mod"] },
+    group: "Navigation",
+    id: "projects.browseRepository",
+    label: "Browse for a repository",
+  },
+  {
+    contexts: ["application", "repository-picker"],
+    defaultBinding: { key: "w", modifiers: ["Mod"] },
+    group: "Navigation",
+    id: "projects.closeActiveRepository",
+    label: "Close active repository",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "b", modifiers: ["Mod"] },
+    group: "Navigation",
+    id: "projects.toggleSidebar",
+    label: "Toggle Projects sidebar",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "f", modifiers: ["Mod", "Shift"] },
+    group: "Navigation",
+    id: "projects.focusFilter",
+    label: "Focus Projects filter",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "ArrowLeft", modifiers: ["Alt"] },
+    group: "Navigation",
+    id: "projects.selectPreviousRepository",
+    label: "Select previous repository",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "ArrowRight", modifiers: ["Alt"] },
+    group: "Navigation",
+    id: "projects.selectNextRepository",
+    label: "Select next repository",
+  },
+  ...repositorySelectionPositions.map(
+    (position): KeyboardShortcutCommand => ({
+      contexts: ["application"],
+      defaultBinding: { key: String(position), modifiers: ["Alt"] },
+      group: "Navigation",
+      id: repositorySelectionCommandId(position),
+      label:
+        position === 9
+          ? "Select last repository"
+          : `Select repository ${position}`,
+    }),
   ),
-  command(
-    "projects.browseRepository",
-    "Browse for a repository",
-    "Navigation",
-    ["application"],
-    "o",
-    ["Mod"],
-  ),
-  command(
-    "projects.closeActiveRepository",
-    "Close active repository",
-    "Navigation",
-    ["application", "repository-picker"],
-    "w",
-    ["Mod"],
-  ),
-  command(
-    "projects.toggleSidebar",
-    "Toggle Projects sidebar",
-    "Navigation",
-    ["application"],
-    "b",
-    ["Mod"],
-  ),
-  command(
-    "projects.focusFilter",
-    "Focus Projects filter",
-    "Navigation",
-    ["application"],
-    "f",
-    ["Mod", "Shift"],
-  ),
-  command(
-    "projects.selectPreviousRepository",
-    "Select previous repository",
-    "Navigation",
-    ["application"],
-    "ArrowLeft",
-    ["Alt"],
-  ),
-  command(
-    "projects.selectNextRepository",
-    "Select next repository",
-    "Navigation",
-    ["application"],
-    "ArrowRight",
-    ["Alt"],
-  ),
-  ...repositorySelectionCommands(),
-  command(
-    "settings.open",
-    "Open settings",
-    "Navigation",
-    ["application"],
-    ",",
-    ["Mod"],
-  ),
-  command(
-    "search.focus",
-    "Focus current search",
-    "Search and lists",
-    ["application", "repository-picker"],
-    "f",
-    ["Mod"],
-  ),
-  command(
-    "repositoryPicker.openSelectedRepository",
-    "Open selected repository",
-    "Folder picker",
-    ["repository-picker"],
-    "Enter",
-    ["Mod"],
-  ),
+  {
+    contexts: ["application"],
+    defaultBinding: { key: ",", modifiers: ["Mod"] },
+    group: "Navigation",
+    id: "settings.open",
+    label: "Open settings",
+  },
+  {
+    contexts: ["application", "repository-picker"],
+    defaultBinding: { key: "f", modifiers: ["Mod"] },
+    group: "Search and lists",
+    id: "search.focus",
+    label: "Focus current search",
+  },
+  {
+    contexts: ["repository-picker"],
+    defaultBinding: { key: "Enter", modifiers: ["Mod"] },
+    group: "Folder picker",
+    id: "repositoryPicker.openSelectedRepository",
+    label: "Open selected repository",
+  },
 ] as const satisfies readonly KeyboardShortcutCommand[];
 
 export const defaultKeyboardShortcutBindings = Object.fromEntries(
@@ -97,7 +101,13 @@ export const defaultKeyboardShortcutBindings = Object.fromEntries(
     id,
     defaultBinding,
   ]),
-) as KeyboardShortcutBindings;
+) as Readonly<Record<KeyboardShortcutCommandId, KeyboardShortcutBinding>>;
+
+export function repositorySelectionCommandId(
+  position: RepositorySelectionPosition,
+) {
+  return `projects.selectRepository${position}` as const;
+}
 
 export function keyboardShortcutFromInput(
   input: KeyboardShortcutInput,
@@ -166,9 +176,7 @@ export function keyboardShortcutBindingsEqual(
   return (
     left.key === right.key &&
     left.modifiers.length === right.modifiers.length &&
-    left.modifiers.every(
-      (modifier, index) => modifier === right.modifiers[index],
-    )
+    left.modifiers.every((modifier) => right.modifiers.includes(modifier))
   );
 }
 
@@ -200,14 +208,9 @@ export function keyboardShortcutCommand(
   return definition;
 }
 
-export function keyboardShortcutPlatform(): KeyboardShortcutPlatform {
-  if (typeof navigator === "undefined") return "other";
-  return /Mac|iPhone|iPad/.test(navigator.platform) ? "mac" : "other";
-}
-
 export function keyboardShortcutKeys(
   binding: KeyboardShortcutBinding | null,
-  platform = keyboardShortcutPlatform(),
+  platform: KeyboardShortcutPlatform,
 ): readonly string[] {
   if (binding === null) return [];
   return [
@@ -220,14 +223,23 @@ export function keyboardShortcutKeys(
 
 export function keyboardShortcutLabel(
   binding: KeyboardShortcutBinding | null,
-  platform = keyboardShortcutPlatform(),
+  platform: KeyboardShortcutPlatform,
 ): string {
   return keyboardShortcutKeys(binding, platform).join(" ");
 }
 
+export function keyboardShortcutTitle(
+  label: string,
+  binding: KeyboardShortcutBinding | null,
+  platform: KeyboardShortcutPlatform,
+): string {
+  const shortcut = keyboardShortcutLabel(binding, platform);
+  return shortcut.length === 0 ? label : `${label} (${shortcut})`;
+}
+
 export function keyboardShortcutAria(
   binding: KeyboardShortcutBinding | null,
-  platform = keyboardShortcutPlatform(),
+  platform: KeyboardShortcutPlatform,
 ): string | undefined {
   if (binding === null) return undefined;
   return [
@@ -239,43 +251,25 @@ export function keyboardShortcutAria(
   ].join("+");
 }
 
-export function keyboardShortcutBrowserWarning(
+export function keyboardShortcutWarning(
   binding: KeyboardShortcutBinding | null,
+  client: KeyboardShortcutClient,
 ): string | undefined {
   if (binding === null) return undefined;
   const serialized = serializeBinding(binding);
+  if (
+    ["Mod+a", "Mod+c", "Mod+v", "Mod+x", "Mod+y", "Mod+z"].includes(serialized)
+  ) {
+    return "This shortcut is commonly used while editing text.";
+  }
+  if (client !== "browser") return undefined;
   if (["Mod+o", "Mod+w", "Mod+f", "Mod+,"].includes(serialized)) {
     return "Your browser may keep this shortcut for its own action.";
   }
-  if (
-    serialized === "Alt+ArrowLeft" ||
-    serialized === "Alt+ArrowRight" ||
-    /^Alt+[1-9]$/.test(serialized)
-  ) {
+  if (/^Alt\+(ArrowLeft|ArrowRight|[1-9])$/.test(serialized)) {
     return "Your browser may use this shortcut for navigation.";
   }
   return undefined;
-}
-
-export function keyboardShortcutTextEditingWarning(
-  binding: KeyboardShortcutBinding | null,
-): string | undefined {
-  if (binding === null) return undefined;
-  return ["Mod+a", "Mod+c", "Mod+v", "Mod+x", "Mod+y", "Mod+z"].includes(
-    serializeBinding(binding),
-  )
-    ? "This shortcut is commonly used while editing text."
-    : undefined;
-}
-
-export function isEditableShortcutTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target.isContentEditable ||
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement
-  );
 }
 
 export function isKeyboardShortcutBinding(
@@ -292,33 +286,6 @@ export function isKeyboardShortcutBinding(
     keyboardShortcutValidationError(candidate as KeyboardShortcutBinding) ===
       undefined
   );
-}
-
-function command(
-  id: KeyboardShortcutCommandId,
-  label: string,
-  group: KeyboardShortcutCommand["group"],
-  contexts: KeyboardShortcutCommand["contexts"],
-  key: string,
-  modifiers: readonly KeyboardShortcutModifier[],
-): KeyboardShortcutCommand {
-  return { contexts, defaultBinding: { key, modifiers }, group, id, label };
-}
-
-function repositorySelectionCommands(): readonly KeyboardShortcutCommand[] {
-  return Array.from({ length: 9 }, (_, index) => {
-    const position = index + 1;
-    return command(
-      `projects.selectRepository${position}` as KeyboardShortcutCommandId,
-      position === 9
-        ? "Select last repository"
-        : `Select repository ${position}`,
-      "Navigation",
-      ["application"],
-      String(position),
-      ["Alt"],
-    );
-  });
 }
 
 function normalizeKey(key: string): string | undefined {

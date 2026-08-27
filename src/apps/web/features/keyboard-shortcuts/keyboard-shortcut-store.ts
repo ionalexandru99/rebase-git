@@ -20,7 +20,7 @@ type KeyboardShortcutOverrides = Partial<
 >;
 
 export function createKeyboardShortcutStore(
-  storage?: KeyboardShortcutStorage,
+  storage: KeyboardShortcutStorage,
 ): KeyboardShortcutStore {
   let overrides = readOverrides(storage);
   let snapshot = createSnapshot(overrides);
@@ -29,41 +29,23 @@ export function createKeyboardShortcutStore(
   const update = (nextOverrides: KeyboardShortcutOverrides) => {
     overrides = nextOverrides;
     snapshot = createSnapshot(overrides);
-    writeOverrides(storage, overrides);
+    if (Object.keys(overrides).length === 0) storage.removeItem(storageKey);
+    else storage.setItem(storageKey, serializeOverrides(overrides));
     for (const listener of listeners) listener();
   };
 
   return {
     getSnapshot: () => snapshot,
-    resetAll: () => {
-      overrides = {};
-      snapshot = createSnapshot(overrides);
-      removeOverrides(storage);
-      for (const listener of listeners) listener();
-    },
+    resetAll: () => update({}),
     resetBinding: (commandId) => {
       if (!(commandId in overrides)) return;
       const { [commandId]: _, ...remaining } = overrides;
-      const defaultBinding = defaultKeyboardShortcutBindings[commandId];
-      const conflict =
-        defaultBinding === null
-          ? undefined
-          : findKeyboardShortcutConflict(
-              createSnapshot(remaining).bindings,
-              commandId,
-              defaultBinding,
-            );
-      update(
-        conflict === undefined
-          ? remaining
-          : { ...remaining, [conflict.id]: null },
-      );
+      update(withoutDisplacedCommand(remaining, commandId));
     },
     setBinding: (commandId, binding, replacedCommandId) => {
       const next = { ...overrides };
       if (replacedCommandId !== undefined) next[replacedCommandId] = null;
       if (
-        binding !== null &&
         keyboardShortcutBindingsEqual(
           binding,
           defaultKeyboardShortcutBindings[commandId],
@@ -82,11 +64,18 @@ export function createKeyboardShortcutStore(
   };
 }
 
-let clientStore: KeyboardShortcutStore | undefined;
-
-export function keyboardShortcutStore(): KeyboardShortcutStore {
-  clientStore ??= createKeyboardShortcutStore(clientStorage());
-  return clientStore;
+function withoutDisplacedCommand(
+  overrides: KeyboardShortcutOverrides,
+  restoredCommandId: KeyboardShortcutCommandId,
+): KeyboardShortcutOverrides {
+  const conflict = findKeyboardShortcutConflict(
+    createSnapshot(overrides).bindings,
+    restoredCommandId,
+    defaultKeyboardShortcutBindings[restoredCommandId],
+  );
+  return conflict === undefined
+    ? overrides
+    : { ...overrides, [conflict.id]: null };
 }
 
 function createSnapshot(
@@ -100,66 +89,40 @@ function createSnapshot(
   };
 }
 
+function serializeOverrides(overrides: KeyboardShortcutOverrides): string {
+  return JSON.stringify({ bindings: overrides, version: 1 });
+}
+
 function readOverrides(
-  storage: KeyboardShortcutStorage | undefined,
+  storage: KeyboardShortcutStorage,
 ): KeyboardShortcutOverrides {
+  const serialized = storage.getItem(storageKey);
+  if (serialized === null) return {};
+  const storedBindings = parseStoredBindings(serialized);
+  return Object.fromEntries(
+    keyboardShortcutCommandIds.flatMap((commandId) => {
+      const binding = storedBindings[commandId];
+      return binding === null || isKeyboardShortcutBinding(binding)
+        ? [[commandId, binding]]
+        : [];
+    }),
+  );
+}
+
+function parseStoredBindings(serialized: string): Record<string, unknown> {
   try {
-    const serialized = storage?.getItem(storageKey);
-    if (serialized === undefined || serialized === null) return {};
     const parsed = JSON.parse(serialized) as unknown;
     if (typeof parsed !== "object" || parsed === null) return {};
     const record = parsed as {
       readonly bindings?: unknown;
       readonly version?: unknown;
     };
-    if (
-      record.version !== 1 ||
-      typeof record.bindings !== "object" ||
-      record.bindings === null
-    ) {
-      return {};
-    }
-
-    const storedBindings = record.bindings as Record<string, unknown>;
-    return Object.fromEntries(
-      keyboardShortcutCommandIds.flatMap((commandId) => {
-        const binding = storedBindings[commandId];
-        return binding === null || isKeyboardShortcutBinding(binding)
-          ? [[commandId, binding]]
-          : [];
-      }),
-    );
+    return record.version === 1 &&
+      typeof record.bindings === "object" &&
+      record.bindings !== null
+      ? (record.bindings as Record<string, unknown>)
+      : {};
   } catch {
     return {};
-  }
-}
-
-function writeOverrides(
-  storage: KeyboardShortcutStorage | undefined,
-  overrides: KeyboardShortcutOverrides,
-) {
-  try {
-    storage?.setItem(
-      storageKey,
-      JSON.stringify({ bindings: overrides, version: 1 }),
-    );
-  } catch {
-    return;
-  }
-}
-
-function removeOverrides(storage: KeyboardShortcutStorage | undefined) {
-  try {
-    storage?.removeItem(storageKey);
-  } catch {
-    return;
-  }
-}
-
-function clientStorage(): KeyboardShortcutStorage | undefined {
-  try {
-    return typeof localStorage === "undefined" ? undefined : localStorage;
-  } catch {
-    return undefined;
   }
 }

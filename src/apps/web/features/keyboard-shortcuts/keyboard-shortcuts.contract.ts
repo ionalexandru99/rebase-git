@@ -1,3 +1,10 @@
+export const repositorySelectionPositions = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9,
+] as const;
+
+export type RepositorySelectionPosition =
+  (typeof repositorySelectionPositions)[number];
+
 export const keyboardShortcutCommandIds = [
   "projects.showOpenProject",
   "projects.browseRepository",
@@ -56,6 +63,8 @@ export interface KeyboardShortcutCommand {
 
 export type KeyboardShortcutPlatform = "mac" | "other";
 
+export type KeyboardShortcutClient = "browser" | "desktop";
+
 export interface KeyboardShortcutInput {
   readonly altKey: boolean;
   readonly ctrlKey: boolean;
@@ -67,6 +76,11 @@ export interface KeyboardShortcutInput {
 export interface KeyboardShortcutSnapshot {
   readonly bindings: KeyboardShortcutBindings;
   readonly modifiedCommandIds: readonly KeyboardShortcutCommandId[];
+}
+
+export interface KeyboardShortcutHost {
+  readonly client: KeyboardShortcutClient;
+  readonly platform: KeyboardShortcutPlatform;
 }
 
 export interface KeyboardShortcutStorage {
@@ -85,4 +99,9 @@ export interface KeyboardShortcutStore {
     replacedCommandId?: KeyboardShortcutCommandId,
   ) => void;
   readonly subscribe: (listener: () => void) => () => void;
+}
+
+export interface KeyboardShortcutRuntime {
+  readonly host: KeyboardShortcutHost;
+  readonly store: KeyboardShortcutStore;
 }

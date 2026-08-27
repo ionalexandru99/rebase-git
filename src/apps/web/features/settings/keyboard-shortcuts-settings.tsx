@@ -2,23 +2,26 @@ import { IconSearch } from "@tabler/icons-react";
 import { type JSX, type KeyboardEvent, useRef, useState } from "react";
 import {
   findKeyboardShortcutConflict,
-  keyboardShortcutBrowserWarning,
   keyboardShortcutCommands,
   keyboardShortcutFromInput,
   keyboardShortcutKeys,
   keyboardShortcutLabel,
-  keyboardShortcutPlatform,
-  keyboardShortcutTextEditingWarning,
   keyboardShortcutValidationError,
+  keyboardShortcutWarning,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type {
   KeyboardShortcutBinding,
   KeyboardShortcutBindings,
+  KeyboardShortcutClient,
   KeyboardShortcutCommand,
   KeyboardShortcutGroup,
+  KeyboardShortcutPlatform,
   KeyboardShortcutStore,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
-import { useKeyboardShortcuts } from "#web/features/keyboard-shortcuts/use-keyboard-shortcuts";
+import {
+  type FixedKeyboardShortcut,
+  fixedKeyboardShortcuts,
+} from "#web/features/settings/fixed-keyboard-shortcuts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +38,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#web-ui/components/ui/popover";
+import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 
 const groups: readonly KeyboardShortcutGroup[] = [
   "Navigation",
@@ -43,17 +47,19 @@ const groups: readonly KeyboardShortcutGroup[] = [
 ];
 
 export function KeyboardShortcutsSettings(): JSX.Element {
-  const { bindings, modifiedCommandIds, store } = useKeyboardShortcuts();
+  const { bindings, client, modifiedCommandIds, platform, store } =
+    useKeyboardShortcuts();
   const [query, setQuery] = useState("");
   const [confirmingResetAll, setConfirmingResetAll] = useState(false);
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visibleCommands = keyboardShortcutCommands.filter(
-    (command) =>
-      normalizedQuery.length === 0 ||
-      command.label.toLocaleLowerCase().includes(normalizedQuery) ||
-      keyboardShortcutLabel(bindings[command.id])
-        .toLocaleLowerCase()
-        .includes(normalizedQuery),
+  const matchesQuery = queryMatcher(query);
+  const visibleCommands = keyboardShortcutCommands.filter((command) =>
+    matchesQuery(
+      command.label,
+      keyboardShortcutLabel(bindings[command.id], platform),
+    ),
+  );
+  const visibleFixedShortcuts = fixedKeyboardShortcuts.filter((shortcut) =>
+    matchesQuery(shortcut.label, shortcut.keys.join(" ")),
   );
 
   return (
@@ -96,7 +102,10 @@ export function KeyboardShortcutsSettings(): JSX.Element {
         const commands = visibleCommands.filter(
           (command) => command.group === group,
         );
-        return commands.length === 0 ? null : (
+        const fixedShortcuts = visibleFixedShortcuts.filter(
+          (shortcut) => shortcut.group === group,
+        );
+        return commands.length === 0 && fixedShortcuts.length === 0 ? null : (
           <section
             aria-labelledby={`keyboard-shortcuts-${groupId(group)}`}
             className="mt-10"
@@ -113,10 +122,18 @@ export function KeyboardShortcutsSettings(): JSX.Element {
                 <ShortcutRow
                   binding={bindings[command.id]}
                   bindings={bindings}
+                  client={client}
                   command={command}
                   key={command.id}
                   modified={modifiedCommandIds.includes(command.id)}
+                  platform={platform}
                   store={store}
+                />
+              ))}
+              {fixedShortcuts.map((shortcut) => (
+                <FixedShortcutRow
+                  key={`${shortcut.label}:${shortcut.keys.join("+")}`}
+                  shortcut={shortcut}
                 />
               ))}
             </div>
@@ -124,7 +141,7 @@ export function KeyboardShortcutsSettings(): JSX.Element {
         );
       })}
 
-      {visibleCommands.length === 0 ? (
+      {visibleCommands.length === 0 && visibleFixedShortcuts.length === 0 ? (
         <p className="mt-10 text-sm text-muted-foreground">
           No keyboard shortcuts found.
         </p>
@@ -154,14 +171,18 @@ export function KeyboardShortcutsSettings(): JSX.Element {
 function ShortcutRow({
   binding,
   bindings,
+  client,
   command,
   modified,
+  platform,
   store,
 }: {
   readonly binding: KeyboardShortcutBinding | null;
   readonly bindings: KeyboardShortcutBindings;
+  readonly client: KeyboardShortcutClient;
   readonly command: KeyboardShortcutCommand;
   readonly modified: boolean;
+  readonly platform: KeyboardShortcutPlatform;
   readonly store: KeyboardShortcutStore;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -172,12 +193,7 @@ function ShortcutRow({
     draft === null
       ? undefined
       : findKeyboardShortcutConflict(bindings, command.id, draft);
-  const warning =
-    validationError ??
-    keyboardShortcutTextEditingWarning(draft) ??
-    (typeof window !== "undefined" && window.rebaseHost === undefined
-      ? keyboardShortcutBrowserWarning(draft)
-      : undefined);
+  const warning = validationError ?? keyboardShortcutWarning(draft, client);
 
   const changeOpen = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -233,7 +249,7 @@ function ShortcutRow({
             aria-label={`Edit ${command.label} shortcut`}
             className="flex min-h-8 min-w-14 items-center justify-center gap-1.5 rounded-lg border border-transparent px-1.5 outline-none hover:border-border hover:bg-background/45 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:border-ring/50 aria-expanded:bg-background/45"
           >
-            <ShortcutKeys binding={binding} />
+            <ShortcutKeys keys={keyboardShortcutKeys(binding, platform)} />
           </PopoverTrigger>
           <PopoverContent
             aria-label={`Edit ${command.label} shortcut`}
@@ -246,21 +262,29 @@ function ShortcutRow({
             <button
               className="mt-3 flex min-h-14 w-full items-center justify-center gap-1.5 rounded-md border border-input bg-input/20 px-3 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
               onKeyDown={(event) =>
-                captureShortcut(event, setDraft, setValidationError, () =>
-                  setOpen(false),
+                captureShortcut(
+                  event,
+                  platform,
+                  setDraft,
+                  setValidationError,
+                  () => setOpen(false),
                 )
               }
               ref={captureRef}
               type="button"
             >
-              <ShortcutKeys binding={draft} emptyLabel="Press keys" />
+              <ShortcutKeys
+                emptyLabel="Press keys"
+                keys={keyboardShortcutKeys(draft, platform)}
+              />
             </button>
             {conflict !== undefined ? (
               <p className="mt-3 text-xs text-muted-foreground" role="status">
                 <span className="font-medium text-status-connecting">
                   Already assigned.
                 </span>{" "}
-                {conflict.label} currently uses {keyboardShortcutLabel(draft)}.
+                {conflict.label} currently uses{" "}
+                {keyboardShortcutLabel(draft, platform)}.
               </p>
             ) : warning !== undefined ? (
               <p className="mt-3 text-xs text-status-connecting" role="status">
@@ -304,14 +328,28 @@ function ShortcutRow({
   );
 }
 
-function ShortcutKeys({
-  binding,
-  emptyLabel = "Unassigned",
+function FixedShortcutRow({
+  shortcut,
 }: {
-  readonly binding: KeyboardShortcutBinding | null;
-  readonly emptyLabel?: string;
+  readonly shortcut: FixedKeyboardShortcut;
 }): JSX.Element {
-  const keys = keyboardShortcutKeys(binding);
+  return (
+    <div className="flex min-h-16 items-center justify-between gap-5 rounded-xl px-3 py-3 sm:px-4">
+      <span className="text-sm font-medium">{shortcut.label}</span>
+      <span className="flex min-h-8 shrink-0 items-center gap-1.5 px-1.5">
+        <ShortcutKeys keys={shortcut.keys} />
+      </span>
+    </div>
+  );
+}
+
+function ShortcutKeys({
+  emptyLabel = "Unassigned",
+  keys,
+}: {
+  readonly emptyLabel?: string;
+  readonly keys: readonly string[];
+}): JSX.Element {
   return keys.length === 0 ? (
     <span className="text-xs text-muted-foreground">{emptyLabel}</span>
   ) : (
@@ -330,6 +368,7 @@ function ShortcutKeys({
 
 function captureShortcut(
   event: KeyboardEvent<HTMLButtonElement>,
+  platform: KeyboardShortcutPlatform,
   setDraft: (binding: KeyboardShortcutBinding | null) => void,
   setValidationError: (error: string | undefined) => void,
   cancel: () => void,
@@ -346,10 +385,19 @@ function captureShortcut(
     setValidationError(undefined);
     return;
   }
-  const binding = keyboardShortcutFromInput(event, keyboardShortcutPlatform());
+  const binding = keyboardShortcutFromInput(event, platform);
   if (binding === undefined) return;
   setDraft(binding);
   setValidationError(keyboardShortcutValidationError(binding));
+}
+
+function queryMatcher(query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return (...candidates: readonly string[]) =>
+    normalizedQuery.length === 0 ||
+    candidates.some((candidate) =>
+      candidate.toLocaleLowerCase().includes(normalizedQuery),
+    );
 }
 
 function groupId(group: KeyboardShortcutGroup): string {

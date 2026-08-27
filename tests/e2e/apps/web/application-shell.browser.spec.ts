@@ -110,12 +110,6 @@ test("controls project navigation from the keyboard", async ({ page }) => {
   await page.keyboard.press("Control+b");
   await expect(
     page.getByRole("heading", { level: 1, name: "Projects" }),
-  ).toBeVisible();
-
-  await filter.blur();
-  await page.keyboard.press("Control+b");
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Projects" }),
   ).not.toBeVisible();
 
   await page.keyboard.press("Control+b");
@@ -127,7 +121,6 @@ test("controls project navigation from the keyboard", async ({ page }) => {
   await page.keyboard.press("Control+Shift+f");
   await expect(filter).toBeFocused();
 
-  await filter.blur();
   await page.keyboard.press("Control+Shift+o");
   await expect(
     page.getByRole("searchbox", { name: "Search repositories" }),
@@ -232,7 +225,6 @@ test("opens and navigates settings", async ({ page }) => {
 test("controls settings from the keyboard", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("searchbox", { name: "Search repositories" }).blur();
   await page.keyboard.press("Control+Comma");
   await expect(
     page.getByRole("navigation", { name: "Settings" }),

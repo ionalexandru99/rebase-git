@@ -10,13 +10,11 @@ import {
 } from "react";
 import { EnvironmentFilesystemRejected } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
 import {
-  isEditableShortcutTarget,
   keyboardShortcutAria,
   keyboardShortcutLabel,
-  keyboardShortcutPlatform,
+  keyboardShortcutTitle,
   matchesKeyboardShortcut,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
-import { useKeyboardShortcuts } from "#web/features/keyboard-shortcuts/use-keyboard-shortcuts";
 import type { RepositoryFolderPickerProps } from "#web/features/repository-folder-picker/repository-folder-picker.contract";
 import {
   filterDirectoryEntries,
@@ -31,6 +29,7 @@ import {
   DialogTitle,
 } from "#web-ui/components/ui/dialog";
 import { Input } from "#web-ui/components/ui/input";
+import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { RepositoryDirectoryList } from "#web-ui/features/repository-folder-picker/repository-directory-list";
 import { RepositoryFolderPickerEnvironmentSelect } from "#web-ui/features/repository-folder-picker/repository-folder-picker-environment-select";
 
@@ -41,7 +40,7 @@ export function RepositoryFolderPicker({
   onOpenRepository,
   open,
 }: RepositoryFolderPickerProps): JSX.Element | null {
-  const { bindings } = useKeyboardShortcuts();
+  const { bindings, platform } = useKeyboardShortcuts();
   const [environmentId, setEnvironmentId] = useState<string>();
   const [directory, setDirectory] = useState<EnvironmentDirectory>();
   const [selectedPath, setSelectedPath] = useState<string>();
@@ -157,7 +156,6 @@ export function RepositoryFolderPicker({
 
   const handlePickerKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing) return;
-    const platform = keyboardShortcutPlatform();
 
     if (matchesKeyboardShortcut(event, bindings["search.focus"], platform)) {
       event.preventDefault();
@@ -176,7 +174,6 @@ export function RepositoryFolderPicker({
       onOpenChange(false);
       return;
     }
-    if (isEditableShortcutTarget(event.target)) return;
     if (event.altKey && event.key === "ArrowUp") {
       if (directory?.parentPath === undefined || loading) return;
       event.preventDefault();
@@ -201,8 +198,8 @@ export function RepositoryFolderPicker({
   const focusSearchShortcut = bindings["search.focus"];
   const openRepositoryShortcut =
     bindings["repositoryPicker.openSelectedRepository"];
-  const closeShortcutAria = keyboardShortcutAria(closeShortcut);
-  const closeShortcutLabel = keyboardShortcutLabel(closeShortcut);
+  const closeShortcutAria = keyboardShortcutAria(closeShortcut, platform);
+  const closeShortcutLabel = keyboardShortcutLabel(closeShortcut, platform);
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -230,7 +227,7 @@ export function RepositoryFolderPicker({
                 : `Escape ${closeShortcutAria}`
             }
             className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
-            title={shortcutTitle("Close", closeShortcut)}
+            title={keyboardShortcutTitle("Close", closeShortcut, platform)}
           >
             <IconX aria-hidden="true" className="size-4" />
           </DialogClose>
@@ -256,7 +253,10 @@ export function RepositoryFolderPicker({
           {searching ? (
             <Input
               aria-label="Filter current directory"
-              aria-keyshortcuts={keyboardShortcutAria(focusSearchShortcut)}
+              aria-keyshortcuts={keyboardShortcutAria(
+                focusSearchShortcut,
+                platform,
+              )}
               className="h-8 bg-white/[.03] sm:h-8"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Filter current directory"
@@ -291,13 +291,20 @@ export function RepositoryFolderPicker({
             aria-label={
               searching ? "Close directory filter" : "Filter current directory"
             }
-            aria-keyshortcuts={keyboardShortcutAria(focusSearchShortcut)}
+            aria-keyshortcuts={keyboardShortcutAria(
+              focusSearchShortcut,
+              platform,
+            )}
             onClick={() => {
               setSearching((current) => !current);
               if (searching) setQuery("");
             }}
             size="icon-sm"
-            title={`Filter current directory${shortcutTitleSuffix(focusSearchShortcut)}`}
+            title={keyboardShortcutTitle(
+              "Filter current directory",
+              focusSearchShortcut,
+              platform,
+            )}
             type="button"
             variant="ghost"
           >
@@ -353,12 +360,19 @@ export function RepositoryFolderPicker({
             Cancel
           </DialogClose>
           <Button
-            aria-keyshortcuts={keyboardShortcutAria(openRepositoryShortcut)}
+            aria-keyshortcuts={keyboardShortcutAria(
+              openRepositoryShortcut,
+              platform,
+            )}
             className="h-8 px-3 text-xs sm:h-8"
             disabled={selectedPath === undefined || opening || loading}
             onClick={() => void openRepository()}
             type="button"
-            title={`Open repository${shortcutTitleSuffix(openRepositoryShortcut)}`}
+            title={keyboardShortcutTitle(
+              "Open repository",
+              openRepositoryShortcut,
+              platform,
+            )}
           >
             {opening ? "Opening…" : "Open repository"}
           </Button>
@@ -366,21 +380,6 @@ export function RepositoryFolderPicker({
       </DialogContent>
     </Dialog>
   );
-}
-
-function shortcutTitleSuffix(
-  binding: Parameters<typeof keyboardShortcutLabel>[0],
-): string {
-  const label = keyboardShortcutLabel(binding);
-  return label.length === 0 ? "" : ` (${label})`;
-}
-
-function shortcutTitle(
-  label: string,
-  binding: Parameters<typeof keyboardShortcutLabel>[0],
-): string {
-  const shortcut = keyboardShortcutLabel(binding);
-  return shortcut.length === 0 ? label : `${label} (${shortcut})`;
 }
 
 function directoryListingError(error: unknown) {
