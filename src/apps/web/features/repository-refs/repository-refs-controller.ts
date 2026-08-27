@@ -6,6 +6,7 @@ import {
   RepositoryRefsResponseError,
 } from "#web/features/repository-refs/repository-refs-client.contract";
 import {
+  RepositoryRefsBusy,
   type RepositoryRefsController,
   type RepositoryRefsControllerError,
   type RepositoryRefsGateway,
@@ -81,6 +82,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
     if (repositoryId === undefined || authorizedCredential === undefined) {
       throw new RepositoryRefsUnavailable();
     }
+    if (snapshot.checkingOut) throw new RepositoryRefsBusy();
     publish({ ...withoutCheckoutError(snapshot), checkingOut: true });
     try {
       const result = await Effect.runPromise(
@@ -173,6 +175,7 @@ function normalizeControllerError(
   error: unknown,
 ): RepositoryRefsControllerError {
   if (
+    error instanceof RepositoryRefsBusy ||
     error instanceof RepositoryRefsRejected ||
     error instanceof RepositoryRefsResponseError ||
     error instanceof RepositoryRefsUnavailable

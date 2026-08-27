@@ -55,15 +55,17 @@ function checkoutWithAutoStash(
   target: CheckoutTarget,
 ): Effect.Effect<RepositoryCheckedOut["stash"], RepositoryRefsError> {
   return Effect.gen(function* () {
-    const stashed = yield* stashLocalChanges(git, directory, target);
-    if (!stashed) {
+    const stash = yield* stashLocalChanges(git, directory, target);
+    if (stash === undefined) {
       yield* runCheckout(git, directory, target);
       return "none";
     }
     yield* runCheckout(git, directory, target).pipe(
-      Effect.tapError(() => restoreStash(git, directory).pipe(Effect.ignore)),
+      Effect.tapError(() =>
+        restoreStash(git, directory, stash).pipe(Effect.ignore),
+      ),
     );
-    return (yield* restoreStash(git, directory)) ? "restored" : "kept";
+    return (yield* restoreStash(git, directory, stash)) ? "restored" : "kept";
   });
 }
 
@@ -153,7 +155,7 @@ function stashLocalChanges(
     if (status.exitCode !== 0) {
       return yield* Effect.fail(checkoutFailure(status.stderr, target.name));
     }
-    if (status.stdout.length === 0) return false;
+    if (status.stdout.length === 0) return undefined;
 
     const stash = yield* runGit(git, directory, [
       "stash",
@@ -162,7 +164,8 @@ function stashLocalChanges(
       "--message",
       `Rebase auto-stash before checking out ${target.name}`,
     ]);
-    if (stash.exitCode !== 0) {
+    const created = yield* runGit(git, directory, ["rev-parse", "refs/stash"]);
+    if (stash.exitCode !== 0 || created.exitCode !== 0) {
       return yield* Effect.fail(
         repositoryRefsFailure({
           _tag: "CheckoutRejected",
@@ -171,7 +174,7 @@ function stashLocalChanges(
         }),
       );
     }
-    return true;
+    return created.stdout.trim();
   });
 }
 
@@ -220,10 +223,27 @@ type CheckoutTarget =
       readonly remote: string;
     };
 
-function restoreStash(git: GitCommandRunner, directory: string) {
-  return runGit(git, directory, ["stash", "pop"]).pipe(
-    Effect.map((output) => output.exitCode === 0),
-  );
+function restoreStash(git: GitCommandRunner, directory: string, stash: string) {
+  return Effect.gen(function* () {
+    const applied = yield* runGit(git, directory, ["stash", "apply", stash]);
+    if (applied.exitCode !== 0) return false;
+    yield* dropStash(git, directory, stash);
+    return true;
+  });
+}
+
+function dropStash(git: GitCommandRunner, directory: string, stash: string) {
+  return Effect.gen(function* () {
+    const listed = yield* runGit(git, directory, [
+      "stash",
+      "list",
+      "--format=%H",
+    ]);
+    const index = listed.stdout.split("\n").indexOf(stash);
+    if (index >= 0) {
+      yield* runGit(git, directory, ["stash", "drop", `stash@{${index}}`]);
+    }
+  });
 }
 
 function readCheckedOutHead(

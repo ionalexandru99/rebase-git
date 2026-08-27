@@ -1,5 +1,5 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
-import { Effect } from "effect";
+import { Effect, Semaphore } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
 import type {
@@ -16,6 +16,7 @@ export function createRepositoryRefsService(dependencies: {
   readonly git: GitCommandRunner;
 }): RepositoryRefsService {
   const { catalog, changes, git } = dependencies;
+  const checkoutLocks = new Map<string, Semaphore.Semaphore>();
   return {
     checkout: (command) =>
       Effect.gen(function* () {
@@ -23,7 +24,13 @@ export function createRepositoryRefsService(dependencies: {
           catalog,
           command.repositoryId,
         );
-        return yield* checkoutRepositoryRef(git, repository.path, command);
+        const lock = yield* repositoryCheckoutLock(
+          checkoutLocks,
+          repository.id,
+        );
+        return yield* lock.withPermit(
+          checkoutRepositoryRef(git, repository.path, command),
+        );
       }),
     read: (repositoryId) =>
       Effect.gen(function* () {
@@ -32,6 +39,19 @@ export function createRepositoryRefsService(dependencies: {
         return yield* readRepositoryRefs(git, repository);
       }),
   };
+}
+
+function repositoryCheckoutLock(
+  locks: Map<string, Semaphore.Semaphore>,
+  repositoryId: string,
+) {
+  return Effect.gen(function* () {
+    const existing = locks.get(repositoryId);
+    if (existing !== undefined) return existing;
+    const lock = yield* Semaphore.make(1);
+    locks.set(repositoryId, lock);
+    return lock;
+  });
 }
 
 function requireRepository(catalog: RepositoryCatalog, repositoryId: string) {

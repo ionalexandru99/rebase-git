@@ -17,7 +17,12 @@ export class RepositoryRefsUnavailable extends Data.TaggedError(
   "RepositoryRefsUnavailable",
 ) {}
 
+export class RepositoryRefsBusy extends Data.TaggedError(
+  "RepositoryRefsBusy",
+) {}
+
 export type RepositoryRefsControllerError =
+  | RepositoryRefsBusy
   | RepositoryRefsClientError
   | RepositoryRefsUnavailable;
 

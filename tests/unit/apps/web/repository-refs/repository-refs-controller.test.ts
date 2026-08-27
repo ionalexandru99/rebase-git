@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { RepositoryRefsRejected } from "#web/features/repository-refs/repository-refs-client.contract";
 import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 import {
+  RepositoryRefsBusy,
   type RepositoryRefsGateway,
   RepositoryRefsUnavailable,
 } from "#web/features/repository-refs/repository-refs-controller.contract";
@@ -146,6 +147,32 @@ describe("repository refs controller", () => {
     session.controller.select(alphaId);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(gateway.read).toHaveBeenCalledTimes(4);
+  });
+
+  it("refuses a second checkout while one is in flight", async () => {
+    const pending = Deferred.makeUnsafe<RepositoryCheckedOut>();
+    const gateway = createGateway({ [alphaId]: refs(alphaId) });
+    gateway.checkout.mockImplementationOnce(() => Deferred.await(pending));
+    const session = createRepositoryRefsController(gateway);
+    session.authorize("private-credential");
+    session.controller.select(alphaId);
+    await whenReady(session.controller);
+
+    const first = session.controller.checkout("/repo", {
+      _tag: "LocalBranch",
+      name: "feature",
+    });
+    await expect(
+      session.controller.checkout("/repo", {
+        _tag: "LocalBranch",
+        name: "main",
+      }),
+    ).rejects.toBeInstanceOf(RepositoryRefsBusy);
+    Deferred.doneUnsafe(pending, Effect.succeed(checkedOut));
+
+    await expect(first).resolves.toEqual(checkedOut);
+    expect(gateway.checkout).toHaveBeenCalledTimes(1);
+    expect(session.controller.getSnapshot().checkingOut).toBe(false);
   });
 
   it("reports unavailability before authorization without calling the gateway", async () => {

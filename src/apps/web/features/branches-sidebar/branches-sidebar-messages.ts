@@ -6,6 +6,9 @@ export function describeRepositoryRefsError(
   if (error._tag === "RepositoryRefsUnavailable") {
     return "The Environment is not connected.";
   }
+  if (error._tag === "RepositoryRefsBusy") {
+    return "A checkout is still running.";
+  }
   if (error._tag === "RepositoryRefsResponseError") {
     return "The Environment did not answer.";
   }

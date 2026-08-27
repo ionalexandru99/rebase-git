@@ -115,6 +115,48 @@ describe("repository refs", () => {
     );
   });
 
+  it("restores each worktree's own auto-stash when checkouts overlap", async () => {
+    const fixture = await createFixture();
+    await writeFile(join(fixture.repositoryPath, "README.md"), "user edit");
+    await git(fixture.repositoryPath, "stash", "push", "-m", "user stash");
+    await writeFile(join(fixture.repositoryPath, "README.md"), "main edit");
+    await writeFile(join(fixture.worktreePath, "README.md"), "topic edit");
+    await git(fixture.repositoryPath, "branch", "spare-main");
+    await git(fixture.repositoryPath, "branch", "spare-topic");
+
+    const results = await withRefsService(fixture, ({ refs, repositoryId }) =>
+      Effect.all(
+        [
+          refs.checkout({
+            repositoryId,
+            target: { _tag: "LocalBranch", name: "spare-main" },
+            worktreePath: fixture.repositoryPath,
+          }),
+          refs.checkout({
+            repositoryId,
+            target: { _tag: "LocalBranch", name: "spare-topic" },
+            worktreePath: fixture.worktreePath,
+          }),
+        ],
+        { concurrency: "unbounded" },
+      ),
+    );
+
+    expect(results.map((result) => result.stash)).toEqual([
+      "restored",
+      "restored",
+    ]);
+    await expect(
+      readFile(join(fixture.repositoryPath, "README.md"), "utf8"),
+    ).resolves.toBe("main edit");
+    await expect(
+      readFile(join(fixture.worktreePath, "README.md"), "utf8"),
+    ).resolves.toBe("topic edit");
+    await expect(
+      git(fixture.repositoryPath, "stash", "list", "--format=%s"),
+    ).resolves.toBe("On main: user stash\n");
+  });
+
   it("refuses to check out a branch that another worktree holds", async () => {
     const fixture = await createFixture();
 
