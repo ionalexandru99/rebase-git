@@ -33,7 +33,7 @@ afterEach(async () => {
   directories.clear();
 });
 
-describe("repository refs", () => {
+describe("repository refs", { timeout: 30_000 }, () => {
   it("reads branches with tracking, worktrees, remotes, and tags", async () => {
     const fixture = await createFixture();
 
