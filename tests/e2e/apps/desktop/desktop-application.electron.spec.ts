@@ -45,6 +45,9 @@ test("pairs the packaged renderer with its managed Environment", async () => {
         "data-connection-state",
         "Connected",
       );
+      await window
+        .getByRole("searchbox", { name: "Search repositories" })
+        .blur();
       await window.keyboard.press("Control+o");
       const picker = window.getByRole("dialog", { name: "Choose repository" });
       await expect(picker).toBeVisible();
@@ -108,16 +111,25 @@ test("pairs the packaged renderer with its managed Environment", async () => {
       await window.keyboard.press("Control+w");
       await expect(openProject).toBeVisible();
 
+      await openProject
+        .getByRole("searchbox", { name: "Search repositories" })
+        .blur();
       await window.keyboard.press("Control+Shift+f");
       await expect(
         projects.getByRole("textbox", { name: "Filter open projects" }),
       ).toBeFocused();
 
+      await projects
+        .getByRole("textbox", { name: "Filter open projects" })
+        .blur();
       await window.keyboard.press("Control+Shift+o");
       await expect(
         openProject.getByRole("searchbox", { name: "Search repositories" }),
       ).toBeFocused();
 
+      await openProject
+        .getByRole("searchbox", { name: "Search repositories" })
+        .blur();
       await window.keyboard.press("Control+Comma");
       await expect(
         window.getByText(packageMetadata.version, { exact: true }),
@@ -131,8 +143,57 @@ test("pairs the packaged renderer with its managed Environment", async () => {
       await expect(
         window.getByRole("button", { name: "Update now" }),
       ).toBeVisible();
+
+      await window
+        .getByRole("navigation", { name: "Settings" })
+        .getByRole("button", { name: "Keyboard shortcuts" })
+        .click();
+      await window
+        .getByRole("button", {
+          name: "Edit Toggle Projects sidebar shortcut",
+        })
+        .click();
+      const shortcutPopover = window.locator('[data-slot="popover-content"]');
+      await expect(shortcutPopover).toBeVisible();
+      await expect(shortcutPopover.getByRole("button").first()).toBeFocused();
+      await window.keyboard.press("Control+Shift+b");
+      await shortcutPopover.getByRole("button", { name: "Save" }).click();
+      await expect(
+        window.getByRole("button", {
+          name: "Edit Toggle Projects sidebar shortcut",
+        }),
+      ).toContainText("Shift");
     } finally {
       await application.close();
+    }
+
+    const restartedApplication = await electron.launch({
+      args: [
+        resolve("src/apps/desktop/dist/package/main.js"),
+        "--headless",
+        "--disable-gpu",
+        "--no-sandbox",
+      ],
+      env: environment,
+    });
+    try {
+      const restartedWindow = await restartedApplication.firstWindow();
+      await expect(restartedWindow.getByRole("status")).toHaveAttribute(
+        "data-connection-state",
+        "Connected",
+      );
+      await restartedWindow.getByRole("button", { name: "Settings" }).click();
+      await restartedWindow
+        .getByRole("navigation", { name: "Settings" })
+        .getByRole("button", { name: "Keyboard shortcuts" })
+        .click();
+      await expect(
+        restartedWindow.getByRole("button", {
+          name: "Edit Toggle Projects sidebar shortcut",
+        }),
+      ).toContainText("Shift");
+    } finally {
+      await restartedApplication.close();
     }
   } finally {
     await rm(testHome, { force: true, recursive: true });

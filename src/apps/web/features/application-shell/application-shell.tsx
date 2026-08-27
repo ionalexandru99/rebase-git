@@ -15,6 +15,8 @@ import type { LocalEnvironmentSession } from "#web/features/local-environment-se
 import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
 import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
 import {
+  selectProjectRepositoryByOffset,
+  selectProjectRepositoryByPosition,
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
   showOpenProject,
@@ -152,6 +154,52 @@ export function ApplicationShell({
     expandSidebar();
     setSidebarFilterRequest((current) => current + 1);
   }, [expandSidebar]);
+  const selectPreviousRepository = useCallback(() => {
+    setNavigation((current) =>
+      selectProjectRepositoryByOffset(
+        setEnvironmentAvailability(
+          current,
+          localEnvironmentId,
+          environmentStatus.availability,
+        ),
+        -1,
+      ),
+    );
+  }, [environmentStatus.availability]);
+  const selectNextRepository = useCallback(() => {
+    setNavigation((current) =>
+      selectProjectRepositoryByOffset(
+        setEnvironmentAvailability(
+          current,
+          localEnvironmentId,
+          environmentStatus.availability,
+        ),
+        1,
+      ),
+    );
+  }, [environmentStatus.availability]);
+  const selectRepositoryByPosition = useCallback(
+    (position: number) => {
+      setNavigation((current) =>
+        selectProjectRepositoryByPosition(
+          setEnvironmentAvailability(
+            current,
+            localEnvironmentId,
+            environmentStatus.availability,
+          ),
+          position,
+        ),
+      );
+    },
+    [environmentStatus.availability],
+  );
+  const selectableRepositoryCount = visibleNavigation.environments.reduce(
+    (count, environment) =>
+      environment.availability === "available"
+        ? count + environment.repositories.length
+        : count,
+    0,
+  );
 
   useApplicationShortcuts({
     availability: environmentStatus.availability,
@@ -163,6 +211,10 @@ export function ApplicationShell({
       navigation.selectedRepositoryId !== undefined,
     openFolderPicker: browseRepository,
     openSettings: setSettingsOpen,
+    selectNextRepository,
+    selectPreviousRepository,
+    selectRepositoryByPosition,
+    selectableRepositoryCount,
     settingsOpen,
     showOpenProject: showOpenProjectScreen,
     toggleSidebar,
@@ -218,6 +270,7 @@ export function ApplicationShell({
               >
                 {navigation.workspaceView === "open-project" ? (
                   <OpenProjectScreen
+                    active={!settingsOpen}
                     browseAvailable={
                       environmentStatus.availability === "available"
                     }

@@ -5,6 +5,8 @@ import {
   filterEnvironmentRepositories,
   openProjectRepository,
   removeProjectRepository,
+  selectProjectRepositoryByOffset,
+  selectProjectRepositoryByPosition,
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
   showOpenProject,
@@ -150,6 +152,47 @@ describe("project navigation state", () => {
       selectedRepositoryId: "payments",
       workspaceView: "repository",
     });
+  });
+
+  it("selects the previous and next open repository with wrapping", () => {
+    const state = navigationState();
+
+    const previous = selectProjectRepositoryByOffset(state, -1);
+    const next = selectProjectRepositoryByOffset(previous, 1);
+
+    expect(previous).toMatchObject({
+      selectedRepositoryId: "worker",
+      workspaceView: "repository",
+    });
+    expect(next).toMatchObject({
+      selectedRepositoryId: "payments",
+      workspaceView: "repository",
+    });
+  });
+
+  it("selects repositories by position and reserves nine for the last", () => {
+    const state = navigationState();
+
+    expect(selectProjectRepositoryByPosition(state, 2)).toMatchObject({
+      selectedRepositoryId: "worker",
+      workspaceView: "repository",
+    });
+    expect(selectProjectRepositoryByPosition(state, 9)).toMatchObject({
+      selectedRepositoryId: "worker",
+      workspaceView: "repository",
+    });
+    expect(selectProjectRepositoryByPosition(state, 3)).toBe(state);
+  });
+
+  it("does not select repositories from unavailable Environments", () => {
+    const state = setEnvironmentAvailability(
+      navigationState(),
+      "office",
+      "unavailable",
+    );
+
+    expect(selectProjectRepositoryByOffset(state, 1)).toBe(state);
+    expect(selectProjectRepositoryByPosition(state, 1)).toBe(state);
   });
 });
 

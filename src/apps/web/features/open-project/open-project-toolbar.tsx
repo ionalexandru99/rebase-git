@@ -1,5 +1,10 @@
 import { IconFolder, IconSearch } from "@tabler/icons-react";
 import type { JSX, KeyboardEvent, RefObject } from "react";
+import {
+  keyboardShortcutAria,
+  keyboardShortcutLabel,
+} from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
+import { useKeyboardShortcuts } from "#web/features/keyboard-shortcuts/use-keyboard-shortcuts";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
 
@@ -20,6 +25,11 @@ export function OpenProjectToolbar({
   readonly onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   readonly query: string;
 }): JSX.Element {
+  const { bindings } = useKeyboardShortcuts();
+  const focusSearchShortcut = bindings["search.focus"];
+  const browseShortcut = bindings["projects.browseRepository"];
+  const focusSearchAria = keyboardShortcutAria(focusSearchShortcut);
+
   return (
     <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] gap-2.5 bg-repository pt-1 pb-3 max-[650px]:grid-cols-1">
       <div className="relative min-w-0">
@@ -30,11 +40,11 @@ export function OpenProjectToolbar({
         <Input
           aria-activedescendant={activeDescendant}
           aria-controls="open-project-results"
-          aria-keyshortcuts="Control+F Meta+F ArrowUp ArrowDown Enter Escape"
+          aria-keyshortcuts={`${focusSearchAria === undefined ? "" : `${focusSearchAria} `}ArrowUp ArrowDown Enter Escape`}
           aria-label="Search repositories"
           autoComplete="off"
           autoFocus
-          className="h-8 bg-white/[.04] pr-15 pl-9 sm:h-8"
+          className={`h-8 bg-white/[.04] pl-9 sm:h-8 ${focusSearchShortcut === null ? "" : "pr-15"}`}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Search repositories"
@@ -42,16 +52,18 @@ export function OpenProjectToolbar({
           type="search"
           value={query}
         />
-        <kbd className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 font-mono text-[.67rem] text-muted-foreground/65">
-          {searchShortcutLabel()}
-        </kbd>
+        {focusSearchShortcut === null ? null : (
+          <kbd className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 font-mono text-[.67rem] text-muted-foreground/65">
+            {keyboardShortcutLabel(focusSearchShortcut)}
+          </kbd>
+        )}
       </div>
       <Button
-        aria-keyshortcuts="Control+O Meta+O"
+        aria-keyshortcuts={keyboardShortcutAria(browseShortcut)}
         className="h-8 gap-[.45rem] px-3 text-[.8rem] font-medium sm:h-8 max-[650px]:w-full"
         disabled={!browseAvailable}
         onClick={onBrowse}
-        title="Browse files (Ctrl/⌘ O)"
+        title={`Browse files${shortcutTitleSuffix(browseShortcut)}`}
         type="button"
       >
         <IconFolder aria-hidden="true" />
@@ -61,7 +73,9 @@ export function OpenProjectToolbar({
   );
 }
 
-function searchShortcutLabel(): string {
-  if (typeof navigator === "undefined") return "Ctrl F";
-  return /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ F" : "Ctrl F";
+function shortcutTitleSuffix(
+  binding: Parameters<typeof keyboardShortcutLabel>[0],
+): string {
+  const label = keyboardShortcutLabel(binding);
+  return label.length === 0 ? "" : ` (${label})`;
 }

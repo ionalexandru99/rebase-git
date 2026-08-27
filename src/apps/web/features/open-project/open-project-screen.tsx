@@ -12,6 +12,11 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  keyboardShortcutPlatform,
+  matchesKeyboardShortcut,
+} from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
+import { useKeyboardShortcuts } from "#web/features/keyboard-shortcuts/use-keyboard-shortcuts";
 import type {
   OpenProjectRepository,
   OpenProjectScreenProps,
@@ -28,6 +33,7 @@ import { RepositoryEnvironmentGroup } from "#web-ui/features/open-project/reposi
 import { openProjectItemId } from "#web-ui/features/open-project/repository-row";
 
 export function OpenProjectScreen({
+  active,
   browseAvailable,
   environments,
   expandedEnvironmentIds,
@@ -39,6 +45,7 @@ export function OpenProjectScreen({
   onRevealRepository,
   revealAvailable,
 }: OpenProjectScreenProps): JSX.Element {
+  const { bindings } = useKeyboardShortcuts();
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string>();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,10 +95,14 @@ export function OpenProjectScreen({
   useEffect(() => {
     const focusSearch = (event: globalThis.KeyboardEvent) => {
       if (
-        !(event.ctrlKey || event.metaKey) ||
-        event.altKey ||
-        event.shiftKey ||
-        event.key.toLocaleLowerCase() !== "f"
+        !active ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        !matchesKeyboardShortcut(
+          event,
+          bindings["search.focus"],
+          keyboardShortcutPlatform(),
+        )
       ) {
         return;
       }
@@ -103,7 +114,7 @@ export function OpenProjectScreen({
 
     window.addEventListener("keydown", focusSearch);
     return () => window.removeEventListener("keydown", focusSearch);
-  }, []);
+  }, [active, bindings]);
 
   const openRepository = useCallback(
     (repository: OpenProjectRepository) => onOpenRepository(repository),

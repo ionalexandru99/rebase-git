@@ -10,6 +10,11 @@ import {
 } from "@tabler/icons-react";
 import { type JSX, type RefObject, useEffect, useRef, useState } from "react";
 import type { EnvironmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
+import {
+  keyboardShortcutAria,
+  keyboardShortcutLabel,
+} from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
+import { useKeyboardShortcuts } from "#web/features/keyboard-shortcuts/use-keyboard-shortcuts";
 import type {
   ProjectNavigationRepository,
   ProjectNavigationState,
@@ -132,6 +137,12 @@ function ExpandedProjectsSidebar({
   readonly setFilterQuery: (query: string) => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }) {
+  const { bindings } = useKeyboardShortcuts();
+  const toggleSidebarShortcut = bindings["projects.toggleSidebar"];
+  const focusFilterShortcut = bindings["projects.focusFilter"];
+  const showOpenProjectShortcut = bindings["projects.showOpenProject"];
+  const closeRepositoryShortcut = bindings["projects.closeActiveRepository"];
+
   return (
     <>
       <div className="flex h-11 shrink-0 items-center px-4 text-sidebar-accent-foreground">
@@ -140,10 +151,13 @@ function ExpandedProjectsSidebar({
         </h1>
         <Button
           aria-label="Collapse Projects sidebar"
-          aria-keyshortcuts="Control+B Meta+B"
+          aria-keyshortcuts={keyboardShortcutAria(toggleSidebarShortcut)}
           onClick={collapse}
           size="icon"
-          title="Collapse Projects sidebar (Ctrl/⌘ B)"
+          title={shortcutTitle(
+            "Collapse Projects sidebar",
+            toggleSidebarShortcut,
+          )}
           variant="ghost"
         >
           <IconLayoutSidebarLeftCollapse aria-hidden="true" />
@@ -157,12 +171,12 @@ function ExpandedProjectsSidebar({
           />
           <Input
             aria-label="Filter open projects"
-            aria-keyshortcuts="Control+Shift+F Meta+Shift+F"
+            aria-keyshortcuts={keyboardShortcutAria(focusFilterShortcut)}
             className="pl-9"
             onChange={(event) => setFilterQuery(event.target.value)}
             placeholder="Filter open projects"
             ref={filterInputRef}
-            title="Filter open projects (Ctrl/⌘ Shift F)"
+            title={shortcutTitle("Filter open projects", focusFilterShortcut)}
             value={filterQuery}
           />
         </div>
@@ -171,11 +185,11 @@ function ExpandedProjectsSidebar({
             navigation.workspaceView === "open-project" ? "page" : undefined
           }
           aria-label="Open project"
-          aria-keyshortcuts="Control+Shift+O Meta+Shift+O"
+          aria-keyshortcuts={keyboardShortcutAria(showOpenProjectShortcut)}
           className={`!size-7.5 shrink-0 border-0 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
           onClick={openProject}
           size="icon"
-          title="Open project (Ctrl/⌘ Shift O)"
+          title={shortcutTitle("Open project", showOpenProjectShortcut)}
           variant="ghost"
         >
           <IconFolderPlus aria-hidden="true" />
@@ -264,11 +278,25 @@ function ExpandedProjectsSidebar({
                       </button>
                       <button
                         aria-label={`Close ${repository.name}`}
+                        aria-keyshortcuts={
+                          navigation.workspaceView === "repository" &&
+                          navigation.selectedRepositoryId === repository.id
+                            ? keyboardShortcutAria(closeRepositoryShortcut)
+                            : undefined
+                        }
                         className="grid size-7.5 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
                         onClick={() =>
                           closeRepository(environment.id, repository)
                         }
-                        title={`Close ${repository.name}`}
+                        title={
+                          navigation.workspaceView === "repository" &&
+                          navigation.selectedRepositoryId === repository.id
+                            ? shortcutTitle(
+                                `Close ${repository.name}`,
+                                closeRepositoryShortcut,
+                              )
+                            : `Close ${repository.name}`
+                        }
                         type="button"
                       >
                         <IconX aria-hidden="true" className="size-4" />
@@ -308,19 +336,28 @@ function CollapsedProjectsSidebar({
   ) => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }) {
+  const { bindings } = useKeyboardShortcuts();
+  const toggleSidebarShortcut = bindings["projects.toggleSidebar"];
+  const showOpenProjectShortcut = bindings["projects.showOpenProject"];
+
   return (
     <>
       <Tooltip>
         <TooltipTrigger
           aria-label="Expand Projects sidebar"
-          aria-keyshortcuts="Control+B Meta+B"
+          aria-keyshortcuts={keyboardShortcutAria(toggleSidebarShortcut)}
           className="mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
           onClick={expand}
-          title="Expand Projects sidebar (Ctrl/⌘ B)"
+          title={shortcutTitle(
+            "Expand Projects sidebar",
+            toggleSidebarShortcut,
+          )}
         >
           <IconLayoutSidebarLeftExpand aria-hidden="true" className="size-5" />
         </TooltipTrigger>
-        <TooltipContent side="right">Expand Projects sidebar</TooltipContent>
+        <TooltipContent side="right">
+          {shortcutTitle("Expand Projects sidebar", toggleSidebarShortcut)}
+        </TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger
@@ -328,14 +365,16 @@ function CollapsedProjectsSidebar({
             navigation.workspaceView === "open-project" ? "page" : undefined
           }
           aria-label="Open project"
-          aria-keyshortcuts="Control+Shift+O Meta+Shift+O"
+          aria-keyshortcuts={keyboardShortcutAria(showOpenProjectShortcut)}
           className={`mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
           onClick={openProject}
-          title="Open project (Ctrl/⌘ Shift O)"
+          title={shortcutTitle("Open project", showOpenProjectShortcut)}
         >
           <IconFolderPlus aria-hidden="true" className="size-5" />
         </TooltipTrigger>
-        <TooltipContent side="right">Open project</TooltipContent>
+        <TooltipContent side="right">
+          {shortcutTitle("Open project", showOpenProjectShortcut)}
+        </TooltipContent>
       </Tooltip>
       <div className="flex min-h-0 flex-1 flex-col items-center gap-1.5 pt-3">
         {navigation.environments.length === 0 ? (
@@ -406,34 +445,47 @@ function SidebarSettings({
   readonly collapsed?: boolean;
   readonly openSettings: () => void;
 }) {
+  const { bindings } = useKeyboardShortcuts();
+  const openSettingsShortcut = bindings["settings.open"];
+
   if (collapsed) {
     return (
       <Tooltip>
         <TooltipTrigger
           aria-label="Settings"
-          aria-keyshortcuts="Control+, Meta+,"
+          aria-keyshortcuts={keyboardShortcutAria(openSettingsShortcut)}
           className="mx-auto mb-3 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
           onClick={openSettings}
-          title="Settings (Ctrl/⌘ ,)"
+          title={shortcutTitle("Settings", openSettingsShortcut)}
         >
           <IconSettings aria-hidden="true" className="size-5" />
         </TooltipTrigger>
-        <TooltipContent side="right">Settings</TooltipContent>
+        <TooltipContent side="right">
+          {shortcutTitle("Settings", openSettingsShortcut)}
+        </TooltipContent>
       </Tooltip>
     );
   }
   return (
     <Button
-      aria-keyshortcuts="Control+, Meta+,"
+      aria-keyshortcuts={keyboardShortcutAria(openSettingsShortcut)}
       className="mx-3 mb-2 h-10 justify-between px-2 text-muted-foreground"
       onClick={openSettings}
-      title="Settings (Ctrl/⌘ ,)"
+      title={shortcutTitle("Settings", openSettingsShortcut)}
       variant="ghost"
     >
       Settings
       <IconSettings aria-hidden="true" data-icon="inline-end" />
     </Button>
   );
+}
+
+function shortcutTitle(
+  label: string,
+  binding: Parameters<typeof keyboardShortcutLabel>[0],
+): string {
+  const shortcut = keyboardShortcutLabel(binding);
+  return shortcut.length === 0 ? label : `${label} (${shortcut})`;
 }
 
 function repositoryInitials(name: string): string {

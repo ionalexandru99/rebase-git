@@ -110,6 +110,12 @@ test("controls project navigation from the keyboard", async ({ page }) => {
   await page.keyboard.press("Control+b");
   await expect(
     page.getByRole("heading", { level: 1, name: "Projects" }),
+  ).toBeVisible();
+
+  await filter.blur();
+  await page.keyboard.press("Control+b");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Projects" }),
   ).not.toBeVisible();
 
   await page.keyboard.press("Control+b");
@@ -121,6 +127,7 @@ test("controls project navigation from the keyboard", async ({ page }) => {
   await page.keyboard.press("Control+Shift+f");
   await expect(filter).toBeFocused();
 
+  await filter.blur();
   await page.keyboard.press("Control+Shift+o");
   await expect(
     page.getByRole("searchbox", { name: "Search repositories" }),
@@ -225,6 +232,7 @@ test("opens and navigates settings", async ({ page }) => {
 test("controls settings from the keyboard", async ({ page }) => {
   await page.goto("/");
 
+  await page.getByRole("searchbox", { name: "Search repositories" }).blur();
   await page.keyboard.press("Control+Comma");
   await expect(
     page.getByRole("navigation", { name: "Settings" }),
@@ -234,4 +242,89 @@ test("controls settings from the keyboard", async ({ page }) => {
   await expect(
     page.getByRole("navigation", { name: "Projects" }),
   ).toBeVisible();
+});
+
+test("edits and persists keyboard shortcuts", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page
+    .getByRole("navigation", { name: "Settings" })
+    .getByRole("button", { name: "Keyboard shortcuts" })
+    .click();
+
+  const editToggle = page.getByRole("button", {
+    name: "Edit Toggle Projects sidebar shortcut",
+  });
+  await editToggle.click();
+  const popover = page.locator('[data-slot="popover-content"]');
+  const capture = popover.getByRole("button").first();
+  await expect(popover).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(popover.getByRole("button", { name: "Clear" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(capture).toBeFocused();
+
+  await capture.press("Control+Shift+o");
+  await expect(popover.getByRole("status")).toContainText(
+    "Show Open Project currently uses Ctrl Shift O.",
+  );
+  await expect(popover.getByRole("button", { name: "Replace" })).toBeVisible();
+  await expect(popover.getByRole("button", { name: "Save" })).not.toBeVisible();
+
+  await page.keyboard.press("Control+Shift+b");
+  await expect(popover.getByRole("status")).not.toBeVisible();
+  await popover.getByRole("button", { name: "Save" }).click();
+  await expect(editToggle).toContainText("Shift");
+  await expect(
+    page.getByRole("button", { name: "Reset Toggle Projects sidebar" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+Shift+b");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Projects" }),
+  ).not.toBeVisible();
+  await page.keyboard.press("Control+Shift+b");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Projects" }),
+  ).toBeVisible();
+
+  await page.reload();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page
+    .getByRole("navigation", { name: "Settings" })
+    .getByRole("button", { name: "Keyboard shortcuts" })
+    .click();
+  await expect(
+    page.getByRole("button", {
+      name: "Edit Toggle Projects sidebar shortcut",
+    }),
+  ).toContainText("Shift");
+
+  await page
+    .getByRole("button", { name: "Edit Toggle Projects sidebar shortcut" })
+    .click();
+  await page
+    .locator('[data-slot="popover-content"]')
+    .getByRole("button", { name: "Clear" })
+    .click();
+  await page
+    .locator('[data-slot="popover-content"]')
+    .getByRole("button", { name: "Save" })
+    .click();
+  await expect(
+    page.getByRole("button", {
+      name: "Edit Toggle Projects sidebar shortcut",
+    }),
+  ).toContainText("Unassigned");
+
+  await page.getByRole("button", { name: "Reset all" }).click();
+  const resetDialog = page.getByRole("alertdialog");
+  await expect(resetDialog).toBeVisible();
+  await resetDialog.getByRole("button", { name: "Reset all" }).click();
+  await expect(
+    page.getByRole("button", {
+      name: "Edit Toggle Projects sidebar shortcut",
+    }),
+  ).toContainText("Ctrl");
 });
