@@ -249,14 +249,13 @@ function restoreStash(git: GitCommandRunner, directory: string, token: string) {
     ]);
     if (applied.exitCode !== 0) return false;
     const current = yield* findStash(git, directory, token);
-    if (current !== undefined) {
-      yield* runGit(git, directory, [
-        "stash",
-        "drop",
-        `stash@{${current.index}}`,
-      ]);
-    }
-    return true;
+    if (current === undefined) return true;
+    const dropped = yield* runGit(git, directory, [
+      "stash",
+      "drop",
+      `stash@{${current.index}}`,
+    ]);
+    return dropped.exitCode === 0;
   });
 }
 
