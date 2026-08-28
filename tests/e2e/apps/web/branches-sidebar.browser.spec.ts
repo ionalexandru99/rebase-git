@@ -46,6 +46,17 @@ test("checks out branches and tags from the branches sidebar", async ({
         (element) => getComputedStyle(element, "::-webkit-scrollbar").display,
       ),
     ).toBe("none");
+    const scope = branches.getByRole("radiogroup", { name: "Branch scope" });
+    const allScope = scope.getByRole("radio", { name: "All" });
+    const localScope = scope.getByRole("radio", { name: "Local" });
+    const remoteScope = scope.getByRole("radio", { name: "Remote" });
+    const tagsScope = scope.getByRole("radio", { name: "Tags" });
+    await expect(allScope).toBeChecked();
+    expect(
+      await scope.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
     const main = tree.getByRole("treeitem", { name: /^main(?:,|$)/ });
     const feature = tree.getByRole("treeitem", { name: "feature" });
     const topic = tree.getByRole("treeitem", {
@@ -62,6 +73,23 @@ test("checks out branches and tags from the branches sidebar", async ({
     await expect(
       tree.getByRole("treeitem", { name: "Tags, 1" }),
     ).toHaveAttribute("aria-expanded", "false");
+
+    await scope.getByText("Tags", { exact: true }).click();
+    await expect(tagsScope).toBeChecked();
+    await expect(main).toHaveCount(0);
+    await expect(tree.getByRole("treeitem", { name: "v1.0.0" })).toBeVisible();
+
+    await scope.getByText("Remote", { exact: true }).click();
+    await expect(remoteScope).toBeChecked();
+    await expect(branches.getByRole("status")).toHaveText(
+      "No remote branches.",
+    );
+
+    await localScope.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(allScope).toBeChecked();
+    await expect(main).toBeVisible();
+    await expect(tree.getByRole("treeitem", { name: "v1.0.0" })).toHaveCount(0);
     await page.screenshot({
       path: "tests/.artifacts/branches-sidebar.png",
     });
@@ -90,7 +118,29 @@ test("checks out branches and tags from the branches sidebar", async ({
       handleBox.y + handleBox.height / 2,
     );
     await page.mouse.down();
-    await page.mouse.move(handleBox.x + 120, handleBox.y + 100, { steps: 6 });
+    await page.mouse.move(handleBox.x - 120, handleBox.y + 100, { steps: 6 });
+    await page.mouse.up();
+    expect((await branches.boundingBox())?.width ?? 0).toBeLessThan(
+      widthBefore - 40,
+    );
+    expect(
+      await scope.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+
+    const minimumHandleBox = await handle.boundingBox();
+    if (minimumHandleBox === null) {
+      throw new Error("The branches handle is missing at minimum width.");
+    }
+    await page.mouse.move(
+      minimumHandleBox.x + minimumHandleBox.width / 2,
+      minimumHandleBox.y + minimumHandleBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(minimumHandleBox.x + 240, minimumHandleBox.y + 100, {
+      steps: 6,
+    });
     await page.mouse.up();
     expect((await branches.boundingBox())?.width ?? 0).toBeGreaterThan(
       widthBefore + 80,

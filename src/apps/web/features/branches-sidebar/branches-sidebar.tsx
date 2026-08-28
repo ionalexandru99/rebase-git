@@ -9,7 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
-import type { BranchesSidebarRow } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import type {
+  BranchesSidebarRow,
+  BranchesSidebarScope,
+} from "#web/features/branches-sidebar/branches-sidebar.contract";
 import { describeRepositoryRefsError } from "#web/features/branches-sidebar/branches-sidebar-messages";
 import {
   buildBranchesSidebarRows,
@@ -28,6 +31,7 @@ import {
   rowElementId,
   SectionRow,
 } from "#web-ui/features/branches-sidebar/branches-sidebar-rows";
+import { BranchesSidebarScopeFilter } from "#web-ui/features/branches-sidebar/branches-sidebar-scope-filter";
 import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 
 const rowHeight = 32;
@@ -49,6 +53,7 @@ export function BranchesSidebar({
   const { bindings, platform } = useKeyboardShortcuts();
   const focusBinding = bindings["branches.focusSidebar"];
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<BranchesSidebarScope>("all");
   const [expandedSections, setExpandedSections] = useState(
     defaultExpandedSections,
   );
@@ -65,8 +70,9 @@ export function BranchesSidebar({
             activeWorktreePath,
             expandedSections,
             query,
+            scope,
           ),
-    [activeWorktreePath, expandedSections, query, refs],
+    [activeWorktreePath, expandedSections, query, refs, scope],
   );
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -168,7 +174,7 @@ export function BranchesSidebar({
           Branches
         </h2>
       </div>
-      <div className="relative mx-3 mt-3 mb-1.5">
+      <div className="relative mx-3 mt-3">
         <IconSearch
           aria-hidden="true"
           className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -184,6 +190,7 @@ export function BranchesSidebar({
           value={query}
         />
       </div>
+      <BranchesSidebarScopeFilter onChange={setScope} scope={scope} />
       <div
         aria-activedescendant={
           activeRowId === undefined ? undefined : rowElementId(activeRowId)
@@ -230,7 +237,13 @@ export function BranchesSidebar({
             );
           })}
         </div>
-        <SidebarStatus onRetry={onRetry} rows={rows} snapshot={snapshot} />
+        <SidebarStatus
+          onRetry={onRetry}
+          query={query}
+          rows={rows}
+          scope={scope}
+          snapshot={snapshot}
+        />
       </div>
       {snapshot.checkoutError === undefined ? null : (
         <p
@@ -246,11 +259,15 @@ export function BranchesSidebar({
 
 function SidebarStatus({
   onRetry,
+  query,
   rows,
+  scope,
   snapshot,
 }: {
   readonly onRetry: () => void;
+  readonly query: string;
   readonly rows: readonly BranchesSidebarRow[];
+  readonly scope: BranchesSidebarScope;
   readonly snapshot: RepositoryRefsSnapshot;
 }): JSX.Element | null {
   if (snapshot.error !== undefined) {
@@ -275,11 +292,28 @@ function SidebarStatus({
   if (rows.length === 0) {
     return (
       <p className="px-2 py-3 text-xs text-muted-foreground" role="status">
-        No branches match.
+        {emptySidebarMessage(scope, query)}
       </p>
     );
   }
   return null;
+}
+
+function emptySidebarMessage(
+  scope: BranchesSidebarScope,
+  query: string,
+): string {
+  if (query.trim().length > 0) return "No branches match.";
+  switch (scope) {
+    case "local":
+      return "No local branches.";
+    case "remote":
+      return "No remote branches.";
+    case "tags":
+      return "No tags.";
+    default:
+      return "No branches or tags.";
+  }
 }
 
 function treeKeyAction(
