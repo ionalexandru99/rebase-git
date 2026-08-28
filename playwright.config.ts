@@ -26,9 +26,5 @@ export default defineConfig({
       name: "electron",
       testMatch: "**/*.electron.spec.ts",
     },
-    {
-      name: "packaged-electron",
-      testMatch: "**/*.packaged-electron.spec.ts",
-    },
   ],
 });

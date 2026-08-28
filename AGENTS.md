@@ -56,9 +56,18 @@ A user on WSl should not be required to install the electron app on windows and 
 - Implement natural action pairs together when both make sense, including add/remove, open/close, expand/collapse, previous/next, and show/hide.
 - Buttons, menus, and shortcuts for the same action must execute the same command or handler. Shortcut labels, tooltips, and accessibility metadata must derive from the configured binding.
 - Persist shortcut changes in the local client across restarts. Shortcut behavior must work in Electron and browser clients on Linux, macOS, and Windows.
-- Cover shortcut matching and persistence with focused unit and integration tests. Cover user-facing editing and restart persistence with E2E tests.
 - tests are good, but we don't want to test all the scenarios, especially we don't want to test deleted code. Code is deleted, tests are deleted.
 - Do not unit test infrastructure implementation details. Use focused integration tests when an issue requires verification of critical persistence guarantees such as migrations, permissions, database pragmas, or cross-process concurrency.
 - generating scripts to solve something without first investigating if it can be done without scripts is not permitted.
 - Use Domain driven design, clean architecture, kiss, solid, yagni principles.
 - source code will be in root/src, tests will be in root/tests
+
+### Test strategy
+
+- Test behavior at the lowest layer that can prove it. A reviewer can reject an E2E case when a unit, integration, or UI test covers the same risk with less setup.
+- Unit tests cover server and domain behavior in isolation. Typed fakes are allowed; infrastructure implementation details do not belong here.
+- Integration tests cross one real adapter or resource boundary, such as Git, SQLite, the filesystem, a process, IPC, browser storage, or a network connection.
+- UI tests render real UI in a browser with typed fake application clients. They own component states, accessibility, focus, keyboard and pointer interaction, responsive behavior, and error handling.
+- E2E tests cover a small set of successful user journeys across real runtime boundaries. Each addition must name the user goal and the boundary chain that a lower layer cannot prove. Do not use E2E for CSS details, isolated widget states, or exhaustive edge cases.
+- One E2E journey owns editing a shortcut, restarting the desktop application, and using the saved binding. Unit, integration, and UI tests own detailed shortcut behavior.
+- Release smoke tests prove that a produced artifact installs or launches and reports the expected product identity. Keep them separate from feature E2E coverage.

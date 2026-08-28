@@ -4,12 +4,20 @@
     "composite": false,
     "declaration": false,
     "declarationMap": false,
+    "jsx": "react-jsx",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "noEmit": true,
     "paths": {
-      "#web/*": ["./../src/apps/web/*.ts", "./../src/apps/web/*.tsx"]
+      "#web/*": ["./../src/apps/web/*.ts", "./../src/apps/web/*.tsx"],
+      "#web-ui/*": ["./../src/apps/web/*.tsx"]
     },
     "skipLibCheck": true,
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vite/client", "vitest/globals"]
   },
-  "include": ["../playwright.config.ts", "../vitest.config.ts", "./**/*.ts"]
+  "include": [
+    "../playwright.config.ts",
+    "../vitest.config.ts",
+    "./**/*.ts",
+    "./**/*.tsx"
+  ]
 }

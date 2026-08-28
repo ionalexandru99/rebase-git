@@ -1,137 +1,67 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { _electron as electron, expect, test } from "@playwright/test";
+import {
+  type ElectronApplication,
+  _electron as electron,
+  expect,
+  type Page,
+  test,
+} from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 
-test("pairs the packaged renderer with its managed Environment", async () => {
-  const packageMetadata = JSON.parse(
-    await readFile("package.json", "utf8"),
-  ) as {
-    readonly version: string;
-  };
+test("opens, closes, and reopens a recent repository after restart", async () => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
   const repositoryPath = join(testHome, "rebase-test");
   await mkdir(repositoryPath);
   await execFileAsync("git", ["init", repositoryPath]);
-  const environment = Object.fromEntries(
-    Object.entries(process.env).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
-  );
-  environment.HOME = testHome;
-  environment.USERPROFILE = testHome;
-  environment.XDG_CONFIG_HOME = testHome;
-  delete environment.ELECTRON_RUN_AS_NODE;
+  const environment = createTestEnvironment(testHome);
 
   try {
-    const application = await electron.launch({
-      args: [
-        resolve("src/apps/desktop/dist/package/main.js"),
-        "--headless",
-        "--disable-gpu",
-        "--no-sandbox",
-      ],
-      env: environment,
-    });
-
+    const application = await launchApplication(environment);
     try {
-      const window = await application.firstWindow();
-
-      await expect(window.getByRole("status")).toHaveAttribute(
-        "data-connection-state",
-        "Connected",
-      );
-      await window.keyboard.press("Control+o");
-      const picker = window.getByRole("dialog", { name: "Choose repository" });
-      await expect(picker).toBeVisible();
-      await expect(
-        picker.getByRole("button", { name: "Select Environment" }),
-      ).toHaveText("Local Environment");
-      await expect(
-        picker.getByRole("button", { name: "Parent directory" }),
-      ).toBeEnabled();
-      await expect(
-        picker.getByRole("button", { name: "Open repository" }),
-      ).toBeDisabled();
-
-      await picker.getByRole("button", { name: /rebase-test/ }).click();
-      await expect(
-        picker.getByRole("button", { name: "Open repository" }),
-      ).toBeEnabled();
-      await window.keyboard.press("Control+Enter");
-      await expect(picker).not.toBeVisible();
+      const window = await connectedWindow(application);
+      await openRepository(window, "rebase-test");
 
       const projects = window.getByRole("navigation", { name: "Projects" });
-      const connectionStatus = projects.getByRole("status");
-      await expect(connectionStatus).toHaveText("Available");
-      await expect(connectionStatus).toHaveClass(/sr-only/);
       await expect(
         projects.getByRole("button", { name: "Close rebase-test" }),
       ).toBeVisible();
-
-      await window.keyboard.press("Control+b");
-      await expect(
-        projects.getByRole("button", { name: "rebase-test" }),
-      ).toBeVisible();
-      await projects
-        .getByRole("button", {
-          name: "Collapse Local Environment, Available",
-        })
-        .click();
-      await expect(
-        projects.getByRole("button", { name: "rebase-test" }),
-      ).not.toBeVisible();
-      await projects
-        .getByRole("button", {
-          name: "Expand Local Environment, Available",
-        })
-        .click();
-      await expect(
-        projects.getByRole("button", { name: "rebase-test" }),
-      ).toBeVisible();
-      await window.keyboard.press("Control+b");
-
       await projects.getByRole("button", { name: "Close rebase-test" }).click();
-      const openProject = window.getByRole("main", { name: "Open project" });
-      await expect(openProject).toBeVisible();
-      const recentRepository = openProject
-        .getByRole("option")
-        .filter({ hasText: "rebase-test" })
-        .first();
-      await expect(recentRepository).toBeVisible();
+      await expect(recentRepository(window, "rebase-test")).toBeVisible();
+    } finally {
+      await application.close();
+    }
 
-      await recentRepository.click();
-      await window.keyboard.press("Control+w");
-      await expect(openProject).toBeVisible();
-
-      await window.keyboard.press("Control+Shift+f");
+    const restartedApplication = await launchApplication(environment);
+    try {
+      const restartedWindow = await connectedWindow(restartedApplication);
+      const repository = recentRepository(restartedWindow, "rebase-test");
+      await expect(repository).toBeVisible();
+      await repository.click();
       await expect(
-        projects.getByRole("textbox", { name: "Filter open projects" }),
-      ).toBeFocused();
-
-      await window.keyboard.press("Control+Shift+o");
-      await expect(
-        openProject.getByRole("searchbox", { name: "Search repositories" }),
-      ).toBeFocused();
-
-      await window.keyboard.press("Control+Comma");
-      await expect(
-        window.getByText(packageMetadata.version, { exact: true }),
+        restartedWindow.getByRole("button", { name: "Close rebase-test" }),
       ).toBeVisible();
-      await expect(
-        window.getByRole("combobox", { name: "Release channel" }),
-      ).toBeEnabled();
-      await expect(
-        window.getByRole("switch", { name: "Check automatically" }),
-      ).toBeEnabled();
-      await expect(
-        window.getByRole("button", { name: "Update now" }),
-      ).toBeVisible();
+    } finally {
+      await restartedApplication.close();
+    }
+  } finally {
+    await rm(testHome, { force: true, recursive: true });
+  }
+});
 
+test("edits a shortcut, restarts, and uses it", async () => {
+  const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
+  const environment = createTestEnvironment(testHome);
+
+  try {
+    const application = await launchApplication(environment);
+    try {
+      const window = await connectedWindow(application);
+      await window.getByRole("button", { name: "Settings" }).click();
       await window
         .getByRole("navigation", { name: "Settings" })
         .getByRole("button", { name: "Keyboard shortcuts" })
@@ -144,42 +74,33 @@ test("pairs the packaged renderer with its managed Environment", async () => {
       const shortcutPopover = window.locator('[data-slot="popover-content"]');
       await expect(shortcutPopover).toBeVisible();
       await expect(shortcutPopover.getByRole("button").first()).toBeFocused();
-      await window.keyboard.press("Control+Alt+b");
+      await window.keyboard.press("Control+Shift+k");
       await shortcutPopover.getByRole("button", { name: "Save" }).click();
-      await expect(
-        window.getByRole("button", {
-          name: "Edit Toggle Projects sidebar shortcut",
-        }),
-      ).toContainText("Alt");
     } finally {
       await application.close();
     }
 
-    const restartedApplication = await electron.launch({
-      args: [
-        resolve("src/apps/desktop/dist/package/main.js"),
-        "--headless",
-        "--disable-gpu",
-        "--no-sandbox",
-      ],
-      env: environment,
-    });
+    const restartedApplication = await launchApplication(environment);
     try {
-      const restartedWindow = await restartedApplication.firstWindow();
-      await expect(restartedWindow.getByRole("status")).toHaveAttribute(
-        "data-connection-state",
-        "Connected",
-      );
+      const restartedWindow = await connectedWindow(restartedApplication);
       await restartedWindow.getByRole("button", { name: "Settings" }).click();
       await restartedWindow
         .getByRole("navigation", { name: "Settings" })
         .getByRole("button", { name: "Keyboard shortcuts" })
         .click();
+      const shortcut = restartedWindow.getByRole("button", {
+        name: "Edit Toggle Projects sidebar shortcut",
+      });
+      await expect(shortcut).toContainText("Shift");
+      await expect(shortcut).toContainText("K");
+      await restartedWindow.keyboard.press("Escape");
       await expect(
-        restartedWindow.getByRole("button", {
-          name: "Edit Toggle Projects sidebar shortcut",
-        }),
-      ).toContainText("Alt");
+        restartedWindow.getByRole("heading", { level: 1, name: "Projects" }),
+      ).toBeVisible();
+      await restartedWindow.keyboard.press("Control+Shift+k");
+      await expect(
+        restartedWindow.getByRole("heading", { level: 1, name: "Projects" }),
+      ).not.toBeVisible();
     } finally {
       await restartedApplication.close();
     }
@@ -187,3 +108,58 @@ test("pairs the packaged renderer with its managed Environment", async () => {
     await rm(testHome, { force: true, recursive: true });
   }
 });
+
+function createTestEnvironment(testHome: string) {
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
+  environment.HOME = testHome;
+  environment.USERPROFILE = testHome;
+  environment.XDG_CONFIG_HOME = testHome;
+  delete environment.ELECTRON_RUN_AS_NODE;
+  return environment;
+}
+
+function launchApplication(environment: Record<string, string>) {
+  return electron.launch({
+    args: [
+      resolve("src/apps/desktop/dist/package/main.js"),
+      "--headless",
+      "--disable-gpu",
+      "--no-sandbox",
+    ],
+    env: environment,
+  });
+}
+
+async function connectedWindow(application: ElectronApplication) {
+  const window = await application.firstWindow();
+  await expect(window.getByRole("status")).toHaveAttribute(
+    "data-connection-state",
+    "Connected",
+  );
+  return window;
+}
+
+async function openRepository(window: Page, repositoryName: string) {
+  await window.keyboard.press("Control+o");
+  const picker = window.getByRole("dialog", { name: "Choose repository" });
+  await expect(picker).toBeVisible();
+  await picker
+    .getByRole("button")
+    .filter({ hasText: repositoryName })
+    .first()
+    .click();
+  await window.keyboard.press("Control+Enter");
+  await expect(picker).not.toBeVisible();
+}
+
+function recentRepository(window: Page, repositoryName: string) {
+  return window
+    .getByRole("main", { name: "Open project" })
+    .getByRole("option")
+    .filter({ hasText: repositoryName })
+    .first();
+}
