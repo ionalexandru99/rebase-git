@@ -11,8 +11,6 @@ import {
 import { EnvironmentFilesystemRejected } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
 import {
   keyboardShortcutAria,
-  keyboardShortcutLabel,
-  keyboardShortcutTitle,
   matchesKeyboardShortcut,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { RepositoryFolderPickerProps } from "#web/features/repository-folder-picker/repository-folder-picker.contract";
@@ -199,8 +197,6 @@ export function RepositoryFolderPicker({
   const openRepositoryShortcut =
     bindings["repositoryPicker.openSelectedRepository"];
   const closeShortcutAria = keyboardShortcutAria(closeShortcut, platform);
-  const closeShortcutLabel = keyboardShortcutLabel(closeShortcut, platform);
-
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
@@ -227,7 +223,6 @@ export function RepositoryFolderPicker({
                 : `Escape ${closeShortcutAria}`
             }
             className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
-            title={keyboardShortcutTitle("Close", closeShortcut, platform)}
           >
             <IconX aria-hidden="true" className="size-4" />
           </DialogClose>
@@ -245,7 +240,6 @@ export function RepositoryFolderPicker({
             }}
             size="icon-sm"
             type="button"
-            title="Parent directory (Alt+↑)"
             variant="ghost"
           >
             <IconArrowUp aria-hidden="true" />
@@ -300,11 +294,6 @@ export function RepositoryFolderPicker({
               if (searching) setQuery("");
             }}
             size="icon-sm"
-            title={keyboardShortcutTitle(
-              "Filter current directory",
-              focusSearchShortcut,
-              platform,
-            )}
             type="button"
             variant="ghost"
           >
@@ -355,7 +344,6 @@ export function RepositoryFolderPicker({
                 : `Escape ${closeShortcutAria}`
             }
             className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white/[.03] px-3 text-xs font-medium text-foreground/80 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 max-[540px]:hidden"
-            title={`Cancel (Esc${closeShortcutLabel.length === 0 ? "" : `, ${closeShortcutLabel}`})`}
           >
             Cancel
           </DialogClose>
@@ -368,11 +356,6 @@ export function RepositoryFolderPicker({
             disabled={selectedPath === undefined || opening || loading}
             onClick={() => void openRepository()}
             type="button"
-            title={keyboardShortcutTitle(
-              "Open repository",
-              openRepositoryShortcut,
-              platform,
-            )}
           >
             {opening ? "Opening…" : "Open repository"}
           </Button>

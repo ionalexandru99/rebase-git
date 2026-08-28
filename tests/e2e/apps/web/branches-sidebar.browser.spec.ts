@@ -52,8 +52,19 @@ test("checks out branches and tags from the branches sidebar", async ({
     });
 
     await feature.click();
+    await expect(main).toHaveAttribute("aria-selected", "true");
+    await expect(feature).toHaveAttribute("aria-selected", "false");
+
+    await feature.dblclick();
     await expect(feature).toHaveAttribute("aria-selected", "true");
     await expect(main).toHaveAttribute("aria-selected", "false");
+
+    await main.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Checkout" }).click();
+    await expect(main).toHaveAttribute("aria-selected", "true");
+    await expect(feature).toHaveAttribute("aria-selected", "false");
+    await feature.dblclick();
+    await expect(feature).toHaveAttribute("aria-selected", "true");
 
     const widthBefore = (await branches.boundingBox())?.width ?? 0;
     const handle = page.locator('[data-slot="resizable-handle"]').nth(1);
@@ -110,7 +121,8 @@ test("checks out branches and tags from the branches sidebar", async ({
     await page.screenshot({
       path: "tests/.artifacts/branches-sidebar-detached.png",
     });
-    await expect(tree).toHaveAttribute("title", "Branches (Ctrl Shift B)");
+    await expect(tree).not.toHaveAttribute("title", /.+/);
+    await expect(tree).toHaveAttribute("aria-keyshortcuts", "Control+Shift+b");
     await page.getByRole("button", { name: "Settings" }).click();
     await page
       .getByRole("navigation", { name: "Settings" })
@@ -123,7 +135,7 @@ test("checks out branches and tags from the branches sidebar", async ({
     await popover.getByRole("button").first().press("Control+Shift+k");
     await popover.getByRole("button", { name: "Save" }).click();
     await page.keyboard.press("Escape");
-    await expect(tree).toHaveAttribute("title", "Branches (Ctrl Shift K)");
+    await expect(tree).toHaveAttribute("aria-keyshortcuts", "Control+Shift+k");
     await filter.focus();
     await page.keyboard.press("Control+Shift+k");
     await expect(tree).toBeFocused();
