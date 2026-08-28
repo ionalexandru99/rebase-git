@@ -31,7 +31,7 @@ test("checks out branches and tags from the branches sidebar", async ({
 
     await page.keyboard.press("Control+o");
     const picker = page.getByRole("dialog", { name: "Choose repository" });
-    await picker.getByRole("button", { name: /rebase-test/ }).click();
+    await picker.getByRole("button", { name: /^rebase-test Folder/ }).click();
     await page.keyboard.press("Control+Enter");
     await expect(picker).not.toBeVisible();
 
@@ -40,10 +40,19 @@ test("checks out branches and tags from the branches sidebar", async ({
     await expect(
       branches.getByRole("heading", { level: 2, name: "Branches" }),
     ).toBeVisible();
-    const main = tree.getByRole("treeitem", { name: "main", exact: true });
+    const main = tree.getByRole("treeitem", { name: /^main(?:,|$)/ });
     const feature = tree.getByRole("treeitem", { name: "feature" });
+    const topic = tree.getByRole("treeitem", {
+      name: "topic, checked out in another worktree",
+      exact: true,
+    });
+    await expect(main).toHaveAccessibleName("main, this worktree");
     await expect(main).toHaveAttribute("aria-selected", "true");
     await expect(feature).toHaveAttribute("aria-selected", "false");
+    await expect(
+      main.getByText("This worktree", { exact: true }),
+    ).toBeVisible();
+    await expect(topic.getByText("Worktree", { exact: true })).toBeVisible();
     await expect(
       tree.getByRole("treeitem", { name: "Tags, 1" }),
     ).toHaveAttribute("aria-expanded", "false");
@@ -97,6 +106,8 @@ test("checks out branches and tags from the branches sidebar", async ({
     await page.keyboard.press("Control+Shift+b");
     await expect(tree).toBeFocused();
     await expect(tree).toHaveAttribute("aria-activedescendant", /feature/);
+    await page.keyboard.press("ArrowDown");
+    await expect(tree).toHaveAttribute("aria-activedescendant", /topic$/);
     await page.keyboard.press("ArrowDown");
     await expect(tree).toHaveAttribute("aria-activedescendant", /main$/);
     await page.keyboard.press("Enter");
@@ -153,6 +164,7 @@ async function createRepository(path: string) {
   await git(path, "commit", "-m", "initial");
   await git(path, "tag", "v1.0.0");
   await git(path, "branch", "feature");
+  await git(path, "worktree", "add", "-b", "topic", `${path}-topic`);
 }
 
 async function git(path: string, ...arguments_: string[]) {
