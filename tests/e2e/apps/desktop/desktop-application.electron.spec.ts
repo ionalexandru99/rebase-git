@@ -15,12 +15,12 @@ const execFileAsync = promisify(execFile);
 
 test("opens, closes, and reopens a recent repository after restart", async () => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
-  const repositoryPath = join(testHome, "rebase-test");
-  await mkdir(repositoryPath);
-  await execFileAsync("git", ["init", repositoryPath]);
-  const environment = createTestEnvironment(testHome);
 
   try {
+    const repositoryPath = join(testHome, "rebase-test");
+    await mkdir(repositoryPath);
+    await execFileAsync("git", ["init", repositoryPath]);
+    const environment = await createTestEnvironment(testHome);
     const application = await launchApplication(environment);
     try {
       const window = await connectedWindow(application);
@@ -55,9 +55,9 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
 
 test("edits a shortcut, restarts, and uses it", async () => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
-  const environment = createTestEnvironment(testHome);
 
   try {
+    const environment = await createTestEnvironment(testHome);
     const application = await launchApplication(environment);
     try {
       const window = await connectedWindow(application);
@@ -109,15 +109,21 @@ test("edits a shortcut, restarts, and uses it", async () => {
   }
 });
 
-function createTestEnvironment(testHome: string) {
+async function createTestEnvironment(testHome: string) {
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
-  environment.APPDATA = join(testHome, "AppData", "Roaming");
+  const applicationData = join(testHome, "AppData", "Roaming");
+  const localApplicationData = join(testHome, "AppData", "Local");
+  await Promise.all([
+    mkdir(applicationData, { recursive: true }),
+    mkdir(localApplicationData, { recursive: true }),
+  ]);
+  environment.APPDATA = applicationData;
   environment.HOME = testHome;
-  environment.LOCALAPPDATA = join(testHome, "AppData", "Local");
+  environment.LOCALAPPDATA = localApplicationData;
   environment.USERPROFILE = testHome;
   environment.XDG_CONFIG_HOME = testHome;
   delete environment.ELECTRON_RUN_AS_NODE;
