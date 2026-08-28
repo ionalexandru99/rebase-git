@@ -72,6 +72,62 @@ describe("branches sidebar state", () => {
     ]);
   });
 
+  it("shows only the selected ref scope and expands its sections", () => {
+    expect(
+      buildBranchesSidebarRows(
+        refs(),
+        mainPath,
+        defaultExpandedSections,
+        "",
+        "local",
+      ).map((row) => row.id),
+    ).toEqual([
+      "section:branches",
+      "ref:branches:main",
+      "ref:branches:topic",
+      "ref:branches:feature",
+    ]);
+
+    expect(
+      buildBranchesSidebarRows(
+        refs(),
+        mainPath,
+        defaultExpandedSections,
+        "",
+        "remote",
+      ).map((row) => row.id),
+    ).toEqual([
+      "section:remote:origin",
+      "ref:remote:origin:feature",
+      "ref:remote:origin:topic",
+      "section:remote:upstream",
+      "ref:remote:upstream:release",
+    ]);
+
+    const tags = buildBranchesSidebarRows(
+      refs(),
+      mainPath,
+      defaultExpandedSections,
+      "",
+      "tags",
+    );
+    expect(tags.map((row) => row.id)).toEqual([
+      "section:tags",
+      "ref:tags:v1.0.0",
+    ]);
+    expect(tags[0]).toMatchObject({ expanded: true });
+
+    expect(
+      buildBranchesSidebarRows(
+        refs(),
+        mainPath,
+        defaultExpandedSections,
+        "feat",
+        "remote",
+      ).map((row) => row.id),
+    ).toEqual(["section:remote:origin", "ref:remote:origin:feature"]);
+  });
+
   it("switches worktrees for branches held elsewhere and checks out the rest", () => {
     const current = refs();
 

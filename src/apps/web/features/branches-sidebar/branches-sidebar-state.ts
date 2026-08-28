@@ -6,6 +6,7 @@ import type {
 import {
   type BranchesSidebarRefRow,
   type BranchesSidebarRow,
+  type BranchesSidebarScope,
   type BranchesSidebarSectionRow,
   localBranchesSectionId,
   type RefSelection,
@@ -25,9 +26,10 @@ export function buildBranchesSidebarRows(
   activeWorktreePath: string,
   expandedSections: ReadonlySet<string>,
   query: string,
+  scope: BranchesSidebarScope = "all",
 ): readonly BranchesSidebarRow[] {
   const matches = createMatcher(query);
-  const filtering = query.trim().length > 0;
+  const filtering = query.trim().length > 0 || scope !== "all";
   const currentBranch = activeHead(refs, activeWorktreePath)?.branch;
   const sections: readonly SectionDraft[] = [
     {
@@ -50,7 +52,8 @@ export function buildBranchesSidebarRows(
             : { worktreePath: branch.worktreePath }),
         })),
       sectionId: localBranchesSectionId,
-      title: "Branches",
+      scope: "local",
+      title: "Local",
       truncated: refs.truncated.branches,
     },
     ...groupByRemote(refs.remoteBranches).map(([remote, branches]) => ({
@@ -62,6 +65,7 @@ export function buildBranchesSidebarRows(
           target: { _tag: "RemoteBranch", name: branch.name, remote } as const,
         })),
       sectionId: remoteSectionId(remote),
+      scope: "remote" as const,
       title: remote,
       truncated: refs.truncated.remoteBranches,
     })),
@@ -74,12 +78,13 @@ export function buildBranchesSidebarRows(
           target: { _tag: "Tag", name: tag.name } as const,
         })),
       sectionId: tagsSectionId,
+      scope: "tags",
       title: "Tags",
       truncated: refs.truncated.tags,
     },
   ];
 
-  return sections.flatMap((section) => {
+  return sections.filter(sectionMatchesScope(scope)).flatMap((section) => {
     if (filtering && section.refs.length === 0) return [];
     const expanded = filtering || expandedSections.has(section.sectionId);
     const header: BranchesSidebarSectionRow = {
@@ -105,6 +110,10 @@ export function buildBranchesSidebarRows(
         ]
       : [header];
   });
+}
+
+function sectionMatchesScope(scope: BranchesSidebarScope) {
+  return (section: SectionDraft) => scope === "all" || section.scope === scope;
 }
 
 export function resolveRefSelection(
@@ -230,6 +239,7 @@ interface SectionDraft {
     "id" | "kind" | "sectionId"
   >[];
   readonly sectionId: string;
+  readonly scope: Exclude<BranchesSidebarScope, "all">;
   readonly title: string;
   readonly truncated: boolean;
 }

@@ -3,6 +3,8 @@ import type { BranchUpstream, RepositoryRefTarget } from "@rebase/contracts";
 export const localBranchesSectionId = "branches";
 export const tagsSectionId = "tags";
 
+export type BranchesSidebarScope = "all" | "local" | "remote" | "tags";
+
 export interface BranchesSidebarSectionRow {
   readonly count: number;
   readonly expanded: boolean;
