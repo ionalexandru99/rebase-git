@@ -38,7 +38,9 @@ function createTestEnvironment(testHome: string) {
       (entry): entry is [string, string] => entry[1] !== undefined,
     ),
   );
+  environment.APPDATA = join(testHome, "AppData", "Roaming");
   environment.HOME = testHome;
+  environment.LOCALAPPDATA = join(testHome, "AppData", "Local");
   environment.USERPROFILE = testHome;
   environment.XDG_CONFIG_HOME = testHome;
   delete environment.ELECTRON_RUN_AS_NODE;
