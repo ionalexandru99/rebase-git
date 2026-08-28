@@ -2,6 +2,7 @@ import type { BranchUpstream } from "@rebase/contracts";
 import {
   IconChevronDown,
   IconCloud,
+  IconFolderCode,
   IconGitBranch,
   IconTag,
 } from "@tabler/icons-react";
@@ -93,6 +94,7 @@ export function RefRow({
         render={
           <button
             aria-level={2}
+            aria-label={refRowLabel(row)}
             aria-selected={row.current}
             className={`absolute top-0 left-0 flex w-full cursor-default items-center gap-2 rounded-md pr-2 pl-2.5 text-left text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active ? "ring-1 ring-sidebar-ring/60 ring-inset" : ""}`}
             id={rowElementId(row.id)}
@@ -104,11 +106,11 @@ export function RefRow({
             tabIndex={-1}
             type="button"
           >
-            <span
-              aria-hidden="true"
-              className={`size-1.5 shrink-0 rounded-full ${row.current ? "bg-primary" : row.worktreePath === undefined ? "bg-transparent" : "bg-status-available"}`}
-            />
+            <RefIcon row={row} />
             <span className="min-w-0 flex-1 truncate">{row.name}</span>
+            {row.worktreePath === undefined ? null : (
+              <WorktreeBadge current={row.current} />
+            )}
             {row.upstream === undefined ? null : (
               <UpstreamIndicator upstream={row.upstream} />
             )}
@@ -120,6 +122,35 @@ export function RefRow({
       </ContextMenuContent>
     </ContextMenu>
   );
+}
+
+function RefIcon({ row }: { readonly row: BranchesSidebarRefRow }) {
+  const Icon = row.target._tag === "Tag" ? IconTag : IconGitBranch;
+  return (
+    <Icon
+      aria-hidden="true"
+      className="size-3.5 shrink-0 text-muted-foreground"
+    />
+  );
+}
+
+function WorktreeBadge({ current }: { readonly current: boolean }) {
+  return (
+    <span
+      className={`flex shrink-0 items-center gap-0.5 rounded-sm border px-1 py-0.5 font-mono text-[.52rem] font-semibold leading-none tracking-wide uppercase ${current ? "border-primary/40 bg-primary/10 text-sidebar-accent-foreground" : "border-sidebar-border bg-sidebar-accent/30 text-muted-foreground"}`}
+    >
+      <IconFolderCode aria-hidden="true" className="size-3" />
+      {current ? "This worktree" : "Worktree"}
+    </span>
+  );
+}
+
+function refRowLabel(row: BranchesSidebarRefRow): string {
+  if (row.current) return `${row.name}, this worktree`;
+  if (row.worktreePath !== undefined) {
+    return `${row.name}, checked out in another worktree`;
+  }
+  return row.name;
 }
 
 function UpstreamIndicator({
