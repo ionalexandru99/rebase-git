@@ -144,13 +144,13 @@ test("pairs the packaged renderer with its managed Environment", async () => {
       const shortcutPopover = window.locator('[data-slot="popover-content"]');
       await expect(shortcutPopover).toBeVisible();
       await expect(shortcutPopover.getByRole("button").first()).toBeFocused();
-      await window.keyboard.press("Control+Shift+b");
+      await window.keyboard.press("Control+Alt+b");
       await shortcutPopover.getByRole("button", { name: "Save" }).click();
       await expect(
         window.getByRole("button", {
           name: "Edit Toggle Projects sidebar shortcut",
         }),
-      ).toContainText("Shift");
+      ).toContainText("Alt");
     } finally {
       await application.close();
     }
@@ -179,7 +179,7 @@ test("pairs the packaged renderer with its managed Environment", async () => {
         restartedWindow.getByRole("button", {
           name: "Edit Toggle Projects sidebar shortcut",
         }),
-      ).toContainText("Shift");
+      ).toContainText("Alt");
     } finally {
       await restartedApplication.close();
     }

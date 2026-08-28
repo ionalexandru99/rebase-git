@@ -42,7 +42,7 @@
     "test": "pnpm test:unit",
     "test:boundary": "pnpm test:integration && pnpm test:compatibility && pnpm test:e2e",
     "test:compatibility": "vp test run --project compatibility --passWithNoTests",
-    "test:e2e": "pnpm build:desktop-package && playwright test",
+    "test:e2e": "pnpm exec install-electron && pnpm build:desktop-package && playwright test",
     "test:e2e:packaged": "pnpm build:desktop-package && electron-builder --config electron-builder.config.js --dir --linux --x64 && REBASE_PACKAGED_EXECUTABLE=release/linux-unpacked/rebase-git playwright test --project packaged-electron",
     "test:integration": "vp test run --project integration --passWithNoTests",
     "test:unit": "vp test run --project unit --passWithNoTests",
