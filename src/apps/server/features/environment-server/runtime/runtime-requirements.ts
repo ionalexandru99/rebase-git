@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { Effect } from "effect";
 import { RuntimeRequirementsError } from "#server/features/environment-server/runtime/runtime-errors.contract";
 
-const requiredNodeMajor = 24;
+const minimumNode22Version = [22, 18, 0] as const;
 const minimumGitVersion = [2, 34, 0] as const;
 
 export const verifyRuntimeRequirements = Effect.gen(function* () {
@@ -15,9 +15,12 @@ export const verifyRuntimeRequirements = Effect.gen(function* () {
 });
 
 export function assertSupportedNodeVersion(version: string) {
-  const [major] = parseVersion(version, "Node");
-  if (major !== requiredNodeMajor) {
-    throw new Error(`Node 24 is required. Found Node ${version}.`);
+  const parsed = parseVersion(version, "Node");
+  const supportsNode =
+    parsed[0] === 24 ||
+    (parsed[0] === 22 && compareVersions(parsed, minimumNode22Version) >= 0);
+  if (!supportsNode) {
+    throw new Error(`Node 22.18 or 24 is required. Found Node ${version}.`);
   }
 }
 
