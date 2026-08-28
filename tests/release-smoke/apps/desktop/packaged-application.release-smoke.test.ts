@@ -122,6 +122,7 @@ function devToolsEndpoint(childProcess: ChildProcessWithoutNullStreams) {
     }, 15_000);
 
     const read = (chunk: Buffer) => {
+      if (settled) return;
       output += chunk.toString();
       const endpoint = /DevTools listening on (ws:\/\/\S+)/.exec(output)?.[1];
       if (endpoint !== undefined) succeed(endpoint);
@@ -137,8 +138,6 @@ function devToolsEndpoint(childProcess: ChildProcessWithoutNullStreams) {
     };
     const cleanUp = () => {
       clearTimeout(timeout);
-      childProcess.stdout.off("data", read);
-      childProcess.stderr.off("data", read);
       childProcess.off("error", processError);
       childProcess.off("exit", processExit);
     };
