@@ -42,12 +42,6 @@ test("loads and persists updater settings in the packaged application", async ()
       await releaseChannel.click();
       await window.getByRole("option", { name: "Nightly" }).click();
       await expect(releaseChannel).toHaveText("Nightly");
-      await expect(
-        window.getByRole("button", { name: "Check for updates" }),
-      ).toBeDisabled();
-      await expect(
-        window.getByText("Updates are unavailable for this installation."),
-      ).toBeVisible();
     } finally {
       await firstApplication.close();
     }

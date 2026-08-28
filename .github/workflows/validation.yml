@@ -147,7 +147,6 @@ jobs:
 
   complete-tests:
     name: Complete tests
-    if: github.event_name == 'push'
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -181,3 +180,22 @@ jobs:
 
       - name: Run packaged Electron test
         run: xvfb-run --auto-servernum pnpm test:e2e:packaged
+
+  validation:
+    name: Validation
+    if: always()
+    needs:
+      - quality
+      - integration
+      - package-smoke
+      - complete-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Verify validation jobs
+        if: >-
+          needs.quality.result != 'success' ||
+          needs.integration.result != 'success' ||
+          needs.package-smoke.result != 'success' ||
+          needs.complete-tests.result != 'success'
+        run: exit 1
