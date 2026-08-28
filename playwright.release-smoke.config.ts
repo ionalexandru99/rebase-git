@@ -11,7 +11,7 @@ export default defineConfig({
   projects: [
     {
       name: "release-smoke",
-      testMatch: "**/*.release-smoke.spec.ts",
+      testMatch: "**/*.release-smoke.test.ts",
     },
   ],
 });
