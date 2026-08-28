@@ -13,7 +13,10 @@ import type {
   BranchesSidebarRow,
   BranchesSidebarScope,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
-import { describeRepositoryRefsError } from "#web/features/branches-sidebar/branches-sidebar-messages";
+import {
+  describeEmptyBranchesSidebar,
+  describeRepositoryRefsError,
+} from "#web/features/branches-sidebar/branches-sidebar-messages";
 import {
   buildBranchesSidebarRows,
   currentRefRowId,
@@ -292,28 +295,11 @@ function SidebarStatus({
   if (rows.length === 0) {
     return (
       <p className="px-2 py-3 text-xs text-muted-foreground" role="status">
-        {emptySidebarMessage(scope, query)}
+        {describeEmptyBranchesSidebar(scope, query)}
       </p>
     );
   }
   return null;
-}
-
-function emptySidebarMessage(
-  scope: BranchesSidebarScope,
-  query: string,
-): string {
-  if (query.trim().length > 0) return "No branches match.";
-  switch (scope) {
-    case "local":
-      return "No local branches.";
-    case "remote":
-      return "No remote branches.";
-    case "tags":
-      return "No tags.";
-    default:
-      return "No branches or tags.";
-  }
 }
 
 function treeKeyAction(
