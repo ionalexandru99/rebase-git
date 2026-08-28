@@ -32,6 +32,11 @@ export function buildBranchesSidebarRows(
   const sections: readonly SectionDraft[] = [
     {
       refs: refs.branches
+        .toSorted(
+          (left, right) =>
+            branchPriority(left.name, left.worktreePath, currentBranch) -
+            branchPriority(right.name, right.worktreePath, currentBranch),
+        )
         .filter((branch) => matches(branch.name))
         .map((branch) => ({
           current: branch.name === currentBranch,
@@ -195,6 +200,16 @@ function createMatcher(query: string) {
   const normalized = query.trim().toLocaleLowerCase();
   return (name: string) =>
     normalized.length === 0 || name.toLocaleLowerCase().includes(normalized);
+}
+
+function branchPriority(
+  name: string,
+  worktreePath: string | undefined,
+  currentBranch: string | undefined,
+): number {
+  if (name === currentBranch) return 0;
+  if (worktreePath !== undefined) return 1;
+  return 2;
 }
 
 function groupByRemote(
