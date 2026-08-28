@@ -157,11 +157,6 @@ function ExpandedProjectsSidebar({
           )}
           onClick={collapse}
           size="icon"
-          title={keyboardShortcutTitle(
-            "Collapse Projects sidebar",
-            toggleSidebarShortcut,
-            platform,
-          )}
           variant="ghost"
         >
           <IconLayoutSidebarLeftCollapse aria-hidden="true" />
@@ -183,11 +178,6 @@ function ExpandedProjectsSidebar({
             onChange={(event) => setFilterQuery(event.target.value)}
             placeholder="Filter open projects"
             ref={filterInputRef}
-            title={keyboardShortcutTitle(
-              "Filter open projects",
-              focusFilterShortcut,
-              platform,
-            )}
             value={filterQuery}
           />
         </div>
@@ -203,11 +193,6 @@ function ExpandedProjectsSidebar({
           className={`!size-7.5 shrink-0 border-0 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
           onClick={openProject}
           size="icon"
-          title={keyboardShortcutTitle(
-            "Open project",
-            showOpenProjectShortcut,
-            platform,
-          )}
           variant="ghost"
         >
           <IconFolderPlus aria-hidden="true" />
@@ -233,10 +218,7 @@ function ExpandedProjectsSidebar({
               onOpenChange={() => toggleEnvironment(environment.id)}
               open={environment.expanded}
             >
-              <div
-                className="flex h-9 min-w-0 items-center gap-1.5 px-1"
-                title={environmentStatus.detail}
-              >
+              <div className="flex h-9 min-w-0 items-center gap-1.5 px-1">
                 <CollapsibleTrigger
                   aria-label={`${environment.expanded ? "Collapse" : "Expand"} ${environment.name}`}
                   className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
@@ -308,16 +290,6 @@ function ExpandedProjectsSidebar({
                         className="grid size-7.5 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
                         onClick={() =>
                           closeRepository(environment.id, repository)
-                        }
-                        title={
-                          navigation.workspaceView === "repository" &&
-                          navigation.selectedRepositoryId === repository.id
-                            ? keyboardShortcutTitle(
-                                `Close ${repository.name}`,
-                                closeRepositoryShortcut,
-                                platform,
-                              )
-                            : `Close ${repository.name}`
                         }
                         type="button"
                       >
@@ -519,7 +491,6 @@ function SidebarSettings({
       aria-keyshortcuts={keyboardShortcutAria(openSettingsShortcut, platform)}
       className="mx-3 mb-2 h-10 justify-between px-2 text-muted-foreground"
       onClick={openSettings}
-      title={keyboardShortcutTitle("Settings", openSettingsShortcut, platform)}
       variant="ghost"
     >
       Settings

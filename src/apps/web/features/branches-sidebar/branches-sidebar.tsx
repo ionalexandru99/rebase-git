@@ -19,10 +19,7 @@ import {
   stepRow,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
-import {
-  keyboardShortcutAria,
-  keyboardShortcutTitle,
-} from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
+import { keyboardShortcutAria } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
@@ -184,7 +181,6 @@ export function BranchesSidebar({
           onKeyDown={handleFilterKeyDown}
           placeholder="Filter branches"
           ref={filterInputRef}
-          title="Filter branches (/)"
           value={query}
         />
       </div>
@@ -201,7 +197,6 @@ export function BranchesSidebar({
         ref={treeRef}
         role="tree"
         tabIndex={0}
-        title={keyboardShortcutTitle("Branches", focusBinding, platform)}
       >
         <div
           className="relative w-full"

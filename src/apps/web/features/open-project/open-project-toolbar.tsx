@@ -3,7 +3,6 @@ import type { JSX, KeyboardEvent, RefObject } from "react";
 import {
   keyboardShortcutAria,
   keyboardShortcutLabel,
-  keyboardShortcutTitle,
 } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
@@ -64,7 +63,6 @@ export function OpenProjectToolbar({
         className="h-8 gap-[.45rem] px-3 text-[.8rem] font-medium sm:h-8 max-[650px]:w-full"
         disabled={!browseAvailable}
         onClick={onBrowse}
-        title={keyboardShortcutTitle("Browse files", browseShortcut, platform)}
         type="button"
       >
         <IconFolder aria-hidden="true" />

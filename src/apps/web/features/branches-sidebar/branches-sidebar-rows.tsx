@@ -14,6 +14,12 @@ import {
   localBranchesSectionId,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "#web-ui/components/ui/context-menu";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;
@@ -82,30 +88,37 @@ export function RefRow({
   readonly style: CSSProperties;
 }): JSX.Element {
   return (
-    <button
-      aria-level={2}
-      aria-selected={row.current}
-      className={`absolute top-0 left-0 flex w-full cursor-default items-center gap-2 rounded-md pr-2 pl-2.5 text-left text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active ? "ring-1 ring-sidebar-ring/60 ring-inset" : ""}`}
-      id={rowElementId(row.id)}
-      onClick={() => {
-        onActivate();
-        onSelect();
-      }}
-      role="treeitem"
-      style={style}
-      tabIndex={-1}
-      title={rowTitle(row)}
-      type="button"
-    >
-      <span
-        aria-hidden="true"
-        className={`size-1.5 shrink-0 rounded-full ${row.current ? "bg-primary" : row.worktreePath === undefined ? "bg-transparent" : "bg-status-available"}`}
+    <ContextMenu>
+      <ContextMenuTrigger
+        render={
+          <button
+            aria-level={2}
+            aria-selected={row.current}
+            className={`absolute top-0 left-0 flex w-full cursor-default items-center gap-2 rounded-md pr-2 pl-2.5 text-left text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active ? "ring-1 ring-sidebar-ring/60 ring-inset" : ""}`}
+            id={rowElementId(row.id)}
+            onClick={onActivate}
+            onContextMenu={onActivate}
+            onDoubleClick={onSelect}
+            role="treeitem"
+            style={style}
+            tabIndex={-1}
+            type="button"
+          >
+            <span
+              aria-hidden="true"
+              className={`size-1.5 shrink-0 rounded-full ${row.current ? "bg-primary" : row.worktreePath === undefined ? "bg-transparent" : "bg-status-available"}`}
+            />
+            <span className="min-w-0 flex-1 truncate">{row.name}</span>
+            {row.upstream === undefined ? null : (
+              <UpstreamIndicator upstream={row.upstream} />
+            )}
+          </button>
+        }
       />
-      <span className="min-w-0 flex-1 truncate">{row.name}</span>
-      {row.upstream === undefined ? null : (
-        <UpstreamIndicator upstream={row.upstream} />
-      )}
-    </button>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={onSelect}>Checkout</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -116,20 +129,14 @@ function UpstreamIndicator({
 }): JSX.Element | null {
   if (upstream.gone) {
     return (
-      <span
-        className="shrink-0 font-mono text-[.69rem] text-status-unavailable"
-        title={`${upstream.name} no longer exists`}
-      >
+      <span className="shrink-0 font-mono text-[.69rem] text-status-unavailable">
         gone
       </span>
     );
   }
   if (upstream.ahead === 0 && upstream.behind === 0) return null;
   return (
-    <span
-      className="flex shrink-0 gap-1 font-mono text-[.69rem]"
-      title={`${upstream.ahead} ahead, ${upstream.behind} behind ${upstream.name}`}
-    >
+    <span className="flex shrink-0 gap-1 font-mono text-[.69rem]">
       {upstream.ahead > 0 ? (
         <span className="text-status-available">↑{upstream.ahead}</span>
       ) : null}
@@ -138,12 +145,4 @@ function UpstreamIndicator({
       ) : null}
     </span>
   );
-}
-
-function rowTitle(row: BranchesSidebarRefRow) {
-  if (row.current) return `${row.name} (current)`;
-  if (row.worktreePath !== undefined) {
-    return `${row.name} · checked out in ${row.worktreePath}`;
-  }
-  return row.name;
 }
