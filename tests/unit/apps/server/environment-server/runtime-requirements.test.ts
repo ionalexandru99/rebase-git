@@ -6,18 +6,18 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 describe("runtime requirements", () => {
-  it.each(["24.0.0", "24.19.0", "24.99.99"])(
+  it.each(["22.18.0", "22.23.2", "24.0.0", "24.19.0", "24.99.99"])(
     "accepts supported Node version %s",
     (version) => {
       expect(() => assertSupportedNodeVersion(version)).not.toThrow();
     },
   );
 
-  it.each(["23.11.1", "25.0.0"])(
+  it.each(["22.17.0", "23.11.1", "25.0.0"])(
     "rejects unsupported Node version %s",
     (version) => {
       expect(() => assertSupportedNodeVersion(version)).toThrow(
-        `Node 24 is required. Found Node ${version}.`,
+        `Node 22.18 or 24 is required. Found Node ${version}.`,
       );
     },
   );

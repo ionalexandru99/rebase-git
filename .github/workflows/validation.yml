@@ -15,9 +15,15 @@ permissions:
 
 jobs:
   quality:
-    name: Quality
+    name: Quality (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - 22.18.0
+          - 24.19.0
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -30,7 +36,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v6
         with:
-          node-version-file: .node-version
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
@@ -50,11 +56,13 @@ jobs:
         run: pnpm build
 
       - name: Pack package
+        if: matrix.node-version == '24.19.0'
         run: |
           mkdir package-artifact
           npm pack --pack-destination package-artifact
 
       - name: Upload package
+        if: matrix.node-version == '24.19.0'
         uses: actions/upload-artifact@v7
         with:
           name: npm-package
