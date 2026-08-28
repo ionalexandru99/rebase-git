@@ -25,20 +25,35 @@ describe("branches sidebar state", () => {
     expect(rows.map((row) => row.id)).toEqual([
       "section:branches",
       "ref:branches:main",
-      "ref:branches:feature",
       "ref:branches:topic",
+      "ref:branches:feature",
       "section:remote:origin",
       "section:remote:upstream",
       "section:tags",
     ]);
     expect(rows[1]).toMatchObject({ current: true, worktreePath: mainPath });
-    expect(rows[3]).toMatchObject({ current: false, worktreePath: topicPath });
+    expect(rows[2]).toMatchObject({ current: false, worktreePath: topicPath });
     expect(rows[4]).toMatchObject({
       count: 2,
       expanded: false,
       title: "origin",
     });
     expect(rows[6]).toMatchObject({ count: 1, expanded: false, title: "Tags" });
+  });
+
+  it("keeps the active branch ahead of branches in other worktrees", () => {
+    const rows = buildBranchesSidebarRows(
+      refs(),
+      topicPath,
+      defaultExpandedSections,
+      "",
+    );
+
+    expect(rows.slice(1, 4).map((row) => row.id)).toEqual([
+      "ref:branches:topic",
+      "ref:branches:main",
+      "ref:branches:feature",
+    ]);
   });
 
   it("expands matching sections and hides empty ones while filtering", () => {
@@ -120,7 +135,7 @@ describe("branches sidebar state", () => {
     expect(stepRow(rows, undefined, 1)).toBe("section:branches");
     expect(stepRow(rows, undefined, -1)).toBe("ref:tags:v1.0.0");
     expect(stepRow(rows, "section:branches", -1)).toBe("section:branches");
-    expect(stepRow(rows, "ref:branches:topic", 1)).toBe(
+    expect(stepRow(rows, "ref:branches:feature", 1)).toBe(
       "section:remote:origin",
     );
     expect(toggleSection(defaultExpandedSections, "branches").size).toBe(0);
