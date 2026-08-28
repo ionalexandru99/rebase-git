@@ -16,7 +16,7 @@ export default defineConfig({
   projects: [
     {
       name: "browser",
-      testMatch: "**/*.browser.spec.ts",
+      testMatch: "**/*.browser.test.ts",
       use: {
         ...devices["Desktop Chrome"],
         baseURL: process.env.REBASE_E2E_BASE_URL ?? "http://127.0.0.1:4173",
@@ -24,11 +24,7 @@ export default defineConfig({
     },
     {
       name: "electron",
-      testMatch: "**/*.electron.spec.ts",
-    },
-    {
-      name: "packaged-electron",
-      testMatch: "**/*.packaged-electron.spec.ts",
+      testMatch: "**/*.electron.test.ts",
     },
   ],
 });

@@ -108,7 +108,7 @@ jobs:
         run: pnpm build:desktop-package
 
       - name: Run integration tests
-        run: pnpm test:integration
+        run: pnpm test:integration:prepared
 
   package-smoke:
     name: Package smoke (${{ matrix.name }})
@@ -175,11 +175,52 @@ jobs:
       - name: Install browser
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run end-to-end tests
-        run: xvfb-run --auto-servernum pnpm test:e2e
+      - name: Run browser integration tests
+        run: pnpm test:integration:browser
 
-      - name: Run packaged Electron test
-        run: xvfb-run --auto-servernum pnpm test:e2e:packaged
+      - name: Run UI tests
+        run: pnpm test:ui
+
+      - name: Prepare desktop test application
+        run: |
+          pnpm exec install-electron
+          pnpm build:desktop-package
+
+      - name: Run end-to-end tests
+        run: xvfb-run --auto-servernum pnpm test:e2e:prepared
+
+      - name: Run release smoke tests
+        run: xvfb-run --auto-servernum pnpm test:release-smoke:prepared
+
+  windows-release-smoke:
+    name: Windows release smoke
+    needs: quality
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop application
+        run: pnpm build:desktop-package
+
+      - name: Run release smoke tests
+        run: pnpm test:release-smoke:prepared
 
   validation:
     name: Validation
@@ -189,6 +230,7 @@ jobs:
       - integration
       - package-smoke
       - complete-tests
+      - windows-release-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
@@ -197,5 +239,6 @@ jobs:
           needs.quality.result != 'success' ||
           needs.integration.result != 'success' ||
           needs.package-smoke.result != 'success' ||
-          needs.complete-tests.result != 'success'
+          needs.complete-tests.result != 'success' ||
+          needs.windows-release-smoke.result != 'success'
         run: exit 1
