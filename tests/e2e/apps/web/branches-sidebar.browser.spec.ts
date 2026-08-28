@@ -40,6 +40,12 @@ test("checks out branches and tags from the branches sidebar", async ({
     await expect(
       branches.getByRole("heading", { level: 2, name: "Branches" }),
     ).toBeVisible();
+    await expect(tree).toHaveCSS("scrollbar-width", "none");
+    expect(
+      await tree.evaluate(
+        (element) => getComputedStyle(element, "::-webkit-scrollbar").display,
+      ),
+    ).toBe("none");
     const main = tree.getByRole("treeitem", { name: /^main(?:,|$)/ });
     const feature = tree.getByRole("treeitem", { name: "feature" });
     const topic = tree.getByRole("treeitem", {
