@@ -83,6 +83,9 @@ function writeCommit(
   objectFormat: RepositoryHistoryPage["objectFormat"],
 ) {
   writeOid(writer, commit.oid, objectFormat);
+  if (commit.parents.length > maximumParentCount) {
+    throw new Error("Too many parents");
+  }
   writer.uint16(commit.parents.length);
   for (const parent of commit.parents) {
     writeOid(writer, parent, objectFormat);

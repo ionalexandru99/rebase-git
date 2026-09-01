@@ -93,6 +93,30 @@ describe("repository history binary codec", () => {
         refTargets: Array.from({ length: 257 }, () => refTarget),
       }),
     ).toThrow("Too many ref targets");
+    expect(() =>
+      encodeRepositoryHistoryPage({
+        ...page,
+        commits: [
+          {
+            ...commit,
+            parents: Array.from({ length: 4_097 }, () => commit.oid),
+          },
+        ],
+      }),
+    ).toThrow("Too many parents");
+  });
+
+  it("rejects logical messages beyond the reassembly limit", () => {
+    expect(() =>
+      fragmentBinaryMessage(
+        {
+          logicalMessageId: 1,
+          payload: new Uint8Array(64 * 1_048_576 + 1),
+          requestId,
+        },
+        1_048_576,
+      ),
+    ).toThrow("Logical message is too large");
   });
 });
 

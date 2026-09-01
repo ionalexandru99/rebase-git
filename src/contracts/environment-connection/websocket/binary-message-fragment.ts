@@ -17,6 +17,9 @@ export function fragmentBinaryMessage(
   message: BinaryLogicalMessage,
   maximumFrameBytes: number,
 ) {
+  if (message.payload.byteLength > maximumLogicalMessageBytes) {
+    throw new Error("Logical message is too large");
+  }
   const payloadBytes = maximumFrameBytes - headerBytes;
   if (payloadBytes <= 0) {
     throw new Error("Binary frame limit is too small");
