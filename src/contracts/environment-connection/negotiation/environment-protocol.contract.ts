@@ -10,6 +10,9 @@ const ProductVersion = Schema.String.check(
   Schema.isMaxLength(64),
 );
 
+export const EnvironmentRequestId = Schema.String.check(Schema.isUUID(4));
+export type EnvironmentRequestId = typeof EnvironmentRequestId.Type;
+
 export const ProtocolRange = Schema.Struct({
   major: ProtocolNumber,
   minor: ProtocolNumber,

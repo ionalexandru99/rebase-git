@@ -43,7 +43,7 @@ export function CommitGraph({
   const [commits, setCommits] = useState<readonly RepositoryCommit[]>([]);
   const [error, setError] =
     useState<ReturnType<RepositoryHistoryReader["getSnapshot"]>["error"]>();
-  const [loading, setLoading] = useState(reader !== undefined);
+  const [loading, setLoading] = useState(true);
   const [selectedOid, setSelectedOid] = useState<string>();
   const loadEpoch = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -52,9 +52,13 @@ export function CommitGraph({
 
   useEffect(() => {
     const element = scrollRef.current;
-    if (element === null) return;
+    if (element === null) {
+      return;
+    }
     const observer = new ResizeObserver(([entry]) => {
-      if (entry === undefined) return;
+      if (entry === undefined) {
+        return;
+      }
       setViewport({
         height: entry.contentRect.height,
         width: entry.contentRect.width,
@@ -82,7 +86,9 @@ export function CommitGraph({
       .read({ limit: 100, order: "topological", roots })
       .then(
         (next) => {
-          if (epoch !== loadEpoch.current) return;
+          if (epoch !== loadEpoch.current) {
+            return;
+          }
           setCommits(next);
           setSelectedOid((selected) =>
             next.some((commit) => commit.oid === selected)
@@ -91,16 +97,23 @@ export function CommitGraph({
           );
         },
         () => {
-          if (epoch !== loadEpoch.current) return;
+          if (epoch !== loadEpoch.current) {
+            return;
+          }
           setError(reader.getSnapshot().error);
         },
       )
       .finally(() => {
-        if (epoch === loadEpoch.current) setLoading(false);
+        if (epoch === loadEpoch.current) {
+          setLoading(false);
+        }
       });
   }, [reader, roots]);
 
   useEffect(() => {
+    setCommits([]);
+    setError(undefined);
+    setSelectedOid(undefined);
     loadHistory();
     return () => {
       loadEpoch.current += 1;
@@ -125,7 +138,9 @@ export function CommitGraph({
   const virtualRows = virtualizer.getVirtualItems();
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
     event.preventDefault();
     const current = commits.findIndex((commit) => commit.oid === selectedOid);
     const next = Math.min(
@@ -133,7 +148,9 @@ export function CommitGraph({
       Math.max(0, current + (event.key === "ArrowDown" ? 1 : -1)),
     );
     const commit = commits[next];
-    if (commit === undefined) return;
+    if (commit === undefined) {
+      return;
+    }
     setSelectedOid(commit.oid);
     virtualizer.scrollToIndex(next, { align: "auto" });
   };
@@ -182,6 +199,7 @@ export function CommitGraph({
         >
           <div
             className="relative"
+            role="presentation"
             style={{
               height: virtualizer.getTotalSize(),
               minWidth: gutterWidth + 528,
@@ -189,7 +207,9 @@ export function CommitGraph({
           >
             {virtualRows.map((virtualRow) => {
               const commit = commits[virtualRow.index];
-              if (commit === undefined) return null;
+              if (commit === undefined) {
+                return null;
+              }
               const selected = commit.oid === selectedOid;
               return (
                 <div

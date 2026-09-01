@@ -23,6 +23,7 @@ describe("commit graph", () => {
       .element(grid.getByRole("option", { name: /Commit 0/ }))
       .toBeVisible();
     expect(grid.getByRole("option").all().length).toBeLessThan(40);
+    await expect.element(grid.getByRole("presentation")).toBeInTheDocument();
     expect(document.querySelector("canvas")).not.toBeNull();
 
     const second = grid.getByRole("option", { name: /^Commit 1,/ });
@@ -72,6 +73,63 @@ describe("commit graph", () => {
       .element(screen.getByRole("status"))
       .toHaveTextContent("This repository has no commits yet.");
     expect(reader.read).not.toHaveBeenCalled();
+  });
+
+  it("starts loading before the reader is available", async () => {
+    const screen = await render(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraph
+          reader={undefined}
+          repositoryName="rebase-test"
+          roots={undefined}
+        />
+      </div>,
+    );
+
+    await expect
+      .element(screen.getByRole("status", { name: "Loading commit history" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("This repository has no commits yet."))
+      .not.toBeInTheDocument();
+  });
+
+  it("removes the previous repository rows before a replacement read fails", async () => {
+    const first = historyReader({ commits: history(2), status: "ready" });
+    const screen = await renderGraph(first);
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    let rejectRead: ((error: unknown) => void) | undefined;
+    const pending = new Promise<readonly RepositoryCommit[]>((_, reject) => {
+      rejectRead = reject;
+    });
+    const second = historyReader({ commits: [], pending, status: "loading" });
+
+    await screen.rerender(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraph
+          reader={second}
+          repositoryName="replacement"
+          roots={[
+            { name: "main", oid: "e".repeat(40), type: "branch" as const },
+          ]}
+        />
+      </div>,
+    );
+    second.snapshot = {
+      error: new RepositoryHistoryUnavailable(),
+      revision: 1,
+      status: "error",
+    };
+    rejectRead?.(new RepositoryHistoryUnavailable());
+
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("Commit history is unavailable");
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .not.toBeInTheDocument();
   });
 });
 

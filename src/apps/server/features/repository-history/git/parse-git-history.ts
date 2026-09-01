@@ -23,9 +23,13 @@ export function parseGitHistory(
   output: string,
   objectFormat: "sha1" | "sha256",
 ): readonly RepositoryCommit[] {
-  if (output.length === 0) return [];
+  if (output.length === 0) {
+    return [];
+  }
   const fields = output.split("\0");
-  if (fields.at(-1) === "") fields.pop();
+  if (fields.at(-1) === "") {
+    fields.pop();
+  }
   if (fields.length % fieldsPerCommit !== 0) {
     throw new Error("Truncated Git history record");
   }
@@ -72,7 +76,9 @@ function parseCommit(
   }
   const parents = parentField.length === 0 ? [] : parentField.split(" ");
   requireOid(oid, objectFormat);
-  for (const parent of parents) requireOid(parent, objectFormat);
+  for (const parent of parents) {
+    requireOid(parent, objectFormat);
+  }
   return {
     author: parseIdentity(
       authorName,
@@ -107,7 +113,9 @@ function parseIdentity(
 }
 
 function parseTimezoneOffset(isoDate: string) {
-  if (isoDate.endsWith("Z")) return 0;
+  if (isoDate.endsWith("Z")) {
+    return 0;
+  }
   const timezone = /([+-])(\d{2}):(\d{2})$/.exec(isoDate);
   if (
     timezone?.[1] === undefined ||

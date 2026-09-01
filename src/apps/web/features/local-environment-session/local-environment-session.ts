@@ -45,12 +45,16 @@ export function createLocalEnvironmentSession(
   const publish: PublishState = (next) =>
     Effect.sync(() => {
       state = next;
-      for (const listener of listeners) listener();
+      for (const listener of listeners) {
+        listener();
+      }
     });
 
   const runSession = Effect.gen(function* () {
     if (credential === undefined) {
-      if (pairingMaterial === undefined) return;
+      if (pairingMaterial === undefined) {
+        return;
+      }
       credential = yield* exchangePairing(options, pairingMaterial, publish);
     }
     repositoryCatalogSession.authorize(credential);
@@ -88,7 +92,9 @@ export function createLocalEnvironmentSession(
   };
 
   const stop = () => {
-    if (!running) return;
+    if (!running) {
+      return;
+    }
     const activeFiber = fiber;
     if (activeFiber !== undefined) {
       Effect.runFork(Fiber.interrupt(activeFiber));
@@ -231,7 +237,9 @@ function createRepositoryHistoryGateway() {
       transport = next;
     },
     disconnect: (current: RepositoryHistoryTransport) => {
-      if (transport === current) transport = undefined;
+      if (transport === current) {
+        transport = undefined;
+      }
     },
     gateway,
   };

@@ -61,9 +61,13 @@ function selectRemoteDefault(
   const fromActive = defaults.find(
     (candidate) => candidate.remote === activeRemote,
   );
-  if (fromActive !== undefined) return fromActive;
+  if (fromActive !== undefined) {
+    return fromActive;
+  }
   const origin = defaults.find((candidate) => candidate.remote === "origin");
-  if (origin !== undefined) return origin;
+  if (origin !== undefined) {
+    return origin;
+  }
   return defaults.length === 1 ? defaults[0] : undefined;
 }
 
@@ -72,9 +76,13 @@ function addUpstream(
   branch: LocalBranch,
   refs: RepositoryRefs,
 ) {
-  if (branch.upstream === undefined) return;
+  if (branch.upstream === undefined) {
+    return;
+  }
   const separator = branch.upstream.name.indexOf("/");
-  if (separator <= 0 || separator === branch.upstream.name.length - 1) return;
+  if (separator <= 0 || separator === branch.upstream.name.length - 1) {
+    return;
+  }
   addRemoteRoot(
     roots,
     branch.upstream.name.slice(0, separator),
@@ -92,7 +100,9 @@ function addRemoteRoot(
   const branch = refs.remoteBranches.find(
     (candidate) => candidate.remote === remote && candidate.name === name,
   );
-  if (branch?.target === undefined) return;
+  if (branch?.target === undefined) {
+    return;
+  }
   addRoot(roots, {
     name: `${remote}/${name}`,
     oid: branch.target,
@@ -114,7 +124,9 @@ function addRoot(
 }
 
 function upstreamRemote(name: string | undefined) {
-  if (name === undefined) return undefined;
+  if (name === undefined) {
+    return undefined;
+  }
   const separator = name.indexOf("/");
   return separator <= 0 ? undefined : name.slice(0, separator);
 }

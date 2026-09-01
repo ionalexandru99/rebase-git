@@ -14,7 +14,9 @@ export class RepositoryHistoryEpoch {
   }
 
   finish(requestId: string) {
-    if (!this.isCurrent(requestId)) return false;
+    if (!this.isCurrent(requestId)) {
+      return false;
+    }
     this.#requestId = undefined;
     return true;
   }

@@ -42,7 +42,9 @@ export function appendCommitLanes(
       nextLaneId += 1;
     }
     const nodeLane = lanes[nodeIndex];
-    if (nodeLane === undefined) throw new Error("Missing commit lane");
+    if (nodeLane === undefined) {
+      throw new Error("Missing commit lane");
+    }
     const lanesBefore = lanes.map((current) => current.id);
     const parentLaneIds: number[] = [];
 
@@ -50,14 +52,18 @@ export function appendCommitLanes(
       lanes.splice(nodeIndex, 1);
     } else {
       const [firstParent, ...otherParents] = commit.parents;
-      if (firstParent === undefined) throw new Error("Missing first parent");
+      if (firstParent === undefined) {
+        throw new Error("Missing first parent");
+      }
       const existingFirst = lanes.findIndex(
         (current, index) =>
           index !== nodeIndex && current.expectedOid === firstParent,
       );
       if (existingFirst >= 0) {
         const target = lanes[existingFirst];
-        if (target === undefined) throw new Error("Missing parent lane");
+        if (target === undefined) {
+          throw new Error("Missing parent lane");
+        }
         parentLaneIds.push(target.id);
         lanes.splice(nodeIndex, 1);
       } else {

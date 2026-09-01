@@ -1,7 +1,7 @@
+import { EnvironmentRequestId } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
 import { Schema } from "effect";
 
 const RepositoryId = Schema.String.check(Schema.isUUID(4));
-const RequestId = Schema.String.check(Schema.isUUID(4));
 const ObjectId = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
 );
@@ -19,7 +19,7 @@ export const ReadRepositoryHistory = Schema.TaggedStruct(
     limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000 })),
     order: Schema.Literals(["topological", "chronological"]),
     repositoryId: RepositoryId,
-    requestId: RequestId,
+    requestId: EnvironmentRequestId,
     roots: Schema.Array(RepositoryHistoryRefTarget).check(
       Schema.isMinLength(1),
       Schema.isMaxLength(256),
@@ -30,7 +30,7 @@ export type ReadRepositoryHistory = typeof ReadRepositoryHistory.Type;
 
 export const CancelRepositoryHistory = Schema.TaggedStruct(
   "CancelRepositoryHistory",
-  { requestId: RequestId },
+  { requestId: EnvironmentRequestId },
 );
 
 export const RepositoryHistoryClientMessage = Schema.Union([
@@ -61,7 +61,7 @@ export const RepositoryHistoryFailed = Schema.TaggedStruct(
   "RepositoryHistoryFailed",
   {
     failure: RepositoryHistoryOperationFailure,
-    requestId: RequestId,
+    requestId: EnvironmentRequestId,
   },
 );
 export type RepositoryHistoryFailed = typeof RepositoryHistoryFailed.Type;

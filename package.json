@@ -47,6 +47,7 @@
     "test:integration": "pnpm build:web && pnpm test:integration:prepared && pnpm test:integration:browser",
     "test:integration:browser": "vp test run --project integration-browser --passWithNoTests",
     "test:integration:prepared": "vp test run --project integration --passWithNoTests",
+    "test:performance": "pnpm build:web && playwright test --config playwright.performance.config.ts",
     "test:release-smoke": "pnpm build:desktop-package && pnpm test:release-smoke:prepared",
     "test:release-smoke:prepared": "electron-builder --config electron-builder.config.js --dir && playwright test --config playwright.release-smoke.config.ts",
     "test:ui": "vp test run --project ui --passWithNoTests",

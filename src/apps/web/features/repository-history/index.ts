@@ -6,3 +6,4 @@ export type {
   RepositoryHistoryRefTarget,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
+export type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/repository-history-transport.contract";

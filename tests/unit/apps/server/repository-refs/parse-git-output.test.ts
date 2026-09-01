@@ -5,6 +5,7 @@ import {
   parseForEachRef,
   remoteBranchFromRecord,
   remoteDefaultBranchFromRecord,
+  tagFromRecord,
 } from "@rebase/server/features/repository-refs/git/parse-for-each-ref";
 import { parseWorktreeList } from "@rebase/server/features/repository-refs/git/parse-worktree-list";
 import { checkoutFailure } from "@rebase/server/features/repository-refs/git/repository-refs-failures";
@@ -96,6 +97,32 @@ describe("git ref parsing", () => {
     ]);
   });
 
+  it("uses commit targets for lightweight and annotated tags", () => {
+    const peeledCommit = "b".repeat(40);
+    const records = parseForEachRef(
+      [
+        record("refs/tags/lightweight", "", "", ""),
+        record(
+          "refs/tags/annotated",
+          "",
+          "",
+          "",
+          "",
+          "tag",
+          peeledCommit,
+          "commit",
+        ),
+        record("refs/tags/tree", "", "", "", "", "tag", "c".repeat(40), "tree"),
+      ].join("\n"),
+    );
+
+    expect(records.map(tagFromRecord)).toEqual([
+      { name: "lightweight", target: commit },
+      { name: "annotated", target: peeledCommit },
+      undefined,
+    ]);
+  });
+
   it("maps git checkout errors to typed failures", () => {
     expect(
       checkoutFailure(
@@ -156,6 +183,19 @@ function record(
   track: string,
   worktreePath: string,
   symref = "",
+  objectType = "commit",
+  peeledObject = "",
+  peeledObjectType = "",
 ) {
-  return [name, commit, upstream, track, worktreePath, symref].join("\0");
+  return [
+    name,
+    commit,
+    objectType,
+    peeledObject,
+    peeledObjectType,
+    upstream,
+    track,
+    worktreePath,
+    symref,
+  ].join("\0");
 }

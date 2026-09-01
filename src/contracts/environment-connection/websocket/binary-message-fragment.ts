@@ -1,3 +1,6 @@
+import { EnvironmentRequestId } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
+import { Schema } from "effect";
+
 const fragmentMagic = 0x5242_4631;
 const requestIdBytes = 36;
 const headerBytes = 52;
@@ -15,7 +18,9 @@ export function fragmentBinaryMessage(
   maximumFrameBytes: number,
 ) {
   const payloadBytes = maximumFrameBytes - headerBytes;
-  if (payloadBytes <= 0) throw new Error("Binary frame limit is too small");
+  if (payloadBytes <= 0) {
+    throw new Error("Binary frame limit is too small");
+  }
   const fragmentCount = Math.max(
     1,
     Math.ceil(message.payload.byteLength / payloadBytes),
@@ -72,7 +77,9 @@ export function createBinaryMessageReassembler() {
       let offset = 0;
       for (let index = 0; index < current.fragmentCount; index += 1) {
         const part = current.fragments.get(index);
-        if (part === undefined) throw new Error("Missing binary fragment");
+        if (part === undefined) {
+          throw new Error("Missing binary fragment");
+        }
         payload.set(part, offset);
         offset += part.byteLength;
       }
@@ -84,7 +91,24 @@ export function createBinaryMessageReassembler() {
         requestId: fragment.requestId,
       };
     },
+    clear() {
+      pending.clear();
+      pendingBytes = 0;
+    },
+    discard(requestId: string) {
+      for (const [key, message] of pending) {
+        if (message.requestId !== requestId) {
+          continue;
+        }
+        pendingBytes -= messageBytes(message);
+        pending.delete(key);
+      }
+    },
   };
+}
+
+export function readBinaryFragmentRequestId(frame: Uint8Array) {
+  return decodeFragment(frame).requestId;
 }
 
 function encodeFragment(fragment: DecodedFragment) {
@@ -105,7 +129,9 @@ function encodeFragment(fragment: DecodedFragment) {
 }
 
 function decodeFragment(frame: Uint8Array): DecodedFragment {
-  if (frame.byteLength < headerBytes) throw new Error("Truncated fragment");
+  if (frame.byteLength < headerBytes) {
+    throw new Error("Truncated fragment");
+  }
   const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
   if (view.getUint32(0, false) !== fragmentMagic) {
     throw new Error("Invalid fragment magic");
@@ -121,15 +147,24 @@ function decodeFragment(frame: Uint8Array): DecodedFragment {
   ) {
     throw new Error("Invalid fragment header");
   }
+  const requestId = new TextDecoder("ascii", { fatal: true }).decode(
+    frame.subarray(16, headerBytes),
+  );
   return {
     fragmentCount,
     fragmentIndex,
     logicalMessageId: view.getUint32(4, false),
     payload: frame.slice(headerBytes),
-    requestId: new TextDecoder("ascii", { fatal: true }).decode(
-      frame.subarray(16, headerBytes),
-    ),
+    requestId: Schema.decodeUnknownSync(EnvironmentRequestId)(requestId),
   };
+}
+
+function messageBytes(message: PendingMessage) {
+  let bytes = 0;
+  for (const fragment of message.fragments.values()) {
+    bytes += fragment.byteLength;
+  }
+  return bytes;
 }
 
 interface DecodedFragment {

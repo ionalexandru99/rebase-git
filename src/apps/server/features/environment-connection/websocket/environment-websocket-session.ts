@@ -26,6 +26,8 @@ import {
   type EnvironmentWebSocketWriter,
 } from "#server/features/environment-connection/websocket/environment-websocket-writer";
 
+const maximumConcurrentHistoryRequests = 2;
+
 export function runEnvironmentWebSocketSession(
   socket: WebSocket,
   state: EnvironmentTransportState,
@@ -212,6 +214,17 @@ function handleClientMessage(
           requestId: message.requestId,
         });
       }
+      if (historyRequests.size >= maximumConcurrentHistoryRequests) {
+        return writer.send({
+          _tag: "RepositoryHistoryFailed",
+          failure: {
+            _tag: "GitFailed",
+            detail: "Too many concurrent repository history requests",
+            reason: "Failed",
+          },
+          requestId: message.requestId,
+        });
+      }
       return Effect.sync(() => {
         const controller = new AbortController();
         historyRequests.set(message.requestId, controller);
@@ -244,8 +257,9 @@ function handleClientMessage(
           ),
           { signal: controller.signal },
         );
-        if (controller.signal.aborted)
+        if (controller.signal.aborted) {
           historyRequests.delete(message.requestId);
+        }
       });
     }
     case "CancelRepositoryHistory":

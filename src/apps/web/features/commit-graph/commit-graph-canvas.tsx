@@ -34,14 +34,18 @@ export function CommitGraphCanvas({
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas === null || width <= 0 || height <= 0) return;
+    if (canvas === null || width <= 0 || height <= 0) {
+      return;
+    }
     const ratio = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.ceil(width * ratio);
     canvas.height = Math.ceil(height * ratio);
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     const context = canvas.getContext("2d");
-    if (context === null) return;
+    if (context === null) {
+      return;
+    }
     context.scale(ratio, ratio);
     context.lineCap = "round";
     context.lineWidth = 1.5;
@@ -52,12 +56,16 @@ export function CommitGraphCanvas({
 
     for (const virtualRow of virtualRows) {
       const row = laneRows[virtualRow.index];
-      if (row === undefined) continue;
+      if (row === undefined) {
+        continue;
+      }
       const top = virtualRow.start - verticalOffset;
       const bottom = top + virtualRow.size;
       const center = top + virtualRow.size / 2;
       const nodeIndex = row.lanesBefore.indexOf(row.nodeLaneId);
-      if (nodeIndex < 0) continue;
+      if (nodeIndex < 0) {
+        continue;
+      }
       const nodeX = laneX(nodeIndex) - horizontalOffset;
 
       for (const laneId of row.lanesBefore) {
@@ -76,9 +84,13 @@ export function CommitGraphCanvas({
 
       for (const parentLaneId of row.parentLaneIds) {
         const parentIndex = row.lanesAfter.indexOf(parentLaneId);
-        if (parentIndex < 0) continue;
+        if (parentIndex < 0) {
+          continue;
+        }
         const parentX = laneX(parentIndex) - horizontalOffset;
-        if (parentLaneId === row.nodeLaneId && parentX === nodeX) continue;
+        if (parentLaneId === row.nodeLaneId && parentX === nodeX) {
+          continue;
+        }
         drawLane(context, parentLaneId, nodeX, center, parentX, bottom);
       }
 

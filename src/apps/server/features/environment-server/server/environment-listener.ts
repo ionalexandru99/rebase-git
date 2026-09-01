@@ -21,11 +21,20 @@ export function acquireEnvironmentListener(
     const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
     const readiness = { value: false };
+    const discovery = createCurrentEnvironmentDiscovery(
+      options.environmentId,
+      options.productVersion,
+    );
     const state: EnvironmentTransportState = {
-      discovery: createCurrentEnvironmentDiscovery(
-        options.environmentId,
-        options.productVersion,
-      ),
+      discovery:
+        options.history === undefined
+          ? {
+              ...discovery,
+              capabilities: discovery.capabilities.filter(
+                (capability) => capability.name !== "repository-history",
+              ),
+            }
+          : discovery,
       events: options.events,
       ...(options.history === undefined ? {} : { history: options.history }),
     };

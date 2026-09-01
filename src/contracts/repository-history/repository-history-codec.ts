@@ -11,6 +11,12 @@ const maximumRefCount = 256;
 const maximumStringBytes = 1_048_576;
 
 export function encodeRepositoryHistoryPage(page: RepositoryHistoryPage) {
+  if (page.refTargets.length > maximumRefCount) {
+    throw new Error("Too many ref targets");
+  }
+  if (page.commits.length > maximumCommitCount) {
+    throw new Error("Too many commits");
+  }
   const writer = new BinaryWriter();
   writer.uint32(pageMagic);
   writer.uint8(page.objectFormat === "sha1" ? 1 : 2);
@@ -23,22 +29,29 @@ export function encodeRepositoryHistoryPage(page: RepositoryHistoryPage) {
     writeOid(writer, target.oid, page.objectFormat);
   }
   writer.uint16(page.commits.length);
-  for (const commit of page.commits)
+  for (const commit of page.commits) {
     writeCommit(writer, commit, page.objectFormat);
+  }
   return writer.bytes();
 }
 
 export function decodeRepositoryHistoryPage(bytes: Uint8Array) {
   const reader = new BinaryReader(bytes);
-  if (reader.uint32() !== pageMagic) throw new Error("Invalid history page");
+  if (reader.uint32() !== pageMagic) {
+    throw new Error("Invalid history page");
+  }
   const encodedFormat = reader.uint8();
   const objectFormat =
     encodedFormat === 1 ? "sha1" : encodedFormat === 2 ? "sha256" : undefined;
-  if (objectFormat === undefined) throw new Error("Invalid object format");
+  if (objectFormat === undefined) {
+    throw new Error("Invalid object format");
+  }
   const requestId = reader.string();
   const repositoryId = reader.string();
   const refCount = reader.uint16();
-  if (refCount > maximumRefCount) throw new Error("Too many ref targets");
+  if (refCount > maximumRefCount) {
+    throw new Error("Too many ref targets");
+  }
   const refTargets = Array.from({ length: refCount }, () => {
     const type = readRefType(reader.uint8());
     return {
@@ -48,7 +61,9 @@ export function decodeRepositoryHistoryPage(bytes: Uint8Array) {
     };
   });
   const count = reader.uint16();
-  if (count > maximumCommitCount) throw new Error("Too many commits");
+  if (count > maximumCommitCount) {
+    throw new Error("Too many commits");
+  }
   const commits = Array.from({ length: count }, () =>
     readCommit(reader, objectFormat),
   );
@@ -69,7 +84,9 @@ function writeCommit(
 ) {
   writeOid(writer, commit.oid, objectFormat);
   writer.uint16(commit.parents.length);
-  for (const parent of commit.parents) writeOid(writer, parent, objectFormat);
+  for (const parent of commit.parents) {
+    writeOid(writer, parent, objectFormat);
+  }
   writeIdentity(writer, commit.author);
   writeIdentity(writer, commit.committer);
   writer.string(commit.subject);
@@ -81,7 +98,9 @@ function readCommit(
 ): RepositoryCommit {
   const oid = readOid(reader, objectFormat);
   const parentCount = reader.uint16();
-  if (parentCount > maximumParentCount) throw new Error("Too many parents");
+  if (parentCount > maximumParentCount) {
+    throw new Error("Too many parents");
+  }
   const parents = Array.from({ length: parentCount }, () =>
     readOid(reader, objectFormat),
   );
@@ -190,7 +209,9 @@ class BinaryWriter {
   }
 
   int64(value: number) {
-    if (!Number.isSafeInteger(value)) throw new Error("Invalid timestamp");
+    if (!Number.isSafeInteger(value)) {
+      throw new Error("Invalid timestamp");
+    }
     const bytes = new Uint8Array(8);
     new DataView(bytes.buffer).setBigInt64(0, BigInt(value), false);
     this.write(bytes);
@@ -249,7 +270,9 @@ class BinaryReader {
     const value = this.#view.getBigInt64(this.#offset, false);
     this.#offset += 8;
     const number = Number(value);
-    if (!Number.isSafeInteger(number)) throw new Error("Invalid timestamp");
+    if (!Number.isSafeInteger(number)) {
+      throw new Error("Invalid timestamp");
+    }
     return number;
   }
 
@@ -261,7 +284,9 @@ class BinaryReader {
 
   string() {
     const length = this.uint32();
-    if (length > maximumStringBytes) throw new Error("String is too large");
+    if (length > maximumStringBytes) {
+      throw new Error("String is too large");
+    }
     this.require(length);
     const value = new TextDecoder("utf-8", { fatal: true }).decode(
       this.#input.subarray(this.#offset, this.#offset + length),

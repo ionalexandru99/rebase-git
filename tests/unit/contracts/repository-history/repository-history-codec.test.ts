@@ -57,6 +57,43 @@ describe("repository history binary codec", () => {
       decodeRepositoryHistoryPage(new Uint8Array([1, 2, 3])),
     ).toThrow();
   });
+
+  it("discards partial messages and rejects invalid request IDs", () => {
+    const [first] = fragmentBinaryMessage(
+      { logicalMessageId: 4, payload: new Uint8Array(160), requestId },
+      96,
+    );
+    const reassembler = createBinaryMessageReassembler();
+    expect(first).toBeDefined();
+    reassembler.accept(first ?? new Uint8Array());
+    reassembler.discard(requestId);
+    expect(() => reassembler.accept(first ?? new Uint8Array())).not.toThrow();
+
+    const malformed = (first ?? new Uint8Array()).slice();
+    malformed.set(new TextEncoder().encode("x".repeat(36)), 16);
+    expect(() => reassembler.accept(malformed)).toThrow();
+  });
+
+  it("rejects pages beyond the encoded collection limits", () => {
+    const page = historyPage("sha1");
+    const commit = page.commits[0];
+    const refTarget = page.refTargets[0];
+    if (commit === undefined || refTarget === undefined) {
+      throw new Error("The fixture is incomplete");
+    }
+    expect(() =>
+      encodeRepositoryHistoryPage({
+        ...page,
+        commits: Array.from({ length: 1_001 }, () => commit),
+      }),
+    ).toThrow("Too many commits");
+    expect(() =>
+      encodeRepositoryHistoryPage({
+        ...page,
+        refTargets: Array.from({ length: 257 }, () => refTarget),
+      }),
+    ).toThrow("Too many ref targets");
+  });
 });
 
 function historyPage(objectFormat: "sha1" | "sha256"): RepositoryHistoryPage {

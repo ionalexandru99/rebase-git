@@ -37,6 +37,11 @@ describe("Environment transport", () => {
         protocol: { major: 1, minor: 3, minimumSupportedMinor: 0 },
         limits: currentTransportLimits,
       });
+      expect(
+        discovery.capabilities.some(
+          (capability) => capability.name === "repository-history",
+        ),
+      ).toBe(false);
 
       const snapshotResponse = await fetch(
         `${origin}${environmentSnapshotPath}`,
@@ -64,6 +69,12 @@ describe("Environment transport", () => {
         environmentId,
         protocol: { major: 1, minor: 3 },
       });
+      expect(
+        accepted._tag === "HelloAccepted" &&
+          accepted.capabilities.some(
+            (capability) => capability.name === "repository-history",
+          ),
+      ).toBe(false);
       acceptedSocket.close();
 
       const rejectedSocket = await openWebSocket(origin);

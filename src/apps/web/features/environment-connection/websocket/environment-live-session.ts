@@ -84,8 +84,12 @@ type ReceivedEnvironmentMessage =
 function binaryMessageBytes(data: unknown) {
   return Effect.tryPromise({
     try: async () => {
-      if (data instanceof ArrayBuffer) return new Uint8Array(data);
-      if (data instanceof Blob) return new Uint8Array(await data.arrayBuffer());
+      if (data instanceof ArrayBuffer) {
+        return new Uint8Array(data);
+      }
+      if (data instanceof Blob) {
+        return new Uint8Array(await data.arrayBuffer());
+      }
       if (ArrayBuffer.isView(data)) {
         return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
       }

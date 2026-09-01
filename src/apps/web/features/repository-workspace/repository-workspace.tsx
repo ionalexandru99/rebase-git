@@ -62,11 +62,9 @@ export function RepositoryWorkspace({
   const roots = useMemo(
     () =>
       refs.refs === undefined
-        ? refs.status === "idle" || refs.status === "loading"
-          ? undefined
-          : []
+        ? undefined
         : resolveAutomaticHistoryRoots(refs.refs, activeWorktreePath),
-    [activeWorktreePath, refs.refs, refs.status],
+    [activeWorktreePath, refs.refs],
   );
 
   return (

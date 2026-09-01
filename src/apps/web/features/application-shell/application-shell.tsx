@@ -159,8 +159,11 @@ export function ApplicationShell({
     session,
   });
   const toggleSidebar = useCallback(() => {
-    if (sidebarRef.current?.isCollapsed()) expandSidebar();
-    else collapseSidebar();
+    if (sidebarRef.current?.isCollapsed()) {
+      expandSidebar();
+    } else {
+      collapseSidebar();
+    }
   }, [collapseSidebar, expandSidebar]);
   const focusSidebarFilter = useCallback(() => {
     setSettingsOpen(false);

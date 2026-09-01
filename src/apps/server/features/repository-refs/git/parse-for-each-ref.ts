@@ -8,6 +8,9 @@ import type {
 export const forEachRefFormat = [
   "%(refname)",
   "%(objectname)",
+  "%(objecttype)",
+  "%(*objectname)",
+  "%(*objecttype)",
   "%(upstream:short)",
   "%(upstream:track,nobracket)",
   "%(worktreepath)",
@@ -17,6 +20,9 @@ export const forEachRefFormat = [
 export interface ForEachRefRecord {
   readonly commit: string;
   readonly name: string;
+  readonly objectType: string;
+  readonly peeledObject: string;
+  readonly peeledObjectType: string;
   readonly symref: string;
   readonly track: string;
   readonly upstream: string;
@@ -32,14 +38,26 @@ export function parseForEachRef(stdout: string): readonly ForEachRefRecord[] {
     .split("\n")
     .filter((line) => line.length > 0)
     .flatMap((line) => {
-      const [name, commit, upstream, track, worktreePath, symref] =
-        line.split("\0");
+      const [
+        name,
+        commit,
+        objectType,
+        peeledObject,
+        peeledObjectType,
+        upstream,
+        track,
+        worktreePath,
+        symref,
+      ] = line.split("\0");
       return name === undefined || commit === undefined
         ? []
         : [
             {
               commit,
               name,
+              objectType: objectType ?? "",
+              peeledObject: peeledObject ?? "",
+              peeledObjectType: peeledObjectType ?? "",
               symref: symref ?? "",
               track: track ?? "",
               upstream: upstream ?? "",
@@ -80,7 +98,9 @@ export function remoteBranchFromRecord(
   }
   const qualified = record.name.slice(remoteBranchPrefix.length);
   const separator = qualified.indexOf("/");
-  if (separator <= 0 || separator === qualified.length - 1) return undefined;
+  if (separator <= 0 || separator === qualified.length - 1) {
+    return undefined;
+  }
   return {
     name: qualified.slice(separator + 1),
     remote: qualified.slice(0, separator),
@@ -100,7 +120,9 @@ export function remoteDefaultBranchFromRecord(
   }
   const remote = record.name.slice(remoteBranchPrefix.length, -"/HEAD".length);
   const target = record.symref.slice(remoteBranchPrefix.length);
-  if (!target.startsWith(`${remote}/`)) return undefined;
+  if (!target.startsWith(`${remote}/`)) {
+    return undefined;
+  }
   const name = target.slice(remote.length + 1);
   return name.length === 0 ? undefined : { name, remote };
 }
@@ -108,9 +130,18 @@ export function remoteDefaultBranchFromRecord(
 export function tagFromRecord(
   record: ForEachRefRecord,
 ): RepositoryTag | undefined {
-  return record.name.startsWith(tagPrefix)
-    ? { name: record.name.slice(tagPrefix.length), target: record.commit }
-    : undefined;
+  if (!record.name.startsWith(tagPrefix)) {
+    return undefined;
+  }
+  const target =
+    record.objectType === "commit"
+      ? record.commit
+      : record.peeledObjectType === "commit"
+        ? record.peeledObject
+        : undefined;
+  return target === undefined
+    ? undefined
+    : { name: record.name.slice(tagPrefix.length), target };
 }
 
 function parseTracking(track: string) {

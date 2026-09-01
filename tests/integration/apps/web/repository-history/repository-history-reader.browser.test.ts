@@ -80,6 +80,55 @@ describe("browser repository history reader", () => {
     expect(reader.getSnapshot().status).toBe("ready");
     reader.close();
   });
+
+  it("shares repository snapshots across readers and releases the final session", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    const second = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    const secondChanged = vi.fn();
+    second.subscribe(secondChanged);
+
+    await first.read({
+      limit: 100,
+      order: "topological",
+      roots: [root("main")],
+    });
+
+    await vi.waitFor(() => expect(second.getSnapshot().status).toBe("ready"));
+    expect(secondChanged).toHaveBeenCalled();
+    await expect(
+      second.getCommitSummaries([commits[1]?.oid ?? ""]),
+    ).resolves.toEqual([commits[1]]);
+    first.close();
+    second.close();
+
+    const reopened = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    await new Promise<void>((resolve) => {
+      const unsubscribe = reopened.subscribe(() => {
+        unsubscribe();
+        resolve();
+      });
+    });
+    expect(reopened.getSnapshot().status).toBe("empty");
+    reopened.close();
+  });
 });
 
 function page(repositoryId: string, commits: readonly RepositoryCommit[]) {

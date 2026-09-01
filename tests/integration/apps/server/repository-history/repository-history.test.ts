@@ -209,6 +209,48 @@ describe("repository history", { timeout: 30_000 }, () => {
       testAuthorization(["environment.read"]),
     );
   });
+
+  it("bounds concurrent history reads within one connection", async () => {
+    const history: RepositoryHistoryService = {
+      read: vi.fn(() => Effect.never),
+    };
+    await withHistoryListener(async ({ origin }) => {
+      const socket = await openHistorySocket(
+        origin,
+        createCurrentEnvironmentHello("0.0.0"),
+      );
+      const requestIds = [
+        "00000000-0000-4000-8000-000000000021",
+        "00000000-0000-4000-8000-000000000022",
+        "00000000-0000-4000-8000-000000000023",
+      ];
+      for (const currentRequestId of requestIds) {
+        socket.send(
+          JSON.stringify({
+            _tag: "ReadRepositoryHistory",
+            limit: 100,
+            order: "topological",
+            repositoryId: "00000000-0000-4000-8000-000000000001",
+            requestId: currentRequestId,
+            roots: [{ name: "main", oid: "a".repeat(40), type: "branch" }],
+          }),
+        );
+      }
+
+      expect(JSON.parse(await nextTextMessage(socket))).toEqual({
+        _tag: "RepositoryHistoryFailed",
+        failure: {
+          _tag: "GitFailed",
+          detail: "Too many concurrent repository history requests",
+          reason: "Failed",
+        },
+        requestId: requestIds[2],
+      });
+      expect(history.read).toHaveBeenCalledTimes(2);
+      expect(socket.readyState).toBe(WebSocket.OPEN);
+      socket.close();
+    }, history);
+  });
 });
 
 function withHistoryListener(
@@ -254,9 +296,7 @@ async function createRepository(
   await mkdir(path, { recursive: true });
   await git(path, "init", `--object-format=${objectFormat}`, "-b", "main");
   for (let index = 0; index < commitCount; index += 1) {
-    await writeFile(join(path, "value.txt"), String(index));
-    await git(path, "add", "value.txt");
-    await git(path, "commit", "-m", `commit ${index}`);
+    await git(path, "commit", "--allow-empty", "-m", `commit ${index}`);
   }
 }
 
@@ -376,7 +416,9 @@ function collectBinaryMessage(
           (fragment) => {
             fragments.push(fragment);
             const complete = reassembler.accept(fragment);
-            if (complete === undefined) return;
+            if (complete === undefined) {
+              return;
+            }
             cleanup();
             resolveMessage(complete);
           },
@@ -396,8 +438,12 @@ function collectBinaryMessage(
 }
 
 async function binaryBytes(data: unknown) {
-  if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  if (data instanceof Blob) return new Uint8Array(await data.arrayBuffer());
+  if (data instanceof ArrayBuffer) {
+    return new Uint8Array(data);
+  }
+  if (data instanceof Blob) {
+    return new Uint8Array(await data.arrayBuffer());
+  }
   if (ArrayBuffer.isView(data)) {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
@@ -415,7 +461,9 @@ function nextMessage<T>(
     }, 10_000);
     const received = (event: MessageEvent) => {
       const selected = select(event.data);
-      if (selected === undefined) return;
+      if (selected === undefined) {
+        return;
+      }
       cleanup();
       resolveMessage(selected);
     };

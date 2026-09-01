@@ -98,7 +98,9 @@ function sendBinaryMessage(
         message,
         limits.maxWebSocketResponseBytes,
       );
-      for (const frame of frames) yield* sendWebSocketBinary(socket, frame);
+      for (const frame of frames) {
+        yield* sendWebSocketBinary(socket, frame);
+      }
     }),
   );
 }

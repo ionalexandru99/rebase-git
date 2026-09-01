@@ -55,11 +55,15 @@ export function createBrowserRepositoryHistoryReader(options: {
         revision: message.revision,
         status: message.status,
       };
-      for (const listener of listeners) listener();
+      for (const listener of listeners) {
+        listener();
+      }
       return;
     }
     const request = pending.get(message.requestId);
-    if (request === undefined) return;
+    if (request === undefined) {
+      return;
+    }
     pending.delete(message.requestId);
     if (message._tag === "RequestFailed") {
       request.reject(readerError(message.failure));
@@ -119,7 +123,9 @@ export function createBrowserRepositoryHistoryReader(options: {
   }
 
   function request<T>(message: RepositoryHistoryWorkerRequest) {
-    if (closed) return Promise.reject(new RepositoryHistoryUnavailable());
+    if (closed) {
+      return Promise.reject(new RepositoryHistoryUnavailable());
+    }
     return new Promise<T>((resolve, reject) => {
       if (!("requestId" in message)) {
         reject(new RepositoryHistoryUnavailable());
@@ -135,9 +141,13 @@ export function createBrowserRepositoryHistoryReader(options: {
 
   return {
     close: () => {
-      if (closed) return;
+      if (closed) {
+        return;
+      }
       closed = true;
-      for (const controller of loads.values()) controller.abort();
+      for (const controller of loads.values()) {
+        controller.abort();
+      }
       loads.clear();
       for (const current of pending.values()) {
         current.reject(new RepositoryHistoryUnavailable());

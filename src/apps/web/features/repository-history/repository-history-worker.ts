@@ -20,11 +20,15 @@ const worker = self as unknown as {
 
 worker.onconnect = (event) => {
   const sharedPort = event.ports[0];
-  if (sharedPort === undefined) return;
+  if (sharedPort === undefined) {
+    return;
+  }
   sharedPort.onmessage = (
     message: MessageEvent<ConnectRepositoryHistoryReader>,
   ) => {
-    if (message.data._tag !== "ConnectRepositoryHistoryReader") return;
+    if (message.data._tag !== "ConnectRepositoryHistoryReader") {
+      return;
+    }
     connectReader(message.data);
   };
   sharedPort.start();
@@ -33,22 +37,25 @@ worker.onconnect = (event) => {
 function connectReader(connection: ConnectRepositoryHistoryReader) {
   const key = `${connection.environmentId}\0${connection.repositoryId}`;
   const replica = repositories.get(key) ?? createReplica();
-  repositories.set(key, replica);
   const reader: ConnectedReader = {
     closed: false,
     connection,
     epoch: new RepositoryHistoryEpoch(),
   };
+  replica.readers.add(reader);
+  repositories.set(key, replica);
   connection.port.onmessage = (
     event: MessageEvent<RepositoryHistoryWorkerRequest>,
   ) => {
     void handleReaderMessage(reader, replica, event.data).catch(() => {
-      if (!("requestId" in event.data)) return;
+      if (!("requestId" in event.data)) {
+        return;
+      }
       const failure = { _tag: "Unavailable" as const };
       replica.failure = failure;
       replica.status = "error";
       replica.revision += 1;
-      publishSnapshot(reader, replica);
+      publishSnapshot(replica);
       post(reader, {
         _tag: "RequestFailed",
         failure,
@@ -57,7 +64,7 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
     });
   };
   connection.port.start();
-  publishSnapshot(reader, replica);
+  postSnapshot(reader, replica);
 }
 
 async function handleReaderMessage(
@@ -65,7 +72,9 @@ async function handleReaderMessage(
   replica: RepositoryReplica,
   message: RepositoryHistoryWorkerRequest,
 ) {
-  if (reader.closed) return;
+  if (reader.closed) {
+    return;
+  }
   switch (message._tag) {
     case "ReadHistory": {
       const supersededRequestId = reader.epoch.begin(message.requestId);
@@ -81,7 +90,7 @@ async function handleReaderMessage(
         });
       }
       replica.status = "loading";
-      publishSnapshot(reader, replica);
+      publishSnapshot(replica);
       post(reader, {
         _tag: "LoadHistory",
         query: message.query,
@@ -90,7 +99,9 @@ async function handleReaderMessage(
       return;
     }
     case "HistoryPageReceived":
-      if (!reader.epoch.isCurrent(message.requestId)) return;
+      if (!reader.epoch.isCurrent(message.requestId)) {
+        return;
+      }
       await acceptHistoryPage(
         reader,
         replica,
@@ -99,11 +110,13 @@ async function handleReaderMessage(
       );
       return;
     case "HistoryPageFailed":
-      if (!reader.epoch.finish(message.requestId)) return;
+      if (!reader.epoch.finish(message.requestId)) {
+        return;
+      }
       replica.failure = message.failure;
       replica.status = "error";
       replica.revision += 1;
-      publishSnapshot(reader, replica);
+      publishSnapshot(replica);
       post(reader, {
         _tag: "RequestFailed",
         failure: message.failure,
@@ -139,6 +152,12 @@ async function handleReaderMessage(
           requestId: activeRequestId,
         });
       }
+      replica.readers.delete(reader);
+      if (replica.readers.size === 0) {
+        repositories.delete(
+          `${reader.connection.environmentId}\0${reader.connection.repositoryId}`,
+        );
+      }
       reader.connection.port.close();
       return;
     }
@@ -161,31 +180,43 @@ async function acceptHistoryPage(
       reader.connection.repositoryId,
       page.commits,
     );
-    for (const commit of page.commits) replica.commits.set(commit.oid, commit);
+    if (!reader.epoch.finish(requestId)) {
+      return;
+    }
+    for (const commit of page.commits) {
+      replica.commits.set(commit.oid, commit);
+    }
     replica.refTargets = page.refTargets;
     replica.visibleOids = page.commits.map((commit) => commit.oid);
     delete replica.failure;
     replica.status = page.commits.length === 0 ? "empty" : "ready";
     replica.revision += 1;
-    reader.epoch.finish(requestId);
-    publishSnapshot(reader, replica);
+    publishSnapshot(replica);
     post(reader, {
       _tag: "HistoryResult",
       commits: page.commits,
       requestId,
     });
   } catch {
-    reader.epoch.finish(requestId);
+    if (!reader.epoch.finish(requestId)) {
+      return;
+    }
     const failure = { _tag: "Unavailable" as const };
     replica.failure = failure;
     replica.status = "error";
     replica.revision += 1;
-    publishSnapshot(reader, replica);
+    publishSnapshot(replica);
     post(reader, { _tag: "RequestFailed", failure, requestId });
   }
 }
 
-function publishSnapshot(reader: ConnectedReader, replica: RepositoryReplica) {
+function publishSnapshot(replica: RepositoryReplica) {
+  for (const reader of replica.readers) {
+    postSnapshot(reader, replica);
+  }
+}
+
+function postSnapshot(reader: ConnectedReader, replica: RepositoryReplica) {
   post(reader, {
     _tag: "SnapshotChanged",
     ...(replica.failure === undefined ? {} : { failure: replica.failure }),
@@ -198,12 +229,15 @@ function post(
   reader: ConnectedReader,
   message: RepositoryHistoryWorkerResponse,
 ) {
-  if (!reader.closed) reader.connection.port.postMessage(message);
+  if (!reader.closed) {
+    reader.connection.port.postMessage(message);
+  }
 }
 
 function createReplica(): RepositoryReplica {
   return {
     commits: new Map(),
+    readers: new Set(),
     refTargets: [],
     revision: 0,
     status: "empty",
@@ -228,6 +262,7 @@ interface RepositoryReplica {
     RepositoryHistoryWorkerResponse,
     { _tag: "RefTargetsResult" }
   >["refs"];
+  readonly readers: Set<ConnectedReader>;
   status: "empty" | "error" | "loading" | "ready";
   visibleOids: readonly string[];
 }
