@@ -12,6 +12,11 @@ import type {
   LocalEnvironmentSessionState,
 } from "#web/features/local-environment-session/local-environment-session.contract";
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
+import {
+  type RepositoryHistoryGateway,
+  type RepositoryHistoryTransport,
+  RepositoryHistoryUnavailable,
+} from "#web/features/repository-history/repository-history-reader.contract";
 import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 
 export function createLocalEnvironmentSession(
@@ -26,6 +31,7 @@ export function createLocalEnvironmentSession(
   const repositoryRefsSession = createRepositoryRefsController(
     options.repositoryRefsGateway,
   );
+  const repositoryHistory = createRepositoryHistoryGateway();
   const listeners = new Set<() => void>();
   const pairingMaterial = options.pairingMaterial;
   let state: LocalEnvironmentSessionState =
@@ -39,12 +45,16 @@ export function createLocalEnvironmentSession(
   const publish: PublishState = (next) =>
     Effect.sync(() => {
       state = next;
-      for (const listener of listeners) listener();
+      for (const listener of listeners) {
+        listener();
+      }
     });
 
   const runSession = Effect.gen(function* () {
     if (credential === undefined) {
-      if (pairingMaterial === undefined) return;
+      if (pairingMaterial === undefined) {
+        return;
+      }
       credential = yield* exchangePairing(options, pairingMaterial, publish);
     }
     repositoryCatalogSession.authorize(credential);
@@ -55,6 +65,7 @@ export function createLocalEnvironmentSession(
       credential,
       repositoryCatalogSession.controller,
       repositoryRefsSession.controller,
+      repositoryHistory,
       publish,
     );
   });
@@ -81,7 +92,9 @@ export function createLocalEnvironmentSession(
   };
 
   const stop = () => {
-    if (!running) return;
+    if (!running) {
+      return;
+    }
     const activeFiber = fiber;
     if (activeFiber !== undefined) {
       Effect.runFork(Fiber.interrupt(activeFiber));
@@ -92,6 +105,7 @@ export function createLocalEnvironmentSession(
     filesystem: filesystemSession.controller,
     getSnapshot: () => state,
     repositoryCatalog: repositoryCatalogSession.controller,
+    repositoryHistory: repositoryHistory.gateway,
     repositoryRefs: repositoryRefsSession.controller,
     start,
     stop,
@@ -136,6 +150,7 @@ function maintainConnection(
   credential: string,
   repositoryCatalog: LocalEnvironmentSession["repositoryCatalog"],
   repositoryRefs: LocalEnvironmentSession["repositoryRefs"],
+  repositoryHistory: ReturnType<typeof createRepositoryHistoryGateway>,
   publish: PublishState,
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
@@ -149,7 +164,10 @@ function maintainConnection(
         Effect.scoped(
           options.gateway.connect(credential, lastObservedSequence).pipe(
             Effect.flatMap((active) =>
-              refreshRepositoryCatalog(repositoryCatalog).pipe(
+              Effect.sync(() =>
+                repositoryHistory.connect(active.repositoryHistory),
+              ).pipe(
+                Effect.andThen(refreshRepositoryCatalog(repositoryCatalog)),
                 Effect.andThen(Effect.sync(repositoryRefs.invalidate)),
                 Effect.andThen(
                   publish({
@@ -169,6 +187,11 @@ function maintainConnection(
                       failure,
                       lastObservedSequence: active.currentSequence(),
                     })),
+                  ),
+                ),
+                Effect.ensuring(
+                  Effect.sync(() =>
+                    repositoryHistory.disconnect(active.repositoryHistory),
                   ),
                 ),
               ),
@@ -193,6 +216,33 @@ function maintainConnection(
       }
     }
   });
+}
+
+function createRepositoryHistoryGateway() {
+  let transport: RepositoryHistoryTransport | undefined;
+  const gateway: RepositoryHistoryGateway = {
+    read: (request, signal) => {
+      const current = transport;
+      if (current === undefined) {
+        return Promise.reject(new RepositoryHistoryUnavailable());
+      }
+      return Effect.runPromise(
+        current.read(request),
+        signal === undefined ? undefined : { signal },
+      );
+    },
+  };
+  return {
+    connect: (next: RepositoryHistoryTransport) => {
+      transport = next;
+    },
+    disconnect: (current: RepositoryHistoryTransport) => {
+      if (transport === current) {
+        transport = undefined;
+      }
+    },
+    gateway,
+  };
 }
 
 function refreshRepositoryCatalog(

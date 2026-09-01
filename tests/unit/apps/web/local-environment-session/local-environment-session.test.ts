@@ -17,6 +17,10 @@ import type {
   LocalEnvironmentSessionState,
 } from "#web/features/local-environment-session/local-environment-session.contract";
 import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
+import {
+  RepositoryHistoryRejected,
+  type RepositoryHistoryTransport,
+} from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 
 describe("local Environment session", () => {
@@ -117,6 +121,41 @@ describe("local Environment session", () => {
     expect(repositoryCatalogGateway.list).not.toHaveBeenCalled();
     session.stop();
   });
+
+  it("preserves typed repository history rejections", async () => {
+    const rejection = new RepositoryHistoryRejected({
+      failure: { _tag: "GitFailed", reason: "Failed" },
+    });
+    const connection = createConnection(0, {
+      read: () => Effect.fail(rejection),
+    });
+    const session = createLocalEnvironmentSession({
+      filesystemGateway: createFilesystemGateway(),
+      gateway: createGateway(connection),
+      pairingMaterial: "123-456",
+      repositoryCatalogGateway: createRepositoryCatalogGateway(),
+      repositoryRefsGateway: createRepositoryRefsGateway(),
+    });
+
+    session.start();
+    await expectState(session.getSnapshot, "Connected");
+
+    await expect(
+      session.repositoryHistory.read({
+        limit: 100,
+        order: "topological",
+        repositoryId: "00000000-0000-4000-8000-000000000001",
+        roots: [
+          {
+            name: "refs/heads/main",
+            oid: "1111111111111111111111111111111111111111",
+            type: "branch",
+          },
+        ],
+      }),
+    ).rejects.toBe(rejection);
+    session.stop();
+  });
 });
 
 function createGateway(...connections: ReturnType<typeof createConnection>[]) {
@@ -176,7 +215,12 @@ function createFilesystemGateway() {
   } satisfies EnvironmentFilesystemGateway;
 }
 
-function createConnection(currentSequence = 0) {
+function createConnection(
+  currentSequence = 0,
+  repositoryHistory: RepositoryHistoryTransport = {
+    read: () => Effect.die("History is not used"),
+  },
+) {
   const disconnect = deferred<EnvironmentResponseError>();
   const discovery = createCurrentEnvironmentDiscovery(
     "00000000-0000-4000-8000-000000000001",
@@ -197,6 +241,7 @@ function createConnection(currentSequence = 0) {
     disconnect,
     discovery,
     negotiated,
+    repositoryHistory,
     waitForSequence: vi.fn(() => Effect.never),
   } satisfies EnvironmentProtocolConnection & {
     readonly disconnect: ReturnType<typeof deferred<EnvironmentResponseError>>;

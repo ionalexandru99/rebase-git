@@ -36,6 +36,14 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
       projects.getByRole("button", { name: "Open rebase-test" }),
     ).toHaveAttribute("aria-current", "page");
 
+    const history = page.getByRole("listbox", { name: "Commit history" });
+    const initialCommit = history.getByRole("option", { name: /^initial,/ });
+    await expect(
+      history.getByRole("option", { name: /^follow-up,/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    await initialCommit.click();
+    await expect(initialCommit).toHaveAttribute("aria-selected", "true");
+
     const branches = page.getByRole("navigation", { name: "Branches" });
     const tree = branches.getByRole("tree", { name: "Branches" });
     const main = tree.getByRole("treeitem", { name: /^main(?:,|$)/ });
@@ -57,6 +65,9 @@ async function createRepository(path: string) {
   await writeFile(join(path, "README.md"), "hello");
   await git(path, "add", "README.md");
   await git(path, "commit", "-m", "initial");
+  await writeFile(join(path, "README.md"), "hello again");
+  await git(path, "add", "README.md");
+  await git(path, "commit", "-m", "follow-up");
   await git(path, "branch", "feature");
 }
 

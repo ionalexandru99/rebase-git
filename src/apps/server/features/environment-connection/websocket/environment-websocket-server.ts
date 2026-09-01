@@ -1,8 +1,12 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
-import { currentTransportLimits, environmentLivePath } from "@rebase/contracts";
+import {
+  currentTransportLimits,
+  type EnvironmentAccessCapability,
+  environmentLivePath,
+} from "@rebase/contracts";
 import { Cause, Effect } from "effect";
-import { WebSocketServer } from "ws";
+import { type WebSocket, WebSocketServer } from "ws";
 import {
   type EnvironmentAuthorization,
   isEnvironmentAuthorizationError,
@@ -31,6 +35,10 @@ export function attachEnvironmentWebSocketServer(
     noServer: true,
     perMessageDeflate: false,
   });
+  const accessCapabilities = new WeakMap<
+    WebSocket,
+    ReadonlySet<EnvironmentAccessCapability>
+  >();
   const upgrade = (
     request: Parameters<typeof webSocketServer.handleUpgrade>[0],
     socket: Duplex,
@@ -46,11 +54,15 @@ export function attachEnvironmentWebSocketServer(
         yield* validateRequestHost(request);
         yield* validateRequestOrigin(request, false);
         const tickets = url.searchParams.getAll("ticket");
-        yield* authorization.consumeTicket(
+        const deviceAuthorization = yield* authorization.consumeTicket(
           tickets.length === 1 ? tickets[0] : undefined,
         );
         yield* Effect.sync(() => {
           webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+            accessCapabilities.set(
+              webSocket,
+              new Set(deviceAuthorization.capabilities),
+            );
             webSocketServer.emit("connection", webSocket, request);
           });
         });
@@ -64,7 +76,14 @@ export function attachEnvironmentWebSocketServer(
 
   server.on("upgrade", upgrade);
   webSocketServer.on("connection", (socket) => {
-    runEnvironmentEffect(runEnvironmentWebSocketSession(socket, state));
+    runEnvironmentEffect(
+      runEnvironmentWebSocketSession(
+        socket,
+        state,
+        accessCapabilities.get(socket) ?? new Set(),
+      ),
+    );
+    accessCapabilities.delete(socket);
   });
 
   return {

@@ -4,6 +4,8 @@ import {
   localBranchFromRecord,
   parseForEachRef,
   remoteBranchFromRecord,
+  remoteDefaultBranchFromRecord,
+  tagFromRecord,
 } from "@rebase/server/features/repository-refs/git/parse-for-each-ref";
 import { parseWorktreeList } from "@rebase/server/features/repository-refs/git/parse-worktree-list";
 import { checkoutFailure } from "@rebase/server/features/repository-refs/git/repository-refs-failures";
@@ -25,18 +27,25 @@ describe("git ref parsing", () => {
     expect(branches).toEqual([
       {
         name: "main",
+        target: commit,
         upstream: { ahead: 0, behind: 2, gone: false, name: "origin/main" },
         worktreePath: "/repo",
       },
       {
         name: "feature",
+        target: commit,
         upstream: { ahead: 3, behind: 1, gone: false, name: "origin/feature" },
       },
       {
         name: "orphan",
+        target: commit,
         upstream: { ahead: 0, behind: 0, gone: true, name: "origin/orphan" },
       },
-      { name: "local", worktreePath: "/repo/../worktrees/local" },
+      {
+        name: "local",
+        target: commit,
+        worktreePath: "/repo/../worktrees/local",
+      },
     ]);
   });
 
@@ -57,8 +66,13 @@ describe("git ref parsing", () => {
 
     expect(records.map(remoteBranchFromRecord)).toEqual([
       undefined,
-      { name: "feature/REB-1/nested", remote: "origin" },
-      { name: "main", remote: "upstream" },
+      { name: "feature/REB-1/nested", remote: "origin", target: commit },
+      { name: "main", remote: "upstream", target: commit },
+    ]);
+    expect(records.map(remoteDefaultBranchFromRecord)).toEqual([
+      { name: "main", remote: "origin" },
+      undefined,
+      undefined,
     ]);
   });
 
@@ -80,6 +94,32 @@ describe("git ref parsing", () => {
     expect(parseWorktreeList(stdout)).toEqual([
       { head: { branch: "main", commit }, main: true, path: "/repo" },
       { head: { commit }, main: false, path: "/repo/.worktrees/spike" },
+    ]);
+  });
+
+  it("uses commit targets for lightweight and annotated tags", () => {
+    const peeledCommit = "b".repeat(40);
+    const records = parseForEachRef(
+      [
+        record("refs/tags/lightweight", "", "", ""),
+        record(
+          "refs/tags/annotated",
+          "",
+          "",
+          "",
+          "",
+          "tag",
+          peeledCommit,
+          "commit",
+        ),
+        record("refs/tags/tree", "", "", "", "", "tag", "c".repeat(40), "tree"),
+      ].join("\n"),
+    );
+
+    expect(records.map(tagFromRecord)).toEqual([
+      { name: "lightweight", target: commit },
+      { name: "annotated", target: peeledCommit },
+      undefined,
     ]);
   });
 
@@ -143,6 +183,19 @@ function record(
   track: string,
   worktreePath: string,
   symref = "",
+  objectType = "commit",
+  peeledObject = "",
+  peeledObjectType = "",
 ) {
-  return [name, commit, upstream, track, worktreePath, symref].join("\0");
+  return [
+    name,
+    commit,
+    objectType,
+    peeledObject,
+    peeledObjectType,
+    upstream,
+    track,
+    worktreePath,
+    symref,
+  ].join("\0");
 }

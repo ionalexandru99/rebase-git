@@ -10,6 +10,9 @@ const ProductVersion = Schema.String.check(
   Schema.isMaxLength(64),
 );
 
+export const EnvironmentRequestId = Schema.String.check(Schema.isUUID(4));
+export type EnvironmentRequestId = typeof EnvironmentRequestId.Type;
+
 export const ProtocolRange = Schema.Struct({
   major: ProtocolNumber,
   minor: ProtocolNumber,
@@ -51,7 +54,7 @@ export const ProductVersionSchema = ProductVersion;
 
 export const currentEnvironmentProtocol = {
   major: 1,
-  minor: 2,
+  minor: 3,
   minimumSupportedMinor: 0,
 } satisfies ProtocolRange;
 
@@ -64,6 +67,16 @@ export const currentEnvironmentCapabilities = [
   {
     introducedInMinor: 1,
     name: "sequence-resnapshot",
+    version: 1,
+  },
+  {
+    introducedInMinor: 3,
+    name: "binary-fragmentation",
+    version: 1,
+  },
+  {
+    introducedInMinor: 3,
+    name: "repository-history",
     version: 1,
   },
 ] satisfies ReadonlyArray<EnvironmentCapability>;

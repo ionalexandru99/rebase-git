@@ -1,10 +1,12 @@
 import type { EnvironmentDiscovery } from "@rebase/contracts";
 import type { Effect } from "effect";
+import type { RepositoryHistoryService } from "#server/domain/repository-history.contract";
 import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
 
 export interface EnvironmentTransportState {
   readonly discovery: EnvironmentDiscovery;
   readonly events: EnvironmentEventPublisher;
+  readonly history?: RepositoryHistoryService;
 }
 
 export type RunEnvironmentEffect = (

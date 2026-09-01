@@ -139,6 +139,10 @@ async function renderRepositoryWorkspace() {
         <RepositoryWorkspace
           activeWorktreePath="/repo"
           branchesFocusRequest={0}
+          environmentId={undefined}
+          historyGateway={{
+            read: async () => Promise.reject(new Error("Unavailable")),
+          }}
           refs={{
             checkingOut: false,
             refs: {
@@ -162,6 +166,8 @@ async function renderRepositoryWorkspace() {
             status: "ready",
           }}
           retryRefs={() => undefined}
+          repositoryId="00000000-0000-4000-8000-000000000001"
+          repositoryName="rebase-test"
           selectRef={() => undefined}
         />
       </div>
@@ -198,6 +204,9 @@ function pairingRequiredSession(): LocalEnvironmentSession {
       remember: async () => Promise.reject(new Error("Unavailable")),
       remove: async () => undefined,
       subscribe: () => unsubscribe,
+    },
+    repositoryHistory: {
+      read: async () => Promise.reject(new Error("Unavailable")),
     },
     repositoryRefs: {
       checkout: async () => Promise.reject(new Error("Unavailable")),

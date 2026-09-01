@@ -43,6 +43,7 @@ export type BranchUpstream = typeof BranchUpstream.Type;
 
 export const LocalBranch = Schema.Struct({
   name: RefName,
+  target: Schema.optional(CommitId),
   upstream: Schema.optional(BranchUpstream),
   worktreePath: Schema.optional(WorktreePath),
 });
@@ -51,11 +52,19 @@ export type LocalBranch = typeof LocalBranch.Type;
 export const RemoteBranch = Schema.Struct({
   name: RefName,
   remote: RemoteName,
+  target: Schema.optional(CommitId),
 });
 export type RemoteBranch = typeof RemoteBranch.Type;
 
+export const RemoteDefaultBranch = Schema.Struct({
+  name: RefName,
+  remote: RemoteName,
+});
+export type RemoteDefaultBranch = typeof RemoteDefaultBranch.Type;
+
 export const RepositoryTag = Schema.Struct({
   name: RefName,
+  target: Schema.optional(CommitId),
 });
 export type RepositoryTag = typeof RepositoryTag.Type;
 
@@ -69,6 +78,9 @@ export type RepositoryRefsTruncation = typeof RepositoryRefsTruncation.Type;
 export const RepositoryRefs = Schema.Struct({
   branches: Schema.Array(LocalBranch).check(Schema.isMaxLength(10_000)),
   remoteBranches: Schema.Array(RemoteBranch).check(Schema.isMaxLength(20_000)),
+  remoteDefaultBranches: Schema.optionalKey(
+    Schema.Array(RemoteDefaultBranch).check(Schema.isMaxLength(256)),
+  ),
   repositoryId: RepositoryId,
   tags: Schema.Array(RepositoryTag).check(Schema.isMaxLength(10_000)),
   truncated: RepositoryRefsTruncation,

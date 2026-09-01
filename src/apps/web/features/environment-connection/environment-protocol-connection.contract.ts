@@ -4,6 +4,7 @@ import type {
 } from "@rebase/contracts";
 import type { Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
+import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
 
 export type NegotiatedEnvironment = Exclude<
   typeof EnvironmentHelloResult.Type,
@@ -16,6 +17,7 @@ export interface EnvironmentProtocolConnection {
   readonly currentSequence: () => number;
   readonly discovery: EnvironmentDiscovery;
   readonly negotiated: NegotiatedEnvironment;
+  readonly repositoryHistory: RepositoryHistoryTransport;
   readonly waitForSequence: (
     sequence: number,
   ) => Effect.Effect<number, EnvironmentConnectionFailure>;

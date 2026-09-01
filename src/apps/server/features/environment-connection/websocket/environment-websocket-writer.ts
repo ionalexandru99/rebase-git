@@ -1,6 +1,8 @@
 import {
+  type BinaryLogicalMessage,
   type EnvironmentServerMessage,
   EnvironmentServerMessage as EnvironmentServerMessageSchema,
+  fragmentBinaryMessage,
   type TransportLimits,
 } from "@rebase/contracts";
 import { Effect, Ref, Schema, Semaphore } from "effect";
@@ -22,6 +24,9 @@ export interface EnvironmentWebSocketWriter {
   ) => Effect.Effect<boolean, EnvironmentWebSocketWriteError>;
   readonly send: (
     message: EnvironmentServerMessage,
+  ) => Effect.Effect<void, EnvironmentWebSocketWriteError>;
+  readonly sendBinary: (
+    message: BinaryLogicalMessage,
   ) => Effect.Effect<void, EnvironmentWebSocketWriteError>;
   readonly enqueue: (
     message: EnvironmentServerMessage,
@@ -72,10 +77,32 @@ export function createEnvironmentWebSocketWriter(
       enqueue,
       flush,
       send,
+      sendBinary: (message) =>
+        sendBinaryMessage(socket, writerState, sendPermit, message),
       setNegotiatedContract: (limits, supportsResnapshot) =>
         setNegotiatedContract(writerState, limits, supportsResnapshot),
     } satisfies EnvironmentWebSocketWriter;
   });
+}
+
+function sendBinaryMessage(
+  socket: WebSocket,
+  writerState: Ref.Ref<WriterState>,
+  sendPermit: Semaphore.Semaphore,
+  message: BinaryLogicalMessage,
+) {
+  return sendPermit.withPermit(
+    Effect.gen(function* () {
+      const { limits } = yield* Ref.get(writerState);
+      const frames = fragmentBinaryMessage(
+        message,
+        limits.maxWebSocketResponseBytes,
+      );
+      for (const frame of frames) {
+        yield* sendWebSocketBinary(socket, frame);
+      }
+    }),
+  );
 }
 
 function flushOutgoingMessages(
@@ -269,6 +296,34 @@ function enqueueMessage(
 function sendWebSocketMessage(socket: WebSocket, message: string) {
   return Effect.callback<void, EnvironmentWebSocketWriteError>((resume) => {
     socket.send(message, (error) => {
+      resume(
+        error == null
+          ? Effect.void
+          : Effect.fail(
+              new EnvironmentWebSocketWriteError({
+                closeCode: 1011,
+                reason: "WebSocketWriteFailed",
+              }),
+            ),
+      );
+    });
+  });
+}
+
+function sendWebSocketBinary(socket: WebSocket, message: Uint8Array) {
+  return Effect.callback<void, EnvironmentWebSocketWriteError>((resume) => {
+    if (socket.readyState !== WebSocket.OPEN) {
+      resume(
+        Effect.fail(
+          new EnvironmentWebSocketWriteError({
+            closeCode: 1011,
+            reason: "WebSocketNotOpen",
+          }),
+        ),
+      );
+      return;
+    }
+    socket.send(message, { binary: true }, (error) => {
       resume(
         error == null
           ? Effect.void

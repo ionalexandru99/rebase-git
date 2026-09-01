@@ -14,6 +14,7 @@ import {
   localBranchFromRecord,
   parseForEachRef,
   remoteBranchFromRecord,
+  remoteDefaultBranchFromRecord,
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
 import { parseWorktreeList } from "#server/features/repository-refs/git/parse-worktree-list";
@@ -59,6 +60,9 @@ export function readRepositoryRefs(
       ),
       remoteBranches: output.remoteBranches.flatMap(
         withDefined(remoteBranchFromRecord),
+      ),
+      remoteDefaultBranches: output.remoteBranches.flatMap(
+        withDefined(remoteDefaultBranchFromRecord),
       ),
       repositoryId: repository.id,
       tags: output.tags.flatMap(withDefined(tagFromRecord)),

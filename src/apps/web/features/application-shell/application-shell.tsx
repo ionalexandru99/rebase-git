@@ -159,8 +159,11 @@ export function ApplicationShell({
     session,
   });
   const toggleSidebar = useCallback(() => {
-    if (sidebarRef.current?.isCollapsed()) expandSidebar();
-    else collapseSidebar();
+    if (sidebarRef.current?.isCollapsed()) {
+      expandSidebar();
+    } else {
+      collapseSidebar();
+    }
   }, [collapseSidebar, expandSidebar]);
   const focusSidebarFilter = useCallback(() => {
     setSettingsOpen(false);
@@ -203,6 +206,9 @@ export function ApplicationShell({
         ? count + environment.repositories.length
         : count,
     0,
+  );
+  const selectedRepository = repositoryCatalog.repositories.find(
+    (repository) => repository.id === navigation.selectedRepositoryId,
   );
 
   useApplicationShortcuts({
@@ -296,7 +302,15 @@ export function ApplicationShell({
                   <RepositoryWorkspace
                     activeWorktreePath={activeWorktreePath}
                     branchesFocusRequest={branchesFocusRequest}
+                    environmentId={
+                      sessionState._tag === "Connected"
+                        ? sessionState.environmentId
+                        : undefined
+                    }
+                    historyGateway={session.repositoryHistory}
                     refs={repositoryRefs}
+                    repositoryId={navigation.selectedRepositoryId}
+                    repositoryName={selectedRepository?.name ?? "Repository"}
                     retryRefs={retryRefs}
                     selectRef={selectRef}
                   />

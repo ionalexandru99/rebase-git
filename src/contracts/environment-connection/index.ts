@@ -20,10 +20,12 @@ export {
   currentEnvironmentProtocol,
   EnvironmentCapabilities,
   EnvironmentCapability,
+  EnvironmentRequestId,
   ProductVersionSchema,
   ProtocolRange,
 } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
 export { negotiateEnvironmentHello } from "@rebase/contracts/environment-connection/negotiation/negotiate-environment-protocol";
+export * from "@rebase/contracts/environment-connection/websocket/binary-message-fragment";
 export {
   createCurrentEnvironmentHello,
   EnvironmentChanged,

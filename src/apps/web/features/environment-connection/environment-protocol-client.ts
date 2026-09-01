@@ -30,6 +30,7 @@ import {
   acquireEnvironmentSocketEvents,
   readEnvironmentHelloResult,
 } from "#web/features/environment-connection/websocket/environment-socket";
+import { createRepositoryHistoryTransport } from "#web/features/repository-history/repository-history-transport";
 
 export {
   EnvironmentAuthorizationRejected,
@@ -240,11 +241,21 @@ function runEnvironmentConnection(
       hello,
       discovery,
     );
+    const repositoryHistory = createRepositoryHistoryTransport(
+      socket,
+      negotiated.capabilities.some(
+        (capability) => capability.name === "repository-history",
+      ) &&
+        negotiated.capabilities.some(
+          (capability) => capability.name === "binary-fragmentation",
+        ),
+    );
     yield* initializeEnvironmentSequence(state, hello, negotiated);
     yield* publishEnvironmentConnection(
       connected,
       closed,
       state,
+      repositoryHistory,
       discovery,
       negotiated,
       closeController,
@@ -259,7 +270,12 @@ function runEnvironmentConnection(
       signal,
       socket,
       state,
-    });
+      repositoryHistory,
+    }).pipe(
+      Effect.ensuring(
+        repositoryHistory.close(environmentResponseError("WebSocket")),
+      ),
+    );
   });
 }
 
@@ -286,6 +302,7 @@ function publishEnvironmentConnection(
   >,
   closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
+  repositoryHistory: ReturnType<typeof createRepositoryHistoryTransport>,
   discovery: EnvironmentDiscovery,
   negotiated: EnvironmentProtocolConnection["negotiated"],
   closeController: AbortController,
@@ -296,6 +313,7 @@ function publishEnvironmentConnection(
     currentSequence: () => Ref.getUnsafe(state).currentSequence,
     discovery,
     negotiated,
+    repositoryHistory,
     waitForSequence: (sequence) => waitForEnvironmentSequence(state, sequence),
   });
 }
