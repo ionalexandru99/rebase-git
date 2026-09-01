@@ -4,6 +4,7 @@ import {
   localBranchFromRecord,
   parseForEachRef,
   remoteBranchFromRecord,
+  remoteDefaultBranchFromRecord,
 } from "@rebase/server/features/repository-refs/git/parse-for-each-ref";
 import { parseWorktreeList } from "@rebase/server/features/repository-refs/git/parse-worktree-list";
 import { checkoutFailure } from "@rebase/server/features/repository-refs/git/repository-refs-failures";
@@ -25,18 +26,25 @@ describe("git ref parsing", () => {
     expect(branches).toEqual([
       {
         name: "main",
+        target: commit,
         upstream: { ahead: 0, behind: 2, gone: false, name: "origin/main" },
         worktreePath: "/repo",
       },
       {
         name: "feature",
+        target: commit,
         upstream: { ahead: 3, behind: 1, gone: false, name: "origin/feature" },
       },
       {
         name: "orphan",
+        target: commit,
         upstream: { ahead: 0, behind: 0, gone: true, name: "origin/orphan" },
       },
-      { name: "local", worktreePath: "/repo/../worktrees/local" },
+      {
+        name: "local",
+        target: commit,
+        worktreePath: "/repo/../worktrees/local",
+      },
     ]);
   });
 
@@ -57,8 +65,13 @@ describe("git ref parsing", () => {
 
     expect(records.map(remoteBranchFromRecord)).toEqual([
       undefined,
-      { name: "feature/REB-1/nested", remote: "origin" },
-      { name: "main", remote: "upstream" },
+      { name: "feature/REB-1/nested", remote: "origin", target: commit },
+      { name: "main", remote: "upstream", target: commit },
+    ]);
+    expect(records.map(remoteDefaultBranchFromRecord)).toEqual([
+      { name: "main", remote: "origin" },
+      undefined,
+      undefined,
     ]);
   });
 

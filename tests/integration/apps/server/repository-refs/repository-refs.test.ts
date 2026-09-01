@@ -58,11 +58,13 @@ describe("repository refs", { timeout: 30_000 }, () => {
       expect.arrayContaining([
         {
           name: "main",
+          target: expect.stringMatching(/^[0-9a-f]{40}$/),
           upstream: { ahead: 0, behind: 0, gone: false, name: "origin/main" },
           worktreePath: fixture.repositoryPath,
         },
         {
           name: "feature",
+          target: expect.stringMatching(/^[0-9a-f]{40}$/),
           upstream: {
             ahead: 1,
             behind: 0,
@@ -70,16 +72,30 @@ describe("repository refs", { timeout: 30_000 }, () => {
             name: "origin/feature",
           },
         },
-        { name: "topic", worktreePath: fixture.worktreePath },
+        {
+          name: "topic",
+          target: expect.stringMatching(/^[0-9a-f]{40}$/),
+          worktreePath: fixture.worktreePath,
+        },
       ]),
     );
     expect(refs.remoteBranches).toEqual(
       expect.arrayContaining([
-        { name: "main", remote: "origin" },
-        { name: "remote-only", remote: "origin" },
+        {
+          name: "main",
+          remote: "origin",
+          target: expect.stringMatching(/^[0-9a-f]{40}$/),
+        },
+        {
+          name: "remote-only",
+          remote: "origin",
+          target: expect.stringMatching(/^[0-9a-f]{40}$/),
+        },
       ]),
     );
-    expect(refs.tags).toEqual([{ name: "v1.0.0" }]);
+    expect(refs.tags).toEqual([
+      { name: "v1.0.0", target: expect.stringMatching(/^[0-9a-f]{40}$/) },
+    ]);
     expect(refs.truncated).toEqual({
       branches: false,
       remoteBranches: false,
@@ -262,6 +278,7 @@ describe("repository refs", { timeout: 30_000 }, () => {
       expect.arrayContaining([
         {
           name: "remote-only",
+          target: expect.stringMatching(/^[0-9a-f]{40}$/),
           upstream: {
             ahead: 0,
             behind: 0,

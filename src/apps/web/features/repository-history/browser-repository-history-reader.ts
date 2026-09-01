@@ -1,0 +1,198 @@
+import type { RepositoryCommit } from "@rebase/contracts";
+import type {
+  RepositoryHistoryGateway,
+  RepositoryHistoryQuery,
+  RepositoryHistoryReader,
+  RepositoryHistoryRefTarget,
+  RepositoryHistorySnapshot,
+} from "#web/features/repository-history/repository-history-reader.contract";
+import {
+  RepositoryHistoryRejected,
+  RepositoryHistoryUnavailable,
+} from "#web/features/repository-history/repository-history-reader.contract";
+import type {
+  ConnectRepositoryHistoryReader,
+  RepositoryHistoryWorkerRequest,
+  RepositoryHistoryWorkerResponse,
+} from "#web/features/repository-history/repository-history-worker.contract";
+
+let sharedWorker: SharedWorker | undefined;
+
+export function createBrowserRepositoryHistoryReader(options: {
+  readonly environmentId: string;
+  readonly gateway: RepositoryHistoryGateway;
+  readonly repositoryId: string;
+  readonly worker?: SharedWorker;
+}): RepositoryHistoryReader {
+  const worker = options.worker ?? acquireSharedWorker();
+  const channel = new MessageChannel();
+  const port = channel.port1;
+  const listeners = new Set<() => void>();
+  const pending = new Map<string, PendingRequest>();
+  const loads = new Map<string, AbortController>();
+  let closed = false;
+  let snapshot: RepositoryHistorySnapshot = {
+    revision: 0,
+    status: "empty",
+  };
+
+  port.onmessage = (event: MessageEvent<RepositoryHistoryWorkerResponse>) => {
+    const message = event.data;
+    if (message._tag === "LoadHistory") {
+      loadHistory(message.requestId, message.query);
+      return;
+    }
+    if (message._tag === "CancelHistoryLoad") {
+      loads.get(message.requestId)?.abort();
+      loads.delete(message.requestId);
+      return;
+    }
+    if (message._tag === "SnapshotChanged") {
+      snapshot = {
+        ...(message.failure === undefined
+          ? {}
+          : { error: readerError(message.failure) }),
+        revision: message.revision,
+        status: message.status,
+      };
+      for (const listener of listeners) listener();
+      return;
+    }
+    const request = pending.get(message.requestId);
+    if (request === undefined) return;
+    pending.delete(message.requestId);
+    if (message._tag === "RequestFailed") {
+      request.reject(readerError(message.failure));
+      return;
+    }
+    if (message._tag === "RefTargetsResult") {
+      request.resolve(message.refs);
+      return;
+    }
+    request.resolve(message.commits);
+  };
+  port.start();
+  const connection: ConnectRepositoryHistoryReader = {
+    _tag: "ConnectRepositoryHistoryReader",
+    environmentId: options.environmentId,
+    port: channel.port2,
+    repositoryId: options.repositoryId,
+  };
+  worker.port.postMessage(connection, [channel.port2]);
+  worker.port.start();
+
+  function loadHistory(requestId: string, query: RepositoryHistoryQuery) {
+    const controller = new AbortController();
+    loads.set(requestId, controller);
+    void options.gateway
+      .read(
+        {
+          limit: query.limit,
+          order: query.order,
+          repositoryId: options.repositoryId,
+          roots: query.roots,
+        },
+        controller.signal,
+      )
+      .then(
+        (bytes) => {
+          const message: RepositoryHistoryWorkerRequest = {
+            _tag: "HistoryPageReceived",
+            bytes,
+            requestId,
+          };
+          port.postMessage(message, [bytes.buffer]);
+        },
+        (error: unknown) => {
+          const message: RepositoryHistoryWorkerRequest = {
+            _tag: "HistoryPageFailed",
+            failure:
+              error instanceof RepositoryHistoryRejected
+                ? { _tag: "Rejected", detail: error.failure }
+                : { _tag: "Unavailable" },
+            requestId,
+          };
+          port.postMessage(message);
+        },
+      )
+      .finally(() => loads.delete(requestId));
+  }
+
+  function request<T>(message: RepositoryHistoryWorkerRequest) {
+    if (closed) return Promise.reject(new RepositoryHistoryUnavailable());
+    return new Promise<T>((resolve, reject) => {
+      if (!("requestId" in message)) {
+        reject(new RepositoryHistoryUnavailable());
+        return;
+      }
+      pending.set(message.requestId, {
+        reject,
+        resolve: (value) => resolve(value as T),
+      });
+      port.postMessage(message);
+    });
+  }
+
+  return {
+    close: () => {
+      if (closed) return;
+      closed = true;
+      for (const controller of loads.values()) controller.abort();
+      loads.clear();
+      for (const current of pending.values()) {
+        current.reject(new RepositoryHistoryUnavailable());
+      }
+      pending.clear();
+      port.postMessage({
+        _tag: "CloseReader",
+      } satisfies RepositoryHistoryWorkerRequest);
+      port.close();
+    },
+    getCommitSummaries: (oids) =>
+      request<readonly RepositoryCommit[]>({
+        _tag: "GetCommitSummaries",
+        oids,
+        requestId: crypto.randomUUID(),
+      }),
+    getRefTargets: () =>
+      request<readonly RepositoryHistoryRefTarget[]>({
+        _tag: "GetRefTargets",
+        requestId: crypto.randomUUID(),
+      }),
+    getSnapshot: () => snapshot,
+    read: (query) =>
+      request<readonly RepositoryCommit[]>({
+        _tag: "ReadHistory",
+        query,
+        requestId: crypto.randomUUID(),
+      }),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+function acquireSharedWorker() {
+  sharedWorker ??= new SharedWorker(
+    new URL("./repository-history-worker.ts", import.meta.url),
+    { name: "rebase-repository-history", type: "module" },
+  );
+  return sharedWorker;
+}
+
+function readerError(
+  failure: Extract<
+    RepositoryHistoryWorkerResponse,
+    { _tag: "RequestFailed" }
+  >["failure"],
+) {
+  return failure._tag === "Rejected"
+    ? new RepositoryHistoryRejected({ failure: failure.detail })
+    : new RepositoryHistoryUnavailable();
+}
+
+interface PendingRequest {
+  readonly reject: (error: unknown) => void;
+  readonly resolve: (value: unknown) => void;
+}

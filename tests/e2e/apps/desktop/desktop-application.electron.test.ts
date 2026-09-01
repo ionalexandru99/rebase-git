@@ -20,11 +20,28 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
     const repositoryPath = join(testHome, "rebase-test");
     await mkdir(repositoryPath);
     await execFileAsync("git", ["init", repositoryPath]);
+    await execFileAsync("git", [
+      "-C",
+      repositoryPath,
+      "-c",
+      "user.name=Rebase test",
+      "-c",
+      "user.email=rebase@example.test",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "initial",
+    ]);
     const environment = await createTestEnvironment(testHome);
     const application = await launchApplication(environment);
     try {
       const window = await connectedWindow(application);
       await openRepository(window, "rebase-test");
+      const commit = window
+        .getByRole("listbox", { name: "Commit history" })
+        .getByRole("option", { name: /^initial,/ });
+      await expect(commit).toHaveAttribute("aria-selected", "true");
+      await commit.click();
 
       const projects = window.getByRole("navigation", { name: "Projects" });
       await expect(

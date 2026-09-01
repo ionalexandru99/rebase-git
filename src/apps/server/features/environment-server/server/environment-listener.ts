@@ -27,6 +27,7 @@ export function acquireEnvironmentListener(
         options.productVersion,
       ),
       events: options.events,
+      ...(options.history === undefined ? {} : { history: options.history }),
     };
     const runFork = yield* FiberSet.makeRuntime<never, void, never>();
     const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {

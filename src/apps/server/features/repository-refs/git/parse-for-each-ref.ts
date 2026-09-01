@@ -1,6 +1,7 @@
 import type {
   LocalBranch,
   RemoteBranch,
+  RemoteDefaultBranch,
   RepositoryTag,
 } from "@rebase/contracts";
 
@@ -56,6 +57,7 @@ export function localBranchFromRecord(
   }
   return {
     name: record.name.slice(localBranchPrefix.length),
+    target: record.commit,
     ...(record.upstream.length === 0
       ? {}
       : {
@@ -82,14 +84,32 @@ export function remoteBranchFromRecord(
   return {
     name: qualified.slice(separator + 1),
     remote: qualified.slice(0, separator),
+    target: record.commit,
   };
+}
+
+export function remoteDefaultBranchFromRecord(
+  record: ForEachRefRecord,
+): RemoteDefaultBranch | undefined {
+  if (
+    !record.name.startsWith(remoteBranchPrefix) ||
+    !record.name.endsWith("/HEAD") ||
+    !record.symref.startsWith(remoteBranchPrefix)
+  ) {
+    return undefined;
+  }
+  const remote = record.name.slice(remoteBranchPrefix.length, -"/HEAD".length);
+  const target = record.symref.slice(remoteBranchPrefix.length);
+  if (!target.startsWith(`${remote}/`)) return undefined;
+  const name = target.slice(remote.length + 1);
+  return name.length === 0 ? undefined : { name, remote };
 }
 
 export function tagFromRecord(
   record: ForEachRefRecord,
 ): RepositoryTag | undefined {
   return record.name.startsWith(tagPrefix)
-    ? { name: record.name.slice(tagPrefix.length) }
+    ? { name: record.name.slice(tagPrefix.length), target: record.commit }
     : undefined;
 }
 

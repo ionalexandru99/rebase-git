@@ -51,7 +51,7 @@ export const ProductVersionSchema = ProductVersion;
 
 export const currentEnvironmentProtocol = {
   major: 1,
-  minor: 2,
+  minor: 3,
   minimumSupportedMinor: 0,
 } satisfies ProtocolRange;
 
@@ -64,6 +64,16 @@ export const currentEnvironmentCapabilities = [
   {
     introducedInMinor: 1,
     name: "sequence-resnapshot",
+    version: 1,
+  },
+  {
+    introducedInMinor: 3,
+    name: "binary-fragmentation",
+    version: 1,
+  },
+  {
+    introducedInMinor: 3,
+    name: "repository-history",
     version: 1,
   },
 ] satisfies ReadonlyArray<EnvironmentCapability>;

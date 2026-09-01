@@ -51,6 +51,12 @@
       "import": "./dist/types/features/repository-refs/index.js",
       "default": "./dist/types/features/repository-refs/index.js"
     },
+    "./features/repository-history": {
+      "rebase-source": "./features/repository-history/index.ts",
+      "types": "./dist/types/features/repository-history/index.d.ts",
+      "import": "./dist/types/features/repository-history/index.js",
+      "default": "./dist/types/features/repository-history/index.js"
+    },
     "./styles.css": "./styles.css"
   },
   "scripts": {

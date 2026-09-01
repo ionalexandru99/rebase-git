@@ -12,6 +12,7 @@ import type {
   RepositoryCatalogController,
   RepositoryCatalogGateway,
 } from "#web/features/repository-catalog/repository-catalog-controller.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   RepositoryRefsController,
   RepositoryRefsGateway,
@@ -42,6 +43,7 @@ export interface LocalEnvironmentSession {
   readonly filesystem: EnvironmentFilesystemController;
   readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly repositoryCatalog: RepositoryCatalogController;
+  readonly repositoryHistory: RepositoryHistoryGateway;
   readonly repositoryRefs: RepositoryRefsController;
   readonly start: () => void;
   readonly stop: () => void;

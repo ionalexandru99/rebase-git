@@ -10,6 +10,10 @@ import {
   ProductVersionSchema,
   ProtocolRange,
 } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
+import {
+  RepositoryHistoryClientMessage,
+  RepositoryHistoryFailed,
+} from "@rebase/contracts/repository-history/repository-history.contract";
 import { Schema } from "effect";
 
 export const EnvironmentHello = Schema.TaggedStruct("Hello", {
@@ -29,6 +33,7 @@ export const SnapshotApplied = Schema.TaggedStruct("SnapshotApplied", {
 export const EnvironmentClientMessage = Schema.Union([
   EnvironmentHello,
   SnapshotApplied,
+  RepositoryHistoryClientMessage,
 ]);
 
 export type EnvironmentClientMessage = typeof EnvironmentClientMessage.Type;
@@ -108,6 +113,7 @@ export const EnvironmentServerMessage = Schema.Union([
   HelloRejected,
   EnvironmentChanged,
   ResnapshotRequired,
+  RepositoryHistoryFailed,
 ]);
 
 export type EnvironmentServerMessage = typeof EnvironmentServerMessage.Type;

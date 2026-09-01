@@ -204,6 +204,9 @@ export function ApplicationShell({
         : count,
     0,
   );
+  const selectedRepository = repositoryCatalog.repositories.find(
+    (repository) => repository.id === navigation.selectedRepositoryId,
+  );
 
   useApplicationShortcuts({
     availability: environmentStatus.availability,
@@ -296,7 +299,15 @@ export function ApplicationShell({
                   <RepositoryWorkspace
                     activeWorktreePath={activeWorktreePath}
                     branchesFocusRequest={branchesFocusRequest}
+                    environmentId={
+                      sessionState._tag === "Connected"
+                        ? sessionState.environmentId
+                        : undefined
+                    }
+                    historyGateway={session.repositoryHistory}
                     refs={repositoryRefs}
+                    repositoryId={navigation.selectedRepositoryId}
+                    repositoryName={selectedRepository?.name ?? "Repository"}
                     retryRefs={retryRefs}
                     selectRef={selectRef}
                   />

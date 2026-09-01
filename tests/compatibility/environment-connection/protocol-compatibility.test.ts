@@ -78,10 +78,28 @@ describe("Environment protocol compatibility", () => {
     expect(negotiateThroughJson(discovery, hello)).toMatchObject({
       _tag: "HelloAccepted",
       capabilities: [
-        { name: "environment-events", version: 1 },
-        { name: "sequence-resnapshot", version: 1 },
+        {
+          introducedInMinor: 0,
+          name: "environment-events",
+          version: 1,
+        },
+        {
+          introducedInMinor: 1,
+          name: "sequence-resnapshot",
+          version: 1,
+        },
+        {
+          introducedInMinor: 3,
+          name: "binary-fragmentation",
+          version: 1,
+        },
+        {
+          introducedInMinor: 3,
+          name: "repository-history",
+          version: 1,
+        },
       ],
-      protocol: { major: 1, minor: 2 },
+      protocol: { major: 1, minor: 3 },
     });
   });
 

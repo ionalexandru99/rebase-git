@@ -197,6 +197,7 @@ function createConnection(currentSequence = 0) {
     disconnect,
     discovery,
     negotiated,
+    repositoryHistory: { read: () => Effect.die("History is not used") },
     waitForSequence: vi.fn(() => Effect.never),
   } satisfies EnvironmentProtocolConnection & {
     readonly disconnect: ReturnType<typeof deferred<EnvironmentResponseError>>;

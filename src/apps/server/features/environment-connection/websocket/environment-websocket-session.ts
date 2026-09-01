@@ -1,8 +1,10 @@
 import {
+  type EnvironmentAccessCapability,
   EnvironmentClientMessage,
   type EnvironmentHello,
   EnvironmentHelloResult,
   type EnvironmentTransportFailure,
+  encodeRepositoryHistoryPage,
   type HelloAccepted,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
@@ -27,8 +29,11 @@ import {
 export function runEnvironmentWebSocketSession(
   socket: WebSocket,
   state: EnvironmentTransportState,
+  accessCapabilities: ReadonlySet<EnvironmentAccessCapability> = new Set([
+    "repository.read",
+  ]),
 ) {
-  return runSession(socket, state).pipe(
+  return runSession(socket, state, accessCapabilities).pipe(
     Effect.catchTag("EnvironmentWebSocketSessionClosed", () => Effect.void),
     Effect.catchTag("EnvironmentWebSocketSessionRejected", ({ result }) =>
       rejectAndClose(socket, result),
@@ -40,14 +45,20 @@ export function runEnvironmentWebSocketSession(
   );
 }
 
-function runSession(socket: WebSocket, state: EnvironmentTransportState) {
+function runSession(
+  socket: WebSocket,
+  state: EnvironmentTransportState,
+  accessCapabilities: ReadonlySet<EnvironmentAccessCapability>,
+) {
   return Effect.gen(function* () {
     const messages = yield* acquireEnvironmentWebSocketInbox(socket, state);
     const writer = yield* createEnvironmentWebSocketWriter(socket, state);
     const runSessionEffect = yield* FiberSet.makeRuntime<never, void, never>();
+    const historyRequests = new Map<string, AbortController>();
+    let logicalMessageId = 0;
     const hello = yield* readHello(messages, state);
     const result = yield* negotiateSession(state, hello);
-    const supportsResnapshot = yield* initializeNegotiatedSession(
+    const capabilities = yield* initializeNegotiatedSession(
       socket,
       state,
       runSessionEffect,
@@ -55,7 +66,19 @@ function runSession(socket: WebSocket, state: EnvironmentTransportState) {
       hello,
       result,
     );
-    yield* processClientMessages(messages, writer, state, supportsResnapshot);
+    yield* processClientMessages(
+      messages,
+      writer,
+      state,
+      capabilities,
+      accessCapabilities,
+      historyRequests,
+      runSessionEffect,
+      () => {
+        logicalMessageId += 1;
+        return logicalMessageId;
+      },
+    );
   });
 }
 
@@ -76,7 +99,10 @@ function negotiateSession(
 function initializeNegotiatedSession(
   socket: WebSocket,
   state: EnvironmentTransportState,
-  runSessionEffect: (effect: Effect.Effect<void, never, never>) => unknown,
+  runSessionEffect: (
+    effect: Effect.Effect<void, never, never>,
+    options?: Effect.RunOptions,
+  ) => unknown,
   writer: EnvironmentWebSocketWriter,
   hello: EnvironmentHello,
   result: HelloAccepted,
@@ -99,7 +125,7 @@ function initializeNegotiatedSession(
     }
     yield* enqueueInitialResnapshot(writer.enqueue, hello, result, state);
     yield* writer.flush;
-    return supportsResnapshot;
+    return capabilities;
   });
 }
 
@@ -110,12 +136,28 @@ function processClientMessages(
   >,
   writer: EnvironmentWebSocketWriter,
   state: EnvironmentTransportState,
-  supportsResnapshot: boolean,
+  capabilities: ReadonlySet<string>,
+  accessCapabilities: ReadonlySet<EnvironmentAccessCapability>,
+  historyRequests: Map<string, AbortController>,
+  runSessionEffect: (
+    effect: Effect.Effect<void, never, never>,
+    options?: Effect.RunOptions,
+  ) => unknown,
+  nextLogicalMessageId: () => number,
 ) {
   return Effect.gen(function* () {
     while (true) {
       const message = decodeSocketMessage(yield* Queue.take(messages));
-      yield* handleClientMessage(message, writer, state, supportsResnapshot);
+      yield* handleClientMessage(
+        message,
+        writer,
+        state,
+        capabilities,
+        accessCapabilities,
+        historyRequests,
+        runSessionEffect,
+        nextLogicalMessageId,
+      );
     }
   });
 }
@@ -124,7 +166,14 @@ function handleClientMessage(
   message: typeof EnvironmentClientMessage.Type | undefined,
   writer: EnvironmentWebSocketWriter,
   state: EnvironmentTransportState,
-  supportsResnapshot: boolean,
+  capabilities: ReadonlySet<string>,
+  accessCapabilities: ReadonlySet<EnvironmentAccessCapability>,
+  historyRequests: Map<string, AbortController>,
+  runSessionEffect: (
+    effect: Effect.Effect<void, never, never>,
+    options?: Effect.RunOptions,
+  ) => unknown,
+  nextLogicalMessageId: () => number,
 ) {
   if (message === undefined) {
     return rejectSession("InvalidMessage");
@@ -132,19 +181,79 @@ function handleClientMessage(
   if (message._tag === "Hello") {
     return rejectSession("HandshakeAlreadyCompleted");
   }
-  if (!supportsResnapshot) {
-    return rejectSession("InvalidMessage");
-  }
-
-  return Effect.gen(function* () {
-    if (!(yield* writer.acknowledgeSnapshot(message.sequence))) {
-      yield* writer.send({
-        _tag: "ResnapshotRequired",
-        currentSequence: state.events.currentSequence(),
-        reason: "SequenceGap",
+  switch (message._tag) {
+    case "SnapshotApplied":
+      if (!capabilities.has("sequence-resnapshot")) {
+        return rejectSession("InvalidMessage");
+      }
+      return Effect.gen(function* () {
+        if (!(yield* writer.acknowledgeSnapshot(message.sequence))) {
+          yield* writer.send({
+            _tag: "ResnapshotRequired",
+            currentSequence: state.events.currentSequence(),
+            reason: "SequenceGap",
+          });
+        }
+      });
+    case "ReadRepositoryHistory": {
+      const history = state.history;
+      if (
+        !capabilities.has("repository-history") ||
+        !capabilities.has("binary-fragmentation") ||
+        history === undefined ||
+        historyRequests.has(message.requestId)
+      ) {
+        return rejectSession("InvalidMessage");
+      }
+      if (!accessCapabilities.has("repository.read")) {
+        return writer.send({
+          _tag: "RepositoryHistoryFailed",
+          failure: { _tag: "AuthorizationDenied" },
+          requestId: message.requestId,
+        });
+      }
+      return Effect.sync(() => {
+        const controller = new AbortController();
+        historyRequests.set(message.requestId, controller);
+        runSessionEffect(
+          history.read(message).pipe(
+            Effect.flatMap((page) =>
+              writer.sendBinary({
+                logicalMessageId: nextLogicalMessageId(),
+                payload: encodeRepositoryHistoryPage(page),
+                requestId: message.requestId,
+              }),
+            ),
+            Effect.catch((error) =>
+              writer.send({
+                _tag: "RepositoryHistoryFailed",
+                failure:
+                  error._tag === "RepositoryHistoryError"
+                    ? error.failure
+                    : { _tag: "GitFailed", reason: "Failed" },
+                requestId: message.requestId,
+              }),
+            ),
+            Effect.ensuring(
+              Effect.sync(() => historyRequests.delete(message.requestId)),
+            ),
+            Effect.catchTag(
+              "EnvironmentWebSocketWriteError",
+              () => Effect.void,
+            ),
+          ),
+          { signal: controller.signal },
+        );
+        if (controller.signal.aborted)
+          historyRequests.delete(message.requestId);
       });
     }
-  });
+    case "CancelRepositoryHistory":
+      return Effect.sync(() => {
+        historyRequests.get(message.requestId)?.abort();
+        historyRequests.delete(message.requestId);
+      });
+  }
 }
 
 function readHello(
