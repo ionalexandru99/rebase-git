@@ -467,7 +467,6 @@ jobs:
       - name: Publish with provenance
         if: steps.registry.outputs.publish == 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TAG: ${{ needs.package.outputs.dist_tag }}
           RELEASE_ARTIFACT: ${{ needs.package.outputs.artifact }}
         run: npm publish "./package-artifact/$RELEASE_ARTIFACT" --access public --provenance --tag "$NPM_TAG"
