@@ -478,6 +478,11 @@ function historyReader({
     getCommitSummaries: vi.fn(async () => commits),
     getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
     manageCache: async () => undefined,
+    search: async () => ({
+      commits: [],
+      replicaComplete: true,
+      synchronizedCommitCount: commits.length,
+    }),
     getRefTargets: vi.fn<RepositoryHistoryReader["getRefTargets"]>(
       async () => [],
     ),
