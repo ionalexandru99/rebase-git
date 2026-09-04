@@ -29,26 +29,45 @@ const events = new BroadcastChannel(
   parameters.get("events") ?? "history-lifecycle",
 );
 const report = (event: string) => events.postMessage(`${name}:${event}`);
-globalThis.addEventListener("pageshow", (event) =>
-  report(`pageshow:${event.persisted}`),
-);
-events.onmessage = (event: MessageEvent<string>) => {
+globalThis.addEventListener("pageshow", (event) => {
+  report(`pageshow:${event.persisted}`);
+  if (event.persisted && parameters.has("cacheAction"))
+    setTimeout(
+      () =>
+        void reader.read(query).then(
+          (commits) => report(`restored-read:${commits.length}`),
+          () => report("restored-read:closed"),
+        ),
+      0,
+    );
+});
+events.onmessage = async (event: MessageEvent<string>) => {
   if (event.data === "navigate")
     location.assign(`history-reader-away.html${location.search}`);
   if (event.data === "close") window.close();
+  if (
+    event.data === "clear" ||
+    event.data === "clear-all" ||
+    event.data === "remove"
+  ) {
+    await reader.manageCache(event.data);
+    report("cache-changed");
+  }
 };
 const reader = createBrowserRepositoryHistoryReader({
   environmentId,
   repositoryId,
   gateway: {
-    read: async () =>
-      encodeRepositoryHistoryPage({
+    read: async () => {
+      report("downloaded");
+      return encodeRepositoryHistoryPage({
         commits: [commit],
         objectFormat: "sha1",
         refTargets: [root],
         repositoryId,
         requestId: crypto.randomUUID(),
-      }),
+      });
+    },
     synchronize: async (_request, accept, signal) => {
       report("started");
       await accept(

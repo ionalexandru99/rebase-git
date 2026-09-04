@@ -40,7 +40,11 @@ const loadingRowIds = Array.from(
   { length: 12 },
   (_, index) => `commit-loading-row-${index}`,
 );
-const emptyHistorySnapshot = { revision: 0, status: "empty" } as const;
+const emptyHistorySnapshot = {
+  revision: 0,
+  historyRevision: 0,
+  status: "empty",
+} as const;
 const noSnapshotSubscription = () => () => undefined;
 
 export function CommitGraph({

@@ -17,6 +17,7 @@ import {
 import { holdRepositoryHistoryReaderLease } from "#web/features/repository-history/repository-history-reader-lease";
 import { maintainRepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader-lifecycle";
 import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
+import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 import type {
   ConnectRepositoryHistoryReader,
   RepositoryHistoryWorkerFailure,
@@ -38,13 +39,25 @@ interface BrowserRepositoryHistoryReaderOptions {
 export function createBrowserRepositoryHistoryReader(
   options: BrowserRepositoryHistoryReaderOptions,
 ): RepositoryHistoryReader {
-  return maintainRepositoryHistoryReader(() =>
-    connectBrowserRepositoryHistoryReader(options),
+  let cachePaused = false;
+  const reader: RepositoryHistoryReader = maintainRepositoryHistoryReader(() =>
+    connectBrowserRepositoryHistoryReader(
+      options,
+      () => reader.close(),
+      (paused) => {
+        cachePaused = paused;
+      },
+      cachePaused,
+    ),
   );
+  return reader;
 }
 
 function connectBrowserRepositoryHistoryReader(
   options: BrowserRepositoryHistoryReaderOptions,
+  onRemoved: () => void,
+  onCachePaused: (paused: boolean) => void,
+  cachePaused: boolean,
 ): RepositoryHistoryReader {
   const worker = options.worker ?? acquireSharedWorker();
   requestPersistentStorage();
@@ -58,11 +71,16 @@ function connectBrowserRepositoryHistoryReader(
   let closed = false;
   let snapshot: RepositoryHistorySnapshot = {
     revision: 0,
+    historyRevision: 0,
     status: "empty",
   };
 
   port.onmessage = (event: MessageEvent<RepositoryHistoryWorkerResponse>) => {
     const message = event.data;
+    if (message._tag === "CacheRemoved") {
+      onRemoved();
+      return;
+    }
     if (message._tag === "LoadHistory") {
       loadHistory(message.requestId, message.query);
       return;
@@ -93,11 +111,13 @@ function connectBrowserRepositoryHistoryReader(
       return;
     }
     if (message._tag === "SnapshotChanged") {
+      onCachePaused(message.cachePaused ?? false);
       snapshot = {
         ...(message.failure === undefined
           ? {}
           : { error: readerError(message.failure) }),
         revision: message.revision,
+        historyRevision: message.historyRevision,
         status: message.status,
         synchronization: message.synchronization,
         synchronizedCommitCount: message.synchronizedCommitCount,
@@ -132,6 +152,14 @@ function connectBrowserRepositoryHistoryReader(
       request.resolve(message.positions);
       return;
     }
+    if (message._tag === "CacheDiagnosticsResult") {
+      request.resolve(message.diagnostics);
+      return;
+    }
+    if (message._tag === "CacheManaged") {
+      request.resolve(undefined);
+      return;
+    }
     request.resolve(message.commits);
   };
   port.start();
@@ -140,6 +168,7 @@ function connectBrowserRepositoryHistoryReader(
       _tag: "ConnectRepositoryHistoryReader",
       environmentId: options.environmentId,
       logicalRepositoryId: options.logicalRepositoryId ?? options.repositoryId,
+      cachePaused,
       ...(lifetimeLock === undefined ? {} : { lifetimeLock }),
       port: channel.port2,
       repositoryId: options.repositoryId,
@@ -266,7 +295,7 @@ function connectBrowserRepositoryHistoryReader(
     });
   }
 
-  return {
+  const reader: RepositoryHistoryReader = {
     locateMany: (query, oids) =>
       request<readonly RepositoryHistoryPosition[]>({
         _tag: "LocateHistoryCommits",
@@ -286,6 +315,17 @@ function connectBrowserRepositoryHistoryReader(
         _tag: "LocateHistoryCommit",
         query,
         oid,
+        requestId: createRepositoryHistoryRequestId(),
+      }),
+    getCacheDiagnostics: () =>
+      request<RepositoryHistoryStorageDiagnostics>({
+        _tag: "GetCacheDiagnostics",
+        requestId: createRepositoryHistoryRequestId(),
+      }),
+    manageCache: (action) =>
+      request<void>({
+        _tag: "ManageCache",
+        action,
         requestId: createRepositoryHistoryRequestId(),
       }),
     close: () => {
@@ -339,6 +379,7 @@ function connectBrowserRepositoryHistoryReader(
       return () => listeners.delete(listener);
     },
   };
+  return reader;
 }
 
 function acquireSharedWorker() {

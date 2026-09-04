@@ -11,10 +11,12 @@ import type {
   HistoryAncestryRoute,
   HistoryParentEdge,
 } from "#web/features/repository-history/history-order.contract";
+import type { RepositoryHistoryCacheManagement } from "#web/features/repository-history/repository-history-storage.contract";
 
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
 export interface RepositoryHistorySnapshot {
+  readonly historyRevision: number;
   readonly error?: RepositoryHistoryReaderError;
   readonly revision: number;
   readonly status: "empty" | "error" | "loading" | "ready";
@@ -36,7 +38,8 @@ export interface RepositoryHistoryPosition {
   readonly index: number;
 }
 
-export interface RepositoryHistoryReader {
+export interface RepositoryHistoryReader
+  extends RepositoryHistoryCacheManagement {
   readonly locateMany: (
     query: RepositoryHistoryQuery,
     oids: readonly string[],

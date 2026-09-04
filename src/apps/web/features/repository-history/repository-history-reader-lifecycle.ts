@@ -58,6 +58,12 @@ export function maintainRepositoryHistoryReader(
     getCommitSummaries: (oids) =>
       reader?.getCommitSummaries(oids) ??
       Promise.reject(new RepositoryHistoryOffline()),
+    getCacheDiagnostics: () =>
+      reader?.getCacheDiagnostics() ??
+      Promise.reject(new RepositoryHistoryOffline()),
+    manageCache: (action) =>
+      reader?.manageCache(action) ??
+      Promise.reject(new RepositoryHistoryOffline()),
     getRefTargets: () =>
       reader?.getRefTargets() ?? Promise.reject(new RepositoryHistoryOffline()),
     getSnapshot: () => snapshot,
