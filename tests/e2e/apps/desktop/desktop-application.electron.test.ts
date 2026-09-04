@@ -50,8 +50,8 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
       const window = await connectedWindow(application);
       await openRepository(window, "rebase-test");
       const commit = window
-        .getByRole("listbox", { name: "Commit history" })
-        .getByRole("option", { name: /^initial,/ });
+        .getByRole("grid", { name: "Commit history" })
+        .getByRole("row", { name: /^initial,/ });
       await expect(commit).toHaveAttribute("aria-selected", "false");
       await commit.click();
       await expect(commit).toHaveAttribute("aria-selected", "true");
@@ -76,9 +76,9 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
       const history = restartedWindow.getByRole("listbox", {
         name: "Commit history",
       });
-      const initial = history.getByRole("option", { name: /^initial,/ });
+      const initial = history.getByRole("row", { name: /^initial,/ });
       await expect(
-        history.getByRole("option", { name: /^follow-up,/ }),
+        history.getByRole("row", { name: /^follow-up,/ }),
       ).toBeVisible();
 
       await restartedWindow.context().setOffline(true);

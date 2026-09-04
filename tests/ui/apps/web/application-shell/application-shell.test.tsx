@@ -142,8 +142,8 @@ describe("application shell", () => {
       .first()
       .click();
     const commit = page
-      .getByRole("listbox", { name: "Commit history" })
-      .getByRole("option", { name: /^cached commit,/ });
+      .getByRole("grid", { name: "Commit history" })
+      .getByRole("row", { name: /^cached commit,/ });
     await expect.element(commit).toBeVisible();
     await expect
       .element(page.getByText("Syncing", { exact: true }))
