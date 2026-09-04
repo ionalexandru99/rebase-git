@@ -50,7 +50,7 @@ import {
 import { HistoryScopeStrip } from "#web-ui/features/commit-graph/history-scope-strip";
 
 const rowHeight = 36;
-const overscanRows = 10;
+const overscanRows = 6;
 
 export function CommitGraph({
   ref,
@@ -75,6 +75,7 @@ export function CommitGraph({
   readonly scope?: HistoryScope;
   readonly selections?: readonly RepositoryRefTarget[];
 }): JSX.Element {
+  const [menuOid, setMenuOid] = useState<string>();
   const [expandedMerges, setExpandedMerges] = useState<
     ReadonlyMap<string, readonly string[]>
   >(new Map());
@@ -170,16 +171,25 @@ export function CommitGraph({
         (commit) => commit.oid === selectedOidRef.current,
       );
       const index = active + paging.snapshot.startOffset;
-      return active < 0 || indexes.includes(index)
-        ? indexes
-        : [...indexes, index].sort((left, right) => left - right);
+      if (active >= 0 && !indexes.includes(index)) indexes.push(index);
+      if (
+        error !== undefined &&
+        error.offset >= paging.snapshot.endOffset &&
+        !indexes.includes(error.offset)
+      )
+        indexes.push(error.offset);
+      return indexes.sort((left, right) => left - right);
     },
   });
   const absoluteRows = virtualizer.getVirtualItems();
-  const virtualRows = absoluteRows.map((row) => ({
-    ...row,
-    index: row.index - paging.snapshot.startOffset,
-  }));
+  const virtualRows = useMemo(
+    () =>
+      absoluteRows.map((row) => ({
+        ...row,
+        index: row.index - paging.snapshot.startOffset,
+      })),
+    [absoluteRows, paging.snapshot.startOffset],
+  );
   const firstVirtual =
     commits.length === 0
       ? undefined
@@ -420,81 +430,89 @@ export function CommitGraph({
         <span>Date</span>
       </div>
       <div className="relative min-h-0 flex-1">
-        <table
-          aria-activedescendant={
-            activeCommitOid === undefined
-              ? undefined
-              : commitRowId(activeCommitOid)
-          }
-          aria-busy={loading}
-          aria-label="Commit history"
-          aria-multiselectable="true"
-          aria-colcount={4}
-          aria-rowcount={
-            paging.snapshot.hasOlder ? -1 : paging.snapshot.knownEndOffset
-          }
-          className="absolute inset-0 block h-full w-full overflow-auto focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
-          onKeyDown={handleKeyDown}
-          onScroll={(event) =>
-            setHorizontalOffset(event.currentTarget.scrollLeft)
-          }
-          ref={scrollRef}
-          role="grid"
+        <CommitCommandMenu
+          context={commands.context(menuOid)}
+          registry={commands.registry}
+          execute={commands.execute}
+          shortcuts={shortcuts}
           tabIndex={0}
+          restoreFocus={() => scrollRef.current?.focus()}
+          refs={(labelsByOid.get(menuOid ?? "") ?? []).flatMap((label) => {
+            const context = refCommandContext(label);
+            return context === undefined ? [] : [context];
+          })}
         >
-          <tbody
-            className="relative block"
-            style={{
-              height: virtualizer.getTotalSize(),
-              minWidth: gutterWidth + 528,
+          <table
+            aria-activedescendant={
+              activeCommitOid === undefined
+                ? undefined
+                : commitRowId(activeCommitOid)
+            }
+            aria-busy={loading}
+            aria-label="Commit history"
+            aria-multiselectable="true"
+            aria-colcount={4}
+            aria-rowcount={
+              paging.snapshot.hasOlder ? -1 : paging.snapshot.knownEndOffset
+            }
+            className="absolute inset-0 block h-full w-full overflow-auto focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
+            onKeyDown={handleKeyDown}
+            onContextMenu={(event) => {
+              if (
+                !(event.target instanceof Element) ||
+                event.target.closest("tr[aria-rowindex]") === null
+              )
+                event.preventDefault();
             }}
+            onScroll={(event) =>
+              setHorizontalOffset(event.currentTarget.scrollLeft)
+            }
+            ref={scrollRef}
+            role="grid"
+            tabIndex={0}
           >
-            {virtualRows.map((virtualRow) => {
-              const commit = visibleCommits[virtualRow.index];
-              if (commit === undefined) {
-                if (
-                  error === undefined ||
-                  virtualRow.index + paging.snapshot.startOffset !==
-                    error.offset
-                )
-                  return null;
+            <tbody
+              className="relative block"
+              style={{
+                height: virtualizer.getTotalSize(),
+                minWidth: gutterWidth + 528,
+              }}
+            >
+              {virtualRows.map((virtualRow) => {
+                const commit = visibleCommits[virtualRow.index];
+                if (commit === undefined) {
+                  if (
+                    error === undefined ||
+                    virtualRow.index + paging.snapshot.startOffset !==
+                      error.offset
+                  )
+                    return null;
+                  return (
+                    <tr
+                      key={`retry-${error.offset}`}
+                      aria-label="History page unavailable"
+                      className="absolute top-0 left-0 block w-full"
+                      style={{
+                        height: virtualRow.size,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      <td colSpan={4} className="block">
+                        <CommitGraphPageRetry
+                          error={error.message}
+                          retry={() => {
+                            void paging.engine?.retry();
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  );
+                }
+                const selected = navigation.selected.has(commit.oid);
+                const labels = labelsByOid.get(commit.oid) ?? [];
                 return (
                   <tr
-                    key={`retry-${error.offset}`}
-                    aria-label="History page unavailable"
-                    className="absolute top-0 left-0 block w-full"
-                    style={{
-                      height: virtualRow.size,
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  >
-                    <td colSpan={4} className="block">
-                      <CommitGraphPageRetry
-                        error={error.message}
-                        retry={() => {
-                          void paging.engine?.retry();
-                        }}
-                      />
-                    </td>
-                  </tr>
-                );
-              }
-              const selected = navigation.selected.has(commit.oid);
-              const labels = labelsByOid.get(commit.oid) ?? [];
-              return (
-                <CommitCommandMenu
-                  key={commit.oid}
-                  context={commands.context(commit.oid)}
-                  registry={commands.registry}
-                  execute={commands.execute}
-                  shortcuts={shortcuts}
-                  restoreFocus={() => scrollRef.current?.focus()}
-                  refs={labels.flatMap((label) => {
-                    const context = refCommandContext(label);
-                    return context === undefined ? [] : [context];
-                  })}
-                >
-                  <tr
+                    key={commit.oid}
                     aria-label={commitAriaLabel(commit, labels)}
                     aria-rowindex={
                       paging.snapshot.startOffset + virtualRow.index + 1
@@ -520,12 +538,13 @@ export function CommitGraph({
                       navigation.onClick(commit.oid, event);
                       scrollRef.current?.focus();
                     }}
-                    onContextMenu={() =>
+                    onContextMenu={() => {
+                      setMenuOid(commit.oid);
                       navigation.select(
                         commit.oid,
                         selected ? "activate" : "replace",
-                      )
-                    }
+                      );
+                    }}
                     onKeyDown={handleKeyDown}
                     style={{
                       gridTemplateColumns: `${gutterWidth}px minmax(16rem, 1fr) 10rem 7rem`,
@@ -574,11 +593,11 @@ export function CommitGraph({
                       </time>
                     </td>
                   </tr>
-                </CommitCommandMenu>
-              );
-            })}
-          </tbody>
-        </table>
+                );
+              })}
+            </tbody>
+          </table>
+        </CommitCommandMenu>
         {commits.length > 0 ? (
           <CommitGraphCanvas
             height={viewport.height}

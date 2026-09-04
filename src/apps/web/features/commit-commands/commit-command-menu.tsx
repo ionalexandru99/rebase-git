@@ -21,7 +21,9 @@ export function CommitCommandMenu({
   shortcuts,
   restoreFocus,
   refs = [],
+  tabIndex = -1,
 }: {
+  readonly tabIndex?: number;
   readonly children: ReactElement;
   readonly context: GraphCommandContext | undefined;
   readonly registry: GraphCommandRegistry;
@@ -40,7 +42,7 @@ export function CommitCommandMenu({
         if (!open) restoreFocus();
       }}
     >
-      <ContextMenuTrigger render={children} tabIndex={-1} />
+      <ContextMenuTrigger render={children} tabIndex={tabIndex} />
       <ContextMenuContent>
         {refs.map((refContext) => {
           const command = registry

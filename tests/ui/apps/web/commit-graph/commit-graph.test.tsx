@@ -268,6 +268,25 @@ describe("commit graph", () => {
     await userEvent.keyboard("{Shift>}{F10}{/Shift}");
     await screen.getByRole("menuitem", { name: "Copy commit SHA" }).click();
     expect(copy).toHaveBeenLastCalledWith(commits[2]?.oid);
+    await userEvent.keyboard("{Control>}");
+    await grid.getByRole("row", { name: /^Commit 0,/ }).click();
+    await userEvent.keyboard("{/Control}");
+    await grid
+      .getByRole("row", { name: /^Commit 2,/ })
+      .click({ button: "right" });
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 2,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Escape}");
+    grid
+      .element()
+      .dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+    await expect.element(screen.getByRole("menu")).not.toBeInTheDocument();
     copy.mockRestore();
   });
   it("expands nested merge lines without selecting them and clears a selection hidden by collapse", async () => {
