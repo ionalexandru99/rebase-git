@@ -15,6 +15,52 @@ import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 describe("commit graph", () => {
   it.each([
+    [3, 100],
+    [100, 3],
+  ])(
+    "keeps metadata aligned when history changes from %i to %i rows",
+    async (before, after) => {
+      const reader = historyReader({
+        commits: history(before),
+        status: "ready",
+      });
+      const screen = await renderGraph(reader);
+      const grid = screen.getByRole("grid");
+      const sha = grid
+        .getByRole("row", { name: /^Commit 0,/ })
+        .getByText(historyOid(0).slice(0, 8), { exact: true });
+      await expect.element(sha).toBeVisible();
+      expect(grid.element().scrollHeight > grid.element().clientHeight).toBe(
+        before > 3,
+      );
+      reader.read.mockImplementation(async (query) =>
+        history(after).slice(
+          query.offset ?? 0,
+          (query.offset ?? 0) + query.limit,
+        ),
+      );
+      await screen
+        .getByRole("combobox", { name: "History ordering" })
+        .selectOptions("chronological");
+      await vi.waitFor(() =>
+        expect(grid.element().scrollHeight > grid.element().clientHeight).toBe(
+          after > 3,
+        ),
+      );
+      await vi.waitFor(() =>
+        expect(
+          Math.abs(
+            screen
+              .getByText("SHA", { exact: true })
+              .element()
+              .getBoundingClientRect().left -
+              sha.element().getBoundingClientRect().left,
+          ),
+        ).toBeLessThan(1),
+      );
+    },
+  );
+  it.each([
     [1280, 720],
     [3440, 1440],
   ])(

@@ -1,7 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import {
   defaultRangeExtractor,
-  observeElementRect,
   useVirtualizer,
   type VirtualItem,
 } from "@tanstack/react-virtual";
@@ -59,13 +58,25 @@ export function CommitGraphVirtualWindow({
       (commits.length > 0 && snapshot.hasOlder ? 1 : 0),
     estimateSize: () => rowHeight,
     getScrollElement: () => scrollRef.current,
-    observeElementRect: (instance, callback) =>
-      observeElementRect(instance, (rect) =>
-        callback({
-          width: instance.scrollElement?.clientWidth ?? rect.width,
-          height: instance.scrollElement?.clientHeight ?? rect.height,
-        }),
-      ),
+    observeElementRect: (instance, callback) => {
+      const element = instance.scrollElement;
+      if (element === null) return;
+      callback({ width: element.clientWidth, height: element.clientHeight });
+      const observer = new ResizeObserver(([entry]) => {
+        if (entry === undefined) return;
+        const previous = instance.scrollRect;
+        const { width, height } = entry.contentRect;
+        callback({ width, height });
+        if (
+          previous !== null &&
+          previous.width !== width &&
+          previous.height === height
+        )
+          instance.options.onChange?.(instance, false);
+      });
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
     overscan: overscanRows,
     rangeExtractor: (range) => {
       const indexes = defaultRangeExtractor(range);
