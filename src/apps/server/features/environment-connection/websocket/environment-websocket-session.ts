@@ -8,6 +8,7 @@ import {
   encodeRepositoryHistoryPage,
   type HelloAccepted,
   negotiateEnvironmentHello,
+  type RepositoryFreshnessClientMessage,
 } from "@rebase/contracts";
 import { Deferred, Effect, FiberSet, Option, Queue, Schema } from "effect";
 import type { WebSocket } from "ws";
@@ -27,6 +28,7 @@ import {
   createEnvironmentWebSocketWriter,
   type EnvironmentWebSocketWriter,
 } from "#server/features/environment-connection/websocket/environment-websocket-writer";
+import { acquireRepositoryFreshnessSession } from "#server/features/environment-connection/websocket/repository-freshness-session";
 
 const maximumConcurrentHistoryRequests = 2;
 const maximumRetiredHistorySynchronizations = 64;
@@ -86,6 +88,13 @@ function runSession(
         logicalMessageId += 1;
         return logicalMessageId;
       },
+      yield* acquireRepositoryFreshnessSession(
+        state.freshness,
+        writer,
+        capabilities,
+        accessCapabilities,
+        runSessionEffect,
+      ),
     );
   });
 }
@@ -156,10 +165,22 @@ function processClientMessages(
     options?: Effect.RunOptions,
   ) => unknown,
   nextLogicalMessageId: () => number,
+  handleFreshness: (
+    message: RepositoryFreshnessClientMessage,
+  ) => Effect.Effect<void, EnvironmentWebSocketWriteError>,
 ) {
   return Effect.gen(function* () {
     while (true) {
       const message = decodeSocketMessage(yield* Queue.take(messages));
+      if (
+        message?._tag === "SubscribeRepositoryHistory" ||
+        message?._tag === "UnsubscribeRepositoryHistory" ||
+        message?._tag === "FetchRepositoryHistory" ||
+        message?._tag === "ConfigureRepositoryFetch"
+      ) {
+        yield* handleFreshness(message);
+        continue;
+      }
       yield* handleClientMessage(
         message,
         writer,
@@ -176,7 +197,12 @@ function processClientMessages(
 }
 
 function handleClientMessage(
-  message: typeof EnvironmentClientMessage.Type | undefined,
+  message:
+    | Exclude<
+        typeof EnvironmentClientMessage.Type,
+        RepositoryFreshnessClientMessage
+      >
+    | undefined,
   writer: EnvironmentWebSocketWriter,
   state: EnvironmentTransportState,
   capabilities: ReadonlyMap<string, number>,

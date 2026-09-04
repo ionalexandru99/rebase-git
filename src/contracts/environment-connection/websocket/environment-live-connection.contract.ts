@@ -11,6 +11,10 @@ import {
   ProtocolRange,
 } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
 import {
+  RepositoryFreshnessClientMessage,
+  RepositoryHistoryFreshness,
+} from "@rebase/contracts/repository-history/repository-freshness.contract";
+import {
   RepositoryHistoryClientMessage,
   RepositoryHistoryFailed,
   RepositoryHistorySynchronized,
@@ -35,6 +39,7 @@ export const EnvironmentClientMessage = Schema.Union([
   EnvironmentHello,
   SnapshotApplied,
   RepositoryHistoryClientMessage,
+  RepositoryFreshnessClientMessage,
 ]);
 
 export type EnvironmentClientMessage = typeof EnvironmentClientMessage.Type;
@@ -116,6 +121,7 @@ export const EnvironmentServerMessage = Schema.Union([
   ResnapshotRequired,
   RepositoryHistoryFailed,
   RepositoryHistorySynchronized,
+  RepositoryHistoryFreshness,
 ]);
 
 export type EnvironmentServerMessage = typeof EnvironmentServerMessage.Type;

@@ -11,6 +11,7 @@ const watchedRootEntries = new Set([
   "packed-refs",
   "refs",
   "worktrees",
+  "logs",
 ]);
 const recursiveEntries = ["refs", "worktrees"] as const;
 
@@ -31,14 +32,42 @@ function watchGitDirectory(
     const watcher = tryWatch(join(gitDirectory, entry), true, () => onChange());
     if (watcher !== undefined) watchers.set(entry, watcher);
   };
+  const watchStashes = () => {
+    if (!watchers.has("logs")) {
+      const logs = tryWatch(join(gitDirectory, "logs"), false, (fileName) => {
+        if (fileName === undefined || fileName === "refs") watchStashes();
+      });
+      if (logs !== undefined) watchers.set("logs", logs);
+    }
+    if (!watchers.has("logs/refs")) {
+      const refs = tryWatch(
+        join(gitDirectory, "logs", "refs"),
+        false,
+        (fileName) => {
+          if (
+            fileName === undefined ||
+            fileName === "stash" ||
+            fileName === "stash.lock"
+          )
+            onChange();
+        },
+      );
+      if (refs !== undefined) watchers.set("logs/refs", refs);
+    }
+  };
   const root = tryWatch(gitDirectory, false, (fileName) => {
-    if (fileName === undefined || !watchedRootEntries.has(fileName)) return;
-    if (fileName === "refs" || fileName === "worktrees")
+    if (fileName !== undefined && !watchedRootEntries.has(fileName)) return;
+    if (fileName === "refs" || fileName === "worktrees") {
+      watchers.get(fileName)?.close();
+      watchers.delete(fileName);
       watchRecursively(fileName);
+    }
+    if (fileName === "logs") watchStashes();
     onChange();
   });
   if (root !== undefined) watchers.set(".", root);
   for (const entry of recursiveEntries) watchRecursively(entry);
+  watchStashes();
 
   return {
     close: () => {

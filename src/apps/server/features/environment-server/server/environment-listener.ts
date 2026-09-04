@@ -26,17 +26,21 @@ export function acquireEnvironmentListener(
       options.productVersion,
     );
     const state: EnvironmentTransportState = {
-      discovery:
-        options.history === undefined
-          ? {
-              ...discovery,
-              capabilities: discovery.capabilities.filter(
-                (capability) => capability.name !== "repository-history",
-              ),
-            }
-          : discovery,
+      discovery: {
+        ...discovery,
+        capabilities: discovery.capabilities.filter(
+          (capability) =>
+            (capability.name !== "repository-history" ||
+              options.history !== undefined) &&
+            (capability.name !== "repository-history-freshness" ||
+              options.freshness !== undefined),
+        ),
+      },
       events: options.events,
       ...(options.history === undefined ? {} : { history: options.history }),
+      ...(options.freshness === undefined
+        ? {}
+        : { freshness: options.freshness }),
     };
     const runFork = yield* FiberSet.makeRuntime<never, void, never>();
     const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {

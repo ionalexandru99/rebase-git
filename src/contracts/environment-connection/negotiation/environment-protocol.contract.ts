@@ -60,6 +60,11 @@ export const currentEnvironmentProtocol = {
 
 export const currentEnvironmentCapabilities = [
   {
+    introducedInMinor: 3,
+    name: "repository-history-freshness",
+    version: 1,
+  },
+  {
     introducedInMinor: 0,
     name: "environment-events",
     version: 1,

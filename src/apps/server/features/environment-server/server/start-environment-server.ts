@@ -25,6 +25,7 @@ import type {
 } from "#server/features/environment-server/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { acquireRepositoryFreshnessService } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
@@ -80,6 +81,11 @@ export function startEnvironmentServer(
       events,
       filesystem: createEnvironmentFilesystem(),
       history: createRepositoryHistoryService({ catalog, git }),
+      freshness: yield* acquireRepositoryFreshnessService({
+        catalog,
+        git,
+        watcher: createLocalRepositoryWatcher(),
+      }),
       ...(options.host === undefined ? {} : { host: options.host }),
       port: requestedPort,
       productVersion,
