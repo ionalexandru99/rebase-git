@@ -7,7 +7,7 @@ import type {
 import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 
 const pageMagic = 0x5248_5031;
-const batchMagic = 0x5248_4231;
+const batchMagic = 0x5248_4232;
 const maximumBatchCommitCount = 512;
 const maximumCommitCount = 1_000;
 const maximumParentCount = 4_096;
@@ -187,6 +187,14 @@ function writeSnapshot(
   for (const oid of snapshot.rootOids) {
     writeOid(writer, oid, objectFormat);
   }
+  if (
+    snapshot.shallowOids !== undefined &&
+    snapshot.shallowOids.length > maximumSnapshotRootCount
+  )
+    throw new Error("Too many shallow history boundaries");
+  writer.uint32(snapshot.shallowOids?.length ?? 0xffff_ffff);
+  for (const oid of snapshot.shallowOids ?? [])
+    writeOid(writer, oid, objectFormat);
 }
 
 function readSnapshot(
@@ -220,7 +228,23 @@ function readSnapshot(
   const rootOids = Array.from({ length: rootCount }, () =>
     readOid(reader, objectFormat),
   );
-  return { id, objectFormat, refTargets, resumable: resumable === 1, rootOids };
+  const shallowCount = reader.uint32();
+  if (shallowCount !== 0xffff_ffff && shallowCount > maximumSnapshotRootCount)
+    throw new Error("Too many shallow history boundaries");
+  const shallowOids =
+    shallowCount === 0xffff_ffff
+      ? undefined
+      : Array.from({ length: shallowCount }, () =>
+          readOid(reader, objectFormat),
+        );
+  return {
+    id,
+    objectFormat,
+    refTargets,
+    resumable: resumable === 1,
+    rootOids,
+    ...(shallowOids === undefined ? {} : { shallowOids }),
+  };
 }
 
 function writeCommit(

@@ -12,6 +12,7 @@ import {
   gitHistoryFormat,
 } from "#server/features/repository-history/git/parse-git-history";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
+import { restoreShallowCommitParents } from "#server/features/repository-history/git/shallow-repository-history";
 
 const batchSize = 256;
 const maximumBatchCharacters = 4 * 1_048_576;
@@ -70,6 +71,7 @@ export function synchronizeRepositoryHistory(
         nextSequence,
         emit,
         true,
+        captured.shallowOids ?? [],
       );
     } else {
       const snapshotSequence = yield* takeSequence(nextSequence);
@@ -91,11 +93,14 @@ export function synchronizeRepositoryHistory(
         nextSequence,
         emit,
         request.basis?._tag === "Complete",
+        captured.shallowOids ?? [],
       );
     }
 
     for (let pass = 0; pass < maximumReconciliationPasses; pass += 1) {
       const latest = yield* readRepositoryHistorySnapshot(git, repositoryPath);
+      if (!sameShallowBoundaries(captured.shallowOids, latest.shallowOids))
+        return yield* snapshotInvalidated();
       if (latest.id === captured.id) {
         return commitCount;
       }
@@ -112,6 +117,7 @@ export function synchronizeRepositoryHistory(
         nextSequence,
         emit,
         true,
+        latest.shallowOids ?? [],
       );
       captured = latest;
     }
@@ -126,16 +132,35 @@ function initialSnapshot(
   repositoryPath: string,
   basis: SynchronizationBasis | undefined,
 ) {
-  if (basis?._tag !== "Incomplete") {
-    return readRepositoryHistorySnapshot(git, repositoryPath);
-  }
-  return Effect.succeed({
-    id: basis.snapshotId,
-    objectFormat: basis.objectFormat,
-    refTargets: [],
-    resumable: true,
-    rootOids: basis.rootOids,
-  } satisfies RepositoryHistorySnapshot);
+  return Effect.gen(function* () {
+    const current = yield* readRepositoryHistorySnapshot(git, repositoryPath);
+    if (
+      basis !== undefined &&
+      !sameShallowBoundaries(basis.shallowOids, current.shallowOids)
+    )
+      return yield* snapshotInvalidated();
+    if (basis?._tag !== "Incomplete") return current;
+    return {
+      id: basis.snapshotId,
+      objectFormat: basis.objectFormat,
+      refTargets: [],
+      resumable: true,
+      rootOids: basis.rootOids,
+      shallowOids: basis.shallowOids ?? [],
+    } satisfies RepositoryHistorySnapshot;
+  });
+}
+
+function sameShallowBoundaries(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+) {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.length === right.length &&
+    left.every((oid, index) => oid === right[index])
+  );
 }
 
 function emitSnapshot(
@@ -170,6 +195,7 @@ function streamHistory(
     batch: RepositoryHistoryBatch,
   ) => Effect.Effect<void, RepositoryHistoryError>,
   invalidBasisOnFailure: boolean,
+  shallowOids: readonly string[],
 ) {
   if (roots.length === 0) {
     return Effect.succeed(0);
@@ -179,21 +205,31 @@ function streamHistory(
     return gitFailure("Git history streaming is unavailable");
   }
   let emitFailure: RepositoryHistoryError | undefined;
+  const shallowBoundaries = new Set(shallowOids);
   let streamSignal: AbortSignal | undefined;
   const parser = createGitHistoryBatchParser(
     objectFormat,
     batchSize,
-    (commits) =>
+    (parsed) =>
       Effect.runPromise(
-        takeSequence(nextSequence).pipe(
-          Effect.flatMap((sequence) =>
-            emit({
-              commits,
-              objectFormat,
-              repositoryId: request.repositoryId,
-              requestId: request.requestId,
-              sequence,
-            }),
+        restoreShallowCommitParents(
+          git,
+          repositoryPath,
+          parsed,
+          shallowBoundaries,
+        ).pipe(
+          Effect.flatMap((commits) =>
+            takeSequence(nextSequence).pipe(
+              Effect.flatMap((sequence) =>
+                emit({
+                  commits,
+                  objectFormat,
+                  repositoryId: request.repositoryId,
+                  requestId: request.requestId,
+                  sequence,
+                }),
+              ),
+            ),
           ),
           Effect.tapError((failure) =>
             Effect.sync(() => {

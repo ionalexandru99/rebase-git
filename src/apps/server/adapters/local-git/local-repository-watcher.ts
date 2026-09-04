@@ -9,6 +9,7 @@ import type {
 const watchedRootEntries = new Set([
   "HEAD",
   "packed-refs",
+  "shallow",
   "refs",
   "worktrees",
   "logs",

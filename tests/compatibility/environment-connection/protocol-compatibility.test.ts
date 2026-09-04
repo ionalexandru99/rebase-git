@@ -101,12 +101,45 @@ describe("Environment protocol compatibility", () => {
         {
           introducedInMinor: 3,
           name: "repository-history",
-          version: 3,
+          version: 4,
         },
       ],
       protocol: { major: 1, minor: 3 },
     });
   });
+
+  it.each(["client", "server"] as const)(
+    "disables incompatible history on an older %s without disconnecting",
+    (side) => {
+      const discovery = createCurrentEnvironmentDiscovery(
+        "00000000-0000-4000-8000-000000000001",
+        "0.0.0",
+      );
+      const hello = createCurrentEnvironmentHello("0.0.0");
+      const older = (capability: (typeof discovery.capabilities)[number]) =>
+        capability.name === "repository-history"
+          ? { ...capability, version: 3 }
+          : capability;
+      const result = negotiateEnvironmentHello(
+        side === "server"
+          ? { ...discovery, capabilities: discovery.capabilities.map(older) }
+          : discovery,
+        side === "client"
+          ? { ...hello, capabilities: hello.capabilities.map(older) }
+          : hello,
+        0,
+      );
+      expect(result._tag).toBe("HelloAccepted");
+      if (result._tag !== "HelloAccepted")
+        throw new Error("Expected accepted connection");
+      expect(
+        result.capabilities.some(({ name }) => name === "repository-history"),
+      ).toBe(false);
+      expect(
+        result.capabilities.some(({ name }) => name === "environment-events"),
+      ).toBe(true);
+    },
+  );
 
   it("negotiates the oldest client to the current server", () => {
     const discovery = createCurrentEnvironmentDiscovery(

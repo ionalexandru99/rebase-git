@@ -373,7 +373,8 @@ describe("repository history", { timeout: 30_000 }, () => {
       const page = await readHistoryPage(origin, repository.id, head);
 
       expect(page.commits).toHaveLength(2);
-      expect(page.commits.at(-1)?.parents).toEqual([]);
+      const missingParent = await gitOutput(source, "rev-parse", "main~2");
+      expect(page.commits.at(-1)?.parents).toEqual([missingParent]);
       const synchronized: RepositoryCommit[] = [];
       await Effect.runPromise(
         synchronizeRepositoryHistory(
@@ -392,7 +393,7 @@ describe("repository history", { timeout: 30_000 }, () => {
         ),
       );
       expect(synchronized).toHaveLength(2);
-      expect(synchronized.at(-1)?.parents).toEqual([]);
+      expect(synchronized.at(-1)?.parents).toEqual([missingParent]);
     });
   });
 
@@ -577,6 +578,7 @@ describe("repository history", { timeout: 30_000 }, () => {
             objectFormat: captured.objectFormat,
             rootOids: captured.rootOids,
             snapshotId: captured.id,
+            shallowOids: captured.shallowOids ?? [],
           },
           priority: "visible",
           repositoryId: environmentId,
@@ -615,6 +617,7 @@ describe("repository history", { timeout: 30_000 }, () => {
         objectFormat: initialSnapshot.objectFormat,
         rootOids: initialSnapshot.rootOids,
         snapshotId: initialSnapshot.id,
+        shallowOids: initialSnapshot.shallowOids ?? [],
       },
       delta,
     );
@@ -634,6 +637,7 @@ describe("repository history", { timeout: 30_000 }, () => {
         objectFormat: deltaSnapshot.objectFormat,
         rootOids: deltaSnapshot.rootOids,
         snapshotId: deltaSnapshot.id,
+        shallowOids: deltaSnapshot.shallowOids ?? [],
       },
       reset,
     );
@@ -699,6 +703,7 @@ describe("repository history", { timeout: 30_000 }, () => {
               _tag: "Incomplete",
               committedCommitCount: 0,
               nextBatchSequence: maximumRepositoryHistorySequence,
+              shallowOids: [],
               objectFormat: "sha1",
               rootOids: [oid],
               snapshotId: "e".repeat(64),

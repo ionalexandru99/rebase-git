@@ -9,6 +9,10 @@ import {
   gitHistoryFormat,
   parseGitHistory,
 } from "#server/features/repository-history/git/parse-git-history";
+import {
+  readShallowHistoryOids,
+  restoreShallowCommitParents,
+} from "#server/features/repository-history/git/shallow-repository-history";
 
 const maximumHistoryOutputBytes = 8 * 1_048_576;
 const historyTimeoutMilliseconds = 30_000;
@@ -42,8 +46,15 @@ export function readRepositoryHistory(
       ],
       maximumHistoryOutputBytes,
     );
-    const commits = yield* parseHistoryOutput(() =>
+    const parsed = yield* parseHistoryOutput(() =>
       parseGitHistory(historyOutput, objectFormat),
+    );
+    const shallowOids = yield* readShallowHistoryOids(git, repositoryPath);
+    const commits = yield* restoreShallowCommitParents(
+      git,
+      repositoryPath,
+      parsed,
+      new Set(shallowOids),
     );
     return {
       commits,

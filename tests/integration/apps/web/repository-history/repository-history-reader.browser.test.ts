@@ -17,7 +17,14 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
+import {
+  beginRepositoryHistorySynchronization,
+  completeStoredRepositoryHistory,
+  readStoredRepositoryHistoryState,
+  restartRepositoryHistorySynchronization,
+  storeRepositoryHistoryBatch,
+  storeRepositoryHistoryPage,
+} from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
   it("does not retry failed synchronization when a non-owner reader closes", async () => {
@@ -199,6 +206,67 @@ describe("browser repository history reader", () => {
     } finally {
       reader.close();
     }
+  });
+
+  it("repairs cached shallow parents and topology when unchanged refs gain ancestors", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const [tip, boundary, ancestor] = commits;
+    if (!tip || !boundary || !ancestor)
+      throw new Error("Missing history fixture");
+    const main = { ...root("main"), oid: tip.oid };
+    const query = { limit: 100, order: "topological" as const, roots: [main] };
+    const shallowCommits = [tip, { ...boundary, parents: [] }];
+    const initialSnapshot = {
+      ...snapshot("a", main),
+      shallowOids: [boundary.oid],
+    };
+    const batch = {
+      commits: shallowCommits,
+      objectFormat: "sha1" as const,
+      repositoryId,
+      requestId: crypto.randomUUID(),
+      sequence: 0,
+      snapshot: initialSnapshot,
+    };
+    await storeRepositoryHistoryPage(
+      environmentId,
+      repositoryId,
+      {
+        commits: shallowCommits,
+        objectFormat: "sha1",
+        repositoryId,
+        requestId: crypto.randomUUID(),
+        refTargets: [main],
+      },
+      query,
+    );
+    await beginRepositoryHistorySynchronization(environmentId, repositoryId);
+    await storeRepositoryHistoryBatch(environmentId, repositoryId, batch);
+    await completeStoredRepositoryHistory(environmentId, repositoryId, 2);
+    expect(
+      await beginRepositoryHistorySynchronization(environmentId, repositoryId),
+    ).toMatchObject({ _tag: "Complete", shallowOids: [boundary.oid] });
+    await restartRepositoryHistorySynchronization(environmentId, repositoryId);
+    expect(
+      await beginRepositoryHistorySynchronization(environmentId, repositoryId),
+    ).toBeUndefined();
+    await storeRepositoryHistoryBatch(environmentId, repositoryId, {
+      ...batch,
+      commits,
+      snapshot: { ...snapshot("b", main), shallowOids: [ancestor.oid] },
+    });
+    await completeStoredRepositoryHistory(environmentId, repositoryId, 3);
+    expect(
+      await readRepositoryHistory(environmentId, repositoryId, query),
+    ).toEqual(commits);
+    expect(
+      await readRepositoryCommits(environmentId, repositoryId, [boundary.oid]),
+    ).toEqual([boundary]);
+    expect(
+      await beginRepositoryHistorySynchronization(environmentId, repositoryId),
+    ).toMatchObject({ _tag: "Complete", shallowOids: [ancestor.oid] });
   });
 
   it("shares committed history between registered linked worktrees and isolates other repositories", async () => {

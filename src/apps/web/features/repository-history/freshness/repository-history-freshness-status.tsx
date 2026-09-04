@@ -29,6 +29,11 @@ export function RepositoryHistoryFreshnessStatus({
       className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-border/60 border-t px-3 py-1 text-[10px] text-muted-foreground"
       role="status"
     >
+      {snapshot.shallowOids?.length ? (
+        <span title="Only locally available history is shown. Fetching never deepens this repository automatically.">
+          Shallow history
+        </span>
+      ) : null}
       {snapshot.storingCommits && snapshot.synchronization === "syncing" ? (
         <span
           className="inline-flex items-center gap-1.5"

@@ -50,12 +50,14 @@ export const SynchronizeRepositoryHistory = Schema.TaggedStruct(
     basis: Schema.optionalKey(
       Schema.Union([
         Schema.TaggedStruct("Complete", {
+          shallowOids: Schema.optionalKey(SnapshotRootOids),
           commitCount: Schema.Natural,
           objectFormat: Schema.Literals(["sha1", "sha256"]),
           rootOids: SnapshotRootOids,
           snapshotId: SnapshotId,
         }),
         Schema.TaggedStruct("Incomplete", {
+          shallowOids: Schema.optionalKey(SnapshotRootOids),
           committedCommitCount: Schema.Natural,
           nextBatchSequence: RepositoryHistorySequence,
           objectFormat: Schema.Literals(["sha1", "sha256"]),
@@ -159,6 +161,7 @@ export interface RepositoryHistoryBatch {
 }
 
 export interface RepositoryHistorySnapshot {
+  readonly shallowOids?: readonly string[];
   readonly id: string;
   readonly objectFormat: "sha1" | "sha256";
   readonly refTargets: readonly RepositoryHistoryRefTarget[];

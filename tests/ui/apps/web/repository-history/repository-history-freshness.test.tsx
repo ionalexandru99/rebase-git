@@ -158,6 +158,7 @@ describe("repository fetch controls", () => {
       freshnessError: new RepositoryHistoryOffline(),
       synchronization: "syncing" as const,
       storingCommits: false,
+      shallowOids: ["a".repeat(40)],
     };
     await render(<Controls reader={reader} snapshot={offline} />);
     await expect
@@ -166,6 +167,9 @@ describe("repository fetch controls", () => {
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("Offline. Cached history is available.");
+    await expect
+      .element(page.getByText("Shallow history", { exact: true }))
+      .toBeVisible();
     await expect
       .element(page.getByText("Syncing", { exact: true }))
       .not.toBeInTheDocument();
