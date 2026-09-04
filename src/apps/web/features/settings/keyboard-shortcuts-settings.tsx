@@ -43,6 +43,7 @@ import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboa
 const groups: readonly KeyboardShortcutGroup[] = [
   "Navigation",
   "Branches",
+  "Commit graph",
   "Search and lists",
   "Folder picker",
 ];
