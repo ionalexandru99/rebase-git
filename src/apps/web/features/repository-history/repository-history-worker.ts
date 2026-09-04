@@ -374,8 +374,7 @@ async function handleReaderMessage(
           ),
         );
         if (replica.synchronizationRequestId !== message.requestId) return;
-        delete replica.orderCache.index;
-        replica.orderCache.revision += 1;
+        invalidateStoredHistory(replica);
         if (completion.snapshot !== undefined) {
           replica.refTargets = completion.snapshot.refTargets;
         }
@@ -417,10 +416,13 @@ async function handleReaderMessage(
         message.failure._tag === "Rejected" &&
         message.failure.detail._tag === "SnapshotInvalidated"
       ) {
-        await restartRepositoryHistorySynchronization(
-          reader.connection.environmentId,
-          reader.connection.logicalRepositoryId,
+        await queueStorageWrite(() =>
+          restartRepositoryHistorySynchronization(
+            reader.connection.environmentId,
+            reader.connection.logicalRepositoryId,
+          ),
         );
+        invalidateStoredHistory(replica);
         await startSynchronization(reader, replica);
         return;
       }
@@ -523,6 +525,7 @@ async function acceptHistoryPage(
     if (!reader.epoch.finish(requestId)) {
       return;
     }
+    invalidateStoredHistory(replica);
     reader.queries.delete(requestId);
     const stored = await readRepositoryCommits(
       reader.connection.environmentId,
@@ -603,6 +606,7 @@ async function acceptHistoryBatch(
     return;
   }
   replica.synchronizedCommitCount = synchronizedCommitCount;
+  invalidateStoredHistory(replica);
   replica.revision += 1;
   publishSnapshot(replica);
   post(reader, { _tag: "HistoryBatchCommitted", batchId });
@@ -633,9 +637,13 @@ async function startSynchronization(
   publishSnapshot(replica);
   let basis: Awaited<ReturnType<typeof beginRepositoryHistorySynchronization>>;
   try {
-    basis = await beginRepositoryHistorySynchronization(
-      reader.connection.environmentId,
-      reader.connection.logicalRepositoryId,
+    basis = await queueStorageWrite(() =>
+      replica.synchronizationRequestId !== requestId
+        ? Promise.resolve(undefined)
+        : beginRepositoryHistorySynchronization(
+            reader.connection.environmentId,
+            reader.connection.logicalRepositoryId,
+          ),
     );
   } catch (error) {
     if (
@@ -688,6 +696,7 @@ function postSnapshot(reader: ConnectedReader, replica: RepositoryReplica) {
     _tag: "SnapshotChanged",
     ...(replica.failure === undefined ? {} : { failure: replica.failure }),
     revision: replica.revision,
+    historyRevision: replica.orderCache.revision,
     status: replica.status,
     synchronization: replica.synchronization,
     synchronizedCommitCount: replica.synchronizedCommitCount,
@@ -733,6 +742,9 @@ async function restoreReplica(
   try {
     if (!(await markHistoryCacheOpened(environmentId, repositoryId))) {
       await clearHistoryCache(environmentId, repositoryId, false);
+      invalidateStoredHistory(replica, true);
+      replica.revision += 1;
+      publishSnapshot(replica);
       return;
     }
     const state = await readStoredRepositoryHistoryState(
@@ -793,6 +805,7 @@ async function manageCache(
 ) {
   const targets =
     action === "clear-all" ? [...repositories.values()] : [replica];
+  await Promise.all(targets.map((target) => target.initialization));
   for (const target of targets) {
     target.cachePaused = true;
     if (target.synchronizationOwner !== undefined)
@@ -814,7 +827,12 @@ async function manageCache(
     const caches =
       action === "clear-all"
         ? await readHistoryCacheRecords()
-        : [reader.connection];
+        : [
+            {
+              environmentId: reader.connection.environmentId,
+              repositoryId: reader.connection.logicalRepositoryId,
+            },
+          ];
     for (const cache of caches)
       await clearHistoryCache(
         cache.environmentId,
@@ -823,6 +841,8 @@ async function manageCache(
       );
   });
   for (const target of targets) {
+    invalidateStoredHistory(target, true);
+    target.reconciled = false;
     target.commits.clear();
     target.visibleOids = [];
     target.refTargets = [];
@@ -845,6 +865,15 @@ async function manageCache(
       });
     }
   }
+}
+
+function invalidateStoredHistory(
+  replica: RepositoryReplica,
+  discardOrder = false,
+) {
+  replica.orderCache.revision += 1;
+  delete replica.orderCache.index;
+  if (discardOrder) replica.orderCache.queries.clear();
 }
 
 interface ConnectedReader {

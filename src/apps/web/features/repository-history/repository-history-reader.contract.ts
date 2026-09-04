@@ -16,6 +16,7 @@ import type { RepositoryHistoryCacheManagement } from "#web/features/repository-
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
 export interface RepositoryHistorySnapshot {
+  readonly historyRevision: number;
   readonly error?: RepositoryHistoryReaderError;
   readonly revision: number;
   readonly status: "empty" | "error" | "loading" | "ready";

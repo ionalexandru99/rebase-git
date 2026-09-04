@@ -43,6 +43,7 @@ function historyReader() {
   let snapshot: RepositoryHistorySnapshot = {
     status: "ready",
     revision: 1,
+    historyRevision: 1,
     synchronization: "complete",
   };
   return {
@@ -184,6 +185,7 @@ describe("history storage dialog", () => {
     reader.publish({
       status: "ready",
       revision: 2,
+      historyRevision: 2,
       synchronization: "syncing",
       synchronizedCommitCount: 256,
     });
@@ -207,6 +209,7 @@ describe("history storage dialog", () => {
     reader.publish({
       status: "error",
       revision: 2,
+      historyRevision: 2,
       error: new RepositoryHistoryStorageUnavailable(),
     });
     await openDialog(reader);

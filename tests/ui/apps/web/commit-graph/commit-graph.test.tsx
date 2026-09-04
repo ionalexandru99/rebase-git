@@ -208,6 +208,7 @@ describe("commit graph", () => {
     const reader = historyReader({ commits: history(2), status: "ready" });
     reader.snapshot = {
       revision: 1,
+      historyRevision: 1,
       status: "ready",
       synchronization: "syncing",
       synchronizedCommitCount: 256,
@@ -292,6 +293,7 @@ describe("commit graph", () => {
     reader.snapshot = {
       error: new RepositoryHistoryUnavailable(),
       revision: 2,
+      historyRevision: 2,
       status: "ready",
       synchronization: "stale",
       synchronizedCommitCount: 2,
@@ -345,6 +347,7 @@ describe("commit graph", () => {
     reader.snapshot = {
       error: new RepositoryHistoryUnavailable(),
       revision: 1,
+      historyRevision: 1,
       status: "error",
     };
     rejectLoad?.(new RepositoryHistoryUnavailable());
@@ -415,6 +418,7 @@ describe("commit graph", () => {
     second.snapshot = {
       error: new RepositoryHistoryUnavailable(),
       revision: 1,
+      historyRevision: 1,
       status: "error",
     };
     rejectRead?.(new RepositoryHistoryUnavailable());
@@ -459,7 +463,11 @@ function historyReader({
   readonly pending?: Promise<readonly RepositoryCommit[]>;
   readonly status: "empty" | "loading" | "ready";
 }) {
-  let snapshot: RepositoryHistorySnapshot = { revision: 0, status };
+  let snapshot: RepositoryHistorySnapshot = {
+    revision: 0,
+    historyRevision: 0,
+    status,
+  };
   const reader = {
     ancestryRoute: vi.fn<RepositoryHistoryReader["ancestryRoute"]>(
       async () => undefined,

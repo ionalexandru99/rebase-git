@@ -59,6 +59,7 @@ function connectBrowserRepositoryHistoryReader(
   let closed = false;
   let snapshot: RepositoryHistorySnapshot = {
     revision: 0,
+    historyRevision: 0,
     status: "empty",
   };
 
@@ -103,6 +104,7 @@ function connectBrowserRepositoryHistoryReader(
           ? {}
           : { error: readerError(message.failure) }),
         revision: message.revision,
+        historyRevision: message.historyRevision,
         status: message.status,
         synchronization: message.synchronization,
         synchronizedCommitCount: message.synchronizedCommitCount,

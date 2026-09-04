@@ -14,6 +14,7 @@ import {
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
+import { readRepositoryCommits } from "#web/features/repository-history/repository-history-query";
 import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
@@ -29,7 +30,6 @@ import {
 import { writeHistoryUnderPressure } from "#web/features/repository-history/repository-history-storage-maintenance";
 import {
   completeStoredRepositoryHistory,
-  readRepositoryCommits,
   readStoredRepositoryHistoryState,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
@@ -38,14 +38,24 @@ import {
 describe("history cache storage", () => {
   it("clears and rebuilds a shared repository through its reader", async () => {
     const fixture = await seed();
-    const gateway = gatewayFor(fixture);
+    const firstRepositoryId = crypto.randomUUID();
+    const secondRepositoryId = crypto.randomUUID();
+    const gateway = gatewayFor({
+      ...fixture,
+      repositoryId: firstRepositoryId,
+      page: { ...fixture.page, repositoryId: firstRepositoryId },
+    });
     const options = {
       environmentId: fixture.environmentId,
-      repositoryId: fixture.repositoryId,
+      logicalRepositoryId: fixture.repositoryId,
+      repositoryId: firstRepositoryId,
       gateway,
     };
     const first = createBrowserRepositoryHistoryReader(options);
-    const second = createBrowserRepositoryHistoryReader(options);
+    const second = createBrowserRepositoryHistoryReader({
+      ...options,
+      repositoryId: secondRepositoryId,
+    });
     const query = {
       limit: 100,
       order: "topological" as const,
@@ -62,17 +72,28 @@ describe("history cache storage", () => {
       ),
     ).toMatchObject({ state: "complete", commitCount: 3, open: true });
 
+    const historyRevision = first.getSnapshot().historyRevision;
+    await first.read({ ...query, order: "chronological" });
+    expect(first.getSnapshot().historyRevision).toBe(historyRevision);
+
     await first.manageCache("clear");
     await expect(second.read(query)).resolves.toEqual([]);
     expect(second.getSnapshot()).toMatchObject({
       status: "empty",
       synchronizedCommitCount: 0,
     });
+    expect(second.getSnapshot().historyRevision).toBeGreaterThan(
+      historyRevision,
+    );
+    const clearedRevision = second.getSnapshot().historyRevision;
     await first.manageCache("rebuild");
     await vi.waitFor(() =>
       expect(second.getSnapshot().synchronization).toBe("complete"),
     );
     expect(gateway.read).toHaveBeenCalledOnce();
+    expect(second.getSnapshot().historyRevision).toBeGreaterThan(
+      clearedRevision,
+    );
     await expect(
       second.getCommitSummaries([fixture.orphan.oid]),
     ).resolves.toEqual([fixture.orphan]);
@@ -368,7 +389,16 @@ describe("history cache storage", () => {
     expect(
       await markHistoryCacheOpened(second.environmentId, second.repositoryId),
     ).toBe(true);
-    await clearHistoryCache(first.environmentId, first.repositoryId, false);
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: first.environmentId,
+      repositoryId: first.repositoryId,
+      gateway: gatewayFor(first),
+    });
+    await expect(reader.getRefTargets()).resolves.toEqual([]);
+    expect(reader.getSnapshot().historyRevision).toBeGreaterThan(0);
+    await expect(
+      reader.getCommitSummaries([first.orphan.oid]),
+    ).resolves.toEqual([]);
     expect(
       await markHistoryCacheOpened(first.environmentId, first.repositoryId),
     ).toBe(true);
@@ -377,6 +407,7 @@ describe("history cache storage", () => {
         second.orphan.oid,
       ]),
     ).toEqual([second.orphan]);
+    reader.close();
   });
 });
 

@@ -160,6 +160,7 @@ export type RepositoryHistoryWorkerResponse =
     }
   | {
       readonly _tag: "SnapshotChanged";
+      readonly historyRevision: number;
       readonly revision: number;
       readonly status: "empty" | "error" | "loading" | "ready";
       readonly synchronization: "complete" | "idle" | "stale" | "syncing";
