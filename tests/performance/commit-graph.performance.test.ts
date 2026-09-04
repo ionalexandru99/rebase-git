@@ -3,7 +3,7 @@ import {
   execFile,
   spawn,
 } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -141,6 +141,7 @@ async function installGraphMeasurements(page: Page) {
             const message = event as MessageEvent;
             if (
               window.__graphMetrics.started > 0 &&
+              window.__graphMetrics.firstContent === undefined &&
               typeof message.data !== "string"
             ) {
               window.__graphMetrics.lastBinaryMessage = performance.now();
@@ -253,7 +254,13 @@ async function startTrace(session: CDPSession) {
   return {
     stop: async () => {
       await session.send("Tracing.end");
-      return frameWorkloads(JSON.parse(await completed) as Trace);
+      const trace = await completed;
+      const path = test.info().outputPath("renderer-trace.json");
+      await writeFile(path, trace);
+      await test
+        .info()
+        .attach("renderer-trace", { path, contentType: "application/json" });
+      return frameWorkloads(JSON.parse(trace) as Trace);
     },
   };
 }
