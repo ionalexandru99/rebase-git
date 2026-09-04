@@ -413,6 +413,7 @@ export function CommitGraph({
                   onScroll={onScroll}
                   ref={scrollRef}
                   role="grid"
+                  style={{ contain: "layout paint" }}
                   tabIndex={0}
                 >
                   <tbody
