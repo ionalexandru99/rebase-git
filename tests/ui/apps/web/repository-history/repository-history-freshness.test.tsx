@@ -21,6 +21,7 @@ const fresh: RepositoryFreshness = {
 };
 const ready: RepositoryHistorySnapshot = {
   revision: 0,
+  historyRevision: 0,
   status: "ready",
   freshness: fresh,
   synchronization: "complete",
@@ -284,6 +285,13 @@ function Controls({
 
 function createReader() {
   return {
+    getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
+    manageCache: async () => undefined,
+    search: async () => ({
+      commits: [],
+      replicaComplete: true,
+      synchronizedCommitCount: 0,
+    }),
     ancestryRoute: async () => undefined,
     locate: async () => undefined,
     locateMany: async () => [],
