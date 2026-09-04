@@ -119,6 +119,7 @@ export interface ConnectRepositoryHistoryReader {
   readonly _tag: "ConnectRepositoryHistoryReader";
   readonly environmentId: string;
   readonly logicalRepositoryId: string;
+  readonly lifetimeLock?: string;
   readonly port: MessagePort;
   readonly repositoryId: string;
 }

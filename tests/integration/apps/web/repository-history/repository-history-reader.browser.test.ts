@@ -20,6 +20,59 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
+  it("does not retry failed synchronization when a non-owner reader closes", async () => {
+    const repositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, [main])),
+      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+    };
+    const connection = {
+      environmentId: crypto.randomUUID(),
+      repositoryId,
+      gateway,
+    };
+    const existingLeases = new Set(
+      (await navigator.locks.query()).held?.map(({ name }) => name),
+    );
+    const first = createBrowserRepositoryHistoryReader(connection);
+    await first.getRefTargets();
+    const firstLease = (await navigator.locks.query()).held?.find(
+      ({ name }) =>
+        name?.startsWith("rebase-history-reader:") && !existingLeases.has(name),
+    )?.name;
+    expect(firstLease).toBeDefined();
+    const second = createBrowserRepositoryHistoryReader(connection);
+    try {
+      await Promise.all([first.getRefTargets(), second.getRefTargets()]);
+      await second.read({ limit: 100, order: "topological", roots: [main] });
+      await vi.waitFor(() =>
+        expect(second.getSnapshot().error).toBeInstanceOf(
+          RepositoryHistoryOffline,
+        ),
+      );
+      expect(gateway.synchronize).toHaveBeenCalledTimes(1);
+      const revision = second.getSnapshot().revision;
+      first.close();
+      await vi.waitFor(async () => {
+        const leases = await navigator.locks.query();
+        expect(
+          [...(leases.held ?? []), ...(leases.pending ?? [])].some(
+            ({ name }) => name === firstLease,
+          ),
+        ).toBe(false);
+      });
+      await second.getRefTargets();
+      expect(second.getSnapshot().revision).toBe(revision);
+      expect(second.getSnapshot().synchronization).toBe("idle");
+      expect(gateway.synchronize).toHaveBeenCalledTimes(1);
+    } finally {
+      first.close();
+      second.close();
+    }
+  });
+
   it("shares committed history between registered linked worktrees and isolates other repositories", async () => {
     const environmentId = crypto.randomUUID();
     const logicalRepositoryId = crypto.randomUUID();

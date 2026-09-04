@@ -31,7 +31,16 @@ const browserProject = (
     browser: {
       enabled: true,
       instances: [{ browser: "chromium" as const }],
-      provider: playwright(),
+      provider: playwright(
+        name === "integration-browser"
+          ? {
+              launchOptions: {
+                channel: "chromium",
+                ignoreDefaultArgs: ["--disable-back-forward-cache"],
+              },
+            }
+          : {},
+      ),
       screenshotDirectory: "tests/.artifacts/vitest",
       viewport: { height: 720, width: 1280 },
     },
