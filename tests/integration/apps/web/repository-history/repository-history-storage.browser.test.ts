@@ -368,6 +368,102 @@ describe("history cache storage", () => {
     ).toEqual(second.commits);
   });
 
+  it("reconciles a delta from the actual remaining count after pruning", async () => {
+    const fixture = await seed();
+    const extra = {
+      ...fixture.orphan,
+      oid: "e".repeat(40),
+      subject: "Foreground-only orphan",
+    };
+    await storeRepositoryHistoryPage(
+      fixture.environmentId,
+      fixture.repositoryId,
+      { ...fixture.page, commits: [...fixture.commits, extra] },
+      { limit: 100, order: "topological", roots: fixture.roots },
+    );
+    const record = (await readHistoryCacheRecords()).find(
+      (cache) => cache.key === fixture.key,
+    );
+    if (record === undefined) throw new Error("Missing fixture");
+    await pruneHistoryCache(record, () => false);
+    expect(
+      await readStoredRepositoryHistoryState(
+        fixture.environmentId,
+        fixture.repositoryId,
+      ),
+    ).toMatchObject({
+      completion: { commitCount: 2 },
+      progress: { committedCommitCount: 2 },
+    });
+    const added = {
+      ...fixture.orphan,
+      oid: "f".repeat(40),
+      parents: ["a".repeat(40)],
+      subject: "New tip",
+    };
+    const roots = [{ name: "main", oid: added.oid, type: "branch" as const }];
+    const gateway = {
+      read: vi.fn(async () => encodeRepositoryHistoryPage(fixture.page)),
+      synchronize: vi.fn<RepositoryHistoryGateway["synchronize"]>(
+        async (request, accept) => {
+          const basis = request.basis;
+          if (basis?._tag !== "Complete")
+            throw new Error("Expected a completed basis");
+          await accept(
+            encodeRepositoryHistoryBatch({
+              commits: [added],
+              objectFormat: "sha1",
+              repositoryId: fixture.repositoryId,
+              requestId: crypto.randomUUID(),
+              sequence: 0,
+              snapshot: {
+                id: "f".repeat(64),
+                objectFormat: "sha1",
+                rootOids: [added.oid],
+                refTargets: roots,
+                resumable: true,
+              },
+            }),
+          );
+          return basis.commitCount + 1;
+        },
+      ),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: fixture.environmentId,
+      repositoryId: fixture.repositoryId,
+      gateway,
+    });
+    try {
+      await reader.read({
+        limit: 100,
+        order: "chronological",
+        roots: fixture.roots,
+      });
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot()).toMatchObject({
+          synchronization: "complete",
+          synchronizedCommitCount: 3,
+        }),
+      );
+      expect(gateway.synchronize.mock.calls[0]?.[0].basis).toMatchObject({
+        _tag: "Complete",
+        commitCount: 2,
+      });
+      expect(gateway.read).not.toHaveBeenCalled();
+      expect(
+        await reader.read({ limit: 100, order: "chronological", roots }),
+      ).toHaveLength(3);
+      expect(
+        (await reader.getCacheDiagnostics()).caches.find(
+          (cache) => cache.repositoryId === fixture.repositoryId,
+        )?.commitCount,
+      ).toBe(3);
+    } finally {
+      reader.close();
+    }
+  });
+
   it("recognizes incompatible repository records without damaging a compatible cache", async () => {
     const first = await seed();
     const second = await seed();
