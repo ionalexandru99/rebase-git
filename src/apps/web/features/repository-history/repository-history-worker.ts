@@ -147,6 +147,22 @@ function connectReader(
   assignFreshnessOwner(replica);
 }
 
+function rejectOversizedNavigation(
+  reader: ConnectedReader,
+  message: RepositoryHistoryWorkerRequest,
+): boolean {
+  const oversized =
+    (message._tag === "GetAncestryRoute" && message.roots.length > 256) ||
+    (message._tag === "LocateHistoryCommits" && message.oids.length > 1_000);
+  if (!oversized) return false;
+  post(reader, {
+    _tag: "RequestFailed",
+    requestId: message.requestId,
+    failure: { _tag: "Unavailable" },
+  });
+  return true;
+}
+
 async function handleReaderMessage(
   reader: ConnectedReader,
   replica: RepositoryReplica,
@@ -155,6 +171,7 @@ async function handleReaderMessage(
   if (reader.closed) {
     return;
   }
+  if (rejectOversizedNavigation(reader, message)) return;
   await replica.initialization;
   if (reader.closed) {
     return;
@@ -205,7 +222,6 @@ async function handleReaderMessage(
       return;
     }
     case "GetAncestryRoute": {
-      if (message.roots.length > 256) throw new Error("Query is too large");
       const revision = replica.orderCache.revision;
       const state = await readStoredRepositoryHistoryState(
         reader.connection.environmentId,

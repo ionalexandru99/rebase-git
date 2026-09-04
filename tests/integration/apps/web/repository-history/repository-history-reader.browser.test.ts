@@ -27,6 +27,92 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
+  it("rejects oversized navigation requests without failing linked readers", async () => {
+    const environmentId = crypto.randomUUID();
+    const logicalRepositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const query = { limit: 100, order: "topological" as const, roots: [main] };
+    await storeRepositoryHistoryPage(
+      environmentId,
+      logicalRepositoryId,
+      {
+        commits,
+        objectFormat: "sha1",
+        repositoryId: logicalRepositoryId,
+        requestId: crypto.randomUUID(),
+        refTargets: [main],
+      },
+      query,
+    );
+    await beginRepositoryHistorySynchronization(
+      environmentId,
+      logicalRepositoryId,
+    );
+    await storeRepositoryHistoryBatch(environmentId, logicalRepositoryId, {
+      commits,
+      objectFormat: "sha1",
+      repositoryId: logicalRepositoryId,
+      requestId: crypto.randomUUID(),
+      sequence: 0,
+      snapshot: snapshot("a", main),
+    });
+    await completeStoredRepositoryHistory(
+      environmentId,
+      logicalRepositoryId,
+      commits.length,
+    );
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+      synchronize: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+    };
+    const readers = [0, 1].map(() =>
+      createBrowserRepositoryHistoryReader({
+        environmentId,
+        logicalRepositoryId,
+        repositoryId: crypto.randomUUID(),
+        gateway,
+      }),
+    );
+    const first = readers[0];
+    if (first === undefined) throw new Error("Missing reader");
+    try {
+      await Promise.all(readers.map((reader) => reader.getRefTargets()));
+      for (const request of [
+        () =>
+          first.ancestryRoute(
+            Array.from({ length: 257 }, () => main.oid),
+            main.oid,
+          ),
+        () =>
+          first.locateMany(
+            query,
+            Array.from({ length: 1_001 }, () => main.oid),
+          ),
+      ]) {
+        await expect(request()).rejects.toBeInstanceOf(
+          RepositoryHistoryUnavailable,
+        );
+        await Promise.all(readers.map((reader) => reader.getRefTargets()));
+        for (const reader of readers) {
+          expect(reader.getSnapshot().status).toBe("ready");
+          expect(reader.getSnapshot().error).toBeUndefined();
+          expect(await reader.locateMany(query, [main.oid])).toEqual([
+            { oid: main.oid, index: 0 },
+          ]);
+        }
+      }
+      expect(gateway.read).not.toHaveBeenCalled();
+      expect(gateway.synchronize).not.toHaveBeenCalled();
+    } finally {
+      for (const reader of readers) reader.close();
+    }
+  });
+
   it("does not retry failed synchronization when a non-owner reader closes", async () => {
     const repositoryId = crypto.randomUUID();
     const commits = history(3);
