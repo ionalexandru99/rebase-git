@@ -40,7 +40,8 @@ export interface RepositoryHistoryPosition {
 }
 
 export interface RepositoryHistoryReader
-  extends RepositoryHistoryCacheManagement, RepositoryHistorySearch {
+  extends RepositoryHistoryCacheManagement,
+    RepositoryHistorySearch {
   readonly locateMany: (
     query: RepositoryHistoryQuery,
     oids: readonly string[],
