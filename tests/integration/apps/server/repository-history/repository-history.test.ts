@@ -12,6 +12,7 @@ import {
   type EnvironmentAccessCapability,
   type EnvironmentHello,
   environmentLivePath,
+  maximumRepositoryHistorySequence,
   type RepositoryCommit,
   type RepositoryHistoryBatch,
   type RepositoryHistorySnapshot,
@@ -678,6 +679,47 @@ describe("repository history", { timeout: 30_000 }, () => {
     );
 
     expect(failure.failure).toEqual({ _tag: "SnapshotInvalidated" });
+  });
+
+  it("rejects a resume that has exhausted the batch sequence", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "exhausted-sequence");
+    await createRepository(repositoryPath, "sha1", 1);
+    const oid = await gitOutput(repositoryPath, "rev-parse", "HEAD");
+    const emitted: RepositoryHistoryBatch[] = [];
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        synchronizeRepositoryHistory(
+          createLocalGitCommandRunner(),
+          repositoryPath,
+          {
+            _tag: "SynchronizeRepositoryHistory",
+            basis: {
+              _tag: "Incomplete",
+              committedCommitCount: 0,
+              nextBatchSequence: maximumRepositoryHistorySequence,
+              objectFormat: "sha1",
+              rootOids: [oid],
+              snapshotId: "e".repeat(64),
+            },
+            priority: "visible",
+            repositoryId: environmentId,
+            requestId,
+          },
+          (batch) =>
+            Effect.sync(() => {
+              emitted.push(batch);
+            }),
+        ),
+      ),
+    );
+
+    expect(failure.failure).toMatchObject({
+      _tag: "GitFailed",
+      detail: "Repository history batch sequence is exhausted",
+    });
+    expect(emitted).toEqual([]);
   });
 });
 

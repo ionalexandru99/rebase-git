@@ -7,6 +7,52 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { createRepositoryHistoryTransport } from "#web/features/repository-history/repository-history-transport";
 
 describe("repository history transport", () => {
+  it.each([
+    [
+      "complete",
+      {
+        _tag: "Complete",
+        commitCount: 12,
+        objectFormat: "sha1",
+        rootOids: ["a".repeat(40)],
+        snapshotId: "b".repeat(64),
+      },
+    ],
+    [
+      "incomplete",
+      {
+        _tag: "Incomplete",
+        committedCommitCount: 8,
+        nextBatchSequence: 7,
+        objectFormat: "sha1",
+        rootOids: ["c".repeat(40)],
+        snapshotId: "d".repeat(64),
+      },
+    ],
+  ] as const)("forwards a %s synchronization basis", async (_name, basis) => {
+    const send = vi.fn();
+    const transport = createRepositoryHistoryTransport(
+      { send } as unknown as WebSocket,
+      true,
+    );
+    const synchronization = Effect.runFork(
+      transport.synchronize(
+        {
+          basis,
+          priority: "visible",
+          repositoryId: "00000000-0000-4000-8000-000000000001",
+        },
+        () => Effect.void,
+      ),
+    );
+
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(JSON.parse(String(send.mock.calls[0]?.[0]))).toMatchObject({
+      basis,
+    });
+    await Effect.runPromise(Fiber.interrupt(synchronization));
+  });
+
   it("acknowledges a synchronization batch only after it is committed", async () => {
     const send = vi.fn();
     const transport = createRepositoryHistoryTransport(

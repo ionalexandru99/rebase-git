@@ -15,10 +15,37 @@ import {
 } from "#web/features/repository-history/repository-history-reader.contract";
 import {
   readRepositoryCommits,
+  readRepositoryHistory,
   readStoredRepositoryHistoryState,
 } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
+  it("migrates version-two commit ordering into topological epochs", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(2);
+    const latest = commits[0];
+    if (latest === undefined) {
+      throw new Error("Commit fixture is missing");
+    }
+    const main = { ...root("main"), oid: latest.oid };
+    await deleteRepositoryHistoryDatabase();
+    await createVersionTwoRepositoryHistory(
+      environmentId,
+      repositoryId,
+      commits,
+      main,
+    );
+
+    await expect(
+      readRepositoryHistory(environmentId, repositoryId, {
+        limit: 100,
+        order: "topological",
+        roots: [main],
+      }),
+    ).resolves.toEqual(commits);
+  });
+
   it("publishes only IndexedDB-committed synchronization progress", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
@@ -810,4 +837,72 @@ function identity(index: number) {
     timestampSeconds: 1_777_777_777 - index,
     timezoneOffsetMinutes: 120,
   };
+}
+
+function deleteRepositoryHistoryDatabase() {
+  return new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase("rebase-repository-history");
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error("Database deletion is blocked"));
+  });
+}
+
+function createVersionTwoRepositoryHistory(
+  environmentId: string,
+  repositoryId: string,
+  commits: readonly RepositoryCommit[],
+  main: ReturnType<typeof root>,
+) {
+  return new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("rebase-repository-history", 2);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      const commitStore = database.createObjectStore("commits", {
+        keyPath: "key",
+      });
+      commitStore.createIndex("repositoryOrder", [
+        "environmentId",
+        "repositoryId",
+        "topologicalOrder",
+      ]);
+      database.createObjectStore("repositories", { keyPath: "key" });
+    };
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction(
+        ["commits", "repositories"],
+        "readwrite",
+      );
+      const commitStore = transaction.objectStore("commits");
+      for (const [topologicalOrder, commit] of commits.entries()) {
+        commitStore.put({
+          commit,
+          environmentId,
+          key: `${environmentId}\0${repositoryId}\0${commit.oid}`,
+          repositoryId,
+          topologicalOrder,
+        });
+      }
+      transaction.objectStore("repositories").put({
+        completion: { commitCount: commits.length },
+        environmentId,
+        key: `${environmentId}\0${repositoryId}`,
+        objectFormat: "sha1",
+        progress: {
+          committedCommitCount: commits.length,
+          nextBatchSequence: 1,
+        },
+        refTargets: [main],
+        repositoryId,
+      });
+      transaction.oncomplete = () => {
+        database.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    };
+  });
 }

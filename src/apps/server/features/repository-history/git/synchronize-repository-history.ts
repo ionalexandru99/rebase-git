@@ -3,6 +3,7 @@ import type {
   RepositoryHistorySnapshot,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
+import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
@@ -35,6 +36,20 @@ export function synchronizeRepositoryHistory(
       request.basis?._tag === "Incomplete"
         ? request.basis.nextBatchSequence
         : 0;
+    const nextSequence = () => {
+      if (sequence >= maximumRepositoryHistorySequence) {
+        throw new RepositoryHistoryError({
+          failure: {
+            _tag: "GitFailed",
+            detail: "Repository history batch sequence is exhausted",
+            reason: "Failed",
+          },
+        });
+      }
+      const current = sequence;
+      sequence += 1;
+      return current;
+    };
     let commitCount =
       request.basis?._tag === "Incomplete"
         ? request.basis.committedCommitCount
@@ -52,16 +67,17 @@ export function synchronizeRepositoryHistory(
         [],
         request.basis.committedCommitCount,
         request.basis.objectFormat,
-        () => sequence++,
+        nextSequence,
         emit,
         true,
       );
     } else {
+      const snapshotSequence = yield* takeSequence(nextSequence);
       yield* emitSnapshot(
         request,
         captured,
         request.basis === undefined,
-        sequence++,
+        snapshotSequence,
         emit,
       );
       commitCount += yield* streamHistory(
@@ -72,7 +88,7 @@ export function synchronizeRepositoryHistory(
         request.basis?._tag === "Complete" ? request.basis.rootOids : [],
         0,
         captured.objectFormat,
-        () => sequence++,
+        nextSequence,
         emit,
         request.basis?._tag === "Complete",
       );
@@ -83,7 +99,8 @@ export function synchronizeRepositoryHistory(
       if (latest.id === captured.id) {
         return commitCount;
       }
-      yield* emitSnapshot(request, latest, false, sequence++, emit);
+      const snapshotSequence = yield* takeSequence(nextSequence);
+      yield* emitSnapshot(request, latest, false, snapshotSequence, emit);
       commitCount += yield* streamHistory(
         git,
         repositoryPath,
@@ -92,7 +109,7 @@ export function synchronizeRepositoryHistory(
         captured.rootOids,
         0,
         latest.objectFormat,
-        () => sequence++,
+        nextSequence,
         emit,
         true,
       );
@@ -168,13 +185,16 @@ function streamHistory(
     batchSize,
     (commits) =>
       Effect.runPromise(
-        emit({
-          commits,
-          objectFormat,
-          repositoryId: request.repositoryId,
-          requestId: request.requestId,
-          sequence: nextSequence(),
-        }).pipe(
+        takeSequence(nextSequence).pipe(
+          Effect.flatMap((sequence) =>
+            emit({
+              commits,
+              objectFormat,
+              repositoryId: request.repositoryId,
+              requestId: request.requestId,
+              sequence,
+            }),
+          ),
           Effect.tapError((failure) =>
             Effect.sync(() => {
               emitFailure = failure;
@@ -240,6 +260,13 @@ function parseOutput<T>(parse: (signal: AbortSignal) => T | Promise<T>) {
           reason: "Failed",
         },
       }),
+  });
+}
+
+function takeSequence(nextSequence: () => number) {
+  return Effect.try({
+    try: nextSequence,
+    catch: repositoryHistoryError,
   });
 }
 

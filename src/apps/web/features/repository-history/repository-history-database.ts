@@ -148,6 +148,7 @@ function openDatabase(indexedDB: IDBFactory) {
           "topologicalEpoch",
           "topologicalOrder",
         ]);
+        backfillTopologicalEpoch(commits);
       }
       if (!database.objectStoreNames.contains(repositoryStoreName)) {
         database.createObjectStore(repositoryStoreName, { keyPath: "key" });
@@ -178,6 +179,24 @@ function openDatabase(indexedDB: IDBFactory) {
       rejectDatabase(storageUnavailable(new Error("IndexedDB is blocked")));
     };
   });
+}
+
+function backfillTopologicalEpoch(commits: IDBObjectStore) {
+  const request = commits.openCursor();
+  request.onsuccess = () => {
+    const cursor = request.result;
+    if (cursor === null) {
+      return;
+    }
+    const commit = cursor.value as StoredCommit;
+    if (
+      commit.topologicalOrder !== undefined &&
+      commit.topologicalEpoch === undefined
+    ) {
+      cursor.update({ ...commit, topologicalEpoch: 0 } satisfies StoredCommit);
+    }
+    cursor.continue();
+  };
 }
 
 function storageUnavailable(cause: unknown) {

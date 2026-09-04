@@ -395,7 +395,7 @@ function viewportAnchor(
   element: HTMLDivElement | null,
   commits: readonly RepositoryCommit[],
 ): ViewportAnchor | undefined {
-  if (element === null || element.scrollTop < rowHeight) {
+  if (element === null || element.scrollTop <= 0) {
     return undefined;
   }
   const index = Math.floor(element.scrollTop / rowHeight);

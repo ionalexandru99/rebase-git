@@ -1,3 +1,4 @@
+import { maximumRepositoryHistorySequence } from "@rebase/contracts";
 import { describe, expect, it } from "vitest";
 import {
   acceptRepositoryHistoryBatch,
@@ -39,5 +40,27 @@ describe("repository history completion", () => {
     expect(() => acceptRepositoryHistoryBatch(progress, 2, 12)).toThrow(
       "batch sequence is incomplete",
     );
+  });
+
+  it("stops before the persisted batch sequence overflows", () => {
+    const finalProgress = acceptRepositoryHistoryBatch(
+      {
+        committedCommitCount: 10,
+        nextBatchSequence: maximumRepositoryHistorySequence - 1,
+      },
+      maximumRepositoryHistorySequence - 1,
+      1,
+    );
+
+    expect(finalProgress.nextBatchSequence).toBe(
+      maximumRepositoryHistorySequence,
+    );
+    expect(() =>
+      acceptRepositoryHistoryBatch(
+        finalProgress,
+        maximumRepositoryHistorySequence,
+        1,
+      ),
+    ).toThrow("batch sequence is exhausted");
   });
 });

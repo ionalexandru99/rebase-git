@@ -1,4 +1,5 @@
 import { EnvironmentRequestId } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
+import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 import { Schema } from "effect";
 
 const RepositoryId = Schema.String.check(Schema.isUUID(4));
@@ -8,6 +9,12 @@ const ObjectId = Schema.String.check(
 const SnapshotId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
 const SnapshotRootOids = Schema.Array(ObjectId).check(
   Schema.isMaxLength(40_512),
+);
+const RepositoryHistorySequence = Schema.Int.check(
+  Schema.isBetween({
+    minimum: 0,
+    maximum: maximumRepositoryHistorySequence,
+  }),
 );
 
 export const RepositoryHistoryRefTarget = Schema.Struct({
@@ -50,7 +57,7 @@ export const SynchronizeRepositoryHistory = Schema.TaggedStruct(
         }),
         Schema.TaggedStruct("Incomplete", {
           committedCommitCount: Schema.Natural,
-          nextBatchSequence: Schema.Natural,
+          nextBatchSequence: RepositoryHistorySequence,
           objectFormat: Schema.Literals(["sha1", "sha256"]),
           rootOids: SnapshotRootOids,
           snapshotId: SnapshotId,
@@ -69,7 +76,7 @@ export const AcknowledgeRepositoryHistoryBatch = Schema.TaggedStruct(
   "AcknowledgeRepositoryHistoryBatch",
   {
     requestId: EnvironmentRequestId,
-    sequence: Schema.Natural,
+    sequence: RepositoryHistorySequence,
   },
 );
 

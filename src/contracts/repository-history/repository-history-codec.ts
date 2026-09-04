@@ -4,6 +4,7 @@ import type {
   RepositoryHistoryBatch,
   RepositoryHistoryPage,
 } from "@rebase/contracts/repository-history/repository-history.contract";
+import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 
 const pageMagic = 0x5248_5031;
 const batchMagic = 0x5248_4231;
@@ -385,6 +386,13 @@ class BinaryWriter {
   }
 
   uint32(value: number) {
+    if (
+      !Number.isInteger(value) ||
+      value < 0 ||
+      value > maximumRepositoryHistorySequence
+    ) {
+      throw new Error("Invalid unsigned 32-bit integer");
+    }
     const bytes = new Uint8Array(4);
     new DataView(bytes.buffer).setUint32(0, value, false);
     this.write(bytes);

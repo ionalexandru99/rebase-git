@@ -26,60 +26,72 @@ describe("commit graph", () => {
       .toBeVisible();
   });
 
-  it("keeps the selected row and viewport anchored while refs reconcile", async () => {
-    const commits = history(100);
-    const firstCommit = commits[0];
-    if (firstCommit === undefined) {
-      throw new Error("Commit fixture is missing");
-    }
-    let finishReconciliation:
-      | ((commits: readonly RepositoryCommit[]) => void)
-      | undefined;
-    const reconciliation = new Promise<readonly RepositoryCommit[]>(
-      (resolve) => {
-        finishReconciliation = resolve;
-      },
-    );
-    const reader = historyReader({ commits, status: "ready" });
-    reader.read
-      .mockResolvedValueOnce(commits)
-      .mockReturnValueOnce(reconciliation);
-    const screen = await renderGraph(reader);
-    const grid = screen.getByRole("listbox", { name: "Commit history" });
-    grid.element().scrollTop = 20 * 36 + 7;
-    grid.element().dispatchEvent(new Event("scroll"));
-    const selected = grid.getByRole("option", { name: /^Commit 22,/ });
-    await expect.element(selected).toBeVisible();
-    await selected.click();
+  it.each([7, 20 * 36 + 7])(
+    "keeps the selected row and viewport anchored from scroll offset %i",
+    async (scrollTop) => {
+      const commits = history(100);
+      const firstCommit = commits[0];
+      if (firstCommit === undefined) {
+        throw new Error("Commit fixture is missing");
+      }
+      let finishReconciliation:
+        | ((commits: readonly RepositoryCommit[]) => void)
+        | undefined;
+      const reconciliation = new Promise<readonly RepositoryCommit[]>(
+        (resolve) => {
+          finishReconciliation = resolve;
+        },
+      );
+      const reader = historyReader({ commits, status: "ready" });
+      reader.read
+        .mockResolvedValueOnce(commits)
+        .mockReturnValueOnce(reconciliation);
+      const screen = await renderGraph(reader);
+      const grid = screen.getByRole("listbox", { name: "Commit history" });
+      grid.element().scrollTop = scrollTop;
+      grid.element().dispatchEvent(new Event("scroll"));
+      const selectedIndex = Math.floor(scrollTop / 36) + 2;
+      const selected = grid.getByRole("option", {
+        name: new RegExp(`^Commit ${selectedIndex},`),
+      });
+      await expect.element(selected).toBeVisible();
+      await selected.click();
 
-    await screen.rerender(
-      <div style={{ height: 520, width: 900 }}>
-        <CommitGraph
-          reader={reader}
-          repositoryName="rebase-test"
-          roots={[
-            { name: "main", oid: "e".repeat(40), type: "branch" as const },
-          ]}
-        />
-      </div>,
-    );
+      await screen.rerender(
+        <div style={{ height: 520, width: 900 }}>
+          <CommitGraph
+            reader={reader}
+            repositoryName="rebase-test"
+            roots={[
+              { name: "main", oid: "e".repeat(40), type: "branch" as const },
+            ]}
+          />
+        </div>,
+      );
 
-    await expect.element(selected).toHaveAttribute("aria-selected", "true");
-    expect(grid.element().scrollTop).toBe(20 * 36 + 7);
-    finishReconciliation?.([
-      {
-        ...firstCommit,
-        oid: "e".repeat(40),
-        parents: [firstCommit.oid],
-        subject: "New tip",
-      },
-      ...commits,
-    ]);
-    await expect
-      .element(grid.getByRole("option", { name: /^Commit 22,/ }))
-      .toHaveAttribute("aria-selected", "true");
-    await vi.waitFor(() => expect(grid.element().scrollTop).toBe(21 * 36 + 7));
-  });
+      await expect.element(selected).toHaveAttribute("aria-selected", "true");
+      expect(grid.element().scrollTop).toBe(scrollTop);
+      finishReconciliation?.([
+        {
+          ...firstCommit,
+          oid: "e".repeat(40),
+          parents: [firstCommit.oid],
+          subject: "New tip",
+        },
+        ...commits,
+      ]);
+      await expect
+        .element(
+          grid.getByRole("option", {
+            name: new RegExp(`^Commit ${selectedIndex},`),
+          }),
+        )
+        .toHaveAttribute("aria-selected", "true");
+      await vi.waitFor(() =>
+        expect(grid.element().scrollTop).toBe(scrollTop + 36),
+      );
+    },
+  );
 
   it("keeps stale history visible and offers a retry", async () => {
     const reader = historyReader({ commits: history(2), status: "ready" });

@@ -6,6 +6,7 @@ import {
   readBinaryFragmentRequestId,
   readRepositoryHistoryBatchSequence,
 } from "@rebase/contracts";
+import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 import { Deferred, Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
 import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
@@ -80,6 +81,7 @@ export function createRepositoryHistoryTransport(
       RepositoryHistoryClientMessage,
       {
         _tag: "SynchronizeRepositoryHistory",
+        ...(pending.basis === undefined ? {} : { basis: pending.basis }),
         priority: pending.priority,
         repositoryId: pending.repositoryId,
         requestId,
@@ -115,6 +117,7 @@ export function createRepositoryHistoryTransport(
       return yield* Effect.gen(function* () {
         requests.set(requestId, {
           acceptBatch,
+          ...(request.basis === undefined ? {} : { basis: request.basis }),
           expectedSequence:
             request.basis?._tag === "Incomplete"
               ? request.basis.nextBatchSequence
@@ -178,7 +181,8 @@ export function createRepositoryHistoryTransport(
             Effect.flatMap((sequence) => {
               if (
                 activeSynchronization !== message.requestId ||
-                sequence !== pending.expectedSequence
+                sequence !== pending.expectedSequence ||
+                sequence >= maximumRepositoryHistorySequence
               ) {
                 return Effect.fail(environmentResponseError("WebSocket"));
               }
@@ -296,6 +300,9 @@ interface SynchronizationRequest {
   readonly acceptBatch: (
     bytes: Uint8Array,
   ) => Effect.Effect<void, RepositoryHistoryUnavailable>;
+  readonly basis?: NonNullable<
+    Parameters<RepositoryHistoryTransport["synchronize"]>[0]["basis"]
+  >;
   expectedSequence: number;
   readonly kind: "sync";
   readonly priority: "background" | "visible";
