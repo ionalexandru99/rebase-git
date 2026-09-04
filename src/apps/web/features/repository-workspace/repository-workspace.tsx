@@ -18,8 +18,13 @@ import type {
   RepositoryHistoryGateway,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import {
+  clearAllCachedRepositoryRefs,
+  clearCachedRepositoryRefs,
+} from "#web/features/repository-refs/browser-repository-refs-cache";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
+import { useHistoryRefRefresh } from "#web/features/repository-workspace/use-history-ref-refresh";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -131,6 +136,8 @@ function RepositoryWorkspaceContent({
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
   const [historyReader, setHistoryReader] = useState<RepositoryHistoryReader>();
+  const [localBranchesFocusRequest, setLocalBranchesFocusRequest] = useState(0);
+  useHistoryRefRefresh(historyReader, connected, retryRefs);
   const activeBranch = refs.refs?.worktrees.find(
     ({ path }) => path === activeWorktreePath,
   )?.head.branch;
@@ -223,7 +230,7 @@ function RepositoryWorkspaceContent({
       >
         <BranchesSidebar
           activeWorktreePath={activeWorktreePath}
-          focusRequest={branchesFocusRequest}
+          focusRequest={branchesFocusRequest + localBranchesFocusRequest}
           onRetry={retryRefs}
           onSelectRef={selectRef}
           onToggleHistoryRef={toggleRef}
@@ -240,6 +247,16 @@ function RepositoryWorkspaceContent({
           className="h-full rounded-none bg-repository"
         >
           <CommitGraph
+            onCacheChanged={(action, identity) =>
+              action === "clear-all"
+                ? clearAllCachedRepositoryRefs()
+                : identity === undefined
+                  ? undefined
+                  : clearCachedRepositoryRefs(
+                      identity.environmentId,
+                      identity.repositoryId,
+                    )
+            }
             commandEnvironment={
               environmentId === undefined ||
               logicalRepositoryId === undefined ||
@@ -260,6 +277,22 @@ function RepositoryWorkspaceContent({
             commandsActive={commandsActive}
             shortcuts={shortcuts}
             onRemoveHistoryRef={toggleRef}
+            onAddHistoryRef={() =>
+              setLocalBranchesFocusRequest((request) => request + 1)
+            }
+            onResetHistoryScope={() => {
+              setHistoryScope(automaticHistoryScope);
+              if (
+                environmentId !== undefined &&
+                logicalRepositoryId !== undefined
+              ) {
+                filterStore.save(
+                  environmentId,
+                  logicalRepositoryId,
+                  automaticHistoryScope,
+                );
+              }
+            }}
             reader={historyReader}
             repositoryName={repositoryName}
             roots={resolvedScope?.roots}

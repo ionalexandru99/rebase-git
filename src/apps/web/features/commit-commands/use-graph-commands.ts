@@ -61,7 +61,8 @@ export function useGraphCommands({
         .commands(target)
         .find(
           (candidate) =>
-            candidate.id === "graph.focus" &&
+            (candidate.id === "graph.focus" ||
+              candidate.id === "graph.fetch") &&
             candidate.enabled &&
             candidate.shortcutId !== undefined &&
             matchesKeyboardShortcut(

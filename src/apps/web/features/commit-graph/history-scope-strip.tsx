@@ -7,11 +7,15 @@ import type { HistoryScope } from "#web/features/commit-graph/history-scope.cont
 
 export function HistoryScopeStrip({
   onRemove,
+  onAdd,
+  onReset,
   roots,
   scope,
   selections,
 }: {
   readonly onRemove: ((target: RepositoryRefTarget) => void) | undefined;
+  readonly onAdd?: (() => void) | undefined;
+  readonly onReset?: (() => void) | undefined;
   readonly roots: readonly RepositoryHistoryRefTarget[];
   readonly scope: HistoryScope;
   readonly selections: readonly RepositoryRefTarget[];
@@ -20,13 +24,20 @@ export function HistoryScopeStrip({
   return (
     <fieldset className="flex min-h-9 shrink-0 flex-wrap items-center gap-1.5 border-border/60 border-b bg-muted/20 px-3 py-1">
       <legend className="sr-only">{scope._tag} history scope</legend>
-      <span className="mr-1 text-[10px] text-muted-foreground">Showing</span>
+      <span className="mr-1 text-[11px] text-muted-foreground">
+        {scope._tag}
+      </span>
       {selections.map((selection) => (
         <span
           className="inline-flex h-6 max-w-64 items-center gap-1 rounded-sm border border-border/70 bg-background/60 px-2 text-[11px] text-foreground"
           key={scopeSelectionKey(selection)}
         >
-          <span className="truncate">{scopeSelectionName(selection)}</span>
+          <span
+            className="truncate font-mono"
+            title={scopeSelectionName(selection)}
+          >
+            {scopeSelectionName(selection)}
+          </span>
           {onRemove === undefined ? null : (
             <button
               aria-label={`Remove ${scopeSelectionName(selection)} from history`}
@@ -47,6 +58,24 @@ export function HistoryScopeStrip({
       {selections.length === 0 && detachedHead === undefined ? (
         <span className="text-[11px] text-muted-foreground">No refs</span>
       ) : null}
+      {onAdd === undefined ? null : (
+        <button
+          type="button"
+          onClick={onAdd}
+          className="h-6 rounded-sm px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+        >
+          + Add ref
+        </button>
+      )}
+      {scope._tag !== "Custom" || onReset === undefined ? null : (
+        <button
+          type="button"
+          onClick={onReset}
+          className="ml-auto h-6 rounded-sm px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+        >
+          Reset to Automatic
+        </button>
+      )}
     </fieldset>
   );
 }

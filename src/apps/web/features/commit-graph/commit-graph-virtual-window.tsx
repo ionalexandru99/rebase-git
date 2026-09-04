@@ -87,13 +87,23 @@ export function CommitGraphVirtualWindow({
     },
   });
   const absoluteRows = virtualizer.getVirtualItems();
+  const [rowSlots, setRowSlots] = useState<readonly (string | undefined)[]>([]);
+  const rowOids = absoluteRows.map(
+    (row) =>
+      commits[row.index - snapshot.startOffset]?.oid ?? `retry-${row.index}`,
+  );
+  const nextSlots = reconcileRowSlots(rowSlots, rowOids);
   const virtualRows = useMemo(
     () =>
       absoluteRows.map((row) => ({
         ...row,
+        key: nextSlots.indexOf(
+          commits[row.index - snapshot.startOffset]?.oid ??
+            `retry-${row.index}`,
+        ),
         index: row.index - snapshot.startOffset,
       })),
-    [absoluteRows, snapshot.startOffset],
+    [absoluteRows, commits, nextSlots, snapshot.startOffset],
   );
   const firstVirtual =
     commits.length === 0
@@ -133,9 +143,14 @@ export function CommitGraphVirtualWindow({
     [onPageSize, viewport.height],
   );
   useImperativeHandle(ref, () => ({
+    getScrollOffset: () => virtualizer.scrollOffset ?? 0,
     scrollToIndex: (index) =>
       virtualizer.scrollToIndex(index, { align: "auto" }),
   }));
+  if (nextSlots !== rowSlots) {
+    setRowSlots(nextSlots);
+    return null;
+  }
   return children({
     viewport,
     horizontalOffset,
@@ -144,4 +159,26 @@ export function CommitGraphVirtualWindow({
     virtualRows,
     onScroll: (event) => setHorizontalOffset(event.currentTarget.scrollLeft),
   });
+}
+
+function reconcileRowSlots(
+  previous: readonly (string | undefined)[],
+  oids: readonly string[],
+) {
+  const current = new Set(oids);
+  if (
+    oids.every((oid) => previous.includes(oid)) &&
+    previous.every((oid) => oid === undefined || current.has(oid))
+  )
+    return previous;
+  const slots = previous.map((oid) =>
+    oid !== undefined && current.has(oid) ? oid : undefined,
+  );
+  for (const oid of oids) {
+    if (slots.includes(oid)) continue;
+    const available = slots.indexOf(undefined);
+    if (available < 0) slots.push(oid);
+    else slots[available] = oid;
+  }
+  return slots;
 }

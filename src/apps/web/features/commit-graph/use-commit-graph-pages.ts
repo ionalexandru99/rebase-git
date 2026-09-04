@@ -50,6 +50,7 @@ export function useCommitGraphPages(
     reader?.getSnapshot ?? (() => emptyHistorySnapshot),
   );
   const previousSynchronization = useRef(historySnapshot.synchronization);
+  const previousHistoryRevision = useRef(historySnapshot.historyRevision);
   const capture = useRef(captureAnchor);
   capture.current = captureAnchor;
   const refTargets = refOwner?.reader === reader ? (refOwner?.refs ?? []) : [];
@@ -82,12 +83,20 @@ export function useCommitGraphPages(
   }, [reader, historySnapshot.historyRevision]);
   useEffect(() => {
     if (
-      previousSynchronization.current !== "complete" &&
-      historySnapshot.synchronization === "complete"
+      (previousSynchronization.current !== "complete" &&
+        historySnapshot.synchronization === "complete") ||
+      (previousHistoryRevision.current !== historySnapshot.historyRevision &&
+        historySnapshot.status === "empty" &&
+        historySnapshot.synchronization === "idle")
     )
       setCompletion((value) => value + 1);
     previousSynchronization.current = historySnapshot.synchronization;
-  }, [historySnapshot.synchronization]);
+    previousHistoryRevision.current = historySnapshot.historyRevision;
+  }, [
+    historySnapshot.historyRevision,
+    historySnapshot.status,
+    historySnapshot.synchronization,
+  ]);
 
   const resolvedRoots = roots?.map(
     (root) =>

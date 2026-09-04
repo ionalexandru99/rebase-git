@@ -52,11 +52,15 @@ for (const scenario of scenarios) {
       await page.evaluate(() => window.__startGraphMeasurement());
       await page.keyboard.press("Control+Enter");
       const history = page.getByRole("grid", { name: "Commit history" });
-      await expect(history.getByRole("row").first()).toBeVisible();
+      await page.evaluate(async () => {
+        while (window.__graphMetrics.firstContent === undefined)
+          await new Promise(requestAnimationFrame);
+      });
       const selectionFeedback = await measureSelectionFeedback(page);
       const scopeFeedback = await measureHistoryScopeFeedback(page);
       await exerciseVirtualRows(page);
       const frameWork = await trace.stop();
+      await expect(history.getByRole("row").first()).toBeVisible();
       const browserMetrics = await page.evaluate(() => window.__graphMetrics);
       const metrics = {
         firstContentMilliseconds:
