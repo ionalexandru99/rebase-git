@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
+import type { RepositoryCommit } from "@rebase/contracts";
 import {
   gitHistoryFormat,
   parseGitHistory,
@@ -32,15 +33,49 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
     configFile: resolve("src/apps/web/vite.config.ts"),
     root: resolve("src/apps/web"),
     server: { host: "127.0.0.1", port: 0, hmr: false },
+    plugins: [
+      {
+        name: "history-search-corpus",
+        configureServer(server) {
+          server.middlewares.use(
+            "/__history-search-corpus",
+            (request, response) => {
+              const query = new URL(request.url ?? "", "http://localhost")
+                .searchParams;
+              const offset = Number(query.get("offset"));
+              const limit = Number(query.get("limit"));
+              if (
+                !Number.isInteger(offset) ||
+                offset < 0 ||
+                !Number.isInteger(limit) ||
+                limit < 1 ||
+                limit > 1_000
+              ) {
+                response.statusCode = 400;
+                response.end();
+                return;
+              }
+              response.setHeader("Content-Type", "application/json");
+              response.end(
+                JSON.stringify(actualCommits.slice(offset, offset + limit)),
+              );
+            },
+          );
+        },
+      },
+    ],
   });
   await server.listen();
   try {
     const url = server.resolvedUrls?.local[0];
     if (url === undefined) throw new Error("Performance server has no URL");
     await page.goto(url);
-    const fixture = { repositoryCommits: actualCommits, onlyRepository };
+    const fixture = {
+      repositoryCommitCount: actualCommits.length,
+      onlyRepository,
+    };
     const measurements = await page.evaluate(async (fixture) => {
-      const { repositoryCommits, onlyRepository } = fixture;
+      const { repositoryCommitCount, onlyRepository } = fixture;
       const storePath =
         "/features/repository-history/repository-history-store.ts";
       const store: typeof import("#web/features/repository-history/repository-history-store") =
@@ -81,25 +116,41 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
       const corpora = [
         {
           name: "repository",
-          count: repositoryCommits.length,
-          commit: (index: number) =>
-            repositoryCommits[index] ?? generatedCommit(index),
+          count: repositoryCommitCount,
+          read: async (
+            offset: number,
+            limit: number,
+          ): Promise<RepositoryCommit[]> => {
+            const response = await fetch(
+              `/__history-search-corpus?offset=${offset}&limit=${limit}`,
+            );
+            if (!response.ok)
+              throw new Error("Failed to load repository fixture");
+            return response.json();
+          },
           queries: ["graph", "history", "missing-token-no-match"],
         },
         {
           name: "generated",
           count,
-          commit: generatedCommit,
+          read: async (offset: number, limit: number) =>
+            Array.from(
+              { length: Math.min(limit, count - offset) },
+              (_, index) => generatedCommit(offset + index),
+            ),
           queries: ["history", "developer7", "synchronization 249999"],
         },
       ].filter((corpus) => !onlyRepository || corpus.name === "repository");
       const measurements = [];
       for (const corpus of corpora) {
         const repositoryId = crypto.randomUUID();
+        const firstPage = await corpus.read(0, 100);
+        const head = firstPage[0];
+        if (head === undefined) throw new Error("Repository fixture is empty");
         const roots = [
           {
             name: "main",
-            oid: corpus.commit(0).oid,
+            oid: head.oid,
             type: "branch" as const,
           },
         ];
@@ -108,10 +159,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
           environmentId,
           repositoryId,
           {
-            commits: Array.from(
-              { length: Math.min(100, corpus.count) },
-              (_, index) => corpus.commit(index),
-            ),
+            commits: firstPage,
             objectFormat: "sha1",
             refTargets: roots,
             repositoryId,
@@ -129,10 +177,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
               `history-search: storing ${corpus.name} ${offset}/${corpus.count}`,
             );
           await store.storeRepositoryHistoryBatch(environmentId, repositoryId, {
-            commits: Array.from(
-              { length: Math.min(1_000, corpus.count - offset) },
-              (_, index) => corpus.commit(offset + index),
-            ),
+            commits: await corpus.read(offset, 1_000),
             objectFormat: "sha1",
             repositoryId,
             requestId: crypto.randomUUID(),
