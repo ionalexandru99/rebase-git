@@ -216,4 +216,21 @@ describe("selection across evicted graph pages", () => {
       .toHaveTextContent('["row-0"]');
     expect(reader.read).toHaveBeenCalledOnce();
   });
+  it("chooses the actual previous query row when a smaller scope removes the active row beyond its end", async () => {
+    const reader = createReader();
+    const screen = await render(<Selection reader={reader} offset={2_000} />);
+    await page.getByRole("button", { name: "row-2001", exact: true }).click();
+    reader.replaceHistory(commits.slice(0, 1_500));
+    await screen.rerender(<Selection reader={reader} offset={0} epoch={1} />);
+    await expect
+      .element(page.getByLabelText("Active"))
+      .toHaveTextContent("row-1499");
+    await expect
+      .element(page.getByLabelText("Selection"))
+      .toHaveTextContent("[]");
+    expect(
+      reader.read.mock.calls.every(([request]) => request.limit === 1),
+    ).toBe(true);
+    expect(reader.read.mock.calls.length).toBeLessThanOrEqual(12);
+  });
 });

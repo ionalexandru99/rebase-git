@@ -118,16 +118,12 @@ export async function reconcileGraphQuerySelection(
   let active = positions.find((position) => position.oid === state.activeOid);
   if (active === undefined) {
     const index = Math.max(0, previousStartOffset + state.activeIndex);
-    const replacement = (
-      await reader.read({ ...query, offset: index, limit: 1 })
-    )[0];
-    const fallback = windowOids.at(-1);
-    active =
-      replacement !== undefined
-        ? { oid: replacement.oid, index }
-        : fallback === undefined
-          ? undefined
-          : { oid: fallback, index: startOffset + windowOids.length - 1 };
+    active = await findGraphSelectionReplacement(
+      reader,
+      query,
+      index,
+      cancelled,
+    );
   }
   if (cancelled()) return;
   const selected = new Set(state.selectedOids);
@@ -141,4 +137,32 @@ export async function reconcileGraphQuerySelection(
     ...(active === undefined ? {} : { activeOid: active.oid }),
     ...(anchor === undefined ? {} : { anchorOid: anchor.oid }),
   };
+}
+
+async function findGraphSelectionReplacement(
+  reader: Pick<RepositoryHistoryReader, "read">,
+  query: RepositoryHistoryQuery,
+  index: number,
+  cancelled: () => boolean,
+): Promise<RepositoryHistoryPosition | undefined> {
+  const replacement = (
+    await reader.read({ ...query, offset: index, limit: 1 })
+  )[0];
+  if (replacement !== undefined) return { oid: replacement.oid, index };
+  let lower = 0;
+  let upper = index - 1;
+  let previous: RepositoryHistoryPosition | undefined;
+  while (lower <= upper) {
+    if (cancelled()) return;
+    const middle = lower + Math.floor((upper - lower) / 2);
+    const commit = (
+      await reader.read({ ...query, offset: middle, limit: 1 })
+    )[0];
+    if (commit === undefined) upper = middle - 1;
+    else {
+      previous = { oid: commit.oid, index: middle };
+      lower = middle + 1;
+    }
+  }
+  return previous;
 }
