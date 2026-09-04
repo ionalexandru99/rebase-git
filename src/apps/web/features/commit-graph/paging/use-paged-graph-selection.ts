@@ -173,6 +173,9 @@ export function usePagedGraphSelection({
     selection,
     selected,
     select,
+    cancelPending: () => {
+      intent.current += 1;
+    },
     clear: () => {
       intent.current += 1;
       updateSelection(clearGraphSelection(selectionRef.current));

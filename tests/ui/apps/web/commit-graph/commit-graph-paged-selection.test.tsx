@@ -53,10 +53,12 @@ function Selection({
   reader,
   offset,
   epoch = 0,
+  requestMove,
 }: {
   readonly reader: ReturnType<typeof createReader>;
   readonly offset: number;
   readonly epoch?: number;
+  readonly requestMove?: (offset: number) => void;
 }) {
   const oids = useMemo(
     () => commits.slice(offset, offset + 2).map((commit) => commit.oid),
@@ -73,6 +75,7 @@ function Selection({
     toggleMerge: () => {},
     startOffset: offset,
     viewEpoch: epoch,
+    ...(requestMove === undefined ? {} : { requestMove }),
   });
   return (
     <>
@@ -80,6 +83,7 @@ function Selection({
         <button
           key={oid}
           onClick={(event) => selection.onClick(oid, event)}
+          onKeyDown={selection.onKeyDown}
           type="button"
         >
           {oid}
@@ -184,5 +188,32 @@ describe("selection across evicted graph pages", () => {
       .element(page.getByLabelText("Active"))
       .toHaveTextContent("row-2000");
     expect(reader.read).toHaveBeenCalledTimes(4);
+  });
+  it("cancels an earlier range immediately when a keyboard move waits for another page", async () => {
+    const reader = createReader();
+    const requestMove = vi.fn();
+    const screen = await render(
+      <Selection reader={reader} offset={0} requestMove={requestMove} />,
+    );
+    await page.getByRole("button", { name: "row-0", exact: true }).click();
+    await screen.rerender(
+      <Selection reader={reader} offset={2_000} requestMove={requestMove} />,
+    );
+    let finish: ((value: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await modifiedClick("row-2001", "Shift");
+    await expect.poll(() => reader.read.mock.calls.length).toBe(1);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(requestMove).toHaveBeenCalledWith(2_002, "replace");
+    finish?.(commits.slice(0, 1_000));
+    await expect
+      .element(page.getByLabelText("Selection"))
+      .toHaveTextContent('["row-0"]');
+    expect(reader.read).toHaveBeenCalledOnce();
   });
 });

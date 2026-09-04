@@ -54,6 +54,7 @@ export function useCommitGraphSelection({
   const { selection, selected, select } = model;
   const move = (index: number, mode: CommitGraphSelectionMode = "replace") => {
     if (requestMove !== undefined) {
+      model.cancelPending();
       requestMove(Math.max(0, index + startOffset), mode);
       return;
     }
@@ -66,6 +67,7 @@ export function useCommitGraphSelection({
   const moveInLane = (direction: -1 | 1) => {
     const activeIndex = selection.activeIndex;
     if (requestLaneMove !== undefined) {
+      model.cancelPending();
       requestLaneMove(activeIndex + startOffset, direction);
       return;
     }
