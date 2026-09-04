@@ -62,9 +62,10 @@ describe("history cache storage", () => {
       roots: fixture.roots,
     };
     await first.read(query);
-    await vi.waitFor(() =>
-      expect(first.getSnapshot().synchronization).toBe("complete"),
-    );
+    await vi.waitFor(() => {
+      expect(gateway.synchronize).toHaveBeenCalledOnce();
+      expect(first.getSnapshot().synchronization).toBe("complete");
+    });
     const diagnostics = await first.getCacheDiagnostics();
     expect(
       diagnostics.caches.find(
