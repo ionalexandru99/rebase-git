@@ -22,88 +22,20 @@ export function CommitGraphCanvas({
   virtualRows,
   verticalOffset,
   width,
-}: {
-  readonly height: number;
-  readonly horizontalOffset: number;
-  readonly laneRows: readonly CommitLaneRow[];
-  readonly virtualRows: readonly VirtualItem[];
-  readonly verticalOffset: number;
-  readonly width: number;
-}): JSX.Element {
+}: CommitGraphCanvasViewport): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas === null || width <= 0 || height <= 0) {
-      return;
-    }
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.ceil(width * ratio);
-    canvas.height = Math.ceil(height * ratio);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    const context = canvas.getContext("2d");
-    if (context === null) {
-      return;
-    }
-    context.scale(ratio, ratio);
-    context.lineCap = "round";
-    context.lineWidth = 1.5;
-    const repositoryColor = getComputedStyle(canvas)
-      .getPropertyValue("--repository")
-      .trim();
-    context.clearRect(0, 0, width, height);
-
-    for (const virtualRow of virtualRows) {
-      const row = laneRows[virtualRow.index];
-      if (row === undefined) {
-        continue;
-      }
-      const top = virtualRow.start - verticalOffset;
-      const bottom = top + virtualRow.size;
-      const center = top + virtualRow.size / 2;
-      const nodeIndex = row.lanesBefore.indexOf(row.nodeLaneId);
-      if (nodeIndex < 0) {
-        continue;
-      }
-      const nodeX = laneX(nodeIndex) - horizontalOffset;
-
-      for (const laneId of row.lanesBefore) {
-        const from = row.lanesBefore.indexOf(laneId);
-        const to = row.lanesAfter.indexOf(laneId);
-        const fromX = laneX(from) - horizontalOffset;
-        drawLane(
-          context,
-          laneId,
-          fromX,
-          top,
-          to < 0 ? nodeX : laneX(to) - horizontalOffset,
-          to < 0 ? center : bottom,
-        );
-      }
-
-      for (const parentLaneId of row.parentLaneIds) {
-        const parentIndex = row.lanesAfter.indexOf(parentLaneId);
-        if (parentIndex < 0) {
-          continue;
-        }
-        const parentX = laneX(parentIndex) - horizontalOffset;
-        if (parentLaneId === row.nodeLaneId && parentX === nodeX) {
-          continue;
-        }
-        drawLane(context, parentLaneId, nodeX, center, parentX, bottom);
-      }
-
-      context.fillStyle =
-        laneColors[row.nodeLaneId % laneColors.length] ?? laneColors[0];
-      context.beginPath();
-      context.arc(nodeX, center, 4, 0, Math.PI * 2);
-      context.fill();
-      context.strokeStyle = repositoryColor || "#0b0b0e";
-      context.lineWidth = 2;
-      context.stroke();
-      context.lineWidth = 1.5;
-    }
+    if (canvas === null) return;
+    redrawCommitGraphCanvas(canvas, {
+      height,
+      horizontalOffset,
+      laneRows,
+      virtualRows,
+      verticalOffset,
+      width,
+    });
   }, [height, horizontalOffset, laneRows, verticalOffset, virtualRows, width]);
 
   return (
@@ -112,6 +44,98 @@ export function CommitGraphCanvas({
       ref={canvasRef}
     />
   );
+}
+
+interface CommitGraphCanvasViewport {
+  readonly height: number;
+  readonly horizontalOffset: number;
+  readonly laneRows: readonly CommitLaneRow[];
+  readonly virtualRows: readonly VirtualItem[];
+  readonly verticalOffset: number;
+  readonly width: number;
+}
+
+export function redrawCommitGraphCanvas(
+  canvas: HTMLCanvasElement,
+  {
+    height,
+    horizontalOffset,
+    laneRows,
+    virtualRows,
+    verticalOffset,
+    width,
+  }: CommitGraphCanvasViewport,
+) {
+  if (width <= 0 || height <= 0) return;
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const pixelWidth = Math.ceil(width * ratio);
+  const pixelHeight = Math.ceil(height * ratio);
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  const context = canvas.getContext("2d");
+  if (context === null) {
+    return;
+  }
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.lineCap = "round";
+  context.lineWidth = 1.5;
+  const repositoryColor = getComputedStyle(canvas)
+    .getPropertyValue("--repository")
+    .trim();
+  context.clearRect(0, 0, width, height);
+
+  for (const virtualRow of virtualRows) {
+    const row = laneRows[virtualRow.index];
+    if (row === undefined) {
+      continue;
+    }
+    const top = virtualRow.start - verticalOffset;
+    const bottom = top + virtualRow.size;
+    const center = top + virtualRow.size / 2;
+    const nodeIndex = row.lanesBefore.indexOf(row.nodeLaneId);
+    if (nodeIndex < 0) {
+      continue;
+    }
+    const nodeX = laneX(nodeIndex) - horizontalOffset;
+    const afterPositions = new Map(
+      row.lanesAfter.map((id, index) => [id, index]),
+    );
+
+    for (const [from, laneId] of row.lanesBefore.entries()) {
+      const to = afterPositions.get(laneId) ?? -1;
+      const fromX = laneX(from) - horizontalOffset;
+      const toX = to < 0 ? nodeX : laneX(to) - horizontalOffset;
+      if (Math.max(fromX, toX) < -2 || Math.min(fromX, toX) > width + 2)
+        continue;
+      drawLane(context, laneId, fromX, top, toX, to < 0 ? center : bottom);
+    }
+
+    for (const parentLaneId of row.parentLaneIds) {
+      const parentIndex = afterPositions.get(parentLaneId) ?? -1;
+      if (parentIndex < 0) {
+        continue;
+      }
+      const parentX = laneX(parentIndex) - horizontalOffset;
+      if (Math.max(parentX, nodeX) < -2 || Math.min(parentX, nodeX) > width + 2)
+        continue;
+      if (parentLaneId === row.nodeLaneId && parentX === nodeX) {
+        continue;
+      }
+      drawLane(context, parentLaneId, nodeX, center, parentX, bottom);
+    }
+
+    context.fillStyle =
+      laneColors[row.nodeLaneId % laneColors.length] ?? laneColors[0];
+    context.beginPath();
+    context.arc(nodeX, center, 4, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = repositoryColor || "#0b0b0e";
+    context.lineWidth = 2;
+    context.stroke();
+    context.lineWidth = 1.5;
+  }
 }
 
 export function commitGraphGutterWidth(laneRows: readonly CommitLaneRow[]) {
@@ -125,6 +149,10 @@ export function commitGraphGutterWidth(laneRows: readonly CommitLaneRow[]) {
 
 function laneX(index: number) {
   return laneInset + index * lanePitch;
+}
+
+export function commitGraphNodePosition(row: CommitLaneRow) {
+  return laneX(row.lanesBefore.indexOf(row.nodeLaneId));
 }
 
 function drawLane(

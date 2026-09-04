@@ -4,6 +4,11 @@ export interface HistoryOrderNode {
   readonly timestamp: number;
 }
 
+export interface HistoryParentEdge {
+  readonly childOid: string;
+  readonly parentOid: string;
+}
+
 export interface HistoryOrderCache {
   index?: HistoryOrderIndexReader;
   revision: number;
@@ -22,5 +27,7 @@ export interface HistoryOrderIndexReader {
     roots: readonly string[],
     order: "topological" | "chronological",
     previous?: readonly string[],
+    ancestry?: "all" | "first-parent",
+    additionalParentEdges?: readonly HistoryParentEdge[],
   ) => readonly string[];
 }

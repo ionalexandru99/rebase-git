@@ -4,6 +4,7 @@ import type {
   HistoryOrderCache,
   HistoryOrderNode,
 } from "#web/features/repository-history/history-order.contract";
+import { selectHistoryPage } from "#web/features/repository-history/history-page-selection";
 import {
   commitKey,
   commitStoreName,
@@ -70,6 +71,8 @@ export function readRepositoryHistory(
     const basis = JSON.stringify([orderCache.revision, roots]);
     const previous = orderCache.queries.get(key);
     if (
+      (query.ancestry !== "first-parent" ||
+        (repository.completion === undefined && offset === 0)) &&
       (previous === undefined ||
         (!previous.complete && previous.basis === basis)) &&
       query.order === repository.cachedPage?.order &&
@@ -92,12 +95,13 @@ export function readRepositoryHistory(
         throw new Error("Repository history cache is incomplete");
       }
       await completed;
+      const selected = selectHistoryPage(result, query);
       rememberHistoryOrder(orderCache, key, {
         basis,
-        oids: repository.cachedPage.oids,
+        oids: selected.map(({ oid }) => oid),
         complete: false,
       });
-      return result;
+      return selected;
     }
     if (repository.completion === undefined) {
       await completed;
@@ -129,6 +133,8 @@ export function readRepositoryHistory(
         roots,
         query.order,
         previous?.oids ?? cachedPrefix,
+        query.ancestry,
+        query.additionalParentEdges,
       );
       rememberHistoryOrder(orderCache, key, {
         basis,
@@ -259,10 +265,17 @@ export function normalizedOids(oids: readonly string[]) {
 }
 
 export function historyOrderScopeKey(
-  query: Pick<RepositoryHistoryQuery, "order" | "roots">,
+  query: Pick<
+    RepositoryHistoryQuery,
+    "order" | "roots" | "ancestry" | "additionalParentEdges"
+  >,
 ) {
   return JSON.stringify([
     query.order,
+    query.ancestry ?? "all",
+    query.additionalParentEdges
+      ?.map(({ childOid, parentOid }) => `${childOid}\0${parentOid}`)
+      .toSorted(),
     query.roots
       .map(({ name, type, oid }) =>
         type === "head" ? [name, type, oid] : [name, type],

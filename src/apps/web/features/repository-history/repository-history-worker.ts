@@ -4,6 +4,7 @@ import {
   type RepositoryCommit,
 } from "@rebase/contracts";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
+import { selectHistoryPage } from "#web/features/repository-history/history-page-selection";
 import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
 import {
   prepareRepositoryHistoryOrder,
@@ -408,14 +409,15 @@ async function acceptHistoryPage(
     if (replica.refTargets.length === 0) {
       replica.refTargets = page.refTargets;
     }
-    replica.visibleOids = stored.map((commit) => commit.oid);
+    const selected = selectHistoryPage(stored, query);
+    replica.visibleOids = selected.map((commit) => commit.oid);
     delete replica.failure;
     replica.status = stored.length === 0 ? "empty" : "ready";
     replica.revision += 1;
     publishSnapshot(replica);
     post(reader, {
       _tag: "HistoryResult",
-      commits: stored,
+      commits: selected,
       requestId,
     });
     if (replica.synchronization !== "syncing") {

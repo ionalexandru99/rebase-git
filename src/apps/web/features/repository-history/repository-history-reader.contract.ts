@@ -7,6 +7,7 @@ import type {
 } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
+import type { HistoryParentEdge } from "#web/features/repository-history/history-order.contract";
 
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
@@ -19,6 +20,8 @@ export interface RepositoryHistorySnapshot {
 }
 
 export interface RepositoryHistoryQuery {
+  readonly ancestry?: "all" | "first-parent";
+  readonly additionalParentEdges?: readonly HistoryParentEdge[];
   readonly offset?: number;
   readonly limit: number;
   readonly order: ReadRepositoryHistory["order"];

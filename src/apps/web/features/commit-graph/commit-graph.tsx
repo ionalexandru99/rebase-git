@@ -22,6 +22,7 @@ import {
   createCommitLaneCheckpoint,
 } from "#web/features/commit-graph/commit-lanes";
 import type { HistoryScope } from "#web/features/commit-graph/history-scope.contract";
+import { visibleMergeTopology } from "#web/features/commit-graph/merge-visibility";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
@@ -31,6 +32,7 @@ import {
   CommitGraphCanvas,
   commitGraphGutterWidth,
 } from "#web-ui/features/commit-graph/commit-graph-canvas";
+import { CommitGraphMergeControls } from "#web-ui/features/commit-graph/commit-graph-merge-controls";
 
 const rowHeight = 36;
 const overscanRows = 10;
@@ -57,10 +59,25 @@ export function CommitGraph({
   readonly selections?: readonly RepositoryRefTarget[];
 }): JSX.Element {
   const [commits, setCommits] = useState<readonly RepositoryCommit[]>([]);
+  const [loadedRoots, setLoadedRoots] = useState<readonly string[]>([]);
   const [error, setError] =
     useState<ReturnType<RepositoryHistoryReader["getSnapshot"]>["error"]>();
   const [loading, setLoading] = useState(true);
   const [selectedOid, setSelectedOid] = useState<string>();
+  const [activeOid, setActiveOid] = useState<string>();
+  const [expandedMerges, setExpandedMerges] = useState<
+    ReadonlyMap<string, readonly string[]>
+  >(new Map());
+  const visible = useMemo(
+    () =>
+      visibleMergeTopology(
+        commits,
+        loadedRoots,
+        new Set(expandedMerges.keys()),
+      ),
+    [commits, loadedRoots, expandedMerges],
+  );
+  const visibleCommits = visible.commits;
   const [order, setOrder] =
     useState<RepositoryHistoryQuery["order"]>("topological");
   const previousOrder = useRef(order);
@@ -68,7 +85,7 @@ export function CommitGraph({
   selectedOidRef.current = selectedOid;
   const loadEpoch = useRef(0);
   const commitsRef = useRef(commits);
-  commitsRef.current = commits;
+  commitsRef.current = visibleCommits;
   const pendingViewportAnchor = useRef<ViewportAnchor | undefined>(undefined);
   const previousReader = useRef(reader);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -152,17 +169,27 @@ export function CommitGraph({
     setLoading(true);
     setError(undefined);
     void reader
-      .read({ limit: 100, order, roots })
+      .read({
+        limit: 100,
+        order,
+        roots,
+        ancestry: "first-parent",
+        additionalParentEdges: [...expandedMerges].flatMap(
+          ([childOid, parents]) =>
+            parents.map((parentOid) => ({ childOid, parentOid })),
+        ),
+      })
       .then(
         (next) => {
           if (epoch !== loadEpoch.current) {
             return;
           }
           setCommits(next);
+          setLoadedRoots(roots.map(({ oid }) => oid));
           setSelectedOid((selected) =>
             next.some((commit) => commit.oid === selected)
               ? selected
-              : next[0]?.oid,
+              : undefined,
           );
         },
         () => {
@@ -177,7 +204,7 @@ export function CommitGraph({
           setLoading(false);
         }
       });
-  }, [reader, roots, order]);
+  }, [reader, roots, order, expandedMerges]);
 
   useEffect(() => {
     if (previousReader.current !== reader) {
@@ -185,6 +212,8 @@ export function CommitGraph({
       setCommits([]);
       setError(undefined);
       setSelectedOid(undefined);
+      setActiveOid(undefined);
+      setExpandedMerges(new Map());
       if (scrollRef.current !== null) {
         scrollRef.current.scrollTop = 0;
       }
@@ -202,45 +231,87 @@ export function CommitGraph({
       return;
     }
     pendingViewportAnchor.current = undefined;
-    const index = commits.findIndex((commit) => commit.oid === anchor.oid);
+    const index = visibleCommits.findIndex(
+      (commit) => commit.oid === anchor.oid,
+    );
     if (index >= 0) {
       element.scrollTop = index * rowHeight + anchor.offset;
     }
-  }, [commits]);
+  }, [visibleCommits]);
+
+  useEffect(() => {
+    if (
+      selectedOid !== undefined &&
+      !visibleCommits.some(({ oid }) => oid === selectedOid)
+    )
+      setSelectedOid(undefined);
+  }, [selectedOid, visibleCommits]);
+
+  const previousSynchronization = useRef(historySnapshot.synchronization);
+  useEffect(() => {
+    if (
+      previousSynchronization.current !== "complete" &&
+      historySnapshot.synchronization === "complete"
+    )
+      loadHistory();
+    previousSynchronization.current = historySnapshot.synchronization;
+  }, [historySnapshot.synchronization, loadHistory]);
 
   const laneRows = useMemo(
     () =>
-      appendCommitLanes(
-        createCommitLaneCheckpoint(),
-        commits.map((commit) => ({ oid: commit.oid, parents: commit.parents })),
-      ).rows,
-    [commits],
+      appendCommitLanes(createCommitLaneCheckpoint(), visible.topology).rows,
+    [visible.topology],
   );
   const labelsByOid = useMemo(() => groupRefLabels(refTargets), [refTargets]);
   const gutterWidth = commitGraphGutterWidth(laneRows);
   const virtualizer = useVirtualizer({
-    count: commits.length,
+    count: visibleCommits.length,
     estimateSize: () => rowHeight,
     getScrollElement: () => scrollRef.current,
     overscan: overscanRows,
   });
   const virtualRows = virtualizer.getVirtualItems();
+  const activeCommitOid = activeOid ?? selectedOid;
+
+  const toggleMerge = (oid: string, expand: boolean) => {
+    const commit = commits.find((candidate) => candidate.oid === oid);
+    if (commit === undefined || commit.parents.length < 2) return;
+    setActiveOid(oid);
+    setExpandedMerges((current) => {
+      const next = new Map(current);
+      if (expand) next.set(oid, commit.parents.slice(1));
+      else next.delete(oid);
+      return next;
+    });
+    scrollRef.current?.focus();
+  };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      const oid = activeOid ?? selectedOid;
+      if (oid !== undefined && visible.merges.has(oid)) {
+        event.preventDefault();
+        toggleMerge(oid, event.key === "ArrowRight");
+      }
+      return;
+    }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
       return;
     }
     event.preventDefault();
-    const current = commits.findIndex((commit) => commit.oid === selectedOid);
+    const current = visibleCommits.findIndex(
+      (commit) => commit.oid === (activeOid ?? selectedOid),
+    );
     const next = Math.min(
-      commits.length - 1,
+      visibleCommits.length - 1,
       Math.max(0, current + (event.key === "ArrowDown" ? 1 : -1)),
     );
-    const commit = commits[next];
+    const commit = visibleCommits[next];
     if (commit === undefined) {
       return;
     }
     setSelectedOid(commit.oid);
+    setActiveOid(commit.oid);
     virtualizer.scrollToIndex(next, { align: "auto" });
   };
 
@@ -307,7 +378,9 @@ export function CommitGraph({
       <div className="relative min-h-0 flex-1">
         <div
           aria-activedescendant={
-            selectedOid === undefined ? undefined : commitRowId(selectedOid)
+            activeCommitOid === undefined
+              ? undefined
+              : commitRowId(activeCommitOid)
           }
           aria-busy={loading}
           aria-label="Commit history"
@@ -330,7 +403,7 @@ export function CommitGraph({
             }}
           >
             {virtualRows.map((virtualRow) => {
-              const commit = commits[virtualRow.index];
+              const commit = visibleCommits[virtualRow.index];
               if (commit === undefined) {
                 return null;
               }
@@ -341,7 +414,7 @@ export function CommitGraph({
                   aria-label={commitAriaLabel(commit, labels)}
                   aria-posinset={virtualRow.index + 1}
                   aria-selected={selected}
-                  aria-setsize={commits.length}
+                  aria-setsize={visibleCommits.length}
                   className={`absolute top-0 left-0 grid w-full cursor-default items-center border-border/40 border-b text-xs ${
                     selected
                       ? "bg-primary/12 text-foreground"
@@ -349,11 +422,15 @@ export function CommitGraph({
                   }`}
                   id={commitRowId(commit.oid)}
                   key={commit.oid}
-                  onClick={() => setSelectedOid(commit.oid)}
+                  onClick={() => {
+                    setSelectedOid(commit.oid);
+                    setActiveOid(commit.oid);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
                       setSelectedOid(commit.oid);
+                      setActiveOid(commit.oid);
                     }
                   }}
                   role="option"
@@ -395,6 +472,15 @@ export function CommitGraph({
             width={Math.min(gutterWidth, viewport.width)}
           />
         ) : null}
+        <CommitGraphMergeControls
+          commits={visibleCommits}
+          horizontalOffset={horizontalOffset}
+          laneRows={laneRows}
+          merges={visible.merges}
+          onToggle={toggleMerge}
+          verticalOffset={virtualizer.scrollOffset ?? 0}
+          virtualRows={virtualRows}
+        />
         {loading && commits.length === 0 ? <CommitGraphLoading /> : null}
         {!loading && error !== undefined ? (
           <CommitGraphFailure

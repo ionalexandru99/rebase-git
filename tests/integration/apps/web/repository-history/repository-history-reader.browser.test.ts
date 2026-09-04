@@ -298,6 +298,74 @@ describe("browser repository history reader", () => {
     }
   });
 
+  it("reveals merge parents from the replica and keeps the initial page collapsed", async () => {
+    const repositoryId = crypto.randomUUID();
+    const [merge, main, side, base] = history(4);
+    if (!merge || !main || !side || !base) throw new Error("Missing fixture");
+    const commits = [
+      { ...merge, parents: [main.oid, side.oid] },
+      { ...main, parents: [base.oid] },
+      { ...side, parents: [base.oid] },
+      base,
+    ];
+    const roots = [{ ...root("main"), oid: merge.oid }];
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, roots)),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      gateway,
+      repositoryId,
+    });
+    const query = {
+      roots,
+      order: "topological",
+      ancestry: "first-parent",
+      limit: 100,
+    } as const;
+    try {
+      expect((await reader.read(query)).map(({ oid }) => oid)).toEqual([
+        merge.oid,
+        main.oid,
+        base.oid,
+      ]);
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot().synchronization).toBe("complete"),
+      );
+      expect(
+        (
+          await reader.read({
+            ...query,
+            additionalParentEdges: [
+              { childOid: merge.oid, parentOid: side.oid },
+            ],
+          })
+        ).map(({ oid }) => oid),
+      ).toEqual(commits.map(({ oid }) => oid));
+      expect((await reader.read(query)).map(({ oid }) => oid)).toEqual([
+        merge.oid,
+        main.oid,
+        base.oid,
+      ]);
+      expect(gateway.read).toHaveBeenCalledOnce();
+      expect(gateway.synchronize).toHaveBeenCalledOnce();
+    } finally {
+      reader.close();
+    }
+  });
+
   it("migrates version-two commit ordering into topological epochs", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
