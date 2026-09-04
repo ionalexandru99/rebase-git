@@ -20,25 +20,35 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
-  it("keeps idle readers idle when another reader closes", async () => {
+  it("does not retry failed synchronization when a non-owner reader closes", async () => {
+    const repositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
     const gateway: RepositoryHistoryGateway = {
-      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+      read: vi.fn(async () => page(repositoryId, commits, [main])),
       synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
     };
     const connection = {
       environmentId: crypto.randomUUID(),
-      repositoryId: crypto.randomUUID(),
+      repositoryId,
       gateway,
     };
     const first = createBrowserRepositoryHistoryReader(connection);
     const second = createBrowserRepositoryHistoryReader(connection);
     try {
       await Promise.all([first.getRefTargets(), second.getRefTargets()]);
+      await second.read({ limit: 100, order: "topological", roots: [main] });
+      await vi.waitFor(() =>
+        expect(second.getSnapshot().error).toBeInstanceOf(
+          RepositoryHistoryOffline,
+        ),
+      );
+      expect(gateway.synchronize).toHaveBeenCalledTimes(1);
       first.close();
       await second.getRefTargets();
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(second.getSnapshot().synchronization).toBe("idle");
-      expect(gateway.synchronize).not.toHaveBeenCalled();
+      expect(gateway.synchronize).toHaveBeenCalledTimes(1);
     } finally {
       first.close();
       second.close();
