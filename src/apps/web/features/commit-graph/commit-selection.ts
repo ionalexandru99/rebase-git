@@ -79,7 +79,7 @@ export function reconcileGraphSelection(
   const activeIndex =
     survivingIndex >= 0
       ? survivingIndex
-      : Math.min(state.activeIndex, visibleOids.length - 1);
+      : Math.max(0, Math.min(state.activeIndex, visibleOids.length - 1));
   const activeOid = visibleOids[activeIndex];
   const selected = new Set(state.selectedOids);
   const anchorOid =

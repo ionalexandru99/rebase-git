@@ -168,6 +168,8 @@ export function CommitGraph({
   );
   const navigation = useCommitGraphSelection({
     reader,
+    query: paging.snapshot.query,
+    loading: paging.loading,
     oids: visibleOids,
     laneRows,
     merges: paging.merges,

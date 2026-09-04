@@ -1,25 +1,16 @@
-import {
-  type KeyboardEvent,
-  type MouseEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import type { CommitLaneRow } from "#web/features/commit-graph/commit-lanes";
-import {
-  clearGraphSelection,
-  reconcileGraphSelection,
-  selectGraphCommit,
-} from "#web/features/commit-graph/commit-selection";
-import {
-  type CommitGraphSelectionMode,
-  emptyCommitGraphSelection,
-} from "#web/features/commit-graph/commit-selection.contract";
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
+import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
+import { usePagedGraphSelection } from "#web/features/commit-graph/paging/use-paged-graph-selection";
+import type {
+  RepositoryHistoryQuery,
+  RepositoryHistoryReader,
+} from "#web/features/repository-history/repository-history-reader.contract";
 
 export function useCommitGraphSelection({
   reader,
+  query,
+  loading = false,
   oids,
   laneRows,
   pageSize,
@@ -32,7 +23,11 @@ export function useCommitGraphSelection({
   requestMove,
   requestLaneMove,
 }: {
-  readonly reader: RepositoryHistoryReader | undefined;
+  readonly reader:
+    | Pick<RepositoryHistoryReader, "read" | "locateMany">
+    | undefined;
+  readonly query?: RepositoryHistoryQuery | undefined;
+  readonly loading?: boolean;
   readonly oids: readonly string[];
   readonly laneRows: readonly CommitLaneRow[];
   readonly pageSize: number;
@@ -48,35 +43,15 @@ export function useCommitGraphSelection({
     mode: CommitGraphSelectionMode,
   ) => void;
 }) {
-  const [selection, setSelection] = useState(emptyCommitGraphSelection);
-  const previousWindow = useRef({ startOffset, viewEpoch });
-  useEffect(() => {
-    if (reader !== undefined) setSelection(emptyCommitGraphSelection);
-  }, [reader]);
-  useEffect(() => {
-    const previous = previousWindow.current;
-    previousWindow.current = { startOffset, viewEpoch };
-    setSelection((current) => {
-      if (previous.viewEpoch !== viewEpoch)
-        return reconcileGraphSelection(current, oids);
-      const activeIndex =
-        current.activeOid === undefined ? -1 : oids.indexOf(current.activeOid);
-      return {
-        ...current,
-        activeIndex:
-          activeIndex >= 0
-            ? activeIndex
-            : current.activeIndex + previous.startOffset - startOffset,
-      };
-    });
-  }, [oids, startOffset, viewEpoch]);
-  const selected = useMemo(
-    () => new Set(selection.selectedOids),
-    [selection.selectedOids],
-  );
-  const select = (oid: string, mode: CommitGraphSelectionMode = "replace") => {
-    setSelection((current) => selectGraphCommit(current, oids, oid, mode));
-  };
+  const model = usePagedGraphSelection({
+    reader,
+    query,
+    oids,
+    loading,
+    startOffset,
+    viewEpoch,
+  });
+  const { selection, selected, select } = model;
   const move = (index: number, mode: CommitGraphSelectionMode = "replace") => {
     if (requestMove !== undefined) {
       requestMove(Math.max(0, index + startOffset), mode);
@@ -149,10 +124,10 @@ export function useCommitGraphSelection({
       );
     } else if (event.key === "Escape") {
       event.preventDefault();
-      setSelection(clearGraphSelection);
+      model.clear();
     } else if (mod && event.key.toLowerCase() === "a") {
       event.preventDefault();
-      setSelection((current) => ({ ...current, selectedOids: oids }));
+      model.selectAll();
     }
   };
   const onClick = (oid: string, event: MouseEvent) => {
@@ -172,6 +147,6 @@ export function useCommitGraphSelection({
     moveInLane,
     onKeyDown,
     onClick,
-    reset: () => setSelection(emptyCommitGraphSelection),
+    reset: model.reset,
   };
 }
