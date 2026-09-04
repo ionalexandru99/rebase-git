@@ -20,6 +20,145 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
+  it("shares committed history between registered linked worktrees and isolates other repositories", async () => {
+    const environmentId = crypto.randomUUID();
+    const logicalRepositoryId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const linkedRepositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, [main])),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: snapshot("a", main),
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      logicalRepositoryId,
+      repositoryId,
+    });
+    const offlineGateway: RepositoryHistoryGateway = {
+      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+    };
+    const linked = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: offlineGateway,
+      logicalRepositoryId,
+      repositoryId: linkedRepositoryId,
+    });
+    const unrelated = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: offlineGateway,
+      logicalRepositoryId: crypto.randomUUID(),
+      repositoryId: crypto.randomUUID(),
+    });
+    try {
+      await reader.read({ limit: 100, order: "topological", roots: [main] });
+      await vi.waitFor(() =>
+        expect(linked.getSnapshot().synchronization).toBe("complete"),
+      );
+      expect(gateway.read).toHaveBeenCalledWith(
+        expect.objectContaining({ repositoryId }),
+        expect.any(AbortSignal),
+      );
+      expect(gateway.synchronize).toHaveBeenCalledWith(
+        expect.objectContaining({ repositoryId }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+      await expect(
+        linked.read({ limit: 100, order: "topological", roots: [main] }),
+      ).resolves.toEqual(commits);
+      await expect(
+        readRepositoryCommits(
+          environmentId,
+          logicalRepositoryId,
+          commits.map(({ oid }) => oid),
+        ),
+      ).resolves.toEqual(commits);
+      await expect(
+        unrelated.getCommitSummaries(commits.map(({ oid }) => oid)),
+      ).resolves.toEqual([]);
+      expect(offlineGateway.read).not.toHaveBeenCalled();
+    } finally {
+      reader.close();
+      linked.close();
+      unrelated.close();
+    }
+    const reopened = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: offlineGateway,
+      logicalRepositoryId,
+      repositoryId: linkedRepositoryId,
+    });
+    try {
+      await expect(
+        reopened.read({ limit: 100, order: "topological", roots: [main] }),
+      ).resolves.toEqual(commits);
+      expect(offlineGateway.read).not.toHaveBeenCalled();
+    } finally {
+      reopened.close();
+    }
+  });
+
+  it("reopens the committed first page offline before synchronization completes", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, [main])),
+      synchronize: vi.fn(
+        (_request, _accept, signal) =>
+          new Promise<number>((_resolve, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => reject(new RepositoryHistoryOffline()),
+              { once: true },
+            );
+          }),
+      ),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    await reader.read({ limit: 100, order: "topological", roots: [main] });
+    await vi.waitFor(() => expect(gateway.synchronize).toHaveBeenCalledOnce());
+    reader.close();
+    const offlineGateway: RepositoryHistoryGateway = {
+      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+    };
+    const reopened = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: offlineGateway,
+      repositoryId,
+    });
+    try {
+      await expect(
+        reopened.read({ limit: 100, order: "topological", roots: [main] }),
+      ).resolves.toEqual(commits);
+      expect(offlineGateway.read).not.toHaveBeenCalled();
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("migrates version-two commit ordering into topological epochs", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
