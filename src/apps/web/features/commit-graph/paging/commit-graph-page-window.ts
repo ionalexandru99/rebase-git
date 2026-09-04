@@ -265,7 +265,7 @@ export function createCommitGraphPageWindow(
         );
         return;
       }
-      publish({ loading: true, error: undefined });
+      publish({ loading: true });
       try {
         const checkpointOffset = [...target.checkpoints.keys()]
           .filter((position) => position <= offset)
@@ -288,8 +288,12 @@ export function createCommitGraphPageWindow(
         }
         signal.throwIfAborted();
         view = target;
-        retryTask = undefined;
-        publish({ loading: false, error: undefined });
+        const failedOffset = snapshot.error?.offset;
+        const recovered =
+          failedOffset === undefined ||
+          target.pages.has(Math.floor(failedOffset / pageSize) * pageSize);
+        if (recovered) retryTask = undefined;
+        publish({ loading: false, ...(recovered ? { error: undefined } : {}) });
       } catch (error) {
         if (!signal.aborted) fail(offset, error, () => prefetchOffset(offset));
       }

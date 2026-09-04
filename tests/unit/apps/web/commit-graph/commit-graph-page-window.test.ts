@@ -71,6 +71,31 @@ describe("commit graph page window", () => {
     window.dispose();
   });
 
+  it("retains a failed older page retry while restoring another evicted page", async () => {
+    const reader = fakeReader(history(25));
+    const window = createCommitGraphPageWindow(reader, {
+      pageSize: 5,
+      maximumPages: 2,
+    });
+    await window.loadInitial(query);
+    await window.appendOlder();
+    await window.appendOlder();
+    reader.read.mockRejectedValueOnce(new Error("Older page failed"));
+    await window.appendOlder();
+    expect(window.getSnapshot().error?.offset).toBe(15);
+    await window.prefetchOffset(0);
+    expect(window.getSnapshot().error).toEqual({
+      offset: 15,
+      message: "Older page failed",
+    });
+    await window.retry();
+    expect(window.getSnapshot().error).toBeUndefined();
+    expect(window.getSnapshot().pages.some((page) => page.offset === 15)).toBe(
+      true,
+    );
+    window.dispose();
+  });
+
   it("bounds resident metadata and checkpoints and restores evicted pages", async () => {
     const reader = fakeReader(history(120));
     const window = createCommitGraphPageWindow(reader, {
