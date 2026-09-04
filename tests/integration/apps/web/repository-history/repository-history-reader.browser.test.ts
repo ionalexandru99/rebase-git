@@ -33,7 +33,16 @@ describe("browser repository history reader", () => {
       repositoryId,
       gateway,
     };
+    const existingLeases = new Set(
+      (await navigator.locks.query()).held?.map(({ name }) => name),
+    );
     const first = createBrowserRepositoryHistoryReader(connection);
+    await first.getRefTargets();
+    const firstLease = (await navigator.locks.query()).held?.find(
+      ({ name }) =>
+        name?.startsWith("rebase-history-reader:") && !existingLeases.has(name),
+    )?.name;
+    expect(firstLease).toBeDefined();
     const second = createBrowserRepositoryHistoryReader(connection);
     try {
       await Promise.all([first.getRefTargets(), second.getRefTargets()]);
@@ -44,9 +53,18 @@ describe("browser repository history reader", () => {
         ),
       );
       expect(gateway.synchronize).toHaveBeenCalledTimes(1);
+      const revision = second.getSnapshot().revision;
       first.close();
+      await vi.waitFor(async () => {
+        const leases = await navigator.locks.query();
+        expect(
+          [...(leases.held ?? []), ...(leases.pending ?? [])].some(
+            ({ name }) => name === firstLease,
+          ),
+        ).toBe(false);
+      });
       await second.getRefTargets();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(second.getSnapshot().revision).toBe(revision);
       expect(second.getSnapshot().synchronization).toBe("idle");
       expect(gateway.synchronize).toHaveBeenCalledTimes(1);
     } finally {
