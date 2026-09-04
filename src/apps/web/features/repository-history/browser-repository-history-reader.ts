@@ -12,6 +12,8 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { holdRepositoryHistoryReaderLease } from "#web/features/repository-history/repository-history-reader-lease";
+import { maintainRepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader-lifecycle";
 import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 import type {
   ConnectRepositoryHistoryReader,
@@ -23,13 +25,25 @@ import type {
 let sharedWorker: SharedWorker | undefined;
 let persistenceRequested = false;
 
-export function createBrowserRepositoryHistoryReader(options: {
+interface BrowserRepositoryHistoryReaderOptions {
   readonly environmentId: string;
   readonly gateway: RepositoryHistoryGateway;
   readonly logicalRepositoryId?: string;
   readonly repositoryId: string;
   readonly worker?: SharedWorker;
-}): RepositoryHistoryReader {
+}
+
+export function createBrowserRepositoryHistoryReader(
+  options: BrowserRepositoryHistoryReaderOptions,
+): RepositoryHistoryReader {
+  return maintainRepositoryHistoryReader(() =>
+    connectBrowserRepositoryHistoryReader(options),
+  );
+}
+
+function connectBrowserRepositoryHistoryReader(
+  options: BrowserRepositoryHistoryReaderOptions,
+): RepositoryHistoryReader {
   const worker = options.worker ?? acquireSharedWorker();
   requestPersistentStorage();
   const channel = new MessageChannel();
@@ -107,15 +121,18 @@ export function createBrowserRepositoryHistoryReader(options: {
     request.resolve(message.commits);
   };
   port.start();
-  const connection: ConnectRepositoryHistoryReader = {
-    _tag: "ConnectRepositoryHistoryReader",
-    environmentId: options.environmentId,
-    logicalRepositoryId: options.logicalRepositoryId ?? options.repositoryId,
-    port: channel.port2,
-    repositoryId: options.repositoryId,
-  };
-  worker.port.postMessage(connection, [channel.port2]);
-  worker.port.start();
+  const releaseLease = holdRepositoryHistoryReaderLease((lifetimeLock) => {
+    const connection: ConnectRepositoryHistoryReader = {
+      _tag: "ConnectRepositoryHistoryReader",
+      environmentId: options.environmentId,
+      logicalRepositoryId: options.logicalRepositoryId ?? options.repositoryId,
+      ...(lifetimeLock === undefined ? {} : { lifetimeLock }),
+      port: channel.port2,
+      repositoryId: options.repositoryId,
+    };
+    worker.port.postMessage(connection, [channel.port2]);
+    worker.port.start();
+  });
   const unsubscribeAvailability = options.gateway.subscribeAvailability?.(
     () => {
       port.postMessage({
@@ -241,6 +258,7 @@ export function createBrowserRepositoryHistoryReader(options: {
         return;
       }
       closed = true;
+      releaseLease();
       for (const controller of loads.values()) {
         controller.abort();
       }

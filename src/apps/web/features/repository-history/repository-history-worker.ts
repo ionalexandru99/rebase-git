@@ -8,6 +8,7 @@ import {
   type RepositoryHistoryQuery,
   RepositoryHistoryStorageUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { watchRepositoryHistoryReaderLease } from "#web/features/repository-history/repository-history-reader-lease";
 import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 import {
   beginRepositoryHistorySynchronization,
@@ -57,9 +58,14 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
     connection,
     epoch: new RepositoryHistoryEpoch(),
     queries: new Map(),
+    stopWatchingLease: () => undefined,
   };
   replica.readers.add(reader);
   repositories.set(key, replica);
+  reader.stopWatchingLease = watchRepositoryHistoryReaderLease(
+    connection.lifetimeLock,
+    () => closeReader(reader, replica),
+  );
   connection.port.onmessage = (
     event: MessageEvent<RepositoryHistoryWorkerRequest>,
   ) => {
@@ -296,37 +302,42 @@ async function handleReaderMessage(
         await startSynchronization(reader, replica);
       }
       return;
-    case "CloseReader": {
-      const activeRequestId = reader.epoch.cancel();
-      if (activeRequestId !== undefined) {
-        post(reader, {
-          _tag: "CancelHistoryLoad",
-          requestId: activeRequestId,
-        });
-      }
-      replica.readers.delete(reader);
-      if (replica.synchronizationOwner === reader) {
-        cancelSynchronization(reader, replica);
-      }
-      reader.closed = true;
-      if (replica.readers.size === 0) {
-        repositories.delete(
-          `${reader.connection.environmentId}\0${reader.connection.logicalRepositoryId}`,
-        );
-      } else if (replica.synchronization !== "complete") {
-        const replacement = replica.readers.values().next().value;
-        if (replacement !== undefined) {
-          void startSynchronization(replacement, replica).catch((error) => {
-            replica.failure = workerFailure(error);
-            replica.revision += 1;
-            publishSnapshot(replica);
-          });
-        }
-      }
-      reader.connection.port.close();
+    case "CloseReader":
+      closeReader(reader, replica);
       return;
+  }
+}
+
+function closeReader(reader: ConnectedReader, replica: RepositoryReplica) {
+  if (reader.closed) return;
+  reader.stopWatchingLease();
+  const activeRequestId = reader.epoch.cancel();
+  if (activeRequestId !== undefined) {
+    post(reader, {
+      _tag: "CancelHistoryLoad",
+      requestId: activeRequestId,
+    });
+  }
+  replica.readers.delete(reader);
+  if (replica.synchronizationOwner === reader) {
+    cancelSynchronization(reader, replica);
+  }
+  reader.closed = true;
+  if (replica.readers.size === 0) {
+    repositories.delete(
+      `${reader.connection.environmentId}\0${reader.connection.logicalRepositoryId}`,
+    );
+  } else if (replica.synchronization !== "complete") {
+    const replacement = replica.readers.values().next().value;
+    if (replacement !== undefined) {
+      void startSynchronization(replacement, replica).catch((error) => {
+        replica.failure = workerFailure(error);
+        replica.revision += 1;
+        publishSnapshot(replica);
+      });
     }
   }
+  reader.connection.port.close();
 }
 
 async function acceptHistoryPage(
@@ -577,6 +588,7 @@ function workerFailure(error: unknown): RepositoryHistoryWorkerFailure {
 }
 
 interface ConnectedReader {
+  stopWatchingLease: () => void;
   closed: boolean;
   readonly connection: ConnectRepositoryHistoryReader;
   readonly epoch: RepositoryHistoryEpoch;
