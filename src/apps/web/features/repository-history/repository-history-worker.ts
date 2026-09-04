@@ -5,11 +5,21 @@ import {
 } from "@rebase/contracts";
 import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
 import {
+  type RepositoryHistoryQuery,
+  RepositoryHistoryStorageUnavailable,
+} from "#web/features/repository-history/repository-history-reader.contract";
+import {
+  beginRepositoryHistorySynchronization,
+  completeStoredRepositoryHistory,
   readRepositoryCommits,
-  storeRepositoryCommits,
+  readRepositoryHistory,
+  readStoredRepositoryHistoryState,
+  storeRepositoryHistoryBatch,
+  storeRepositoryHistoryPage,
 } from "#web/features/repository-history/repository-history-store";
 import type {
   ConnectRepositoryHistoryReader,
+  RepositoryHistoryWorkerFailure,
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
 } from "#web/features/repository-history/repository-history-worker.contract";
@@ -37,22 +47,26 @@ worker.onconnect = (event) => {
 
 function connectReader(connection: ConnectRepositoryHistoryReader) {
   const key = `${connection.environmentId}\0${connection.repositoryId}`;
-  const replica = repositories.get(key) ?? createReplica();
+  const replica =
+    repositories.get(key) ??
+    createReplica(connection.environmentId, connection.repositoryId);
   const reader: ConnectedReader = {
     closed: false,
     connection,
     epoch: new RepositoryHistoryEpoch(),
+    queries: new Map(),
   };
   replica.readers.add(reader);
   repositories.set(key, replica);
   connection.port.onmessage = (
     event: MessageEvent<RepositoryHistoryWorkerRequest>,
   ) => {
-    void handleReaderMessage(reader, replica, event.data).catch(() => {
+    void handleReaderMessage(reader, replica, event.data).catch((error) => {
       if (event.data._tag === "HistoryBatchReceived") {
         replica.synchronization = "idle";
         delete replica.synchronizationOwner;
         delete replica.synchronizationRequestId;
+        replica.failure = workerFailure(error);
         replica.revision += 1;
         publishSnapshot(replica);
         post(reader, {
@@ -64,7 +78,7 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
       if (!("requestId" in event.data)) {
         return;
       }
-      const failure = { _tag: "Unavailable" as const };
+      const failure = workerFailure(error);
       replica.failure = failure;
       replica.status = "error";
       replica.revision += 1;
@@ -88,10 +102,15 @@ async function handleReaderMessage(
   if (reader.closed) {
     return;
   }
+  await replica.initialization;
+  if (reader.closed) {
+    return;
+  }
   switch (message._tag) {
     case "ReadHistory": {
       const supersededRequestId = reader.epoch.begin(message.requestId);
       if (supersededRequestId !== undefined) {
+        reader.queries.delete(supersededRequestId);
         post(reader, {
           _tag: "CancelHistoryLoad",
           requestId: supersededRequestId,
@@ -101,6 +120,37 @@ async function handleReaderMessage(
           failure: { _tag: "Unavailable" },
           requestId: supersededRequestId,
         });
+      }
+      reader.queries.set(message.requestId, message.query);
+      const cached = await readRepositoryHistory(
+        reader.connection.environmentId,
+        reader.connection.repositoryId,
+        message.query,
+      );
+      if (!reader.epoch.isCurrent(message.requestId)) {
+        reader.queries.delete(message.requestId);
+        return;
+      }
+      if (cached !== undefined) {
+        reader.epoch.finish(message.requestId);
+        reader.queries.delete(message.requestId);
+        for (const commit of cached) {
+          replica.commits.set(commit.oid, commit);
+        }
+        replica.visibleOids = cached.map((commit) => commit.oid);
+        delete replica.failure;
+        replica.status = cached.length === 0 ? "empty" : "ready";
+        replica.revision += 1;
+        publishSnapshot(replica);
+        post(reader, {
+          _tag: "HistoryResult",
+          commits: cached,
+          requestId: message.requestId,
+        });
+        return;
+      }
+      if (replica.synchronization === "complete") {
+        replica.synchronization = "idle";
       }
       replica.status = "loading";
       publishSnapshot(replica);
@@ -126,6 +176,7 @@ async function handleReaderMessage(
       if (!reader.epoch.finish(message.requestId)) {
         return;
       }
+      reader.queries.delete(message.requestId);
       replica.failure = message.failure;
       replica.status = "error";
       replica.revision += 1;
@@ -152,8 +203,14 @@ async function handleReaderMessage(
       ) {
         return;
       }
+      await completeStoredRepositoryHistory(
+        reader.connection.environmentId,
+        reader.connection.repositoryId,
+        message.commitCount,
+      );
       replica.synchronization = "complete";
       replica.synchronizedCommitCount = message.commitCount;
+      delete replica.failure;
       delete replica.synchronizationOwner;
       delete replica.synchronizationRequestId;
       replica.revision += 1;
@@ -167,6 +224,7 @@ async function handleReaderMessage(
         return;
       }
       replica.synchronization = "idle";
+      replica.failure = message.failure;
       delete replica.synchronizationOwner;
       delete replica.synchronizationRequestId;
       replica.revision += 1;
@@ -212,7 +270,11 @@ async function handleReaderMessage(
       } else if (replica.synchronization !== "complete") {
         const replacement = replica.readers.values().next().value;
         if (replacement !== undefined) {
-          startSynchronization(replacement, replica);
+          void startSynchronization(replacement, replica).catch((error) => {
+            replica.failure = workerFailure(error);
+            replica.revision += 1;
+            publishSnapshot(replica);
+          });
         }
       }
       reader.connection.port.close();
@@ -232,36 +294,54 @@ async function acceptHistoryPage(
     if (page.repositoryId !== reader.connection.repositoryId) {
       throw new Error("History page identity does not match the reader");
     }
-    await storeRepositoryCommits(
+    const query = reader.queries.get(requestId);
+    if (query === undefined) {
+      throw new Error("History page has no matching query");
+    }
+    await storeRepositoryHistoryPage(
       reader.connection.environmentId,
       reader.connection.repositoryId,
-      page.commits,
+      page,
+      query,
     );
     if (!reader.epoch.finish(requestId)) {
       return;
     }
-    for (const commit of page.commits) {
+    reader.queries.delete(requestId);
+    const stored = await readRepositoryCommits(
+      reader.connection.environmentId,
+      reader.connection.repositoryId,
+      page.commits.map((commit) => commit.oid),
+    );
+    for (const commit of stored) {
       replica.commits.set(commit.oid, commit);
     }
     replica.refTargets = page.refTargets;
-    replica.visibleOids = page.commits.map((commit) => commit.oid);
+    replica.visibleOids = stored.map((commit) => commit.oid);
     delete replica.failure;
-    replica.status = page.commits.length === 0 ? "empty" : "ready";
+    replica.status = stored.length === 0 ? "empty" : "ready";
     replica.revision += 1;
     publishSnapshot(replica);
     post(reader, {
       _tag: "HistoryResult",
-      commits: page.commits,
+      commits: stored,
       requestId,
     });
     if (replica.synchronization === "idle") {
-      startSynchronization(reader, replica);
+      try {
+        await startSynchronization(reader, replica);
+      } catch (error) {
+        replica.failure = workerFailure(error);
+        replica.revision += 1;
+        publishSnapshot(replica);
+      }
     }
-  } catch {
+  } catch (error) {
     if (!reader.epoch.finish(requestId)) {
       return;
     }
-    const failure = { _tag: "Unavailable" as const };
+    reader.queries.delete(requestId);
+    const failure = workerFailure(error);
     replica.failure = failure;
     replica.status = "error";
     replica.revision += 1;
@@ -287,10 +367,10 @@ async function acceptHistoryBatch(
   if (batch.repositoryId !== reader.connection.repositoryId) {
     throw new Error("History batch identity does not match the reader");
   }
-  await storeRepositoryCommits(
+  const synchronizedCommitCount = await storeRepositoryHistoryBatch(
     reader.connection.environmentId,
     reader.connection.repositoryId,
-    batch.commits,
+    batch,
   );
   if (
     replica.synchronizationOwner !== reader ||
@@ -298,17 +378,28 @@ async function acceptHistoryBatch(
   ) {
     return;
   }
-  replica.synchronizedCommitCount += batch.commits.length;
+  replica.synchronizedCommitCount = synchronizedCommitCount;
   replica.revision += 1;
   publishSnapshot(replica);
   post(reader, { _tag: "HistoryBatchCommitted", batchId });
 }
 
-function startSynchronization(
+async function startSynchronization(
   reader: ConnectedReader,
   replica: RepositoryReplica,
 ) {
-  if (reader.closed || replica.synchronization === "syncing") {
+  if (
+    reader.closed ||
+    replica.synchronization === "complete" ||
+    replica.synchronization === "syncing"
+  ) {
+    return;
+  }
+  await beginRepositoryHistorySynchronization(
+    reader.connection.environmentId,
+    reader.connection.repositoryId,
+  );
+  if (reader.closed) {
     return;
   }
   const requestId = crypto.randomUUID();
@@ -360,9 +451,13 @@ function post(
   }
 }
 
-function createReplica(): RepositoryReplica {
-  return {
+function createReplica(
+  environmentId: string,
+  repositoryId: string,
+): RepositoryReplica {
+  const replica: RepositoryReplica = {
     commits: new Map(),
+    initialization: Promise.resolve(),
     readers: new Set(),
     refTargets: [],
     revision: 0,
@@ -371,20 +466,57 @@ function createReplica(): RepositoryReplica {
     synchronizedCommitCount: 0,
     visibleOids: [],
   };
+  replica.initialization = restoreReplica(replica, environmentId, repositoryId);
+  return replica;
+}
+
+async function restoreReplica(
+  replica: RepositoryReplica,
+  environmentId: string,
+  repositoryId: string,
+) {
+  try {
+    const state = await readStoredRepositoryHistoryState(
+      environmentId,
+      repositoryId,
+    );
+    if (state === undefined) {
+      return;
+    }
+    replica.refTargets = state.refTargets;
+    replica.synchronizedCommitCount = state.progress.committedCommitCount;
+    if (state.completion !== undefined) {
+      replica.synchronization = "complete";
+      replica.synchronizedCommitCount = state.completion.commitCount;
+      replica.status = state.completion.commitCount === 0 ? "empty" : "ready";
+    }
+    replica.revision += 1;
+    publishSnapshot(replica);
+  } catch (error) {
+    replica.failure = workerFailure(error);
+    replica.status = "error";
+    replica.revision += 1;
+    publishSnapshot(replica);
+  }
+}
+
+function workerFailure(error: unknown): RepositoryHistoryWorkerFailure {
+  return error instanceof RepositoryHistoryStorageUnavailable
+    ? { _tag: "StorageUnavailable" }
+    : { _tag: "Unavailable" };
 }
 
 interface ConnectedReader {
   closed: boolean;
   readonly connection: ConnectRepositoryHistoryReader;
   readonly epoch: RepositoryHistoryEpoch;
+  readonly queries: Map<string, RepositoryHistoryQuery>;
 }
 
 interface RepositoryReplica {
   readonly commits: Map<string, RepositoryCommit>;
-  failure?: Extract<
-    RepositoryHistoryWorkerResponse,
-    { _tag: "RequestFailed" }
-  >["failure"];
+  failure?: RepositoryHistoryWorkerFailure;
+  initialization: Promise<void>;
   revision: number;
   refTargets: Extract<
     RepositoryHistoryWorkerResponse,

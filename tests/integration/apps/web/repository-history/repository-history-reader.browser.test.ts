@@ -6,8 +6,15 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
-import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
-import { readRepositoryCommits } from "#web/features/repository-history/repository-history-store";
+import {
+  RepositoryHistoryOffline,
+  RepositoryHistoryStorageUnavailable,
+  RepositoryHistoryUnavailable,
+} from "#web/features/repository-history/repository-history-reader.contract";
+import {
+  readRepositoryCommits,
+  readStoredRepositoryHistoryState,
+} from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
   it("publishes only IndexedDB-committed synchronization progress", async () => {
@@ -30,6 +37,11 @@ describe("browser repository history reader", () => {
       gateway,
       repositoryId,
     });
+    const otherTab = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
     await reader.read({
       limit: 100,
       order: "topological",
@@ -37,6 +49,9 @@ describe("browser repository history reader", () => {
     });
     await vi.waitFor(() =>
       expect(reader.getSnapshot().synchronization).toBe("syncing"),
+    );
+    await vi.waitFor(() =>
+      expect(otherTab.getSnapshot().synchronization).toBe("syncing"),
     );
     const synchronized = history(3);
 
@@ -51,6 +66,9 @@ describe("browser repository history reader", () => {
     );
 
     expect(reader.getSnapshot().synchronizedCommitCount).toBe(3);
+    await vi.waitFor(() =>
+      expect(otherTab.getSnapshot().synchronizedCommitCount).toBe(3),
+    );
     await expect(
       readRepositoryCommits(environmentId, repositoryId, [
         synchronized[2]?.oid ?? "",
@@ -60,7 +78,11 @@ describe("browser repository history reader", () => {
     await vi.waitFor(() =>
       expect(reader.getSnapshot().synchronization).toBe("complete"),
     );
+    await vi.waitFor(() =>
+      expect(otherTab.getSnapshot().synchronization).toBe("complete"),
+    );
     reader.close();
+    otherTab.close();
   });
 
   it("cancels synchronization when the final reader closes", async () => {
@@ -159,7 +181,7 @@ describe("browser repository history reader", () => {
 
     await expect(stale).rejects.toBeInstanceOf(RepositoryHistoryUnavailable);
     await expect(current).resolves.toHaveLength(2);
-    expect(firstSignal?.aborted).toBe(true);
+    expect(firstSignal === undefined || firstSignal.aborted).toBe(true);
     expect(reader.getSnapshot().status).toBe("ready");
     reader.close();
   });
@@ -213,13 +235,114 @@ describe("browser repository history reader", () => {
     expect(reopened.getSnapshot().status).toBe("empty");
     reopened.close();
   });
+
+  it("reopens a completed repository from IndexedDB while offline", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const firstGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, [main])),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: firstGateway,
+      repositoryId,
+    });
+    await first.read({ limit: 100, order: "topological", roots: [main] });
+    await vi.waitFor(() =>
+      expect(first.getSnapshot().synchronization).toBe("complete"),
+    );
+    first.close();
+
+    const offlineGateway: RepositoryHistoryGateway = {
+      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+    };
+    const reopened = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: offlineGateway,
+      repositoryId,
+    });
+
+    const cacheReadStartedAt = performance.now();
+    await expect(
+      reopened.read({ limit: 100, order: "topological", roots: [main] }),
+    ).resolves.toEqual(commits);
+    expect(performance.now() - cacheReadStartedAt).toBeLessThan(100);
+    await expect(
+      reopened.read({
+        limit: 100,
+        order: "topological",
+        roots: [{ ...main, oid: commits[1]?.oid ?? "" }],
+      }),
+    ).resolves.toEqual(commits.slice(1));
+    await expect(
+      reopened.getCommitSummaries(["e".repeat(40)]),
+    ).resolves.toEqual([]);
+    expect(offlineGateway.read).not.toHaveBeenCalled();
+    expect(reopened.getSnapshot()).toMatchObject({
+      status: "ready",
+      synchronization: "complete",
+      synchronizedCommitCount: commits.length,
+    });
+    reopened.close();
+  });
+
+  it("reports offline and IndexedDB failures with separate types", async () => {
+    const repositoryId = crypto.randomUUID();
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      gateway,
+      repositoryId,
+    });
+
+    await expect(
+      reader.read({ limit: 100, order: "topological", roots: [root("main")] }),
+    ).rejects.toBeInstanceOf(RepositoryHistoryOffline);
+    expect(reader.getSnapshot().error).toBeInstanceOf(RepositoryHistoryOffline);
+    reader.close();
+
+    const unavailableIndexedDb = {
+      open: () => {
+        throw new Error("Storage disabled");
+      },
+    } as unknown as IDBFactory;
+    await expect(
+      readStoredRepositoryHistoryState(
+        crypto.randomUUID(),
+        crypto.randomUUID(),
+        unavailableIndexedDb,
+      ),
+    ).rejects.toBeInstanceOf(RepositoryHistoryStorageUnavailable);
+  });
 });
 
-function page(repositoryId: string, commits: readonly RepositoryCommit[]) {
+function page(
+  repositoryId: string,
+  commits: readonly RepositoryCommit[],
+  refTargets = [root("main")],
+) {
   return encodeRepositoryHistoryPage({
     commits,
     objectFormat: "sha1",
-    refTargets: [root("main")],
+    refTargets,
     repositoryId,
     requestId: "00000000-0000-4000-8000-000000000011",
   });

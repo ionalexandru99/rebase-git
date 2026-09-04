@@ -78,6 +78,10 @@ describe("local Environment session", () => {
       new EnvironmentResponseError({ responseTag: "WebSocket" }),
     );
     await expectState(session.getSnapshot, "Reconnecting");
+    expect(session.getSnapshot()).toMatchObject({
+      _tag: "Reconnecting",
+      environmentId: "00000000-0000-4000-8000-000000000001",
+    });
     expect(gateway.connect).toHaveBeenCalledTimes(1);
 
     reconnect.resolve();

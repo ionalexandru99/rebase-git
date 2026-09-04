@@ -7,16 +7,20 @@ import type {
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import {
+  RepositoryHistoryOffline,
   RepositoryHistoryRejected,
+  RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   ConnectRepositoryHistoryReader,
+  RepositoryHistoryWorkerFailure,
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
 } from "#web/features/repository-history/repository-history-worker.contract";
 
 let sharedWorker: SharedWorker | undefined;
+let persistenceRequested = false;
 
 export function createBrowserRepositoryHistoryReader(options: {
   readonly environmentId: string;
@@ -25,6 +29,7 @@ export function createBrowserRepositoryHistoryReader(options: {
   readonly worker?: SharedWorker;
 }): RepositoryHistoryReader {
   const worker = options.worker ?? acquireSharedWorker();
+  requestPersistentStorage();
   const channel = new MessageChannel();
   const port = channel.port1;
   const listeners = new Set<() => void>();
@@ -136,10 +141,7 @@ export function createBrowserRepositoryHistoryReader(options: {
         (error: unknown) => {
           const message: RepositoryHistoryWorkerRequest = {
             _tag: "HistoryPageFailed",
-            failure:
-              error instanceof RepositoryHistoryRejected
-                ? { _tag: "Rejected", detail: error.failure }
-                : { _tag: "Unavailable" },
+            failure: workerFailure(error),
             requestId,
           };
           port.postMessage(message);
@@ -180,9 +182,10 @@ export function createBrowserRepositoryHistoryReader(options: {
             requestId,
           } satisfies RepositoryHistoryWorkerRequest);
         },
-        () => {
+        (error: unknown) => {
           port.postMessage({
             _tag: "HistorySynchronizationFailed",
+            failure: workerFailure(error),
             requestId,
           } satisfies RepositoryHistoryWorkerRequest);
         },
@@ -286,9 +289,34 @@ function readerError(
     { _tag: "RequestFailed" }
   >["failure"],
 ) {
-  return failure._tag === "Rejected"
-    ? new RepositoryHistoryRejected({ failure: failure.detail })
-    : new RepositoryHistoryUnavailable();
+  switch (failure._tag) {
+    case "Rejected":
+      return new RepositoryHistoryRejected({ failure: failure.detail });
+    case "Offline":
+      return new RepositoryHistoryOffline();
+    case "StorageUnavailable":
+      return new RepositoryHistoryStorageUnavailable();
+    case "Unavailable":
+      return new RepositoryHistoryUnavailable();
+  }
+}
+
+function workerFailure(error: unknown): RepositoryHistoryWorkerFailure {
+  if (error instanceof RepositoryHistoryRejected) {
+    return { _tag: "Rejected", detail: error.failure };
+  }
+  if (error instanceof RepositoryHistoryStorageUnavailable) {
+    return { _tag: "StorageUnavailable" };
+  }
+  return { _tag: "Offline" };
+}
+
+function requestPersistentStorage() {
+  if (persistenceRequested) {
+    return;
+  }
+  persistenceRequested = true;
+  void globalThis.navigator?.storage?.persist?.().catch(() => false);
 }
 
 interface PendingRequest {

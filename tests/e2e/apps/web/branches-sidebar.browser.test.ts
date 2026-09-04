@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve("src/apps/server/cli.ts");
@@ -59,6 +59,51 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
   }
 });
 
+test("reopens synchronized history and keeps browsing while offline", async ({
+  page,
+}) => {
+  const testHome = await mkdtemp(join(tmpdir(), "rebase-history-e2e-"));
+  const repositoryPath = join(testHome, "rebase-test");
+  await createRepository(repositoryPath);
+  const server = startServer(testHome);
+
+  try {
+    await page.goto(await server.waitForPairingUrl());
+    const projects = page.getByRole("navigation", { name: "Projects" });
+    await expect(projects.getByRole("status")).toHaveAttribute(
+      "data-connection-state",
+      "Connected",
+    );
+    await openRepository(page, "rebase-test");
+    const history = page.getByRole("listbox", { name: "Commit history" });
+    const initial = history.getByRole("option", { name: /^initial,/ });
+    await expect(
+      history.getByRole("option", { name: /^follow-up,/ }),
+    ).toBeVisible();
+    await expect.poll(() => hasCompletedHistory(page)).toBe(true);
+
+    await projects.getByRole("button", { name: "Close rebase-test" }).click();
+    await page
+      .getByRole("main", { name: "Open project" })
+      .getByRole("option")
+      .filter({ hasText: "rebase-test" })
+      .first()
+      .click();
+    await expect(initial).toBeVisible();
+
+    server.child.kill("SIGTERM");
+    await expect(projects.getByRole("status")).toHaveAttribute(
+      "data-connection-state",
+      "Reconnecting",
+    );
+    await initial.click();
+    await expect(initial).toHaveAttribute("aria-selected", "true");
+  } finally {
+    if (server.child.exitCode === null) server.child.kill("SIGTERM");
+    await rm(testHome, { force: true, recursive: true });
+  }
+});
+
 async function createRepository(path: string) {
   await mkdir(path, { recursive: true });
   await git(path, "init", "-b", "main");
@@ -74,6 +119,41 @@ async function createRepository(path: string) {
 async function currentBranch(path: string) {
   const { stdout } = await git(path, "branch", "--show-current");
   return stdout.trim();
+}
+
+async function openRepository(page: Page, name: string) {
+  await page.keyboard.press("Control+o");
+  const picker = page.getByRole("dialog", { name: "Choose repository" });
+  await picker
+    .getByRole("button", { name: new RegExp(`^${name} Folder`) })
+    .click();
+  await page.keyboard.press("Control+Enter");
+  await expect(picker).not.toBeVisible();
+}
+
+async function hasCompletedHistory(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<boolean>((resolve, reject) => {
+        const request = indexedDB.open("rebase-repository-history");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction("repositories", "readonly");
+          const repositories = transaction.objectStore("repositories").getAll();
+          repositories.onerror = () => reject(repositories.error);
+          repositories.onsuccess = () => {
+            database.close();
+            resolve(
+              repositories.result.some(
+                (repository: { completion?: unknown }) =>
+                  repository.completion !== undefined,
+              ),
+            );
+          };
+        };
+      }),
+  );
 }
 
 async function git(path: string, ...arguments_: string[]) {

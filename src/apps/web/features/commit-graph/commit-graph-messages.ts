@@ -3,8 +3,14 @@ import type { RepositoryHistoryReaderError } from "#web/features/repository-hist
 export function describeRepositoryHistoryError(
   error: RepositoryHistoryReaderError,
 ) {
-  if (error._tag === "RepositoryHistoryUnavailable") {
+  if (
+    error._tag === "RepositoryHistoryOffline" ||
+    error._tag === "RepositoryHistoryUnavailable"
+  ) {
     return "Commit history is unavailable while the Environment reconnects.";
+  }
+  if (error._tag === "RepositoryHistoryStorageUnavailable") {
+    return "This browser cannot store repository history.";
   }
   switch (error.failure._tag) {
     case "AuthorizationDenied":

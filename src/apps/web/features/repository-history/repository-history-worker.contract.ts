@@ -7,6 +7,15 @@ import type {
   RepositoryHistoryRefTarget,
 } from "#web/features/repository-history/repository-history-reader.contract";
 
+export type RepositoryHistoryWorkerFailure =
+  | {
+      readonly _tag: "Rejected";
+      readonly detail: RepositoryHistoryOperationFailure;
+    }
+  | { readonly _tag: "Offline" }
+  | { readonly _tag: "StorageUnavailable" }
+  | { readonly _tag: "Unavailable" };
+
 export type RepositoryHistoryWorkerRequest =
   | {
       readonly _tag: "ReadHistory";
@@ -31,6 +40,7 @@ export type RepositoryHistoryWorkerRequest =
     }
   | {
       readonly _tag: "HistorySynchronizationFailed";
+      readonly failure: RepositoryHistoryWorkerFailure;
       readonly requestId: string;
     }
   | { readonly _tag: "GetRefTargets"; readonly requestId: string }
@@ -41,12 +51,7 @@ export type RepositoryHistoryWorkerRequest =
     }
   | {
       readonly _tag: "HistoryPageFailed";
-      readonly failure:
-        | {
-            readonly _tag: "Rejected";
-            readonly detail: RepositoryHistoryOperationFailure;
-          }
-        | { readonly _tag: "Unavailable" };
+      readonly failure: RepositoryHistoryWorkerFailure;
       readonly requestId: string;
     }
   | { readonly _tag: "CloseReader" };
@@ -94,12 +99,7 @@ export type RepositoryHistoryWorkerResponse =
     }
   | {
       readonly _tag: "RequestFailed";
-      readonly failure:
-        | {
-            readonly _tag: "Rejected";
-            readonly detail: RepositoryHistoryOperationFailure;
-          }
-        | { readonly _tag: "Unavailable" };
+      readonly failure: RepositoryHistoryWorkerFailure;
       readonly requestId: string;
     }
   | {
@@ -108,12 +108,7 @@ export type RepositoryHistoryWorkerResponse =
       readonly status: "empty" | "error" | "loading" | "ready";
       readonly synchronization: "complete" | "idle" | "syncing";
       readonly synchronizedCommitCount: number;
-      readonly failure?:
-        | {
-            readonly _tag: "Rejected";
-            readonly detail: RepositoryHistoryOperationFailure;
-          }
-        | { readonly _tag: "Unavailable" };
+      readonly failure?: RepositoryHistoryWorkerFailure;
     };
 
 export interface ConnectRepositoryHistoryReader {

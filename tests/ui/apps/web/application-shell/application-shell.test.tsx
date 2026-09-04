@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import {
+  encodeRepositoryHistoryBatch,
+  encodeRepositoryHistoryPage,
+  type RepositoryCommit,
+} from "@rebase/contracts";
+import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { browserKeyboardShortcutHost } from "#web/features/keyboard-shortcuts/browser-keyboard-shortcut-host";
@@ -118,6 +123,42 @@ describe("application shell", () => {
     expect(minimumWidth).toBeGreaterThanOrEqual(191);
     expect(minimumWidth).toBeLessThanOrEqual(193);
   });
+
+  it("keeps cached commit rows visible while reconnecting", async () => {
+    const connected = connectedSession();
+    await render(
+      <KeyboardShortcutsProvider runtime={keyboardShortcutRuntime()}>
+        <ApplicationShell
+          desktopUpdates={undefined}
+          productVersion="0.0.2-test"
+          session={connected.session}
+        />
+      </KeyboardShortcutsProvider>,
+    );
+    await page
+      .getByRole("main", { name: "Open project" })
+      .getByRole("option")
+      .filter({ hasText: "rebase-test" })
+      .first()
+      .click();
+    const commit = page
+      .getByRole("listbox", { name: "Commit history" })
+      .getByRole("option", { name: /^cached commit,/ });
+    await expect.element(commit).toBeVisible();
+    await expect
+      .element(page.getByText("Syncing", { exact: true }))
+      .toBeVisible();
+    connected.finishSynchronization();
+    await expect
+      .element(page.getByText("Syncing", { exact: true }))
+      .not.toBeInTheDocument();
+
+    connected.disconnect();
+
+    await expect.element(commit).toBeVisible();
+    await commit.click();
+    await expect.element(commit).toHaveAttribute("aria-selected", "true");
+  });
 });
 
 async function renderShell() {
@@ -221,6 +262,137 @@ function pairingRequiredSession(): LocalEnvironmentSession {
     start: () => undefined,
     stop: () => undefined,
     subscribe: () => unsubscribe,
+  };
+}
+
+function connectedSession() {
+  const environmentId = "00000000-0000-4000-8000-000000000020";
+  const repositoryId = "00000000-0000-4000-8000-000000000021";
+  const oid = "c".repeat(40);
+  const commit: RepositoryCommit = {
+    author: identity(),
+    committer: identity(),
+    oid,
+    parents: [],
+    subject: "cached commit",
+  };
+  const root = { name: "main", oid, type: "branch" as const };
+  const repository = {
+    addedAt: "2026-09-04T12:00:00.000Z",
+    id: repositoryId,
+    lastOpenedAt: "2026-09-04T12:00:00.000Z",
+    name: "rebase-test",
+    path: "/repo",
+  };
+  const catalogSnapshot = {
+    repositories: [repository],
+    status: "ready" as const,
+  };
+  const refsSnapshot = {
+    checkingOut: false,
+    refs: {
+      branches: [{ name: "main", target: oid, worktreePath: "/repo" }],
+      remoteBranches: [],
+      repositoryId,
+      tags: [],
+      truncated: {
+        branches: false,
+        remoteBranches: false,
+        tags: false,
+      },
+      worktrees: [
+        {
+          head: { branch: "main", commit: oid },
+          main: true,
+          path: "/repo",
+        },
+      ],
+    },
+    repositoryId,
+    status: "ready" as const,
+  };
+  const listeners = new Set<() => void>();
+  let state: ReturnType<LocalEnvironmentSession["getSnapshot"]> = {
+    _tag: "Connected",
+    environmentId,
+  };
+  let finishSynchronization: () => void = () => undefined;
+  const synchronizationFinished = new Promise<void>((resolve) => {
+    finishSynchronization = resolve;
+  });
+  const session: LocalEnvironmentSession = {
+    filesystem: {
+      listDirectory: async () => ({
+        breadcrumbs: [],
+        entries: [],
+        path: "/",
+        truncated: false,
+      }),
+    },
+    getSnapshot: () => state,
+    repositoryCatalog: {
+      getSnapshot: () => catalogSnapshot,
+      recordOpened: async () => repository,
+      refresh: async () => undefined,
+      remember: async () => repository,
+      remove: async () => undefined,
+      subscribe: () => () => undefined,
+    },
+    repositoryHistory: {
+      read: vi.fn(async () =>
+        encodeRepositoryHistoryPage({
+          commits: [commit],
+          objectFormat: "sha1",
+          refTargets: [root],
+          repositoryId,
+          requestId: crypto.randomUUID(),
+        }),
+      ),
+      synchronize: vi.fn(async (_request, acceptBatch) => {
+        await acceptBatch(
+          encodeRepositoryHistoryBatch({
+            commits: [commit],
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+          }),
+        );
+        await synchronizationFinished;
+        return 1;
+      }),
+    },
+    repositoryRefs: {
+      checkout: async () => Promise.reject(new Error("Unused")),
+      getSnapshot: () => refsSnapshot,
+      invalidate: () => undefined,
+      refresh: async () => undefined,
+      select: () => undefined,
+      subscribe: () => () => undefined,
+    },
+    start: () => undefined,
+    stop: () => undefined,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  return {
+    disconnect: () => {
+      state = { _tag: "Reconnecting", attempt: 1 };
+      for (const listener of listeners) listener();
+    },
+    finishSynchronization,
+    session,
+  };
+}
+
+function identity() {
+  return {
+    email: "alex@example.test",
+    name: "Alex",
+    timestampSeconds: 1_777_777_777,
+    timezoneOffsetMinutes: 120,
   };
 }
 
