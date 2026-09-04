@@ -1,4 +1,8 @@
 import {
+  EnvironmentAccessCapability,
+  environmentAccessCapabilities,
+} from "@rebase/contracts/environment-authorization/environment-access-capability.contract";
+import {
   InvalidMessage,
   PayloadTooLarge,
 } from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
@@ -12,27 +16,13 @@ export const environmentAuthorizationRoles = [
   "custom",
 ] as const;
 
-export const environmentAccessCapabilities = [
-  "environment.read",
-  "repository.read",
-  "repository.write",
-  "history.rewrite",
-  "worktree.manage",
-  "authorization.manage",
-  "environment.manage",
-] as const;
+export { EnvironmentAccessCapability, environmentAccessCapabilities };
 
 export const EnvironmentAuthorizationRole = Schema.Literals(
   environmentAuthorizationRoles,
 );
 export type EnvironmentAuthorizationRole =
   typeof EnvironmentAuthorizationRole.Type;
-
-export const EnvironmentAccessCapability = Schema.Literals(
-  environmentAccessCapabilities,
-);
-export type EnvironmentAccessCapability =
-  typeof EnvironmentAccessCapability.Type;
 
 const AuthorizationId = Schema.String.check(Schema.isUUID(4));
 const SecretMaterial = Schema.String.check(

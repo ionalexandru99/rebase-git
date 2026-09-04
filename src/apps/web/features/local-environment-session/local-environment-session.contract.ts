@@ -1,3 +1,4 @@
+import type { EnvironmentAccessCapability } from "@rebase/contracts";
 import type { Effect, Scope } from "effect";
 import type {
   EnvironmentAuthorizationRejected,
@@ -25,6 +26,7 @@ export type LocalEnvironmentSessionState =
   | {
       readonly _tag: "Connected";
       readonly environmentId: string;
+      readonly accessCapabilities: readonly EnvironmentAccessCapability[];
     }
   | {
       readonly _tag: "Reconnecting";

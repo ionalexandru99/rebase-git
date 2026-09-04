@@ -314,6 +314,7 @@ function connectedSession() {
   const listeners = new Set<() => void>();
   let state: ReturnType<LocalEnvironmentSession["getSnapshot"]> = {
     _tag: "Connected",
+    accessCapabilities: [],
     environmentId,
   };
   let finishSynchronization: () => void = () => undefined;
