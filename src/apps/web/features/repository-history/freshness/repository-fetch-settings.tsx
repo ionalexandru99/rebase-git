@@ -19,12 +19,16 @@ export function RepositoryFetchSettings({
   readonly onSaved: () => void;
 }) {
   const id = useId();
-  const [mode, setMode] = useState(setting._tag);
-  const [seconds, setSeconds] = useState(
+  const [draft, setDraft] = useState<{
+    readonly mode: RepositoryFetchSetting["_tag"];
+    readonly seconds: string;
+  }>();
+  const mode = draft?.mode ?? setting._tag;
+  const seconds =
+    draft?.seconds ??
     String(
       setting._tag === "Interval" ? setting.seconds : defaultIntervalSeconds,
-    ),
-  );
+    );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const save = (event: FormEvent<HTMLFormElement>) => {
@@ -46,8 +50,12 @@ export function RepositoryFetchSettings({
     setError(undefined);
     void reader
       .configureFetch(next)
-      .then(onSaved, (cause: unknown) =>
-        setError(describeRepositoryFetchError(cause)),
+      .then(
+        () => {
+          setDraft(undefined);
+          onSaved();
+        },
+        (cause: unknown) => setError(describeRepositoryFetchError(cause)),
       )
       .finally(() => setSaving(false));
   };
@@ -66,7 +74,7 @@ export function RepositoryFetchSettings({
             checked={mode === "Inherit"}
             className="accent-primary"
             name={id}
-            onChange={() => setMode("Inherit")}
+            onChange={() => setDraft({ mode: "Inherit", seconds })}
             type="radio"
             value="Inherit"
           />
@@ -77,7 +85,7 @@ export function RepositoryFetchSettings({
             checked={mode === "Disabled"}
             className="accent-primary"
             name={id}
-            onChange={() => setMode("Disabled")}
+            onChange={() => setDraft({ mode: "Disabled", seconds })}
             type="radio"
             value="Disabled"
           />
@@ -88,7 +96,7 @@ export function RepositoryFetchSettings({
             checked={mode === "Interval"}
             className="accent-primary"
             name={id}
-            onChange={() => setMode("Interval")}
+            onChange={() => setDraft({ mode: "Interval", seconds })}
             type="radio"
             value="Interval"
           />
@@ -103,7 +111,9 @@ export function RepositoryFetchSettings({
               id={`${id}-interval`}
               max={86_400}
               min={1}
-              onChange={(event) => setSeconds(event.target.value)}
+              onChange={(event) =>
+                setDraft({ mode, seconds: event.target.value })
+              }
               required
               step={1}
               type="number"

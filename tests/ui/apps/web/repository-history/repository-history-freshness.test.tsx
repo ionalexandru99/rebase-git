@@ -27,6 +27,64 @@ const ready: RepositoryHistorySnapshot = {
 };
 
 describe("repository fetch controls", () => {
+  it("updates clean settings from other clients while preserving an edited interval", async () => {
+    const reader = createReader();
+    const screen = await render(
+      <Controls
+        reader={reader}
+        snapshot={{
+          ...ready,
+          freshness: { ...fresh, setting: { _tag: "Interval", seconds: 120 } },
+        }}
+      />,
+    );
+    await page
+      .getByRole("button", { name: "Repository fetch settings" })
+      .click();
+    await screen.rerender(
+      <Controls
+        reader={reader}
+        snapshot={{
+          ...ready,
+          freshness: { ...fresh, defaultIntervalSeconds: 600 },
+        }}
+      />,
+    );
+    await expect
+      .element(
+        page.getByRole("radio", { name: "Use server default (10 minutes)" }),
+      )
+      .toBeChecked();
+    await page.getByRole("radio", { name: "Custom interval" }).click();
+    const interval = page.getByRole("spinbutton", {
+      name: "Interval in seconds",
+    });
+    await expect.element(interval).toHaveValue(600);
+    await interval.fill("90");
+    await screen.rerender(
+      <Controls
+        reader={reader}
+        snapshot={{
+          ...ready,
+          freshness: {
+            ...fresh,
+            setting: { _tag: "Disabled" },
+            defaultIntervalSeconds: 900,
+          },
+        }}
+      />,
+    );
+    await expect
+      .element(page.getByRole("radio", { name: "Custom interval" }))
+      .toBeChecked();
+    await expect.element(interval).toHaveValue(90);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    expect(reader.configureFetch).toHaveBeenLastCalledWith({
+      _tag: "Interval",
+      seconds: 90,
+    });
+  });
+
   it("uses the shared fetch handler for the toolbar and retry with configured shortcut metadata", async () => {
     const reader = createReader();
     reader.fetch.mockRejectedValueOnce(new RepositoryHistoryOffline());
