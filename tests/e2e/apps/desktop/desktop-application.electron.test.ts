@@ -73,7 +73,7 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
       const repository = recentRepository(restartedWindow, "rebase-test");
       await expect(repository).toBeVisible();
       await repository.click();
-      const history = restartedWindow.getByRole("listbox", {
+      const history = restartedWindow.getByRole("grid", {
         name: "Commit history",
       });
       const initial = history.getByRole("row", { name: /^initial,/ });
