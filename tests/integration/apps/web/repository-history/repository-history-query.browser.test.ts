@@ -1,7 +1,10 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
-import { readRepositoryHistory } from "#web/features/repository-history/repository-history-query";
+import {
+  prepareRepositoryHistoryOrder,
+  readRepositoryHistory,
+} from "#web/features/repository-history/repository-history-query";
 import {
   completeStoredRepositoryHistory,
   storeRepositoryHistoryBatch,
@@ -9,6 +12,51 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("local ordered history pages", () => {
+  it("shares one cold index scan across concurrent readers and retries after a scan failure", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    const prepare = () =>
+      prepareRepositoryHistoryOrder(
+        fixture.environmentId,
+        fixture.repositoryId,
+        cache,
+      );
+    try {
+      reads.mockImplementationOnce(() => {
+        throw new DOMException("Index unavailable", "InvalidStateError");
+      });
+      await expect(prepare()).rejects.toThrow();
+      reads.mockClear();
+      await Promise.all([prepare(), prepare(), prepare()]);
+      expect(reads).toHaveBeenCalledTimes(1);
+      expect(cache.index?.order([oid("merge")], "topological")).toHaveLength(4);
+      await prepare();
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it("restarts index preparation when the stored generation changes", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const stale = prepareRepositoryHistoryOrder(
+      fixture.environmentId,
+      fixture.repositoryId,
+      cache,
+    );
+    cache.revision += 1;
+    const current = prepareRepositoryHistoryOrder(
+      fixture.environmentId,
+      fixture.repositoryId,
+      cache,
+    );
+    expect(current).not.toBe(stale);
+    await Promise.all([stale, current]);
+    expect(cache.index?.order([oid("merge")], "topological")).toHaveLength(4);
+  });
+
   it("does not inherit the first page ordering of a different ref scope", async () => {
     const fixture = await seed("side", false);
     const result = await readRepositoryHistory(

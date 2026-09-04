@@ -285,12 +285,33 @@ async function readHistoryOrderNodes(
   }
 }
 
-export async function prepareRepositoryHistoryOrder(
+export function prepareRepositoryHistoryOrder(
   environmentId: string,
   repositoryId: string,
   cache: HistoryOrderCache,
 ) {
+  if (cache.index !== undefined) return Promise.resolve();
+  if (cache.preparation?.revision === cache.revision)
+    return cache.preparation.task;
   const revision = cache.revision;
+  const task = buildRepositoryHistoryOrder(
+    environmentId,
+    repositoryId,
+    cache,
+    revision,
+  ).finally(() => {
+    if (cache.preparation?.task === task) delete cache.preparation;
+  });
+  cache.preparation = { revision, task };
+  return task;
+}
+
+async function buildRepositoryHistoryOrder(
+  environmentId: string,
+  repositoryId: string,
+  cache: HistoryOrderCache,
+  revision: number,
+) {
   const nodes = await readHistoryOrderNodes(
     (range) =>
       withRepositoryHistoryDatabase(globalThis.indexedDB, async (database) => {

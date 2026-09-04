@@ -23,6 +23,7 @@ export interface HistoryAncestryIndex {
 
 export interface HistoryOrderCache {
   index?: HistoryOrderIndexReader;
+  preparation?: { readonly revision: number; readonly task: Promise<void> };
   revision: number;
   readonly queries: Map<
     string,
