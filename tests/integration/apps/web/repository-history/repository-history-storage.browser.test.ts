@@ -86,7 +86,7 @@ describe("history cache storage", () => {
             order: "topological",
             roots: secondFixture.roots,
           }),
-        ).resolves.toEqual(fail ? secondFixture.commits : []);
+        ).resolves.toEqual(fail ? secondFixture.page.commits : []);
         expect(gateway.read).not.toHaveBeenCalled();
         if (!fail)
           expect(second.getSnapshot()).toMatchObject({
@@ -129,8 +129,8 @@ describe("history cache storage", () => {
         order: "topological" as const,
         roots: fixture.roots,
       };
-      await expect(first.read(query)).resolves.toEqual(fixture.commits);
-      await expect(second.read(query)).resolves.toEqual(fixture.commits);
+      await expect(first.read(query)).resolves.toEqual(fixture.page.commits);
+      await expect(second.read(query)).resolves.toEqual(fixture.page.commits);
       expect(gateway.read).not.toHaveBeenCalled();
     } finally {
       first.close();
@@ -264,7 +264,7 @@ describe("history cache storage", () => {
           order: "topological",
           roots: fixture.roots,
         }),
-      ).resolves.toEqual(fixture.commits);
+      ).resolves.toEqual(fixture.page.commits);
       expect(options.gateway.read).toHaveBeenCalledOnce();
     } finally {
       reopened.close();
@@ -693,7 +693,7 @@ async function seed(repositoryId = crypto.randomUUID()) {
     { name: "main", oid: "a".repeat(40), type: "branch" as const },
   ];
   const page: RepositoryHistoryPage = {
-    commits,
+    commits: commits.slice(0, 2),
     objectFormat: "sha1",
     refTargets: roots,
     repositoryId,
