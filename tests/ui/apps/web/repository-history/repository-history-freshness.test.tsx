@@ -237,6 +237,16 @@ describe("repository fetch controls", () => {
     await expect
       .element(page.getByRole("button", { name: "Save", exact: true }))
       .toBeDisabled();
+    await expect
+      .element(page.getByText("Reconnect to the server and try again."))
+      .toBeVisible();
+    await expect
+      .element(
+        page.getByText(
+          "Connect with repository write access to change fetch settings.",
+        ),
+      )
+      .not.toBeInTheDocument();
   });
 });
 
@@ -280,7 +290,10 @@ function createReader() {
     close: vi.fn(),
     fetch: vi.fn<RepositoryHistoryReader["fetch"]>(async () => fresh),
     configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(
-      async (setting) => ({ ...fresh, setting }),
+      async (setting) => ({
+        ...fresh,
+        setting,
+      }),
     ),
     getSnapshot: () => ready,
     getRefTargets: async () => [],

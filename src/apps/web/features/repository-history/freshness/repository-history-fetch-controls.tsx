@@ -1,6 +1,7 @@
 import { IconArrowDown, IconDots } from "@tabler/icons-react";
 import { useState } from "react";
 import type { RepositoryFetchAction } from "#web/features/repository-history/freshness/repository-fetch-action.contract";
+import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
 import type {
   RepositoryHistoryReader,
   RepositoryHistorySnapshot,
@@ -64,6 +65,13 @@ export function RepositoryHistoryFetchControls({
               !canConfigure ||
               freshness === undefined ||
               snapshot.freshnessError !== undefined
+            }
+            disabledReason={
+              !canConfigure
+                ? "Connect with repository write access to change fetch settings."
+                : snapshot.freshnessError !== undefined
+                  ? describeRepositoryFetchError(snapshot.freshnessError)
+                  : "Loading fetch settings."
             }
             onSaved={() => setSettingsOpen(false)}
             reader={reader}

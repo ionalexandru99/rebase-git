@@ -10,12 +10,14 @@ export function RepositoryFetchSettings({
   setting,
   defaultIntervalSeconds,
   disabled,
+  disabledReason,
   onSaved,
 }: {
   readonly reader: RepositoryHistoryReader;
   readonly setting: RepositoryFetchSetting;
   readonly defaultIntervalSeconds: number;
   readonly disabled: boolean;
+  readonly disabledReason?: string;
   readonly onSaved: () => void;
 }) {
   const id = useId();
@@ -133,7 +135,7 @@ export function RepositoryFetchSettings({
       )}
       {disabled ? (
         <p className="mt-3 mb-0 text-xs text-muted-foreground">
-          Connect with repository write access to change fetch settings.
+          {disabledReason ?? "Fetch settings are unavailable."}
         </p>
       ) : null}
       <div className="mt-4 flex justify-end">
