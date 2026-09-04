@@ -80,4 +80,5 @@ reader.subscribe(() => {
 if (parameters.get("read") !== "false") {
   await reader.read(query);
 }
+await reader.getRefTargets();
 document.body.dataset.ready = "true";

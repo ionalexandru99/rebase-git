@@ -315,6 +315,9 @@ export function ApplicationShell({
                           : undefined
                     }
                     historyGateway={session.repositoryHistory}
+                    logicalRepositoryId={
+                      selectedRepository?.logicalRepositoryId
+                    }
                     refs={repositoryRefs}
                     repositoryId={navigation.selectedRepositoryId}
                     repositoryName={selectedRepository?.name ?? "Repository"}
