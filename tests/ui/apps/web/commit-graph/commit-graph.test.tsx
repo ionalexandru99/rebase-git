@@ -125,6 +125,7 @@ describe("commit graph", () => {
     ]);
     reader.snapshot = {
       revision: 1,
+      historyRevision: 1,
       status: "ready",
       synchronization: "complete",
     };
@@ -766,7 +767,11 @@ function historyReader({
   readonly pending?: Promise<readonly RepositoryCommit[]>;
   readonly status: "empty" | "loading" | "ready";
 }) {
-  let snapshot: RepositoryHistorySnapshot = { revision: 0, historyRevision: 0, status };
+  let snapshot: RepositoryHistorySnapshot = {
+    revision: 0,
+    historyRevision: 0,
+    status,
+  };
   const listeners = new Set<() => void>();
   const matching = (query: RepositoryHistoryQuery) =>
     query.ancestry === "first-parent"
@@ -797,7 +802,9 @@ function historyReader({
     configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(),
 
     close: vi.fn(),
-    getCommitSummaries: vi.fn<RepositoryHistoryReader["getCommitSummaries"]>(async () => commits),
+    getCommitSummaries: vi.fn<RepositoryHistoryReader["getCommitSummaries"]>(
+      async () => commits,
+    ),
     getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
     manageCache: async () => undefined,
     search: async () => ({
