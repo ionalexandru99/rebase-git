@@ -274,6 +274,7 @@ describe("commit graph", () => {
     await grid
       .getByRole("row", { name: /^Commit 2,/ })
       .click({ button: "right" });
+    await userEvent.keyboard("{Escape}");
     await expect
       .element(grid.getByRole("row", { name: /^Commit 0,/ }))
       .toHaveAttribute("aria-selected", "true");

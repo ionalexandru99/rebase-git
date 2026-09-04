@@ -457,12 +457,14 @@ export function CommitGraph({
             }
             className="absolute inset-0 block h-full w-full overflow-auto focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
             onKeyDown={handleKeyDown}
-            onContextMenu={(event) => {
+            onContextMenuCapture={(event) => {
               if (
                 !(event.target instanceof Element) ||
                 event.target.closest("tr[aria-rowindex]") === null
-              )
+              ) {
                 event.preventDefault();
+                event.stopPropagation();
+              }
             }}
             onScroll={(event) =>
               setHorizontalOffset(event.currentTarget.scrollLeft)
