@@ -20,6 +20,18 @@ import {
 import { watchRepositoryHistoryReaderLease } from "#web/features/repository-history/repository-history-reader-lease";
 import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 import {
+  clearHistoryCache,
+  describeHistoryCaches,
+  markHistoryCacheOpened,
+  readHistoryCacheRecords,
+} from "#web/features/repository-history/repository-history-storage";
+import type { RepositoryHistoryCacheAction } from "#web/features/repository-history/repository-history-storage.contract";
+import {
+  queueHistoryStorageWrite as queueStorageWrite,
+  writeHistoryUnderPressure,
+} from "#web/features/repository-history/repository-history-storage-maintenance";
+import { isHistoryStorageQuotaError } from "#web/features/repository-history/repository-history-storage-policy";
+import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
   readStoredRepositoryHistoryState,
@@ -35,6 +47,7 @@ import type {
 } from "#web/features/repository-history/repository-history-worker.contract";
 
 const repositories = new Map<string, RepositoryReplica>();
+let cacheManagement: Promise<void> = Promise.resolve();
 const worker = self as unknown as {
   onconnect: ((event: MessageEvent) => void) | null;
 };
@@ -89,6 +102,7 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
           delete replica.synchronizationOwner;
           delete replica.synchronizationRequestId;
           replica.failure = failure;
+          replica.storageExhausted = isHistoryStorageQuotaError(error);
           replica.revision += 1;
           publishSnapshot(replica);
         }
@@ -146,6 +160,28 @@ async function handleReaderMessage(
       });
       return;
     }
+    case "GetCacheDiagnostics": {
+      const [caches, estimate, persistent] = await Promise.all([
+        describeHistoryCaches((key) => repositories.has(key)),
+        navigator.storage?.estimate().catch((): StorageEstimate => ({})),
+        navigator.storage?.persisted().catch(() => false),
+      ]);
+      post(reader, {
+        _tag: "CacheDiagnosticsResult",
+        diagnostics: {
+          caches,
+          persistent: persistent ?? false,
+          ...(estimate?.usage === undefined
+            ? {}
+            : { usageBytes: estimate.usage }),
+          ...(estimate?.quota === undefined
+            ? {}
+            : { quotaBytes: estimate.quota }),
+        },
+        requestId: message.requestId,
+      });
+      return;
+    }
     case "GetAncestryRoute": {
       if (message.roots.length > 256) throw new Error("Query is too large");
       const revision = replica.orderCache.revision;
@@ -191,7 +227,28 @@ async function handleReaderMessage(
       });
       return;
     }
+    case "ManageCache":
+      await scheduleCacheManagement(reader, replica, message.action);
+      post(reader, { _tag: "CacheManaged", requestId: message.requestId });
+      if (message.action === "remove") {
+        for (const connected of [...replica.readers]) {
+          post(connected, { _tag: "CacheRemoved" });
+          await handleReaderMessage(connected, replica, {
+            _tag: "CloseReader",
+          });
+        }
+      }
+      return;
     case "ReadHistory": {
+      reader.lastQuery = message.query;
+      if (replica.cachePaused) {
+        post(reader, {
+          _tag: "HistoryResult",
+          commits: [],
+          requestId: message.requestId,
+        });
+        return;
+      }
       const supersededRequestId = reader.epoch.begin(message.requestId);
       if (supersededRequestId !== undefined) {
         reader.queries.delete(supersededRequestId);
@@ -309,11 +366,14 @@ async function handleReaderMessage(
         return;
       }
       try {
-        const completion = await completeStoredRepositoryHistory(
-          reader.connection.environmentId,
-          reader.connection.logicalRepositoryId,
-          message.commitCount,
+        const completion = await queueStorageWrite(() =>
+          completeStoredRepositoryHistory(
+            reader.connection.environmentId,
+            reader.connection.logicalRepositoryId,
+            message.commitCount,
+          ),
         );
+        if (replica.synchronizationRequestId !== message.requestId) return;
         delete replica.orderCache.index;
         replica.orderCache.revision += 1;
         if (completion.snapshot !== undefined) {
@@ -450,11 +510,15 @@ async function acceptHistoryPage(
     if (query === undefined) {
       throw new Error("History page has no matching query");
     }
-    await storeRepositoryHistoryPage(
-      reader.connection.environmentId,
-      reader.connection.logicalRepositoryId,
-      page,
-      query,
+    await writeStoredHistory(() =>
+      !reader.epoch.isCurrent(requestId)
+        ? Promise.resolve()
+        : storeRepositoryHistoryPage(
+            reader.connection.environmentId,
+            reader.connection.logicalRepositoryId,
+            page,
+            query,
+          ),
     );
     if (!reader.epoch.finish(requestId)) {
       return;
@@ -497,6 +561,7 @@ async function acceptHistoryPage(
     }
     reader.queries.delete(requestId);
     const failure = workerFailure(error);
+    replica.storageExhausted = isHistoryStorageQuotaError(error);
     replica.failure = failure;
     replica.status = "error";
     replica.revision += 1;
@@ -522,10 +587,14 @@ async function acceptHistoryBatch(
   if (batch.repositoryId !== reader.connection.repositoryId) {
     throw new Error("History batch identity does not match the reader");
   }
-  const synchronizedCommitCount = await storeRepositoryHistoryBatch(
-    reader.connection.environmentId,
-    reader.connection.logicalRepositoryId,
-    batch,
+  const synchronizedCommitCount = await writeStoredHistory(() =>
+    replica.synchronizationRequestId !== requestId
+      ? Promise.resolve(replica.synchronizedCommitCount)
+      : storeRepositoryHistoryBatch(
+          reader.connection.environmentId,
+          reader.connection.logicalRepositoryId,
+          batch,
+        ),
   );
   if (
     replica.synchronizationOwner !== reader ||
@@ -543,7 +612,12 @@ async function startSynchronization(
   reader: ConnectedReader,
   replica: RepositoryReplica,
 ) {
-  if (reader.closed || replica.synchronization === "syncing") {
+  if (
+    reader.closed ||
+    replica.cachePaused ||
+    replica.storageExhausted ||
+    replica.synchronization === "syncing"
+  ) {
     return;
   }
   replica.reconciled = true;
@@ -657,6 +731,10 @@ async function restoreReplica(
   repositoryId: string,
 ) {
   try {
+    if (!(await markHistoryCacheOpened(environmentId, repositoryId))) {
+      await clearHistoryCache(environmentId, repositoryId, false);
+      return;
+    }
     const state = await readStoredRepositoryHistoryState(
       environmentId,
       repositoryId,
@@ -692,9 +770,87 @@ function workerFailure(error: unknown): RepositoryHistoryWorkerFailure {
     : { _tag: "Unavailable" };
 }
 
+function writeStoredHistory<T>(write: () => Promise<T>) {
+  return writeHistoryUnderPressure(write, (key) => repositories.has(key));
+}
+
+function scheduleCacheManagement(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+  action: RepositoryHistoryCacheAction,
+) {
+  const operation = cacheManagement.then(() =>
+    manageCache(reader, replica, action),
+  );
+  cacheManagement = operation.catch(() => undefined);
+  return operation;
+}
+
+async function manageCache(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+  action: RepositoryHistoryCacheAction,
+) {
+  const targets =
+    action === "clear-all" ? [...repositories.values()] : [replica];
+  for (const target of targets) {
+    target.cachePaused = true;
+    if (target.synchronizationOwner !== undefined)
+      cancelSynchronization(target.synchronizationOwner, target);
+    for (const connected of target.readers) {
+      const requestId = connected.epoch.cancel();
+      connected.queries.clear();
+      if (requestId !== undefined) {
+        post(connected, { _tag: "CancelHistoryLoad", requestId });
+        post(connected, {
+          _tag: "RequestFailed",
+          requestId,
+          failure: { _tag: "Unavailable" },
+        });
+      }
+    }
+  }
+  await queueStorageWrite(async () => {
+    const caches =
+      action === "clear-all"
+        ? await readHistoryCacheRecords()
+        : [reader.connection];
+    for (const cache of caches)
+      await clearHistoryCache(
+        cache.environmentId,
+        cache.repositoryId,
+        action === "remove",
+      );
+  });
+  for (const target of targets) {
+    target.commits.clear();
+    target.visibleOids = [];
+    target.refTargets = [];
+    target.status = "empty";
+    target.synchronization = "idle";
+    target.synchronizedCommitCount = 0;
+    target.storageExhausted = false;
+    delete target.failure;
+    target.revision += 1;
+    publishSnapshot(target);
+  }
+  if (action === "rebuild") {
+    replica.cachePaused = false;
+    const query = reader.lastQuery;
+    if (query !== undefined) {
+      await handleReaderMessage(reader, replica, {
+        _tag: "ReadHistory",
+        query,
+        requestId: createRepositoryHistoryRequestId(),
+      });
+    }
+  }
+}
+
 interface ConnectedReader {
   stopWatchingLease: () => void;
   closed: boolean;
+  lastQuery?: RepositoryHistoryQuery;
   readonly connection: ConnectRepositoryHistoryReader;
   readonly epoch: RepositoryHistoryEpoch;
   readonly queries: Map<string, RepositoryHistoryQuery>;
@@ -703,6 +859,8 @@ interface ConnectedReader {
 interface RepositoryReplica {
   reconciled: boolean;
   readonly orderCache: HistoryOrderCache;
+  cachePaused?: boolean;
+  storageExhausted?: boolean;
   readonly commits: Map<string, RepositoryCommit>;
   failure?: RepositoryHistoryWorkerFailure;
   initialization: Promise<void>;

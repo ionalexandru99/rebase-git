@@ -468,6 +468,8 @@ function historyReader({
     locateMany: vi.fn<RepositoryHistoryReader["locateMany"]>(async () => []),
     close: vi.fn(),
     getCommitSummaries: vi.fn(async () => commits),
+    getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
+    manageCache: async () => undefined,
     getRefTargets: vi.fn<RepositoryHistoryReader["getRefTargets"]>(
       async () => [],
     ),

@@ -9,6 +9,10 @@ import type {
   RepositoryHistoryQuery,
   RepositoryHistoryRefTarget,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import type {
+  RepositoryHistoryCacheAction,
+  RepositoryHistoryStorageDiagnostics,
+} from "#web/features/repository-history/repository-history-storage.contract";
 
 export type RepositoryHistoryWorkerFailure =
   | {
@@ -20,6 +24,12 @@ export type RepositoryHistoryWorkerFailure =
   | { readonly _tag: "Unavailable" };
 
 export type RepositoryHistoryWorkerRequest =
+  | { readonly _tag: "GetCacheDiagnostics"; readonly requestId: string }
+  | {
+      readonly _tag: "ManageCache";
+      readonly action: RepositoryHistoryCacheAction;
+      readonly requestId: string;
+    }
   | {
       readonly _tag: "LocateHistoryCommits";
       readonly query: RepositoryHistoryQuery;
@@ -79,6 +89,13 @@ export type RepositoryHistoryWorkerRequest =
   | { readonly _tag: "CloseReader" };
 
 export type RepositoryHistoryWorkerResponse =
+  | { readonly _tag: "CacheRemoved" }
+  | {
+      readonly _tag: "CacheDiagnosticsResult";
+      readonly diagnostics: RepositoryHistoryStorageDiagnostics;
+      readonly requestId: string;
+    }
+  | { readonly _tag: "CacheManaged"; readonly requestId: string }
   | {
       readonly _tag: "HistoryPositionsResult";
       readonly positions: readonly RepositoryHistoryPosition[];

@@ -80,6 +80,8 @@ export function emptyStoredRepository(
   return {
     environmentId,
     key: repositoryKey(environmentId, repositoryId),
+    cacheFormatVersion: 1,
+    lastOpenedAt: Date.now(),
     objectFormat,
     minimumTopologicalEpoch: 0,
     progress: { committedCommitCount: 0, nextBatchSequence: 0 },
@@ -216,6 +218,8 @@ export interface StoredCommit {
 }
 
 export interface StoredRepository {
+  readonly cacheFormatVersion?: number;
+  readonly lastOpenedAt?: number;
   readonly cachedPage?: {
     readonly scopeKey?: string;
     readonly oids: readonly string[];
