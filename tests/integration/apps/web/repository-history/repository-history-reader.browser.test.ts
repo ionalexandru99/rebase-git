@@ -286,6 +286,70 @@ describe("browser repository history reader", () => {
     second.close();
   });
 
+  it("preserves replacement synchronization after a closed reader batch fails", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(1);
+    let batchDispatched: (() => void) | undefined;
+    const batchWasDispatched = new Promise<void>((resolve) => {
+      batchDispatched = resolve;
+    });
+    const firstGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(async (_request, accept) => {
+        const pendingBatch = accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 1,
+          }),
+        );
+        batchDispatched?.();
+        await pendingBatch;
+        return commits.length;
+      }),
+    };
+    const secondGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(
+        (_request, _accept, signal) =>
+          new Promise<number>((_resolve, reject) => {
+            signal?.addEventListener(
+              "abort",
+              () => reject(new RepositoryHistoryOffline()),
+              { once: true },
+            );
+          }),
+      ),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: firstGateway,
+      repositoryId,
+    });
+    const second = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: secondGateway,
+      repositoryId,
+    });
+
+    await first.read({
+      limit: 100,
+      order: "topological",
+      roots: [root("main")],
+    });
+    await batchWasDispatched;
+    first.close();
+
+    await vi.waitFor(() =>
+      expect(secondGateway.synchronize).toHaveBeenCalledOnce(),
+    );
+    expect(second.getSnapshot().synchronization).toBe("syncing");
+    second.close();
+  });
+
   it("retries synchronization after completion persistence fails", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();

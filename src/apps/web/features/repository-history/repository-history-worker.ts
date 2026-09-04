@@ -63,13 +63,18 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
   ) => {
     void handleReaderMessage(reader, replica, event.data).catch((error) => {
       if (event.data._tag === "HistoryBatchReceived") {
-        replica.synchronization = "idle";
-        delete replica.synchronizationOwner;
-        delete replica.synchronizationRequestId;
         const failure = workerFailure(error);
-        replica.failure = failure;
-        replica.revision += 1;
-        publishSnapshot(replica);
+        if (
+          replica.synchronizationOwner === reader &&
+          replica.synchronizationRequestId === event.data.requestId
+        ) {
+          replica.synchronization = "idle";
+          delete replica.synchronizationOwner;
+          delete replica.synchronizationRequestId;
+          replica.failure = failure;
+          replica.revision += 1;
+          publishSnapshot(replica);
+        }
         post(reader, {
           _tag: "HistoryBatchFailed",
           batchId: event.data.batchId,
