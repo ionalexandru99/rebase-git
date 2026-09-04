@@ -19,6 +19,7 @@ export interface RepositoryHistorySnapshot {
 }
 
 export interface RepositoryHistoryQuery {
+  readonly offset?: number;
   readonly limit: number;
   readonly order: ReadRepositoryHistory["order"];
   readonly roots: ReadRepositoryHistory["roots"];

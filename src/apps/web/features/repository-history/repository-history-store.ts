@@ -6,6 +6,11 @@ import type {
   RepositoryHistorySnapshot,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
+import { HistoryOrderIndex } from "#web/features/repository-history/history-order";
+import type {
+  HistoryOrderCache,
+  HistoryOrderNode,
+} from "#web/features/repository-history/history-order.contract";
 import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,
@@ -338,7 +343,20 @@ export function readRepositoryHistory(
   repositoryId: string,
   query: RepositoryHistoryQuery,
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
+  orderCache: HistoryOrderCache = { queries: new Map(), revision: 0 },
 ): Promise<readonly RepositoryCommit[] | undefined> {
+  const offset = query.offset ?? 0;
+  if (
+    !Number.isInteger(offset) ||
+    offset < 0 ||
+    !Number.isInteger(query.limit) ||
+    query.limit < 1 ||
+    query.limit > 1_000
+  ) {
+    return Promise.reject(
+      new Error("History query is outside the supported range"),
+    );
+  }
   return withRepositoryHistoryDatabase(indexedDB, async (database) => {
     const transaction = database.transaction(
       [commitStoreName, repositoryStoreName],
@@ -370,11 +388,14 @@ export function readRepositoryHistory(
     if (
       query.order === repository.cachedPage?.order &&
       sameOids(roots, repository.cachedPage.rootOids) &&
-      (query.limit <= repository.cachedPage.oids.length ||
+      (offset + query.limit <= repository.cachedPage.oids.length ||
         repository.cachedPage.oids.length <
           repository.cachedPage.requestedLimit)
     ) {
-      const cachedOids = repository.cachedPage.oids.slice(0, query.limit);
+      const cachedOids = repository.cachedPage.oids.slice(
+        offset,
+        offset + query.limit,
+      );
       const result = await readCommitsByOid(
         commits,
         environmentId,
@@ -391,12 +412,41 @@ export function readRepositoryHistory(
       await completed;
       return undefined;
     }
-    const result = await readTopologicalHistory(
-      commits.index(repositoryOrderIndexName),
+    const key = JSON.stringify([
+      query.order,
+      query.roots.map(({ name, type }) => [name, type]).sort(),
+    ]);
+    const basis = JSON.stringify([orderCache.revision, roots]);
+    const previous = orderCache.queries.get(key);
+    let ordered = previous?.basis === basis ? previous.oids : undefined;
+    if (ordered === undefined) {
+      orderCache.index ??= new HistoryOrderIndex(
+        await readHistoryOrderNodes(
+          commits.index(repositoryOrderIndexName),
+          environmentId,
+          repositoryId,
+        ),
+      );
+      const cachedPrefix =
+        repository.cachedPage?.order === query.order
+          ? repository.cachedPage.oids
+          : undefined;
+      ordered = orderCache.index.order(
+        roots,
+        query.order,
+        previous?.oids ?? cachedPrefix,
+      );
+      if (orderCache.queries.size >= 4) {
+        const oldest = orderCache.queries.keys().next().value;
+        if (oldest !== undefined) orderCache.queries.delete(oldest);
+      }
+      orderCache.queries.set(key, { basis, oids: ordered });
+    }
+    const result = await readCommitsByOid(
+      commits,
       environmentId,
       repositoryId,
-      roots,
-      query.limit,
+      ordered.slice(offset, offset + query.limit),
     );
     await completed;
     return result;
@@ -460,44 +510,71 @@ function readCommitsByOid(
   );
 }
 
-function readTopologicalHistory(
+async function readHistoryOrderNodes(
   index: IDBIndex,
   environmentId: string,
   repositoryId: string,
-  roots: readonly string[],
-  limit: number,
 ) {
-  const range = IDBKeyRange.bound(
-    [environmentId, repositoryId, Number.MIN_SAFE_INTEGER, 0],
-    [
+  let lower = [environmentId, repositoryId, Number.MIN_SAFE_INTEGER, 0];
+  const upper = [
+    environmentId,
+    repositoryId,
+    Number.MAX_SAFE_INTEGER,
+    Number.MAX_SAFE_INTEGER,
+  ];
+  let open = false;
+  const result: HistoryOrderNode[] = [];
+  while (true) {
+    const records = await requestResult<StoredCommit[]>(
+      index.getAll(IDBKeyRange.bound(lower, upper, open), 2_048),
+    );
+    for (const record of records) {
+      result.push({
+        oid: record.commit.oid,
+        parents: record.commit.parents,
+        timestamp: record.commit.committer.timestampSeconds,
+      });
+    }
+    const last = records.at(-1);
+    if (
+      records.length < 2_048 ||
+      last?.topologicalEpoch === undefined ||
+      last.topologicalOrder === undefined
+    )
+      return result;
+    lower = [
       environmentId,
       repositoryId,
-      Number.MAX_SAFE_INTEGER,
-      Number.MAX_SAFE_INTEGER,
-    ],
+      last.topologicalEpoch,
+      last.topologicalOrder,
+    ];
+    open = true;
+  }
+}
+
+export async function prepareRepositoryHistoryOrder(
+  environmentId: string,
+  repositoryId: string,
+  cache: HistoryOrderCache,
+) {
+  const revision = cache.revision;
+  const nodes = await withRepositoryHistoryDatabase(
+    globalThis.indexedDB,
+    async (database) => {
+      const transaction = database.transaction(commitStoreName, "readonly");
+      const completed = transactionCompleted(transaction);
+      const nodes = await readHistoryOrderNodes(
+        transaction
+          .objectStore(commitStoreName)
+          .index(repositoryOrderIndexName),
+        environmentId,
+        repositoryId,
+      );
+      await completed;
+      return nodes;
+    },
   );
-  const reachable = new Set(roots);
-  return new Promise<readonly RepositoryCommit[]>((resolve, reject) => {
-    const result: RepositoryCommit[] = [];
-    const request = index.openCursor(range);
-    request.onerror = () =>
-      reject(request.error ?? new Error("IndexedDB cursor failed"));
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (cursor === null || result.length === limit) {
-        resolve(result);
-        return;
-      }
-      const record = cursor.value as StoredCommit;
-      if (reachable.delete(record.commit.oid)) {
-        result.push(record.commit);
-        for (const parent of record.commit.parents) {
-          reachable.add(parent);
-        }
-      }
-      cursor.continue();
-    };
-  });
+  if (revision === cache.revision) cache.index = new HistoryOrderIndex(nodes);
 }
 
 function normalizedOids(oids: readonly string[]) {

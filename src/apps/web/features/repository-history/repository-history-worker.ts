@@ -3,6 +3,7 @@ import {
   decodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
+import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
 import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
 import {
   type RepositoryHistoryQuery,
@@ -13,6 +14,7 @@ import { createRepositoryHistoryRequestId } from "#web/features/repository-histo
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
+  prepareRepositoryHistoryOrder,
   readRepositoryCommits,
   readRepositoryHistory,
   readStoredRepositoryHistoryState,
@@ -55,6 +57,7 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
     createReplica(connection.environmentId, connection.logicalRepositoryId);
   const reader: ConnectedReader = {
     closed: false,
+    reconciled: false,
     connection,
     epoch: new RepositoryHistoryEpoch(),
     queries: new Map(),
@@ -142,6 +145,8 @@ async function handleReaderMessage(
         reader.connection.environmentId,
         reader.connection.logicalRepositoryId,
         message.query,
+        globalThis.indexedDB,
+        replica.orderCache,
       );
       if (!reader.epoch.isCurrent(message.requestId)) {
         reader.queries.delete(message.requestId);
@@ -163,7 +168,8 @@ async function handleReaderMessage(
           commits: cached,
           requestId: message.requestId,
         });
-        if (replica.synchronization !== "syncing") {
+        if (!reader.reconciled && replica.synchronization !== "syncing") {
+          reader.reconciled = true;
           void startSynchronization(reader, replica).catch((error) => {
             replica.failure = workerFailure(error);
             replica.revision += 1;
@@ -174,6 +180,16 @@ async function handleReaderMessage(
       }
       if (replica.synchronization === "complete") {
         replica.synchronization = "stale";
+      }
+      if ((message.query.offset ?? 0) > 0) {
+        reader.epoch.finish(message.requestId);
+        reader.queries.delete(message.requestId);
+        post(reader, {
+          _tag: "RequestFailed",
+          failure: { _tag: "Unavailable" },
+          requestId: message.requestId,
+        });
+        return;
       }
       replica.status = "loading";
       publishSnapshot(replica);
@@ -232,6 +248,8 @@ async function handleReaderMessage(
           reader.connection.logicalRepositoryId,
           message.commitCount,
         );
+        delete replica.orderCache.index;
+        replica.orderCache.revision += 1;
         if (completion.snapshot !== undefined) {
           replica.refTargets = completion.snapshot.refTargets;
         }
@@ -245,6 +263,11 @@ async function handleReaderMessage(
       replica.synchronization = "complete";
       replica.reconciling = false;
       replica.synchronizedCommitCount = message.commitCount;
+      void prepareRepositoryHistoryOrder(
+        reader.connection.environmentId,
+        reader.connection.logicalRepositoryId,
+        replica.orderCache,
+      ).catch(() => undefined);
       delete replica.failure;
       delete replica.synchronizationOwner;
       delete replica.synchronizationRequestId;
@@ -388,6 +411,7 @@ async function acceptHistoryPage(
       requestId,
     });
     if (replica.synchronization !== "syncing") {
+      reader.reconciled = true;
       try {
         await startSynchronization(reader, replica);
       } catch (error) {
@@ -537,6 +561,7 @@ function createReplica(
   repositoryId: string,
 ): RepositoryReplica {
   const replica: RepositoryReplica = {
+    orderCache: { queries: new Map(), revision: 0 },
     commits: new Map(),
     initialization: Promise.resolve(),
     readers: new Set(),
@@ -568,6 +593,11 @@ async function restoreReplica(
     replica.refTargets = state.refTargets;
     replica.synchronizedCommitCount = state.progress.committedCommitCount;
     if (state.completion !== undefined) {
+      void prepareRepositoryHistoryOrder(
+        environmentId,
+        repositoryId,
+        replica.orderCache,
+      ).catch(() => undefined);
       replica.synchronization = "complete";
       replica.synchronizedCommitCount = state.completion.commitCount;
       replica.status = state.completion.commitCount === 0 ? "empty" : "ready";
@@ -591,12 +621,14 @@ function workerFailure(error: unknown): RepositoryHistoryWorkerFailure {
 interface ConnectedReader {
   stopWatchingLease: () => void;
   closed: boolean;
+  reconciled: boolean;
   readonly connection: ConnectRepositoryHistoryReader;
   readonly epoch: RepositoryHistoryEpoch;
   readonly queries: Map<string, RepositoryHistoryQuery>;
 }
 
 interface RepositoryReplica {
+  readonly orderCache: HistoryOrderCache;
   readonly commits: Map<string, RepositoryCommit>;
   failure?: RepositoryHistoryWorkerFailure;
   initialization: Promise<void>;
