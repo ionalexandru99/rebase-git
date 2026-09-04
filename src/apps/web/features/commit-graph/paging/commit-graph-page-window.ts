@@ -403,6 +403,7 @@ export function createCommitGraphPageWindow(
 
   const jumpToOid = async (oid: string) => {
     if (view === undefined || disposed) return undefined;
+    initialRequest += 1;
     cancelNavigation();
     const request = navigationRequest;
     jumping = true;
@@ -434,7 +435,10 @@ export function createCommitGraphPageWindow(
         });
       return undefined;
     } finally {
-      if (request === navigationRequest) jumping = false;
+      if (request === navigationRequest) {
+        jumping = false;
+        if (snapshot.loading) publish({ loading: false });
+      }
     }
   };
 
