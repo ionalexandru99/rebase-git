@@ -229,7 +229,7 @@ describe("Environment state", () => {
     });
   });
 
-  it("rejects changed and newer migrations", async () => {
+  it("rejects changed migration checksums", async () => {
     const checksumPaths = await createTemporaryPaths();
     await seedMigrationHistory(checksumPaths.stateDatabase, [
       {
@@ -241,7 +241,9 @@ describe("Environment state", () => {
     await expect(openState(checksumPaths)).rejects.toThrow(
       `Migration 1 "${createEnvironmentMigration.name}" no longer matches its applied checksum.`,
     );
+  });
 
+  it("rejects newer migration versions", async () => {
     const newerPaths = await createTemporaryPaths();
     await seedMigrationHistory(newerPaths.stateDatabase, [
       generatedMigrationEntry(createEnvironmentMigration, 1),

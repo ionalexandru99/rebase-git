@@ -10,6 +10,123 @@ import {
 import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 describe("commit graph", () => {
+  it("clears the active descendant when a scope change hides its commit", async () => {
+    const commits = history(3);
+    const last = commits[2];
+    if (last === undefined) throw new Error("Missing fixture");
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    const list = screen.getByRole("listbox");
+    await screen.getByRole("option", { name: /^Commit 1,/ }).click();
+    await expect.element(list).toHaveAttribute("aria-activedescendant");
+    reader.read.mockResolvedValue(commits.slice(2));
+    await screen.rerender(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraph
+          reader={reader}
+          repositoryName="rebase-test"
+          roots={[{ name: "other", oid: last.oid, type: "branch" }]}
+        />
+      </div>,
+    );
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 1,/ }))
+      .not.toBeInTheDocument();
+    await expect.element(list).not.toHaveAttribute("aria-activedescendant");
+    list.element().focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .toHaveAttribute("aria-selected", "true");
+  });
+
+  it("expands nested merge lines without selecting them and clears a selection hidden by collapse", async () => {
+    const commits = mergeHistory();
+    const merge = commits[0];
+    const side = commits[2];
+    const nested = commits[4];
+    if (!merge || !side || !nested) throw new Error("Missing fixture");
+    const reader = historyReader({ commits, status: "ready" });
+    reader.getRefTargets.mockResolvedValue([
+      { name: "nested-ref", oid: nested.oid, type: "tag" },
+    ]);
+    const screen = await renderGraph(reader);
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Expand merge Commit 0" }).click();
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .toHaveAttribute("aria-selected", "false");
+    await expect
+      .element(screen.getByText("nested-ref"))
+      .not.toBeInTheDocument();
+    await screen.getByRole("button", { name: "Expand merge Commit 2" }).click();
+    await screen.getByRole("option", { name: /^Commit 4,/ }).click();
+    await expect.element(screen.getByText("nested-ref")).toBeVisible();
+    await screen
+      .getByRole("button", { name: "Collapse merge Commit 0" })
+      .click();
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 4,/ }))
+      .not.toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("listbox")
+        .getByRole("option")
+        .all()
+        .every(
+          (row) => row.element().getAttribute("aria-selected") === "false",
+        ),
+    ).toBe(true);
+    await userEvent.keyboard("{ArrowRight}");
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 4,/ }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Collapse merge Commit 2" }))
+      .toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("does not reload history when merge keyboard expansion is unchanged", async () => {
+    const reader = historyReader({ commits: mergeHistory(), status: "ready" });
+    const screen = await renderGraph(reader);
+    await screen.getByRole("option", { name: /^Commit 0,/ }).click();
+    const initialReads = reader.read.mock.calls.length;
+    await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
+    expect(reader.read).toHaveBeenCalledTimes(initialReads);
+
+    await userEvent.keyboard("{ArrowRight}");
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .toBeVisible();
+    const expandedReads = reader.read.mock.calls.length;
+    expect(expandedReads).toBe(initialReads + 1);
+    await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+    expect(reader.read).toHaveBeenCalledTimes(expandedReads);
+  });
+
+  it("keeps scope-owned side lines visible without a redundant collapse control", async () => {
+    const commits = mergeHistory();
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader, [
+      { name: "main", oid: "0".repeat(40), type: "branch" },
+      { name: "feature", oid: "2".padStart(40, "0"), type: "branch" },
+    ]);
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Expand merge Commit 0" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Expand merge Commit 2" }))
+      .toBeVisible();
+  });
+
   it("switches ordering locally while retaining selection and showing immediate feedback", async () => {
     const commits = history(3);
     const reader = historyReader({ commits, status: "ready" });
@@ -313,13 +430,24 @@ describe("commit graph", () => {
 
 async function renderGraph(
   reader: ReturnType<typeof historyReader>,
-  roots = [{ name: "main", oid: "f".repeat(40), type: "branch" as const }],
+  roots = [{ name: "main", oid: "0".repeat(40), type: "branch" as const }],
 ) {
   return render(
     <div style={{ height: 520, width: 900 }}>
       <CommitGraph reader={reader} repositoryName="rebase-test" roots={roots} />
     </div>,
   );
+}
+
+function mergeHistory() {
+  const commits = history(6);
+  const parents = [[1, 2], [5], [3, 4], [5], [5], []];
+  return commits.map((commit, index) => ({
+    ...commit,
+    parents: (parents[index] ?? []).map((parent) =>
+      parent.toString(16).padStart(40, "0"),
+    ),
+  }));
 }
 
 function historyReader({
@@ -333,6 +461,11 @@ function historyReader({
 }) {
   let snapshot: RepositoryHistorySnapshot = { revision: 0, status };
   const reader = {
+    ancestryRoute: vi.fn<RepositoryHistoryReader["ancestryRoute"]>(
+      async () => undefined,
+    ),
+    locate: vi.fn<RepositoryHistoryReader["locate"]>(async () => undefined),
+    locateMany: vi.fn<RepositoryHistoryReader["locateMany"]>(async () => []),
     close: vi.fn(),
     getCommitSummaries: vi.fn(async () => commits),
     getRefTargets: vi.fn<RepositoryHistoryReader["getRefTargets"]>(

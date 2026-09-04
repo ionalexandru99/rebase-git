@@ -1,7 +1,19 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
-import { readRepositoryHistory } from "#web/features/repository-history/repository-history-query";
+import {
+  repositoryKey,
+  repositoryStoreName,
+  requestResult,
+  type StoredRepository,
+  transactionCompleted,
+  withRepositoryHistoryDatabase,
+} from "#web/features/repository-history/repository-history-database";
+import {
+  locateRepositoryHistoryCommits,
+  prepareRepositoryHistoryOrder,
+  readRepositoryHistory,
+} from "#web/features/repository-history/repository-history-query";
 import {
   completeStoredRepositoryHistory,
   storeRepositoryHistoryBatch,
@@ -9,6 +21,224 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("local ordered history pages", () => {
+  it.each([false, true])(
+    "derives an initial first-parent page from an all-ancestry cache (legacy=%s)",
+    async (legacy) => {
+      const source = await seed("main", false);
+      const environmentId = crypto.randomUUID();
+      const repositoryId = crypto.randomUUID();
+      const commits = source.commits.filter(({ subject }) => subject !== "new");
+      await initialPage(environmentId, repositoryId, "main", commits);
+      if (legacy)
+        await withRepositoryHistoryDatabase(indexedDB, async (database) => {
+          const transaction = database.transaction(
+            repositoryStoreName,
+            "readwrite",
+          );
+          const completed = transactionCompleted(transaction);
+          const store = transaction.objectStore(repositoryStoreName);
+          const record = await requestResult<StoredRepository>(
+            store.get(repositoryKey(environmentId, repositoryId)),
+          );
+          if (record.cachedPage === undefined)
+            throw new Error("Missing cached page");
+          const { scopeKey: _scopeKey, ...cachedPage } = record.cachedPage;
+          store.put({ ...record, cachedPage });
+          await completed;
+        });
+      const query = {
+        roots: [root("main", "merge")],
+        order: "chronological" as const,
+        limit: 4,
+      };
+      expect(
+        await readRepositoryHistory(environmentId, repositoryId, query),
+      ).toEqual(commits);
+      expect(
+        (
+          await readRepositoryHistory(environmentId, repositoryId, {
+            ...query,
+            ancestry: "first-parent",
+          })
+        )?.map(({ subject }) => subject),
+      ).toEqual(["merge", "left", "base"]);
+      expect(
+        await readRepositoryHistory(environmentId, repositoryId, {
+          ...query,
+          ancestry: "first-parent",
+          additionalParentEdges: [
+            { childOid: oid("merge"), parentOid: oid("right") },
+          ],
+        }),
+      ).toBeUndefined();
+    },
+  );
+
+  it("does not reuse an initial page for another ancestry scope", async () => {
+    const source = await seed("main", false);
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const roots = [root("main", "merge")];
+    const query = {
+      roots,
+      ancestry: "first-parent" as const,
+      order: "chronological" as const,
+      limit: 100,
+    };
+    await storeRepositoryHistoryPage(
+      environmentId,
+      repositoryId,
+      {
+        repositoryId,
+        requestId: crypto.randomUUID(),
+        objectFormat: "sha1",
+        refTargets: roots,
+        commits: source.commits.filter(({ subject }) => subject !== "new"),
+      },
+      query,
+    );
+    expect(
+      (await readRepositoryHistory(environmentId, repositoryId, query))?.map(
+        ({ subject }) => subject,
+      ),
+    ).toEqual(["merge", "left", "base"]);
+    expect(
+      await readRepositoryHistory(environmentId, repositoryId, {
+        ...query,
+        additionalParentEdges: [
+          { childOid: oid("merge"), parentOid: oid("right") },
+        ],
+      }),
+    ).toBeUndefined();
+    expect(
+      await readRepositoryHistory(environmentId, repositoryId, {
+        ...query,
+        ancestry: "all",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("keeps absolute positions after reading a nonzero page from incomplete history", async () => {
+    const source = await seed("main", false);
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = ["merge", "right", "left", "base"].flatMap((subject) =>
+      source.commits.filter((commit) => commit.subject === subject),
+    );
+    await initialPage(environmentId, repositoryId, "main", commits);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const query = {
+      roots: [root("main", "merge")],
+      order: "chronological" as const,
+      offset: 2,
+      limit: 1,
+    };
+    expect(
+      (
+        await readRepositoryHistory(
+          environmentId,
+          repositoryId,
+          query,
+          indexedDB,
+          cache,
+        )
+      )?.map(({ subject }) => subject),
+    ).toEqual(["left"]);
+    expect(
+      await locateRepositoryHistoryCommits(
+        environmentId,
+        repositoryId,
+        query,
+        [oid("merge"), oid("left")],
+        cache,
+      ),
+    ).toEqual([
+      { oid: oid("merge"), index: 0 },
+      { oid: oid("left"), index: 2 },
+    ]);
+  });
+
+  it("locates a batch without reading commit metadata once the ordered scope is cached", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const query = {
+      roots: [root("main", "merge")],
+      ancestry: "first-parent" as const,
+      order: "topological" as const,
+      limit: 100,
+    };
+    await locateRepositoryHistoryCommits(
+      fixture.environmentId,
+      fixture.repositoryId,
+      query,
+      [oid("merge")],
+      cache,
+    );
+    const transactions = vi.spyOn(IDBDatabase.prototype, "transaction");
+    try {
+      expect(
+        await locateRepositoryHistoryCommits(
+          fixture.environmentId,
+          fixture.repositoryId,
+          { ...query, additionalParentEdges: [] },
+          [oid("base"), oid("left"), oid("right"), oid("left")],
+          cache,
+        ),
+      ).toEqual([
+        { oid: oid("left"), index: 1 },
+        { oid: oid("base"), index: 2 },
+      ]);
+      expect(transactions).not.toHaveBeenCalled();
+    } finally {
+      transactions.mockRestore();
+    }
+  });
+
+  it("shares one cold index scan across concurrent readers and retries after a scan failure", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    const prepare = () =>
+      prepareRepositoryHistoryOrder(
+        fixture.environmentId,
+        fixture.repositoryId,
+        cache,
+      );
+    try {
+      reads.mockImplementationOnce(() => {
+        throw new DOMException("Index unavailable", "InvalidStateError");
+      });
+      await expect(prepare()).rejects.toThrow();
+      reads.mockClear();
+      await Promise.all([prepare(), prepare(), prepare()]);
+      expect(reads).toHaveBeenCalledTimes(1);
+      expect(cache.index?.order([oid("merge")], "topological")).toHaveLength(4);
+      await prepare();
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it("restarts index preparation when the stored generation changes", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const stale = prepareRepositoryHistoryOrder(
+      fixture.environmentId,
+      fixture.repositoryId,
+      cache,
+    );
+    cache.revision += 1;
+    const current = prepareRepositoryHistoryOrder(
+      fixture.environmentId,
+      fixture.repositoryId,
+      cache,
+    );
+    expect(current).not.toBe(stale);
+    await Promise.all([stale, current]);
+    expect(cache.index?.order([oid("merge")], "topological")).toHaveLength(4);
+  });
+
   it("does not inherit the first page ordering of a different ref scope", async () => {
     const fixture = await seed("side", false);
     const result = await readRepositoryHistory(

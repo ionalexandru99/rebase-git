@@ -4,6 +4,7 @@ import type {
   HistoryOrderCache,
   HistoryOrderNode,
 } from "#web/features/repository-history/history-order.contract";
+import { selectHistoryPage } from "#web/features/repository-history/history-page-selection";
 import {
   commitKey,
   commitStoreName,
@@ -16,7 +17,107 @@ import {
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type {
+  RepositoryHistoryPosition,
+  RepositoryHistoryQuery,
+} from "#web/features/repository-history/repository-history-reader.contract";
+import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
+
+export async function locateRepositoryHistoryCommit(
+  environmentId: string,
+  repositoryId: string,
+  query: RepositoryHistoryQuery,
+  oid: string,
+  cache: HistoryOrderCache,
+): Promise<number | undefined> {
+  return (
+    await locateRepositoryHistoryCommits(
+      environmentId,
+      repositoryId,
+      query,
+      [oid],
+      cache,
+    )
+  )[0]?.index;
+}
+
+export async function locateRepositoryHistoryCommits(
+  environmentId: string,
+  repositoryId: string,
+  query: RepositoryHistoryQuery,
+  oids: readonly string[],
+  cache: HistoryOrderCache,
+): Promise<readonly RepositoryHistoryPosition[]> {
+  if (oids.length > 1_000) throw new Error("Query is too large");
+  if (oids.length === 0) return [];
+  const ordered = await resolveRepositoryHistoryOrder(
+    environmentId,
+    repositoryId,
+    query,
+    cache,
+  );
+  if (ordered === undefined) return [];
+  const remaining = new Set(oids);
+  const result: RepositoryHistoryPosition[] = [];
+  for (
+    let index = 0;
+    index < ordered.length && remaining.size > 0;
+    index += 1
+  ) {
+    const oid = ordered[index];
+    if (oid !== undefined && remaining.delete(oid)) result.push({ oid, index });
+  }
+  return result;
+}
+
+async function resolveRepositoryHistoryOrder(
+  environmentId: string,
+  repositoryId: string,
+  query: RepositoryHistoryQuery,
+  cache: HistoryOrderCache,
+): Promise<readonly string[] | undefined> {
+  const revision = cache.revision;
+  const key = historyOrderScopeKey(query);
+  const roots = normalizedOids(query.roots.map(({ oid }) => oid));
+  const basis = JSON.stringify([revision, roots]);
+  let previous = cache.queries.get(key);
+  if (previous?.basis !== basis) {
+    const page = await readRepositoryHistory(
+      environmentId,
+      repositoryId,
+      { ...query, offset: 0, limit: 1_000 },
+      globalThis.indexedDB,
+      cache,
+    );
+    if (page === undefined || cache.revision !== revision) return undefined;
+    previous = cache.queries.get(key);
+  }
+  if (previous === undefined) return undefined;
+  let ordered = previous.oids;
+  if (
+    !previous.complete &&
+    (await readStoredRepositoryHistoryState(environmentId, repositoryId))
+      ?.completion !== undefined
+  ) {
+    if (cache.index === undefined)
+      await prepareRepositoryHistoryOrder(environmentId, repositoryId, cache);
+    if (cache.revision !== revision || cache.index === undefined)
+      return undefined;
+    ordered = cache.index.order(
+      roots,
+      query.order,
+      previous.oids,
+      query.ancestry,
+      query.additionalParentEdges,
+    );
+    rememberHistoryOrder(cache, key, {
+      basis: previous.basis,
+      oids: ordered,
+      complete: true,
+    });
+  }
+  return cache.revision === revision ? ordered : undefined;
+}
 
 export function readRepositoryHistory(
   environmentId: string,
@@ -70,9 +171,12 @@ export function readRepositoryHistory(
     const basis = JSON.stringify([orderCache.revision, roots]);
     const previous = orderCache.queries.get(key);
     if (
+      (query.ancestry !== "first-parent" ||
+        (repository.completion === undefined && offset === 0)) &&
       (previous === undefined ||
         (!previous.complete && previous.basis === basis)) &&
       query.order === repository.cachedPage?.order &&
+      canSelectCachedHistoryPage(query, repository.cachedPage.scopeKey) &&
       sameOids(roots, repository.cachedPage.rootOids) &&
       (offset + query.limit <= repository.cachedPage.oids.length ||
         repository.cachedPage.oids.length <
@@ -92,12 +196,16 @@ export function readRepositoryHistory(
         throw new Error("Repository history cache is incomplete");
       }
       await completed;
+      const selected = selectHistoryPage(result, query);
       rememberHistoryOrder(orderCache, key, {
         basis,
-        oids: repository.cachedPage.oids,
+        oids:
+          query.ancestry === "first-parent"
+            ? selected.map(({ oid }) => oid)
+            : repository.cachedPage.oids,
         complete: false,
       });
-      return result;
+      return selected;
     }
     if (repository.completion === undefined) {
       await completed;
@@ -122,6 +230,8 @@ export function readRepositoryHistory(
         repository.cachedPage?.order === query.order &&
         (repository.cachedPage.scopeKey === key ||
           (repository.cachedPage.scopeKey === undefined &&
+            query.ancestry !== "first-parent" &&
+            (query.additionalParentEdges?.length ?? 0) === 0 &&
             sameOids(roots, repository.cachedPage.rootOids)))
           ? repository.cachedPage.oids
           : undefined;
@@ -129,6 +239,8 @@ export function readRepositoryHistory(
         roots,
         query.order,
         previous?.oids ?? cachedPrefix,
+        query.ancestry,
+        query.additionalParentEdges,
       );
       rememberHistoryOrder(orderCache, key, {
         basis,
@@ -227,12 +339,33 @@ async function readHistoryOrderNodes(
   }
 }
 
-export async function prepareRepositoryHistoryOrder(
+export function prepareRepositoryHistoryOrder(
   environmentId: string,
   repositoryId: string,
   cache: HistoryOrderCache,
 ) {
+  if (cache.index !== undefined) return Promise.resolve();
+  if (cache.preparation?.revision === cache.revision)
+    return cache.preparation.task;
   const revision = cache.revision;
+  const task = buildRepositoryHistoryOrder(
+    environmentId,
+    repositoryId,
+    cache,
+    revision,
+  ).finally(() => {
+    if (cache.preparation?.task === task) delete cache.preparation;
+  });
+  cache.preparation = { revision, task };
+  return task;
+}
+
+async function buildRepositoryHistoryOrder(
+  environmentId: string,
+  repositoryId: string,
+  cache: HistoryOrderCache,
+  revision: number,
+) {
   const nodes = await readHistoryOrderNodes(
     (range) =>
       withRepositoryHistoryDatabase(globalThis.indexedDB, async (database) => {
@@ -259,16 +392,46 @@ export function normalizedOids(oids: readonly string[]) {
 }
 
 export function historyOrderScopeKey(
-  query: Pick<RepositoryHistoryQuery, "order" | "roots">,
+  query: Pick<
+    RepositoryHistoryQuery,
+    "order" | "roots" | "ancestry" | "additionalParentEdges"
+  >,
 ) {
   return JSON.stringify([
     query.order,
+    query.ancestry ?? "all",
+    (query.additionalParentEdges ?? [])
+      .map(({ childOid, parentOid }) => `${childOid}\0${parentOid}`)
+      .toSorted(),
     query.roots
       .map(({ name, type, oid }) =>
         type === "head" ? [name, type, oid] : [name, type],
       )
       .sort(),
   ]);
+}
+
+function canSelectCachedHistoryPage(
+  query: RepositoryHistoryQuery,
+  scopeKey: string | undefined,
+) {
+  if (scopeKey === historyOrderScopeKey(query)) return true;
+  if ((query.additionalParentEdges?.length ?? 0) > 0) return false;
+  if (query.ancestry !== "first-parent") return scopeKey === undefined;
+  if ((query.offset ?? 0) !== 0) return false;
+  if (scopeKey === undefined) return true;
+  try {
+    const stored: unknown = JSON.parse(scopeKey);
+    return (
+      Array.isArray(stored) &&
+      ((stored.length === 2 && Array.isArray(stored[1])) ||
+        (stored[1] === "all" &&
+          Array.isArray(stored[2]) &&
+          stored[2].length === 0))
+    );
+  } catch {
+    return false;
+  }
 }
 
 function sameOids(left: readonly string[], right: readonly string[]) {

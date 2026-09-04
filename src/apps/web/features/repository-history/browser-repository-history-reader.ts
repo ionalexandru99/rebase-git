@@ -1,6 +1,8 @@
 import type { RepositoryCommit } from "@rebase/contracts";
+import type { HistoryAncestryRoute } from "#web/features/repository-history/history-order.contract";
 import type {
   RepositoryHistoryGateway,
+  RepositoryHistoryPosition,
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
   RepositoryHistoryRefTarget,
@@ -116,6 +118,18 @@ function connectBrowserRepositoryHistoryReader(
     }
     if (message._tag === "RefTargetsResult") {
       request.resolve(message.refs);
+      return;
+    }
+    if (message._tag === "AncestryRouteResult") {
+      request.resolve(message.route);
+      return;
+    }
+    if (message._tag === "HistoryPositionResult") {
+      request.resolve(message.position);
+      return;
+    }
+    if (message._tag === "HistoryPositionsResult") {
+      request.resolve(message.positions);
       return;
     }
     request.resolve(message.commits);
@@ -253,6 +267,27 @@ function connectBrowserRepositoryHistoryReader(
   }
 
   return {
+    locateMany: (query, oids) =>
+      request<readonly RepositoryHistoryPosition[]>({
+        _tag: "LocateHistoryCommits",
+        query,
+        oids,
+        requestId: createRepositoryHistoryRequestId(),
+      }),
+    ancestryRoute: (roots, oid) =>
+      request<HistoryAncestryRoute | undefined>({
+        _tag: "GetAncestryRoute",
+        roots,
+        oid,
+        requestId: createRepositoryHistoryRequestId(),
+      }),
+    locate: (query, oid) =>
+      request<number | undefined>({
+        _tag: "LocateHistoryCommit",
+        query,
+        oid,
+        requestId: createRepositoryHistoryRequestId(),
+      }),
     close: () => {
       if (closed) {
         return;

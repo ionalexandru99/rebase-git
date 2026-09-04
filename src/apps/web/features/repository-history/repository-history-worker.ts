@@ -4,8 +4,11 @@ import {
   type RepositoryCommit,
 } from "@rebase/contracts";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
+import { selectHistoryPage } from "#web/features/repository-history/history-page-selection";
 import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
 import {
+  locateRepositoryHistoryCommit,
+  locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryCommits,
   readRepositoryHistory,
@@ -128,6 +131,66 @@ async function handleReaderMessage(
     return;
   }
   switch (message._tag) {
+    case "LocateHistoryCommits": {
+      const positions = await locateRepositoryHistoryCommits(
+        reader.connection.environmentId,
+        reader.connection.logicalRepositoryId,
+        message.query,
+        message.oids,
+        replica.orderCache,
+      );
+      post(reader, {
+        _tag: "HistoryPositionsResult",
+        positions,
+        requestId: message.requestId,
+      });
+      return;
+    }
+    case "GetAncestryRoute": {
+      if (message.roots.length > 256) throw new Error("Query is too large");
+      const revision = replica.orderCache.revision;
+      const state = await readStoredRepositoryHistoryState(
+        reader.connection.environmentId,
+        reader.connection.logicalRepositoryId,
+      );
+      if (
+        state?.completion !== undefined &&
+        replica.orderCache.index === undefined
+      )
+        await prepareRepositoryHistoryOrder(
+          reader.connection.environmentId,
+          reader.connection.logicalRepositoryId,
+          replica.orderCache,
+        );
+      post(reader, {
+        _tag: "AncestryRouteResult",
+        route:
+          state?.completion !== undefined &&
+          replica.orderCache.revision === revision
+            ? replica.orderCache.index?.ancestryRoute(
+                message.roots,
+                message.oid,
+              )
+            : undefined,
+        requestId: message.requestId,
+      });
+      return;
+    }
+    case "LocateHistoryCommit": {
+      const position = await locateRepositoryHistoryCommit(
+        reader.connection.environmentId,
+        reader.connection.logicalRepositoryId,
+        message.query,
+        message.oid,
+        replica.orderCache,
+      );
+      post(reader, {
+        _tag: "HistoryPositionResult",
+        position,
+        requestId: message.requestId,
+      });
+      return;
+    }
     case "ReadHistory": {
       const supersededRequestId = reader.epoch.begin(message.requestId);
       if (supersededRequestId !== undefined) {
@@ -408,14 +471,15 @@ async function acceptHistoryPage(
     if (replica.refTargets.length === 0) {
       replica.refTargets = page.refTargets;
     }
-    replica.visibleOids = stored.map((commit) => commit.oid);
+    const selected = selectHistoryPage(stored, query);
+    replica.visibleOids = selected.map((commit) => commit.oid);
     delete replica.failure;
     replica.status = stored.length === 0 ? "empty" : "ready";
     replica.revision += 1;
     publishSnapshot(replica);
     post(reader, {
       _tag: "HistoryResult",
-      commits: stored,
+      commits: selected,
       requestId,
     });
     if (replica.synchronization !== "syncing") {

@@ -1,6 +1,8 @@
+import { findHistoryAncestryRoute } from "#web/features/repository-history/history-ancestry-route";
 import type {
   HistoryOrderIndexReader,
   HistoryOrderNode,
+  HistoryParentEdge,
 } from "#web/features/repository-history/history-order.contract";
 
 export class HistoryOrderIndex implements HistoryOrderIndexReader {
@@ -23,20 +25,40 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
       this.timestamps[index] = node.timestamp;
       for (const oid of node.parents) {
         const parent = this.positions.get(oid);
-        if (parent !== undefined) parents.push(parent);
+        parents.push(parent ?? 0xffffffff);
       }
     }
     this.offsets[nodes.length] = parents.length;
     this.parents = Uint32Array.from(parents);
   }
 
+  ancestryRoute(roots: readonly string[], targetOid: string) {
+    return findHistoryAncestryRoute(
+      {
+        oids: this.oids,
+        positions: this.positions,
+        parents: this.parents,
+        offsets: this.offsets,
+      },
+      roots,
+      targetOid,
+    );
+  }
+
   order(
     roots: readonly string[],
     order: "topological" | "chronological",
     previous: readonly string[] = [],
+    ancestry: "all" | "first-parent" = "all",
+    additionalParentEdges: readonly HistoryParentEdge[] = [],
   ): readonly string[] {
     const reachable = new Uint8Array(this.oids.length);
     const children = new Uint32Array(this.oids.length);
+    const allowed = new Set(
+      additionalParentEdges.map(
+        ({ childOid, parentOid }) => `${childOid}\0${parentOid}`,
+      ),
+    );
     const pending = roots.flatMap((oid) => {
       const index = this.positions.get(oid);
       return index === undefined ? [] : [index];
@@ -47,11 +69,20 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
       if (index === undefined || reachable[index]) continue;
       reachable[index] = 1;
       reached.push(index);
-      this.forEachParent(index, (parent) => {
-        children[parent] = (children[parent] ?? 0) + 1;
-        if (!reachable[parent]) pending.push(parent);
+      this.forEachParent(index, (parent, first) => {
+        if (
+          !reachable[parent] &&
+          (ancestry === "all" ||
+            first ||
+            allowed.has(`${this.oids[index]}\0${this.oids[parent]}`))
+        )
+          pending.push(parent);
       });
     }
+    for (const index of reached)
+      this.forEachParent(index, (parent) => {
+        if (reachable[parent]) children[parent] = (children[parent] ?? 0) + 1;
+      });
     const successors = new Int32Array(this.oids.length).fill(-1);
     const priorPositions = new Int32Array(this.oids.length).fill(-1);
     let previousIndex: number | undefined;
@@ -93,7 +124,9 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
       if (oid === undefined)
         throw new Error("History ordering node is missing");
       result.push(oid);
-      this.forEachParent(index, release);
+      this.forEachParent(index, (parent) => {
+        if (reachable[parent]) release(parent);
+      });
       const successor = successors[index] ?? -1;
       if (successor >= 0) release(successor);
       index = ready.pop();
@@ -103,11 +136,15 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
     return result;
   }
 
-  private forEachParent(index: number, visit: (parent: number) => void) {
+  private forEachParent(
+    index: number,
+    visit: (parent: number, first: boolean) => void,
+  ) {
     const end = this.offsets[index + 1] ?? 0;
     for (let offset = this.offsets[index] ?? 0; offset < end; offset += 1) {
       const parent = this.parents[offset];
-      if (parent !== undefined) visit(parent);
+      if (parent !== undefined && parent !== 0xffffffff)
+        visit(parent, offset === this.offsets[index]);
     }
   }
 }

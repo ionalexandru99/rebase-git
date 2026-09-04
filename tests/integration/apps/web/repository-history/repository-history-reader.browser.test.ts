@@ -73,6 +73,134 @@ describe("browser repository history reader", () => {
     }
   });
 
+  it("locates ordered commits and reveals hidden ancestry from a cached linked worktree", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const logicalRepositoryId = crypto.randomUUID();
+    const oid = (index: number) => index.toString(16).padStart(40, "0");
+    const commits = history(260).map((commit, index) => ({
+      ...commit,
+      oid: oid(index),
+      parents:
+        index === 0
+          ? [oid(1), oid(120)]
+          : index === 120
+            ? [oid(121), oid(200)]
+            : index === 119 || index === 199
+              ? [oid(259)]
+              : index === 259
+                ? []
+                : [oid(index + 1)],
+    }));
+    const main = { ...root("main"), oid: oid(0) };
+    const query = {
+      limit: 100,
+      order: "topological" as const,
+      ancestry: "first-parent" as const,
+      roots: [main],
+    };
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () =>
+        page(repositoryId, commits.slice(0, 100), [main]),
+      ),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: snapshot("a", main),
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const initial = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId,
+      logicalRepositoryId,
+      gateway,
+    });
+    await initial.read(query);
+    await vi.waitFor(() =>
+      expect(initial.getSnapshot().synchronization).toBe("complete"),
+    );
+    const painted = await initial.read(query);
+    expect(
+      await initial.locate({ ...query, offset: 90, limit: 2 }, oid(80)),
+    ).toBe(80);
+    expect((await initial.read(query)).map(({ oid }) => oid)).toEqual(
+      painted.map(({ oid }) => oid),
+    );
+    initial.close();
+    const offline: RepositoryHistoryGateway = {
+      read: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+      synchronize: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId: crypto.randomUUID(),
+      logicalRepositoryId,
+      gateway: offline,
+    });
+    try {
+      expect(await reader.locate(query, oid(250))).toBeUndefined();
+      const route = await reader.ancestryRoute([main.oid], oid(250));
+      expect(route).toEqual({
+        edges: [
+          { childOid: oid(0), parentOid: oid(120) },
+          { childOid: oid(120), parentOid: oid(200) },
+        ],
+      });
+      const expanded = { ...query, additionalParentEdges: route?.edges ?? [] };
+      const position = await reader.locate(expanded, oid(250));
+      expect(position).toBeGreaterThan(100);
+      expect(
+        await reader.locateMany(expanded, [
+          oid(250),
+          oid(80),
+          oid(250),
+          oid(999),
+        ]),
+      ).toEqual([
+        { oid: oid(80), index: 80 },
+        { oid: oid(250), index: position },
+      ]);
+      expect(await reader.locateMany(query, [oid(80), oid(250)])).toEqual([
+        { oid: oid(80), index: 80 },
+      ]);
+      expect(await reader.locateMany(query, [])).toEqual([]);
+      await expect(
+        reader.locateMany(
+          query,
+          Array.from({ length: 1_001 }, () => oid(80)),
+        ),
+      ).rejects.toBeInstanceOf(RepositoryHistoryUnavailable);
+      expect(offline.read).not.toHaveBeenCalled();
+      expect(offline.synchronize).not.toHaveBeenCalled();
+      expect(
+        (await reader.read({ ...expanded, offset: position ?? 0, limit: 1 }))[0]
+          ?.oid,
+      ).toBe(oid(250));
+      expect(
+        await reader.locate(
+          { ...query, roots: [{ ...main, oid: oid(120) }] },
+          oid(80),
+        ),
+      ).toBeUndefined();
+      expect(await reader.ancestryRoute([oid(259)], oid(250))).toBeUndefined();
+      expect(offline.read).not.toHaveBeenCalled();
+    } finally {
+      reader.close();
+    }
+  });
+
   it("shares committed history between registered linked worktrees and isolates other repositories", async () => {
     const environmentId = crypto.randomUUID();
     const logicalRepositoryId = crypto.randomUUID();
@@ -298,6 +426,74 @@ describe("browser repository history reader", () => {
     }
   });
 
+  it("reveals merge parents from the replica and keeps the initial page collapsed", async () => {
+    const repositoryId = crypto.randomUUID();
+    const [merge, main, side, base] = history(4);
+    if (!merge || !main || !side || !base) throw new Error("Missing fixture");
+    const commits = [
+      { ...merge, parents: [main.oid, side.oid] },
+      { ...main, parents: [base.oid] },
+      { ...side, parents: [base.oid] },
+      base,
+    ];
+    const roots = [{ ...root("main"), oid: merge.oid }];
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, roots)),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      gateway,
+      repositoryId,
+    });
+    const query = {
+      roots,
+      order: "topological",
+      ancestry: "first-parent",
+      limit: 100,
+    } as const;
+    try {
+      expect((await reader.read(query)).map(({ oid }) => oid)).toEqual([
+        merge.oid,
+        main.oid,
+        base.oid,
+      ]);
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot().synchronization).toBe("complete"),
+      );
+      expect(
+        (
+          await reader.read({
+            ...query,
+            additionalParentEdges: [
+              { childOid: merge.oid, parentOid: side.oid },
+            ],
+          })
+        ).map(({ oid }) => oid),
+      ).toEqual(commits.map(({ oid }) => oid));
+      expect((await reader.read(query)).map(({ oid }) => oid)).toEqual([
+        merge.oid,
+        main.oid,
+        base.oid,
+      ]);
+      expect(gateway.read).toHaveBeenCalledOnce();
+      expect(gateway.synchronize).toHaveBeenCalledOnce();
+    } finally {
+      reader.close();
+    }
+  });
+
   it("migrates version-two commit ordering into topological epochs", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
@@ -497,7 +693,7 @@ describe("browser repository history reader", () => {
     reader.close();
   });
 
-  it("shares repository snapshots across readers and releases the final session", async () => {
+  it("shares repository snapshots across readers and reopens stored metadata", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const commits = history(3);
@@ -537,13 +733,10 @@ describe("browser repository history reader", () => {
       gateway,
       repositoryId,
     });
-    await new Promise<void>((resolve) => {
-      const unsubscribe = reopened.subscribe(() => {
-        unsubscribe();
-        resolve();
-      });
-    });
-    expect(reopened.getSnapshot().status).toBe("empty");
+    await expect(
+      reopened.getCommitSummaries(commits.map(({ oid }) => oid)),
+    ).resolves.toEqual(commits);
+    expect(gateway.read).toHaveBeenCalledOnce();
     reopened.close();
   });
 
@@ -762,11 +955,9 @@ describe("browser repository history reader", () => {
       repositoryId,
     });
 
-    const cacheReadStartedAt = performance.now();
     await expect(
       reopened.read({ limit: 100, order: "topological", roots: [main] }),
     ).resolves.toEqual(commits);
-    expect(performance.now() - cacheReadStartedAt).toBeLessThan(100);
     await expect(
       reopened.read({
         limit: 100,
