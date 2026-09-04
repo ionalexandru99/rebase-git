@@ -693,7 +693,7 @@ describe("browser repository history reader", () => {
     reader.close();
   });
 
-  it("shares repository snapshots across readers and releases the final session", async () => {
+  it("shares repository snapshots across readers and reopens stored metadata", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const commits = history(3);
@@ -733,13 +733,10 @@ describe("browser repository history reader", () => {
       gateway,
       repositoryId,
     });
-    await new Promise<void>((resolve) => {
-      const unsubscribe = reopened.subscribe(() => {
-        unsubscribe();
-        resolve();
-      });
-    });
-    expect(reopened.getSnapshot().status).toBe("empty");
+    await expect(
+      reopened.getCommitSummaries(commits.map(({ oid }) => oid)),
+    ).resolves.toEqual(commits);
+    expect(gateway.read).toHaveBeenCalledOnce();
     reopened.close();
   });
 
