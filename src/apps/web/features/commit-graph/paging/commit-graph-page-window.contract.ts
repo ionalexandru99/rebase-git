@@ -74,6 +74,7 @@ export interface CommitGraphPageWindow {
   readonly requestMove: (
     offset: number,
   ) => Promise<{ readonly oid: string; readonly offset: number } | undefined>;
+  readonly cancelNavigation: () => void;
   readonly jumpToOid: (oid: string) => Promise<
     | {
         readonly oid: string;

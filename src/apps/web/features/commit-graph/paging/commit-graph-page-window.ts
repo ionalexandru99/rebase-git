@@ -61,6 +61,7 @@ export function createCommitGraphPageWindow(
   let controller = new AbortController();
   let generation = 0;
   let navigationRequest = 0;
+  let jumping = false;
   let disposed = false;
   let replacing = false;
   let queue = Promise.resolve();
@@ -192,14 +193,30 @@ export function createCommitGraphPageWindow(
     }
   };
 
+  const cancelNavigation = () => {
+    const hadPendingMove = pendingMove !== undefined;
+    navigationRequest += 1;
+    pendingMove?.resolve(undefined);
+    pendingMove = undefined;
+    if (jumping) {
+      jumping = false;
+      controller.abort();
+      controller = new AbortController();
+      generation += 1;
+      loads.clear();
+      queue = Promise.resolve();
+      replacing = false;
+      publish({ loading: false });
+    } else if (hadPendingMove) publish();
+  };
+
   const loadInitial = async (
     query: RepositoryHistoryQuery,
     anchorOid?: string,
   ) => {
     if (disposed) return;
-    pendingMove?.resolve(undefined);
-    pendingMove = undefined;
-    const request = ++navigationRequest;
+    cancelNavigation();
+    const request = navigationRequest;
     let offset = 0;
     if (anchorOid !== undefined) {
       publish({ loading: true, error: undefined });
@@ -295,7 +312,7 @@ export function createCommitGraphPageWindow(
       epoch: number;
     },
   ) => {
-    pendingMove?.resolve(undefined);
+    cancelNavigation();
     if (disposed || replacing || !Number.isInteger(offset) || offset < 0) {
       pendingMove = undefined;
       publish();
@@ -381,8 +398,9 @@ export function createCommitGraphPageWindow(
 
   const jumpToOid = async (oid: string) => {
     if (view === undefined || disposed) return undefined;
-    pendingMove?.resolve(undefined);
-    pendingMove = undefined;
+    cancelNavigation();
+    const request = navigationRequest;
+    jumping = true;
     const signal = controller.signal;
     try {
       const target = await locateCommitGraphTarget(
@@ -391,11 +409,13 @@ export function createCommitGraphPageWindow(
         oid,
         signal,
       );
-      if (target === undefined) return undefined;
+      if (target === undefined || request !== navigationRequest)
+        return undefined;
       const { offset, query } = target;
       const expectedEpoch = generation + 1;
       await replace(query, Math.floor(offset / pageSize) * pageSize, oid);
       if (
+        request !== navigationRequest ||
         snapshot.error !== undefined ||
         disposed ||
         view?.epoch !== expectedEpoch
@@ -403,11 +423,13 @@ export function createCommitGraphPageWindow(
         return undefined;
       return { oid, offset, query };
     } catch (error) {
-      if (!signal.aborted)
+      if (!signal.aborted && request === navigationRequest)
         fail(0, error, async () => {
           await jumpToOid(oid);
         });
       return undefined;
+    } finally {
+      if (request === navigationRequest) jumping = false;
     }
   };
 
@@ -465,6 +487,7 @@ export function createCommitGraphPageWindow(
         epoch: snapshot.epoch,
       });
     },
+    cancelNavigation,
     jumpToOid,
     retry: async () => {
       await retryTask?.();

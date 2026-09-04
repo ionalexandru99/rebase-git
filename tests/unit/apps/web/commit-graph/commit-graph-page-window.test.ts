@@ -112,6 +112,24 @@ describe("commit graph page window", () => {
     window.dispose();
   });
 
+  it("keeps the newest keyboard move after cancelling an earlier pending page", async () => {
+    const commits = history(15);
+    const reader = fakeReader(commits);
+    const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
+    await window.loadInitial(query);
+    const pending = deferred<readonly RepositoryCommit[]>();
+    reader.read.mockReturnValueOnce(pending.promise);
+    const first = window.requestMove(5);
+    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(2));
+    window.cancelNavigation();
+    const latest = window.requestMove(7);
+    await expect(first).resolves.toBeUndefined();
+    pending.resolve(commits.slice(5, 10));
+    await expect(latest).resolves.toEqual({ oid: oid(7), offset: 7 });
+    expect(reader.read).toHaveBeenCalledTimes(2);
+    window.dispose();
+  });
+
   it("follows a lane across intervening pages and restores an evicted previous node", async () => {
     const commits = history(30).map((commit, index) =>
       index === 4

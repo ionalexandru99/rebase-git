@@ -75,6 +75,86 @@ describe("commit graph", () => {
       .toHaveAttribute("aria-selected", "true");
   });
 
+  it("keeps a later pointer selection when a pending keyboard page arrives", async () => {
+    const commits = history(130);
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    let release: ((value: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    grid.element().focus();
+    await userEvent.keyboard("{End}{ArrowDown}");
+    await vi.waitFor(() => expect(release).toBeDefined());
+    await grid.getByRole("row", { name: /^Commit 98,/ }).click();
+    release?.(commits.slice(100, 200));
+    await expect.element(grid).toHaveAttribute("aria-rowcount", "130");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 98,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowUp}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 97,/ }))
+      .toHaveAttribute("aria-selected", "true");
+  });
+
+  it.each(["locate", "page"] as const)(
+    "cancels an older direct navigation waiting on %s when a row is clicked",
+    async (phase) => {
+      const commits = history(400);
+      const reader = historyReader({ commits, status: "ready" });
+      const handle = createRef<CommitGraphHandle>();
+      const screen = await render(
+        <div style={{ height: 520, width: 900 }}>
+          <CommitGraph
+            ref={handle}
+            reader={reader}
+            repositoryName="Pending jump"
+            roots={[{ name: "main", type: "branch", oid: historyOid(0) }]}
+          />
+        </div>,
+      );
+      const grid = screen.getByRole("grid");
+      await expect
+        .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+        .toBeVisible();
+      let release: (() => void) | undefined;
+      if (phase === "locate")
+        reader.locate.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = () => resolve(350);
+            }),
+        );
+      else
+        reader.read.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = () => resolve(commits.slice(300));
+            }),
+        );
+      const jump = handle.current?.navigateToOid(historyOid(350));
+      await vi.waitFor(() => expect(release).toBeDefined());
+      await grid.getByRole("row", { name: /^Commit 1,/ }).click();
+      release?.();
+      await jump;
+      await expect
+        .element(grid.getByRole("row", { name: /^Commit 1,/ }))
+        .toHaveAttribute("aria-selected", "true");
+      await userEvent.keyboard("{ArrowDown}");
+      await expect
+        .element(grid.getByRole("row", { name: /^Commit 2,/ }))
+        .toHaveAttribute("aria-selected", "true");
+    },
+  );
+
   it("continues same-lane keyboard navigation across a pending page", async () => {
     const commits = history(130);
     const reader = historyReader({ commits, status: "ready" });

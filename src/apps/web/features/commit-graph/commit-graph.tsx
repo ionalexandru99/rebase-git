@@ -148,9 +148,18 @@ export function CommitGraph({
   const labelsByOid = useMemo(() => groupRefLabels(refTargets), [refTargets]);
   const gutterWidth = commitGraphGutterWidth(laneRows);
 
+  const navigationIntent = useRef(0);
+  const beginNavigation = () => {
+    const intent = ++navigationIntent.current;
+    paging.engine?.cancelNavigation();
+    setPendingNavigation(undefined);
+    return intent;
+  };
+
   const toggleMerge = (oid: string, expand: boolean) => {
     const commit = commits.find((candidate) => candidate.oid === oid);
     if (commit === undefined || commit.parents.length < 2) return;
+    beginNavigation();
     navigation.select(oid, "activate");
     setExpandedMerges((current) => {
       if (expand === current.has(oid)) return current;
@@ -178,15 +187,19 @@ export function CommitGraph({
     startOffset: paging.snapshot.startOffset,
     viewEpoch: paging.snapshot.epoch,
     oldestLoadedOffset: Math.max(0, paging.snapshot.knownEndOffset - 1),
+    onSelectionIntent: beginNavigation,
     requestLaneMove: (offset, direction) => {
+      const intent = beginNavigation();
       void paging.engine?.requestLaneMove(offset, direction).then((target) => {
-        if (target !== undefined)
+        if (intent === navigationIntent.current && target !== undefined)
           setPendingNavigation({ ...target, mode: "replace" });
       });
     },
     requestMove: (offset, mode) => {
+      const intent = beginNavigation();
       void paging.engine?.requestMove(offset).then((target) => {
-        if (target !== undefined) setPendingNavigation({ ...target, mode });
+        if (intent === navigationIntent.current && target !== undefined)
+          setPendingNavigation({ ...target, mode });
       });
     },
     scrollToIndex: (index) =>
@@ -204,7 +217,9 @@ export function CommitGraph({
   }, [pendingNavigation, visibleOids, navigation.select]);
   useImperativeHandle(ref, () => ({
     navigateToOid: async (oid) => {
+      const intent = beginNavigation();
       const target = await paging.engine?.jumpToOid(oid);
+      if (intent !== navigationIntent.current) return;
       if (target === undefined)
         throw new Error("This commit is outside the selected history.");
       setExpandedMerges((current) => {
@@ -492,6 +507,7 @@ export function CommitGraph({
                             scrollRef.current?.focus();
                           }}
                           onContextMenu={() => {
+                            beginNavigation();
                             setMenuOid(commit.oid);
                             navigation.select(
                               commit.oid,

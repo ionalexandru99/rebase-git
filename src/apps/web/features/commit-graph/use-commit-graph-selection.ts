@@ -22,6 +22,7 @@ export function useCommitGraphSelection({
   viewEpoch = 0,
   requestMove,
   requestLaneMove,
+  onSelectionIntent,
 }: {
   readonly reader:
     | Pick<RepositoryHistoryReader, "read" | "locateMany">
@@ -37,6 +38,7 @@ export function useCommitGraphSelection({
   readonly startOffset?: number;
   readonly oldestLoadedOffset?: number;
   readonly viewEpoch?: number;
+  readonly onSelectionIntent?: () => void;
   readonly requestLaneMove?: (offset: number, direction: -1 | 1) => void;
   readonly requestMove?: (
     offset: number,
@@ -120,19 +122,23 @@ export function useCommitGraphSelection({
       oid !== undefined
     ) {
       event.preventDefault();
+      onSelectionIntent?.();
       select(
         oid,
         event.key === " " ? (event.shiftKey ? "range" : "toggle") : "replace",
       );
     } else if (event.key === "Escape") {
       event.preventDefault();
+      onSelectionIntent?.();
       model.clear();
     } else if (mod && event.key.toLowerCase() === "a") {
       event.preventDefault();
+      onSelectionIntent?.();
       model.selectAll();
     }
   };
   const onClick = (oid: string, event: MouseEvent) => {
+    onSelectionIntent?.();
     select(
       oid,
       event.shiftKey
