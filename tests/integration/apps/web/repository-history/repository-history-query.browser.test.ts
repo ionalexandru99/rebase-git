@@ -2,6 +2,7 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
 import {
+  locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryHistory,
 } from "#web/features/repository-history/repository-history-query";
@@ -12,6 +13,42 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("local ordered history pages", () => {
+  it("locates a batch without reading commit metadata once the ordered scope is cached", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const query = {
+      roots: [root("main", "merge")],
+      ancestry: "first-parent" as const,
+      order: "topological" as const,
+      limit: 100,
+    };
+    await locateRepositoryHistoryCommits(
+      fixture.environmentId,
+      fixture.repositoryId,
+      query,
+      [oid("merge")],
+      cache,
+    );
+    const transactions = vi.spyOn(IDBDatabase.prototype, "transaction");
+    try {
+      expect(
+        await locateRepositoryHistoryCommits(
+          fixture.environmentId,
+          fixture.repositoryId,
+          query,
+          [oid("base"), oid("left"), oid("right"), oid("left")],
+          cache,
+        ),
+      ).toEqual([
+        { oid: oid("left"), index: 1 },
+        { oid: oid("base"), index: 2 },
+      ]);
+      expect(transactions).not.toHaveBeenCalled();
+    } finally {
+      transactions.mockRestore();
+    }
+  });
+
   it("shares one cold index scan across concurrent readers and retries after a scan failure", async () => {
     const fixture = await seed("main", false);
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };

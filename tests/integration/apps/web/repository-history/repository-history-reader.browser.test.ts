@@ -161,6 +161,27 @@ describe("browser repository history reader", () => {
       const expanded = { ...query, additionalParentEdges: route?.edges ?? [] };
       const position = await reader.locate(expanded, oid(250));
       expect(position).toBeGreaterThan(100);
+      expect(
+        await reader.locateMany(expanded, [
+          oid(250),
+          oid(80),
+          oid(250),
+          oid(999),
+        ]),
+      ).toEqual([
+        { oid: oid(80), index: 80 },
+        { oid: oid(250), index: position },
+      ]);
+      expect(await reader.locateMany(query, [oid(80), oid(250)])).toEqual([
+        { oid: oid(80), index: 80 },
+      ]);
+      expect(await reader.locateMany(query, [])).toEqual([]);
+      await expect(
+        reader.locateMany(
+          query,
+          Array.from({ length: 1_001 }, () => oid(80)),
+        ),
+      ).rejects.toBeInstanceOf(RepositoryHistoryUnavailable);
       expect(offline.read).not.toHaveBeenCalled();
       expect(offline.synchronize).not.toHaveBeenCalled();
       expect(

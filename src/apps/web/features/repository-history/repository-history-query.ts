@@ -17,7 +17,10 @@ import {
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type {
+  RepositoryHistoryPosition,
+  RepositoryHistoryQuery,
+} from "#web/features/repository-history/repository-history-reader.contract";
 import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
 
 export async function locateRepositoryHistoryCommit(
@@ -27,6 +30,52 @@ export async function locateRepositoryHistoryCommit(
   oid: string,
   cache: HistoryOrderCache,
 ): Promise<number | undefined> {
+  return (
+    await locateRepositoryHistoryCommits(
+      environmentId,
+      repositoryId,
+      query,
+      [oid],
+      cache,
+    )
+  )[0]?.index;
+}
+
+export async function locateRepositoryHistoryCommits(
+  environmentId: string,
+  repositoryId: string,
+  query: RepositoryHistoryQuery,
+  oids: readonly string[],
+  cache: HistoryOrderCache,
+): Promise<readonly RepositoryHistoryPosition[]> {
+  if (oids.length > 1_000) throw new Error("Query is too large");
+  if (oids.length === 0) return [];
+  const ordered = await resolveRepositoryHistoryOrder(
+    environmentId,
+    repositoryId,
+    query,
+    cache,
+  );
+  if (ordered === undefined) return [];
+  const remaining = new Set(oids);
+  const result: RepositoryHistoryPosition[] = [];
+  for (
+    let index = 0;
+    index < ordered.length && remaining.size > 0;
+    index += 1
+  ) {
+    const oid = ordered[index];
+    if (oid !== undefined && remaining.delete(oid)) result.push({ oid, index });
+  }
+  return result;
+}
+
+async function resolveRepositoryHistoryOrder(
+  environmentId: string,
+  repositoryId: string,
+  query: RepositoryHistoryQuery,
+  cache: HistoryOrderCache,
+): Promise<readonly string[] | undefined> {
   const revision = cache.revision;
   const key = historyOrderScopeKey(query);
   const roots = normalizedOids(query.roots.map(({ oid }) => oid));
@@ -67,8 +116,7 @@ export async function locateRepositoryHistoryCommit(
       complete: true,
     });
   }
-  const position = ordered.indexOf(oid);
-  return position < 0 ? undefined : position;
+  return cache.revision === revision ? ordered : undefined;
 }
 
 export function readRepositoryHistory(

@@ -2,6 +2,7 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import type { HistoryAncestryRoute } from "#web/features/repository-history/history-order.contract";
 import type {
   RepositoryHistoryGateway,
+  RepositoryHistoryPosition,
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
   RepositoryHistoryRefTarget,
@@ -125,6 +126,10 @@ function connectBrowserRepositoryHistoryReader(
     }
     if (message._tag === "HistoryPositionResult") {
       request.resolve(message.position);
+      return;
+    }
+    if (message._tag === "HistoryPositionsResult") {
+      request.resolve(message.positions);
       return;
     }
     request.resolve(message.commits);
@@ -262,6 +267,13 @@ function connectBrowserRepositoryHistoryReader(
   }
 
   return {
+    locateMany: (query, oids) =>
+      request<readonly RepositoryHistoryPosition[]>({
+        _tag: "LocateHistoryCommits",
+        query,
+        oids,
+        requestId: createRepositoryHistoryRequestId(),
+      }),
     ancestryRoute: (roots, oid) =>
       request<HistoryAncestryRoute | undefined>({
         _tag: "GetAncestryRoute",

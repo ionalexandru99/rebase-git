@@ -8,6 +8,7 @@ import { selectHistoryPage } from "#web/features/repository-history/history-page
 import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
 import {
   locateRepositoryHistoryCommit,
+  locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryCommits,
   readRepositoryHistory,
@@ -130,6 +131,21 @@ async function handleReaderMessage(
     return;
   }
   switch (message._tag) {
+    case "LocateHistoryCommits": {
+      const positions = await locateRepositoryHistoryCommits(
+        reader.connection.environmentId,
+        reader.connection.logicalRepositoryId,
+        message.query,
+        message.oids,
+        replica.orderCache,
+      );
+      post(reader, {
+        _tag: "HistoryPositionsResult",
+        positions,
+        requestId: message.requestId,
+      });
+      return;
+    }
     case "GetAncestryRoute": {
       if (message.roots.length > 256) throw new Error("Query is too large");
       const revision = replica.orderCache.revision;

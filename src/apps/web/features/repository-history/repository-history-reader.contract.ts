@@ -31,7 +31,16 @@ export interface RepositoryHistoryQuery {
   readonly roots: ReadRepositoryHistory["roots"];
 }
 
+export interface RepositoryHistoryPosition {
+  readonly oid: string;
+  readonly index: number;
+}
+
 export interface RepositoryHistoryReader {
+  readonly locateMany: (
+    query: RepositoryHistoryQuery,
+    oids: readonly string[],
+  ) => Promise<readonly RepositoryHistoryPosition[]>;
   readonly ancestryRoute: (
     roots: readonly string[],
     oid: string,
