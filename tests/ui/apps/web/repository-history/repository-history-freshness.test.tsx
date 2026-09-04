@@ -216,6 +216,9 @@ function Controls({
 
 function createReader() {
   return {
+    ancestryRoute: async () => undefined,
+    locate: async () => undefined,
+    locateMany: async () => [],
     close: vi.fn(),
     fetch: vi.fn<RepositoryHistoryReader["fetch"]>(async () => fresh),
     configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(

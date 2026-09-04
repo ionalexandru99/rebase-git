@@ -81,6 +81,7 @@ export function storeRepositoryHistoryPage(
       ...emptyStoredRepository(environmentId, repositoryId, page.objectFormat),
       ...current,
       cachedPage: {
+        exhausted: page.commits.length < query.limit,
         scopeKey: historyOrderScopeKey(query),
         oids: page.commits.map((commit) => commit.oid),
         order: query.order,
@@ -284,11 +285,15 @@ export function completeStoredRepositoryHistory(
     repositories.put({
       ...withoutPendingSynchronization,
       completion,
-      ...(cachedPage !== undefined &&
-      snapshot !== undefined &&
-      current.completion?.snapshot?.id === snapshot.id
-        ? { cachedPage }
-        : {}),
+      ...(cachedPage === undefined
+        ? {}
+        : {
+            cachedPage:
+              snapshot !== undefined &&
+              current.completion?.snapshot?.id === snapshot.id
+                ? cachedPage
+                : { ...cachedPage, exhausted: false },
+          }),
       ...(snapshot === undefined ? {} : { refTargets: snapshot.refTargets }),
     } satisfies StoredRepository);
     await completed;
