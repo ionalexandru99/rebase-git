@@ -19,7 +19,6 @@ import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
   RepositoryHistoryStorageUnavailable,
-  RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import {
   clearHistoryCache,
@@ -37,6 +36,73 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("history cache storage", () => {
+  it.each([false, true])(
+    "initializes a repository opened during clear-all after it settles (failure=%s)",
+    async (fail) => {
+      const firstFixture = await seed();
+      const secondFixture = await seed();
+      const name = crypto.randomUUID();
+      const control = new BroadcastChannel(`history-clear-${name}`);
+      const waiting = Promise.withResolvers<void>();
+      const connecting = Promise.withResolvers<void>();
+      control.onmessage = (message) => {
+        if (message.data === "waiting") waiting.resolve();
+        if (message.data === "connecting") connecting.resolve();
+      };
+      const worker = new SharedWorker(
+        new URL("./fixtures/history-cache-clear-worker.ts", import.meta.url),
+        { type: "module", name },
+      );
+      const first = createBrowserRepositoryHistoryReader({
+        environmentId: firstFixture.environmentId,
+        repositoryId: firstFixture.repositoryId,
+        gateway: gatewayFor(firstFixture),
+        worker,
+      });
+      await first.getRefTargets();
+      const clearing = first.manageCache("clear-all");
+      const outcome = fail
+        ? expect(clearing).rejects.toBeInstanceOf(
+            RepositoryHistoryStorageUnavailable,
+          )
+        : expect(clearing).resolves.toBeUndefined();
+      await waiting.promise;
+      const gateway = gatewayFor(secondFixture);
+      const second = createBrowserRepositoryHistoryReader({
+        environmentId: secondFixture.environmentId,
+        repositoryId: secondFixture.repositoryId,
+        gateway,
+        worker,
+      });
+      const refs = second.getRefTargets();
+      await connecting.promise;
+      control.postMessage(fail ? "fail" : "continue");
+      try {
+        await outcome;
+        await expect(refs).resolves.toEqual(fail ? secondFixture.roots : []);
+        await expect(
+          second.read({
+            limit: 100,
+            order: "topological",
+            roots: secondFixture.roots,
+          }),
+        ).resolves.toEqual(fail ? secondFixture.commits : []);
+        expect(gateway.read).not.toHaveBeenCalled();
+        if (!fail)
+          expect(second.getSnapshot()).toMatchObject({
+            status: "empty",
+            synchronizedCommitCount: 0,
+            synchronization: "idle",
+          });
+      } finally {
+        first.close();
+        second.close();
+        control.close();
+        worker.port.close();
+      }
+    },
+  );
+
   it("restores every reader after a failed cache clear", async () => {
     const fixture = await seed();
     const worker = new SharedWorker(
@@ -179,7 +245,7 @@ describe("history cache storage", () => {
     await first.manageCache("remove");
     await vi.waitFor(async () => {
       await expect(second.getCommitSummaries([])).rejects.toBeInstanceOf(
-        RepositoryHistoryUnavailable,
+        RepositoryHistoryOffline,
       );
     });
     expect(
@@ -190,6 +256,19 @@ describe("history cache storage", () => {
     ).toBeUndefined();
     first.close();
     second.close();
+    const reopened = createBrowserRepositoryHistoryReader(options);
+    try {
+      await expect(
+        reopened.read({
+          limit: 100,
+          order: "topological",
+          roots: fixture.roots,
+        }),
+      ).resolves.toEqual(fixture.commits);
+      expect(options.gateway.read).toHaveBeenCalledOnce();
+    } finally {
+      reopened.close();
+    }
   });
 
   it("rebuild failure keeps the reader recoverable", async () => {
@@ -526,48 +605,55 @@ describe("history cache storage", () => {
     }
   });
 
-  it("recognizes incompatible repository records without damaging a compatible cache", async () => {
-    const first = await seed();
-    const second = await seed();
-    await withRepositoryHistoryDatabase(indexedDB, async (database) => {
-      const transaction = database.transaction(
-        repositoryStoreName,
-        "readwrite",
-      );
-      const completed = transactionCompleted(transaction);
-      const store = transaction.objectStore(repositoryStoreName);
-      const record = await requestResult<StoredRepository>(
-        store.get(first.key),
-      );
-      store.put({ ...record, cacheFormatVersion: 99 });
-      await completed;
-    });
-    expect(
-      await markHistoryCacheOpened(first.environmentId, first.repositoryId),
-    ).toBe(false);
-    expect(
-      await markHistoryCacheOpened(second.environmentId, second.repositoryId),
-    ).toBe(true);
-    const reader = createBrowserRepositoryHistoryReader({
-      environmentId: first.environmentId,
-      repositoryId: first.repositoryId,
-      gateway: gatewayFor(first),
-    });
-    await expect(reader.getRefTargets()).resolves.toEqual([]);
-    expect(reader.getSnapshot().historyRevision).toBeGreaterThan(0);
-    await expect(
-      reader.getCommitSummaries([first.orphan.oid]),
-    ).resolves.toEqual([]);
-    expect(
-      await markHistoryCacheOpened(first.environmentId, first.repositoryId),
-    ).toBe(true);
-    expect(
-      await readRepositoryCommits(second.environmentId, second.repositoryId, [
-        second.orphan.oid,
-      ]),
-    ).toEqual([second.orphan]);
-    reader.close();
-  });
+  it.each([
+    { cacheFormatVersion: 99 },
+    { progress: null },
+    { completion: null },
+  ])(
+    "recovers incompatible repository metadata %o without damaging a compatible cache",
+    async (corruption) => {
+      const first = await seed();
+      const second = await seed();
+      await withRepositoryHistoryDatabase(indexedDB, async (database) => {
+        const transaction = database.transaction(
+          repositoryStoreName,
+          "readwrite",
+        );
+        const completed = transactionCompleted(transaction);
+        const store = transaction.objectStore(repositoryStoreName);
+        const record = await requestResult<StoredRepository>(
+          store.get(first.key),
+        );
+        store.put({ ...record, ...corruption });
+        await completed;
+      });
+      expect(
+        await markHistoryCacheOpened(first.environmentId, first.repositoryId),
+      ).toBe(false);
+      expect(
+        await markHistoryCacheOpened(second.environmentId, second.repositoryId),
+      ).toBe(true);
+      const reader = createBrowserRepositoryHistoryReader({
+        environmentId: first.environmentId,
+        repositoryId: first.repositoryId,
+        gateway: gatewayFor(first),
+      });
+      await expect(reader.getRefTargets()).resolves.toEqual([]);
+      expect(reader.getSnapshot().historyRevision).toBeGreaterThan(0);
+      await expect(
+        reader.getCommitSummaries([first.orphan.oid]),
+      ).resolves.toEqual([]);
+      expect(
+        await markHistoryCacheOpened(first.environmentId, first.repositoryId),
+      ).toBe(true);
+      expect(
+        await readRepositoryCommits(second.environmentId, second.repositoryId, [
+          second.orphan.oid,
+        ]),
+      ).toEqual([second.orphan]);
+      reader.close();
+    },
+  );
 });
 
 async function seed(repositoryId = crypto.randomUUID()) {

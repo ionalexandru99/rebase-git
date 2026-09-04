@@ -2,6 +2,66 @@ import { expect, it } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 
+it.each(["clear", "remove"] as const)(
+  "preserves %s when the document returns from the back-forward cache",
+  async (action) => {
+    const activeReader = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      repositoryId: crypto.randomUUID(),
+      gateway: {
+        read: async () => {
+          throw new RepositoryHistoryOffline();
+        },
+        synchronize: async () => {
+          throw new RepositoryHistoryOffline();
+        },
+      },
+    });
+    await activeReader.getRefTargets();
+    const events: string[] = [];
+    const channelName = crypto.randomUUID();
+    const channel = new BroadcastChannel(channelName);
+    channel.onmessage = (event: MessageEvent<string>) =>
+      events.push(event.data);
+    const query = new URLSearchParams({
+      environment: crypto.randomUUID(),
+      repository: crypto.randomUUID(),
+      events: channelName,
+      name: "cache",
+      cacheAction: action,
+    });
+    window.open(
+      `${location.origin}/tests/integration/apps/web/repository-history/fixtures/history-reader-page.html?${query}`,
+      "_blank",
+      "noopener",
+    );
+    try {
+      await expect
+        .poll(() => events, { timeout: 5_000 })
+        .toContain("cache:committed");
+      channel.postMessage(action);
+      await expect.poll(() => events).toContain("cache:cache-changed");
+      channel.postMessage("navigate");
+      await expect
+        .poll(() => events, { timeout: 5_000 })
+        .toContain("cache:pageshow:true");
+      await expect
+        .poll(() => events, { timeout: 5_000 })
+        .toContain(
+          `cache:restored-read:${action === "clear" ? "0" : "closed"}`,
+        );
+      expect(
+        events.filter((event) => event === "cache:downloaded"),
+      ).toHaveLength(1);
+    } finally {
+      channel.postMessage("close");
+      channel.close();
+      activeReader.close();
+    }
+  },
+  20_000,
+);
+
 it.each([false, true])(
   "hands synchronization to another tab on close, with pagehide suppressed: %s",
   async (suppressPageHide) => {

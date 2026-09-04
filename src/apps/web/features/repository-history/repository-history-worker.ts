@@ -48,6 +48,7 @@ import type {
 
 const repositories = new Map<string, RepositoryReplica>();
 let cacheManagement: Promise<void> = Promise.resolve();
+let clearingAllCaches: Promise<boolean> | undefined;
 const worker = self as unknown as {
   onconnect: ((event: MessageEvent) => void) | null;
 };
@@ -63,16 +64,26 @@ worker.onconnect = (event) => {
     if (message.data._tag !== "ConnectRepositoryHistoryReader") {
       return;
     }
-    connectReader(message.data);
+    if (clearingAllCaches === undefined) connectReader(message.data);
+    else
+      void clearingAllCaches.then((cleared) =>
+        connectReader(message.data, cleared),
+      );
   };
   sharedPort.start();
 };
 
-function connectReader(connection: ConnectRepositoryHistoryReader) {
+function connectReader(
+  connection: ConnectRepositoryHistoryReader,
+  cachePaused = false,
+) {
   const key = `${connection.environmentId}\0${connection.logicalRepositoryId}`;
+  const existing = repositories.get(key);
   const replica =
-    repositories.get(key) ??
+    existing ??
     createReplica(connection.environmentId, connection.logicalRepositoryId);
+  if (cachePaused || (existing === undefined && connection.cachePaused))
+    replica.cachePaused = true;
   const reader: ConnectedReader = {
     closed: false,
     connection,
@@ -694,6 +705,7 @@ function publishSnapshot(replica: RepositoryReplica) {
 function postSnapshot(reader: ConnectedReader, replica: RepositoryReplica) {
   post(reader, {
     _tag: "SnapshotChanged",
+    cachePaused: replica.cachePaused ?? false,
     ...(replica.failure === undefined ? {} : { failure: replica.failure }),
     revision: replica.revision,
     historyRevision: replica.orderCache.revision,
@@ -792,10 +804,29 @@ function scheduleCacheManagement(
   action: RepositoryHistoryCacheAction,
 ) {
   const operation = cacheManagement.then(() =>
-    manageCache(reader, replica, action),
+    runCacheManagement(reader, replica, action),
   );
   cacheManagement = operation.catch(() => undefined);
   return operation;
+}
+
+async function runCacheManagement(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+  action: RepositoryHistoryCacheAction,
+) {
+  if (action !== "clear-all") return manageCache(reader, replica, action);
+  const completion = Promise.withResolvers<boolean>();
+  clearingAllCaches = completion.promise;
+  try {
+    await manageCache(reader, replica, action);
+    completion.resolve(true);
+  } catch (error) {
+    completion.resolve(false);
+    throw error;
+  } finally {
+    clearingAllCaches = undefined;
+  }
 }
 
 async function manageCache(
@@ -858,6 +889,7 @@ async function manageCache(
   }
   for (const target of targets) {
     invalidateStoredHistory(target, true);
+    target.cachePaused = action !== "rebuild";
     target.reconciled = false;
     target.commits.clear();
     target.visibleOids = [];
@@ -871,7 +903,6 @@ async function manageCache(
     publishSnapshot(target);
   }
   if (action === "rebuild") {
-    replica.cachePaused = false;
     const query = reader.lastQuery;
     if (query !== undefined) {
       await handleReaderMessage(reader, replica, {

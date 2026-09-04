@@ -13,6 +13,7 @@ import {
 import type { RepositoryHistoryCacheDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 
 const batchSize = 256;
+const encoder = new TextEncoder();
 
 export function readHistoryCacheRecords(indexedDB = globalThis.indexedDB) {
   return withRepositoryHistoryDatabase(indexedDB, async (database) => {
@@ -39,9 +40,7 @@ export async function describeHistoryCaches(
       record,
       (commit) => {
         commitCount += 1;
-        estimatedBytes += new TextEncoder().encode(
-          JSON.stringify(commit),
-        ).byteLength;
+        estimatedBytes += encoder.encode(JSON.stringify(commit)).byteLength;
       },
       indexedDB,
     );
@@ -72,13 +71,16 @@ export function isCompatibleHistoryCache(record: StoredRepository) {
     record.refTargets.every(
       (ref) => typeof ref?.oid === "string" && typeof ref?.name === "string",
     ) &&
-    record.progress !== undefined &&
+    record.progress !== null &&
+    typeof record.progress === "object" &&
     Number.isSafeInteger(record.progress.committedCommitCount) &&
     record.progress.committedCommitCount >= 0 &&
     Number.isSafeInteger(record.progress.nextBatchSequence) &&
     record.progress.nextBatchSequence >= 0 &&
     (record.completion === undefined ||
-      (Number.isSafeInteger(record.completion.commitCount) &&
+      (record.completion !== null &&
+        typeof record.completion === "object" &&
+        Number.isSafeInteger(record.completion.commitCount) &&
         record.completion.commitCount >= 0))
   );
 }

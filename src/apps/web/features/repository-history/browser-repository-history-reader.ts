@@ -39,13 +39,25 @@ interface BrowserRepositoryHistoryReaderOptions {
 export function createBrowserRepositoryHistoryReader(
   options: BrowserRepositoryHistoryReaderOptions,
 ): RepositoryHistoryReader {
-  return maintainRepositoryHistoryReader(() =>
-    connectBrowserRepositoryHistoryReader(options),
+  let cachePaused = false;
+  const reader: RepositoryHistoryReader = maintainRepositoryHistoryReader(() =>
+    connectBrowserRepositoryHistoryReader(
+      options,
+      () => reader.close(),
+      (paused) => {
+        cachePaused = paused;
+      },
+      cachePaused,
+    ),
   );
+  return reader;
 }
 
 function connectBrowserRepositoryHistoryReader(
   options: BrowserRepositoryHistoryReaderOptions,
+  onRemoved: () => void,
+  onCachePaused: (paused: boolean) => void,
+  cachePaused: boolean,
 ): RepositoryHistoryReader {
   const worker = options.worker ?? acquireSharedWorker();
   requestPersistentStorage();
@@ -66,7 +78,7 @@ function connectBrowserRepositoryHistoryReader(
   port.onmessage = (event: MessageEvent<RepositoryHistoryWorkerResponse>) => {
     const message = event.data;
     if (message._tag === "CacheRemoved") {
-      reader.close();
+      onRemoved();
       return;
     }
     if (message._tag === "LoadHistory") {
@@ -99,6 +111,7 @@ function connectBrowserRepositoryHistoryReader(
       return;
     }
     if (message._tag === "SnapshotChanged") {
+      onCachePaused(message.cachePaused ?? false);
       snapshot = {
         ...(message.failure === undefined
           ? {}
@@ -155,6 +168,7 @@ function connectBrowserRepositoryHistoryReader(
       _tag: "ConnectRepositoryHistoryReader",
       environmentId: options.environmentId,
       logicalRepositoryId: options.logicalRepositoryId ?? options.repositoryId,
+      cachePaused,
       ...(lifetimeLock === undefined ? {} : { lifetimeLock }),
       port: channel.port2,
       repositoryId: options.repositoryId,

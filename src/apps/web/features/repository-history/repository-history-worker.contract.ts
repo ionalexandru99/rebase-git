@@ -160,6 +160,7 @@ export type RepositoryHistoryWorkerResponse =
     }
   | {
       readonly _tag: "SnapshotChanged";
+      readonly cachePaused?: boolean;
       readonly historyRevision: number;
       readonly revision: number;
       readonly status: "empty" | "error" | "loading" | "ready";
@@ -170,6 +171,7 @@ export type RepositoryHistoryWorkerResponse =
 
 export interface ConnectRepositoryHistoryReader {
   readonly _tag: "ConnectRepositoryHistoryReader";
+  readonly cachePaused?: boolean;
   readonly environmentId: string;
   readonly logicalRepositoryId: string;
   readonly lifetimeLock?: string;

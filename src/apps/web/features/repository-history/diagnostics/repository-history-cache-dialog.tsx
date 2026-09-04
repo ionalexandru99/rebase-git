@@ -30,8 +30,8 @@ const actions: Record<
   clear: {
     label: "Clear cache",
     description:
-      "Clear this repository’s cached history and pause synchronization. Rebuild when you want to download it again.",
-    result: "Cache cleared. Synchronization is paused until you rebuild.",
+      "Clear this repository’s cached history and pause synchronization. Rebuild or reopen the repository to load history.",
+    result: "Cache cleared. Rebuild or reopen the repository to load history.",
   },
   rebuild: {
     label: "Rebuild cache",
@@ -48,8 +48,9 @@ const actions: Record<
   "clear-all": {
     label: "Clear all caches",
     description:
-      "Clear cached history for every repository, including open repositories. Synchronization stays paused until each cache is rebuilt.",
-    result: "All history caches cleared. Rebuild to resume synchronization.",
+      "Clear cached history for every repository, including open repositories. Rebuild or reopen a repository to load its history.",
+    result:
+      "All history caches cleared. Rebuild or reopen a repository to load history.",
   },
 };
 
