@@ -19,8 +19,8 @@ import {
 
 interface WatchedRepository {
   readonly controller: AbortController;
-  readonly path: string;
-  readonly subscribers: Set<(freshness: RepositoryFreshness) => void>;
+  path: string;
+  readonly subscribers: Map<(freshness: RepositoryFreshness) => void, string>;
   freshness: RepositoryFreshness;
   fetch?: Promise<RepositoryFreshness>;
   timer?: ReturnType<typeof setTimeout>;
@@ -57,7 +57,7 @@ function createRepositoryFreshnessService(dependencies: {
   let closed = false;
 
   const publish = (repository: WatchedRepository) => {
-    for (const subscriber of repository.subscribers)
+    for (const subscriber of repository.subscribers.keys())
       subscriber(repository.freshness);
   };
   const stop = (repository: WatchedRepository) => {
@@ -172,7 +172,7 @@ function createRepositoryFreshnessService(dependencies: {
         const repository: WatchedRepository = {
           controller: new AbortController(),
           path: entry.path,
-          subscribers: new Set(),
+          subscribers: new Map(),
           freshness: {
             fetching: false,
             stale: false,
@@ -232,6 +232,8 @@ function createRepositoryFreshnessService(dependencies: {
             signal.removeEventListener("abort", release);
             pending.count -= 1;
             repository.subscribers.delete(subscriber);
+            const survivingPath = repository.subscribers.values().next().value;
+            if (survivingPath !== undefined) repository.path = survivingPath;
             if (pending.count !== 0) return;
             if (repositories.get(key) === pending) repositories.delete(key);
             for (const [alias, logicalId] of aliases)
@@ -242,7 +244,8 @@ function createRepositoryFreshnessService(dependencies: {
             release();
             throw missingRepository(repositoryId);
           }
-          repository.subscribers.add(subscriber);
+          if (repository.subscribers.size === 0) repository.path = entry.path;
+          repository.subscribers.set(subscriber, entry.path);
           signal.addEventListener("abort", release, { once: true });
           subscriber(repository.freshness);
           if (

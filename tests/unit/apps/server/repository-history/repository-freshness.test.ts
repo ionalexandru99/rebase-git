@@ -15,6 +15,28 @@ const linkedId = "00000000-0000-4000-8000-000000000002";
 afterEach(() => vi.useRealTimers());
 
 describe("repository freshness", () => {
+  it("fetches through a surviving worktree after the original subscriber leaves", async () => {
+    let removed = false;
+    const fetch = vi.fn((command: Parameters<GitCommandRunner["run"]>[0]) =>
+      Effect.succeed(output(removed && command.directory === "/repo" ? 1 : 0)),
+    );
+    await withService({ fetch, setting: "0" }, async (service) => {
+      const closeFirst = await Effect.runPromise(
+        service.subscribe(repositoryId, () => {}),
+      );
+      await Effect.runPromise(service.subscribe(linkedId, () => {}));
+      closeFirst();
+      removed = true;
+      expect(await Effect.runPromise(service.fetch(linkedId))).toMatchObject({
+        stale: false,
+        fetching: false,
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        expect.objectContaining({ directory: "/linked" }),
+      );
+    });
+  });
+
   it("shares an immediate fetch across linked worktrees, subscriptions and manual requests", async () => {
     let finish: (() => void) | undefined;
     const fetch = vi.fn(() =>
@@ -133,7 +155,9 @@ function output(exitCode = 0, stdout = "") {
 
 function withService(
   options: {
-    readonly fetch: () => ReturnType<GitCommandRunner["run"]>;
+    readonly fetch: (
+      command: Parameters<GitCommandRunner["run"]>[0],
+    ) => ReturnType<GitCommandRunner["run"]>;
     readonly setting?: string;
   },
   test: (
@@ -150,7 +174,12 @@ function withService(
     lastOpenedAt: "2026-09-04T00:00:00.000Z",
   };
   const catalog: RepositoryCatalog = {
-    find: (id) => Effect.succeed({ ...entry, id }),
+    find: (id) =>
+      Effect.succeed({
+        ...entry,
+        id,
+        path: id === linkedId ? "/linked" : entry.path,
+      }),
     list: () => Effect.succeed([entry]),
     recordOpened: () => Effect.succeed(entry),
     remember: () => Effect.succeed(entry),
@@ -160,7 +189,7 @@ function withService(
     run: (command) => {
       if (command.arguments[0] === "fetch") {
         expect(command.arguments).toEqual(["fetch"]);
-        return options.fetch();
+        return options.fetch(command);
       }
       return Effect.succeed(
         output(
