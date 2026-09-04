@@ -15,6 +15,32 @@ const linkedId = "00000000-0000-4000-8000-000000000002";
 afterEach(() => vi.useRealTimers());
 
 describe("repository freshness", () => {
+  it("clears a defective manual fetch so it can be retried with automatic fetch disabled", async () => {
+    const fetch = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        Effect.die(new Error("Unexpected runner defect")),
+      )
+      .mockImplementation(() => Effect.succeed(output()));
+    const states: RepositoryFreshness[] = [];
+    await withService({ fetch, setting: "0" }, async (service) => {
+      await Effect.runPromise(
+        service.subscribe(repositoryId, (state) => states.push(state)),
+      );
+      expect(
+        await Effect.runPromise(service.fetch(repositoryId)),
+      ).toMatchObject({
+        fetching: false,
+        stale: true,
+        failure: { _tag: "FetchFailed" },
+      });
+      expect(states.at(-1)?.fetching).toBe(false);
+      expect(
+        await Effect.runPromise(service.fetch(repositoryId)),
+      ).toMatchObject({ fetching: false, stale: false });
+    });
+  });
+
   it("fetches through a surviving worktree after the original subscriber leaves", async () => {
     let removed = false;
     const fetch = vi.fn((command: Parameters<GitCommandRunner["run"]>[0]) =>

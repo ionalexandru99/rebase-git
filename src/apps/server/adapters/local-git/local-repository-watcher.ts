@@ -32,10 +32,19 @@ function watchGitDirectory(
     const watcher = tryWatch(join(gitDirectory, entry), true, () => onChange());
     if (watcher !== undefined) watchers.set(entry, watcher);
   };
-  const watchStashes = () => {
+  const removeWatcher = (entry: string) => {
+    watchers.get(entry)?.close();
+    watchers.delete(entry);
+  };
+  const watchStashes = (replace?: "logs" | "logs/refs") => {
+    if (replace === "logs") removeWatcher("logs");
+    if (replace !== undefined) removeWatcher("logs/refs");
     if (!watchers.has("logs")) {
       const logs = tryWatch(join(gitDirectory, "logs"), false, (fileName) => {
-        if (fileName === undefined || fileName === "refs") watchStashes();
+        if (fileName === undefined || fileName === "refs") {
+          watchStashes("logs/refs");
+          onChange();
+        }
       });
       if (logs !== undefined) watchers.set("logs", logs);
     }
@@ -58,11 +67,10 @@ function watchGitDirectory(
   const root = tryWatch(gitDirectory, false, (fileName) => {
     if (fileName !== undefined && !watchedRootEntries.has(fileName)) return;
     if (fileName === "refs" || fileName === "worktrees") {
-      watchers.get(fileName)?.close();
-      watchers.delete(fileName);
+      removeWatcher(fileName);
       watchRecursively(fileName);
     }
-    if (fileName === "logs") watchStashes();
+    if (fileName === undefined || fileName === "logs") watchStashes("logs");
     onChange();
   });
   if (root !== undefined) watchers.set(".", root);

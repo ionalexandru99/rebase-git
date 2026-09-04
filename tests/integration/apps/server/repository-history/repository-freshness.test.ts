@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -36,6 +36,36 @@ afterEach(async () => {
 });
 
 describe("repository freshness with real Git", { timeout: 30_000 }, () => {
+  it("continues watching stash history after reflog directories are replaced", async () => {
+    const fixture = await createFixture();
+    const gitDirectory = join(fixture.local, ".git");
+    let changes = 0;
+    const watcher = await Effect.runPromise(
+      createLocalRepositoryWatcher().watch(gitDirectory, () => {
+        changes += 1;
+      }),
+    );
+    try {
+      for (const [index, entry] of ["logs/refs", "logs"].entries()) {
+        const directory = join(gitDirectory, entry);
+        const beforeReplacement = changes;
+        await rename(directory, join(fixture.root, `previous-logs-${index}`));
+        await mkdir(join(gitDirectory, "logs", "refs"), { recursive: true });
+        await vi.waitFor(() =>
+          expect(changes).toBeGreaterThan(beforeReplacement),
+        );
+        const beforeWrite = changes;
+        await writeFile(
+          join(gitDirectory, "logs", "refs", "stash"),
+          `stash ${index}`,
+        );
+        await vi.waitFor(() => expect(changes).toBeGreaterThan(beforeWrite));
+      }
+    } finally {
+      watcher.close();
+    }
+  });
+
   it("watches Git paths with forward slashes on every platform", async () => {
     const fixture = await createFixture();
     const gitDirectory = join(fixture.local, ".git").replaceAll("\\", "/");
@@ -116,20 +146,21 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
       ];
       for (const change of changes) {
         const before = states.at(-1)?.revision ?? 0;
-        const start = performance.now();
         await change();
+        const completed = performance.now();
         await vi.waitFor(
           () => expect(states.at(-1)?.revision).toBeGreaterThan(before),
           { timeout: 1_000, interval: 10 },
         );
-        expect(performance.now() - start).toBeLessThan(500);
+        expect(performance.now() - completed).toBeLessThan(500);
       }
+      const beforeStashes = states.at(-1)?.revision ?? 0;
       await writeFile(join(fixture.local, "file.txt"), "first stash");
       await git(fixture.local, "stash", "push", "-m", "first");
       await writeFile(join(fixture.local, "file.txt"), "second stash");
       await git(fixture.local, "stash", "push", "-m", "second");
       await vi.waitFor(() =>
-        expect(states.at(-1)?.revision).toBeGreaterThan(4),
+        expect(states.at(-1)?.revision).toBeGreaterThan(beforeStashes),
       );
       const before = states.at(-1)?.revision ?? 0;
       const stashHead = await git(fixture.local, "rev-parse", "refs/stash");

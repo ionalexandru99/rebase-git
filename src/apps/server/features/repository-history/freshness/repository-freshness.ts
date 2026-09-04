@@ -60,6 +60,21 @@ function createRepositoryFreshnessService(dependencies: {
     for (const subscriber of repository.subscribers.keys())
       subscriber(repository.freshness);
   };
+  const completeFetch = (
+    repository: WatchedRepository,
+    failure: RepositoryFreshness["failure"],
+  ) => {
+    const { failure: previousFailure, ...freshness } = repository.freshness;
+    repository.freshness = {
+      ...freshness,
+      fetching: false,
+      stale: failure !== undefined,
+      revision: freshness.revision + 1,
+      ...(failure === undefined ? {} : { failure }),
+    };
+    publish(repository);
+    return repository.freshness;
+  };
   const stop = (repository: WatchedRepository) => {
     clearTimeout(repository.timer);
     clearTimeout(repository.changeTimer);
@@ -115,20 +130,9 @@ function createRepositoryFreshnessService(dependencies: {
       { signal: repository.controller.signal },
     )
       .then(
-        (failure) => {
-          const { failure: previousFailure, ...freshness } =
-            repository.freshness;
-          repository.freshness = {
-            ...freshness,
-            fetching: false,
-            stale: failure !== undefined,
-            revision: freshness.revision + 1,
-            ...(failure === undefined ? {} : { failure }),
-          };
-          publish(repository);
-          return repository.freshness;
-        },
-        () => repository.freshness,
+        (failure) => completeFetch(repository, failure),
+        () =>
+          completeFetch(repository, { _tag: "FetchFailed", reason: "Failed" }),
       )
       .finally(() => {
         delete repository.fetch;
