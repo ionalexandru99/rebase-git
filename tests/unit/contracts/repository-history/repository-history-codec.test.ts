@@ -40,6 +40,28 @@ describe("repository history binary codec", () => {
     expect(decodeRepositoryHistoryBatch(encoded)).toEqual(batch);
   });
 
+  it("round trips a resumable snapshot basis before publishing refs", () => {
+    const page = historyPage("sha1");
+    const batch = {
+      commits: [],
+      objectFormat: page.objectFormat,
+      repositoryId,
+      requestId,
+      sequence: 0,
+      snapshot: {
+        id: "d".repeat(64),
+        objectFormat: page.objectFormat,
+        refTargets: page.refTargets,
+        resumable: true,
+        rootOids: [page.commits[0]?.oid ?? ""],
+      },
+    } as const;
+
+    expect(
+      decodeRepositoryHistoryBatch(encodeRepositoryHistoryBatch(batch)),
+    ).toEqual(batch);
+  });
+
   it("fragments and reassembles a logical history message out of order", () => {
     const payload = encodeRepositoryHistoryPage(historyPage("sha1"));
     const frames = fragmentBinaryMessage(

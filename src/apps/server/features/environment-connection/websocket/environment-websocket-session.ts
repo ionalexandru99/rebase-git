@@ -290,7 +290,7 @@ function handleClientMessage(
     case "SynchronizeRepositoryHistory": {
       const history = state.history;
       if (
-        (capabilities.get("repository-history") ?? 0) < 2 ||
+        (capabilities.get("repository-history") ?? 0) < 3 ||
         !capabilities.has("binary-fragmentation") ||
         history === undefined ||
         historyRequests.has(message.requestId)

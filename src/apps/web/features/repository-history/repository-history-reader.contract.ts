@@ -14,7 +14,7 @@ export interface RepositoryHistorySnapshot {
   readonly error?: RepositoryHistoryReaderError;
   readonly revision: number;
   readonly status: "empty" | "error" | "loading" | "ready";
-  readonly synchronization?: "complete" | "idle" | "syncing";
+  readonly synchronization?: "complete" | "idle" | "stale" | "syncing";
   readonly synchronizedCommitCount?: number;
 }
 
@@ -95,4 +95,5 @@ export interface RepositoryHistoryGateway {
     acceptBatch: (bytes: Uint8Array) => Promise<void>,
     signal?: AbortSignal,
   ) => Promise<number>;
+  readonly subscribeAvailability?: (listener: () => void) => () => void;
 }

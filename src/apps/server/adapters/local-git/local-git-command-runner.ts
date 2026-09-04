@@ -40,10 +40,12 @@ function streamLocalGitCommand(
         {
           env: gitEnvironment(),
           signal: combinedSignal,
-          stdio: ["ignore", "pipe", "pipe"],
+          stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
         },
       );
+      child.stdin?.once("error", () => undefined);
+      child.stdin?.end(command.input);
       child.stdout.setEncoding("utf8");
       child.stderr.setEncoding("utf8");
       let stderr = "";

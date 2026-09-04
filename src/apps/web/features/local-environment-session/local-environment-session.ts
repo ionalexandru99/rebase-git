@@ -223,6 +223,7 @@ function maintainConnection(
 
 function createRepositoryHistoryGateway() {
   let transport: RepositoryHistoryTransport | undefined;
+  const listeners = new Set<() => void>();
   const gateway: RepositoryHistoryGateway = {
     read: (request, signal) => {
       const current = transport;
@@ -249,10 +250,17 @@ function createRepositoryHistoryGateway() {
         signal === undefined ? undefined : { signal },
       );
     },
+    subscribeAvailability: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
   };
   return {
     connect: (next: RepositoryHistoryTransport) => {
       transport = next;
+      for (const listener of listeners) {
+        listener();
+      }
     },
     disconnect: (current: RepositoryHistoryTransport) => {
       if (transport === current) {

@@ -17,6 +17,8 @@ export function describeRepositoryHistoryError(
       return "This device cannot read repository history.";
     case "RepositoryMissing":
       return "The repository is no longer known by this Environment.";
+    case "SnapshotInvalidated":
+      return "Commit history changed while it was loading. Retry to refresh it.";
     case "GitFailed":
       return (
         error.failure.detail?.trim() || "Git could not read commit history."

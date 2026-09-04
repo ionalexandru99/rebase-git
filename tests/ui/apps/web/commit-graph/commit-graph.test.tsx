@@ -26,6 +26,79 @@ describe("commit graph", () => {
       .toBeVisible();
   });
 
+  it("keeps the selected row and viewport anchored while refs reconcile", async () => {
+    const commits = history(100);
+    const firstCommit = commits[0];
+    if (firstCommit === undefined) {
+      throw new Error("Commit fixture is missing");
+    }
+    let finishReconciliation:
+      | ((commits: readonly RepositoryCommit[]) => void)
+      | undefined;
+    const reconciliation = new Promise<readonly RepositoryCommit[]>(
+      (resolve) => {
+        finishReconciliation = resolve;
+      },
+    );
+    const reader = historyReader({ commits, status: "ready" });
+    reader.read
+      .mockResolvedValueOnce(commits)
+      .mockReturnValueOnce(reconciliation);
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("listbox", { name: "Commit history" });
+    grid.element().scrollTop = 20 * 36 + 7;
+    grid.element().dispatchEvent(new Event("scroll"));
+    const selected = grid.getByRole("option", { name: /^Commit 22,/ });
+    await expect.element(selected).toBeVisible();
+    await selected.click();
+
+    await screen.rerender(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraph
+          reader={reader}
+          repositoryName="rebase-test"
+          roots={[
+            { name: "main", oid: "e".repeat(40), type: "branch" as const },
+          ]}
+        />
+      </div>,
+    );
+
+    await expect.element(selected).toHaveAttribute("aria-selected", "true");
+    expect(grid.element().scrollTop).toBe(20 * 36 + 7);
+    finishReconciliation?.([
+      {
+        ...firstCommit,
+        oid: "e".repeat(40),
+        parents: [firstCommit.oid],
+        subject: "New tip",
+      },
+      ...commits,
+    ]);
+    await expect
+      .element(grid.getByRole("option", { name: /^Commit 22,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await vi.waitFor(() => expect(grid.element().scrollTop).toBe(21 * 36 + 7));
+  });
+
+  it("keeps stale history visible and offers a retry", async () => {
+    const reader = historyReader({ commits: history(2), status: "ready" });
+    reader.snapshot = {
+      error: new RepositoryHistoryUnavailable(),
+      revision: 2,
+      status: "ready",
+      synchronization: "stale",
+      synchronizedCommitCount: 2,
+    };
+    const screen = await renderGraph(reader);
+
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Stale. Retry" }).click();
+    expect(reader.read).toHaveBeenCalledTimes(2);
+  });
+
   it("renders 100 connected commits with bounded semantic rows and selection", async () => {
     const commits = history(100);
     const reader = historyReader({ commits, status: "ready" });

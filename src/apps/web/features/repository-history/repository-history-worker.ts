@@ -14,6 +14,7 @@ import {
   readRepositoryCommits,
   readRepositoryHistory,
   readStoredRepositoryHistoryState,
+  restartRepositoryHistorySynchronization,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/repository-history-store";
@@ -68,7 +69,8 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
           replica.synchronizationOwner === reader &&
           replica.synchronizationRequestId === event.data.requestId
         ) {
-          replica.synchronization = "idle";
+          replica.synchronization = replica.reconciling ? "stale" : "idle";
+          replica.reconciling = false;
           delete replica.synchronizationOwner;
           delete replica.synchronizationRequestId;
           replica.failure = failure;
@@ -154,10 +156,17 @@ async function handleReaderMessage(
           commits: cached,
           requestId: message.requestId,
         });
+        if (replica.synchronization !== "syncing") {
+          void startSynchronization(reader, replica).catch((error) => {
+            replica.failure = workerFailure(error);
+            replica.revision += 1;
+            publishSnapshot(replica);
+          });
+        }
         return;
       }
       if (replica.synchronization === "complete") {
-        replica.synchronization = "idle";
+        replica.synchronization = "stale";
       }
       replica.status = "loading";
       publishSnapshot(replica);
@@ -211,18 +220,23 @@ async function handleReaderMessage(
         return;
       }
       try {
-        await completeStoredRepositoryHistory(
+        const completion = await completeStoredRepositoryHistory(
           reader.connection.environmentId,
           reader.connection.repositoryId,
           message.commitCount,
         );
+        if (completion.snapshot !== undefined) {
+          replica.refTargets = completion.snapshot.refTargets;
+        }
       } catch (error) {
-        replica.synchronization = "idle";
+        replica.synchronization = replica.reconciling ? "stale" : "idle";
+        replica.reconciling = false;
         delete replica.synchronizationOwner;
         delete replica.synchronizationRequestId;
         throw error;
       }
       replica.synchronization = "complete";
+      replica.reconciling = false;
       replica.synchronizedCommitCount = message.commitCount;
       delete replica.failure;
       delete replica.synchronizationOwner;
@@ -237,10 +251,22 @@ async function handleReaderMessage(
       ) {
         return;
       }
-      replica.synchronization = "idle";
-      replica.failure = message.failure;
+      replica.synchronization = replica.reconciling ? "stale" : "idle";
+      replica.reconciling = false;
       delete replica.synchronizationOwner;
       delete replica.synchronizationRequestId;
+      if (
+        message.failure._tag === "Rejected" &&
+        message.failure.detail._tag === "SnapshotInvalidated"
+      ) {
+        await restartRepositoryHistorySynchronization(
+          reader.connection.environmentId,
+          reader.connection.repositoryId,
+        );
+        await startSynchronization(reader, replica);
+        return;
+      }
+      replica.failure = message.failure;
       replica.revision += 1;
       publishSnapshot(replica);
       return;
@@ -263,6 +289,11 @@ async function handleReaderMessage(
         refs: replica.refTargets,
         requestId: message.requestId,
       });
+      return;
+    case "ReconcileHistory":
+      if (replica.synchronization !== "syncing") {
+        await startSynchronization(reader, replica);
+      }
       return;
     case "CloseReader": {
       const activeRequestId = reader.epoch.cancel();
@@ -330,7 +361,9 @@ async function acceptHistoryPage(
     for (const commit of stored) {
       replica.commits.set(commit.oid, commit);
     }
-    replica.refTargets = page.refTargets;
+    if (replica.refTargets.length === 0) {
+      replica.refTargets = page.refTargets;
+    }
     replica.visibleOids = stored.map((commit) => commit.oid);
     delete replica.failure;
     replica.status = stored.length === 0 ? "empty" : "ready";
@@ -341,7 +374,7 @@ async function acceptHistoryPage(
       commits: stored,
       requestId,
     });
-    if (replica.synchronization === "idle") {
+    if (replica.synchronization !== "syncing") {
       try {
         await startSynchronization(reader, replica);
       } catch (error) {
@@ -402,22 +435,22 @@ async function startSynchronization(
   reader: ConnectedReader,
   replica: RepositoryReplica,
 ) {
-  if (
-    reader.closed ||
-    replica.synchronization === "complete" ||
-    replica.synchronization === "syncing"
-  ) {
+  if (reader.closed || replica.synchronization === "syncing") {
     return;
   }
   const requestId = crypto.randomUUID();
+  replica.reconciling =
+    replica.synchronization === "complete" ||
+    replica.synchronization === "stale";
   replica.synchronization = "syncing";
   replica.synchronizationOwner = reader;
   replica.synchronizationRequestId = requestId;
   replica.synchronizedCommitCount = 0;
   replica.revision += 1;
   publishSnapshot(replica);
+  let basis: Awaited<ReturnType<typeof beginRepositoryHistorySynchronization>>;
   try {
-    await beginRepositoryHistorySynchronization(
+    basis = await beginRepositoryHistorySynchronization(
       reader.connection.environmentId,
       reader.connection.repositoryId,
     );
@@ -426,7 +459,8 @@ async function startSynchronization(
       replica.synchronizationOwner === reader &&
       replica.synchronizationRequestId === requestId
     ) {
-      replica.synchronization = "idle";
+      replica.synchronization = replica.reconciling ? "stale" : "idle";
+      replica.reconciling = false;
       delete replica.synchronizationOwner;
       delete replica.synchronizationRequestId;
     }
@@ -439,7 +473,11 @@ async function startSynchronization(
   ) {
     return;
   }
-  post(reader, { _tag: "SynchronizeHistory", requestId });
+  post(reader, {
+    _tag: "SynchronizeHistory",
+    ...(basis === undefined ? {} : { basis }),
+    requestId,
+  });
 }
 
 function cancelSynchronization(
@@ -450,7 +488,7 @@ function cancelSynchronization(
   if (requestId !== undefined) {
     post(reader, { _tag: "CancelHistorySynchronization", requestId });
   }
-  replica.synchronization = "idle";
+  replica.synchronization = replica.reconciling ? "stale" : "idle";
   delete replica.synchronizationOwner;
   delete replica.synchronizationRequestId;
 }
@@ -490,6 +528,7 @@ function createReplica(
     initialization: Promise.resolve(),
     readers: new Set(),
     refTargets: [],
+    reconciling: false,
     revision: 0,
     status: "empty",
     synchronization: "idle",
@@ -553,8 +592,9 @@ interface RepositoryReplica {
     { _tag: "RefTargetsResult" }
   >["refs"];
   readonly readers: Set<ConnectedReader>;
+  reconciling: boolean;
   status: "empty" | "error" | "loading" | "ready";
-  synchronization: "complete" | "idle" | "syncing";
+  synchronization: "complete" | "idle" | "stale" | "syncing";
   synchronizationOwner?: ConnectedReader;
   synchronizationRequestId?: string;
   synchronizedCommitCount: number;

@@ -115,7 +115,10 @@ export function createRepositoryHistoryTransport(
       return yield* Effect.gen(function* () {
         requests.set(requestId, {
           acceptBatch,
-          expectedSequence: 0,
+          expectedSequence:
+            request.basis?._tag === "Incomplete"
+              ? request.basis.nextBatchSequence
+              : 0,
           kind: "sync",
           priority: request.priority,
           repositoryId: request.repositoryId,

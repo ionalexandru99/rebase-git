@@ -1,3 +1,5 @@
+import type { RepositoryHistorySnapshot } from "@rebase/contracts";
+
 export interface RepositoryHistorySynchronizationProgress {
   readonly committedCommitCount: number;
   readonly nextBatchSequence: number;
@@ -5,18 +7,23 @@ export interface RepositoryHistorySynchronizationProgress {
 
 export interface RepositoryHistoryCompletionBasis {
   readonly commitCount: number;
+  readonly snapshot?: Omit<RepositoryHistorySnapshot, "resumable">;
 }
 
 export function completeRepositoryHistory(
   progress: RepositoryHistorySynchronizationProgress,
   reportedCommitCount: number,
+  snapshot?: NonNullable<RepositoryHistoryCompletionBasis["snapshot"]>,
 ): RepositoryHistoryCompletionBasis {
   if (progress.committedCommitCount !== reportedCommitCount) {
     throw new Error(
       "Repository history completion count does not match storage",
     );
   }
-  return { commitCount: reportedCommitCount };
+  return {
+    commitCount: reportedCommitCount,
+    ...(snapshot === undefined ? {} : { snapshot }),
+  };
 }
 
 export function acceptRepositoryHistoryBatch(

@@ -55,7 +55,7 @@ export function createBrowserRepositoryHistoryReader(options: {
       return;
     }
     if (message._tag === "SynchronizeHistory") {
-      synchronizeHistory(message.requestId);
+      synchronizeHistory(message.requestId, message.basis);
       return;
     }
     if (message._tag === "CancelHistorySynchronization") {
@@ -113,6 +113,13 @@ export function createBrowserRepositoryHistoryReader(options: {
   };
   worker.port.postMessage(connection, [channel.port2]);
   worker.port.start();
+  const unsubscribeAvailability = options.gateway.subscribeAvailability?.(
+    () => {
+      port.postMessage({
+        _tag: "ReconcileHistory",
+      } satisfies RepositoryHistoryWorkerRequest);
+    },
+  );
 
   function loadHistory(requestId: string, query: RepositoryHistoryQuery) {
     const controller = new AbortController();
@@ -148,12 +155,16 @@ export function createBrowserRepositoryHistoryReader(options: {
       .finally(() => loads.delete(requestId));
   }
 
-  function synchronizeHistory(requestId: string) {
+  function synchronizeHistory(
+    requestId: string,
+    basis: Parameters<RepositoryHistoryGateway["synchronize"]>[0]["basis"],
+  ) {
     const controller = new AbortController();
     synchronizations.set(requestId, controller);
     void options.gateway
       .synchronize(
         {
+          ...(basis === undefined ? {} : { basis }),
           priority: "visible",
           repositoryId: options.repositoryId,
         },
@@ -243,6 +254,7 @@ export function createBrowserRepositoryHistoryReader(options: {
         current.reject(new RepositoryHistoryUnavailable());
       }
       pending.clear();
+      unsubscribeAvailability?.();
       port.postMessage({
         _tag: "CloseReader",
       } satisfies RepositoryHistoryWorkerRequest);

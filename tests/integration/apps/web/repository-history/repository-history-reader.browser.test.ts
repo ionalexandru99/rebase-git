@@ -9,6 +9,7 @@ import { withRepositoryHistoryDatabase } from "#web/features/repository-history/
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import {
   RepositoryHistoryOffline,
+  RepositoryHistoryRejected,
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
@@ -459,11 +460,12 @@ describe("browser repository history reader", () => {
       reopened.getCommitSummaries(["e".repeat(40)]),
     ).resolves.toEqual([]);
     expect(offlineGateway.read).not.toHaveBeenCalled();
-    expect(reopened.getSnapshot()).toMatchObject({
-      status: "ready",
-      synchronization: "complete",
-      synchronizedCommitCount: commits.length,
-    });
+    await vi.waitFor(() =>
+      expect(reopened.getSnapshot()).toMatchObject({
+        status: "ready",
+        synchronization: "stale",
+      }),
+    );
     reopened.close();
   });
 
@@ -510,6 +512,256 @@ describe("browser repository history reader", () => {
       ),
     ).rejects.toBe(applicationFailure);
   });
+
+  it("resumes an incomplete snapshot and publishes its refs only after completion", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(2);
+    const [firstCommit, secondCommit] = commits;
+    if (firstCommit === undefined || secondCommit === undefined) {
+      throw new Error("Commit fixture is missing");
+    }
+    const oldRef = { ...root("main"), oid: firstCommit.oid };
+    const nextRef = { ...root("main"), oid: secondCommit.oid };
+    const captured = snapshot("a", nextRef);
+    let firstBatchStored: (() => void) | undefined;
+    const batchStored = new Promise<void>((resolve) => {
+      firstBatchStored = resolve;
+    });
+    const firstGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, [firstCommit], [oldRef])),
+      synchronize: vi.fn(async (_request, accept, signal) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits: [firstCommit],
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: captured,
+          }),
+        );
+        firstBatchStored?.();
+        return new Promise<number>((_resolve, reject) =>
+          signal?.addEventListener(
+            "abort",
+            () => reject(new RepositoryHistoryOffline()),
+            { once: true },
+          ),
+        );
+      }),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: firstGateway,
+      repositoryId,
+    });
+    await first.read({ limit: 100, order: "topological", roots: [oldRef] });
+    await batchStored;
+    first.close();
+
+    let finish: (() => void) | undefined;
+    const mayFinish = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const secondGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, [nextRef])),
+      synchronize: vi.fn(async (request, accept) => {
+        expect(request.basis).toEqual({
+          _tag: "Incomplete",
+          committedCommitCount: 1,
+          nextBatchSequence: 1,
+          objectFormat: "sha1",
+          rootOids: captured.rootOids,
+          snapshotId: captured.id,
+        });
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits: [secondCommit],
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 1,
+          }),
+        );
+        await mayFinish;
+        return 2;
+      }),
+    };
+    const resumed = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: secondGateway,
+      repositoryId,
+    });
+    await resumed.read({ limit: 100, order: "topological", roots: [nextRef] });
+    await vi.waitFor(() =>
+      expect(secondGateway.synchronize).toHaveBeenCalled(),
+    );
+
+    await expect(resumed.getRefTargets()).resolves.toEqual([oldRef]);
+    finish?.();
+    await vi.waitFor(() =>
+      expect(resumed.getSnapshot().synchronization).toBe("complete"),
+    );
+    await expect(resumed.getRefTargets()).resolves.toEqual([nextRef]);
+    resumed.close();
+  });
+
+  it("restarts an invalid completed basis without publishing duplicate refs", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commit = history(1)[0];
+    if (commit === undefined) {
+      throw new Error("Commit fixture is missing");
+    }
+    const oldRef = { ...root("main"), oid: commit.oid };
+    const oldSnapshot = snapshot("b", oldRef);
+    const initialGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, [commit], [oldRef])),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits: [commit],
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: oldSnapshot,
+          }),
+        );
+        return 1;
+      }),
+    };
+    const initial = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: initialGateway,
+      repositoryId,
+    });
+    await initial.read({ limit: 100, order: "topological", roots: [oldRef] });
+    await vi.waitFor(() =>
+      expect(initial.getSnapshot().synchronization).toBe("complete"),
+    );
+    initial.close();
+
+    const newRef = { ...oldRef, name: "trunk" };
+    const newSnapshot = snapshot("c", newRef);
+    let attempt = 0;
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, [commit], [newRef])),
+      synchronize: vi.fn(async (request, accept) => {
+        attempt += 1;
+        if (attempt === 1) {
+          expect(request.basis?._tag).toBe("Complete");
+          throw new RepositoryHistoryRejected({
+            failure: { _tag: "SnapshotInvalidated" },
+          });
+        }
+        expect(request.basis).toBeUndefined();
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits: [commit],
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: newSnapshot,
+          }),
+        );
+        return 1;
+      }),
+    };
+    const reopened = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    await reopened.read({ limit: 100, order: "topological", roots: [oldRef] });
+    await vi.waitFor(() =>
+      expect(gateway.synchronize).toHaveBeenCalledTimes(2),
+    );
+    await vi.waitFor(() =>
+      expect(reopened.getSnapshot().synchronization).toBe("complete"),
+    );
+
+    await expect(reopened.getRefTargets()).resolves.toEqual([newRef]);
+    reopened.close();
+  });
+
+  it("reconciles a completed cache when its environment reconnects", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(2);
+    const [newCommit, oldCommit] = commits;
+    if (newCommit === undefined || oldCommit === undefined) {
+      throw new Error("Commit fixtures are missing");
+    }
+    const initialRef = { ...root("main"), oid: oldCommit.oid };
+    const reconnectedRef = { ...root("trunk"), oid: newCommit.oid };
+    let connected: (() => void) | undefined;
+    let synchronization = 0;
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, [oldCommit], [initialRef])),
+      subscribeAvailability: (listener) => {
+        connected = listener;
+        return () => {
+          connected = undefined;
+        };
+      },
+      synchronize: vi.fn(async (_request, accept) => {
+        const initial = synchronization === 0;
+        const ref = initial ? initialRef : reconnectedRef;
+        synchronization += 1;
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits: initial
+              ? [oldCommit]
+              : synchronization === 2
+                ? [newCommit]
+                : [],
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: snapshot(initial ? "d" : "e", ref),
+          }),
+        );
+        return initial ? 1 : 2;
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    await reader.read({
+      limit: 100,
+      order: "topological",
+      roots: [initialRef],
+    });
+    await vi.waitFor(() =>
+      expect(reader.getSnapshot().synchronization).toBe("complete"),
+    );
+
+    connected?.();
+
+    await vi.waitFor(() =>
+      expect(gateway.synchronize).toHaveBeenCalledTimes(2),
+    );
+    await vi.waitFor(() =>
+      expect(reader.getSnapshot().synchronization).toBe("complete"),
+    );
+    await expect(reader.getRefTargets()).resolves.toEqual([reconnectedRef]);
+    await expect(
+      reader.read({
+        limit: 100,
+        order: "topological",
+        roots: [reconnectedRef],
+      }),
+    ).resolves.toEqual(commits);
+    expect(gateway.read).toHaveBeenCalledOnce();
+    reader.close();
+    expect(connected).toBeUndefined();
+  });
 });
 
 function page(
@@ -528,6 +780,16 @@ function page(
 
 function root(name: string) {
   return { name, oid: "f".repeat(40), type: "branch" as const };
+}
+
+function snapshot(idCharacter: string, ref: ReturnType<typeof root>) {
+  return {
+    id: idCharacter.repeat(64),
+    objectFormat: "sha1" as const,
+    refTargets: [ref],
+    resumable: true,
+    rootOids: [ref.oid],
+  };
 }
 
 function history(count: number): readonly RepositoryCommit[] {

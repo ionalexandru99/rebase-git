@@ -5,6 +5,10 @@ const RepositoryId = Schema.String.check(Schema.isUUID(4));
 const ObjectId = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
 );
+const SnapshotId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
+const SnapshotRootOids = Schema.Array(ObjectId).check(
+  Schema.isMaxLength(40_512),
+);
 
 export const RepositoryHistoryRefTarget = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024)),
@@ -36,6 +40,23 @@ export const CancelRepositoryHistory = Schema.TaggedStruct(
 export const SynchronizeRepositoryHistory = Schema.TaggedStruct(
   "SynchronizeRepositoryHistory",
   {
+    basis: Schema.optionalKey(
+      Schema.Union([
+        Schema.TaggedStruct("Complete", {
+          commitCount: Schema.Natural,
+          objectFormat: Schema.Literals(["sha1", "sha256"]),
+          rootOids: SnapshotRootOids,
+          snapshotId: SnapshotId,
+        }),
+        Schema.TaggedStruct("Incomplete", {
+          committedCommitCount: Schema.Natural,
+          nextBatchSequence: Schema.Natural,
+          objectFormat: Schema.Literals(["sha1", "sha256"]),
+          rootOids: SnapshotRootOids,
+          snapshotId: SnapshotId,
+        }),
+      ]),
+    ),
     priority: Schema.Literals(["background", "visible"]),
     repositoryId: RepositoryId,
     requestId: EnvironmentRequestId,
@@ -64,6 +85,7 @@ export type RepositoryHistoryClientMessage =
 export const RepositoryHistoryOperationFailure = Schema.Union([
   Schema.TaggedStruct("AuthorizationDenied", {}),
   Schema.TaggedStruct("RepositoryMissing", { repositoryId: RepositoryId }),
+  Schema.TaggedStruct("SnapshotInvalidated", {}),
   Schema.TaggedStruct("GitFailed", {
     detail: Schema.optional(Schema.String.check(Schema.isMaxLength(2_048))),
     reason: Schema.Literals([
@@ -126,4 +148,13 @@ export interface RepositoryHistoryBatch {
   readonly repositoryId: string;
   readonly requestId: string;
   readonly sequence: number;
+  readonly snapshot?: RepositoryHistorySnapshot;
+}
+
+export interface RepositoryHistorySnapshot {
+  readonly id: string;
+  readonly objectFormat: "sha1" | "sha256";
+  readonly refTargets: readonly RepositoryHistoryRefTarget[];
+  readonly resumable: boolean;
+  readonly rootOids: readonly string[];
 }

@@ -3,6 +3,7 @@ import { Data, type Effect } from "effect";
 export interface GitCommand {
   readonly arguments: readonly string[];
   readonly directory: string;
+  readonly input?: string;
   readonly maxOutputBytes?: number;
   readonly timeoutMilliseconds?: number;
 }
