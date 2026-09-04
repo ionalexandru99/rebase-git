@@ -19,6 +19,89 @@ export const gitHistoryFormat = [
 
 const fieldsPerCommit = 11;
 
+export function createGitHistoryBatchParser(
+  objectFormat: "sha1" | "sha256",
+  batchSize: number,
+  emit: (commits: readonly RepositoryCommit[]) => Promise<void>,
+  maximumBatchCharacters = Number.POSITIVE_INFINITY,
+) {
+  if (
+    !Number.isSafeInteger(batchSize) ||
+    batchSize < 1 ||
+    maximumBatchCharacters < 1
+  ) {
+    throw new Error("Invalid history batch size");
+  }
+  let remainder = "";
+  let fields: string[] = [];
+  let commits: RepositoryCommit[] = [];
+  let batchCharacters = 0;
+  let count = 0;
+
+  const flush = async () => {
+    if (commits.length === 0) {
+      return;
+    }
+    const batch = commits;
+    commits = [];
+    batchCharacters = 0;
+    await emit(batch);
+  };
+
+  const acceptField = async (field: string) => {
+    fields.push(field);
+    if (fields.length !== fieldsPerCommit) {
+      return;
+    }
+    const commit = parseCommit(fields, objectFormat);
+    fields = [];
+    const characters = commitCharacters(commit);
+    if (
+      commits.length > 0 &&
+      batchCharacters + characters > maximumBatchCharacters
+    ) {
+      await flush();
+    }
+    commits.push(commit);
+    batchCharacters += characters;
+    count += 1;
+    if (commits.length === batchSize) {
+      await flush();
+    }
+  };
+
+  return {
+    async accept(chunk: string) {
+      remainder += chunk;
+      let separator = remainder.indexOf("\0");
+      while (separator >= 0) {
+        await acceptField(remainder.slice(0, separator));
+        remainder = remainder.slice(separator + 1);
+        separator = remainder.indexOf("\0");
+      }
+    },
+    async finish() {
+      if (remainder.length > 0 || fields.length > 0) {
+        throw new Error("Truncated Git history record");
+      }
+      await flush();
+      return count;
+    },
+  };
+}
+
+function commitCharacters(commit: RepositoryCommit) {
+  return (
+    commit.oid.length +
+    commit.parents.reduce((total, parent) => total + parent.length, 0) +
+    commit.author.name.length +
+    commit.author.email.length +
+    commit.committer.name.length +
+    commit.committer.email.length +
+    commit.subject.length
+  );
+}
+
 export function parseGitHistory(
   output: string,
   objectFormat: "sha1" | "sha256",

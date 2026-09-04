@@ -96,7 +96,7 @@ describe("Environment protocol compatibility", () => {
         {
           introducedInMinor: 3,
           name: "repository-history",
-          version: 1,
+          version: 2,
         },
       ],
       protocol: { major: 1, minor: 3 },

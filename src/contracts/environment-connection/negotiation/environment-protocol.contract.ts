@@ -77,6 +77,6 @@ export const currentEnvironmentCapabilities = [
   {
     introducedInMinor: 3,
     name: "repository-history",
-    version: 1,
+    version: 2,
   },
 ] satisfies ReadonlyArray<EnvironmentCapability>;

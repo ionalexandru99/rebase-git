@@ -249,6 +249,10 @@ function runEnvironmentConnection(
         negotiated.capabilities.some(
           (capability) => capability.name === "binary-fragmentation",
         ),
+      negotiated.capabilities.some(
+        (capability) =>
+          capability.name === "repository-history" && capability.version >= 2,
+      ),
     );
     yield* initializeEnvironmentSequence(state, hello, negotiated);
     yield* publishEnvironmentConnection(

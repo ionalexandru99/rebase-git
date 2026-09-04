@@ -33,8 +33,29 @@ export const CancelRepositoryHistory = Schema.TaggedStruct(
   { requestId: EnvironmentRequestId },
 );
 
+export const SynchronizeRepositoryHistory = Schema.TaggedStruct(
+  "SynchronizeRepositoryHistory",
+  {
+    priority: Schema.Literals(["background", "visible"]),
+    repositoryId: RepositoryId,
+    requestId: EnvironmentRequestId,
+  },
+);
+export type SynchronizeRepositoryHistory =
+  typeof SynchronizeRepositoryHistory.Type;
+
+export const AcknowledgeRepositoryHistoryBatch = Schema.TaggedStruct(
+  "AcknowledgeRepositoryHistoryBatch",
+  {
+    requestId: EnvironmentRequestId,
+    sequence: Schema.Natural,
+  },
+);
+
 export const RepositoryHistoryClientMessage = Schema.Union([
   ReadRepositoryHistory,
+  SynchronizeRepositoryHistory,
+  AcknowledgeRepositoryHistoryBatch,
   CancelRepositoryHistory,
 ]);
 export type RepositoryHistoryClientMessage =
@@ -66,6 +87,16 @@ export const RepositoryHistoryFailed = Schema.TaggedStruct(
 );
 export type RepositoryHistoryFailed = typeof RepositoryHistoryFailed.Type;
 
+export const RepositoryHistorySynchronized = Schema.TaggedStruct(
+  "RepositoryHistorySynchronized",
+  {
+    commitCount: Schema.Natural,
+    requestId: EnvironmentRequestId,
+  },
+);
+export type RepositoryHistorySynchronized =
+  typeof RepositoryHistorySynchronized.Type;
+
 export interface RepositoryCommitIdentity {
   readonly email: string;
   readonly name: string;
@@ -87,4 +118,12 @@ export interface RepositoryHistoryPage {
   readonly refTargets: readonly RepositoryHistoryRefTarget[];
   readonly repositoryId: string;
   readonly requestId: string;
+}
+
+export interface RepositoryHistoryBatch {
+  readonly commits: readonly RepositoryCommit[];
+  readonly objectFormat: "sha1" | "sha256";
+  readonly repositoryId: string;
+  readonly requestId: string;
+  readonly sequence: number;
 }

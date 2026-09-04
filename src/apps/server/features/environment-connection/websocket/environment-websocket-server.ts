@@ -33,7 +33,7 @@ export function attachEnvironmentWebSocketServer(
     clientTracking: true,
     maxPayload: currentTransportLimits.maxWebSocketRequestBytes,
     noServer: true,
-    perMessageDeflate: false,
+    perMessageDeflate: { threshold: 1_024 },
   });
   const accessCapabilities = new WeakMap<
     WebSocket,

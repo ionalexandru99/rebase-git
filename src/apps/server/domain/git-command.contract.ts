@@ -17,6 +17,10 @@ export interface GitCommandRunner {
   readonly run: (
     command: GitCommand,
   ) => Effect.Effect<GitCommandOutput, GitCommandError>;
+  readonly stream?: (
+    command: GitCommand,
+    onStdout: (chunk: string, signal: AbortSignal) => Promise<void>,
+  ) => Effect.Effect<Omit<GitCommandOutput, "stdout">, GitCommandError>;
 }
 
 export type GitCommandFailureReason =

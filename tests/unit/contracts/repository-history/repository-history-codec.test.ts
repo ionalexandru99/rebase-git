@@ -1,9 +1,12 @@
 import {
   createBinaryMessageReassembler,
+  decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
+  encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
   fragmentBinaryMessage,
   type RepositoryHistoryPage,
+  readRepositoryHistoryBatchSequence,
 } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -21,6 +24,21 @@ describe("repository history binary codec", () => {
       ).toEqual(page);
     },
   );
+
+  it("round trips acknowledged synchronization batches", () => {
+    const page = historyPage("sha1");
+    const batch = {
+      commits: page.commits,
+      objectFormat: page.objectFormat,
+      repositoryId,
+      requestId,
+      sequence: 7,
+    } as const;
+    const encoded = encodeRepositoryHistoryBatch(batch);
+
+    expect(readRepositoryHistoryBatchSequence(encoded)).toBe(7);
+    expect(decodeRepositoryHistoryBatch(encoded)).toEqual(batch);
+  });
 
   it("fragments and reassembles a logical history message out of order", () => {
     const payload = encodeRepositoryHistoryPage(historyPage("sha1"));

@@ -1,4 +1,5 @@
 import {
+  encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
@@ -9,12 +10,93 @@ import { RepositoryHistoryUnavailable } from "#web/features/repository-history/r
 import { readRepositoryCommits } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
+  it("publishes only IndexedDB-committed synchronization progress", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    let acceptBatch: ((bytes: Uint8Array) => Promise<void>) | undefined;
+    let finishSynchronization: ((count: number) => void) | undefined;
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, history(2))),
+      synchronize: vi.fn(
+        (_request, accept) =>
+          new Promise<number>((resolve) => {
+            acceptBatch = accept;
+            finishSynchronization = resolve;
+          }),
+      ),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    await reader.read({
+      limit: 100,
+      order: "topological",
+      roots: [root("main")],
+    });
+    await vi.waitFor(() =>
+      expect(reader.getSnapshot().synchronization).toBe("syncing"),
+    );
+    const synchronized = history(3);
+
+    await acceptBatch?.(
+      encodeRepositoryHistoryBatch({
+        commits: synchronized,
+        objectFormat: "sha1",
+        repositoryId,
+        requestId: crypto.randomUUID(),
+        sequence: 0,
+      }),
+    );
+
+    expect(reader.getSnapshot().synchronizedCommitCount).toBe(3);
+    await expect(
+      readRepositoryCommits(environmentId, repositoryId, [
+        synchronized[2]?.oid ?? "",
+      ]),
+    ).resolves.toEqual([synchronized[2]]);
+    finishSynchronization?.(3);
+    await vi.waitFor(() =>
+      expect(reader.getSnapshot().synchronization).toBe("complete"),
+    );
+    reader.close();
+  });
+
+  it("cancels synchronization when the final reader closes", async () => {
+    const repositoryId = crypto.randomUUID();
+    let synchronizationSignal: AbortSignal | undefined;
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, history(1))),
+      synchronize: vi.fn((_request, _accept, signal) => {
+        synchronizationSignal = signal;
+        return new Promise<number>(() => undefined);
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      gateway,
+      repositoryId,
+    });
+    await reader.read({
+      limit: 100,
+      order: "topological",
+      roots: [root("main")],
+    });
+    await vi.waitFor(() => expect(gateway.synchronize).toHaveBeenCalledOnce());
+
+    reader.close();
+
+    expect(synchronizationSignal?.aborted).toBe(true);
+  });
+
   it("stores a page in IndexedDB before publishing its repository snapshot", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const commits = history(100);
     const gateway: RepositoryHistoryGateway = {
       read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(async () => 0),
     };
     const reader = createBrowserRepositoryHistoryReader({
       environmentId,
@@ -56,6 +138,7 @@ describe("browser repository history reader", () => {
         }
         return Promise.resolve(page(repositoryId, history(2)));
       }),
+      synchronize: vi.fn(async () => 0),
     };
     const reader = createBrowserRepositoryHistoryReader({
       environmentId: crypto.randomUUID(),
@@ -87,6 +170,7 @@ describe("browser repository history reader", () => {
     const commits = history(3);
     const gateway: RepositoryHistoryGateway = {
       read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(async () => 0),
     };
     const first = createBrowserRepositoryHistoryReader({
       environmentId,

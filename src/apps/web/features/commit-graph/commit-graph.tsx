@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { describeRepositoryHistoryError } from "#web/features/commit-graph/commit-graph-messages";
 import {
@@ -30,6 +31,8 @@ const loadingRowIds = Array.from(
   { length: 12 },
   (_, index) => `commit-loading-row-${index}`,
 );
+const emptyHistorySnapshot = { revision: 0, status: "empty" } as const;
+const noSnapshotSubscription = () => () => undefined;
 
 export function CommitGraph({
   reader,
@@ -49,6 +52,10 @@ export function CommitGraph({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ height: 0, width: 0 });
   const [horizontalOffset, setHorizontalOffset] = useState(0);
+  const historySnapshot = useSyncExternalStore(
+    reader?.subscribe ?? noSnapshotSubscription,
+    reader?.getSnapshot ?? (() => emptyHistorySnapshot),
+  );
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -160,13 +167,18 @@ export function CommitGraph({
       aria-label="Commit graph"
       className="flex h-full min-h-0 flex-col bg-repository"
     >
-      <header className="flex h-12 shrink-0 items-center border-border/60 border-b px-4">
+      <header className="flex h-12 shrink-0 items-center justify-between border-border/60 border-b px-4">
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold text-foreground">
             {repositoryName}
           </h1>
           <p className="m-0 text-[11px] text-muted-foreground">Commit graph</p>
         </div>
+        {historySnapshot.synchronization === "syncing" ? (
+          <span className="text-[11px] text-muted-foreground" role="status">
+            Syncing
+          </span>
+        ) : null}
       </header>
       <div
         className="grid h-8 shrink-0 items-center border-border/60 border-b text-[11px] text-muted-foreground"
