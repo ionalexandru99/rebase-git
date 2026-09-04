@@ -36,6 +36,23 @@ afterEach(async () => {
 });
 
 describe("repository freshness with real Git", { timeout: 30_000 }, () => {
+  it("watches Git paths with forward slashes on every platform", async () => {
+    const fixture = await createFixture();
+    const gitDirectory = join(fixture.local, ".git").replaceAll("\\", "/");
+    let changes = 0;
+    const watcher = await Effect.runPromise(
+      createLocalRepositoryWatcher().watch(gitDirectory, () => {
+        changes += 1;
+      }),
+    );
+    try {
+      await git(fixture.local, "branch", "watcher-path");
+      await vi.waitFor(() => expect(changes).toBeGreaterThan(0));
+    } finally {
+      watcher.close();
+    }
+  });
+
   it("fetches the configured default remote, respects prune settings and keeps cached history after failure", async () => {
     const fixture = await createFixture();
     await withService(fixture, async (service) => {

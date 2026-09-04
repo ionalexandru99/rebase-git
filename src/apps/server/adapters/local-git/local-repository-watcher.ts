@@ -1,4 +1,4 @@
-import { type FSWatcher, watch } from "node:fs";
+import { type FSWatcher, realpathSync, watch } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import type {
@@ -84,7 +84,7 @@ function tryWatch(
 ) {
   try {
     const watcher = watch(
-      path,
+      realpathSync.native(path),
       { persistent: false, recursive },
       (_, fileName) => listener(fileName === null ? undefined : fileName),
     );
