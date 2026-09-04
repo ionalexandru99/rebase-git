@@ -35,6 +35,7 @@ const browserProject = (
         name === "integration-browser"
           ? {
               launchOptions: {
+                channel: "chromium",
                 ignoreDefaultArgs: ["--disable-back-forward-cache"],
               },
             }
