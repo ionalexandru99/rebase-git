@@ -25,6 +25,16 @@
       "preset": "recommended"
     }
   },
+  "overrides": [
+    {
+      "includes": ["src/apps/web/features/commit-graph/commit-graph.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": { "noNoninteractiveElementToInteractiveRole": "off" }
+        }
+      }
+    }
+  ],
   "assist": {
     "actions": {
       "source": {

@@ -1,6 +1,10 @@
-import type { RepositoryRefTarget } from "@rebase/contracts";
+import type {
+  EnvironmentAccessCapability,
+  RepositoryRefTarget,
+} from "@rebase/contracts";
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { GraphCommandShortcuts } from "#web/features/commit-commands/graph-command.contract";
 import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/browser-history-filter-store";
 import {
   automaticHistoryScope,
@@ -31,6 +35,10 @@ const branchesSidebarSize = {
 } as const;
 
 export function RepositoryWorkspace({
+  accessCapabilities = [],
+  connected = false,
+  commandsActive = true,
+  shortcuts,
   activeWorktreePath,
   branchesFocusRequest,
   environmentId,
@@ -42,6 +50,10 @@ export function RepositoryWorkspace({
   retryRefs,
   selectRef,
 }: {
+  readonly accessCapabilities?: readonly EnvironmentAccessCapability[];
+  readonly connected?: boolean;
+  readonly commandsActive?: boolean;
+  readonly shortcuts?: GraphCommandShortcuts | undefined;
   readonly activeWorktreePath: string;
   readonly branchesFocusRequest: number;
   readonly environmentId: string | undefined;
@@ -65,6 +77,10 @@ export function RepositoryWorkspace({
   );
   return (
     <RepositoryWorkspaceContent
+      accessCapabilities={accessCapabilities}
+      connected={connected}
+      commandsActive={commandsActive}
+      shortcuts={shortcuts}
       activeWorktreePath={activeWorktreePath}
       branchesFocusRequest={branchesFocusRequest}
       environmentId={environmentId}
@@ -82,6 +98,10 @@ export function RepositoryWorkspace({
 }
 
 function RepositoryWorkspaceContent({
+  accessCapabilities,
+  connected,
+  commandsActive,
+  shortcuts,
   activeWorktreePath,
   branchesFocusRequest,
   environmentId,
@@ -94,6 +114,10 @@ function RepositoryWorkspaceContent({
   retryRefs,
   selectRef,
 }: {
+  readonly accessCapabilities: readonly EnvironmentAccessCapability[];
+  readonly connected: boolean;
+  readonly commandsActive: boolean;
+  readonly shortcuts: GraphCommandShortcuts | undefined;
   readonly activeWorktreePath: string;
   readonly branchesFocusRequest: number;
   readonly environmentId: string | undefined;
@@ -107,6 +131,9 @@ function RepositoryWorkspaceContent({
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
   const [historyReader, setHistoryReader] = useState<RepositoryHistoryReader>();
+  const activeBranch = refs.refs?.worktrees.find(
+    ({ path }) => path === activeWorktreePath,
+  )?.head.branch;
   const filterStore = useMemo(() => createBrowserHistoryFilterStore(), []);
   const [historyScope, setHistoryScope] = useState<HistoryScope>(() =>
     environmentId === undefined || logicalRepositoryId === undefined
@@ -213,6 +240,25 @@ function RepositoryWorkspaceContent({
           className="h-full rounded-none bg-repository"
         >
           <CommitGraph
+            commandEnvironment={
+              environmentId === undefined ||
+              logicalRepositoryId === undefined ||
+              repositoryId === undefined
+                ? undefined
+                : {
+                    environmentId,
+                    logicalRepositoryId,
+                    repositoryId,
+                    activeWorktreePath,
+                    ...(activeBranch === undefined ? {} : { activeBranch }),
+                    connected,
+                    capabilities: new Set(accessCapabilities),
+                    freshnessReady: false,
+                    operationState: "idle",
+                  }
+            }
+            commandsActive={commandsActive}
+            shortcuts={shortcuts}
             onRemoveHistoryRef={toggleRef}
             reader={historyReader}
             repositoryName={repositoryName}

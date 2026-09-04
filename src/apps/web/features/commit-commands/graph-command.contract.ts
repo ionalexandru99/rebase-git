@@ -3,7 +3,20 @@ import type {
   RepositoryCommit,
   RepositoryRefTarget,
 } from "@rebase/contracts";
-import type { KeyboardShortcutCommandId } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
+import type {
+  KeyboardShortcutBindings,
+  KeyboardShortcutCommandId,
+  KeyboardShortcutPlatform,
+} from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
+
+export type GraphCommandEnvironment = Omit<
+  GraphCommandContext,
+  "selectedOids" | "invokingOid" | "ref"
+>;
+export interface GraphCommandShortcuts {
+  readonly bindings: KeyboardShortcutBindings;
+  readonly platform: KeyboardShortcutPlatform;
+}
 
 export type GraphShortcutCommandId = Extract<
   KeyboardShortcutCommandId,

@@ -29,6 +29,7 @@ import {
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
 import { TooltipProvider } from "#web-ui/components/ui/tooltip";
+import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { OpenProjectScreen } from "#web-ui/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-sidebar";
 import { RepositoryFolderPicker } from "#web-ui/features/repository-folder-picker/repository-folder-picker";
@@ -61,6 +62,7 @@ export function ApplicationShell({
     session.repositoryCatalog.getSnapshot,
   );
   const environmentStatus = environmentSessionPresentation(sessionState);
+  const shortcuts = useKeyboardShortcuts();
   const lastConnectedEnvironmentId = useRef<string | undefined>(undefined);
   if (sessionState._tag === "Connected") {
     lastConnectedEnvironmentId.current = sessionState.environmentId;
@@ -304,6 +306,14 @@ export function ApplicationShell({
                   />
                 ) : (
                   <RepositoryWorkspace
+                    accessCapabilities={
+                      sessionState._tag === "Connected"
+                        ? sessionState.accessCapabilities
+                        : []
+                    }
+                    connected={sessionState._tag === "Connected"}
+                    commandsActive={!settingsOpen && !folderPickerOpen}
+                    shortcuts={shortcuts}
                     activeWorktreePath={activeWorktreePath}
                     branchesFocusRequest={branchesFocusRequest}
                     environmentId={

@@ -1,7 +1,9 @@
 import type { RepositoryCommit } from "@rebase/contracts";
+import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import {
   type RepositoryHistoryReader,
   type RepositoryHistorySnapshot,
@@ -10,36 +12,93 @@ import {
 import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 describe("commit graph", () => {
-  it("clears the active descendant when a scope change hides its commit", async () => {
+  it("uses the same history command from a ref label and the row keyboard menu", async () => {
     const commits = history(3);
-    const last = commits[2];
-    if (last === undefined) throw new Error("Missing fixture");
     const reader = historyReader({ commits, status: "ready" });
-    const screen = await renderGraph(reader);
-    const list = screen.getByRole("listbox");
-    await screen.getByRole("option", { name: /^Commit 1,/ }).click();
-    await expect.element(list).toHaveAttribute("aria-activedescendant");
-    reader.read.mockResolvedValue(commits.slice(2));
-    await screen.rerender(
-      <div style={{ height: 520, width: 900 }}>
-        <CommitGraph
-          reader={reader}
-          repositoryName="rebase-test"
-          roots={[{ name: "other", oid: last.oid, type: "branch" }]}
-        />
-      </div>,
+    const roots = [
+      { name: "main", oid: "0".repeat(40), type: "branch" as const },
+    ];
+    reader.getRefTargets.mockResolvedValue(roots);
+    const toggle = vi.fn();
+    const screen = await renderGraph(reader, roots, {
+      onRemoveHistoryRef: toggle,
+    });
+    await screen.getByRole("button", { name: "Actions for main" }).click();
+    await screen.getByRole("menuitem", { name: "Remove from history" }).click();
+    expect(toggle).toHaveBeenLastCalledWith(
+      { _tag: "LocalBranch", name: "main" },
+      expect.objectContaining({ selectedOids: [] }),
     );
+    await expect.element(screen.getByRole("grid")).toHaveFocus();
+    await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+    await screen
+      .getByRole("menuitem", { name: "Remove main from history" })
+      .click();
+    expect(toggle).toHaveBeenCalledTimes(2);
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 1,/ }))
-      .not.toBeInTheDocument();
-    await expect.element(list).not.toHaveAttribute("aria-activedescendant");
-    list.element().focus();
-    await userEvent.keyboard("{ArrowDown}");
-    await expect
-      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .toHaveAttribute("aria-selected", "true");
   });
+  it("keeps active movement separate from ordered range and toggle selection", async () => {
+    const screen = await renderGraph(
+      historyReader({ commits: history(8), status: "ready" }),
+    );
+    const grid = screen.getByRole("grid");
+    const row = (index: number) =>
+      grid.getByRole("row", { name: new RegExp(`^Commit ${index},`) });
+    await row(1).click();
+    await userEvent.keyboard("{Shift>}");
+    await row(4).click();
+    await userEvent.keyboard("{/Shift}");
+    for (const index of [1, 2, 3, 4])
+      await expect.element(row(index)).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Control>}{ArrowDown}{/Control}");
+    await expect
+      .element(grid)
+      .toHaveAttribute(
+        "aria-activedescendant",
+        `commit-${(5).toString(16).padStart(40, "0")}`,
+      );
+    await expect.element(row(5)).toHaveAttribute("aria-selected", "false");
+    await userEvent.keyboard(" ");
+    await expect.element(row(5)).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Escape}");
+    expect(
+      grid
+        .getByRole("row")
+        .all()
+        .every(
+          (candidate) =>
+            candidate.element().getAttribute("aria-selected") === "false",
+        ),
+    ).toBe(true);
+    await expect.element(grid).toHaveFocus();
+  });
 
+  it("selects the invoking commit and opens its menu from the keyboard", async () => {
+    const commits = history(4);
+    const reader = historyReader({ commits, status: "ready" });
+    reader.getCommitSummaries.mockImplementation(async (oids) =>
+      commits.filter(({ oid }) => oids.includes(oid)),
+    );
+    const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await grid.getByRole("row", { name: /^Commit 0,/ }).click();
+    await grid
+      .getByRole("row", { name: /^Commit 2,/ })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Copy commit subject" }).click();
+    expect(copy).toHaveBeenLastCalledWith("Commit 2");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toHaveAttribute("aria-selected", "false");
+    await expect.element(grid).toHaveFocus();
+    await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+    await screen.getByRole("menuitem", { name: "Copy commit SHA" }).click();
+    expect(copy).toHaveBeenLastCalledWith(commits[2]?.oid);
+    copy.mockRestore();
+  });
   it("expands nested merge lines without selecting them and clears a selection hidden by collapse", async () => {
     const commits = mergeHistory();
     const merge = commits[0];
@@ -52,31 +111,31 @@ describe("commit graph", () => {
     ]);
     const screen = await renderGraph(reader);
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 2,/ }))
       .not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Expand merge Commit 0" }).click();
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 2,/ }))
       .toBeVisible();
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .toHaveAttribute("aria-selected", "false");
     await expect
       .element(screen.getByText("nested-ref"))
       .not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Expand merge Commit 2" }).click();
-    await screen.getByRole("option", { name: /^Commit 4,/ }).click();
+    await screen.getByRole("row", { name: /^Commit 4,/ }).click();
     await expect.element(screen.getByText("nested-ref")).toBeVisible();
     await screen
       .getByRole("button", { name: "Collapse merge Commit 0" })
       .click();
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 4,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 4,/ }))
       .not.toBeInTheDocument();
     expect(
       screen
-        .getByRole("listbox")
-        .getByRole("option")
+        .getByRole("grid")
+        .getByRole("row")
         .all()
         .every(
           (row) => row.element().getAttribute("aria-selected") === "false",
@@ -84,7 +143,7 @@ describe("commit graph", () => {
     ).toBe(true);
     await userEvent.keyboard("{ArrowRight}");
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 4,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 4,/ }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Collapse merge Commit 2" }))
@@ -117,7 +176,7 @@ describe("commit graph", () => {
       { name: "feature", oid: "2".padStart(40, "0"), type: "branch" },
     ]);
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 2,/ }))
       .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Expand merge Commit 0" }))
@@ -131,7 +190,7 @@ describe("commit graph", () => {
     const commits = history(3);
     const reader = historyReader({ commits, status: "ready" });
     const screen = await renderGraph(reader);
-    const selected = screen.getByRole("option", { name: /^Commit 1,/ });
+    const selected = screen.getByRole("row", { name: /^Commit 1,/ });
     await selected.click();
     let finish: ((value: readonly RepositoryCommit[]) => void) | undefined;
     reader.read.mockImplementationOnce(
@@ -144,7 +203,7 @@ describe("commit graph", () => {
       .getByRole("combobox", { name: "History ordering" })
       .selectOptions("chronological");
     await expect
-      .element(screen.getByRole("listbox"))
+      .element(screen.getByRole("grid"))
       .toHaveAttribute("aria-busy", "true");
     expect(reader.read).toHaveBeenLastCalledWith(
       expect.objectContaining({ order: "chronological" }),
@@ -152,7 +211,7 @@ describe("commit graph", () => {
     finish?.(commits.toReversed());
     await expect.element(selected).toHaveAttribute("aria-selected", "true");
     await expect
-      .element(screen.getByRole("listbox"))
+      .element(screen.getByRole("grid"))
       .toHaveAttribute("aria-busy", "false");
   });
 
@@ -189,7 +248,7 @@ describe("commit graph", () => {
     await expect
       .element(screen.getByRole("group", { name: "Custom history scope" }))
       .toBeVisible();
-    const firstCommit = screen.getByRole("option", { name: /^Commit 0,/ });
+    const firstCommit = screen.getByRole("row", { name: /^Commit 0,/ });
     await expect
       .element(firstCommit.getByText("main", { exact: true }))
       .toBeVisible();
@@ -217,7 +276,7 @@ describe("commit graph", () => {
 
     await expect.element(screen.getByText("Syncing")).toBeVisible();
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .toBeVisible();
   });
 
@@ -242,11 +301,11 @@ describe("commit graph", () => {
         .mockResolvedValueOnce(commits)
         .mockReturnValueOnce(reconciliation);
       const screen = await renderGraph(reader);
-      const grid = screen.getByRole("listbox", { name: "Commit history" });
+      const grid = screen.getByRole("grid", { name: "Commit history" });
       grid.element().scrollTop = scrollTop;
       grid.element().dispatchEvent(new Event("scroll"));
       const selectedIndex = Math.floor(scrollTop / 36) + 2;
-      const selected = grid.getByRole("option", {
+      const selected = grid.getByRole("row", {
         name: new RegExp(`^Commit ${selectedIndex},`),
       });
       await expect.element(selected).toBeVisible();
@@ -277,7 +336,7 @@ describe("commit graph", () => {
       ]);
       await expect
         .element(
-          grid.getByRole("option", {
+          grid.getByRole("row", {
             name: new RegExp(`^Commit ${selectedIndex},`),
           }),
         )
@@ -301,7 +360,7 @@ describe("commit graph", () => {
     const screen = await renderGraph(reader);
 
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .toBeVisible();
     await screen.getByRole("button", { name: "Stale. Retry" }).click();
     expect(reader.read).toHaveBeenCalledTimes(2);
@@ -311,25 +370,23 @@ describe("commit graph", () => {
     const commits = history(100);
     const reader = historyReader({ commits, status: "ready" });
     const screen = await renderGraph(reader);
-    const grid = screen.getByRole("listbox", { name: "Commit history" });
+    const grid = screen.getByRole("grid", { name: "Commit history" });
 
+    await expect.element(grid).toHaveAttribute("aria-rowcount", "100");
     await expect
-      .element(grid.getByRole("option", { name: /Commit 0/ }))
-      .toHaveAttribute("aria-setsize", "100");
-    await expect
-      .element(grid.getByRole("option", { name: /Commit 0/ }))
+      .element(grid.getByRole("row", { name: /Commit 0/ }))
       .toBeVisible();
-    expect(grid.getByRole("option").all().length).toBeLessThan(40);
-    await expect.element(grid.getByRole("presentation")).toBeInTheDocument();
+    expect(grid.getByRole("row").all().length).toBeLessThan(40);
+    await expect.element(grid.getByRole("rowgroup")).toBeInTheDocument();
     expect(document.querySelector("canvas")).not.toBeNull();
 
-    const second = grid.getByRole("option", { name: /^Commit 1,/ });
+    const second = grid.getByRole("row", { name: /^Commit 1,/ });
     await second.click();
     await expect.element(second).toHaveAttribute("aria-selected", "true");
     grid.element().focus();
     await userEvent.keyboard("{ArrowDown}");
     await expect
-      .element(grid.getByRole("option", { name: /^Commit 2,/ }))
+      .element(grid.getByRole("row", { name: /^Commit 2,/ }))
       .toHaveAttribute("aria-selected", "true");
   });
 
@@ -396,7 +453,7 @@ describe("commit graph", () => {
     const first = historyReader({ commits: history(2), status: "ready" });
     const screen = await renderGraph(first);
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .toBeVisible();
     let rejectRead: ((error: unknown) => void) | undefined;
     const pending = new Promise<readonly RepositoryCommit[]>((_, reject) => {
@@ -427,7 +484,7 @@ describe("commit graph", () => {
       .element(screen.getByRole("alert"))
       .toHaveTextContent("Commit history is unavailable");
     await expect
-      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .not.toBeInTheDocument();
   });
 });
@@ -435,10 +492,31 @@ describe("commit graph", () => {
 async function renderGraph(
   reader: ReturnType<typeof historyReader>,
   roots = [{ name: "main", oid: "0".repeat(40), type: "branch" as const }],
+  options: Pick<ComponentProps<typeof CommitGraph>, "onRemoveHistoryRef"> = {},
 ) {
   return render(
     <div style={{ height: 520, width: 900 }}>
-      <CommitGraph reader={reader} repositoryName="rebase-test" roots={roots} />
+      <CommitGraph
+        {...options}
+        reader={reader}
+        repositoryName="rebase-test"
+        roots={roots}
+        commandEnvironment={{
+          environmentId: "test-environment",
+          logicalRepositoryId: "test-logical-repository",
+          repositoryId: "test-repository",
+          activeBranch: "main",
+          activeWorktreePath: "/repo",
+          capabilities: new Set(),
+          connected: false,
+          freshnessReady: false,
+          operationState: "idle",
+        }}
+        shortcuts={{
+          bindings: defaultKeyboardShortcutBindings,
+          platform: "other",
+        }}
+      />
     </div>,
   );
 }
@@ -477,7 +555,7 @@ function historyReader({
     fetch: vi.fn<RepositoryHistoryReader["fetch"]>(),
     configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(),
     close: vi.fn(),
-    getCommitSummaries: vi.fn(async () => commits),
+    getCommitSummaries: vi.fn<RepositoryHistoryReader["getCommitSummaries"]>(async () => commits),
     getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
     manageCache: async () => undefined,
     search: async () => ({
@@ -485,6 +563,7 @@ function historyReader({
       replicaComplete: true,
       synchronizedCommitCount: commits.length,
     }),
+
     getRefTargets: vi.fn<RepositoryHistoryReader["getRefTargets"]>(
       async () => [],
     ),
