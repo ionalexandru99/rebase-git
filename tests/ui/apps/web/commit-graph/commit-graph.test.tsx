@@ -413,6 +413,10 @@ function historyReader({
 }) {
   let snapshot: RepositoryHistorySnapshot = { revision: 0, status };
   const reader = {
+    ancestryRoute: vi.fn<RepositoryHistoryReader["ancestryRoute"]>(
+      async () => undefined,
+    ),
+    locate: vi.fn<RepositoryHistoryReader["locate"]>(async () => undefined),
     close: vi.fn(),
     getCommitSummaries: vi.fn(async () => commits),
     getRefTargets: vi.fn<RepositoryHistoryReader["getRefTargets"]>(
