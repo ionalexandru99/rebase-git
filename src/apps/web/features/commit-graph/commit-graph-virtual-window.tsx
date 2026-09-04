@@ -1,0 +1,147 @@
+import type { RepositoryCommit } from "@rebase/contracts";
+import {
+  defaultRangeExtractor,
+  useVirtualizer,
+  type VirtualItem,
+} from "@tanstack/react-virtual";
+import {
+  type ReactNode,
+  type Ref,
+  type RefObject,
+  type UIEventHandler,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useState,
+} from "react";
+import type { CommitGraphViewportHandle } from "#web/features/commit-graph/commit-graph.contract";
+import type {
+  CommitGraphPageWindow,
+  CommitGraphPageWindowSnapshot,
+} from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+
+const rowHeight = 36;
+const overscanRows = 6;
+
+export function CommitGraphVirtualWindow({
+  ref,
+  scrollRef,
+  commits,
+  snapshot,
+  engine,
+  activeOid,
+  onPageSize,
+  children,
+}: {
+  readonly ref: Ref<CommitGraphViewportHandle>;
+  readonly scrollRef: RefObject<HTMLTableElement | null>;
+  readonly commits: readonly RepositoryCommit[];
+  readonly snapshot: CommitGraphPageWindowSnapshot;
+  readonly engine: CommitGraphPageWindow | undefined;
+  readonly activeOid: string | undefined;
+  readonly onPageSize: (size: number) => void;
+  readonly children: (viewport: {
+    readonly viewport: { readonly width: number; readonly height: number };
+    readonly horizontalOffset: number;
+    readonly verticalOffset: number;
+    readonly totalHeight: number;
+    readonly virtualRows: readonly VirtualItem[];
+    readonly onScroll: UIEventHandler<HTMLTableElement>;
+  }) => ReactNode;
+}) {
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [horizontalOffset, setHorizontalOffset] = useState(0);
+  const error = snapshot.error;
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (element === null) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined)
+        setViewport({
+          height: entry.contentRect.height,
+          width: entry.contentRect.width,
+        });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [scrollRef]);
+  const virtualizer = useVirtualizer({
+    count:
+      snapshot.knownEndOffset +
+      (commits.length > 0 && snapshot.hasOlder ? 1 : 0),
+    estimateSize: () => rowHeight,
+    getScrollElement: () => scrollRef.current,
+    overscan: overscanRows,
+    rangeExtractor: (range) => {
+      const indexes = defaultRangeExtractor(range);
+      const active = commits.findIndex((commit) => commit.oid === activeOid);
+      const index = active + snapshot.startOffset;
+      if (active >= 0 && !indexes.includes(index)) indexes.push(index);
+      if (
+        error !== undefined &&
+        error.offset >= snapshot.endOffset &&
+        !indexes.includes(error.offset)
+      )
+        indexes.push(error.offset);
+      return indexes.sort((left, right) => left - right);
+    },
+  });
+  const absoluteRows = virtualizer.getVirtualItems();
+  const virtualRows = useMemo(
+    () =>
+      absoluteRows.map((row) => ({
+        ...row,
+        index: row.index - snapshot.startOffset,
+      })),
+    [absoluteRows, snapshot.startOffset],
+  );
+  const firstVirtual =
+    commits.length === 0
+      ? undefined
+      : Math.floor((virtualizer.scrollOffset ?? 0) / rowHeight);
+  const lastVirtual =
+    firstVirtual === undefined
+      ? undefined
+      : firstVirtual + Math.ceil(viewport.height / rowHeight);
+  useEffect(() => {
+    if (
+      firstVirtual === undefined ||
+      lastVirtual === undefined ||
+      engine === undefined ||
+      snapshot.loading ||
+      snapshot.error !== undefined
+    )
+      return;
+    if (
+      firstVirtual < snapshot.startOffset ||
+      firstVirtual >= snapshot.endOffset
+    )
+      void engine.prefetchOffset(firstVirtual);
+    else engine.setViewport(firstVirtual, lastVirtual);
+  }, [
+    firstVirtual,
+    lastVirtual,
+    engine,
+    snapshot.startOffset,
+    snapshot.endOffset,
+    snapshot.loading,
+    snapshot.error,
+  ]);
+
+  useEffect(
+    () => onPageSize(Math.max(1, Math.floor(viewport.height / rowHeight))),
+    [onPageSize, viewport.height],
+  );
+  useImperativeHandle(ref, () => ({
+    scrollToIndex: (index) =>
+      virtualizer.scrollToIndex(index, { align: "auto" }),
+  }));
+  return children({
+    viewport,
+    horizontalOffset,
+    verticalOffset: virtualizer.scrollOffset ?? 0,
+    totalHeight: virtualizer.getTotalSize(),
+    virtualRows,
+    onScroll: (event) => setHorizontalOffset(event.currentTarget.scrollLeft),
+  });
+}
