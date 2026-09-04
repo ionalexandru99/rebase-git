@@ -5,6 +5,7 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -49,6 +50,10 @@ export function CommitGraph({
   const [loading, setLoading] = useState(true);
   const [selectedOid, setSelectedOid] = useState<string>();
   const loadEpoch = useRef(0);
+  const commitsRef = useRef(commits);
+  commitsRef.current = commits;
+  const pendingViewportAnchor = useRef<ViewportAnchor | undefined>(undefined);
+  const previousReader = useRef(reader);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ height: 0, width: 0 });
   const [horizontalOffset, setHorizontalOffset] = useState(0);
@@ -85,8 +90,16 @@ export function CommitGraph({
       setCommits([]);
       setError(undefined);
       setLoading(false);
+      setSelectedOid(undefined);
+      if (scrollRef.current !== null) {
+        scrollRef.current.scrollTop = 0;
+      }
       return;
     }
+    pendingViewportAnchor.current = viewportAnchor(
+      scrollRef.current,
+      commitsRef.current,
+    );
     setLoading(true);
     setError(undefined);
     void reader
@@ -118,14 +131,33 @@ export function CommitGraph({
   }, [reader, roots]);
 
   useEffect(() => {
-    setCommits([]);
-    setError(undefined);
-    setSelectedOid(undefined);
+    if (previousReader.current !== reader) {
+      previousReader.current = reader;
+      setCommits([]);
+      setError(undefined);
+      setSelectedOid(undefined);
+      if (scrollRef.current !== null) {
+        scrollRef.current.scrollTop = 0;
+      }
+    }
     loadHistory();
     return () => {
       loadEpoch.current += 1;
     };
-  }, [loadHistory]);
+  }, [loadHistory, reader]);
+
+  useLayoutEffect(() => {
+    const anchor = pendingViewportAnchor.current;
+    const element = scrollRef.current;
+    if (anchor === undefined || element === null) {
+      return;
+    }
+    pendingViewportAnchor.current = undefined;
+    const index = commits.findIndex((commit) => commit.oid === anchor.oid);
+    if (index >= 0) {
+      element.scrollTop = index * rowHeight + anchor.offset;
+    }
+  }, [commits]);
 
   const laneRows = useMemo(
     () =>
@@ -178,6 +210,11 @@ export function CommitGraph({
           <span className="text-[11px] text-muted-foreground" role="status">
             Syncing
           </span>
+        ) : historySnapshot.synchronization === "stale" ||
+          (!loading && error !== undefined && commits.length > 0) ? (
+          <Button onClick={loadHistory} size="sm" variant="ghost">
+            Stale. Retry
+          </Button>
         ) : null}
       </header>
       <div
@@ -352,6 +389,25 @@ function commitRowId(oid: string) {
 
 function shortOid(oid: string) {
   return oid.slice(0, 8);
+}
+
+function viewportAnchor(
+  element: HTMLDivElement | null,
+  commits: readonly RepositoryCommit[],
+): ViewportAnchor | undefined {
+  if (element === null || element.scrollTop <= 0) {
+    return undefined;
+  }
+  const index = Math.floor(element.scrollTop / rowHeight);
+  const commit = commits[index];
+  return commit === undefined
+    ? undefined
+    : { oid: commit.oid, offset: element.scrollTop - index * rowHeight };
+}
+
+interface ViewportAnchor {
+  readonly offset: number;
+  readonly oid: string;
 }
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {

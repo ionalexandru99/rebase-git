@@ -4,6 +4,7 @@ import type {
   RepositoryHistoryBatch,
   RepositoryHistoryPage,
 } from "@rebase/contracts/repository-history/repository-history.contract";
+import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 
 const pageMagic = 0x5248_5031;
 const batchMagic = 0x5248_4231;
@@ -11,6 +12,8 @@ const maximumBatchCommitCount = 512;
 const maximumCommitCount = 1_000;
 const maximumParentCount = 4_096;
 const maximumRefCount = 256;
+const maximumSnapshotRefCount = 40_512;
+const maximumSnapshotRootCount = 40_512;
 const maximumStringBytes = 1_048_576;
 
 export function encodeRepositoryHistoryPage(page: RepositoryHistoryPage) {
@@ -90,6 +93,10 @@ export function encodeRepositoryHistoryBatch(batch: RepositoryHistoryBatch) {
   writer.string(batch.requestId);
   writer.string(batch.repositoryId);
   writer.uint32(batch.sequence);
+  writer.uint8(batch.snapshot === undefined ? 0 : 1);
+  if (batch.snapshot !== undefined) {
+    writeSnapshot(writer, batch.snapshot, batch.objectFormat);
+  }
   writer.uint16(batch.commits.length);
   for (const commit of batch.commits) {
     writeCommit(writer, commit, batch.objectFormat);
@@ -113,6 +120,12 @@ export function decodeRepositoryHistoryBatch(
   const requestId = reader.string();
   const repositoryId = reader.string();
   const sequence = reader.uint32();
+  const hasSnapshot = reader.uint8();
+  if (hasSnapshot !== 0 && hasSnapshot !== 1) {
+    throw new Error("Invalid history snapshot flag");
+  }
+  const snapshot =
+    hasSnapshot === 1 ? readSnapshot(reader, objectFormat) : undefined;
   const count = reader.uint16();
   if (count > maximumBatchCommitCount) {
     throw new Error("Too many commits in history batch");
@@ -127,6 +140,7 @@ export function decodeRepositoryHistoryBatch(
     repositoryId,
     requestId,
     sequence,
+    ...(snapshot === undefined ? {} : { snapshot }),
   };
 }
 
@@ -142,6 +156,71 @@ export function readRepositoryHistoryBatchSequence(bytes: Uint8Array) {
   reader.string();
   reader.string();
   return reader.uint32();
+}
+
+function writeSnapshot(
+  writer: BinaryWriter,
+  snapshot: NonNullable<RepositoryHistoryBatch["snapshot"]>,
+  objectFormat: RepositoryHistoryBatch["objectFormat"],
+) {
+  if (snapshot.objectFormat !== objectFormat) {
+    throw new Error("History snapshot object format does not match the batch");
+  }
+  if (!/^[0-9a-f]{64}$/.test(snapshot.id)) {
+    throw new Error("Invalid history snapshot ID");
+  }
+  if (snapshot.refTargets.length > maximumSnapshotRefCount) {
+    throw new Error("Too many history snapshot refs");
+  }
+  if (snapshot.rootOids.length > maximumSnapshotRootCount) {
+    throw new Error("Too many history snapshot roots");
+  }
+  writer.string(snapshot.id);
+  writer.uint8(snapshot.resumable ? 1 : 0);
+  writer.uint32(snapshot.refTargets.length);
+  for (const target of snapshot.refTargets) {
+    writer.uint8(refTypeCode(target.type));
+    writer.string(target.name);
+    writeOid(writer, target.oid, objectFormat);
+  }
+  writer.uint32(snapshot.rootOids.length);
+  for (const oid of snapshot.rootOids) {
+    writeOid(writer, oid, objectFormat);
+  }
+}
+
+function readSnapshot(
+  reader: BinaryReader,
+  objectFormat: RepositoryHistoryBatch["objectFormat"],
+): NonNullable<RepositoryHistoryBatch["snapshot"]> {
+  const id = reader.string();
+  if (!/^[0-9a-f]{64}$/.test(id)) {
+    throw new Error("Invalid history snapshot ID");
+  }
+  const resumable = reader.uint8();
+  if (resumable !== 0 && resumable !== 1) {
+    throw new Error("Invalid resumable snapshot flag");
+  }
+  const refCount = reader.uint32();
+  if (refCount > maximumSnapshotRefCount) {
+    throw new Error("Too many history snapshot refs");
+  }
+  const refTargets = Array.from({ length: refCount }, () => {
+    const type = readRefType(reader.uint8());
+    return {
+      name: reader.string(),
+      oid: readOid(reader, objectFormat),
+      type,
+    };
+  });
+  const rootCount = reader.uint32();
+  if (rootCount > maximumSnapshotRootCount) {
+    throw new Error("Too many history snapshot roots");
+  }
+  const rootOids = Array.from({ length: rootCount }, () =>
+    readOid(reader, objectFormat),
+  );
+  return { id, objectFormat, refTargets, resumable: resumable === 1, rootOids };
 }
 
 function writeCommit(
@@ -307,6 +386,13 @@ class BinaryWriter {
   }
 
   uint32(value: number) {
+    if (
+      !Number.isInteger(value) ||
+      value < 0 ||
+      value > maximumRepositoryHistorySequence
+    ) {
+      throw new Error("Invalid unsigned 32-bit integer");
+    }
     const bytes = new Uint8Array(4);
     new DataView(bytes.buffer).setUint32(0, value, false);
     this.write(bytes);

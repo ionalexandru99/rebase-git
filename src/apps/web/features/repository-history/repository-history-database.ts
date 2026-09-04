@@ -1,6 +1,7 @@
 import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
+  RepositoryHistorySnapshot,
 } from "@rebase/contracts";
 import type {
   RepositoryHistoryCompletionBasis,
@@ -14,7 +15,7 @@ export const repositoryStoreName = "repositories";
 export const repositoryOrderIndexName = "repositoryOrder";
 
 const databaseName = "rebase-repository-history";
-const databaseVersion = 2;
+const databaseVersion = 3;
 
 export function withRepositoryHistoryDatabase<T>(
   indexedDB: IDBFactory | undefined,
@@ -80,6 +81,7 @@ export function emptyStoredRepository(
     environmentId,
     key: repositoryKey(environmentId, repositoryId),
     objectFormat,
+    minimumTopologicalEpoch: 0,
     progress: { committedCommitCount: 0, nextBatchSequence: 0 },
     refTargets: [],
     repositoryId,
@@ -90,14 +92,22 @@ export function storedCommit(
   environmentId: string,
   repositoryId: string,
   commit: RepositoryCommit,
-  topologicalOrder?: number,
+  topologicalPosition?: {
+    readonly epoch: number;
+    readonly order: number;
+  },
 ): StoredCommit {
   return {
     commit,
     environmentId,
     key: commitKey(environmentId, repositoryId, commit.oid),
     repositoryId,
-    ...(topologicalOrder === undefined ? {} : { topologicalOrder }),
+    ...(topologicalPosition === undefined
+      ? {}
+      : {
+          topologicalEpoch: topologicalPosition.epoch,
+          topologicalOrder: topologicalPosition.order,
+        }),
   };
 }
 
@@ -128,15 +138,17 @@ function openDatabase(indexedDB: IDBFactory) {
       const commits = database.objectStoreNames.contains(commitStoreName)
         ? request.transaction?.objectStore(commitStoreName)
         : database.createObjectStore(commitStoreName, { keyPath: "key" });
-      if (
-        commits !== undefined &&
-        !commits.indexNames.contains(repositoryOrderIndexName)
-      ) {
+      if (commits !== undefined) {
+        if (commits.indexNames.contains(repositoryOrderIndexName)) {
+          commits.deleteIndex(repositoryOrderIndexName);
+        }
         commits.createIndex(repositoryOrderIndexName, [
           "environmentId",
           "repositoryId",
+          "topologicalEpoch",
           "topologicalOrder",
         ]);
+        backfillTopologicalEpoch(commits);
       }
       if (!database.objectStoreNames.contains(repositoryStoreName)) {
         database.createObjectStore(repositoryStoreName, { keyPath: "key" });
@@ -169,6 +181,24 @@ function openDatabase(indexedDB: IDBFactory) {
   });
 }
 
+function backfillTopologicalEpoch(commits: IDBObjectStore) {
+  const request = commits.openCursor();
+  request.onsuccess = () => {
+    const cursor = request.result;
+    if (cursor === null) {
+      return;
+    }
+    const commit = cursor.value as StoredCommit;
+    if (
+      commit.topologicalOrder !== undefined &&
+      commit.topologicalEpoch === undefined
+    ) {
+      cursor.update({ ...commit, topologicalEpoch: 0 } satisfies StoredCommit);
+    }
+    cursor.continue();
+  };
+}
+
 function storageUnavailable(cause: unknown) {
   return cause instanceof RepositoryHistoryStorageUnavailable
     ? cause
@@ -180,6 +210,7 @@ export interface StoredCommit {
   readonly environmentId: string;
   readonly key: string;
   readonly repositoryId: string;
+  readonly topologicalEpoch?: number;
   readonly topologicalOrder?: number;
 }
 
@@ -193,7 +224,11 @@ export interface StoredRepository {
   readonly completion?: RepositoryHistoryCompletionBasis;
   readonly environmentId: string;
   readonly key: string;
+  readonly minimumTopologicalEpoch: number;
   readonly objectFormat: "sha1" | "sha256";
+  readonly pendingTopologicalEpoch?: number;
+  readonly pendingTopologicalOrder?: number;
+  readonly pendingSnapshot?: RepositoryHistorySnapshot;
   readonly progress: RepositoryHistorySynchronizationProgress;
   readonly refTargets: readonly RepositoryHistoryRefTarget[];
   readonly repositoryId: string;

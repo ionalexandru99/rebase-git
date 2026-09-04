@@ -1,9 +1,20 @@
 import { EnvironmentRequestId } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
+import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 import { Schema } from "effect";
 
 const RepositoryId = Schema.String.check(Schema.isUUID(4));
 const ObjectId = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
+);
+const SnapshotId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
+const SnapshotRootOids = Schema.Array(ObjectId).check(
+  Schema.isMaxLength(40_512),
+);
+const RepositoryHistorySequence = Schema.Int.check(
+  Schema.isBetween({
+    minimum: 0,
+    maximum: maximumRepositoryHistorySequence,
+  }),
 );
 
 export const RepositoryHistoryRefTarget = Schema.Struct({
@@ -36,6 +47,23 @@ export const CancelRepositoryHistory = Schema.TaggedStruct(
 export const SynchronizeRepositoryHistory = Schema.TaggedStruct(
   "SynchronizeRepositoryHistory",
   {
+    basis: Schema.optionalKey(
+      Schema.Union([
+        Schema.TaggedStruct("Complete", {
+          commitCount: Schema.Natural,
+          objectFormat: Schema.Literals(["sha1", "sha256"]),
+          rootOids: SnapshotRootOids,
+          snapshotId: SnapshotId,
+        }),
+        Schema.TaggedStruct("Incomplete", {
+          committedCommitCount: Schema.Natural,
+          nextBatchSequence: RepositoryHistorySequence,
+          objectFormat: Schema.Literals(["sha1", "sha256"]),
+          rootOids: SnapshotRootOids,
+          snapshotId: SnapshotId,
+        }),
+      ]),
+    ),
     priority: Schema.Literals(["background", "visible"]),
     repositoryId: RepositoryId,
     requestId: EnvironmentRequestId,
@@ -48,7 +76,7 @@ export const AcknowledgeRepositoryHistoryBatch = Schema.TaggedStruct(
   "AcknowledgeRepositoryHistoryBatch",
   {
     requestId: EnvironmentRequestId,
-    sequence: Schema.Natural,
+    sequence: RepositoryHistorySequence,
   },
 );
 
@@ -64,6 +92,7 @@ export type RepositoryHistoryClientMessage =
 export const RepositoryHistoryOperationFailure = Schema.Union([
   Schema.TaggedStruct("AuthorizationDenied", {}),
   Schema.TaggedStruct("RepositoryMissing", { repositoryId: RepositoryId }),
+  Schema.TaggedStruct("SnapshotInvalidated", {}),
   Schema.TaggedStruct("GitFailed", {
     detail: Schema.optional(Schema.String.check(Schema.isMaxLength(2_048))),
     reason: Schema.Literals([
@@ -126,4 +155,13 @@ export interface RepositoryHistoryBatch {
   readonly repositoryId: string;
   readonly requestId: string;
   readonly sequence: number;
+  readonly snapshot?: RepositoryHistorySnapshot;
+}
+
+export interface RepositoryHistorySnapshot {
+  readonly id: string;
+  readonly objectFormat: "sha1" | "sha256";
+  readonly refTargets: readonly RepositoryHistoryRefTarget[];
+  readonly resumable: boolean;
+  readonly rootOids: readonly string[];
 }

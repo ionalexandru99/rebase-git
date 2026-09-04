@@ -12,7 +12,10 @@ import {
   type EnvironmentAccessCapability,
   type EnvironmentHello,
   environmentLivePath,
+  maximumRepositoryHistorySequence,
   type RepositoryCommit,
+  type RepositoryHistoryBatch,
+  type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
 import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
 import {
@@ -472,7 +475,285 @@ describe("repository history", { timeout: 30_000 }, () => {
       socket.close();
     }, history);
   });
+
+  it("coalesces ref movement during traversal before publishing the latest refs", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "moving-refs");
+    await createRepository(repositoryPath, "sha1", 2);
+    const batches: RepositoryHistoryBatch[] = [];
+    let moved = false;
+
+    const count = await Effect.runPromise(
+      synchronizeRepositoryHistory(
+        createLocalGitCommandRunner(),
+        repositoryPath,
+        {
+          _tag: "SynchronizeRepositoryHistory",
+          priority: "visible",
+          repositoryId: environmentId,
+          requestId,
+        },
+        (batch) =>
+          Effect.promise(async () => {
+            batches.push(batch);
+            if (batch.snapshot !== undefined && !moved) {
+              moved = true;
+              await git(
+                repositoryPath,
+                "commit",
+                "--allow-empty",
+                "-m",
+                "arrived during traversal",
+              );
+            }
+          }),
+      ),
+    );
+
+    const latestHead = await gitOutput(repositoryPath, "rev-parse", "main");
+    expect(count).toBe(3);
+    expect(batches.flatMap((batch) => batch.commits)).toHaveLength(3);
+    expect(batches.at(-2)?.snapshot?.refTargets).toContainEqual({
+      name: "main",
+      oid: latestHead,
+      type: "branch",
+    });
+    expect(batches.map((batch) => batch.sequence)).toEqual(
+      batches.map((_, index) => index),
+    );
+  });
+
+  it("resumes an unchanged incomplete snapshot from its committed batch", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "resumable");
+    await createRepository(repositoryPath, "sha1", 300);
+    let snapshot: RepositoryHistorySnapshot | undefined;
+    const committed: RepositoryHistoryBatch[] = [];
+    const interrupted = new RepositoryHistoryError({
+      failure: { _tag: "GitFailed", reason: "Failed" },
+    });
+
+    await expect(
+      Effect.runPromise(
+        synchronizeRepositoryHistory(
+          createLocalGitCommandRunner(),
+          repositoryPath,
+          {
+            _tag: "SynchronizeRepositoryHistory",
+            priority: "visible",
+            repositoryId: environmentId,
+            requestId,
+          },
+          (batch) => {
+            if (batch.snapshot !== undefined) {
+              snapshot = batch.snapshot;
+            }
+            if (batch.commits.length > 0) {
+              committed.push(batch);
+            }
+            return batch.commits.length === 256
+              ? Effect.fail(interrupted)
+              : Effect.void;
+          },
+        ),
+      ),
+    ).rejects.toBe(interrupted);
+    const captured = snapshot;
+    if (captured === undefined) {
+      throw new Error("Snapshot metadata was not sent");
+    }
+    const resumed: RepositoryHistoryBatch[] = [];
+
+    const count = await Effect.runPromise(
+      synchronizeRepositoryHistory(
+        createLocalGitCommandRunner(),
+        repositoryPath,
+        {
+          _tag: "SynchronizeRepositoryHistory",
+          basis: {
+            _tag: "Incomplete",
+            committedCommitCount: 256,
+            nextBatchSequence: 2,
+            objectFormat: captured.objectFormat,
+            rootOids: captured.rootOids,
+            snapshotId: captured.id,
+          },
+          priority: "visible",
+          repositoryId: environmentId,
+          requestId,
+        },
+        (batch) =>
+          Effect.sync(() => {
+            resumed.push(batch);
+          }),
+      ),
+    );
+
+    expect(committed).toHaveLength(1);
+    expect(resumed[0]?.sequence).toBe(2);
+    expect(resumed.flatMap((batch) => batch.commits)).toHaveLength(44);
+    expect(count).toBe(300);
+  });
+
+  it("sends only the delta for a completed basis and reconciles force resets", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "completed-basis");
+    await createRepository(repositoryPath, "sha1", 3);
+    await git(repositoryPath, "branch", "side", "main~1");
+    const initial: RepositoryHistoryBatch[] = [];
+    await runSynchronization(repositoryPath, undefined, initial);
+    const initialSnapshot = lastSnapshot(initial);
+    const resetTarget = await gitOutput(repositoryPath, "rev-parse", "main~1");
+    await git(repositoryPath, "commit", "--allow-empty", "-m", "delta commit");
+    const delta: RepositoryHistoryBatch[] = [];
+
+    await runSynchronization(
+      repositoryPath,
+      {
+        _tag: "Complete",
+        commitCount: 3,
+        objectFormat: initialSnapshot.objectFormat,
+        rootOids: initialSnapshot.rootOids,
+        snapshotId: initialSnapshot.id,
+      },
+      delta,
+    );
+
+    expect(delta.flatMap((batch) => batch.commits)).toHaveLength(1);
+    expect(delta[0]?.snapshot?.resumable).toBe(false);
+    const deltaSnapshot = lastSnapshot(delta);
+    await git(repositoryPath, "branch", "-D", "side");
+    await git(repositoryPath, "reset", "--hard", resetTarget);
+    const reset: RepositoryHistoryBatch[] = [];
+
+    await runSynchronization(
+      repositoryPath,
+      {
+        _tag: "Complete",
+        commitCount: 4,
+        objectFormat: deltaSnapshot.objectFormat,
+        rootOids: deltaSnapshot.rootOids,
+        snapshotId: deltaSnapshot.id,
+      },
+      reset,
+    );
+
+    expect(reset.flatMap((batch) => batch.commits)).toEqual([]);
+    expect(lastSnapshot(reset).refTargets).toContainEqual({
+      name: "main",
+      oid: resetTarget,
+      type: "branch",
+    });
+    expect(
+      lastSnapshot(reset).refTargets.some((target) => target.name === "side"),
+    ).toBe(false);
+  });
+
+  it("rejects a resume basis whose captured roots no longer exist", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "invalid-basis");
+    await createRepository(repositoryPath, "sha1", 1);
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        synchronizeRepositoryHistory(
+          createLocalGitCommandRunner(),
+          repositoryPath,
+          {
+            _tag: "SynchronizeRepositoryHistory",
+            basis: {
+              _tag: "Incomplete",
+              committedCommitCount: 1,
+              nextBatchSequence: 2,
+              objectFormat: "sha1",
+              rootOids: ["f".repeat(40)],
+              snapshotId: "e".repeat(64),
+            },
+            priority: "visible",
+            repositoryId: environmentId,
+            requestId,
+          },
+          () => Effect.void,
+        ),
+      ),
+    );
+
+    expect(failure.failure).toEqual({ _tag: "SnapshotInvalidated" });
+  });
+
+  it("rejects a resume that has exhausted the batch sequence", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "exhausted-sequence");
+    await createRepository(repositoryPath, "sha1", 1);
+    const oid = await gitOutput(repositoryPath, "rev-parse", "HEAD");
+    const emitted: RepositoryHistoryBatch[] = [];
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        synchronizeRepositoryHistory(
+          createLocalGitCommandRunner(),
+          repositoryPath,
+          {
+            _tag: "SynchronizeRepositoryHistory",
+            basis: {
+              _tag: "Incomplete",
+              committedCommitCount: 0,
+              nextBatchSequence: maximumRepositoryHistorySequence,
+              objectFormat: "sha1",
+              rootOids: [oid],
+              snapshotId: "e".repeat(64),
+            },
+            priority: "visible",
+            repositoryId: environmentId,
+            requestId,
+          },
+          (batch) =>
+            Effect.sync(() => {
+              emitted.push(batch);
+            }),
+        ),
+      ),
+    );
+
+    expect(failure.failure).toMatchObject({
+      _tag: "GitFailed",
+      detail: "Repository history batch sequence is exhausted",
+    });
+    expect(emitted).toEqual([]);
+  });
 });
+
+async function runSynchronization(
+  repositoryPath: string,
+  basis: Parameters<typeof synchronizeRepositoryHistory>[2]["basis"],
+  batches: RepositoryHistoryBatch[],
+) {
+  return Effect.runPromise(
+    synchronizeRepositoryHistory(
+      createLocalGitCommandRunner(),
+      repositoryPath,
+      {
+        _tag: "SynchronizeRepositoryHistory",
+        ...(basis === undefined ? {} : { basis }),
+        priority: "visible",
+        repositoryId: environmentId,
+        requestId,
+      },
+      (batch) =>
+        Effect.sync(() => {
+          batches.push(batch);
+        }),
+    ),
+  );
+}
+
+function lastSnapshot(batches: readonly RepositoryHistoryBatch[]) {
+  const snapshot = batches.findLast((batch) => batch.snapshot)?.snapshot;
+  if (snapshot === undefined) {
+    throw new Error("Snapshot metadata was not sent");
+  }
+  return snapshot;
+}
 
 function withHistoryListener(
   use: (fixture: ListenerFixture) => Promise<void>,

@@ -3,6 +3,8 @@ import type {
   RepositoryHistoryBatch,
   RepositoryHistoryPage,
   RepositoryHistoryRefTarget,
+  RepositoryHistorySnapshot,
+  SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import {
   acceptRepositoryHistoryBatch,
@@ -31,7 +33,10 @@ export interface StoredRepositoryHistoryState {
   readonly objectFormat: "sha1" | "sha256";
   readonly refTargets: readonly RepositoryHistoryRefTarget[];
   readonly progress: RepositoryHistorySynchronizationProgress;
+  readonly pendingSnapshot?: RepositoryHistorySnapshot;
 }
+
+type SynchronizationBasis = NonNullable<SynchronizeRepositoryHistory["basis"]>;
 
 export function storeRepositoryHistoryPage(
   environmentId: string,
@@ -65,16 +70,13 @@ export function storeRepositoryHistoryPage(
           environmentId,
           repositoryId,
           commit,
-          existingCommits[index]?.topologicalOrder,
+          topologicalPosition(existingCommits[index]),
         ),
       );
     }
-    const { completion: _, ...currentWithoutCompletion } =
-      current ??
-      emptyStoredRepository(environmentId, repositoryId, page.objectFormat);
     repositories.put({
       ...emptyStoredRepository(environmentId, repositoryId, page.objectFormat),
-      ...currentWithoutCompletion,
+      ...current,
       cachedPage: {
         oids: page.commits.map((commit) => commit.oid),
         order: query.order,
@@ -82,7 +84,11 @@ export function storeRepositoryHistoryPage(
         rootOids: normalizedOids(page.refTargets.map((ref) => ref.oid)),
       },
       objectFormat: page.objectFormat,
-      refTargets: page.refTargets,
+      refTargets:
+        current?.completion !== undefined ||
+        current?.pendingSnapshot !== undefined
+          ? current.refTargets
+          : page.refTargets,
     } satisfies StoredRepository);
     await completed;
   });
@@ -104,9 +110,55 @@ export function beginRepositoryHistorySynchronization(
     if (current === undefined) {
       throw new Error("Repository history has no initial page");
     }
-    const { completion: _, ...incomplete } = current;
+    const basis = synchronizationBasis(current);
+    const {
+      pendingSnapshot: _,
+      pendingTopologicalEpoch: __,
+      pendingTopologicalOrder: ___,
+      ...withoutPendingSynchronization
+    } = current;
+    repositories.put(
+      basis?._tag === "Incomplete"
+        ? current
+        : ({
+            ...withoutPendingSynchronization,
+            progress: {
+              committedCommitCount:
+                basis?._tag === "Complete" ? basis.commitCount : 0,
+              nextBatchSequence: 0,
+            },
+          } satisfies StoredRepository),
+    );
+    await completed;
+    return basis;
+  });
+}
+
+export function restartRepositoryHistorySynchronization(
+  environmentId: string,
+  repositoryId: string,
+  indexedDB: IDBFactory | undefined = globalThis.indexedDB,
+) {
+  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
+    const transaction = database.transaction(repositoryStoreName, "readwrite");
+    const completed = transactionCompleted(transaction);
+    const repositories = transaction.objectStore(repositoryStoreName);
+    const key = repositoryKey(environmentId, repositoryId);
+    const current = await requestResult<StoredRepository | undefined>(
+      repositories.get(key),
+    );
+    if (current === undefined) {
+      throw new Error("Repository history has no synchronization state");
+    }
+    const {
+      completion: _,
+      pendingSnapshot: __,
+      pendingTopologicalEpoch: ___,
+      pendingTopologicalOrder: ____,
+      ...withoutSynchronizationBasis
+    } = current;
     repositories.put({
-      ...incomplete,
+      ...withoutSynchronizationBasis,
       progress: { committedCommitCount: 0, nextBatchSequence: 0 },
     } satisfies StoredRepository);
     await completed;
@@ -140,15 +192,44 @@ export function storeRepositoryHistoryBatch(
       batch.commits.length,
     );
     if (progress !== current.progress) {
-      const start = current.progress.committedCommitCount;
+      const minimumTopologicalEpoch = current.minimumTopologicalEpoch ?? 0;
+      const topologicalEpoch =
+        batch.snapshot === undefined
+          ? (current.pendingTopologicalEpoch ?? minimumTopologicalEpoch - 1)
+          : minimumTopologicalEpoch - 1;
+      const topologicalOrder =
+        batch.snapshot === undefined
+          ? (current.pendingTopologicalOrder ?? 0)
+          : 0;
+      const existingCommits = await Promise.all(
+        batch.commits.map((commit) =>
+          requestResult<StoredCommit | undefined>(
+            commits.get(commitKey(environmentId, repositoryId, commit.oid)),
+          ),
+        ),
+      );
       for (const [offset, commit] of batch.commits.entries()) {
-        commits.put(
-          storedCommit(environmentId, repositoryId, commit, start + offset),
-        );
+        if (topologicalPosition(existingCommits[offset]) === undefined) {
+          commits.put(
+            storedCommit(environmentId, repositoryId, commit, {
+              epoch: topologicalEpoch,
+              order: topologicalOrder + offset,
+            }),
+          );
+        }
       }
       repositories.put({
         ...current,
         objectFormat: batch.objectFormat,
+        ...(batch.snapshot === undefined
+          ? {}
+          : { pendingSnapshot: batch.snapshot }),
+        minimumTopologicalEpoch: Math.min(
+          minimumTopologicalEpoch,
+          topologicalEpoch,
+        ),
+        pendingTopologicalEpoch: topologicalEpoch,
+        pendingTopologicalOrder: topologicalOrder + batch.commits.length,
         progress,
       } satisfies StoredRepository);
     }
@@ -174,11 +255,23 @@ export function completeStoredRepositoryHistory(
     if (current === undefined) {
       throw new Error("Repository history has no synchronization state");
     }
+    const snapshot = current.pendingSnapshot;
     const completion = completeRepositoryHistory(
       current.progress,
       reportedCommitCount,
+      snapshot,
     );
-    repositories.put({ ...current, completion } satisfies StoredRepository);
+    const {
+      pendingSnapshot: _,
+      pendingTopologicalEpoch: __,
+      pendingTopologicalOrder: ___,
+      ...withoutPendingSynchronization
+    } = current;
+    repositories.put({
+      ...withoutPendingSynchronization,
+      completion,
+      ...(snapshot === undefined ? {} : { refTargets: snapshot.refTargets }),
+    } satisfies StoredRepository);
     await completed;
     return completion;
   });
@@ -206,10 +299,38 @@ export function readStoredRepositoryHistoryState(
         ? {}
         : { completion: repository.completion }),
       objectFormat: repository.objectFormat,
+      ...(repository.pendingSnapshot === undefined
+        ? {}
+        : { pendingSnapshot: repository.pendingSnapshot }),
       progress: repository.progress,
       refTargets: repository.refTargets,
     };
   });
+}
+
+function synchronizationBasis(
+  repository: StoredRepository,
+): SynchronizationBasis | undefined {
+  if (repository.pendingSnapshot?.resumable === true) {
+    return {
+      _tag: "Incomplete",
+      committedCommitCount: repository.progress.committedCommitCount,
+      nextBatchSequence: repository.progress.nextBatchSequence,
+      objectFormat: repository.pendingSnapshot.objectFormat,
+      rootOids: repository.pendingSnapshot.rootOids,
+      snapshotId: repository.pendingSnapshot.id,
+    };
+  }
+  const snapshot = repository.completion?.snapshot;
+  return snapshot === undefined
+    ? undefined
+    : {
+        _tag: "Complete",
+        commitCount: repository.completion?.commitCount ?? 0,
+        objectFormat: snapshot.objectFormat,
+        rootOids: snapshot.rootOids,
+        snapshotId: snapshot.id,
+      };
 }
 
 export function readRepositoryHistory(
@@ -343,8 +464,13 @@ function readTopologicalHistory(
   limit: number,
 ) {
   const range = IDBKeyRange.bound(
-    [environmentId, repositoryId, 0],
-    [environmentId, repositoryId, Number.MAX_SAFE_INTEGER],
+    [environmentId, repositoryId, Number.MIN_SAFE_INTEGER, 0],
+    [
+      environmentId,
+      repositoryId,
+      Number.MAX_SAFE_INTEGER,
+      Number.MAX_SAFE_INTEGER,
+    ],
   );
   const reachable = new Set(roots);
   return new Promise<readonly RepositoryCommit[]>((resolve, reject) => {
@@ -379,4 +505,11 @@ function sameOids(left: readonly string[], right: readonly string[]) {
     left.length === right.length &&
     left.every((oid, index) => oid === right[index])
   );
+}
+
+function topologicalPosition(commit: StoredCommit | undefined) {
+  return commit?.topologicalEpoch === undefined ||
+    commit.topologicalOrder === undefined
+    ? undefined
+    : { epoch: commit.topologicalEpoch, order: commit.topologicalOrder };
 }

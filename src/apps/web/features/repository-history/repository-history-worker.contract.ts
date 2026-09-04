@@ -1,6 +1,7 @@
 import type {
   RepositoryCommit,
   RepositoryHistoryOperationFailure,
+  SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import type {
   RepositoryHistoryQuery,
@@ -44,6 +45,7 @@ export type RepositoryHistoryWorkerRequest =
       readonly requestId: string;
     }
   | { readonly _tag: "GetRefTargets"; readonly requestId: string }
+  | { readonly _tag: "ReconcileHistory" }
   | {
       readonly _tag: "HistoryPageReceived";
       readonly bytes: Uint8Array;
@@ -68,6 +70,7 @@ export type RepositoryHistoryWorkerResponse =
     }
   | {
       readonly _tag: "SynchronizeHistory";
+      readonly basis?: SynchronizeRepositoryHistory["basis"];
       readonly requestId: string;
     }
   | {
@@ -107,7 +110,7 @@ export type RepositoryHistoryWorkerResponse =
       readonly _tag: "SnapshotChanged";
       readonly revision: number;
       readonly status: "empty" | "error" | "loading" | "ready";
-      readonly synchronization: "complete" | "idle" | "syncing";
+      readonly synchronization: "complete" | "idle" | "stale" | "syncing";
       readonly synchronizedCommitCount: number;
       readonly failure?: RepositoryHistoryWorkerFailure;
     };

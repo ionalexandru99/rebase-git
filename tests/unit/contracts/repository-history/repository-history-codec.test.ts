@@ -5,6 +5,7 @@ import {
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
   fragmentBinaryMessage,
+  maximumRepositoryHistorySequence,
   type RepositoryHistoryPage,
   readRepositoryHistoryBatchSequence,
 } from "@rebase/contracts";
@@ -38,6 +39,50 @@ describe("repository history binary codec", () => {
 
     expect(readRepositoryHistoryBatchSequence(encoded)).toBe(7);
     expect(decodeRepositoryHistoryBatch(encoded)).toEqual(batch);
+  });
+
+  it("rejects batch sequences outside the unsigned wire range", () => {
+    const page = historyPage("sha1");
+    const batch = {
+      commits: [],
+      objectFormat: page.objectFormat,
+      repositoryId,
+      requestId,
+      sequence: maximumRepositoryHistorySequence,
+    } as const;
+
+    expect(
+      decodeRepositoryHistoryBatch(encodeRepositoryHistoryBatch(batch))
+        .sequence,
+    ).toBe(maximumRepositoryHistorySequence);
+    expect(() =>
+      encodeRepositoryHistoryBatch({
+        ...batch,
+        sequence: maximumRepositoryHistorySequence + 1,
+      }),
+    ).toThrow("Invalid unsigned 32-bit integer");
+  });
+
+  it("round trips a resumable snapshot basis before publishing refs", () => {
+    const page = historyPage("sha1");
+    const batch = {
+      commits: [],
+      objectFormat: page.objectFormat,
+      repositoryId,
+      requestId,
+      sequence: 0,
+      snapshot: {
+        id: "d".repeat(64),
+        objectFormat: page.objectFormat,
+        refTargets: page.refTargets,
+        resumable: true,
+        rootOids: [page.commits[0]?.oid ?? ""],
+      },
+    } as const;
+
+    expect(
+      decodeRepositoryHistoryBatch(encodeRepositoryHistoryBatch(batch)),
+    ).toEqual(batch);
   });
 
   it("fragments and reassembles a logical history message out of order", () => {
