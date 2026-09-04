@@ -17,7 +17,11 @@ import type {
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
 
-const emptyHistorySnapshot = { revision: 0, status: "empty" } as const;
+const emptyHistorySnapshot = {
+  revision: 0,
+  historyRevision: 0,
+  status: "empty",
+} as const;
 const noSubscription = () => () => undefined;
 
 export function useCommitGraphPages(
@@ -58,12 +62,12 @@ export function useCommitGraphPages(
   }, [reader]);
   useEffect(() => {
     if (reader === undefined) return;
-    const revision = historySnapshot.revision;
+    const revision = historySnapshot.historyRevision;
     let current = true;
     void reader
       .getRefTargets()
       .then((refs) => {
-        if (current && reader.getSnapshot().revision === revision)
+        if (current && reader.getSnapshot().historyRevision === revision)
           setRefOwner((previous) =>
             previous?.reader === reader &&
             JSON.stringify(previous.refs) === JSON.stringify(refs)
@@ -75,7 +79,7 @@ export function useCommitGraphPages(
     return () => {
       current = false;
     };
-  }, [reader, historySnapshot.revision]);
+  }, [reader, historySnapshot.historyRevision]);
   useEffect(() => {
     if (
       previousSynchronization.current !== "complete" &&

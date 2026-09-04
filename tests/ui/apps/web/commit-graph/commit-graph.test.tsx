@@ -141,7 +141,7 @@ describe("commit graph", () => {
       .toHaveAttribute("aria-selected", "true");
     await vi.waitFor(() => expect(grid.element().scrollTop).toBe(10 * 36 + 7));
     const reads = reader.read.mock.calls.length;
-    reader.snapshot = { ...reader.snapshot, revision: 2 };
+    reader.snapshot = { ...reader.snapshot, revision: 2, historyRevision: 2 };
     await vi.waitFor(() =>
       expect(reader.getRefTargets).toHaveBeenCalledTimes(3),
     );
