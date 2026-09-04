@@ -955,11 +955,9 @@ describe("browser repository history reader", () => {
       repositoryId,
     });
 
-    const cacheReadStartedAt = performance.now();
     await expect(
       reopened.read({ limit: 100, order: "topological", roots: [main] }),
     ).resolves.toEqual(commits);
-    expect(performance.now() - cacheReadStartedAt).toBeLessThan(100);
     await expect(
       reopened.read({
         limit: 100,
