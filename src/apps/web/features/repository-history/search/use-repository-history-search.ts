@@ -1,6 +1,9 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { readNextHistorySearchPage } from "#web/features/repository-history/search/read-next-history-search-page";
+import {
+  historySearchPageSize,
+  readNextHistorySearchPage,
+} from "#web/features/repository-history/search/read-next-history-search-page";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 
 interface SearchState {
@@ -63,15 +66,18 @@ export function useRepositoryHistorySearch(
       )
         .then((result) => {
           if (controller.signal.aborted) return;
+          const selectedIndex = result.commits.findIndex(
+            (commit) => commit.oid === selected,
+          );
+          if (selected !== undefined && selectedIndex === -1)
+            selection.current = undefined;
           setState({
             ...emptyState,
             commits: result.commits,
             cursor: result.nextCursor,
             complete: result.replicaComplete,
             count: result.synchronizedCommitCount,
-            selected: result.commits.findIndex(
-              (commit) => commit.oid === selected,
-            ),
+            selected: selectedIndex,
           });
         })
         .catch(() => {
@@ -175,19 +181,27 @@ async function restoreSearchResults(
   selected: string | undefined,
   signal: AbortSignal,
 ) {
-  let result = await readNextHistorySearchPage(reader, text, undefined, signal);
+  if (selected === undefined)
+    return readNextHistorySearchPage(reader, text, undefined, signal);
+  signal.throwIfAborted();
+  let result = await reader.search(
+    { text, limit: historySearchPageSize },
+    signal,
+  );
+  signal.throwIfAborted();
   const commits = [...result.commits];
+  let restoredPages = 1;
   while (
-    selected !== undefined &&
+    restoredPages < 5 &&
     !commits.some((commit) => commit.oid === selected) &&
     result.nextCursor !== undefined
   ) {
-    result = await readNextHistorySearchPage(
-      reader,
-      text,
-      result.nextCursor,
+    result = await reader.search(
+      { text, limit: historySearchPageSize, cursor: result.nextCursor },
       signal,
     );
+    signal.throwIfAborted();
+    restoredPages += 1;
     commits.push(...result.commits);
   }
   return { ...result, commits };

@@ -272,6 +272,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
             firstMatches,
             firstPageP50Milliseconds: sorted[14],
             firstPageP95Milliseconds: sorted[28],
+            firstPageMaximumMilliseconds: Math.max(...durations),
             cold,
             warm,
             matches: warm.matches,
@@ -286,6 +287,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
           controller.abort();
         }, 10);
         let cursor: string | undefined;
+        let canceled = false;
         try {
           do {
             const result = await searchStoredRepositoryHistory(
@@ -303,16 +305,34 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
         } catch (error) {
           if (!(error instanceof DOMException && error.name === "AbortError"))
             throw error;
+          if (canceledAt === 0 || !controller.signal.aborted)
+            throw new Error(
+              "Search aborted before the cancellation timer fired",
+            );
+          canceled = true;
           console.log(
             `history-search: ${JSON.stringify({ corpus: corpus.name, cancellationMilliseconds: performance.now() - canceledAt })}`,
           );
         } finally {
           clearTimeout(timer);
         }
+        if (controller.signal.aborted && !canceled)
+          throw new Error("Canceled search did not reject");
+        if (!canceled) {
+          if (corpus.name === "generated")
+            throw new Error(
+              "The large-corpus benchmark did not exercise cancellation",
+            );
+          console.log(
+            `history-search: ${JSON.stringify({ corpus: corpus.name, completedBeforeCancellation: true })}`,
+          );
+        }
       }
       return measurements;
     }, fixture);
     expect(measurements).toHaveLength(onlyRepository ? 3 : 6);
+    for (const measurement of measurements)
+      expect(measurement.firstPageMaximumMilliseconds).toBeLessThan(250);
     if (!onlyRepository)
       expect(
         measurements.find(

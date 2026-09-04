@@ -1,5 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { createRef } from "react";
+import { act, createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
@@ -176,7 +176,10 @@ describe("history search controls", () => {
       .element(page.getByRole("button", { name: /Repair shallow history 2/ }))
       .toBeVisible();
     expect(signal?.aborted).toBe(true);
-    finish?.(result([commit(1)]));
+    await act(async () => finish?.(result([commit(1)])));
+    await expect
+      .element(page.getByRole("button", { name: /Repair shallow history 2/ }))
+      .toBeVisible();
     await expect
       .element(page.getByRole("button", { name: /Repair shallow history 1/ }))
       .not.toBeInTheDocument();
@@ -232,6 +235,73 @@ describe("history search controls", () => {
       .toHaveTextContent("Result 3");
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    { selectedPage: 4, emptyPages: false },
+    { selectedPage: 5, emptyPages: false },
+    { selectedPage: 5, emptyPages: true },
+  ])(
+    "bounds selection restoration at five requests: %j",
+    async ({ selectedPage, emptyPages }) => {
+      const reader = {
+        search: vi
+          .fn<RepositoryHistorySearch["search"]>()
+          .mockResolvedValue(result([commit(99)])),
+      };
+      const onNavigate = vi.fn(async () => undefined);
+      const screen = await render(
+        <RepositoryHistorySearchControls
+          reader={reader}
+          snapshot={snapshot}
+          onNavigate={onNavigate}
+        />,
+      );
+      await page.getByRole("searchbox").fill("history");
+      await page
+        .getByRole("button", { name: /Repair shallow history 99/ })
+        .click();
+      reader.search.mockClear();
+      reader.search.mockImplementation(async (query) => {
+        const index = Number(query.cursor ?? 0);
+        return {
+          ...result(
+            index === selectedPage
+              ? [commit(99)]
+              : emptyPages
+                ? []
+                : [commit(index)],
+          ),
+          ...(index < selectedPage ? { nextCursor: String(index + 1) } : {}),
+        };
+      });
+      await screen.rerender(
+        <RepositoryHistorySearchControls
+          reader={reader}
+          snapshot={{ ...snapshot, historyRevision: 2 }}
+          onNavigate={onNavigate}
+        />,
+      );
+      await vi.waitFor(() => expect(reader.search).toHaveBeenCalledTimes(5));
+      if (selectedPage === 4) {
+        await expect
+          .element(
+            page.getByRole("button", { name: /Repair shallow history 99/ }),
+          )
+          .toHaveAttribute("aria-current", "true");
+      } else {
+        await expect
+          .element(page.getByRole("button", { name: "Next search result" }))
+          .toBeEnabled();
+        await expect
+          .element(
+            page.getByRole("button", { name: /Repair shallow history 99/ }),
+          )
+          .not.toBeInTheDocument();
+      }
+      expect(reader.search).toHaveBeenCalledTimes(5);
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("keeps pending navigation disabled and reports failures with a retry", async () => {
     let rejectNavigation: ((error: Error) => void) | undefined;
