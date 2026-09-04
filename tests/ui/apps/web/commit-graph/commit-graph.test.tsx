@@ -10,6 +10,54 @@ import {
 import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 describe("commit graph", () => {
+  it("shows the editable scope and labels at their visible commit targets", async () => {
+    const commits = history(3);
+    const first = commits[0];
+    if (first === undefined) throw new Error("Commit fixture is missing");
+    const reader = historyReader({ commits, status: "ready" });
+    reader.getRefTargets.mockResolvedValue([
+      { name: "main", oid: first.oid, type: "branch" },
+      {
+        name: "origin/main",
+        oid: first.oid,
+        type: "remote-branch",
+      },
+      { name: "hidden", oid: "e".repeat(40), type: "tag" },
+      { name: "HEAD", oid: first.oid, type: "head" },
+    ]);
+    const remove = vi.fn();
+    const selection = { _tag: "LocalBranch", name: "main" } as const;
+    const screen = await render(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraph
+          onRemoveHistoryRef={remove}
+          reader={reader}
+          repositoryName="rebase-test"
+          roots={[{ name: "main", oid: first.oid, type: "branch" }]}
+          scope={{ _tag: "Custom", selections: [selection] }}
+          selections={[selection]}
+        />
+      </div>,
+    );
+
+    await expect
+      .element(screen.getByRole("group", { name: "Custom history scope" }))
+      .toBeVisible();
+    const firstCommit = screen.getByRole("option", { name: /^Commit 0,/ });
+    await expect
+      .element(firstCommit.getByText("main", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(firstCommit.getByText("origin/main", { exact: true }))
+      .toBeVisible();
+    await expect.element(screen.getByText("hidden")).not.toBeInTheDocument();
+
+    await screen
+      .getByRole("button", { name: "Remove main from history" })
+      .click();
+    expect(remove).toHaveBeenCalledWith(selection);
+  });
+
   it("shows background synchronization without covering the graph", async () => {
     const reader = historyReader({ commits: history(2), status: "ready" });
     reader.snapshot = {
@@ -258,7 +306,9 @@ function historyReader({
   const reader = {
     close: vi.fn(),
     getCommitSummaries: vi.fn(async () => commits),
-    getRefTargets: vi.fn(async () => []),
+    getRefTargets: vi.fn<RepositoryHistoryReader["getRefTargets"]>(
+      async () => [],
+    ),
     getSnapshot: (): RepositoryHistorySnapshot => snapshot,
     read: vi.fn(() => pending ?? Promise.resolve(commits)),
     get snapshot() {

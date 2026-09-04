@@ -29,7 +29,11 @@ const realpathNative = promisify(realpath.native);
 
 export function readRepositoryRefs(
   git: GitCommandRunner,
-  repository: { readonly id: string; readonly path: string },
+  repository: {
+    readonly id: string;
+    readonly logicalRepositoryId?: string;
+    readonly path: string;
+  },
 ): Effect.Effect<RepositoryRefs, RepositoryRefsError> {
   return Effect.gen(function* () {
     const output = yield* Effect.all(
@@ -58,6 +62,7 @@ export function readRepositoryRefs(
         output.worktrees,
         worktrees,
       ),
+      logicalRepositoryId: repository.logicalRepositoryId ?? repository.id,
       remoteBranches: output.remoteBranches.flatMap(
         withDefined(remoteBranchFromRecord),
       ),

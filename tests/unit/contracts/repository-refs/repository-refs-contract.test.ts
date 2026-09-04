@@ -15,6 +15,7 @@ const refs = {
       worktreePath: "/home/alex/rebase-git",
     },
   ],
+  logicalRepositoryId: "00000000-0000-4000-8000-000000000002",
   remoteBranches: [{ name: "main", remote: "origin" }],
   repositoryId: "00000000-0000-4000-8000-000000000001",
   tags: [{ name: "v0.0.2" }],

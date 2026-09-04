@@ -16,6 +16,7 @@ import {
   type RepositoryHistoryTransport,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 import type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/repository-history-transport.contract";
 
 type RequestFailure =
@@ -38,7 +39,7 @@ export function createRepositoryHistoryTransport(
       if (!enabled) {
         return yield* new RepositoryHistoryUnavailable();
       }
-      const requestId = crypto.randomUUID();
+      const requestId = createRepositoryHistoryRequestId();
       const result = yield* Deferred.make<Uint8Array, RequestFailure>();
       return yield* Effect.gen(function* () {
         requests.set(requestId, { kind: "read", result });
@@ -112,7 +113,7 @@ export function createRepositoryHistoryTransport(
       if (!synchronizationEnabled) {
         return yield* new RepositoryHistoryUnavailable();
       }
-      const requestId = crypto.randomUUID();
+      const requestId = createRepositoryHistoryRequestId();
       const result = yield* Deferred.make<number, RequestFailure>();
       return yield* Effect.gen(function* () {
         requests.set(requestId, {

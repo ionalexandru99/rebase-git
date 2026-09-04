@@ -3,6 +3,7 @@ import type {
   RemoteDefaultBranch,
   RepositoryHistoryRefTarget,
   RepositoryRefs,
+  RepositoryRefTarget,
 } from "@rebase/contracts";
 
 export function resolveAutomaticHistoryRoots(
@@ -51,6 +52,44 @@ export function resolveAutomaticHistoryRoots(
     }
   }
   return roots;
+}
+
+export function resolveAutomaticHistorySelections(
+  refs: RepositoryRefs,
+  activeWorktreePath: string,
+): readonly RepositoryRefTarget[] {
+  const selections: RepositoryRefTarget[] = [];
+  const activeWorktree = refs.worktrees.find(
+    (worktree) => worktree.path === activeWorktreePath,
+  );
+  const activeBranch = refs.branches.find(
+    (branch) => branch.name === activeWorktree?.head.branch,
+  );
+  if (activeBranch !== undefined) {
+    addSelection(selections, {
+      _tag: "LocalBranch",
+      name: activeBranch.name,
+    });
+  }
+  const defaultBranch = selectRemoteDefault(
+    refs.remoteDefaultBranches ?? [],
+    activeBranch,
+  );
+  if (defaultBranch === undefined) return selections;
+  const local = refs.branches.find(
+    (branch) => branch.name === defaultBranch.name,
+  );
+  addSelection(
+    selections,
+    local?.target === undefined
+      ? {
+          _tag: "RemoteBranch",
+          name: defaultBranch.name,
+          remote: defaultBranch.remote,
+        }
+      : { _tag: "LocalBranch", name: local.name },
+  );
+  return selections;
 }
 
 function selectRemoteDefault(
@@ -129,4 +168,22 @@ function upstreamRemote(name: string | undefined) {
   }
   const separator = name.indexOf("/");
   return separator <= 0 ? undefined : name.slice(0, separator);
+}
+
+function addSelection(
+  selections: RepositoryRefTarget[],
+  selection: RepositoryRefTarget,
+) {
+  if (
+    !selections.some(
+      (current) =>
+        current._tag === selection._tag &&
+        current.name === selection.name &&
+        (current._tag !== "RemoteBranch" ||
+          (selection._tag === "RemoteBranch" &&
+            current.remote === selection.remote)),
+    )
+  ) {
+    selections.push(selection);
+  }
 }

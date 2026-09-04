@@ -18,6 +18,7 @@ export const RepositoryCatalogEntry = Schema.Struct({
   addedAt: IsoDate,
   id: RepositoryId,
   lastOpenedAt: IsoDate,
+  logicalRepositoryId: Schema.optionalKey(RepositoryId),
   name: RepositoryName,
   path: NativeRepositoryPath,
 });

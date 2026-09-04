@@ -13,6 +13,8 @@ import { promisify } from "node:util";
 import { RepositoryCatalogError } from "@rebase/server/domain/repository-catalog.contract";
 import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
 import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
+import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
+import { repositoryCatalogTable } from "@rebase/server/persistence/environment-state.schema";
 import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import type { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { Effect } from "effect";
@@ -74,6 +76,57 @@ describe("repository catalog", () => {
       { name: "feature worktree", path: worktreePath },
       { name: "main", path: repositoryPath },
     ]);
+    expect(repositories[0]?.logicalRepositoryId).toBe(
+      repositories[1]?.logicalRepositoryId,
+    );
+  });
+
+  it("creates a new logical identity after the last catalog entry is removed", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "repository");
+    await createRepository(repositoryPath);
+
+    const result = await withCatalog(root, (catalog) =>
+      Effect.gen(function* () {
+        const first = yield* catalog.remember(repositoryPath);
+        yield* catalog.remove(first.id);
+        const second = yield* catalog.remember(repositoryPath);
+        return { first, second };
+      }),
+    );
+
+    expect(result.second.logicalRepositoryId).not.toBe(
+      result.first.logicalRepositoryId,
+    );
+  });
+
+  it("repairs linked-worktree identities created before the identity migration", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "main");
+    const worktreePath = join(root, "feature");
+    await createRepository(repositoryPath);
+    await git(repositoryPath, "worktree", "add", worktreePath, "-b", "feature");
+
+    const result = await withCatalog(root, (catalog, context) =>
+      Effect.gen(function* () {
+        const main = yield* catalog.remember(repositoryPath);
+        const feature = yield* catalog.remember(worktreePath);
+        yield* context.write("Could not simulate legacy catalog", (database) =>
+          database
+            .update(repositoryCatalogTable)
+            .set({ gitCommonDirectory: null, logicalRepositoryId: null }),
+        );
+        return {
+          feature: yield* catalog.find(feature.id),
+          main: yield* catalog.find(main.id),
+        };
+      }),
+    );
+
+    expect(result.feature?.logicalRepositoryId).toBeDefined();
+    expect(result.feature?.logicalRepositoryId).toBe(
+      result.main?.logicalRepositoryId,
+    );
   });
 
   it("records an open and removes only the catalog entry", async () => {
@@ -133,6 +186,7 @@ function withCatalog<A, E>(
   root: string,
   use: (
     catalog: ReturnType<typeof createRepositoryCatalog>,
+    context: EnvironmentContext,
   ) => Effect.Effect<A, E>,
 ) {
   return Effect.runPromise(
@@ -141,7 +195,7 @@ function withCatalog<A, E>(
         const context = yield* acquireEnvironmentContext(
           environmentPaths(join(root, ".rebase")),
         );
-        return yield* use(createRepositoryCatalog(context));
+        return yield* use(createRepositoryCatalog(context), context);
       }),
     ),
   );

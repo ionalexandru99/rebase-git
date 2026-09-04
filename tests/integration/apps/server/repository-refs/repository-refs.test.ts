@@ -42,6 +42,9 @@ describe("repository refs", { timeout: 30_000 }, () => {
       refs.read(repositoryId),
     );
 
+    expect(refs.logicalRepositoryId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(refs.worktrees).toEqual([
       expect.objectContaining({
         head: expect.objectContaining({ branch: "main" }),

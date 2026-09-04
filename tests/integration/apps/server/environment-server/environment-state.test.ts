@@ -31,14 +31,16 @@ const createEnvironmentMigration = generatedMigrations[0];
 const createActivityMigration = generatedMigrations[1];
 const createAuthorizationCapabilitiesMigration = generatedMigrations[2];
 const createRepositoryCatalogMigration = generatedMigrations[3];
+const addLogicalRepositoryIdentityMigration = generatedMigrations[4];
 
 if (
   createEnvironmentMigration === undefined ||
   createActivityMigration === undefined ||
   createAuthorizationCapabilitiesMigration === undefined ||
-  createRepositoryCatalogMigration === undefined
+  createRepositoryCatalogMigration === undefined ||
+  addLogicalRepositoryIdentityMigration === undefined
 ) {
-  throw new Error("Expected four generated Environment state migrations.");
+  throw new Error("Expected five generated Environment state migrations.");
 }
 
 afterEach(async () => {
@@ -132,6 +134,11 @@ describe("Environment state", () => {
         checksum_length: 64,
         name: createRepositoryCatalogMigration.name,
         version: 4,
+      },
+      {
+        checksum_length: 64,
+        name: addLogicalRepositoryIdentityMigration.name,
+        version: 5,
       },
     ]);
     database.close();
@@ -241,16 +248,17 @@ describe("Environment state", () => {
       generatedMigrationEntry(createActivityMigration, 2),
       generatedMigrationEntry(createAuthorizationCapabilitiesMigration, 3),
       generatedMigrationEntry(createRepositoryCatalogMigration, 4),
+      generatedMigrationEntry(addLogicalRepositoryIdentityMigration, 5),
       {
         checksum: "future",
-        createdAt: createRepositoryCatalogMigration.folderMillis + 1,
+        createdAt: addLogicalRepositoryIdentityMigration.folderMillis + 1,
         name: "future",
-        version: 5,
+        version: 6,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 5, but this Rebase build supports version 4.",
+      "The state database is at version 6, but this Rebase build supports version 5.",
     );
   });
 
@@ -277,7 +285,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 4 });
+    ).toEqual({ version: 5 });
     database.close();
   });
 
