@@ -61,6 +61,11 @@ export function CommitGraph({
     useState<ReturnType<RepositoryHistoryReader["getSnapshot"]>["error"]>();
   const [loading, setLoading] = useState(true);
   const [selectedOid, setSelectedOid] = useState<string>();
+  const [order, setOrder] =
+    useState<RepositoryHistoryQuery["order"]>("topological");
+  const previousOrder = useRef(order);
+  const selectedOidRef = useRef(selectedOid);
+  selectedOidRef.current = selectedOid;
   const loadEpoch = useRef(0);
   const commitsRef = useRef(commits);
   commitsRef.current = commits;
@@ -138,10 +143,16 @@ export function CommitGraph({
       scrollRef.current,
       commitsRef.current,
     );
+    if (previousOrder.current !== order) {
+      previousOrder.current = order;
+      const selected = selectedOidRef.current;
+      if (selected !== undefined)
+        pendingViewportAnchor.current = { oid: selected, offset: 0 };
+    }
     setLoading(true);
     setError(undefined);
     void reader
-      .read({ limit: 100, order: "topological", roots })
+      .read({ limit: 100, order, roots })
       .then(
         (next) => {
           if (epoch !== loadEpoch.current) {
@@ -166,7 +177,7 @@ export function CommitGraph({
           setLoading(false);
         }
       });
-  }, [reader, roots]);
+  }, [reader, roots, order]);
 
   useEffect(() => {
     if (previousReader.current !== reader) {
@@ -245,16 +256,33 @@ export function CommitGraph({
           </h1>
           <p className="m-0 text-[11px] text-muted-foreground">Commit graph</p>
         </div>
-        {historySnapshot.synchronization === "syncing" ? (
-          <span className="text-[11px] text-muted-foreground" role="status">
-            Syncing
-          </span>
-        ) : historySnapshot.synchronization === "stale" ||
-          (!loading && error !== undefined && commits.length > 0) ? (
-          <Button onClick={loadHistory} size="sm" variant="ghost">
-            Stale. Retry
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-3">
+          <select
+            aria-label="History ordering"
+            className="rounded-sm border border-border bg-background px-2 py-1 text-xs text-foreground"
+            onChange={(event) =>
+              setOrder(
+                event.currentTarget.value === "chronological"
+                  ? "chronological"
+                  : "topological",
+              )
+            }
+            value={order}
+          >
+            <option value="topological">Topological</option>
+            <option value="chronological">Chronological</option>
+          </select>
+          {historySnapshot.synchronization === "syncing" ? (
+            <span className="text-[11px] text-muted-foreground" role="status">
+              Syncing
+            </span>
+          ) : historySnapshot.synchronization === "stale" ||
+            (!loading && error !== undefined && commits.length > 0) ? (
+            <Button onClick={loadHistory} size="sm" variant="ghost">
+              Stale. Retry
+            </Button>
+          ) : null}
+        </div>
       </header>
       {scope === undefined || selections === undefined ? null : (
         <HistoryScopeStrip

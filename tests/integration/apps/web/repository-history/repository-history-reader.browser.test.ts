@@ -6,6 +6,10 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { withRepositoryHistoryDatabase } from "#web/features/repository-history/repository-history-database";
+import {
+  readRepositoryCommits,
+  readRepositoryHistory,
+} from "#web/features/repository-history/repository-history-query";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import {
   RepositoryHistoryOffline,
@@ -13,11 +17,7 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import {
-  readRepositoryCommits,
-  readRepositoryHistory,
-  readStoredRepositoryHistoryState,
-} from "#web/features/repository-history/repository-history-store";
+import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
   it("does not retry failed synchronization when a non-owner reader closes", async () => {
@@ -209,6 +209,92 @@ describe("browser repository history reader", () => {
       expect(offlineGateway.read).not.toHaveBeenCalled();
     } finally {
       reopened.close();
+    }
+  });
+
+  it("orders and pages the complete replica locally without starting more Git traversals", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const [merge, main, side, base] = history(4);
+    if (!merge || !main || !side || !base) throw new Error("Missing fixture");
+    const commits = [
+      { ...merge, parents: [main.oid, side.oid] },
+      { ...main, parents: [base.oid], committer: identity(10) },
+      { ...side, parents: [base.oid], committer: identity(1) },
+      base,
+    ];
+    const roots = [{ ...root("main"), oid: merge.oid }];
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, roots)),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    try {
+      await reader.read({ roots, order: "topological", limit: 100 });
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot().synchronization).toBe("complete"),
+      );
+      expect(
+        (await reader.read({ roots, order: "chronological", limit: 2 })).map(
+          ({ oid }) => oid,
+        ),
+      ).toEqual([merge.oid, side.oid]);
+      expect(
+        (
+          await reader.read({
+            roots,
+            order: "chronological",
+            offset: 2,
+            limit: 2,
+          })
+        ).map(({ oid }) => oid),
+      ).toEqual([main.oid, base.oid]);
+      expect(gateway.read).toHaveBeenCalledTimes(1);
+      expect(gateway.synchronize).toHaveBeenCalledTimes(1);
+      const sibling = createBrowserRepositoryHistoryReader({
+        environmentId,
+        gateway,
+        repositoryId,
+      });
+      try {
+        const [chronological, topological] = await Promise.all([
+          reader.read({ roots, order: "chronological", limit: 100 }),
+          sibling.read({ roots, order: "topological", limit: 100 }),
+        ]);
+        expect(chronological.map(({ oid }) => oid)).toEqual([
+          merge.oid,
+          side.oid,
+          main.oid,
+          base.oid,
+        ]);
+        expect(topological.map(({ oid }) => oid)).toEqual([
+          merge.oid,
+          main.oid,
+          side.oid,
+          base.oid,
+        ]);
+        await sibling.read({ roots, order: "chronological", limit: 100 });
+        expect(gateway.synchronize).toHaveBeenCalledTimes(1);
+      } finally {
+        sibling.close();
+      }
+    } finally {
+      reader.close();
     }
   });
 
@@ -574,9 +660,10 @@ describe("browser repository history reader", () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const commits = history(1);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
     let synchronizationAttempt = 0;
     const gateway: RepositoryHistoryGateway = {
-      read: vi.fn(async () => page(repositoryId, commits)),
+      read: vi.fn(async () => page(repositoryId, commits, [main])),
       synchronize: vi.fn(async (_request, accept) => {
         await accept(
           encodeRepositoryHistoryBatch({
@@ -600,7 +687,7 @@ describe("browser repository history reader", () => {
     await reader.read({
       limit: 100,
       order: "topological",
-      roots: [root("main")],
+      roots: [main],
     });
     await vi.waitFor(() => {
       expect(reader.getSnapshot()).toMatchObject({
@@ -613,12 +700,24 @@ describe("browser repository history reader", () => {
     await reader.read({
       limit: 100,
       order: "topological",
-      roots: [root("main")],
+      roots: [main],
     });
     await vi.waitFor(() => {
       expect(gateway.synchronize).toHaveBeenCalledTimes(2);
       expect(reader.getSnapshot().synchronization).toBe("complete");
     });
+    expect(gateway.read).toHaveBeenCalledOnce();
+    const revision = reader.getSnapshot().revision;
+    await expect(
+      reader.read({
+        limit: 1,
+        offset: 1,
+        order: "topological",
+        roots: [root("missing")],
+      }),
+    ).rejects.toBeInstanceOf(RepositoryHistoryUnavailable);
+    expect(reader.getSnapshot()).toMatchObject({ synchronization: "stale" });
+    expect(reader.getSnapshot().revision).toBeGreaterThan(revision);
     reader.close();
   });
 

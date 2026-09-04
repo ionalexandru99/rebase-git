@@ -10,6 +10,35 @@ import {
 import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 describe("commit graph", () => {
+  it("switches ordering locally while retaining selection and showing immediate feedback", async () => {
+    const commits = history(3);
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    const selected = screen.getByRole("option", { name: /^Commit 1,/ });
+    await selected.click();
+    let finish: ((value: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await screen
+      .getByRole("combobox", { name: "History ordering" })
+      .selectOptions("chronological");
+    await expect
+      .element(screen.getByRole("listbox"))
+      .toHaveAttribute("aria-busy", "true");
+    expect(reader.read).toHaveBeenLastCalledWith(
+      expect.objectContaining({ order: "chronological" }),
+    );
+    finish?.(commits.toReversed());
+    await expect.element(selected).toHaveAttribute("aria-selected", "true");
+    await expect
+      .element(screen.getByRole("listbox"))
+      .toHaveAttribute("aria-busy", "false");
+  });
+
   it("shows the editable scope and labels at their visible commit targets", async () => {
     const commits = history(3);
     const first = commits[0];
