@@ -797,9 +797,26 @@ async function createRepository(
 ) {
   await mkdir(path, { recursive: true });
   await git(path, "init", `--object-format=${objectFormat}`, "-b", "main");
+  const commands: string[] = [];
   for (let index = 0; index < commitCount; index += 1) {
-    await git(path, "commit", "--allow-empty", "-m", `commit ${index}`);
+    const subject = `commit ${index}`;
+    commands.push(
+      "commit refs/heads/main\n",
+      `mark :${index + 1}\n`,
+      `committer Rebase test <rebase@example.test> ${1_700_000_000 + index} +0000\n`,
+      `data ${Buffer.byteLength(subject)}\n${subject}\n`,
+      index === 0 ? "" : `from :${index}\n`,
+      "\n",
+    );
   }
+  const imported = execFilePromise("git", [
+    "-C",
+    path,
+    "fast-import",
+    "--quiet",
+  ]);
+  imported.child.stdin?.end(`${commands.join("")}done\n`);
+  await imported;
 }
 
 async function createMergeRepository(path: string) {
