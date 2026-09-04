@@ -176,6 +176,12 @@ export function CommitGraph({
     startOffset: paging.snapshot.startOffset,
     viewEpoch: paging.snapshot.epoch,
     oldestLoadedOffset: Math.max(0, paging.snapshot.knownEndOffset - 1),
+    requestLaneMove: (offset, direction) => {
+      void paging.engine?.requestLaneMove(offset, direction).then((target) => {
+        if (target !== undefined)
+          setPendingNavigation({ ...target, mode: "replace" });
+      });
+    },
     requestMove: (offset, mode) => {
       void paging.engine?.requestMove(offset).then((target) => {
         if (target !== undefined) setPendingNavigation({ ...target, mode });

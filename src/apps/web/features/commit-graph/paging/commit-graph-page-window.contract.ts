@@ -67,6 +67,10 @@ export interface CommitGraphPageWindow {
   readonly appendOlder: () => Promise<void>;
   readonly prefetchOffset: (offset: number) => Promise<void>;
   readonly setViewport: (firstOffset: number, lastOffset: number) => void;
+  readonly requestLaneMove: (
+    offset: number,
+    direction: -1 | 1,
+  ) => Promise<{ readonly oid: string; readonly offset: number } | undefined>;
   readonly requestMove: (
     offset: number,
   ) => Promise<{ readonly oid: string; readonly offset: number } | undefined>;

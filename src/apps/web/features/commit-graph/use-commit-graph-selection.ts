@@ -30,6 +30,7 @@ export function useCommitGraphSelection({
   oldestLoadedOffset,
   viewEpoch = 0,
   requestMove,
+  requestLaneMove,
 }: {
   readonly reader: RepositoryHistoryReader | undefined;
   readonly oids: readonly string[];
@@ -41,6 +42,7 @@ export function useCommitGraphSelection({
   readonly startOffset?: number;
   readonly oldestLoadedOffset?: number;
   readonly viewEpoch?: number;
+  readonly requestLaneMove?: (offset: number, direction: -1 | 1) => void;
   readonly requestMove?: (
     offset: number,
     mode: CommitGraphSelectionMode,
@@ -88,6 +90,10 @@ export function useCommitGraphSelection({
   };
   const moveInLane = (direction: -1 | 1) => {
     const activeIndex = selection.activeIndex;
+    if (requestLaneMove !== undefined) {
+      requestLaneMove(activeIndex + startOffset, direction);
+      return;
+    }
     const lane = laneRows[activeIndex]?.nodeLaneId;
     if (lane === undefined) return;
     for (

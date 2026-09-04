@@ -69,6 +69,12 @@ export function createCommitGraphPageWindow(
   let pendingMove:
     | {
         offset: number;
+        lane?: {
+          id: number;
+          readonly direction: -1 | 1;
+          readonly activeOid: string;
+          epoch: number;
+        };
         resolve: (value: { oid: string; offset: number } | undefined) => void;
       }
     | undefined;
@@ -280,7 +286,15 @@ export function createCommitGraphPageWindow(
     return task;
   };
 
-  const requestMove = (offset: number) => {
+  const requestMove = (
+    offset: number,
+    lane?: {
+      id: number;
+      readonly direction: -1 | 1;
+      readonly activeOid: string;
+      epoch: number;
+    },
+  ) => {
     pendingMove?.resolve(undefined);
     if (disposed || replacing || !Number.isInteger(offset) || offset < 0) {
       pendingMove = undefined;
@@ -289,7 +303,11 @@ export function createCommitGraphPageWindow(
     }
     return new Promise<{ oid: string; offset: number } | undefined>(
       (resolve) => {
-        const move = { offset, resolve };
+        const move = {
+          offset,
+          resolve,
+          ...(lane === undefined ? {} : { lane }),
+        };
         pendingMove = move;
         publish();
         void finishPendingMove();
@@ -306,14 +324,54 @@ export function createCommitGraphPageWindow(
         await prefetchOffset(move.offset);
         if (pendingMove !== move) continue;
         const pageOffset = Math.floor(move.offset / pageSize) * pageSize;
-        const commit =
-          view?.pages.get(pageOffset)?.commits[move.offset - pageOffset];
+        const page = view?.pages.get(pageOffset);
+        let targetOffset = move.offset;
+        if (move.lane !== undefined && page !== undefined) {
+          const lane = move.lane;
+          if (lane.epoch !== snapshot.epoch) {
+            const activeRow = snapshot.pages
+              .flatMap((item) => item.rows)
+              .find((row) => row.oid === lane.activeOid);
+            if (activeRow === undefined) {
+              pendingMove = undefined;
+              publish();
+              move.resolve(undefined);
+              continue;
+            }
+            lane.id = activeRow.nodeLaneId;
+            lane.epoch = snapshot.epoch;
+          }
+          let index = move.offset - pageOffset;
+          while (
+            index >= 0 &&
+            index < page.rows.length &&
+            page.rows[index]?.nodeLaneId !== lane.id
+          )
+            index += lane.direction;
+          targetOffset = pageOffset + index;
+          if (index < 0 || index >= page.rows.length) {
+            const checkpoint =
+              lane.direction > 0
+                ? page.outgoingCheckpoint
+                : page.incomingCheckpoint;
+            if (
+              targetOffset >= 0 &&
+              (lane.direction < 0 || page.commits.length === pageSize) &&
+              checkpoint.lanes.some((item) => item.id === lane.id)
+            ) {
+              move.offset = targetOffset;
+              publish();
+              continue;
+            }
+          }
+        }
+        const commit = page?.commits[targetOffset - pageOffset];
         pendingMove = undefined;
         publish();
         move.resolve(
           commit === undefined
             ? undefined
-            : { oid: commit.oid, offset: move.offset },
+            : { oid: commit.oid, offset: targetOffset },
         );
       }
     } finally {
@@ -391,6 +449,22 @@ export function createCommitGraphPageWindow(
         void prefetchOffset(Math.max(0, snapshot.startOffset - pageSize));
     },
     requestMove,
+    requestLaneMove: (offset, direction) => {
+      const pageOffset = Math.floor(offset / pageSize) * pageSize;
+      const page = view?.pages.get(pageOffset);
+      const row = page?.rows[offset - pageOffset];
+      if (
+        row === undefined ||
+        (direction > 0 && !row.lanesAfter.includes(row.nodeLaneId))
+      )
+        return Promise.resolve(undefined);
+      return requestMove(offset + direction, {
+        id: row.nodeLaneId,
+        direction,
+        activeOid: row.oid,
+        epoch: snapshot.epoch,
+      });
+    },
     jumpToOid,
     retry: async () => {
       await retryTask?.();

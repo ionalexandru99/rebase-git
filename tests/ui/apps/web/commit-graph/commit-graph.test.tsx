@@ -75,6 +75,40 @@ describe("commit graph", () => {
       .toHaveAttribute("aria-selected", "true");
   });
 
+  it("continues same-lane keyboard navigation across a pending page", async () => {
+    const commits = history(130);
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    let release: ((value: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    grid.element().focus();
+    await userEvent.keyboard("{End}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 99,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Alt>}{ArrowDown}{ArrowDown}{/Alt}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 99,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    release?.(commits.slice(100));
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 100,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Alt>}{ArrowUp}{/Alt}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 99,/ }))
+      .toHaveAttribute("aria-selected", "true");
+  });
+
   it("uses replicated named refs when their tips change without changing the caller roots", async () => {
     const commits = history(150);
     const reader = historyReader({ commits, status: "ready" });
