@@ -13,6 +13,18 @@ const commits = Array.from({ length: 9 }, (_, index) =>
 );
 
 describe("history scope", () => {
+  it("retains Custom selections missing from cached metadata until live refs arrive", () => {
+    const scope = { _tag: "Custom", selections: [tag("new-tag")] } as const;
+    const resolved = resolveHistoryScope(scope, refs(), "/repo", {
+      removeMissingSelections: false,
+    });
+    expect(resolved.scope).toEqual(scope);
+    expect(resolved.roots).toEqual([]);
+    expect(resolveHistoryScope(scope, refs(), "/repo").scope).toEqual(
+      automaticHistoryScope,
+    );
+  });
+
   it("resolves Automatic from the active and default branch groups", () => {
     const resolved = resolveHistoryScope(
       automaticHistoryScope,

@@ -15,6 +15,7 @@ import type {
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
+import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -34,6 +35,7 @@ export function RepositoryWorkspace({
   branchesFocusRequest,
   environmentId,
   historyGateway,
+  logicalRepositoryId: catalogLogicalRepositoryId,
   refs,
   repositoryId,
   repositoryName,
@@ -44,13 +46,23 @@ export function RepositoryWorkspace({
   readonly branchesFocusRequest: number;
   readonly environmentId: string | undefined;
   readonly historyGateway: RepositoryHistoryGateway;
+  readonly logicalRepositoryId?: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly repositoryId: string | undefined;
   readonly repositoryName: string;
   readonly retryRefs: () => void;
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
-  const logicalRepositoryId = refs.refs?.logicalRepositoryId ?? repositoryId;
+  const logicalRepositoryId =
+    catalogLogicalRepositoryId ??
+    refs.refs?.logicalRepositoryId ??
+    repositoryId;
+  const cachedRefs = useCachedRepositoryRefs(
+    environmentId,
+    logicalRepositoryId,
+    repositoryId,
+    refs,
+  );
   return (
     <RepositoryWorkspaceContent
       activeWorktreePath={activeWorktreePath}
@@ -59,7 +71,8 @@ export function RepositoryWorkspace({
       historyGateway={historyGateway}
       key={`${environmentId ?? ""}\0${logicalRepositoryId ?? ""}`}
       logicalRepositoryId={logicalRepositoryId}
-      refs={refs}
+      refs={cachedRefs.snapshot}
+      refsRestored={cachedRefs.restored}
       repositoryId={repositoryId}
       repositoryName={repositoryName}
       retryRefs={retryRefs}
@@ -75,6 +88,7 @@ function RepositoryWorkspaceContent({
   historyGateway,
   logicalRepositoryId,
   refs,
+  refsRestored,
   repositoryId,
   repositoryName,
   retryRefs,
@@ -86,6 +100,7 @@ function RepositoryWorkspaceContent({
   readonly historyGateway: RepositoryHistoryGateway;
   readonly logicalRepositoryId: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
+  readonly refsRestored: boolean;
   readonly repositoryId: string | undefined;
   readonly repositoryName: string;
   readonly retryRefs: () => void;
@@ -122,12 +137,15 @@ function RepositoryWorkspaceContent({
     () =>
       refs.refs === undefined
         ? undefined
-        : resolveHistoryScope(historyScope, refs.refs, activeWorktreePath),
-    [activeWorktreePath, historyScope, refs.refs],
+        : resolveHistoryScope(historyScope, refs.refs, activeWorktreePath, {
+            removeMissingSelections: !refsRestored,
+          }),
+    [activeWorktreePath, historyScope, refs.refs, refsRestored],
   );
   useEffect(() => {
     if (
       resolvedScope === undefined ||
+      refsRestored ||
       historyScopesEqual(historyScope, resolvedScope.scope)
     ) {
       return;
@@ -142,6 +160,7 @@ function RepositoryWorkspaceContent({
     historyScope,
     logicalRepositoryId,
     resolvedScope,
+    refsRestored,
   ]);
   const toggleRef = useCallback(
     (target: RepositoryRefTarget) => {

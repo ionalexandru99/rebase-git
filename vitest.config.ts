@@ -68,7 +68,7 @@ export default defineConfig({
       testProject("integration", ["tests/integration/**/*.browser.test.ts"]),
       browserProject(
         "integration-browser",
-        "tests/integration/**/*.browser.test.ts",
+        "tests/integration/**/*.browser.test.{ts,tsx}",
       ),
       testProject("compatibility"),
       browserProject("ui", "tests/ui/**/*.test.tsx", ["./tests/ui/setup.ts"]),

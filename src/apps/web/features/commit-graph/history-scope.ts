@@ -24,6 +24,7 @@ export function resolveHistoryScope(
   scope: HistoryScope,
   refs: RepositoryRefs,
   activeWorktreePath: string,
+  options: { readonly removeMissingSelections?: boolean } = {},
 ): ResolvedHistoryScope {
   if (scope._tag === "Automatic") {
     const selections = resolveAutomaticHistorySelections(
@@ -39,7 +40,11 @@ export function resolveHistoryScope(
   }
 
   const selections = uniqueSelections(
-    scope.selections.filter((selection) => selectionExists(selection, refs)),
+    scope.selections.filter(
+      (selection) =>
+        options.removeMissingSelections === false ||
+        selectionExists(selection, refs),
+    ),
   );
   if (selections.length === 0) {
     return resolveHistoryScope(automaticHistoryScope, refs, activeWorktreePath);
