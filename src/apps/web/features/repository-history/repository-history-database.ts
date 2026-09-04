@@ -21,29 +21,35 @@ export function withRepositoryHistoryDatabase<T>(
   use: (database: IDBDatabase) => Promise<T>,
 ) {
   if (indexedDB === undefined) {
-    return Promise.reject(new RepositoryHistoryStorageUnavailable());
+    return Promise.reject(
+      new RepositoryHistoryStorageUnavailable({
+        cause: new Error("IndexedDB is unavailable"),
+      }),
+    );
   }
-  return openDatabase(indexedDB)
-    .then(async (database) => {
-      try {
-        return await use(database);
-      } finally {
-        database.close();
+  return openDatabase(indexedDB).then(async (database) => {
+    try {
+      return await use(database);
+    } catch (cause) {
+      if (cause instanceof DOMException) {
+        throw storageUnavailable(cause);
       }
-    })
-    .catch((cause: unknown) => {
-      if (cause instanceof RepositoryHistoryStorageUnavailable) {
-        throw cause;
-      }
-      throw new RepositoryHistoryStorageUnavailable();
-    });
+      throw cause;
+    } finally {
+      database.close();
+    }
+  });
 }
 
 export function requestResult<T>(request: IDBRequest<T>) {
   return new Promise<T>((resolveResult, rejectResult) => {
     request.onsuccess = () => resolveResult(request.result);
     request.onerror = () =>
-      rejectResult(request.error ?? new Error("IndexedDB request failed"));
+      rejectResult(
+        storageUnavailable(
+          request.error ?? new Error("IndexedDB request failed"),
+        ),
+      );
   });
 }
 
@@ -52,11 +58,15 @@ export function transactionCompleted(transaction: IDBTransaction) {
     transaction.oncomplete = () => resolveTransaction();
     transaction.onerror = () =>
       rejectTransaction(
-        transaction.error ?? new Error("IndexedDB transaction failed"),
+        storageUnavailable(
+          transaction.error ?? new Error("IndexedDB transaction failed"),
+        ),
       );
     transaction.onabort = () =>
       rejectTransaction(
-        transaction.error ?? new Error("IndexedDB transaction aborted"),
+        storageUnavailable(
+          transaction.error ?? new Error("IndexedDB transaction aborted"),
+        ),
       );
   });
 }
@@ -105,7 +115,14 @@ export function commitKey(
 
 function openDatabase(indexedDB: IDBFactory) {
   return new Promise<IDBDatabase>((resolveDatabase, rejectDatabase) => {
-    const request = indexedDB.open(databaseName, databaseVersion);
+    let settled = false;
+    let request: IDBOpenDBRequest;
+    try {
+      request = indexedDB.open(databaseName, databaseVersion);
+    } catch (cause) {
+      rejectDatabase(storageUnavailable(cause));
+      return;
+    }
     request.onupgradeneeded = () => {
       const database = request.result;
       const commits = database.objectStoreNames.contains(commitStoreName)
@@ -125,11 +142,37 @@ function openDatabase(indexedDB: IDBFactory) {
         database.createObjectStore(repositoryStoreName, { keyPath: "key" });
       }
     };
-    request.onsuccess = () => resolveDatabase(request.result);
-    request.onerror = () =>
-      rejectDatabase(request.error ?? new Error("IndexedDB failed"));
-    request.onblocked = () => rejectDatabase(new Error("IndexedDB is blocked"));
+    request.onsuccess = () => {
+      if (settled) {
+        request.result.close();
+        return;
+      }
+      settled = true;
+      resolveDatabase(request.result);
+    };
+    request.onerror = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      rejectDatabase(
+        storageUnavailable(request.error ?? new Error("IndexedDB failed")),
+      );
+    };
+    request.onblocked = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      rejectDatabase(storageUnavailable(new Error("IndexedDB is blocked")));
+    };
   });
+}
+
+function storageUnavailable(cause: unknown) {
+  return cause instanceof RepositoryHistoryStorageUnavailable
+    ? cause
+    : new RepositoryHistoryStorageUnavailable({ cause });
 }
 
 export interface StoredCommit {

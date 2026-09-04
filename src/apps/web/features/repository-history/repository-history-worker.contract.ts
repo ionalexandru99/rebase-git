@@ -81,6 +81,7 @@ export type RepositoryHistoryWorkerResponse =
   | {
       readonly _tag: "HistoryBatchFailed";
       readonly batchId: string;
+      readonly failure: RepositoryHistoryWorkerFailure;
     }
   | {
       readonly _tag: "HistoryResult";

@@ -379,7 +379,7 @@ function connectedSession() {
   };
   return {
     disconnect: () => {
-      state = { _tag: "Reconnecting", attempt: 1 };
+      state = { _tag: "Reconnecting", attempt: 1, environmentId };
       for (const listener of listeners) listener();
     },
     finishSynchronization,

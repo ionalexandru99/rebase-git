@@ -136,12 +136,31 @@ async function hasCompletedHistory(page: Page) {
     () =>
       new Promise<boolean>((resolve, reject) => {
         const request = indexedDB.open("rebase-repository-history");
-        request.onerror = () => reject(request.error);
+        let createdDatabase = false;
+        request.onupgradeneeded = () => {
+          createdDatabase = true;
+          request.transaction?.abort();
+        };
+        request.onerror = () => {
+          if (createdDatabase) {
+            resolve(false);
+            return;
+          }
+          reject(request.error);
+        };
         request.onsuccess = () => {
           const database = request.result;
+          if (!database.objectStoreNames.contains("repositories")) {
+            database.close();
+            resolve(false);
+            return;
+          }
           const transaction = database.transaction("repositories", "readonly");
           const repositories = transaction.objectStore("repositories").getAll();
-          repositories.onerror = () => reject(repositories.error);
+          repositories.onerror = () => {
+            database.close();
+            reject(repositories.error);
+          };
           repositories.onsuccess = () => {
             database.close();
             resolve(

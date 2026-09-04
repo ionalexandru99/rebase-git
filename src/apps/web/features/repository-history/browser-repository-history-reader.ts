@@ -70,9 +70,7 @@ export function createBrowserRepositoryHistoryReader(options: {
       return;
     }
     if (message._tag === "HistoryBatchFailed") {
-      pendingBatches
-        .get(message.batchId)
-        ?.reject(new RepositoryHistoryUnavailable());
+      pendingBatches.get(message.batchId)?.reject(readerError(message.failure));
       pendingBatches.delete(message.batchId);
       return;
     }
@@ -307,6 +305,12 @@ function workerFailure(error: unknown): RepositoryHistoryWorkerFailure {
   }
   if (error instanceof RepositoryHistoryStorageUnavailable) {
     return { _tag: "StorageUnavailable" };
+  }
+  if (error instanceof RepositoryHistoryUnavailable) {
+    return { _tag: "Unavailable" };
+  }
+  if (error instanceof RepositoryHistoryOffline) {
+    return { _tag: "Offline" };
   }
   return { _tag: "Offline" };
 }

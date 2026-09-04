@@ -51,7 +51,11 @@ export class RepositoryHistoryOffline extends Data.TaggedError(
 
 export class RepositoryHistoryStorageUnavailable extends Data.TaggedError(
   "RepositoryHistoryStorageUnavailable",
-) {}
+)<{ readonly cause?: unknown }> {
+  constructor(options: { readonly cause?: unknown } = {}) {
+    super(options);
+  }
+}
 
 export type RepositoryHistoryReaderError =
   | RepositoryHistoryOffline

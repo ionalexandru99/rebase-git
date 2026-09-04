@@ -66,12 +66,14 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
         replica.synchronization = "idle";
         delete replica.synchronizationOwner;
         delete replica.synchronizationRequestId;
-        replica.failure = workerFailure(error);
+        const failure = workerFailure(error);
+        replica.failure = failure;
         replica.revision += 1;
         publishSnapshot(replica);
         post(reader, {
           _tag: "HistoryBatchFailed",
           batchId: event.data.batchId,
+          failure,
         });
         return;
       }
@@ -203,11 +205,18 @@ async function handleReaderMessage(
       ) {
         return;
       }
-      await completeStoredRepositoryHistory(
-        reader.connection.environmentId,
-        reader.connection.repositoryId,
-        message.commitCount,
-      );
+      try {
+        await completeStoredRepositoryHistory(
+          reader.connection.environmentId,
+          reader.connection.repositoryId,
+          message.commitCount,
+        );
+      } catch (error) {
+        replica.synchronization = "idle";
+        delete replica.synchronizationOwner;
+        delete replica.synchronizationRequestId;
+        throw error;
+      }
       replica.synchronization = "complete";
       replica.synchronizedCommitCount = message.commitCount;
       delete replica.failure;
@@ -395,13 +404,6 @@ async function startSynchronization(
   ) {
     return;
   }
-  await beginRepositoryHistorySynchronization(
-    reader.connection.environmentId,
-    reader.connection.repositoryId,
-  );
-  if (reader.closed) {
-    return;
-  }
   const requestId = crypto.randomUUID();
   replica.synchronization = "syncing";
   replica.synchronizationOwner = reader;
@@ -409,6 +411,29 @@ async function startSynchronization(
   replica.synchronizedCommitCount = 0;
   replica.revision += 1;
   publishSnapshot(replica);
+  try {
+    await beginRepositoryHistorySynchronization(
+      reader.connection.environmentId,
+      reader.connection.repositoryId,
+    );
+  } catch (error) {
+    if (
+      replica.synchronizationOwner === reader &&
+      replica.synchronizationRequestId === requestId
+    ) {
+      replica.synchronization = "idle";
+      delete replica.synchronizationOwner;
+      delete replica.synchronizationRequestId;
+    }
+    throw error;
+  }
+  if (
+    reader.closed ||
+    replica.synchronizationOwner !== reader ||
+    replica.synchronizationRequestId !== requestId
+  ) {
+    return;
+  }
   post(reader, { _tag: "SynchronizeHistory", requestId });
 }
 
