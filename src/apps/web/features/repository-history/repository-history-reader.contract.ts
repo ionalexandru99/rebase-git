@@ -3,6 +3,7 @@ import type {
   RepositoryCommit,
   RepositoryHistoryOperationFailure,
   RepositoryHistoryRefTarget,
+  SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
@@ -13,6 +14,8 @@ export interface RepositoryHistorySnapshot {
   readonly error?: RepositoryHistoryReaderError;
   readonly revision: number;
   readonly status: "empty" | "error" | "loading" | "ready";
+  readonly synchronization?: "complete" | "idle" | "syncing";
+  readonly synchronizedCommitCount?: number;
 }
 
 export interface RepositoryHistoryQuery {
@@ -55,6 +58,17 @@ export interface RepositoryHistoryTransport {
     | RepositoryHistoryRejected
     | RepositoryHistoryUnavailable
   >;
+  readonly synchronize: (
+    request: Omit<SynchronizeRepositoryHistory, "requestId" | "_tag">,
+    acceptBatch: (
+      bytes: Uint8Array,
+    ) => Effect.Effect<void, RepositoryHistoryUnavailable>,
+  ) => Effect.Effect<
+    number,
+    | EnvironmentConnectionFailure
+    | RepositoryHistoryRejected
+    | RepositoryHistoryUnavailable
+  >;
 }
 
 export interface RepositoryHistoryGateway {
@@ -62,4 +76,9 @@ export interface RepositoryHistoryGateway {
     request: Omit<ReadRepositoryHistory, "requestId" | "_tag">,
     signal?: AbortSignal,
   ) => Promise<Uint8Array>;
+  readonly synchronize: (
+    request: Omit<SynchronizeRepositoryHistory, "requestId" | "_tag">,
+    acceptBatch: (bytes: Uint8Array) => Promise<void>,
+    signal?: AbortSignal,
+  ) => Promise<number>;
 }

@@ -10,6 +10,22 @@ import {
 import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 describe("commit graph", () => {
+  it("shows background synchronization without covering the graph", async () => {
+    const reader = historyReader({ commits: history(2), status: "ready" });
+    reader.snapshot = {
+      revision: 1,
+      status: "ready",
+      synchronization: "syncing",
+      synchronizedCommitCount: 256,
+    };
+    const screen = await renderGraph(reader);
+
+    await expect.element(screen.getByText("Syncing")).toBeVisible();
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 0,/ }))
+      .toBeVisible();
+  });
+
   it("renders 100 connected commits with bounded semantic rows and selection", async () => {
     const commits = history(100);
     const reader = historyReader({ commits, status: "ready" });

@@ -231,6 +231,21 @@ function createRepositoryHistoryGateway() {
         signal === undefined ? undefined : { signal },
       );
     },
+    synchronize: (request, acceptBatch, signal) => {
+      const current = transport;
+      if (current === undefined) {
+        return Promise.reject(new RepositoryHistoryUnavailable());
+      }
+      return Effect.runPromise(
+        current.synchronize(request, (bytes) =>
+          Effect.tryPromise({
+            try: () => acceptBatch(bytes),
+            catch: () => new RepositoryHistoryUnavailable(),
+          }),
+        ),
+        signal === undefined ? undefined : { signal },
+      );
+    },
   };
   return {
     connect: (next: RepositoryHistoryTransport) => {

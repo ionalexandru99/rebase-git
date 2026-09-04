@@ -142,6 +142,7 @@ async function renderRepositoryWorkspace() {
           environmentId={undefined}
           historyGateway={{
             read: async () => Promise.reject(new Error("Unavailable")),
+            synchronize: async () => Promise.reject(new Error("Unavailable")),
           }}
           refs={{
             checkingOut: false,
@@ -207,6 +208,7 @@ function pairingRequiredSession(): LocalEnvironmentSession {
     },
     repositoryHistory: {
       read: async () => Promise.reject(new Error("Unavailable")),
+      synchronize: async () => Promise.reject(new Error("Unavailable")),
     },
     repositoryRefs: {
       checkout: async () => Promise.reject(new Error("Unavailable")),

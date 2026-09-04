@@ -128,6 +128,7 @@ describe("local Environment session", () => {
     });
     const connection = createConnection(0, {
       read: () => Effect.fail(rejection),
+      synchronize: () => Effect.never,
     });
     const session = createLocalEnvironmentSession({
       filesystemGateway: createFilesystemGateway(),
@@ -219,6 +220,7 @@ function createConnection(
   currentSequence = 0,
   repositoryHistory: RepositoryHistoryTransport = {
     read: () => Effect.die("History is not used"),
+    synchronize: () => Effect.die("History is not used"),
   },
 ) {
   const disconnect = deferred<EnvironmentResponseError>();

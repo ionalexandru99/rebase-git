@@ -7,17 +7,23 @@ import { promisify } from "node:util";
 import {
   createBinaryMessageReassembler,
   createCurrentEnvironmentHello,
+  decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   type EnvironmentAccessCapability,
   type EnvironmentHello,
   environmentLivePath,
+  type RepositoryCommit,
 } from "@rebase/contracts";
 import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
-import type { RepositoryHistoryService } from "@rebase/server/domain/repository-history.contract";
+import {
+  RepositoryHistoryError,
+  type RepositoryHistoryService,
+} from "@rebase/server/domain/repository-history.contract";
 import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
 import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
+import { synchronizeRepositoryHistory } from "@rebase/server/features/repository-history/git/synchronize-repository-history";
 import { createRepositoryHistoryService } from "@rebase/server/features/repository-history/repository-history";
 import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
 import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
@@ -39,6 +45,200 @@ afterEach(async () => {
 });
 
 describe("repository history", { timeout: 30_000 }, () => {
+  it("waits for each committed-batch acknowledgement before sending the next", async () => {
+    const continuedAfterFirst = vi.fn();
+    const history: RepositoryHistoryService = {
+      read: () => Effect.die("unused"),
+      synchronize: (request, emit) =>
+        Effect.gen(function* () {
+          yield* emit(emptyBatch(request.repositoryId, request.requestId, 0));
+          continuedAfterFirst();
+          yield* emit(emptyBatch(request.repositoryId, request.requestId, 1));
+          return 0;
+        }),
+    };
+    await withHistoryListener(async ({ origin }) => {
+      const socket = await openHistorySocket(
+        origin,
+        createCurrentEnvironmentHello("0.0.0"),
+      );
+      expect(socket.extensions).toContain("permessage-deflate");
+      const first = collectBinaryMessage(
+        socket,
+        createBinaryMessageReassembler(),
+        [],
+      );
+      socket.send(
+        JSON.stringify({
+          _tag: "SynchronizeRepositoryHistory",
+          priority: "visible",
+          repositoryId: environmentId,
+          requestId,
+        }),
+      );
+      await first;
+      expect(continuedAfterFirst).not.toHaveBeenCalled();
+
+      const second = collectBinaryMessage(
+        socket,
+        createBinaryMessageReassembler(),
+        [],
+      );
+      socket.send(
+        JSON.stringify({
+          _tag: "AcknowledgeRepositoryHistoryBatch",
+          requestId,
+          sequence: 0,
+        }),
+      );
+      await second;
+      expect(continuedAfterFirst).toHaveBeenCalledOnce();
+
+      const completed = nextTextMessage(socket);
+      socket.send(
+        JSON.stringify({
+          _tag: "AcknowledgeRepositoryHistoryBatch",
+          requestId,
+          sequence: 0,
+        }),
+      );
+      socket.send(
+        JSON.stringify({
+          _tag: "AcknowledgeRepositoryHistoryBatch",
+          requestId,
+          sequence: 1,
+        }),
+      );
+      expect(JSON.parse(await completed)).toMatchObject({
+        _tag: "RepositoryHistorySynchronized",
+        requestId,
+      });
+      socket.close();
+    }, history);
+  });
+
+  it("synchronizes a bare repository without a worktree HEAD", async () => {
+    const root = await createTemporaryDirectory();
+    const source = join(root, "bare-source");
+    const bare = join(root, "repository.git");
+    await createRepository(source, "sha1", 3);
+    await execFilePromise("git", ["clone", "--bare", source, bare]);
+    const commits: RepositoryCommit[] = [];
+
+    const count = await Effect.runPromise(
+      synchronizeRepositoryHistory(
+        createLocalGitCommandRunner(),
+        bare,
+        {
+          _tag: "SynchronizeRepositoryHistory",
+          priority: "visible",
+          repositoryId: environmentId,
+          requestId,
+        },
+        (batch) =>
+          Effect.sync(() => {
+            commits.push(...batch.commits);
+          }),
+      ),
+    );
+
+    expect(count).toBe(3);
+    expect(commits.map((commit) => commit.subject)).toEqual([
+      "commit 2",
+      "commit 1",
+      "commit 0",
+    ]);
+  });
+
+  it("preserves failures raised while emitting streamed batches", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "emit-failure");
+    await createRepository(repositoryPath, "sha1", 1);
+    const failure = new RepositoryHistoryError({
+      failure: {
+        _tag: "GitFailed",
+        detail: "Batch delivery failed",
+        reason: "Failed",
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        synchronizeRepositoryHistory(
+          createLocalGitCommandRunner(),
+          repositoryPath,
+          {
+            _tag: "SynchronizeRepositoryHistory",
+            priority: "visible",
+            repositoryId: environmentId,
+            requestId,
+          },
+          () => Effect.fail(failure),
+        ),
+      ),
+    ).rejects.toBe(failure);
+  });
+
+  it("synchronizes refs, stashes, and detached linked worktree heads", async () => {
+    await withHistoryListener(async ({ catalog, origin, root }) => {
+      const repositoryPath = join(root, "complete");
+      const linkedPath = join(root, "linked");
+      await createRepository(repositoryPath, "sha1", 2);
+      await git(repositoryPath, "checkout", "-b", "side");
+      await git(repositoryPath, "commit", "--allow-empty", "-m", "side");
+      const side = await gitOutput(repositoryPath, "rev-parse", "HEAD");
+      await git(repositoryPath, "checkout", "main");
+      await git(repositoryPath, "update-ref", "refs/remotes/origin/side", side);
+      await git(repositoryPath, "tag", "snapshot");
+      await writeFile(join(repositoryPath, "stashed-one.txt"), "one");
+      await git(repositoryPath, "add", "stashed-one.txt");
+      await git(repositoryPath, "stash", "push", "-m", "saved work one");
+      await writeFile(join(repositoryPath, "stashed-two.txt"), "two");
+      await git(repositoryPath, "add", "stashed-two.txt");
+      await git(repositoryPath, "stash", "push", "-m", "saved work two");
+      await git(
+        repositoryPath,
+        "worktree",
+        "add",
+        "--detach",
+        linkedPath,
+        "main",
+      );
+      await git(linkedPath, "commit", "--allow-empty", "-m", "detached linked");
+      const detached = await gitOutput(linkedPath, "rev-parse", "HEAD");
+      const repository = await Effect.runPromise(
+        catalog.remember(repositoryPath),
+      );
+      const stashRoots = (
+        await gitOutput(repositoryPath, "stash", "list", "--format=%H")
+      ).split("\n");
+      const expected = new Set(
+        (
+          await gitOutput(
+            repositoryPath,
+            "rev-list",
+            "--all",
+            detached,
+            ...stashRoots,
+          )
+        ).split("\n"),
+      );
+
+      const commits = await synchronizeHistory(origin, repository.id);
+
+      expect(new Set(commits.map((commit) => commit.oid))).toEqual(expected);
+      expect(
+        commits.some((commit) => commit.subject === "detached linked"),
+      ).toBe(true);
+      expect(
+        commits.some((commit) => commit.subject.includes("saved work one")),
+      ).toBe(true);
+      expect(
+        commits.some((commit) => commit.subject.includes("saved work two")),
+      ).toBe(true);
+    });
+  });
+
   it.each(["sha1", "sha256"] as const)(
     "delivers the first 100 %s commits through fragmented binary messages",
     async (objectFormat) => {
@@ -87,6 +287,7 @@ describe("repository history", { timeout: 30_000 }, () => {
     const canceled = vi.fn();
     const history: RepositoryHistoryService = {
       read: () => Effect.never.pipe(Effect.ensuring(Effect.sync(canceled))),
+      synchronize: () => Effect.never,
     };
     await withHistoryListener(async ({ catalog, origin, root }) => {
       const repositoryPath = join(root, "cancel");
@@ -170,6 +371,25 @@ describe("repository history", { timeout: 30_000 }, () => {
 
       expect(page.commits).toHaveLength(2);
       expect(page.commits.at(-1)?.parents).toEqual([]);
+      const synchronized: RepositoryCommit[] = [];
+      await Effect.runPromise(
+        synchronizeRepositoryHistory(
+          createLocalGitCommandRunner(),
+          repositoryPath,
+          {
+            _tag: "SynchronizeRepositoryHistory",
+            priority: "visible",
+            repositoryId: repository.id,
+            requestId,
+          },
+          (batch) =>
+            Effect.sync(() => {
+              synchronized.push(...batch.commits);
+            }),
+        ),
+      );
+      expect(synchronized).toHaveLength(2);
+      expect(synchronized.at(-1)?.parents).toEqual([]);
     });
   });
 
@@ -213,6 +433,7 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("bounds concurrent history reads within one connection", async () => {
     const history: RepositoryHistoryService = {
       read: vi.fn(() => Effect.never),
+      synchronize: () => Effect.never,
     };
     await withHistoryListener(async ({ origin }) => {
       const socket = await openHistorySocket(
@@ -339,10 +560,7 @@ async function readHistoryPage(
   repositoryId: string,
   oid: string,
 ) {
-  const socket = await openHistorySocket(
-    origin,
-    createCurrentEnvironmentHello("0.0.0"),
-  );
+  const socket = await openHistorySocket(origin, smallFrameHello());
   const received = collectBinaryMessage(
     socket,
     createBinaryMessageReassembler(),
@@ -363,6 +581,64 @@ async function readHistoryPage(
   return decodeRepositoryHistoryPage(complete.payload);
 }
 
+async function synchronizeHistory(origin: string, repositoryId: string) {
+  const socket = await openHistorySocket(origin, smallFrameHello());
+  const synchronizationRequestId = crypto.randomUUID();
+  const reassembler = createBinaryMessageReassembler();
+  const commits: RepositoryCommit[] = [];
+  const completed = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error("Timed out waiting for history synchronization")),
+      10_000,
+    );
+    socket.addEventListener("message", (event) => {
+      void Promise.resolve()
+        .then(async () => {
+          if (typeof event.data === "string") {
+            const message = JSON.parse(event.data) as {
+              readonly _tag: string;
+              readonly requestId?: string;
+            };
+            if (
+              message._tag === "RepositoryHistorySynchronized" &&
+              message.requestId === synchronizationRequestId
+            ) {
+              clearTimeout(timeout);
+              resolve();
+            }
+            return;
+          }
+          const fragment = await binaryBytes(event.data);
+          const message = reassembler.accept(fragment);
+          if (message === undefined) {
+            return;
+          }
+          const batch = decodeRepositoryHistoryBatch(message.payload);
+          commits.push(...batch.commits);
+          socket.send(
+            JSON.stringify({
+              _tag: "AcknowledgeRepositoryHistoryBatch",
+              requestId: synchronizationRequestId,
+              sequence: batch.sequence,
+            }),
+          );
+        })
+        .catch(reject);
+    });
+  });
+  socket.send(
+    JSON.stringify({
+      _tag: "SynchronizeRepositoryHistory",
+      priority: "visible",
+      repositoryId,
+      requestId: synchronizationRequestId,
+    }),
+  );
+  await completed;
+  socket.close();
+  return commits;
+}
+
 function smallFrameHello(): EnvironmentHello {
   return {
     ...createCurrentEnvironmentHello("0.0.0"),
@@ -371,6 +647,20 @@ function smallFrameHello(): EnvironmentHello {
       maxHttpResponseBytes: 1_048_576,
       maxWebSocketResponseBytes: 1_024,
     },
+  };
+}
+
+function emptyBatch(
+  repositoryId: string,
+  batchRequestId: string,
+  sequence: number,
+) {
+  return {
+    commits: [],
+    objectFormat: "sha1" as const,
+    repositoryId,
+    requestId: batchRequestId,
+    sequence,
   };
 }
 

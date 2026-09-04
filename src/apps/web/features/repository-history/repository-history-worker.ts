@@ -1,4 +1,5 @@
 import {
+  decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
@@ -48,6 +49,18 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
     event: MessageEvent<RepositoryHistoryWorkerRequest>,
   ) => {
     void handleReaderMessage(reader, replica, event.data).catch(() => {
+      if (event.data._tag === "HistoryBatchReceived") {
+        replica.synchronization = "idle";
+        delete replica.synchronizationOwner;
+        delete replica.synchronizationRequestId;
+        replica.revision += 1;
+        publishSnapshot(replica);
+        post(reader, {
+          _tag: "HistoryBatchFailed",
+          batchId: event.data.batchId,
+        });
+        return;
+      }
       if (!("requestId" in event.data)) {
         return;
       }
@@ -123,6 +136,42 @@ async function handleReaderMessage(
         requestId: message.requestId,
       });
       return;
+    case "HistoryBatchReceived":
+      await acceptHistoryBatch(
+        reader,
+        replica,
+        message.requestId,
+        message.batchId,
+        message.bytes,
+      );
+      return;
+    case "HistorySynchronizationCompleted":
+      if (
+        replica.synchronizationOwner !== reader ||
+        replica.synchronizationRequestId !== message.requestId
+      ) {
+        return;
+      }
+      replica.synchronization = "complete";
+      replica.synchronizedCommitCount = message.commitCount;
+      delete replica.synchronizationOwner;
+      delete replica.synchronizationRequestId;
+      replica.revision += 1;
+      publishSnapshot(replica);
+      return;
+    case "HistorySynchronizationFailed":
+      if (
+        replica.synchronizationOwner !== reader ||
+        replica.synchronizationRequestId !== message.requestId
+      ) {
+        return;
+      }
+      replica.synchronization = "idle";
+      delete replica.synchronizationOwner;
+      delete replica.synchronizationRequestId;
+      replica.revision += 1;
+      publishSnapshot(replica);
+      return;
     case "GetCommitSummaries": {
       const commits = await readRepositoryCommits(
         reader.connection.environmentId,
@@ -144,7 +193,6 @@ async function handleReaderMessage(
       });
       return;
     case "CloseReader": {
-      reader.closed = true;
       const activeRequestId = reader.epoch.cancel();
       if (activeRequestId !== undefined) {
         post(reader, {
@@ -153,10 +201,19 @@ async function handleReaderMessage(
         });
       }
       replica.readers.delete(reader);
+      if (replica.synchronizationOwner === reader) {
+        cancelSynchronization(reader, replica);
+      }
+      reader.closed = true;
       if (replica.readers.size === 0) {
         repositories.delete(
           `${reader.connection.environmentId}\0${reader.connection.repositoryId}`,
         );
+      } else if (replica.synchronization !== "complete") {
+        const replacement = replica.readers.values().next().value;
+        if (replacement !== undefined) {
+          startSynchronization(replacement, replica);
+        }
       }
       reader.connection.port.close();
       return;
@@ -197,6 +254,9 @@ async function acceptHistoryPage(
       commits: page.commits,
       requestId,
     });
+    if (replica.synchronization === "idle") {
+      startSynchronization(reader, replica);
+    }
   } catch {
     if (!reader.epoch.finish(requestId)) {
       return;
@@ -208,6 +268,70 @@ async function acceptHistoryPage(
     publishSnapshot(replica);
     post(reader, { _tag: "RequestFailed", failure, requestId });
   }
+}
+
+async function acceptHistoryBatch(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+  requestId: string,
+  batchId: string,
+  bytes: Uint8Array,
+) {
+  if (
+    replica.synchronizationOwner !== reader ||
+    replica.synchronizationRequestId !== requestId
+  ) {
+    return;
+  }
+  const batch = decodeRepositoryHistoryBatch(bytes);
+  if (batch.repositoryId !== reader.connection.repositoryId) {
+    throw new Error("History batch identity does not match the reader");
+  }
+  await storeRepositoryCommits(
+    reader.connection.environmentId,
+    reader.connection.repositoryId,
+    batch.commits,
+  );
+  if (
+    replica.synchronizationOwner !== reader ||
+    replica.synchronizationRequestId !== requestId
+  ) {
+    return;
+  }
+  replica.synchronizedCommitCount += batch.commits.length;
+  replica.revision += 1;
+  publishSnapshot(replica);
+  post(reader, { _tag: "HistoryBatchCommitted", batchId });
+}
+
+function startSynchronization(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+) {
+  if (reader.closed || replica.synchronization === "syncing") {
+    return;
+  }
+  const requestId = crypto.randomUUID();
+  replica.synchronization = "syncing";
+  replica.synchronizationOwner = reader;
+  replica.synchronizationRequestId = requestId;
+  replica.synchronizedCommitCount = 0;
+  replica.revision += 1;
+  publishSnapshot(replica);
+  post(reader, { _tag: "SynchronizeHistory", requestId });
+}
+
+function cancelSynchronization(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+) {
+  const requestId = replica.synchronizationRequestId;
+  if (requestId !== undefined) {
+    post(reader, { _tag: "CancelHistorySynchronization", requestId });
+  }
+  replica.synchronization = "idle";
+  delete replica.synchronizationOwner;
+  delete replica.synchronizationRequestId;
 }
 
 function publishSnapshot(replica: RepositoryReplica) {
@@ -222,6 +346,8 @@ function postSnapshot(reader: ConnectedReader, replica: RepositoryReplica) {
     ...(replica.failure === undefined ? {} : { failure: replica.failure }),
     revision: replica.revision,
     status: replica.status,
+    synchronization: replica.synchronization,
+    synchronizedCommitCount: replica.synchronizedCommitCount,
   });
 }
 
@@ -241,6 +367,8 @@ function createReplica(): RepositoryReplica {
     refTargets: [],
     revision: 0,
     status: "empty",
+    synchronization: "idle",
+    synchronizedCommitCount: 0,
     visibleOids: [],
   };
 }
@@ -264,5 +392,9 @@ interface RepositoryReplica {
   >["refs"];
   readonly readers: Set<ConnectedReader>;
   status: "empty" | "error" | "loading" | "ready";
+  synchronization: "complete" | "idle" | "syncing";
+  synchronizationOwner?: ConnectedReader;
+  synchronizationRequestId?: string;
+  synchronizedCommitCount: number;
   visibleOids: readonly string[];
 }

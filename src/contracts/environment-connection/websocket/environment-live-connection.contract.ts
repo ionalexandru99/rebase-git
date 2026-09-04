@@ -13,6 +13,7 @@ import {
 import {
   RepositoryHistoryClientMessage,
   RepositoryHistoryFailed,
+  RepositoryHistorySynchronized,
 } from "@rebase/contracts/repository-history/repository-history.contract";
 import { Schema } from "effect";
 
@@ -114,6 +115,7 @@ export const EnvironmentServerMessage = Schema.Union([
   EnvironmentChanged,
   ResnapshotRequired,
   RepositoryHistoryFailed,
+  RepositoryHistorySynchronized,
 ]);
 
 export type EnvironmentServerMessage = typeof EnvironmentServerMessage.Type;

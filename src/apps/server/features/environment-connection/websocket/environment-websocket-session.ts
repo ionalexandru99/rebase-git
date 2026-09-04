@@ -4,13 +4,15 @@ import {
   type EnvironmentHello,
   EnvironmentHelloResult,
   type EnvironmentTransportFailure,
+  encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
   type HelloAccepted,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
-import { Effect, FiberSet, Option, Queue, Schema } from "effect";
+import { Deferred, Effect, FiberSet, Option, Queue, Schema } from "effect";
 import type { WebSocket } from "ws";
 import { WebSocket as WebSocketState } from "ws";
+import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
 import {
   type EnvironmentWebSocketSessionClosed,
@@ -27,6 +29,8 @@ import {
 } from "#server/features/environment-connection/websocket/environment-websocket-writer";
 
 const maximumConcurrentHistoryRequests = 2;
+const maximumRetiredHistorySynchronizations = 64;
+const historyBatchAcknowledgementTimeoutMilliseconds = 30_000;
 
 export function runEnvironmentWebSocketSession(
   socket: WebSocket,
@@ -56,7 +60,8 @@ function runSession(
     const messages = yield* acquireEnvironmentWebSocketInbox(socket, state);
     const writer = yield* createEnvironmentWebSocketWriter(socket, state);
     const runSessionEffect = yield* FiberSet.makeRuntime<never, void, never>();
-    const historyRequests = new Map<string, AbortController>();
+    const historyRequests = new Map<string, ActiveHistoryRequest>();
+    const retiredHistorySynchronizations = new Map<string, number>();
     let logicalMessageId = 0;
     const hello = yield* readHello(messages, state);
     const result = yield* negotiateSession(state, hello);
@@ -75,6 +80,7 @@ function runSession(
       capabilities,
       accessCapabilities,
       historyRequests,
+      retiredHistorySynchronizations,
       runSessionEffect,
       () => {
         logicalMessageId += 1;
@@ -110,8 +116,11 @@ function initializeNegotiatedSession(
   result: HelloAccepted,
 ) {
   return Effect.gen(function* () {
-    const capabilities = new Set(
-      result.capabilities.map((capability) => capability.name),
+    const capabilities = new Map(
+      result.capabilities.map((capability) => [
+        capability.name,
+        capability.version,
+      ]),
     );
     const supportsEnvironmentEvents = capabilities.has("environment-events");
     const supportsResnapshot = capabilities.has("sequence-resnapshot");
@@ -138,9 +147,10 @@ function processClientMessages(
   >,
   writer: EnvironmentWebSocketWriter,
   state: EnvironmentTransportState,
-  capabilities: ReadonlySet<string>,
+  capabilities: ReadonlyMap<string, number>,
   accessCapabilities: ReadonlySet<EnvironmentAccessCapability>,
-  historyRequests: Map<string, AbortController>,
+  historyRequests: Map<string, ActiveHistoryRequest>,
+  retiredHistorySynchronizations: Map<string, number>,
   runSessionEffect: (
     effect: Effect.Effect<void, never, never>,
     options?: Effect.RunOptions,
@@ -157,6 +167,7 @@ function processClientMessages(
         capabilities,
         accessCapabilities,
         historyRequests,
+        retiredHistorySynchronizations,
         runSessionEffect,
         nextLogicalMessageId,
       );
@@ -168,9 +179,10 @@ function handleClientMessage(
   message: typeof EnvironmentClientMessage.Type | undefined,
   writer: EnvironmentWebSocketWriter,
   state: EnvironmentTransportState,
-  capabilities: ReadonlySet<string>,
+  capabilities: ReadonlyMap<string, number>,
   accessCapabilities: ReadonlySet<EnvironmentAccessCapability>,
-  historyRequests: Map<string, AbortController>,
+  historyRequests: Map<string, ActiveHistoryRequest>,
+  retiredHistorySynchronizations: Map<string, number>,
   runSessionEffect: (
     effect: Effect.Effect<void, never, never>,
     options?: Effect.RunOptions,
@@ -226,8 +238,11 @@ function handleClientMessage(
         });
       }
       return Effect.sync(() => {
-        const controller = new AbortController();
-        historyRequests.set(message.requestId, controller);
+        const request: ActiveHistoryRequest = {
+          controller: new AbortController(),
+          kind: "page",
+        };
+        historyRequests.set(message.requestId, request);
         runSessionEffect(
           history.read(message).pipe(
             Effect.flatMap((page) =>
@@ -248,27 +263,249 @@ function handleClientMessage(
               }),
             ),
             Effect.ensuring(
-              Effect.sync(() => historyRequests.delete(message.requestId)),
+              Effect.sync(() =>
+                deleteOwnedHistoryRequest(
+                  historyRequests,
+                  message.requestId,
+                  request,
+                ),
+              ),
             ),
             Effect.catchTag(
               "EnvironmentWebSocketWriteError",
               () => Effect.void,
             ),
           ),
-          { signal: controller.signal },
+          { signal: request.controller.signal },
         );
-        if (controller.signal.aborted) {
+        if (request.controller.signal.aborted) {
+          deleteOwnedHistoryRequest(
+            historyRequests,
+            message.requestId,
+            request,
+          );
+        }
+      });
+    }
+    case "SynchronizeRepositoryHistory": {
+      const history = state.history;
+      if (
+        (capabilities.get("repository-history") ?? 0) < 2 ||
+        !capabilities.has("binary-fragmentation") ||
+        history === undefined ||
+        historyRequests.has(message.requestId)
+      ) {
+        return rejectSession("InvalidMessage");
+      }
+      if (!accessCapabilities.has("repository.read")) {
+        return writer.send({
+          _tag: "RepositoryHistoryFailed",
+          failure: { _tag: "AuthorizationDenied" },
+          requestId: message.requestId,
+        });
+      }
+      if (
+        [...historyRequests.values()].some((request) => request.kind === "sync")
+      ) {
+        return writer.send({
+          _tag: "RepositoryHistoryFailed",
+          failure: {
+            _tag: "GitFailed",
+            detail: "A repository history synchronization is already running",
+            reason: "Failed",
+          },
+          requestId: message.requestId,
+        });
+      }
+      return Effect.sync(() => {
+        const request: ActiveHistoryRequest = {
+          controller: new AbortController(),
+          kind: "sync",
+          lastSentSequence: -1,
+        };
+        historyRequests.set(message.requestId, request);
+        runSessionEffect(
+          history
+            .synchronize(message, (batch) =>
+              sendHistoryBatch(
+                writer,
+                request,
+                batch.sequence,
+                nextLogicalMessageId(),
+                message.requestId,
+                encodeRepositoryHistoryBatch(batch),
+              ).pipe(Effect.mapError(historyBatchError)),
+            )
+            .pipe(
+              Effect.flatMap((commitCount) =>
+                writer.send({
+                  _tag: "RepositoryHistorySynchronized",
+                  commitCount,
+                  requestId: message.requestId,
+                }),
+              ),
+              Effect.catch((error) =>
+                writer.send({
+                  _tag: "RepositoryHistoryFailed",
+                  failure:
+                    error._tag === "RepositoryHistoryError"
+                      ? error.failure
+                      : { _tag: "GitFailed", reason: "Failed" },
+                  requestId: message.requestId,
+                }),
+              ),
+              Effect.ensuring(
+                Effect.sync(() =>
+                  retireOwnedHistoryRequest(
+                    historyRequests,
+                    retiredHistorySynchronizations,
+                    message.requestId,
+                    request,
+                  ),
+                ),
+              ),
+              Effect.catchTag(
+                "EnvironmentWebSocketWriteError",
+                () => Effect.void,
+              ),
+            ),
+          { signal: request.controller.signal },
+        );
+      });
+    }
+    case "AcknowledgeRepositoryHistoryBatch": {
+      const request = historyRequests.get(message.requestId);
+      if (request?.kind === "sync") {
+        const acknowledgement = request.acknowledgement;
+        if (acknowledgement?.sequence === message.sequence) {
+          delete request.acknowledgement;
+          return Deferred.succeed(acknowledgement.deferred, undefined).pipe(
+            Effect.asVoid,
+          );
+        }
+        return message.sequence <= request.lastSentSequence
+          ? Effect.void
+          : rejectSession("InvalidMessage");
+      }
+      const lastSentSequence = retiredHistorySynchronizations.get(
+        message.requestId,
+      );
+      if (
+        lastSentSequence === undefined ||
+        message.sequence > lastSentSequence
+      ) {
+        return rejectSession("InvalidMessage");
+      }
+      return Effect.void;
+    }
+    case "CancelRepositoryHistory": {
+      return Effect.sync(() => {
+        const request = historyRequests.get(message.requestId);
+        request?.controller.abort();
+        if (request?.kind === "sync") {
+          retireOwnedHistoryRequest(
+            historyRequests,
+            retiredHistorySynchronizations,
+            message.requestId,
+            request,
+          );
+        } else {
           historyRequests.delete(message.requestId);
         }
       });
     }
-    case "CancelRepositoryHistory":
-      return Effect.sync(() => {
-        historyRequests.get(message.requestId)?.abort();
-        historyRequests.delete(message.requestId);
-      });
   }
 }
+
+function historyBatchError(cause: unknown) {
+  return new RepositoryHistoryError({
+    cause,
+    failure: {
+      _tag: "GitFailed",
+      detail: "History batch acknowledgement failed",
+      reason: "Failed",
+    },
+  });
+}
+
+function sendHistoryBatch(
+  writer: EnvironmentWebSocketWriter,
+  request: ActiveHistorySynchronization,
+  sequence: number,
+  logicalMessageId: number,
+  requestId: string,
+  payload: Uint8Array,
+) {
+  return Effect.gen(function* () {
+    const deferred = yield* Deferred.make<void>();
+    request.lastSentSequence = sequence;
+    request.acknowledgement = { deferred, sequence };
+    yield* writer.sendBinary({ logicalMessageId, payload, requestId });
+    yield* Deferred.await(deferred).pipe(
+      Effect.timeout(historyBatchAcknowledgementTimeoutMilliseconds),
+    );
+  }).pipe(
+    Effect.ensuring(
+      Effect.sync(() => {
+        if (request.acknowledgement?.sequence === sequence) {
+          delete request.acknowledgement;
+        }
+      }),
+    ),
+  );
+}
+
+function retireOwnedHistoryRequest(
+  requests: Map<string, ActiveHistoryRequest>,
+  retiredSynchronizations: Map<string, number>,
+  requestId: string,
+  request: ActiveHistorySynchronization,
+) {
+  if (requests.get(requestId) !== request) {
+    return;
+  }
+  requests.delete(requestId);
+  if (request.lastSentSequence < 0) {
+    return;
+  }
+  retiredSynchronizations.set(requestId, request.lastSentSequence);
+  if (retiredSynchronizations.size <= maximumRetiredHistorySynchronizations) {
+    return;
+  }
+  const oldestRequestId = retiredSynchronizations.keys().next().value;
+  if (oldestRequestId !== undefined) {
+    retiredSynchronizations.delete(oldestRequestId);
+  }
+}
+
+function deleteOwnedHistoryRequest(
+  requests: Map<string, ActiveHistoryRequest>,
+  requestId: string,
+  request: ActiveHistoryRequest,
+) {
+  if (requests.get(requestId) === request) {
+    requests.delete(requestId);
+  }
+}
+
+interface ActiveHistoryPageRequest {
+  readonly controller: AbortController;
+  readonly kind: "page";
+}
+
+interface ActiveHistorySynchronization {
+  acknowledgement?: {
+    readonly deferred: Deferred.Deferred<void>;
+    readonly sequence: number;
+  };
+  readonly controller: AbortController;
+  readonly kind: "sync";
+  lastSentSequence: number;
+}
+
+type ActiveHistoryRequest =
+  | ActiveHistoryPageRequest
+  | ActiveHistorySynchronization;
 
 function readHello(
   messages: Queue.Dequeue<

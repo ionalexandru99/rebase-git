@@ -30,6 +30,8 @@ export function createBrowserRepositoryHistoryReader(options: {
   const listeners = new Set<() => void>();
   const pending = new Map<string, PendingRequest>();
   const loads = new Map<string, AbortController>();
+  const synchronizations = new Map<string, AbortController>();
+  const pendingBatches = new Map<string, PendingBatch>();
   let closed = false;
   let snapshot: RepositoryHistorySnapshot = {
     revision: 0,
@@ -47,6 +49,28 @@ export function createBrowserRepositoryHistoryReader(options: {
       loads.delete(message.requestId);
       return;
     }
+    if (message._tag === "SynchronizeHistory") {
+      synchronizeHistory(message.requestId);
+      return;
+    }
+    if (message._tag === "CancelHistorySynchronization") {
+      synchronizations.get(message.requestId)?.abort();
+      synchronizations.delete(message.requestId);
+      rejectSynchronizationBatches(message.requestId);
+      return;
+    }
+    if (message._tag === "HistoryBatchCommitted") {
+      pendingBatches.get(message.batchId)?.resolve();
+      pendingBatches.delete(message.batchId);
+      return;
+    }
+    if (message._tag === "HistoryBatchFailed") {
+      pendingBatches
+        .get(message.batchId)
+        ?.reject(new RepositoryHistoryUnavailable());
+      pendingBatches.delete(message.batchId);
+      return;
+    }
     if (message._tag === "SnapshotChanged") {
       snapshot = {
         ...(message.failure === undefined
@@ -54,6 +78,8 @@ export function createBrowserRepositoryHistoryReader(options: {
           : { error: readerError(message.failure) }),
         revision: message.revision,
         status: message.status,
+        synchronization: message.synchronization,
+        synchronizedCommitCount: message.synchronizedCommitCount,
       };
       for (const listener of listeners) {
         listener();
@@ -122,6 +148,61 @@ export function createBrowserRepositoryHistoryReader(options: {
       .finally(() => loads.delete(requestId));
   }
 
+  function synchronizeHistory(requestId: string) {
+    const controller = new AbortController();
+    synchronizations.set(requestId, controller);
+    void options.gateway
+      .synchronize(
+        {
+          priority: "visible",
+          repositoryId: options.repositoryId,
+        },
+        (bytes) => {
+          const batchId = crypto.randomUUID();
+          return new Promise<void>((resolve, reject) => {
+            pendingBatches.set(batchId, { reject, requestId, resolve });
+            const message: RepositoryHistoryWorkerRequest = {
+              _tag: "HistoryBatchReceived",
+              batchId,
+              bytes,
+              requestId,
+            };
+            port.postMessage(message, [bytes.buffer]);
+          });
+        },
+        controller.signal,
+      )
+      .then(
+        (commitCount) => {
+          port.postMessage({
+            _tag: "HistorySynchronizationCompleted",
+            commitCount,
+            requestId,
+          } satisfies RepositoryHistoryWorkerRequest);
+        },
+        () => {
+          port.postMessage({
+            _tag: "HistorySynchronizationFailed",
+            requestId,
+          } satisfies RepositoryHistoryWorkerRequest);
+        },
+      )
+      .finally(() => {
+        synchronizations.delete(requestId);
+        rejectSynchronizationBatches(requestId);
+      });
+  }
+
+  function rejectSynchronizationBatches(requestId: string) {
+    for (const [batchId, batch] of pendingBatches) {
+      if (batch.requestId !== requestId) {
+        continue;
+      }
+      batch.reject(new RepositoryHistoryUnavailable());
+      pendingBatches.delete(batchId);
+    }
+  }
+
   function request<T>(message: RepositoryHistoryWorkerRequest) {
     if (closed) {
       return Promise.reject(new RepositoryHistoryUnavailable());
@@ -149,6 +230,14 @@ export function createBrowserRepositoryHistoryReader(options: {
         controller.abort();
       }
       loads.clear();
+      for (const controller of synchronizations.values()) {
+        controller.abort();
+      }
+      synchronizations.clear();
+      for (const batch of pendingBatches.values()) {
+        batch.reject(new RepositoryHistoryUnavailable());
+      }
+      pendingBatches.clear();
       for (const current of pending.values()) {
         current.reject(new RepositoryHistoryUnavailable());
       }
@@ -205,4 +294,10 @@ function readerError(
 interface PendingRequest {
   readonly reject: (error: unknown) => void;
   readonly resolve: (value: unknown) => void;
+}
+
+interface PendingBatch {
+  readonly reject: (error: unknown) => void;
+  readonly requestId: string;
+  readonly resolve: () => void;
 }

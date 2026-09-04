@@ -66,6 +66,8 @@ function handleEnvironmentServerMessage(
       return session.repositoryHistory.acceptBinary(message.bytes);
     case "RepositoryHistoryFailed":
       return session.repositoryHistory.acceptFailure(message);
+    case "RepositoryHistorySynchronized":
+      return session.repositoryHistory.acceptSynchronized(message);
     case "EnvironmentChanged":
       return handleEnvironmentChanged(session, capabilities, message.sequence);
     case "ResnapshotRequired":

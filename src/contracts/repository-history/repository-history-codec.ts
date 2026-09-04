@@ -1,10 +1,13 @@
 import type {
   RepositoryCommit,
   RepositoryCommitIdentity,
+  RepositoryHistoryBatch,
   RepositoryHistoryPage,
 } from "@rebase/contracts/repository-history/repository-history.contract";
 
 const pageMagic = 0x5248_5031;
+const batchMagic = 0x5248_4231;
+const maximumBatchCommitCount = 512;
 const maximumCommitCount = 1_000;
 const maximumParentCount = 4_096;
 const maximumRefCount = 256;
@@ -75,6 +78,70 @@ export function decodeRepositoryHistoryPage(bytes: Uint8Array) {
     repositoryId,
     requestId,
   } satisfies RepositoryHistoryPage;
+}
+
+export function encodeRepositoryHistoryBatch(batch: RepositoryHistoryBatch) {
+  if (batch.commits.length > maximumBatchCommitCount) {
+    throw new Error("Too many commits in history batch");
+  }
+  const writer = new BinaryWriter();
+  writer.uint32(batchMagic);
+  writer.uint8(batch.objectFormat === "sha1" ? 1 : 2);
+  writer.string(batch.requestId);
+  writer.string(batch.repositoryId);
+  writer.uint32(batch.sequence);
+  writer.uint16(batch.commits.length);
+  for (const commit of batch.commits) {
+    writeCommit(writer, commit, batch.objectFormat);
+  }
+  return writer.bytes();
+}
+
+export function decodeRepositoryHistoryBatch(
+  bytes: Uint8Array,
+): RepositoryHistoryBatch {
+  const reader = new BinaryReader(bytes);
+  if (reader.uint32() !== batchMagic) {
+    throw new Error("Invalid history batch");
+  }
+  const encodedFormat = reader.uint8();
+  const objectFormat =
+    encodedFormat === 1 ? "sha1" : encodedFormat === 2 ? "sha256" : undefined;
+  if (objectFormat === undefined) {
+    throw new Error("Invalid object format");
+  }
+  const requestId = reader.string();
+  const repositoryId = reader.string();
+  const sequence = reader.uint32();
+  const count = reader.uint16();
+  if (count > maximumBatchCommitCount) {
+    throw new Error("Too many commits in history batch");
+  }
+  const commits = Array.from({ length: count }, () =>
+    readCommit(reader, objectFormat),
+  );
+  reader.requireEnd();
+  return {
+    commits,
+    objectFormat,
+    repositoryId,
+    requestId,
+    sequence,
+  };
+}
+
+export function readRepositoryHistoryBatchSequence(bytes: Uint8Array) {
+  const reader = new BinaryReader(bytes);
+  if (reader.uint32() !== batchMagic) {
+    throw new Error("Invalid history batch");
+  }
+  const encodedFormat = reader.uint8();
+  if (encodedFormat !== 1 && encodedFormat !== 2) {
+    throw new Error("Invalid object format");
+  }
+  reader.string();
+  reader.string();
+  return reader.uint32();
 }
 
 function writeCommit(

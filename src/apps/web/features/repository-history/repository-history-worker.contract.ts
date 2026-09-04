@@ -18,6 +18,21 @@ export type RepositoryHistoryWorkerRequest =
       readonly oids: readonly string[];
       readonly requestId: string;
     }
+  | {
+      readonly _tag: "HistoryBatchReceived";
+      readonly batchId: string;
+      readonly bytes: Uint8Array;
+      readonly requestId: string;
+    }
+  | {
+      readonly _tag: "HistorySynchronizationCompleted";
+      readonly commitCount: number;
+      readonly requestId: string;
+    }
+  | {
+      readonly _tag: "HistorySynchronizationFailed";
+      readonly requestId: string;
+    }
   | { readonly _tag: "GetRefTargets"; readonly requestId: string }
   | {
       readonly _tag: "HistoryPageReceived";
@@ -45,6 +60,22 @@ export type RepositoryHistoryWorkerResponse =
   | {
       readonly _tag: "CancelHistoryLoad";
       readonly requestId: string;
+    }
+  | {
+      readonly _tag: "SynchronizeHistory";
+      readonly requestId: string;
+    }
+  | {
+      readonly _tag: "CancelHistorySynchronization";
+      readonly requestId: string;
+    }
+  | {
+      readonly _tag: "HistoryBatchCommitted";
+      readonly batchId: string;
+    }
+  | {
+      readonly _tag: "HistoryBatchFailed";
+      readonly batchId: string;
     }
   | {
       readonly _tag: "HistoryResult";
@@ -75,6 +106,8 @@ export type RepositoryHistoryWorkerResponse =
       readonly _tag: "SnapshotChanged";
       readonly revision: number;
       readonly status: "empty" | "error" | "loading" | "ready";
+      readonly synchronization: "complete" | "idle" | "syncing";
+      readonly synchronizedCommitCount: number;
       readonly failure?:
         | {
             readonly _tag: "Rejected";

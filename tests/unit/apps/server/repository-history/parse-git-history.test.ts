@@ -1,10 +1,49 @@
 import {
+  createGitHistoryBatchParser,
   gitHistoryFormat,
   parseGitHistory,
 } from "@rebase/server/features/repository-history/git/parse-git-history";
 import { describe, expect, it } from "vite-plus/test";
 
 describe("Git history metadata", () => {
+  it("streams fragmented records into bounded batches", async () => {
+    const output = Array.from({ length: 5 }, (_, index) =>
+      record({ oid: index.toString(16).padStart(40, "0") }),
+    ).join("");
+    const batches: unknown[] = [];
+    const parser = createGitHistoryBatchParser("sha1", 2, async (batch) => {
+      batches.push(batch);
+    });
+
+    for (let offset = 0; offset < output.length; offset += 13) {
+      await parser.accept(output.slice(offset, offset + 13));
+    }
+
+    await expect(parser.finish()).resolves.toBe(5);
+    expect(batches).toHaveLength(3);
+    expect(batches.map((batch) => (batch as unknown[]).length)).toEqual([
+      2, 2, 1,
+    ]);
+  });
+
+  it("flushes a batch before oversized commit metadata can accumulate", async () => {
+    const batches: unknown[][] = [];
+    const parser = createGitHistoryBatchParser(
+      "sha1",
+      100,
+      async (batch) => {
+        batches.push([...batch]);
+      },
+      100,
+    );
+    await parser.accept(
+      record({ oid: "a".repeat(40), subject: "a".repeat(200) }) +
+        record({ oid: "b".repeat(40), subject: "b".repeat(200) }),
+    );
+    await parser.finish();
+
+    expect(batches.map((batch) => batch.length)).toEqual([1, 1]);
+  });
   it("parses NUL-framed commits, parents, identities, and timezones", () => {
     const first = "a".repeat(40);
     const second = "b".repeat(40);
@@ -107,11 +146,13 @@ function record({
   authorTimestamp = "1777777777",
   committerIsoDate = "2026-05-03T01:29:37+02:00",
   oid = "a".repeat(40),
+  subject = "Subject",
 }: {
   readonly authorIsoDate?: string;
   readonly authorTimestamp?: string;
   readonly committerIsoDate?: string;
   readonly oid?: string;
+  readonly subject?: string;
 }) {
   return [
     oid,
@@ -124,7 +165,7 @@ function record({
     "alex@example.test",
     "1777777777",
     committerIsoDate,
-    "Subject",
+    subject,
     "",
   ].join("\0");
 }
