@@ -29,6 +29,14 @@ const events = new BroadcastChannel(
   parameters.get("events") ?? "history-lifecycle",
 );
 const report = (event: string) => events.postMessage(`${name}:${event}`);
+globalThis.addEventListener("pageshow", (event) =>
+  report(`pageshow:${event.persisted}`),
+);
+events.onmessage = (event: MessageEvent<string>) => {
+  if (event.data === "navigate")
+    location.assign(`history-reader-away.html${location.search}`);
+  if (event.data === "close") window.close();
+};
 const reader = createBrowserRepositoryHistoryReader({
   environmentId,
   repositoryId,

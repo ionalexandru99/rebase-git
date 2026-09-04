@@ -1,4 +1,6 @@
 import { expect, it } from "vitest";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 
 it.each([false, true])(
   "hands synchronization to another tab on close, with pagehide suppressed: %s",
@@ -50,6 +52,19 @@ it.each([false, true])(
 );
 
 it("reconnects the same reader when a document returns from the back-forward cache", async () => {
+  const activeReader = createBrowserRepositoryHistoryReader({
+    environmentId: crypto.randomUUID(),
+    repositoryId: crypto.randomUUID(),
+    gateway: {
+      read: async () => {
+        throw new RepositoryHistoryOffline();
+      },
+      synchronize: async () => {
+        throw new RepositoryHistoryOffline();
+      },
+    },
+  });
+  await activeReader.getRefTargets();
   const events: string[] = [];
   const channelName = crypto.randomUUID();
   const channel = new BroadcastChannel(channelName);
@@ -60,29 +75,29 @@ it("reconnects the same reader when a document returns from the back-forward cac
     events: channelName,
     name: "restored",
   });
-  const popup = window.open(
+  window.open(
     `${location.origin}/tests/integration/apps/web/repository-history/fixtures/history-reader-page.html?${query}`,
+    "_blank",
+    "noopener",
   );
   try {
     await expect
       .poll(() => events, { timeout: 5_000 })
       .toContain("restored:committed");
-    popup?.dispatchEvent(
-      new PageTransitionEvent("pagehide", { persisted: true }),
-    );
+    channel.postMessage("navigate");
     await expect.poll(() => events).toContain("restored:aborted");
-    popup?.dispatchEvent(
-      new PageTransitionEvent("pageshow", { persisted: true }),
-    );
+    await expect
+      .poll(() => events.join("\n"), { timeout: 5_000 })
+      .toContain("restored:pageshow:true");
     await expect
       .poll(
         () => events.filter((event) => event === "restored:committed").length,
         { timeout: 5_000 },
       )
       .toBe(2);
-    expect(popup?.document.body.dataset.synchronization).toBe("syncing");
   } finally {
-    popup?.close();
+    channel.postMessage("close");
     channel.close();
+    activeReader.close();
   }
 }, 20_000);

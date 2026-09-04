@@ -319,7 +319,8 @@ function closeReader(reader: ConnectedReader, replica: RepositoryReplica) {
     });
   }
   replica.readers.delete(reader);
-  if (replica.synchronizationOwner === reader) {
+  const ownedSynchronization = replica.synchronizationOwner === reader;
+  if (ownedSynchronization) {
     cancelSynchronization(reader, replica);
   }
   reader.closed = true;
@@ -327,7 +328,7 @@ function closeReader(reader: ConnectedReader, replica: RepositoryReplica) {
     repositories.delete(
       `${reader.connection.environmentId}\0${reader.connection.logicalRepositoryId}`,
     );
-  } else if (replica.synchronization !== "complete") {
+  } else if (ownedSynchronization && replica.synchronization !== "complete") {
     const replacement = replica.readers.values().next().value;
     if (replacement !== undefined) {
       void startSynchronization(replacement, replica).catch((error) => {

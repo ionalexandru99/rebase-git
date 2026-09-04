@@ -20,6 +20,31 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
+  it("keeps idle readers idle when another reader closes", async () => {
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+    };
+    const connection = {
+      environmentId: crypto.randomUUID(),
+      repositoryId: crypto.randomUUID(),
+      gateway,
+    };
+    const first = createBrowserRepositoryHistoryReader(connection);
+    const second = createBrowserRepositoryHistoryReader(connection);
+    try {
+      await Promise.all([first.getRefTargets(), second.getRefTargets()]);
+      first.close();
+      await second.getRefTargets();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(second.getSnapshot().synchronization).toBe("idle");
+      expect(gateway.synchronize).not.toHaveBeenCalled();
+    } finally {
+      first.close();
+      second.close();
+    }
+  });
+
   it("shares committed history between registered linked worktrees and isolates other repositories", async () => {
     const environmentId = crypto.randomUUID();
     const logicalRepositoryId = crypto.randomUUID();
