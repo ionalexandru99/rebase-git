@@ -281,7 +281,7 @@ async function handleReaderMessage(
           replica.commits.set(commit.oid, commit);
         }
         replica.visibleOids = cached.map((commit) => commit.oid);
-        delete replica.failure;
+        if (!replica.storageExhausted) delete replica.failure;
         replica.status = cached.length === 0 ? "empty" : "ready";
         replica.revision += 1;
         publishSnapshot(replica);
