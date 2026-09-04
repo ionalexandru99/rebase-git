@@ -176,24 +176,25 @@ describe("commit graph page window", () => {
     );
     reader.ancestryRoute
       .mockResolvedValueOnce({
-        edges: [{ childOid: oid(2), parentOid: oid(7) }],
+        edges: [{ childOid: oid(0), parentOid: oid(2) }],
         continuationOid: oid(2),
       })
       .mockResolvedValueOnce({
-        edges: [{ childOid: oid(0), parentOid: oid(2) }],
+        edges: [{ childOid: oid(2), parentOid: oid(7) }],
       });
     const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
     await window.loadInitial({ ...query, ancestry: "first-parent" });
     const result = await window.jumpToOid(oid(7));
     expect(result?.query.additionalParentEdges).toEqual([
-      { childOid: oid(2), parentOid: oid(7) },
       { childOid: oid(0), parentOid: oid(2) },
+      { childOid: oid(2), parentOid: oid(7) },
     ]);
     expect(window.getSnapshot()).toMatchObject({
       startOffset: 5,
       anchorOid: oid(7),
     });
-    expect(reader.ancestryRoute).toHaveBeenCalledTimes(2);
+    expect(reader.ancestryRoute).toHaveBeenNthCalledWith(1, [oid(0)], oid(7));
+    expect(reader.ancestryRoute).toHaveBeenNthCalledWith(2, [oid(2)], oid(7));
     window.dispose();
   });
 

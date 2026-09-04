@@ -62,6 +62,11 @@ export function CommitRefLabels({
               aria-label={`Actions for ${label.name}`}
               tabIndex={-1}
               onClick={(event) => event.stopPropagation()}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.click();
+              }}
               onKeyDown={(event) => event.stopPropagation()}
             >
               {label.name}

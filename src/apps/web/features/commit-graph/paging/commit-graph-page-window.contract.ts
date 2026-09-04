@@ -18,6 +18,7 @@ export interface CommitGraphPageReader
 }
 
 export interface CommitGraphPage {
+  readonly merges: ReadonlyMap<string, "collapsed" | "expanded">;
   readonly offset: number;
   readonly commits: readonly RepositoryCommit[];
   readonly topology: readonly CommitTopology[];

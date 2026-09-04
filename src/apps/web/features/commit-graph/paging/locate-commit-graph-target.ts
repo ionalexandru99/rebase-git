@@ -13,20 +13,19 @@ export async function locateCommitGraphTarget(
   signal.throwIfAborted();
   if (offset === undefined && query.ancestry === "first-parent") {
     const edges: HistoryParentEdge[] = [...(query.additionalParentEdges ?? [])];
-    let cursor: string | undefined = oid;
+    let roots = query.roots.map((root) => root.oid);
     const visited = new Set<string>();
-    while (cursor !== undefined) {
-      if (visited.has(cursor))
-        throw new Error("The ancestry route did not advance.");
-      visited.add(cursor);
-      const route = await reader.ancestryRoute(
-        query.roots.map((root) => root.oid),
-        cursor,
-      );
+    while (true) {
+      const route = await reader.ancestryRoute(roots, oid);
       signal.throwIfAborted();
       if (route === undefined) return undefined;
       edges.push(...route.edges);
-      cursor = route.continuationOid;
+      const continuation = route.continuationOid;
+      if (continuation === undefined) break;
+      if (visited.has(continuation))
+        throw new Error("The ancestry route did not advance.");
+      visited.add(continuation);
+      roots = [continuation];
     }
     effectiveQuery = {
       ...query,

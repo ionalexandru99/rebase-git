@@ -22,21 +22,22 @@ interface PageView extends CommitGraphPageCache {
   hasOlder: boolean;
 }
 
-const emptySnapshot: CommitGraphPageWindowSnapshot = {
-  epoch: 0,
-  query: undefined,
-  pages: [],
-  startOffset: 0,
-  endOffset: 0,
-  knownEndOffset: 0,
-  hasOlder: true,
-  loading: false,
-  error: undefined,
-  anchorOid: undefined,
-  pendingMove: undefined,
-  estimatedBytes: 0,
-  checkpointCount: 0,
-};
+export const emptyCommitGraphPageWindowSnapshot: CommitGraphPageWindowSnapshot =
+  {
+    epoch: 0,
+    query: undefined,
+    pages: [],
+    startOffset: 0,
+    endOffset: 0,
+    knownEndOffset: 0,
+    hasOlder: true,
+    loading: false,
+    error: undefined,
+    anchorOid: undefined,
+    pendingMove: undefined,
+    estimatedBytes: 0,
+    checkpointCount: 0,
+  };
 
 export function createCommitGraphPageWindow(
   reader: CommitGraphPageReader,
@@ -55,7 +56,7 @@ export function createCommitGraphPageWindow(
     maximumBytes < 1
   )
     throw new Error("Invalid graph page cache limits");
-  let snapshot = emptySnapshot;
+  let snapshot = emptyCommitGraphPageWindowSnapshot;
   let view: PageView | undefined;
   let controller = new AbortController();
   let generation = 0;
@@ -75,9 +76,14 @@ export function createCommitGraphPageWindow(
   const listeners = new Set<() => void>();
 
   const publish = (changes: Partial<CommitGraphPageWindowSnapshot> = {}) => {
-    const pages = [...(view?.pages.values() ?? [])].sort(
+    const nextPages = [...(view?.pages.values() ?? [])].sort(
       (left, right) => left.offset - right.offset,
     );
+    const pages =
+      nextPages.length === snapshot.pages.length &&
+      nextPages.every((page, index) => page === snapshot.pages[index])
+        ? snapshot.pages
+        : nextPages;
     const first = pages[0];
     const last = pages.at(-1);
     snapshot = {
@@ -141,11 +147,15 @@ export function createCommitGraphPageWindow(
       pages: new Map(),
       checkpoints: new Map([[offset, createCommitLaneCheckpoint()]]),
       knownEndOffset: offset,
-      hasOlder: true,
+      hasOlder: query.roots.length > 0,
     };
     publish({ loading: true, error: undefined });
     try {
-      for (let cursor = offset; cursor <= throughOffset; cursor += pageSize) {
+      for (
+        let cursor = offset;
+        cursor <= throughOffset && query.roots.length > 0;
+        cursor += pageSize
+      ) {
         const checkpoint = next.checkpoints.get(cursor);
         if (checkpoint === undefined) break;
         const page = await prepareCommitGraphPage(
@@ -359,7 +369,7 @@ export function createCommitGraphPageWindow(
       pendingMove = undefined;
       loads.clear();
       view = undefined;
-      snapshot = emptySnapshot;
+      snapshot = emptyCommitGraphPageWindowSnapshot;
       listeners.clear();
     },
     loadInitial,

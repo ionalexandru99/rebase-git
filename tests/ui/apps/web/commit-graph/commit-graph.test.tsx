@@ -1,10 +1,13 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import type { ComponentProps } from "react";
+import { type ComponentProps, createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
+import { visibleMergeTopology } from "#web/features/commit-graph/merge-visibility";
 import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import {
+  type RepositoryHistoryQuery,
   type RepositoryHistoryReader,
   type RepositoryHistorySnapshot,
   RepositoryHistoryUnavailable,
@@ -12,6 +15,174 @@ import {
 import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 describe("commit graph", () => {
+  it("prefetches older pages, retains one keyboard move and retries without hiding loaded rows", async () => {
+    const commits = history(230);
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    let release: ((commits: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    grid.element().scrollTop = 80 * 36;
+    grid.element().dispatchEvent(new Event("scroll"));
+    await vi.waitFor(() =>
+      expect(reader.read).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 100, limit: 100 }),
+      ),
+    );
+    grid.element().focus();
+    await userEvent.keyboard("{End}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 99,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 99,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    release?.(commits.slice(100, 200));
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 100,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    expect(
+      reader.read.mock.calls.filter(([query]) => query.offset === 100),
+    ).toHaveLength(1);
+    reader.read.mockRejectedValueOnce(new Error("Older page failed"));
+    grid.element().scrollTop = 180 * 36;
+    grid.element().dispatchEvent(new Event("scroll"));
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("Older page failed");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 180,/ }))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Retry loading history" }).click();
+    await expect.element(grid).toHaveAttribute("aria-rowcount", "230");
+    grid.element().focus();
+    await userEvent.keyboard("{End}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 229,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Home}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toHaveAttribute("aria-selected", "true");
+  });
+
+  it("uses replicated named refs when their tips change without changing the caller roots", async () => {
+    const commits = history(150);
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    grid.element().scrollTop = 20 * 36 + 7;
+    grid.element().dispatchEvent(new Event("scroll"));
+    await grid.getByRole("row", { name: /^Commit 22,/ }).click();
+    reader.getRefTargets.mockResolvedValue([
+      { name: "main", type: "branch", oid: commits[10]?.oid ?? "" },
+    ]);
+    reader.snapshot = {
+      revision: 1,
+      status: "ready",
+      synchronization: "complete",
+    };
+    await vi.waitFor(() =>
+      expect(reader.read).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          roots: [{ name: "main", type: "branch", oid: commits[10]?.oid }],
+        }),
+      ),
+    );
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 22,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await vi.waitFor(() => expect(grid.element().scrollTop).toBe(10 * 36 + 7));
+    const reads = reader.read.mock.calls.length;
+    reader.snapshot = { ...reader.snapshot, revision: 2 };
+    await vi.waitFor(() =>
+      expect(reader.getRefTargets).toHaveBeenCalledTimes(3),
+    );
+    expect(reader.read).toHaveBeenCalledTimes(reads);
+  });
+
+  it("jumps to a hidden nested line outside the first page and retains nested expansion after collapse", async () => {
+    const commits = history(360).map((commit, index) => ({
+      ...commit,
+      parents:
+        index === 0
+          ? [historyOid(1), historyOid(250)]
+          : index === 250
+            ? [historyOid(251), historyOid(320)]
+            : [100, 280, 359].includes(index)
+              ? []
+              : commit.parents,
+    }));
+    const reader = historyReader({ commits, status: "ready" });
+    reader.ancestryRoute
+      .mockResolvedValueOnce({
+        edges: [{ childOid: historyOid(0), parentOid: historyOid(250) }],
+        continuationOid: historyOid(250),
+      })
+      .mockResolvedValueOnce({
+        edges: [{ childOid: historyOid(250), parentOid: historyOid(320) }],
+      });
+    const handle = createRef<CommitGraphHandle>();
+    const screen = await render(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraph
+          ref={handle}
+          reader={reader}
+          repositoryName="Nested"
+          roots={[{ name: "main", type: "branch", oid: historyOid(0) }]}
+        />
+      </div>,
+    );
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    await handle.current?.navigateToOid(historyOid(350));
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 350,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    expect(reader.read).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 100 }),
+    );
+    grid.element().focus();
+    await userEvent.keyboard("{Home}");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    await screen
+      .getByRole("button", { name: "Collapse merge Commit 0" })
+      .click();
+    await expect
+      .element(screen.getByRole("button", { name: "Expand merge Commit 0" }))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Expand merge Commit 0" }).click();
+    await vi.waitFor(() =>
+      expect(reader.read).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalParentEdges: expect.arrayContaining([
+            { childOid: historyOid(250), parentOid: historyOid(320) },
+          ]),
+        }),
+      ),
+    );
+    await handle.current?.navigateToOid(historyOid(350));
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 350,/ }))
+      .toHaveAttribute("aria-selected", "true");
+  });
+
   it("uses the same history command from a ref label and the row keyboard menu", async () => {
     const commits = history(3);
     const reader = historyReader({ commits, status: "ready" });
@@ -332,7 +503,7 @@ describe("commit graph", () => {
           parents: [firstCommit.oid],
           subject: "New tip",
         },
-        ...commits,
+        ...commits.slice(0, 99),
       ]);
       await expect
         .element(
@@ -372,7 +543,7 @@ describe("commit graph", () => {
     const screen = await renderGraph(reader);
     const grid = screen.getByRole("grid", { name: "Commit history" });
 
-    await expect.element(grid).toHaveAttribute("aria-rowcount", "100");
+    await expect.element(grid).toHaveAttribute("aria-rowcount", "-1");
     await expect
       .element(grid.getByRole("row", { name: /Commit 0/ }))
       .toBeVisible();
@@ -541,19 +712,36 @@ function historyReader({
   readonly pending?: Promise<readonly RepositoryCommit[]>;
   readonly status: "empty" | "loading" | "ready";
 }) {
-  let snapshot: RepositoryHistorySnapshot = {
-    revision: 0,
-    historyRevision: 0,
-    status,
-  };
+  let snapshot: RepositoryHistorySnapshot = { revision: 0, historyRevision: 0, status };
+  const listeners = new Set<() => void>();
+  const matching = (query: RepositoryHistoryQuery) =>
+    query.ancestry === "first-parent"
+      ? visibleMergeTopology(
+          commits,
+          query.roots.map((root) => root.oid),
+          new Set(
+            (query.additionalParentEdges ?? []).map((edge) => edge.childOid),
+          ),
+        ).commits
+      : commits;
+
   const reader = {
     ancestryRoute: vi.fn<RepositoryHistoryReader["ancestryRoute"]>(
       async () => undefined,
     ),
-    locate: vi.fn<RepositoryHistoryReader["locate"]>(async () => undefined),
-    locateMany: vi.fn<RepositoryHistoryReader["locateMany"]>(async () => []),
+    locate: vi.fn<RepositoryHistoryReader["locate"]>(async (query, oid) => {
+      const index = matching(query).findIndex((commit) => commit.oid === oid);
+      return index < 0 ? undefined : index;
+    }),
+    locateMany: vi.fn<RepositoryHistoryReader["locateMany"]>(
+      async (query, oids) =>
+        matching(query).flatMap((commit, index) =>
+          oids.includes(commit.oid) ? [{ oid: commit.oid, index }] : [],
+        ),
+    ),
     fetch: vi.fn<RepositoryHistoryReader["fetch"]>(),
     configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(),
+
     close: vi.fn(),
     getCommitSummaries: vi.fn<RepositoryHistoryReader["getCommitSummaries"]>(async () => commits),
     getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
@@ -568,14 +756,29 @@ function historyReader({
       async () => [],
     ),
     getSnapshot: (): RepositoryHistorySnapshot => snapshot,
-    read: vi.fn(() => pending ?? Promise.resolve(commits)),
+    read: vi.fn<RepositoryHistoryReader["read"]>(
+      (query) =>
+        pending ??
+        Promise.resolve(
+          matching(query).slice(
+            query.offset ?? 0,
+            (query.offset ?? 0) + query.limit,
+          ),
+        ),
+    ),
     get snapshot() {
       return snapshot;
     },
     set snapshot(value: RepositoryHistorySnapshot) {
       snapshot = value;
+      for (const listener of listeners) listener();
     },
-    subscribe: vi.fn(() => () => undefined),
+    subscribe: vi.fn((listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    }),
   } satisfies RepositoryHistoryReader & {
     snapshot: RepositoryHistorySnapshot;
   };
@@ -591,6 +794,10 @@ function history(count: number): readonly RepositoryCommit[] {
       index === count - 1 ? [] : [(index + 1).toString(16).padStart(40, "0")],
     subject: `Commit ${index}`,
   }));
+}
+
+function historyOid(index: number) {
+  return index.toString(16).padStart(40, "0");
 }
 
 function identity(index: number) {

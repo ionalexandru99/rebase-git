@@ -3,6 +3,7 @@ import {
   type MouseEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { CommitLaneRow } from "#web/features/commit-graph/commit-lanes";
@@ -25,6 +26,10 @@ export function useCommitGraphSelection({
   scrollToIndex,
   toggleMerge,
   merges,
+  startOffset = 0,
+  oldestLoadedOffset,
+  viewEpoch = 0,
+  requestMove,
 }: {
   readonly reader: RepositoryHistoryReader | undefined;
   readonly oids: readonly string[];
@@ -33,15 +38,36 @@ export function useCommitGraphSelection({
   readonly scrollToIndex: (index: number) => void;
   readonly toggleMerge: (oid: string, expand: boolean) => void;
   readonly merges: ReadonlyMap<string, "collapsed" | "expanded">;
+  readonly startOffset?: number;
+  readonly oldestLoadedOffset?: number;
+  readonly viewEpoch?: number;
+  readonly requestMove?: (
+    offset: number,
+    mode: CommitGraphSelectionMode,
+  ) => void;
 }) {
   const [selection, setSelection] = useState(emptyCommitGraphSelection);
+  const previousWindow = useRef({ startOffset, viewEpoch });
   useEffect(() => {
     if (reader !== undefined) setSelection(emptyCommitGraphSelection);
   }, [reader]);
-  useEffect(
-    () => setSelection((current) => reconcileGraphSelection(current, oids)),
-    [oids],
-  );
+  useEffect(() => {
+    const previous = previousWindow.current;
+    previousWindow.current = { startOffset, viewEpoch };
+    setSelection((current) => {
+      if (previous.viewEpoch !== viewEpoch)
+        return reconcileGraphSelection(current, oids);
+      const activeIndex =
+        current.activeOid === undefined ? -1 : oids.indexOf(current.activeOid);
+      return {
+        ...current,
+        activeIndex:
+          activeIndex >= 0
+            ? activeIndex
+            : current.activeIndex + previous.startOffset - startOffset,
+      };
+    });
+  }, [oids, startOffset, viewEpoch]);
   const selected = useMemo(
     () => new Set(selection.selectedOids),
     [selection.selectedOids],
@@ -50,6 +76,10 @@ export function useCommitGraphSelection({
     setSelection((current) => selectGraphCommit(current, oids, oid, mode));
   };
   const move = (index: number, mode: CommitGraphSelectionMode = "replace") => {
+    if (requestMove !== undefined) {
+      requestMove(Math.max(0, index + startOffset), mode);
+      return;
+    }
     const bounded = Math.max(0, Math.min(oids.length - 1, index));
     const oid = oids[bounded];
     if (oid === undefined) return;
@@ -95,9 +125,9 @@ export function useCommitGraphSelection({
             : event.key === "PageUp"
               ? selection.activeIndex - pageSize
               : event.key === "Home"
-                ? 0
+                ? -startOffset
                 : event.key === "End"
-                  ? oids.length - 1
+                  ? (oldestLoadedOffset ?? oids.length - 1) - startOffset
                   : undefined;
     if (destination !== undefined) {
       event.preventDefault();
