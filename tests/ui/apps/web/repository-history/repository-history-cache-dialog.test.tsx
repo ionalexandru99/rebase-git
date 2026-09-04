@@ -47,6 +47,9 @@ function historyReader() {
     synchronization: "complete",
   };
   return {
+    locateMany: vi.fn(async () => []),
+    ancestryRoute: vi.fn(async () => undefined),
+    locate: vi.fn(async () => undefined),
     close: vi.fn(),
     getCommitSummaries: vi.fn(async () => []),
     getRefTargets: vi.fn(async () => []),

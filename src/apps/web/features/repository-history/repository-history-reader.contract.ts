@@ -38,7 +38,8 @@ export interface RepositoryHistoryPosition {
   readonly index: number;
 }
 
-export interface RepositoryHistoryReader extends RepositoryHistoryCacheManagement {
+export interface RepositoryHistoryReader
+  extends RepositoryHistoryCacheManagement {
   readonly locateMany: (
     query: RepositoryHistoryQuery,
     oids: readonly string[],
