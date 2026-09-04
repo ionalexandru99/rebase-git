@@ -68,6 +68,8 @@ function handleEnvironmentServerMessage(
       return session.repositoryHistory.acceptFailure(message);
     case "RepositoryHistorySynchronized":
       return session.repositoryHistory.acceptSynchronized(message);
+    case "RepositoryHistoryFreshness":
+      return session.repositoryHistory.freshness.accept(message);
     case "EnvironmentChanged":
       return handleEnvironmentChanged(session, capabilities, message.sequence);
     case "ResnapshotRequired":

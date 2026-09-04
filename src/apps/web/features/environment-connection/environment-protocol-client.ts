@@ -251,6 +251,9 @@ function runEnvironmentConnection(
       socket,
       repositoryHistoryVersion !== undefined && supportsBinaryFragmentation,
       (repositoryHistoryVersion ?? 0) >= 2 && supportsBinaryFragmentation,
+      negotiated.capabilities.some(
+        (capability) => capability.name === "repository-history-freshness",
+      ),
     );
     yield* initializeEnvironmentSequence(state, hello, negotiated);
     yield* publishEnvironmentConnection(

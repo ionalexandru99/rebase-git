@@ -1,5 +1,7 @@
 import type {
   RepositoryCommit,
+  RepositoryFetchSetting,
+  RepositoryFreshness,
   RepositoryHistoryOperationFailure,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
@@ -28,17 +30,29 @@ export type RepositoryHistoryWorkerFailure =
   | { readonly _tag: "Unavailable" };
 
 export type RepositoryHistoryWorkerRequest =
+  | { readonly _tag: "FetchHistory"; readonly requestId: string }
   | {
-      readonly _tag: "SearchHistory";
-      readonly query: RepositoryHistorySearchQuery;
+      readonly _tag: "ConfigureFetch";
       readonly requestId: string;
+      readonly setting: RepositoryFetchSetting;
     }
-  | { readonly _tag: "CancelHistorySearch"; readonly requestId: string }
-  | { readonly _tag: "GetCacheDiagnostics"; readonly requestId: string }
   | {
-      readonly _tag: "ManageCache";
-      readonly action: RepositoryHistoryCacheAction;
+      readonly _tag: "FreshnessChanged";
+      readonly freshness: RepositoryFreshness;
+    }
+  | {
+      readonly _tag: "FreshnessFailed";
+      readonly failure: RepositoryHistoryWorkerFailure;
+    }
+  | {
+      readonly _tag: "FreshnessCommandCompleted";
       readonly requestId: string;
+      readonly freshness: RepositoryFreshness;
+    }
+  | {
+      readonly _tag: "FreshnessCommandFailed";
+      readonly requestId: string;
+      readonly failure: RepositoryHistoryWorkerFailure;
     }
   | {
       readonly _tag: "LocateHistoryCommits";
@@ -56,6 +70,18 @@ export type RepositoryHistoryWorkerRequest =
       readonly _tag: "LocateHistoryCommit";
       readonly query: RepositoryHistoryQuery;
       readonly oid: string;
+      readonly requestId: string;
+    }
+  | {
+      readonly _tag: "SearchHistory";
+      readonly query: RepositoryHistorySearchQuery;
+      readonly requestId: string;
+    }
+  | { readonly _tag: "CancelHistorySearch"; readonly requestId: string }
+  | { readonly _tag: "GetCacheDiagnostics"; readonly requestId: string }
+  | {
+      readonly _tag: "ManageCache";
+      readonly action: RepositoryHistoryCacheAction;
       readonly requestId: string;
     }
   | {
@@ -99,19 +125,19 @@ export type RepositoryHistoryWorkerRequest =
   | { readonly _tag: "CloseReader" };
 
 export type RepositoryHistoryWorkerResponse =
-  | { readonly _tag: "HistorySearchCanceled"; readonly requestId: string }
+  | { readonly _tag: "SubscribeFreshness" }
+  | { readonly _tag: "UnsubscribeFreshness" }
+  | { readonly _tag: "RunFetchHistory"; readonly requestId: string }
   | {
-      readonly _tag: "HistorySearchResult";
-      readonly result: RepositoryHistorySearchResult;
+      readonly _tag: "RunConfigureFetch";
       readonly requestId: string;
+      readonly setting: RepositoryFetchSetting;
     }
-  | { readonly _tag: "CacheRemoved" }
   | {
-      readonly _tag: "CacheDiagnosticsResult";
-      readonly diagnostics: RepositoryHistoryStorageDiagnostics;
+      readonly _tag: "FreshnessResult";
       readonly requestId: string;
+      readonly freshness: RepositoryFreshness;
     }
-  | { readonly _tag: "CacheManaged"; readonly requestId: string }
   | {
       readonly _tag: "HistoryPositionsResult";
       readonly positions: readonly RepositoryHistoryPosition[];
@@ -127,6 +153,19 @@ export type RepositoryHistoryWorkerResponse =
       readonly position: number | undefined;
       readonly requestId: string;
     }
+  | { readonly _tag: "HistorySearchCanceled"; readonly requestId: string }
+  | {
+      readonly _tag: "HistorySearchResult";
+      readonly result: RepositoryHistorySearchResult;
+      readonly requestId: string;
+    }
+  | { readonly _tag: "CacheRemoved" }
+  | {
+      readonly _tag: "CacheDiagnosticsResult";
+      readonly diagnostics: RepositoryHistoryStorageDiagnostics;
+      readonly requestId: string;
+    }
+  | { readonly _tag: "CacheManaged"; readonly requestId: string }
   | {
       readonly _tag: "LoadHistory";
       readonly query: RepositoryHistoryQuery;
@@ -176,6 +215,10 @@ export type RepositoryHistoryWorkerResponse =
     }
   | {
       readonly _tag: "SnapshotChanged";
+      readonly shallowOids?: readonly string[];
+      readonly freshness?: RepositoryFreshness;
+      readonly freshnessFailure?: RepositoryHistoryWorkerFailure;
+      readonly storingCommits?: boolean;
       readonly cachePaused?: boolean;
       readonly historyRevision: number;
       readonly revision: number;
@@ -186,6 +229,7 @@ export type RepositoryHistoryWorkerResponse =
     };
 
 export interface ConnectRepositoryHistoryReader {
+  readonly supportsFreshness?: boolean;
   readonly _tag: "ConnectRepositoryHistoryReader";
   readonly cachePaused?: boolean;
   readonly environmentId: string;

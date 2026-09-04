@@ -11,6 +11,7 @@ import { Deferred, Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
 import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
 import { sendEnvironmentSocketMessage } from "#web/features/environment-connection/websocket/environment-socket";
+import { createRepositoryFreshnessTransport } from "#web/features/repository-history/repository-freshness-transport";
 import {
   RepositoryHistoryRejected,
   type RepositoryHistoryTransport,
@@ -28,11 +29,16 @@ export function createRepositoryHistoryTransport(
   socket: WebSocket,
   enabled: boolean,
   synchronizationEnabled = enabled,
+  freshnessEnabled = false,
 ): RepositoryHistoryTransportRuntime {
   const requests = new Map<string, PendingRequest>();
   const synchronizationQueue: string[] = [];
   const reassembler = createBinaryMessageReassembler();
   let activeSynchronization: string | undefined;
+  const freshness = createRepositoryFreshnessTransport(
+    socket,
+    freshnessEnabled,
+  );
 
   const read: RepositoryHistoryTransport["read"] = (request) =>
     Effect.gen(function* () {
@@ -149,6 +155,7 @@ export function createRepositoryHistoryTransport(
     });
 
   return {
+    freshness,
     acceptBinary(frame: Uint8Array) {
       return Effect.try({
         try: () => {
@@ -229,7 +236,7 @@ export function createRepositoryHistoryTransport(
       const pending = requests.get(message.requestId);
       if (pending === undefined) {
         reassembler.discard(message.requestId);
-        return Effect.void;
+        return freshness.acceptFailure(message);
       }
       const failure = new RepositoryHistoryRejected({
         failure: message.failure,
@@ -258,6 +265,7 @@ export function createRepositoryHistoryTransport(
         (pending) => failPendingRequest(pending, failure),
         { discard: true },
       ).pipe(
+        Effect.andThen(freshness.close(failure)),
         Effect.andThen(
           Effect.sync(() => {
             activeSynchronization = undefined;
