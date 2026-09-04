@@ -120,6 +120,34 @@ describe("history storage dialog", () => {
       .toHaveFocus();
   });
 
+  it("reports a successful removal separately from a failed view refresh", async () => {
+    const { reader, changed } = await openDialog();
+    changed.mockRejectedValueOnce(new Error("View refresh failed"));
+    await page
+      .getByRole("button", { name: "Remove cache", exact: true })
+      .click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Remove cache", exact: true })
+      .click();
+    await expect
+      .element(
+        page.getByText("Cache removed. Reopen the repository to load history."),
+      )
+      .toBeVisible();
+    await expect
+      .element(
+        page.getByText(
+          "The cache changed, but the repository view could not refresh. Reopen the repository to update it.",
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Rebuild cache", exact: true }))
+      .toBeDisabled();
+    expect(reader.manageCache).toHaveBeenCalledExactlyOnceWith("remove");
+  });
+
   it.each(["clear", "rebuild", "remove", "clear-all"] as const)(
     "confirms %s and reports the affected identity",
     async (action) => {

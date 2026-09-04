@@ -111,6 +111,7 @@ export function clearHistoryCache(
   repositoryId: string,
   remove: boolean,
   indexedDB = globalThis.indexedDB,
+  isOpen?: (key: string) => boolean,
 ) {
   return withRepositoryHistoryDatabase(indexedDB, async (database) => {
     const transaction = database.transaction(
@@ -123,6 +124,10 @@ export function clearHistoryCache(
     const record = await requestResult<StoredRepository | undefined>(
       repositories.get(key),
     );
+    if (isOpen?.(key)) {
+      await completed;
+      return false;
+    }
     transaction.objectStore(commitStoreName).delete(repositoryCommitRange(key));
     if (remove || record === undefined) {
       repositories.delete(key);
@@ -139,6 +144,7 @@ export function clearHistoryCache(
       } satisfies StoredRepository);
     }
     await completed;
+    return true;
   });
 }
 

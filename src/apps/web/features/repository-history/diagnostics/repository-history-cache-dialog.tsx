@@ -134,12 +134,18 @@ function CacheDialogBody({
             },
         );
       }
-      await onCacheChanged(
-        action,
-        action === "clear-all" ? undefined : identity,
-      );
       setMessage(actions[action].result);
       if (action !== "remove") await refresh();
+      try {
+        await onCacheChanged(
+          action,
+          action === "clear-all" ? undefined : identity,
+        );
+      } catch {
+        setError(
+          "The cache changed, but the repository view could not refresh. Reopen the repository to update it.",
+        );
+      }
     } catch {
       setError(
         "The cache action could not finish. Refresh storage details and try again.",

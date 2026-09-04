@@ -58,12 +58,14 @@ async function evictNextHistoryCache(
     attempted.add(key);
     if (isOpen(key)) continue;
     try {
-      await clearHistoryCache(
+      const cleared = await clearHistoryCache(
         candidate.environmentId,
         candidate.repositoryId,
         true,
+        globalThis.indexedDB,
+        isOpen,
       );
-      return true;
+      if (cleared) return true;
     } catch {}
   }
   return false;

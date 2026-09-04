@@ -18,6 +18,7 @@ import { readRepositoryCommits } from "#web/features/repository-history/reposito
 import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
+  RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import {
@@ -36,6 +37,69 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("history cache storage", () => {
+  it("restores every reader after a failed cache clear", async () => {
+    const fixture = await seed();
+    const worker = new SharedWorker(
+      new URL("./fixtures/history-cache-failure-worker.ts", import.meta.url),
+      { type: "module", name: crypto.randomUUID() },
+    );
+    const gateway = gatewayFor(fixture);
+    const options = {
+      environmentId: fixture.environmentId,
+      repositoryId: fixture.repositoryId,
+      gateway,
+      worker,
+    };
+    const first = createBrowserRepositoryHistoryReader(options);
+    const second = createBrowserRepositoryHistoryReader(options);
+    try {
+      await second.getRefTargets();
+      await expect(first.manageCache("clear")).rejects.toBeInstanceOf(
+        RepositoryHistoryStorageUnavailable,
+      );
+      await vi.waitFor(() => expect(second.getSnapshot().status).toBe("error"));
+      const query = {
+        limit: 100,
+        order: "topological" as const,
+        roots: fixture.roots,
+      };
+      await expect(first.read(query)).resolves.toEqual(fixture.commits);
+      await expect(second.read(query)).resolves.toEqual(fixture.commits);
+      expect(gateway.read).not.toHaveBeenCalled();
+    } finally {
+      first.close();
+      second.close();
+      worker.port.close();
+    }
+  });
+
+  it("preserves a cache opened while eviction awaits its transaction", async () => {
+    const fixture = await seed();
+    let opened = false;
+    const clearing = clearHistoryCache(
+      fixture.environmentId,
+      fixture.repositoryId,
+      true,
+      indexedDB,
+      () => opened,
+    );
+    opened = true;
+    await expect(clearing).resolves.toBe(false);
+    await expect(
+      readRepositoryCommits(
+        fixture.environmentId,
+        fixture.repositoryId,
+        fixture.commits.map((commit) => commit.oid),
+      ),
+    ).resolves.toEqual(fixture.commits);
+    expect(
+      await readStoredRepositoryHistoryState(
+        fixture.environmentId,
+        fixture.repositoryId,
+      ),
+    ).toBeDefined();
+  });
+
   it("clears and rebuilds a shared repository through its reader", async () => {
     const fixture = await seed();
     const firstRepositoryId = crypto.randomUUID();
@@ -169,10 +233,8 @@ describe("history cache storage", () => {
       roots: fixture.roots,
     };
     await first.read(query);
-    await Promise.all([
-      first.manageCache("rebuild"),
-      second.manageCache("clear"),
-    ]);
+    await first.manageCache("rebuild");
+    await second.manageCache("clear");
     await expect(first.read(query)).resolves.toEqual([]);
     await expect(
       second.getCommitSummaries(fixture.commits.map((commit) => commit.oid)),

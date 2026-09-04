@@ -806,6 +806,9 @@ async function manageCache(
   const targets =
     action === "clear-all" ? [...repositories.values()] : [replica];
   await Promise.all(targets.map((target) => target.initialization));
+  const priorPauses = new Map(
+    targets.map((target) => [target, target.cachePaused ?? false]),
+  );
   for (const target of targets) {
     target.cachePaused = true;
     if (target.synchronizationOwner !== undefined)
@@ -823,23 +826,36 @@ async function manageCache(
       }
     }
   }
-  await queueStorageWrite(async () => {
-    const caches =
-      action === "clear-all"
-        ? await readHistoryCacheRecords()
-        : [
-            {
-              environmentId: reader.connection.environmentId,
-              repositoryId: reader.connection.logicalRepositoryId,
-            },
-          ];
-    for (const cache of caches)
-      await clearHistoryCache(
-        cache.environmentId,
-        cache.repositoryId,
-        action === "remove",
-      );
-  });
+  try {
+    await queueStorageWrite(async () => {
+      const caches =
+        action === "clear-all"
+          ? await readHistoryCacheRecords()
+          : [
+              {
+                environmentId: reader.connection.environmentId,
+                repositoryId: reader.connection.logicalRepositoryId,
+              },
+            ];
+      for (const cache of caches)
+        await clearHistoryCache(
+          cache.environmentId,
+          cache.repositoryId,
+          action === "remove",
+        );
+    });
+  } catch (error) {
+    for (const target of targets) {
+      target.cachePaused = priorPauses.get(target) ?? false;
+      target.reconciled = false;
+      invalidateStoredHistory(target, true);
+      target.failure = workerFailure(error);
+      target.status = "error";
+      target.revision += 1;
+      publishSnapshot(target);
+    }
+    throw error;
+  }
   for (const target of targets) {
     invalidateStoredHistory(target, true);
     target.reconciled = false;
