@@ -283,6 +283,7 @@ export function CommitGraph({
     if (commit === undefined || commit.parents.length < 2) return;
     setActiveOid(oid);
     setExpandedMerges((current) => {
+      if (expand === current.has(oid)) return current;
       const next = new Map(current);
       if (expand) next.set(oid, commit.parents.slice(1));
       else next.delete(oid);

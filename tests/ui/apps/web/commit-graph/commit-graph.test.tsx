@@ -91,6 +91,24 @@ describe("commit graph", () => {
       .toHaveAttribute("aria-expanded", "true");
   });
 
+  it("does not reload history when merge keyboard expansion is unchanged", async () => {
+    const reader = historyReader({ commits: mergeHistory(), status: "ready" });
+    const screen = await renderGraph(reader);
+    await screen.getByRole("option", { name: /^Commit 0,/ }).click();
+    const initialReads = reader.read.mock.calls.length;
+    await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
+    expect(reader.read).toHaveBeenCalledTimes(initialReads);
+
+    await userEvent.keyboard("{ArrowRight}");
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .toBeVisible();
+    const expandedReads = reader.read.mock.calls.length;
+    expect(expandedReads).toBe(initialReads + 1);
+    await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+    expect(reader.read).toHaveBeenCalledTimes(expandedReads);
+  });
+
   it("keeps scope-owned side lines visible without a redundant collapse control", async () => {
     const commits = mergeHistory();
     const reader = historyReader({ commits, status: "ready" });
