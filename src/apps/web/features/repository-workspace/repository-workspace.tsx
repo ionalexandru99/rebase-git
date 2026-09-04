@@ -99,20 +99,25 @@ function RepositoryWorkspaceContent({
       : filterStore.load(environmentId, logicalRepositoryId),
   );
   useEffect(() => {
-    if (environmentId === undefined || repositoryId === undefined) {
+    if (
+      environmentId === undefined ||
+      repositoryId === undefined ||
+      logicalRepositoryId === undefined
+    ) {
       setHistoryReader(undefined);
       return;
     }
     const reader = createBrowserRepositoryHistoryReader({
       environmentId,
       gateway: historyGateway,
+      logicalRepositoryId,
       repositoryId,
     });
     setHistoryReader(reader);
     return () => {
       reader.close();
     };
-  }, [environmentId, historyGateway, repositoryId]);
+  }, [environmentId, historyGateway, logicalRepositoryId, repositoryId]);
   const resolvedScope = useMemo(
     () =>
       refs.refs === undefined

@@ -351,7 +351,7 @@ export function readRepositoryHistory(
         .objectStore(repositoryStoreName)
         .get(repositoryKey(environmentId, repositoryId)),
     );
-    if (repository?.completion === undefined) {
+    if (repository === undefined) {
       await completed;
       return undefined;
     }
@@ -386,6 +386,10 @@ export function readRepositoryHistory(
       }
       await completed;
       return result;
+    }
+    if (repository.completion === undefined) {
+      await completed;
+      return undefined;
     }
     const result = await readTopologicalHistory(
       commits.index(repositoryOrderIndexName),

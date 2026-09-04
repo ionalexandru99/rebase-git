@@ -26,6 +26,7 @@ let persistenceRequested = false;
 export function createBrowserRepositoryHistoryReader(options: {
   readonly environmentId: string;
   readonly gateway: RepositoryHistoryGateway;
+  readonly logicalRepositoryId?: string;
   readonly repositoryId: string;
   readonly worker?: SharedWorker;
 }): RepositoryHistoryReader {
@@ -109,6 +110,7 @@ export function createBrowserRepositoryHistoryReader(options: {
   const connection: ConnectRepositoryHistoryReader = {
     _tag: "ConnectRepositoryHistoryReader",
     environmentId: options.environmentId,
+    logicalRepositoryId: options.logicalRepositoryId ?? options.repositoryId,
     port: channel.port2,
     repositoryId: options.repositoryId,
   };

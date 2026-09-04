@@ -160,6 +160,7 @@ function openDatabase(indexedDB: IDBFactory) {
         return;
       }
       settled = true;
+      request.result.onversionchange = () => request.result.close();
       resolveDatabase(request.result);
     };
     request.onerror = () => {

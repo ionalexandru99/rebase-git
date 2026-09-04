@@ -48,10 +48,10 @@ worker.onconnect = (event) => {
 };
 
 function connectReader(connection: ConnectRepositoryHistoryReader) {
-  const key = `${connection.environmentId}\0${connection.repositoryId}`;
+  const key = `${connection.environmentId}\0${connection.logicalRepositoryId}`;
   const replica =
     repositories.get(key) ??
-    createReplica(connection.environmentId, connection.repositoryId);
+    createReplica(connection.environmentId, connection.logicalRepositoryId);
   const reader: ConnectedReader = {
     closed: false,
     connection,
@@ -134,7 +134,7 @@ async function handleReaderMessage(
       reader.queries.set(message.requestId, message.query);
       const cached = await readRepositoryHistory(
         reader.connection.environmentId,
-        reader.connection.repositoryId,
+        reader.connection.logicalRepositoryId,
         message.query,
       );
       if (!reader.epoch.isCurrent(message.requestId)) {
@@ -223,7 +223,7 @@ async function handleReaderMessage(
       try {
         const completion = await completeStoredRepositoryHistory(
           reader.connection.environmentId,
-          reader.connection.repositoryId,
+          reader.connection.logicalRepositoryId,
           message.commitCount,
         );
         if (completion.snapshot !== undefined) {
@@ -262,7 +262,7 @@ async function handleReaderMessage(
       ) {
         await restartRepositoryHistorySynchronization(
           reader.connection.environmentId,
-          reader.connection.repositoryId,
+          reader.connection.logicalRepositoryId,
         );
         await startSynchronization(reader, replica);
         return;
@@ -274,7 +274,7 @@ async function handleReaderMessage(
     case "GetCommitSummaries": {
       const commits = await readRepositoryCommits(
         reader.connection.environmentId,
-        reader.connection.repositoryId,
+        reader.connection.logicalRepositoryId,
         message.oids,
       );
       post(reader, {
@@ -311,7 +311,7 @@ async function handleReaderMessage(
       reader.closed = true;
       if (replica.readers.size === 0) {
         repositories.delete(
-          `${reader.connection.environmentId}\0${reader.connection.repositoryId}`,
+          `${reader.connection.environmentId}\0${reader.connection.logicalRepositoryId}`,
         );
       } else if (replica.synchronization !== "complete") {
         const replacement = replica.readers.values().next().value;
@@ -346,7 +346,7 @@ async function acceptHistoryPage(
     }
     await storeRepositoryHistoryPage(
       reader.connection.environmentId,
-      reader.connection.repositoryId,
+      reader.connection.logicalRepositoryId,
       page,
       query,
     );
@@ -356,7 +356,7 @@ async function acceptHistoryPage(
     reader.queries.delete(requestId);
     const stored = await readRepositoryCommits(
       reader.connection.environmentId,
-      reader.connection.repositoryId,
+      reader.connection.logicalRepositoryId,
       page.commits.map((commit) => commit.oid),
     );
     for (const commit of stored) {
@@ -417,7 +417,7 @@ async function acceptHistoryBatch(
   }
   const synchronizedCommitCount = await storeRepositoryHistoryBatch(
     reader.connection.environmentId,
-    reader.connection.repositoryId,
+    reader.connection.logicalRepositoryId,
     batch,
   );
   if (
@@ -453,7 +453,7 @@ async function startSynchronization(
   try {
     basis = await beginRepositoryHistorySynchronization(
       reader.connection.environmentId,
-      reader.connection.repositoryId,
+      reader.connection.logicalRepositoryId,
     );
   } catch (error) {
     if (
