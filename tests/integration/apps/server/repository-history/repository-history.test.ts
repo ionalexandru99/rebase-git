@@ -15,7 +15,10 @@ import {
   type RepositoryCommit,
 } from "@rebase/contracts";
 import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
-import type { RepositoryHistoryService } from "@rebase/server/domain/repository-history.contract";
+import {
+  RepositoryHistoryError,
+  type RepositoryHistoryService,
+} from "@rebase/server/domain/repository-history.contract";
 import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
@@ -96,6 +99,13 @@ describe("repository history", { timeout: 30_000 }, () => {
         JSON.stringify({
           _tag: "AcknowledgeRepositoryHistoryBatch",
           requestId,
+          sequence: 0,
+        }),
+      );
+      socket.send(
+        JSON.stringify({
+          _tag: "AcknowledgeRepositoryHistoryBatch",
+          requestId,
           sequence: 1,
         }),
       );
@@ -140,6 +150,35 @@ describe("repository history", { timeout: 30_000 }, () => {
     ]);
   });
 
+  it("preserves failures raised while emitting streamed batches", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = join(root, "emit-failure");
+    await createRepository(repositoryPath, "sha1", 1);
+    const failure = new RepositoryHistoryError({
+      failure: {
+        _tag: "GitFailed",
+        detail: "Batch delivery failed",
+        reason: "Failed",
+      },
+    });
+
+    await expect(
+      Effect.runPromise(
+        synchronizeRepositoryHistory(
+          createLocalGitCommandRunner(),
+          repositoryPath,
+          {
+            _tag: "SynchronizeRepositoryHistory",
+            priority: "visible",
+            repositoryId: environmentId,
+            requestId,
+          },
+          () => Effect.fail(failure),
+        ),
+      ),
+    ).rejects.toBe(failure);
+  });
+
   it("synchronizes refs, stashes, and detached linked worktree heads", async () => {
     await withHistoryListener(async ({ catalog, origin, root }) => {
       const repositoryPath = join(root, "complete");
@@ -151,9 +190,12 @@ describe("repository history", { timeout: 30_000 }, () => {
       await git(repositoryPath, "checkout", "main");
       await git(repositoryPath, "update-ref", "refs/remotes/origin/side", side);
       await git(repositoryPath, "tag", "snapshot");
-      await writeFile(join(repositoryPath, "stashed.txt"), "stashed");
-      await git(repositoryPath, "add", "stashed.txt");
-      await git(repositoryPath, "stash", "push", "-m", "saved work");
+      await writeFile(join(repositoryPath, "stashed-one.txt"), "one");
+      await git(repositoryPath, "add", "stashed-one.txt");
+      await git(repositoryPath, "stash", "push", "-m", "saved work one");
+      await writeFile(join(repositoryPath, "stashed-two.txt"), "two");
+      await git(repositoryPath, "add", "stashed-two.txt");
+      await git(repositoryPath, "stash", "push", "-m", "saved work two");
       await git(
         repositoryPath,
         "worktree",
@@ -167,10 +209,19 @@ describe("repository history", { timeout: 30_000 }, () => {
       const repository = await Effect.runPromise(
         catalog.remember(repositoryPath),
       );
+      const stashRoots = (
+        await gitOutput(repositoryPath, "stash", "list", "--format=%H")
+      ).split("\n");
       const expected = new Set(
-        (await gitOutput(repositoryPath, "rev-list", "--all", detached)).split(
-          "\n",
-        ),
+        (
+          await gitOutput(
+            repositoryPath,
+            "rev-list",
+            "--all",
+            detached,
+            ...stashRoots,
+          )
+        ).split("\n"),
       );
 
       const commits = await synchronizeHistory(origin, repository.id);
@@ -180,7 +231,10 @@ describe("repository history", { timeout: 30_000 }, () => {
         commits.some((commit) => commit.subject === "detached linked"),
       ).toBe(true);
       expect(
-        commits.some((commit) => commit.subject.includes("saved work")),
+        commits.some((commit) => commit.subject.includes("saved work one")),
+      ).toBe(true);
+      expect(
+        commits.some((commit) => commit.subject.includes("saved work two")),
       ).toBe(true);
     });
   });

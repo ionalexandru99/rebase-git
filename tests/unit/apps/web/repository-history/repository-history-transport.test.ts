@@ -106,6 +106,104 @@ describe("repository history transport", () => {
     await Effect.runPromise(Fiber.interrupt(first));
   });
 
+  it("releases the synchronization slot when starting a request fails", async () => {
+    const send = vi.fn();
+    send
+      .mockImplementationOnce(() => {
+        throw new Error("Socket closed");
+      })
+      .mockImplementation(() => undefined);
+    const transport = createRepositoryHistoryTransport(
+      { send } as unknown as WebSocket,
+      true,
+    );
+
+    await expect(
+      Effect.runPromise(
+        transport.synchronize(
+          {
+            priority: "background",
+            repositoryId: "00000000-0000-4000-8000-000000000001",
+          },
+          () => Effect.void,
+        ),
+      ),
+    ).rejects.toBeDefined();
+    const next = Effect.runFork(
+      transport.synchronize(
+        {
+          priority: "visible",
+          repositoryId: "00000000-0000-4000-8000-000000000002",
+        },
+        () => Effect.void,
+      ),
+    );
+
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(String(send.mock.calls[1]?.[0]))).toMatchObject({
+      _tag: "SynchronizeRepositoryHistory",
+      repositoryId: "00000000-0000-4000-8000-000000000002",
+    });
+    await Effect.runPromise(Fiber.interrupt(next));
+  });
+
+  it("releases the synchronization slot when an acknowledgement cannot be sent", async () => {
+    const send = vi.fn();
+    send.mockImplementation(() => undefined);
+    const transport = createRepositoryHistoryTransport(
+      { send } as unknown as WebSocket,
+      true,
+    );
+    const first = Effect.runFork(
+      transport.synchronize(
+        {
+          priority: "visible",
+          repositoryId: "00000000-0000-4000-8000-000000000001",
+        },
+        () => Effect.void,
+      ),
+    );
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    const request = JSON.parse(String(send.mock.calls[0]?.[0])) as {
+      readonly requestId: string;
+    };
+    send.mockImplementationOnce(() => {
+      throw new Error("Socket closed");
+    });
+    const payload = encodeRepositoryHistoryBatch({
+      commits: [],
+      objectFormat: "sha1",
+      repositoryId: "00000000-0000-4000-8000-000000000001",
+      requestId: request.requestId,
+      sequence: 0,
+    });
+    const [frame] = fragmentBinaryMessage(
+      { logicalMessageId: 1, payload, requestId: request.requestId },
+      16_384,
+    );
+
+    await expect(
+      Effect.runPromise(transport.acceptBinary(frame ?? new Uint8Array())),
+    ).rejects.toBeDefined();
+    await expect(Effect.runPromise(Fiber.join(first))).rejects.toBeDefined();
+    const next = Effect.runFork(
+      transport.synchronize(
+        {
+          priority: "visible",
+          repositoryId: "00000000-0000-4000-8000-000000000002",
+        },
+        () => Effect.void,
+      ),
+    );
+
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(3));
+    expect(JSON.parse(String(send.mock.calls[2]?.[0]))).toMatchObject({
+      _tag: "SynchronizeRepositoryHistory",
+      repositoryId: "00000000-0000-4000-8000-000000000002",
+    });
+    await Effect.runPromise(Fiber.interrupt(next));
+  });
+
   it("ignores terminal responses and fragments that arrive after cancellation", async () => {
     const send = vi.fn();
     const transport = createRepositoryHistoryTransport(

@@ -27,7 +27,7 @@ export function synchronizeRepositoryHistory(
     if (stream === undefined) {
       return yield* gitFailure("Git history streaming is unavailable");
     }
-    const [formatOutput, stashOutput, worktreesOutput] = yield* Effect.all(
+    const [formatOutput, stashTipOutput, worktreesOutput] = yield* Effect.all(
       [
         runGit(git, repositoryPath, ["rev-parse", "--show-object-format"]),
         runGit(git, repositoryPath, [
@@ -39,6 +39,15 @@ export function synchronizeRepositoryHistory(
       ],
       { concurrency: "unbounded" },
     );
+    const stashOutput =
+      stashTipOutput.trim() === ""
+        ? ""
+        : yield* runGit(git, repositoryPath, [
+            "reflog",
+            "show",
+            "--format=%H",
+            "refs/stash",
+          ]);
     const objectFormat = yield* parseOutput(() =>
       parseObjectFormat(formatOutput),
     );
@@ -48,6 +57,7 @@ export function synchronizeRepositoryHistory(
       objectFormat,
     );
     let sequence = 0;
+    let emitFailure: RepositoryHistoryError | undefined;
     let streamSignal: AbortSignal | undefined;
     const parser = createGitHistoryBatchParser(
       objectFormat,
@@ -60,7 +70,13 @@ export function synchronizeRepositoryHistory(
             repositoryId: request.repositoryId,
             requestId: request.requestId,
             sequence: sequence++,
-          }),
+          }).pipe(
+            Effect.tapError((failure) =>
+              Effect.sync(() => {
+                emitFailure = failure;
+              }),
+            ),
+          ),
           streamSignal === undefined ? undefined : { signal: streamSignal },
         ),
       maximumBatchCharacters,
@@ -87,14 +103,18 @@ export function synchronizeRepositoryHistory(
         streamSignal = signal;
         return parser.accept(chunk);
       },
-    ).pipe(Effect.mapError(repositoryHistoryError));
+    ).pipe(
+      Effect.mapError((cause) =>
+        emitFailure === undefined ? repositoryHistoryError(cause) : emitFailure,
+      ),
+    );
     if (output.exitCode !== 0) {
       return yield* gitFailure(output.stderr.slice(0, 2_048));
     }
     return yield* parseOutput((signal) => {
       streamSignal = signal;
       return parser.finish();
-    });
+    }).pipe(Effect.mapError((failure) => emitFailure ?? failure));
   });
 }
 
@@ -104,7 +124,9 @@ function additionalHistoryRoots(
   objectFormat: "sha1" | "sha256",
 ) {
   const roots = new Set<string>();
-  addOid(roots, stashOutput.trim(), objectFormat);
+  for (const line of stashOutput.split("\n")) {
+    addOid(roots, line.trim(), objectFormat);
+  }
   for (const field of worktreesOutput.split("\0")) {
     if (field.startsWith("HEAD ")) {
       addOid(roots, field.slice(5), objectFormat);

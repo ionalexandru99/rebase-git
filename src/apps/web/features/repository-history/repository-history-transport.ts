@@ -122,13 +122,16 @@ export function createRepositoryHistoryTransport(
         return yield* Deferred.await(result);
       }).pipe(
         Effect.onInterrupt(() =>
-          Effect.gen(function* () {
-            const wasActive = activeSynchronization === requestId;
-            if (wasActive) {
-              yield* cancelServerRequest(socket, requestId);
-            }
-            yield* finishSynchronization(requestId);
-          }).pipe(Effect.ignore),
+          Effect.suspend(() =>
+            activeSynchronization === requestId
+              ? cancelServerRequest(socket, requestId)
+              : Effect.void,
+          ),
+        ),
+        Effect.ensuring(
+          Effect.suspend(() => finishSynchronization(requestId)).pipe(
+            Effect.ignore,
+          ),
         ),
         Effect.ensuring(cleanRequest(requests, reassembler, requestId)),
       );
@@ -182,6 +185,12 @@ export function createRepositoryHistoryTransport(
                       requestId: message.requestId,
                       sequence,
                     },
+                  ).pipe(
+                    Effect.tapError((failure) =>
+                      Deferred.fail(pending.result, failure).pipe(
+                        Effect.ignore,
+                      ),
+                    ),
                   ),
                 ),
                 Effect.tap(() =>

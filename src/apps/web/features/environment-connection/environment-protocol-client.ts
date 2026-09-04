@@ -241,18 +241,16 @@ function runEnvironmentConnection(
       hello,
       discovery,
     );
+    const supportsBinaryFragmentation = negotiated.capabilities.some(
+      (capability) => capability.name === "binary-fragmentation",
+    );
+    const repositoryHistoryVersion = negotiated.capabilities.find(
+      (capability) => capability.name === "repository-history",
+    )?.version;
     const repositoryHistory = createRepositoryHistoryTransport(
       socket,
-      negotiated.capabilities.some(
-        (capability) => capability.name === "repository-history",
-      ) &&
-        negotiated.capabilities.some(
-          (capability) => capability.name === "binary-fragmentation",
-        ),
-      negotiated.capabilities.some(
-        (capability) =>
-          capability.name === "repository-history" && capability.version >= 2,
-      ),
+      repositoryHistoryVersion !== undefined && supportsBinaryFragmentation,
+      (repositoryHistoryVersion ?? 0) >= 2 && supportsBinaryFragmentation,
     );
     yield* initializeEnvironmentSequence(state, hello, negotiated);
     yield* publishEnvironmentConnection(

@@ -29,6 +29,7 @@ import {
 } from "#server/features/environment-connection/websocket/environment-websocket-writer";
 
 const maximumConcurrentHistoryRequests = 2;
+const maximumRetiredHistorySynchronizations = 64;
 const historyBatchAcknowledgementTimeoutMilliseconds = 30_000;
 
 export function runEnvironmentWebSocketSession(
@@ -60,6 +61,7 @@ function runSession(
     const writer = yield* createEnvironmentWebSocketWriter(socket, state);
     const runSessionEffect = yield* FiberSet.makeRuntime<never, void, never>();
     const historyRequests = new Map<string, ActiveHistoryRequest>();
+    const retiredHistorySynchronizations = new Map<string, number>();
     let logicalMessageId = 0;
     const hello = yield* readHello(messages, state);
     const result = yield* negotiateSession(state, hello);
@@ -78,6 +80,7 @@ function runSession(
       capabilities,
       accessCapabilities,
       historyRequests,
+      retiredHistorySynchronizations,
       runSessionEffect,
       () => {
         logicalMessageId += 1;
@@ -147,6 +150,7 @@ function processClientMessages(
   capabilities: ReadonlyMap<string, number>,
   accessCapabilities: ReadonlySet<EnvironmentAccessCapability>,
   historyRequests: Map<string, ActiveHistoryRequest>,
+  retiredHistorySynchronizations: Map<string, number>,
   runSessionEffect: (
     effect: Effect.Effect<void, never, never>,
     options?: Effect.RunOptions,
@@ -163,6 +167,7 @@ function processClientMessages(
         capabilities,
         accessCapabilities,
         historyRequests,
+        retiredHistorySynchronizations,
         runSessionEffect,
         nextLogicalMessageId,
       );
@@ -177,6 +182,7 @@ function handleClientMessage(
   capabilities: ReadonlyMap<string, number>,
   accessCapabilities: ReadonlySet<EnvironmentAccessCapability>,
   historyRequests: Map<string, ActiveHistoryRequest>,
+  retiredHistorySynchronizations: Map<string, number>,
   runSessionEffect: (
     effect: Effect.Effect<void, never, never>,
     options?: Effect.RunOptions,
@@ -315,6 +321,7 @@ function handleClientMessage(
         const request: ActiveHistoryRequest = {
           controller: new AbortController(),
           kind: "sync",
+          lastSentSequence: -1,
         };
         historyRequests.set(message.requestId, request);
         runSessionEffect(
@@ -349,8 +356,9 @@ function handleClientMessage(
               ),
               Effect.ensuring(
                 Effect.sync(() =>
-                  deleteOwnedHistoryRequest(
+                  retireOwnedHistoryRequest(
                     historyRequests,
+                    retiredHistorySynchronizations,
                     message.requestId,
                     request,
                   ),
@@ -367,23 +375,45 @@ function handleClientMessage(
     }
     case "AcknowledgeRepositoryHistoryBatch": {
       const request = historyRequests.get(message.requestId);
+      if (request?.kind === "sync") {
+        const acknowledgement = request.acknowledgement;
+        if (acknowledgement?.sequence === message.sequence) {
+          delete request.acknowledgement;
+          return Deferred.succeed(acknowledgement.deferred, undefined).pipe(
+            Effect.asVoid,
+          );
+        }
+        return message.sequence <= request.lastSentSequence
+          ? Effect.void
+          : rejectSession("InvalidMessage");
+      }
+      const lastSentSequence = retiredHistorySynchronizations.get(
+        message.requestId,
+      );
       if (
-        request?.kind !== "sync" ||
-        request.acknowledgement?.sequence !== message.sequence
+        lastSentSequence === undefined ||
+        message.sequence > lastSentSequence
       ) {
         return rejectSession("InvalidMessage");
       }
-      const acknowledgement = request.acknowledgement;
-      delete request.acknowledgement;
-      return Deferred.succeed(acknowledgement.deferred, undefined).pipe(
-        Effect.asVoid,
-      );
+      return Effect.void;
     }
-    case "CancelRepositoryHistory":
+    case "CancelRepositoryHistory": {
       return Effect.sync(() => {
-        historyRequests.get(message.requestId)?.controller.abort();
-        historyRequests.delete(message.requestId);
+        const request = historyRequests.get(message.requestId);
+        request?.controller.abort();
+        if (request?.kind === "sync") {
+          retireOwnedHistoryRequest(
+            historyRequests,
+            retiredHistorySynchronizations,
+            message.requestId,
+            request,
+          );
+        } else {
+          historyRequests.delete(message.requestId);
+        }
       });
+    }
   }
 }
 
@@ -400,7 +430,7 @@ function historyBatchError(cause: unknown) {
 
 function sendHistoryBatch(
   writer: EnvironmentWebSocketWriter,
-  request: ActiveHistoryRequest,
+  request: ActiveHistorySynchronization,
   sequence: number,
   logicalMessageId: number,
   requestId: string,
@@ -408,6 +438,7 @@ function sendHistoryBatch(
 ) {
   return Effect.gen(function* () {
     const deferred = yield* Deferred.make<void>();
+    request.lastSentSequence = sequence;
     request.acknowledgement = { deferred, sequence };
     yield* writer.sendBinary({ logicalMessageId, payload, requestId });
     yield* Deferred.await(deferred).pipe(
@@ -424,6 +455,29 @@ function sendHistoryBatch(
   );
 }
 
+function retireOwnedHistoryRequest(
+  requests: Map<string, ActiveHistoryRequest>,
+  retiredSynchronizations: Map<string, number>,
+  requestId: string,
+  request: ActiveHistorySynchronization,
+) {
+  if (requests.get(requestId) !== request) {
+    return;
+  }
+  requests.delete(requestId);
+  if (request.lastSentSequence < 0) {
+    return;
+  }
+  retiredSynchronizations.set(requestId, request.lastSentSequence);
+  if (retiredSynchronizations.size <= maximumRetiredHistorySynchronizations) {
+    return;
+  }
+  const oldestRequestId = retiredSynchronizations.keys().next().value;
+  if (oldestRequestId !== undefined) {
+    retiredSynchronizations.delete(oldestRequestId);
+  }
+}
+
 function deleteOwnedHistoryRequest(
   requests: Map<string, ActiveHistoryRequest>,
   requestId: string,
@@ -434,14 +488,24 @@ function deleteOwnedHistoryRequest(
   }
 }
 
-interface ActiveHistoryRequest {
+interface ActiveHistoryPageRequest {
+  readonly controller: AbortController;
+  readonly kind: "page";
+}
+
+interface ActiveHistorySynchronization {
   acknowledgement?: {
     readonly deferred: Deferred.Deferred<void>;
     readonly sequence: number;
   };
   readonly controller: AbortController;
-  readonly kind: "page" | "sync";
+  readonly kind: "sync";
+  lastSentSequence: number;
 }
+
+type ActiveHistoryRequest =
+  | ActiveHistoryPageRequest
+  | ActiveHistorySynchronization;
 
 function readHello(
   messages: Queue.Dequeue<
