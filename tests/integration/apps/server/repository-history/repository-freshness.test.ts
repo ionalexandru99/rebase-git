@@ -36,35 +36,34 @@ afterEach(async () => {
 });
 
 describe("repository freshness with real Git", { timeout: 30_000 }, () => {
-  it("continues watching stash history after reflog directories are replaced", async () => {
-    const fixture = await createFixture();
-    const gitDirectory = join(fixture.local, ".git");
-    let changes = 0;
-    const watcher = await Effect.runPromise(
-      createLocalRepositoryWatcher().watch(gitDirectory, () => {
-        changes += 1;
-      }),
+  for (const entry of ["logs/refs", "logs"])
+    it.skipIf(process.platform === "win32" && entry === "logs")(
+      `continues watching stash history after ${entry} is replaced`,
+      async () => {
+        const fixture = await createFixture();
+        const gitDirectory = join(fixture.local, ".git");
+        let changes = 0;
+        const watcher = await Effect.runPromise(
+          createLocalRepositoryWatcher().watch(gitDirectory, () => {
+            changes += 1;
+          }),
+        );
+        try {
+          const directory = join(gitDirectory, entry);
+          const beforeReplacement = changes;
+          await rename(directory, join(fixture.root, "previous-logs"));
+          await mkdir(join(gitDirectory, "logs", "refs"), { recursive: true });
+          await vi.waitFor(() =>
+            expect(changes).toBeGreaterThan(beforeReplacement),
+          );
+          const beforeWrite = changes;
+          await writeFile(join(gitDirectory, "logs", "refs", "stash"), "stash");
+          await vi.waitFor(() => expect(changes).toBeGreaterThan(beforeWrite));
+        } finally {
+          watcher.close();
+        }
+      },
     );
-    try {
-      for (const [index, entry] of ["logs/refs", "logs"].entries()) {
-        const directory = join(gitDirectory, entry);
-        const beforeReplacement = changes;
-        await rename(directory, join(fixture.root, `previous-logs-${index}`));
-        await mkdir(join(gitDirectory, "logs", "refs"), { recursive: true });
-        await vi.waitFor(() =>
-          expect(changes).toBeGreaterThan(beforeReplacement),
-        );
-        const beforeWrite = changes;
-        await writeFile(
-          join(gitDirectory, "logs", "refs", "stash"),
-          `stash ${index}`,
-        );
-        await vi.waitFor(() => expect(changes).toBeGreaterThan(beforeWrite));
-      }
-    } finally {
-      watcher.close();
-    }
-  });
 
   it("watches Git paths with forward slashes on every platform", async () => {
     const fixture = await createFixture();
