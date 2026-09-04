@@ -6,11 +6,6 @@ import type {
   RepositoryHistorySnapshot,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
-import { HistoryOrderIndex } from "#web/features/repository-history/history-order";
-import type {
-  HistoryOrderCache,
-  HistoryOrderNode,
-} from "#web/features/repository-history/history-order.contract";
 import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,
@@ -22,7 +17,6 @@ import {
   commitStoreName,
   emptyStoredRepository,
   repositoryKey,
-  repositoryOrderIndexName,
   repositoryStoreName,
   requestResult,
   type StoredCommit,
@@ -31,6 +25,7 @@ import {
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
+import { historyOrderScopeKey } from "#web/features/repository-history/repository-history-query";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 export interface StoredRepositoryHistoryState {
@@ -83,6 +78,7 @@ export function storeRepositoryHistoryPage(
       ...emptyStoredRepository(environmentId, repositoryId, page.objectFormat),
       ...current,
       cachedPage: {
+        scopeKey: historyOrderScopeKey(query),
         oids: page.commits.map((commit) => commit.oid),
         order: query.order,
         requestedLimit: query.limit,
@@ -338,121 +334,6 @@ function synchronizationBasis(
       };
 }
 
-export function readRepositoryHistory(
-  environmentId: string,
-  repositoryId: string,
-  query: RepositoryHistoryQuery,
-  indexedDB: IDBFactory | undefined = globalThis.indexedDB,
-  orderCache: HistoryOrderCache = { queries: new Map(), revision: 0 },
-): Promise<readonly RepositoryCommit[] | undefined> {
-  const offset = query.offset ?? 0;
-  if (
-    !Number.isInteger(offset) ||
-    offset < 0 ||
-    !Number.isInteger(query.limit) ||
-    query.limit < 1 ||
-    query.limit > 1_000
-  ) {
-    return Promise.reject(
-      new Error("History query is outside the supported range"),
-    );
-  }
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(
-      [commitStoreName, repositoryStoreName],
-      "readonly",
-    );
-    const completed = transactionCompleted(transaction);
-    const commits = transaction.objectStore(commitStoreName);
-    const repository = await requestResult<StoredRepository | undefined>(
-      transaction
-        .objectStore(repositoryStoreName)
-        .get(repositoryKey(environmentId, repositoryId)),
-    );
-    if (repository === undefined) {
-      await completed;
-      return undefined;
-    }
-    const roots = normalizedOids(query.roots.map((root) => root.oid));
-    const storedRoots = await Promise.all(
-      roots.map((oid) =>
-        requestResult<StoredCommit | undefined>(
-          commits.get(commitKey(environmentId, repositoryId, oid)),
-        ),
-      ),
-    );
-    if (storedRoots.some((root) => root === undefined)) {
-      await completed;
-      return undefined;
-    }
-    if (
-      query.order === repository.cachedPage?.order &&
-      sameOids(roots, repository.cachedPage.rootOids) &&
-      (offset + query.limit <= repository.cachedPage.oids.length ||
-        repository.cachedPage.oids.length <
-          repository.cachedPage.requestedLimit)
-    ) {
-      const cachedOids = repository.cachedPage.oids.slice(
-        offset,
-        offset + query.limit,
-      );
-      const result = await readCommitsByOid(
-        commits,
-        environmentId,
-        repositoryId,
-        cachedOids,
-      );
-      if (result.length !== cachedOids.length) {
-        throw new Error("Repository history cache is incomplete");
-      }
-      await completed;
-      return result;
-    }
-    if (repository.completion === undefined) {
-      await completed;
-      return undefined;
-    }
-    const key = JSON.stringify([
-      query.order,
-      query.roots.map(({ name, type }) => [name, type]).sort(),
-    ]);
-    const basis = JSON.stringify([orderCache.revision, roots]);
-    const previous = orderCache.queries.get(key);
-    let ordered = previous?.basis === basis ? previous.oids : undefined;
-    if (ordered === undefined) {
-      orderCache.index ??= new HistoryOrderIndex(
-        await readHistoryOrderNodes(
-          commits.index(repositoryOrderIndexName),
-          environmentId,
-          repositoryId,
-        ),
-      );
-      const cachedPrefix =
-        repository.cachedPage?.order === query.order
-          ? repository.cachedPage.oids
-          : undefined;
-      ordered = orderCache.index.order(
-        roots,
-        query.order,
-        previous?.oids ?? cachedPrefix,
-      );
-      if (orderCache.queries.size >= 4) {
-        const oldest = orderCache.queries.keys().next().value;
-        if (oldest !== undefined) orderCache.queries.delete(oldest);
-      }
-      orderCache.queries.set(key, { basis, oids: ordered });
-    }
-    const result = await readCommitsByOid(
-      commits,
-      environmentId,
-      repositoryId,
-      ordered.slice(offset, offset + query.limit),
-    );
-    await completed;
-    return result;
-  });
-}
-
 export function storeRepositoryCommits(
   environmentId: string,
   repositoryId: string,
@@ -470,122 +351,8 @@ export function storeRepositoryCommits(
   });
 }
 
-export function readRepositoryCommits(
-  environmentId: string,
-  repositoryId: string,
-  oids: readonly string[],
-  indexedDB: IDBFactory | undefined = globalThis.indexedDB,
-) {
-  if (oids.length > 1_000) {
-    return Promise.reject(new Error("Query is too large"));
-  }
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(commitStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const records = await readCommitsByOid(
-      transaction.objectStore(commitStoreName),
-      environmentId,
-      repositoryId,
-      oids,
-    );
-    await completed;
-    return records;
-  });
-}
-
-function readCommitsByOid(
-  store: IDBObjectStore,
-  environmentId: string,
-  repositoryId: string,
-  oids: readonly string[],
-) {
-  return Promise.all(
-    oids.map((oid) =>
-      requestResult<StoredCommit | undefined>(
-        store.get(commitKey(environmentId, repositoryId, oid)),
-      ),
-    ),
-  ).then((records) =>
-    records.flatMap((record) => (record === undefined ? [] : [record.commit])),
-  );
-}
-
-async function readHistoryOrderNodes(
-  index: IDBIndex,
-  environmentId: string,
-  repositoryId: string,
-) {
-  let lower = [environmentId, repositoryId, Number.MIN_SAFE_INTEGER, 0];
-  const upper = [
-    environmentId,
-    repositoryId,
-    Number.MAX_SAFE_INTEGER,
-    Number.MAX_SAFE_INTEGER,
-  ];
-  let open = false;
-  const result: HistoryOrderNode[] = [];
-  while (true) {
-    const records = await requestResult<StoredCommit[]>(
-      index.getAll(IDBKeyRange.bound(lower, upper, open), 2_048),
-    );
-    for (const record of records) {
-      result.push({
-        oid: record.commit.oid,
-        parents: record.commit.parents,
-        timestamp: record.commit.committer.timestampSeconds,
-      });
-    }
-    const last = records.at(-1);
-    if (
-      records.length < 2_048 ||
-      last?.topologicalEpoch === undefined ||
-      last.topologicalOrder === undefined
-    )
-      return result;
-    lower = [
-      environmentId,
-      repositoryId,
-      last.topologicalEpoch,
-      last.topologicalOrder,
-    ];
-    open = true;
-  }
-}
-
-export async function prepareRepositoryHistoryOrder(
-  environmentId: string,
-  repositoryId: string,
-  cache: HistoryOrderCache,
-) {
-  const revision = cache.revision;
-  const nodes = await withRepositoryHistoryDatabase(
-    globalThis.indexedDB,
-    async (database) => {
-      const transaction = database.transaction(commitStoreName, "readonly");
-      const completed = transactionCompleted(transaction);
-      const nodes = await readHistoryOrderNodes(
-        transaction
-          .objectStore(commitStoreName)
-          .index(repositoryOrderIndexName),
-        environmentId,
-        repositoryId,
-      );
-      await completed;
-      return nodes;
-    },
-  );
-  if (revision === cache.revision) cache.index = new HistoryOrderIndex(nodes);
-}
-
 function normalizedOids(oids: readonly string[]) {
   return [...new Set(oids)].sort();
-}
-
-function sameOids(left: readonly string[], right: readonly string[]) {
-  return (
-    left.length === right.length &&
-    left.every((oid, index) => oid === right[index])
-  );
 }
 
 function topologicalPosition(commit: StoredCommit | undefined) {

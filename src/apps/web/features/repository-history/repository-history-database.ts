@@ -217,6 +217,7 @@ export interface StoredCommit {
 
 export interface StoredRepository {
   readonly cachedPage?: {
+    readonly scopeKey?: string;
     readonly oids: readonly string[];
     readonly order: RepositoryHistoryQuery["order"];
     readonly requestedLimit: number;

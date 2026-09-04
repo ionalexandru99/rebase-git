@@ -67,6 +67,11 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
       previousIndex = index;
     }
     const ready = new HistoryOrderQueue((left, right) => {
+      if (order === "chronological") {
+        const difference =
+          (this.timestamps[right] ?? 0) - (this.timestamps[left] ?? 0);
+        if (difference !== 0) return difference;
+      }
       const priorLeft = priorPositions[left] ?? -1;
       const priorRight = priorPositions[right] ?? -1;
       if (priorLeft >= 0 || priorRight >= 0)
@@ -74,11 +79,6 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
           (priorLeft < 0 ? Number.MAX_SAFE_INTEGER : priorLeft) -
           (priorRight < 0 ? Number.MAX_SAFE_INTEGER : priorRight)
         );
-      if (order === "chronological") {
-        const difference =
-          (this.timestamps[right] ?? 0) - (this.timestamps[left] ?? 0);
-        if (difference !== 0) return difference;
-      }
       return left - right;
     });
     for (const index of reached) if (children[index] === 0) ready.push(index);

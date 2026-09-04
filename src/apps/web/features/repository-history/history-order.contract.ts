@@ -9,7 +9,11 @@ export interface HistoryOrderCache {
   revision: number;
   readonly queries: Map<
     string,
-    { readonly basis: string; readonly oids: readonly string[] }
+    {
+      readonly basis: string;
+      readonly oids: readonly string[];
+      readonly complete: boolean;
+    }
   >;
 }
 

@@ -6,6 +6,10 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { withRepositoryHistoryDatabase } from "#web/features/repository-history/repository-history-database";
+import {
+  readRepositoryCommits,
+  readRepositoryHistory,
+} from "#web/features/repository-history/repository-history-query";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import {
   RepositoryHistoryOffline,
@@ -13,11 +17,7 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import {
-  readRepositoryCommits,
-  readRepositoryHistory,
-  readStoredRepositoryHistoryState,
-} from "#web/features/repository-history/repository-history-store";
+import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
   it("does not retry failed synchronization when a non-owner reader closes", async () => {
@@ -213,6 +213,7 @@ describe("browser repository history reader", () => {
   });
 
   it("orders and pages the complete replica locally without starting more Git traversals", async () => {
+    const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const [merge, main, side, base] = history(4);
     if (!merge || !main || !side || !base) throw new Error("Missing fixture");
@@ -239,7 +240,7 @@ describe("browser repository history reader", () => {
       }),
     };
     const reader = createBrowserRepositoryHistoryReader({
-      environmentId: crypto.randomUUID(),
+      environmentId,
       gateway,
       repositoryId,
     });
@@ -265,6 +266,33 @@ describe("browser repository history reader", () => {
       ).toEqual([main.oid, base.oid]);
       expect(gateway.read).toHaveBeenCalledTimes(1);
       expect(gateway.synchronize).toHaveBeenCalledTimes(1);
+      const sibling = createBrowserRepositoryHistoryReader({
+        environmentId,
+        gateway,
+        repositoryId,
+      });
+      try {
+        const [chronological, topological] = await Promise.all([
+          reader.read({ roots, order: "chronological", limit: 100 }),
+          sibling.read({ roots, order: "topological", limit: 100 }),
+        ]);
+        expect(chronological.map(({ oid }) => oid)).toEqual([
+          merge.oid,
+          side.oid,
+          main.oid,
+          base.oid,
+        ]);
+        expect(topological.map(({ oid }) => oid)).toEqual([
+          merge.oid,
+          main.oid,
+          side.oid,
+          base.oid,
+        ]);
+        await sibling.read({ roots, order: "chronological", limit: 100 });
+        expect(gateway.synchronize).toHaveBeenCalledTimes(1);
+      } finally {
+        sibling.close();
+      }
     } finally {
       reader.close();
     }

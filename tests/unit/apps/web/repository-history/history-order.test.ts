@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HistoryOrderIndex } from "#web/features/repository-history/history-order";
 import type { HistoryOrderNode } from "#web/features/repository-history/history-order.contract";
+import { historyOrderScopeKey } from "#web/features/repository-history/repository-history-query";
 
 function orderHistory(
   nodes: readonly HistoryOrderNode[],
@@ -19,6 +20,15 @@ const nodes = [
 ];
 
 describe("local history ordering", () => {
+  it("isolates detached HEAD scopes while preserving a moving branch scope", () => {
+    const key = (type: "branch" | "head", oid: string) =>
+      historyOrderScopeKey({
+        order: "topological",
+        roots: [{ name: type === "head" ? "HEAD" : "main", type, oid }],
+      });
+    expect(key("head", "a")).not.toBe(key("head", "b"));
+    expect(key("branch", "a")).toBe(key("branch", "b"));
+  });
   it.each(["topological", "chronological"] as const)(
     "keeps octopus and criss-cross ancestry valid across 256 tips in %s order",
     (order) => {
@@ -93,5 +103,19 @@ describe("local history ordering", () => {
     expect(
       orderHistory(graph, ["new", "late"], "chronological", ["early", "late"]),
     ).toEqual(["new", "early", "late"]);
+  });
+
+  it("places newer live commits before older independent rows while preserving existing row order", () => {
+    const graph = [
+      { oid: "new-feature", parents: ["feature"], timestamp: 100 },
+      { oid: "main", parents: [], timestamp: 1 },
+      { oid: "feature", parents: [], timestamp: 0 },
+    ];
+    expect(
+      orderHistory(graph, ["main", "new-feature"], "chronological", [
+        "main",
+        "feature",
+      ]),
+    ).toEqual(["new-feature", "main", "feature"]);
   });
 });
