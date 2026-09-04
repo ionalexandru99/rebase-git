@@ -99,8 +99,10 @@ export const repositoryCatalogTable = sqliteTable(
   "repository_catalog",
   {
     addedAt: text("added_at").notNull(),
+    gitCommonDirectory: text("git_common_directory"),
     id: text("id").primaryKey(),
     lastOpenedAt: text("last_opened_at").notNull(),
+    logicalRepositoryId: text("logical_repository_id"),
     name: text("name").notNull(),
     path: text("path").notNull().unique(),
   },
@@ -116,6 +118,9 @@ export const repositoryCatalogTable = sqliteTable(
     index("repository_catalog_last_opened_at").on(
       sql`${repository.lastOpenedAt} DESC`,
       sql`${repository.id} DESC`,
+    ),
+    index("repository_catalog_logical_repository_id").on(
+      repository.logicalRepositoryId,
     ),
     index("repository_catalog_name").on(repository.name, repository.path),
   ],

@@ -30,24 +30,86 @@ export function createRepositoryCatalog(
 }
 
 function listRepositories(context: EnvironmentContext) {
-  return context.read("Could not read repository catalog", (database) =>
-    database
-      .select()
-      .from(repositoryCatalogTable)
-      .orderBy(
-        asc(repositoryCatalogTable.name),
-        asc(repositoryCatalogTable.path),
-      ),
-  );
+  return context
+    .read("Could not read repository catalog", (database) =>
+      database
+        .select()
+        .from(repositoryCatalogTable)
+        .orderBy(
+          asc(repositoryCatalogTable.name),
+          asc(repositoryCatalogTable.path),
+        ),
+    )
+    .pipe(Effect.map((repositories) => repositories.map(catalogEntry)));
 }
 
 function findRepository(context: EnvironmentContext, repositoryId: string) {
-  return context.read("Could not read repository", (database) =>
-    database
-      .select()
-      .from(repositoryCatalogTable)
-      .where(eq(repositoryCatalogTable.id, repositoryId))
-      .get(),
+  return context
+    .read("Could not read repository", (database) =>
+      database
+        .select()
+        .from(repositoryCatalogTable)
+        .where(eq(repositoryCatalogTable.id, repositoryId))
+        .get(),
+    )
+    .pipe(
+      Effect.flatMap((repository) =>
+        repository === undefined
+          ? Effect.succeed(undefined)
+          : ensureRepositoryIdentity(context, repository),
+      ),
+      Effect.map((repository) =>
+        repository === undefined ? undefined : catalogEntry(repository),
+      ),
+    );
+}
+
+function ensureRepositoryIdentity(
+  context: EnvironmentContext,
+  repository: typeof repositoryCatalogTable.$inferSelect,
+) {
+  if (
+    repository.gitCommonDirectory !== null &&
+    repository.logicalRepositoryId !== null
+  ) {
+    return Effect.succeed(repository);
+  }
+
+  return resolveRepository(repository.path).pipe(
+    Effect.flatMap((resolved) =>
+      context.write(
+        "Could not repair repository identity",
+        async (database) => {
+          const linkedRepository = await database
+            .select({
+              logicalRepositoryId: repositoryCatalogTable.logicalRepositoryId,
+            })
+            .from(repositoryCatalogTable)
+            .where(
+              eq(
+                repositoryCatalogTable.gitCommonDirectory,
+                resolved.gitCommonDirectory,
+              ),
+            )
+            .get();
+          const logicalRepositoryId =
+            linkedRepository?.logicalRepositoryId ??
+            repository.logicalRepositoryId ??
+            randomUUID();
+          const repaired = await database
+            .update(repositoryCatalogTable)
+            .set({
+              gitCommonDirectory: resolved.gitCommonDirectory,
+              logicalRepositoryId,
+            })
+            .where(eq(repositoryCatalogTable.id, repository.id))
+            .returning()
+            .get();
+          return repaired ?? repository;
+        },
+      ),
+    ),
+    Effect.catch(() => Effect.succeed(repository)),
   );
 }
 
@@ -56,30 +118,48 @@ function rememberRepository(
   requestedPath: string,
 ) {
   return Effect.gen(function* () {
-    const repositoryPath = yield* resolveRepositoryPath(requestedPath);
+    const repository = yield* resolveRepository(requestedPath);
     const openedAt = new Date().toISOString();
     return yield* context.write(
       "Could not remember repository",
       async (database) => {
-        const repository = await database
+        const linkedRepository = await database
+          .select({
+            logicalRepositoryId: repositoryCatalogTable.logicalRepositoryId,
+          })
+          .from(repositoryCatalogTable)
+          .where(
+            eq(
+              repositoryCatalogTable.gitCommonDirectory,
+              repository.gitCommonDirectory,
+            ),
+          )
+          .get();
+        const logicalRepositoryId =
+          linkedRepository?.logicalRepositoryId ?? randomUUID();
+        const remembered = await database
           .insert(repositoryCatalogTable)
           .values({
             addedAt: openedAt,
+            gitCommonDirectory: repository.gitCommonDirectory,
             id: randomUUID(),
             lastOpenedAt: openedAt,
-            name: basename(repositoryPath),
-            path: repositoryPath,
+            logicalRepositoryId,
+            name: basename(repository.path),
+            path: repository.path,
           })
           .onConflictDoUpdate({
             set: {
+              gitCommonDirectory: repository.gitCommonDirectory,
               lastOpenedAt: openedAt,
-              name: basename(repositoryPath),
+              logicalRepositoryId,
+              name: basename(repository.path),
             },
             target: repositoryCatalogTable.path,
           })
           .returning()
           .get();
-        return requireRepository(repository);
+        return catalogEntry(requireStoredRepository(remembered));
       },
     );
   });
@@ -102,7 +182,7 @@ function recordRepositoryOpened(
       Effect.flatMap((repository) =>
         repository === undefined
           ? Effect.fail(repositoryMissing(repositoryId))
-          : Effect.succeed(repository),
+          : Effect.succeed(catalogEntry(repository)),
       ),
     );
 }
@@ -125,7 +205,7 @@ function removeRepository(context: EnvironmentContext, repositoryId: string) {
     );
 }
 
-function resolveRepositoryPath(requestedPath: string) {
+function resolveRepository(requestedPath: string) {
   if (
     requestedPath.length === 0 ||
     requestedPath.length > 4_096 ||
@@ -141,8 +221,12 @@ function resolveRepositoryPath(requestedPath: string) {
     if (!metadata.isDirectory()) {
       return yield* Effect.fail(repositoryPathRejected("NotDirectory"));
     }
-    const worktreeRoot = yield* resolveGitWorktreeRoot(selectedPath);
-    return yield* canonicalizePath(worktreeRoot);
+    const git = yield* resolveGitPaths(selectedPath);
+    const [path, gitCommonDirectory] = yield* Effect.all([
+      canonicalizePath(git.worktreeRoot),
+      canonicalizePath(git.commonDirectory),
+    ]);
+    return { gitCommonDirectory, path };
   });
 }
 
@@ -162,10 +246,13 @@ function inspectPath(path: string) {
   });
 }
 
-function resolveGitWorktreeRoot(path: string) {
+function resolveGitPaths(path: string) {
   return Effect.tryPromise({
     try: (signal) =>
-      new Promise<string>((resolve, reject) => {
+      new Promise<{
+        readonly commonDirectory: string;
+        readonly worktreeRoot: string;
+      }>((resolve, reject) => {
         execFile(
           "git",
           [
@@ -174,6 +261,7 @@ function resolveGitWorktreeRoot(path: string) {
             "rev-parse",
             "--path-format=absolute",
             "--show-toplevel",
+            "--git-common-dir",
           ],
           {
             encoding: "utf8",
@@ -186,12 +274,20 @@ function resolveGitWorktreeRoot(path: string) {
               reject(error);
               return;
             }
-            const worktreeRoot = stdout.trim();
-            if (worktreeRoot.length === 0 || !isAbsolute(worktreeRoot)) {
-              reject(new Error("Git returned an invalid worktree root."));
+            const [worktreeRoot, commonDirectory, ...extra] = stdout
+              .trim()
+              .split("\n");
+            if (
+              worktreeRoot === undefined ||
+              commonDirectory === undefined ||
+              extra.length > 0 ||
+              !isAbsolute(worktreeRoot) ||
+              !isAbsolute(commonDirectory)
+            ) {
+              reject(new Error("Git returned invalid repository paths."));
               return;
             }
-            resolve(worktreeRoot);
+            resolve({ commonDirectory, worktreeRoot });
           },
         );
       }),
@@ -254,11 +350,26 @@ function repositoryMissing(repositoryId: string) {
   });
 }
 
-function requireRepository(
-  repository: RepositoryCatalogEntry | undefined,
-): RepositoryCatalogEntry {
+function requireStoredRepository(
+  repository: typeof repositoryCatalogTable.$inferSelect | undefined,
+) {
   if (repository === undefined) {
     throw new Error("The remembered repository was not returned.");
   }
   return repository;
+}
+
+function catalogEntry(
+  repository: typeof repositoryCatalogTable.$inferSelect,
+): RepositoryCatalogEntry {
+  return {
+    addedAt: repository.addedAt,
+    id: repository.id,
+    lastOpenedAt: repository.lastOpenedAt,
+    ...(repository.logicalRepositoryId === null
+      ? {}
+      : { logicalRepositoryId: repository.logicalRepositoryId }),
+    name: repository.name,
+    path: repository.path,
+  };
 }

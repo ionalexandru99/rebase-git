@@ -8,6 +8,7 @@ import {
   type RepositoryHistoryQuery,
   RepositoryHistoryStorageUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
@@ -438,7 +439,7 @@ async function startSynchronization(
   if (reader.closed || replica.synchronization === "syncing") {
     return;
   }
-  const requestId = crypto.randomUUID();
+  const requestId = createRepositoryHistoryRequestId();
   replica.reconciling =
     replica.synchronization === "complete" ||
     replica.synchronization === "stale";

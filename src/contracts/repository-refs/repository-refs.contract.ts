@@ -77,6 +77,7 @@ export type RepositoryRefsTruncation = typeof RepositoryRefsTruncation.Type;
 
 export const RepositoryRefs = Schema.Struct({
   branches: Schema.Array(LocalBranch).check(Schema.isMaxLength(10_000)),
+  logicalRepositoryId: Schema.optionalKey(RepositoryId),
   remoteBranches: Schema.Array(RemoteBranch).check(Schema.isMaxLength(20_000)),
   remoteDefaultBranches: Schema.optionalKey(
     Schema.Array(RemoteDefaultBranch).check(Schema.isMaxLength(256)),

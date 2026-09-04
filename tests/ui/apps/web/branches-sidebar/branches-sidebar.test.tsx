@@ -2,6 +2,7 @@ import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { historyRefKey } from "#web/features/commit-graph/history-scope";
 import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { KeyboardShortcutRuntime } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
 import {
@@ -78,6 +79,34 @@ describe("branches sidebar", () => {
       _tag: "LocalBranch",
       name: "feature",
     });
+  });
+
+  it("adds and removes refs from history with pointer and keyboard", async () => {
+    const { onToggleHistoryRef, screen } = await renderSidebar({
+      selectedHistoryRefKeys: new Set([
+        historyRefKey({ _tag: "LocalBranch", name: "main" }),
+      ]),
+    });
+
+    await screen
+      .getByRole("button", { name: "Add feature to history" })
+      .click();
+    expect(onToggleHistoryRef).toHaveBeenCalledWith({
+      _tag: "LocalBranch",
+      name: "feature",
+    });
+
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    await tree.getByRole("treeitem", { name: "main, this worktree" }).click();
+    tree.element().focus();
+    await userEvent.keyboard(" ");
+    expect(onToggleHistoryRef).toHaveBeenLastCalledWith({
+      _tag: "LocalBranch",
+      name: "main",
+    });
+    await expect
+      .element(screen.getByRole("button", { name: "Remove main from history" }))
+      .toBeVisible();
   });
 
   it("filters rows and switches ref scopes", async () => {
@@ -190,14 +219,21 @@ describe("branches sidebar", () => {
 
 async function renderSidebar({
   focusRequest = 0,
+  selectedHistoryRefKeys,
   snapshot: currentSnapshot = snapshot({ refs: refs(), status: "ready" }),
 }: {
   readonly focusRequest?: number;
+  readonly selectedHistoryRefKeys?: ReadonlySet<string>;
   readonly snapshot?: RepositoryRefsSnapshot;
 } = {}) {
   const callbacks = sidebarCallbacks();
   const screen = await render(
-    sidebarView(currentSnapshot, callbacks, focusRequest),
+    sidebarView(
+      currentSnapshot,
+      callbacks,
+      focusRequest,
+      selectedHistoryRefKeys,
+    ),
   );
   return { ...callbacks, screen };
 }
@@ -206,6 +242,7 @@ function sidebarCallbacks() {
   return {
     onRetry: vi.fn<() => void>(),
     onSelectRef: vi.fn<(target: RepositoryRefTarget) => void>(),
+    onToggleHistoryRef: vi.fn<(target: RepositoryRefTarget) => void>(),
   };
 }
 
@@ -213,6 +250,7 @@ function sidebarView(
   currentSnapshot: RepositoryRefsSnapshot,
   callbacks: ReturnType<typeof sidebarCallbacks>,
   focusRequest = 0,
+  selectedHistoryRefKeys?: ReadonlySet<string>,
 ) {
   return (
     <KeyboardShortcutsProvider runtime={shortcutRuntime}>
@@ -222,6 +260,10 @@ function sidebarView(
           focusRequest={focusRequest}
           onRetry={callbacks.onRetry}
           onSelectRef={callbacks.onSelectRef}
+          onToggleHistoryRef={callbacks.onToggleHistoryRef}
+          {...(selectedHistoryRefKeys === undefined
+            ? {}
+            : { selectedHistoryRefKeys })}
           snapshot={currentSnapshot}
         />
       </div>

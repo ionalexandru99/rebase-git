@@ -25,6 +25,7 @@ import {
   stepRow,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
+import { historyRefKey } from "#web/features/commit-graph/history-scope";
 import { keyboardShortcutAria } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { Button } from "#web-ui/components/ui/button";
@@ -45,12 +46,16 @@ export function BranchesSidebar({
   focusRequest,
   onRetry,
   onSelectRef,
+  onToggleHistoryRef = () => undefined,
+  selectedHistoryRefKeys = new Set<string>(),
   snapshot,
 }: {
   readonly activeWorktreePath: string;
   readonly focusRequest: number;
   readonly onRetry: () => void;
   readonly onSelectRef: (target: RepositoryRefTarget) => void;
+  readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
+  readonly selectedHistoryRefKeys?: ReadonlySet<string>;
   readonly snapshot: RepositoryRefsSnapshot;
 }): JSX.Element {
   const { bindings, platform } = useKeyboardShortcuts();
@@ -137,6 +142,7 @@ export function BranchesSidebar({
       hasQuery: query.length > 0,
       rows,
       setActive: setActiveRowId,
+      toggleHistoryRef: (row) => onToggleHistoryRef(row.target),
       activate: activateRow,
       clearQuery: () => setQuery(""),
     });
@@ -234,7 +240,11 @@ export function BranchesSidebar({
                 key={row.id}
                 onActivate={() => setActiveRowId(row.id)}
                 onSelect={() => onSelectRef(row.target)}
+                onToggleHistory={() => onToggleHistoryRef(row.target)}
                 row={row}
+                selectedInHistory={selectedHistoryRefKeys.has(
+                  historyRefKey(row.target),
+                )}
                 style={style}
               />
             );
@@ -314,6 +324,9 @@ function treeKeyAction(
     readonly hasQuery: boolean;
     readonly rows: readonly BranchesSidebarRow[];
     readonly setActive: (rowId: string | undefined) => void;
+    readonly toggleHistoryRef: (
+      row: Extract<BranchesSidebarRow, { kind: "ref" }>,
+    ) => void;
   },
 ): boolean {
   const { activeRow, rows } = actions;
@@ -342,9 +355,13 @@ function treeKeyAction(
       else actions.collapse(activeRow.sectionId);
       return true;
     case "Enter":
-    case " ":
       if (activeRow === undefined) return false;
       actions.activate(activeRow);
+      return true;
+    case " ":
+      if (activeRow === undefined) return false;
+      if (activeRow.kind === "ref") actions.toggleHistoryRef(activeRow);
+      else actions.activate(activeRow);
       return true;
     case "/":
       actions.focusFilter();

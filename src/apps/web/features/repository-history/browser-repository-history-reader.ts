@@ -12,6 +12,7 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 import type {
   ConnectRepositoryHistoryReader,
   RepositoryHistoryWorkerFailure,
@@ -169,7 +170,7 @@ export function createBrowserRepositoryHistoryReader(options: {
           repositoryId: options.repositoryId,
         },
         (bytes) => {
-          const batchId = crypto.randomUUID();
+          const batchId = createRepositoryHistoryRequestId();
           return new Promise<void>((resolve, reject) => {
             pendingBatches.set(batchId, { reject, requestId, resolve });
             const message: RepositoryHistoryWorkerRequest = {
@@ -264,19 +265,19 @@ export function createBrowserRepositoryHistoryReader(options: {
       request<readonly RepositoryCommit[]>({
         _tag: "GetCommitSummaries",
         oids,
-        requestId: crypto.randomUUID(),
+        requestId: createRepositoryHistoryRequestId(),
       }),
     getRefTargets: () =>
       request<readonly RepositoryHistoryRefTarget[]>({
         _tag: "GetRefTargets",
-        requestId: crypto.randomUUID(),
+        requestId: createRepositoryHistoryRequestId(),
       }),
     getSnapshot: () => snapshot,
     read: (query) =>
       request<readonly RepositoryCommit[]>({
         _tag: "ReadHistory",
         query,
-        requestId: crypto.randomUUID(),
+        requestId: createRepositoryHistoryRequestId(),
       }),
     subscribe: (listener) => {
       listeners.add(listener);

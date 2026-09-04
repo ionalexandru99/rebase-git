@@ -54,6 +54,7 @@ for (const scenario of scenarios) {
       const history = page.getByRole("listbox", { name: "Commit history" });
       await expect(history.getByRole("option").first()).toBeVisible();
       const selectionFeedback = await measureSelectionFeedback(page);
+      const scopeFeedback = await measureHistoryScopeFeedback(page);
       await exerciseVirtualRows(page);
       const frameWork = await trace.stop();
       const browserMetrics = await page.evaluate(() => window.__graphMetrics);
@@ -70,6 +71,7 @@ for (const scenario of scenarios) {
           required(browserMetrics.firstContent) -
           required(browserMetrics.lastBinaryMessage),
         selectionFeedbackMilliseconds: selectionFeedback,
+        scopeFeedbackMilliseconds: scopeFeedback,
       };
       process.stdout.write(`${scenario.name} ${JSON.stringify(metrics)}\n`);
 
@@ -78,6 +80,7 @@ for (const scenario of scenarios) {
       );
       expect(metrics.openingFeedbackMilliseconds).toBeLessThanOrEqual(50);
       expect(metrics.selectionFeedbackMilliseconds).toBeLessThanOrEqual(50);
+      expect(metrics.scopeFeedbackMilliseconds).toBeLessThanOrEqual(100);
       expect(metrics.postGitRenderMilliseconds).toBeLessThanOrEqual(100);
       expect(metrics.frameWorkP95Milliseconds).toBeLessThan(8.3);
       expect(metrics.frameWorkP99Milliseconds).toBeLessThan(16.7);
@@ -175,6 +178,31 @@ async function measureSelectionFeedback(page: Page) {
     const started = performance.now();
     target.click();
     while (target.getAttribute("aria-selected") !== "true") {
+      await new Promise(requestAnimationFrame);
+    }
+    return performance.now() - started;
+  });
+}
+
+async function measureHistoryScopeFeedback(page: Page) {
+  return page.evaluate(async () => {
+    const button = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Add feature to history"]',
+    );
+    const history = document.querySelector<HTMLElement>(
+      '[role="listbox"][aria-label="Commit history"]',
+    );
+    if (button === null || history === null) {
+      throw new Error("The history scope controls are missing");
+    }
+    const started = performance.now();
+    button.click();
+    while (
+      document.querySelector(
+        'button[aria-label="Remove feature from history"]',
+      ) === null ||
+      history.getAttribute("aria-busy") !== "false"
+    ) {
       await new Promise(requestAnimationFrame);
     }
     return performance.now() - started;
@@ -288,6 +316,7 @@ async function createRepository(path: string) {
   for (let index = 0; index < 100; index += 1) {
     await git(path, "commit", "--allow-empty", "-m", `commit ${index}`);
   }
+  await git(path, "branch", "feature", "HEAD~50");
 }
 
 async function git(path: string, ...arguments_: string[]) {

@@ -1,7 +1,14 @@
 import type { RepositoryRefTarget } from "@rebase/contracts";
 import type { JSX } from "react";
-import { useEffect, useMemo, useState } from "react";
-import { resolveAutomaticHistoryRoots } from "#web/features/repository-history/automatic-history-roots";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/browser-history-filter-store";
+import {
+  automaticHistoryScope,
+  historyScopesEqual,
+  resolveHistoryScope,
+  toggleHistoryRef,
+} from "#web/features/commit-graph/history-scope";
+import type { HistoryScope } from "#web/features/commit-graph/history-scope.contract";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import type {
   RepositoryHistoryGateway,
@@ -43,7 +50,54 @@ export function RepositoryWorkspace({
   readonly retryRefs: () => void;
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
+  const logicalRepositoryId = refs.refs?.logicalRepositoryId ?? repositoryId;
+  return (
+    <RepositoryWorkspaceContent
+      activeWorktreePath={activeWorktreePath}
+      branchesFocusRequest={branchesFocusRequest}
+      environmentId={environmentId}
+      historyGateway={historyGateway}
+      key={`${environmentId ?? ""}\0${logicalRepositoryId ?? ""}`}
+      logicalRepositoryId={logicalRepositoryId}
+      refs={refs}
+      repositoryId={repositoryId}
+      repositoryName={repositoryName}
+      retryRefs={retryRefs}
+      selectRef={selectRef}
+    />
+  );
+}
+
+function RepositoryWorkspaceContent({
+  activeWorktreePath,
+  branchesFocusRequest,
+  environmentId,
+  historyGateway,
+  logicalRepositoryId,
+  refs,
+  repositoryId,
+  repositoryName,
+  retryRefs,
+  selectRef,
+}: {
+  readonly activeWorktreePath: string;
+  readonly branchesFocusRequest: number;
+  readonly environmentId: string | undefined;
+  readonly historyGateway: RepositoryHistoryGateway;
+  readonly logicalRepositoryId: string | undefined;
+  readonly refs: RepositoryRefsSnapshot;
+  readonly repositoryId: string | undefined;
+  readonly repositoryName: string;
+  readonly retryRefs: () => void;
+  readonly selectRef: (target: RepositoryRefTarget) => void;
+}): JSX.Element {
   const [historyReader, setHistoryReader] = useState<RepositoryHistoryReader>();
+  const filterStore = useMemo(() => createBrowserHistoryFilterStore(), []);
+  const [historyScope, setHistoryScope] = useState<HistoryScope>(() =>
+    environmentId === undefined || logicalRepositoryId === undefined
+      ? automaticHistoryScope
+      : filterStore.load(environmentId, logicalRepositoryId),
+  );
   useEffect(() => {
     if (environmentId === undefined || repositoryId === undefined) {
       setHistoryReader(undefined);
@@ -59,12 +113,52 @@ export function RepositoryWorkspace({
       reader.close();
     };
   }, [environmentId, historyGateway, repositoryId]);
-  const roots = useMemo(
+  const resolvedScope = useMemo(
     () =>
       refs.refs === undefined
         ? undefined
-        : resolveAutomaticHistoryRoots(refs.refs, activeWorktreePath),
-    [activeWorktreePath, refs.refs],
+        : resolveHistoryScope(historyScope, refs.refs, activeWorktreePath),
+    [activeWorktreePath, historyScope, refs.refs],
+  );
+  useEffect(() => {
+    if (
+      resolvedScope === undefined ||
+      historyScopesEqual(historyScope, resolvedScope.scope)
+    ) {
+      return;
+    }
+    setHistoryScope(resolvedScope.scope);
+    if (environmentId !== undefined && logicalRepositoryId !== undefined) {
+      filterStore.save(environmentId, logicalRepositoryId, resolvedScope.scope);
+    }
+  }, [
+    environmentId,
+    filterStore,
+    historyScope,
+    logicalRepositoryId,
+    resolvedScope,
+  ]);
+  const toggleRef = useCallback(
+    (target: RepositoryRefTarget) => {
+      if (refs.refs === undefined) return;
+      const next = resolveHistoryScope(
+        toggleHistoryRef(historyScope, target, refs.refs, activeWorktreePath),
+        refs.refs,
+        activeWorktreePath,
+      ).scope;
+      setHistoryScope(next);
+      if (environmentId !== undefined && logicalRepositoryId !== undefined) {
+        filterStore.save(environmentId, logicalRepositoryId, next);
+      }
+    },
+    [
+      activeWorktreePath,
+      environmentId,
+      filterStore,
+      historyScope,
+      logicalRepositoryId,
+      refs.refs,
+    ],
   );
 
   return (
@@ -81,6 +175,10 @@ export function RepositoryWorkspace({
           focusRequest={branchesFocusRequest}
           onRetry={retryRefs}
           onSelectRef={selectRef}
+          onToggleHistoryRef={toggleRef}
+          selectedHistoryRefKeys={
+            resolvedScope?.selectedRefKeys ?? new Set<string>()
+          }
           snapshot={refs}
         />
       </ResizablePanel>
@@ -91,9 +189,12 @@ export function RepositoryWorkspace({
           className="h-full rounded-none bg-repository"
         >
           <CommitGraph
+            onRemoveHistoryRef={toggleRef}
             reader={historyReader}
             repositoryName={repositoryName}
-            roots={roots}
+            roots={resolvedScope?.roots}
+            scope={resolvedScope?.scope ?? automaticHistoryScope}
+            selections={resolvedScope?.selections ?? []}
           />
         </main>
       </ResizablePanel>
