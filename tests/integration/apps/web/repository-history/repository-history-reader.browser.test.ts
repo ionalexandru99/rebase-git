@@ -983,7 +983,6 @@ function deleteRepositoryHistoryDatabase() {
     const request = indexedDB.deleteDatabase("rebase-repository-history");
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(new Error("Database deletion is blocked"));
   });
 }
 
