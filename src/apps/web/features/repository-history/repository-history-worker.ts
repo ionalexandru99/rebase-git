@@ -45,6 +45,7 @@ import type {
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
 } from "#web/features/repository-history/repository-history-worker.contract";
+import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
 
 const repositories = new Map<string, RepositoryReplica>();
 let cacheManagement: Promise<void> = Promise.resolve();
@@ -171,6 +172,13 @@ async function handleReaderMessage(
       });
       return;
     }
+    case "SearchHistory":
+      await searchHistory(reader, message);
+      return;
+    case "CancelHistorySearch":
+      if (reader.search?.requestId === message.requestId)
+        reader.search.controller.abort();
+      return;
     case "GetCacheDiagnostics": {
       const [caches, estimate, persistent] = await Promise.all([
         describeHistoryCaches((key) => repositories.has(key)),
@@ -474,6 +482,7 @@ async function handleReaderMessage(
 
 function closeReader(reader: ConnectedReader, replica: RepositoryReplica) {
   if (reader.closed) return;
+  reader.search?.controller.abort();
   reader.stopWatchingLease();
   const activeRequestId = reader.epoch.cancel();
   if (activeRequestId !== undefined) {
@@ -798,6 +807,43 @@ function writeStoredHistory<T>(write: () => Promise<T>) {
   return writeHistoryUnderPressure(write, (key) => repositories.has(key));
 }
 
+async function searchHistory(
+  reader: ConnectedReader,
+  message: Extract<RepositoryHistoryWorkerRequest, { _tag: "SearchHistory" }>,
+) {
+  reader.search?.controller.abort();
+  const controller = new AbortController();
+  reader.search = { requestId: message.requestId, controller };
+  try {
+    const result = await searchStoredRepositoryHistory(
+      reader.connection.environmentId,
+      reader.connection.logicalRepositoryId,
+      message.query,
+      controller.signal,
+    );
+    controller.signal.throwIfAborted();
+    post(reader, {
+      _tag: "HistorySearchResult",
+      result,
+      requestId: message.requestId,
+    });
+  } catch (error) {
+    if (controller.signal.aborted)
+      post(reader, {
+        _tag: "HistorySearchCanceled",
+        requestId: message.requestId,
+      });
+    else
+      post(reader, {
+        _tag: "RequestFailed",
+        failure: workerFailure(error),
+        requestId: message.requestId,
+      });
+  } finally {
+    if (reader.search?.requestId === message.requestId) delete reader.search;
+  }
+}
+
 function scheduleCacheManagement(
   reader: ConnectedReader,
   replica: RepositoryReplica,
@@ -845,6 +891,7 @@ async function manageCache(
     if (target.synchronizationOwner !== undefined)
       cancelSynchronization(target.synchronizationOwner, target);
     for (const connected of target.readers) {
+      connected.search?.controller.abort();
       const requestId = connected.epoch.cancel();
       connected.queries.clear();
       if (requestId !== undefined) {
@@ -925,6 +972,7 @@ function invalidateStoredHistory(
 
 interface ConnectedReader {
   stopWatchingLease: () => void;
+  search?: { readonly requestId: string; readonly controller: AbortController };
   closed: boolean;
   lastQuery?: RepositoryHistoryQuery;
   readonly connection: ConnectRepositoryHistoryReader;

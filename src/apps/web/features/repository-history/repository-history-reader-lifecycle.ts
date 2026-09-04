@@ -66,6 +66,9 @@ export function maintainRepositoryHistoryReader(
       Promise.reject(new RepositoryHistoryOffline()),
     getRefTargets: () =>
       reader?.getRefTargets() ?? Promise.reject(new RepositoryHistoryOffline()),
+    search: (query, signal) =>
+      reader?.search(query, signal) ??
+      Promise.reject(new RepositoryHistoryOffline()),
     getSnapshot: () => snapshot,
     read: (query) => {
       lastQuery = query;

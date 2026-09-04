@@ -24,6 +24,7 @@ import type {
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
 } from "#web/features/repository-history/repository-history-worker.contract";
+import type { RepositoryHistorySearchResult } from "#web/features/repository-history/search/repository-history-search.contract";
 
 let sharedWorker: SharedWorker | undefined;
 let persistenceRequested = false;
@@ -132,6 +133,16 @@ function connectBrowserRepositoryHistoryReader(
       return;
     }
     pending.delete(message.requestId);
+    if (message._tag === "HistorySearchCanceled") {
+      request.reject(
+        new DOMException("History search was canceled", "AbortError"),
+      );
+      return;
+    }
+    if (message._tag === "HistorySearchResult") {
+      request.resolve(message.result);
+      return;
+    }
     if (message._tag === "RequestFailed") {
       request.reject(readerError(message.failure));
       return;
@@ -278,18 +289,38 @@ function connectBrowserRepositoryHistoryReader(
     }
   }
 
-  function request<T>(message: RepositoryHistoryWorkerRequest) {
+  function request<T>(
+    message: RepositoryHistoryWorkerRequest,
+    signal?: AbortSignal,
+  ) {
     if (closed) {
       return Promise.reject(new RepositoryHistoryUnavailable());
     }
+    if (signal?.aborted) return Promise.reject(signal.reason);
     return new Promise<T>((resolve, reject) => {
       if (!("requestId" in message)) {
         reject(new RepositoryHistoryUnavailable());
         return;
       }
+      const abort = () => {
+        pending.delete(message.requestId);
+        if (message._tag === "SearchHistory")
+          port.postMessage({
+            _tag: "CancelHistorySearch",
+            requestId: message.requestId,
+          } satisfies RepositoryHistoryWorkerRequest);
+        reject(signal?.reason);
+      };
+      signal?.addEventListener("abort", abort, { once: true });
       pending.set(message.requestId, {
-        reject,
-        resolve: (value) => resolve(value as T),
+        reject: (error) => {
+          signal?.removeEventListener("abort", abort);
+          reject(error);
+        },
+        resolve: (value) => {
+          signal?.removeEventListener("abort", abort);
+          resolve(value as T);
+        },
       });
       port.postMessage(message);
     });
@@ -317,6 +348,15 @@ function connectBrowserRepositoryHistoryReader(
         oid,
         requestId: createRepositoryHistoryRequestId(),
       }),
+    search: (query, signal) =>
+      request<RepositoryHistorySearchResult>(
+        {
+          _tag: "SearchHistory",
+          query,
+          requestId: createRepositoryHistoryRequestId(),
+        },
+        signal,
+      ),
     getCacheDiagnostics: () =>
       request<RepositoryHistoryStorageDiagnostics>({
         _tag: "GetCacheDiagnostics",

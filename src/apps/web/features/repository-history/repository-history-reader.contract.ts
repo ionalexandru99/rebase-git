@@ -12,6 +12,7 @@ import type {
   HistoryParentEdge,
 } from "#web/features/repository-history/history-order.contract";
 import type { RepositoryHistoryCacheManagement } from "#web/features/repository-history/repository-history-storage.contract";
+import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
@@ -39,7 +40,8 @@ export interface RepositoryHistoryPosition {
 }
 
 export interface RepositoryHistoryReader
-  extends RepositoryHistoryCacheManagement {
+  extends RepositoryHistoryCacheManagement,
+    RepositoryHistorySearch {
   readonly locateMany: (
     query: RepositoryHistoryQuery,
     oids: readonly string[],

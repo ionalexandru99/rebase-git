@@ -13,6 +13,10 @@ import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
 } from "#web/features/repository-history/repository-history-storage.contract";
+import type {
+  RepositoryHistorySearchQuery,
+  RepositoryHistorySearchResult,
+} from "#web/features/repository-history/search/repository-history-search.contract";
 
 export type RepositoryHistoryWorkerFailure =
   | {
@@ -24,6 +28,12 @@ export type RepositoryHistoryWorkerFailure =
   | { readonly _tag: "Unavailable" };
 
 export type RepositoryHistoryWorkerRequest =
+  | {
+      readonly _tag: "SearchHistory";
+      readonly query: RepositoryHistorySearchQuery;
+      readonly requestId: string;
+    }
+  | { readonly _tag: "CancelHistorySearch"; readonly requestId: string }
   | { readonly _tag: "GetCacheDiagnostics"; readonly requestId: string }
   | {
       readonly _tag: "ManageCache";
@@ -89,6 +99,12 @@ export type RepositoryHistoryWorkerRequest =
   | { readonly _tag: "CloseReader" };
 
 export type RepositoryHistoryWorkerResponse =
+  | { readonly _tag: "HistorySearchCanceled"; readonly requestId: string }
+  | {
+      readonly _tag: "HistorySearchResult";
+      readonly result: RepositoryHistorySearchResult;
+      readonly requestId: string;
+    }
   | { readonly _tag: "CacheRemoved" }
   | {
       readonly _tag: "CacheDiagnosticsResult";
