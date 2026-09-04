@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
-import { visibleMergeTopology } from "#web/features/commit-graph/merge-visibility";
 import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import {
   type RepositoryHistoryQuery,
@@ -296,6 +295,44 @@ describe("commit graph", () => {
     await expect
       .element(grid.getByRole("row", { name: /^Commit 350,/ }))
       .toHaveAttribute("aria-selected", "true");
+  });
+
+  it("reveals only the requested parent of an octopus merge when locating a commit", async () => {
+    const commits = history(6).map((commit, index) => ({
+      ...commit,
+      parents:
+        index === 0
+          ? [historyOid(1), historyOid(3), historyOid(5)]
+          : index === 2 || index === 4
+            ? []
+            : commit.parents,
+    }));
+    const reader = historyReader({ commits, status: "ready" });
+    reader.ancestryRoute.mockResolvedValue({
+      edges: [{ childOid: historyOid(0), parentOid: historyOid(3) }],
+    });
+    const handle = createRef<CommitGraphHandle>();
+    const screen = await render(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraph
+          ref={handle}
+          reader={reader}
+          repositoryName="Octopus"
+          roots={[{ name: "main", type: "branch", oid: historyOid(0) }]}
+        />
+      </div>,
+    );
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    await handle.current?.navigateToOid(historyOid(3));
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 3,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 5,/ }))
+      .not.toBeInTheDocument();
   });
 
   it("uses the same history command from a ref label and the row keyboard menu", async () => {
@@ -853,16 +890,29 @@ function historyReader({
     status,
   };
   const listeners = new Set<() => void>();
-  const matching = (query: RepositoryHistoryQuery) =>
-    query.ancestry === "first-parent"
-      ? visibleMergeTopology(
-          commits,
-          query.roots.map((root) => root.oid),
-          new Set(
-            (query.additionalParentEdges ?? []).map((edge) => edge.childOid),
-          ),
-        ).commits
-      : commits;
+  const matching = (query: RepositoryHistoryQuery) => {
+    if (query.ancestry !== "first-parent") return commits;
+    const byOid = new Map(commits.map((commit) => [commit.oid, commit]));
+    const visible = new Set<string>();
+    const pending = query.roots.map((root) => root.oid);
+    while (pending.length > 0) {
+      const oid = pending.pop();
+      if (oid === undefined || visible.has(oid)) continue;
+      visible.add(oid);
+      const commit = byOid.get(oid);
+      if (commit === undefined) continue;
+      pending.push(
+        ...commit.parents.filter(
+          (parentOid, index) =>
+            index === 0 ||
+            query.additionalParentEdges?.some(
+              (edge) => edge.childOid === oid && edge.parentOid === parentOid,
+            ),
+        ),
+      );
+    }
+    return commits.filter((commit) => visible.has(commit.oid));
+  };
 
   const reader = {
     ancestryRoute: vi.fn<RepositoryHistoryReader["ancestryRoute"]>(
