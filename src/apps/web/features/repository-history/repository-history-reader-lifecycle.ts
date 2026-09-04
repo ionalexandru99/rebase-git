@@ -38,6 +38,15 @@ export function maintainRepositoryHistoryReader(
   globalThis.addEventListener("pageshow", resume);
 
   return {
+    ancestryRoute: (roots, oid) =>
+      reader?.ancestryRoute(roots, oid) ??
+      Promise.reject(new RepositoryHistoryOffline()),
+    locate: (query, oid) =>
+      reader?.locate(query, oid) ??
+      Promise.reject(new RepositoryHistoryOffline()),
+    locateMany: (query, oids) =>
+      reader?.locateMany(query, oids) ??
+      Promise.reject(new RepositoryHistoryOffline()),
     close: () => {
       if (closed) return;
       closed = true;
