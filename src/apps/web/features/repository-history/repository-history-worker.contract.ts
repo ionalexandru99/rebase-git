@@ -3,6 +3,7 @@ import type {
   RepositoryHistoryOperationFailure,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
+import type { HistoryAncestryRoute } from "#web/features/repository-history/history-order.contract";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryRefTarget,
@@ -18,6 +19,18 @@ export type RepositoryHistoryWorkerFailure =
   | { readonly _tag: "Unavailable" };
 
 export type RepositoryHistoryWorkerRequest =
+  | {
+      readonly _tag: "GetAncestryRoute";
+      readonly roots: readonly string[];
+      readonly oid: string;
+      readonly requestId: string;
+    }
+  | {
+      readonly _tag: "LocateHistoryCommit";
+      readonly query: RepositoryHistoryQuery;
+      readonly oid: string;
+      readonly requestId: string;
+    }
   | {
       readonly _tag: "ReadHistory";
       readonly requestId: string;
@@ -59,6 +72,16 @@ export type RepositoryHistoryWorkerRequest =
   | { readonly _tag: "CloseReader" };
 
 export type RepositoryHistoryWorkerResponse =
+  | {
+      readonly _tag: "AncestryRouteResult";
+      readonly route: HistoryAncestryRoute | undefined;
+      readonly requestId: string;
+    }
+  | {
+      readonly _tag: "HistoryPositionResult";
+      readonly position: number | undefined;
+      readonly requestId: string;
+    }
   | {
       readonly _tag: "LoadHistory";
       readonly query: RepositoryHistoryQuery;

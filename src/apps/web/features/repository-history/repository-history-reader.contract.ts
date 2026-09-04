@@ -7,7 +7,10 @@ import type {
 } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
-import type { HistoryParentEdge } from "#web/features/repository-history/history-order.contract";
+import type {
+  HistoryAncestryRoute,
+  HistoryParentEdge,
+} from "#web/features/repository-history/history-order.contract";
 
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
@@ -29,6 +32,14 @@ export interface RepositoryHistoryQuery {
 }
 
 export interface RepositoryHistoryReader {
+  readonly ancestryRoute: (
+    roots: readonly string[],
+    oid: string,
+  ) => Promise<HistoryAncestryRoute | undefined>;
+  readonly locate: (
+    query: RepositoryHistoryQuery,
+    oid: string,
+  ) => Promise<number | undefined>;
   readonly close: () => void;
   readonly getCommitSummaries: (
     oids: readonly string[],

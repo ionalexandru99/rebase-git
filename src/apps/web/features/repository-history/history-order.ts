@@ -1,3 +1,4 @@
+import { findHistoryAncestryRoute } from "#web/features/repository-history/history-ancestry-route";
 import type {
   HistoryOrderIndexReader,
   HistoryOrderNode,
@@ -29,6 +30,19 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
     }
     this.offsets[nodes.length] = parents.length;
     this.parents = Uint32Array.from(parents);
+  }
+
+  ancestryRoute(roots: readonly string[], targetOid: string) {
+    return findHistoryAncestryRoute(
+      {
+        oids: this.oids,
+        positions: this.positions,
+        parents: this.parents,
+        offsets: this.offsets,
+      },
+      roots,
+      targetOid,
+    );
   }
 
   order(

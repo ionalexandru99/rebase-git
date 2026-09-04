@@ -9,6 +9,18 @@ export interface HistoryParentEdge {
   readonly parentOid: string;
 }
 
+export interface HistoryAncestryRoute {
+  readonly edges: readonly HistoryParentEdge[];
+  readonly continuationOid?: string;
+}
+
+export interface HistoryAncestryIndex {
+  readonly oids: readonly string[];
+  readonly positions: ReadonlyMap<string, number>;
+  readonly parents: Uint32Array;
+  readonly offsets: Uint32Array;
+}
+
 export interface HistoryOrderCache {
   index?: HistoryOrderIndexReader;
   revision: number;
@@ -23,6 +35,10 @@ export interface HistoryOrderCache {
 }
 
 export interface HistoryOrderIndexReader {
+  readonly ancestryRoute: (
+    roots: readonly string[],
+    targetOid: string,
+  ) => HistoryAncestryRoute | undefined;
   readonly order: (
     roots: readonly string[],
     order: "topological" | "chronological",

@@ -73,6 +73,113 @@ describe("browser repository history reader", () => {
     }
   });
 
+  it("locates ordered commits and reveals hidden ancestry from a cached linked worktree", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const logicalRepositoryId = crypto.randomUUID();
+    const oid = (index: number) => index.toString(16).padStart(40, "0");
+    const commits = history(260).map((commit, index) => ({
+      ...commit,
+      oid: oid(index),
+      parents:
+        index === 0
+          ? [oid(1), oid(120)]
+          : index === 120
+            ? [oid(121), oid(200)]
+            : index === 119 || index === 199
+              ? [oid(259)]
+              : index === 259
+                ? []
+                : [oid(index + 1)],
+    }));
+    const main = { ...root("main"), oid: oid(0) };
+    const query = {
+      limit: 100,
+      order: "topological" as const,
+      ancestry: "first-parent" as const,
+      roots: [main],
+    };
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () =>
+        page(repositoryId, commits.slice(0, 100), [main]),
+      ),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: snapshot("a", main),
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const initial = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId,
+      logicalRepositoryId,
+      gateway,
+    });
+    await initial.read(query);
+    await vi.waitFor(() =>
+      expect(initial.getSnapshot().synchronization).toBe("complete"),
+    );
+    const painted = await initial.read(query);
+    expect(
+      await initial.locate({ ...query, offset: 90, limit: 2 }, oid(80)),
+    ).toBe(80);
+    expect((await initial.read(query)).map(({ oid }) => oid)).toEqual(
+      painted.map(({ oid }) => oid),
+    );
+    initial.close();
+    const offline: RepositoryHistoryGateway = {
+      read: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+      synchronize: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId: crypto.randomUUID(),
+      logicalRepositoryId,
+      gateway: offline,
+    });
+    try {
+      expect(await reader.locate(query, oid(250))).toBeUndefined();
+      const route = await reader.ancestryRoute([main.oid], oid(250));
+      expect(route).toEqual({
+        edges: [
+          { childOid: oid(0), parentOid: oid(120) },
+          { childOid: oid(120), parentOid: oid(200) },
+        ],
+      });
+      const expanded = { ...query, additionalParentEdges: route?.edges ?? [] };
+      const position = await reader.locate(expanded, oid(250));
+      expect(position).toBeGreaterThan(100);
+      expect(offline.read).not.toHaveBeenCalled();
+      expect(offline.synchronize).not.toHaveBeenCalled();
+      expect(
+        (await reader.read({ ...expanded, offset: position ?? 0, limit: 1 }))[0]
+          ?.oid,
+      ).toBe(oid(250));
+      expect(
+        await reader.locate(
+          { ...query, roots: [{ ...main, oid: oid(120) }] },
+          oid(80),
+        ),
+      ).toBeUndefined();
+      expect(await reader.ancestryRoute([oid(259)], oid(250))).toBeUndefined();
+      expect(offline.read).not.toHaveBeenCalled();
+    } finally {
+      reader.close();
+    }
+  });
+
   it("shares committed history between registered linked worktrees and isolates other repositories", async () => {
     const environmentId = crypto.randomUUID();
     const logicalRepositoryId = crypto.randomUUID();

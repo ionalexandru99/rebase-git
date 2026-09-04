@@ -7,6 +7,7 @@ import type { HistoryOrderCache } from "#web/features/repository-history/history
 import { selectHistoryPage } from "#web/features/repository-history/history-page-selection";
 import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
 import {
+  locateRepositoryHistoryCommit,
   prepareRepositoryHistoryOrder,
   readRepositoryCommits,
   readRepositoryHistory,
@@ -129,6 +130,51 @@ async function handleReaderMessage(
     return;
   }
   switch (message._tag) {
+    case "GetAncestryRoute": {
+      if (message.roots.length > 256) throw new Error("Query is too large");
+      const revision = replica.orderCache.revision;
+      const state = await readStoredRepositoryHistoryState(
+        reader.connection.environmentId,
+        reader.connection.logicalRepositoryId,
+      );
+      if (
+        state?.completion !== undefined &&
+        replica.orderCache.index === undefined
+      )
+        await prepareRepositoryHistoryOrder(
+          reader.connection.environmentId,
+          reader.connection.logicalRepositoryId,
+          replica.orderCache,
+        );
+      post(reader, {
+        _tag: "AncestryRouteResult",
+        route:
+          state?.completion !== undefined &&
+          replica.orderCache.revision === revision
+            ? replica.orderCache.index?.ancestryRoute(
+                message.roots,
+                message.oid,
+              )
+            : undefined,
+        requestId: message.requestId,
+      });
+      return;
+    }
+    case "LocateHistoryCommit": {
+      const position = await locateRepositoryHistoryCommit(
+        reader.connection.environmentId,
+        reader.connection.logicalRepositoryId,
+        message.query,
+        message.oid,
+        replica.orderCache,
+      );
+      post(reader, {
+        _tag: "HistoryPositionResult",
+        position,
+        requestId: message.requestId,
+      });
+      return;
+    }
     case "ReadHistory": {
       const supersededRequestId = reader.epoch.begin(message.requestId);
       if (supersededRequestId !== undefined) {

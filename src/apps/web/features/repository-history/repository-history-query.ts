@@ -18,6 +18,58 @@ import {
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
+
+export async function locateRepositoryHistoryCommit(
+  environmentId: string,
+  repositoryId: string,
+  query: RepositoryHistoryQuery,
+  oid: string,
+  cache: HistoryOrderCache,
+): Promise<number | undefined> {
+  const revision = cache.revision;
+  const key = historyOrderScopeKey(query);
+  const roots = normalizedOids(query.roots.map(({ oid }) => oid));
+  const basis = JSON.stringify([revision, roots]);
+  let previous = cache.queries.get(key);
+  if (previous?.basis !== basis) {
+    const page = await readRepositoryHistory(
+      environmentId,
+      repositoryId,
+      { ...query, offset: 0, limit: 1_000 },
+      globalThis.indexedDB,
+      cache,
+    );
+    if (page === undefined || cache.revision !== revision) return undefined;
+    previous = cache.queries.get(key);
+  }
+  if (previous === undefined) return undefined;
+  let ordered = previous.oids;
+  if (
+    !previous.complete &&
+    (await readStoredRepositoryHistoryState(environmentId, repositoryId))
+      ?.completion !== undefined
+  ) {
+    if (cache.index === undefined)
+      await prepareRepositoryHistoryOrder(environmentId, repositoryId, cache);
+    if (cache.revision !== revision || cache.index === undefined)
+      return undefined;
+    ordered = cache.index.order(
+      roots,
+      query.order,
+      previous.oids,
+      query.ancestry,
+      query.additionalParentEdges,
+    );
+    rememberHistoryOrder(cache, key, {
+      basis: previous.basis,
+      oids: ordered,
+      complete: true,
+    });
+  }
+  const position = ordered.indexOf(oid);
+  return position < 0 ? undefined : position;
+}
 
 export function readRepositoryHistory(
   environmentId: string,
