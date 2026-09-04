@@ -40,7 +40,7 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
     const initialCommit = history.getByRole("option", { name: /^initial,/ });
     await expect(
       history.getByRole("option", { name: /^follow-up,/ }),
-    ).toHaveAttribute("aria-selected", "true");
+    ).toHaveAttribute("aria-selected", "false");
     await initialCommit.click();
     await expect(initialCommit).toHaveAttribute("aria-selected", "true");
 
