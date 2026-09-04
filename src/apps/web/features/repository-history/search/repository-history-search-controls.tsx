@@ -27,7 +27,6 @@ import { Input } from "#web-ui/components/ui/input";
 export function RepositoryHistorySearchControls({
   reader,
   snapshot,
-  contentRevision,
   onNavigate,
   bindings = {},
   offline = false,
@@ -35,7 +34,6 @@ export function RepositoryHistorySearchControls({
 }: {
   readonly reader: RepositoryHistorySearch;
   readonly snapshot: RepositoryHistorySnapshot;
-  readonly contentRevision: number;
   readonly onNavigate: (oid: string) => Promise<void>;
   readonly bindings?: RepositoryHistorySearchBindings;
   readonly offline?: boolean;
@@ -46,7 +44,7 @@ export function RepositoryHistorySearchControls({
   const [opened, setOpened] = useState(false);
   const search = useRepositoryHistorySearch(
     reader,
-    contentRevision,
+    snapshot.historyRevision,
     onNavigate,
   );
   const open = () => {

@@ -5,10 +5,7 @@ import {
   emptyStoredRepository,
   storedCommit,
 } from "#web/features/repository-history/repository-history-database";
-import {
-  RepositoryHistoryOffline,
-  RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 import {
   completeStoredRepositoryHistory,
   storeRepositoryHistoryBatch,
@@ -61,6 +58,8 @@ describe("browser metadata search", () => {
     const gateway = offlineGateway();
     const reader = createBrowserRepositoryHistoryReader({
       ...fixture,
+      logicalRepositoryId: fixture.repositoryId,
+      repositoryId: crypto.randomUUID(),
       gateway,
     });
     const result = await reader.search({ text: "main", limit: 100 });
@@ -168,7 +167,7 @@ describe("browser metadata search", () => {
     reader.close();
     await expect(
       reader.search({ text: "Commit", limit: 100 }),
-    ).rejects.toBeInstanceOf(RepositoryHistoryUnavailable);
+    ).rejects.toBeInstanceOf(RepositoryHistoryOffline);
   });
 
   it("rejects cross-repository continuations without leaking results", async () => {

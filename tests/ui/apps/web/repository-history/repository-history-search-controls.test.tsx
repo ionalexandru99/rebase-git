@@ -11,6 +11,7 @@ import type { RepositoryHistorySearchActions } from "#web/features/repository-hi
 import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/repository-history-search-controls";
 
 const snapshot = {
+  historyRevision: 1,
   revision: 1,
   status: "ready" as const,
   synchronization: "complete" as const,
@@ -38,7 +39,6 @@ describe("history search controls", () => {
       <RepositoryHistorySearchControls
         reader={reader}
         snapshot={snapshot}
-        contentRevision={1}
         onNavigate={vi.fn()}
         bindings={bindings}
         offline
@@ -89,7 +89,6 @@ describe("history search controls", () => {
         ref={actions}
         reader={reader}
         snapshot={snapshot}
-        contentRevision={1}
         onNavigate={onNavigate}
         bindings={bindings}
       />,
@@ -163,7 +162,6 @@ describe("history search controls", () => {
       <RepositoryHistorySearchControls
         reader={reader}
         snapshot={snapshot}
-        contentRevision={1}
         onNavigate={onNavigate}
       />,
     );
@@ -186,7 +184,6 @@ describe("history search controls", () => {
       <RepositoryHistorySearchControls
         reader={reader}
         snapshot={{ ...snapshot, revision: 99 }}
-        contentRevision={1}
         onNavigate={onNavigate}
       />,
     );
@@ -194,8 +191,7 @@ describe("history search controls", () => {
     await screen.rerender(
       <RepositoryHistorySearchControls
         reader={reader}
-        snapshot={snapshot}
-        contentRevision={2}
+        snapshot={{ ...snapshot, historyRevision: 2 }}
         onNavigate={onNavigate}
       />,
     );
@@ -213,7 +209,6 @@ describe("history search controls", () => {
       <RepositoryHistorySearchControls
         reader={reader}
         snapshot={snapshot}
-        contentRevision={1}
         onNavigate={onNavigate}
       />,
     );
@@ -225,8 +220,7 @@ describe("history search controls", () => {
     await screen.rerender(
       <RepositoryHistorySearchControls
         reader={reader}
-        snapshot={snapshot}
-        contentRevision={2}
+        snapshot={{ ...snapshot, historyRevision: 2 }}
         onNavigate={onNavigate}
       />,
     );
@@ -257,7 +251,6 @@ describe("history search controls", () => {
       <RepositoryHistorySearchControls
         reader={reader}
         snapshot={snapshot}
-        contentRevision={1}
         onNavigate={onNavigate}
       />,
     );

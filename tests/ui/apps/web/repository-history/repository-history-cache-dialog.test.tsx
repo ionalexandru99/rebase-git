@@ -51,6 +51,11 @@ function historyReader() {
     ancestryRoute: vi.fn(async () => undefined),
     locate: vi.fn(async () => undefined),
     close: vi.fn(),
+    search: vi.fn(async () => ({
+      commits: [],
+      replicaComplete: false,
+      synchronizedCommitCount: 0,
+    })),
     getCommitSummaries: vi.fn(async () => []),
     getRefTargets: vi.fn(async () => []),
     read: vi.fn(async () => []),

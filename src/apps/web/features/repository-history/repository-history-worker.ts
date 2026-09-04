@@ -817,7 +817,7 @@ async function searchHistory(
   try {
     const result = await searchStoredRepositoryHistory(
       reader.connection.environmentId,
-      reader.connection.repositoryId,
+      reader.connection.logicalRepositoryId,
       message.query,
       controller.signal,
     );
