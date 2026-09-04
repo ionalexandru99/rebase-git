@@ -254,7 +254,7 @@ export async function prepareRepositoryHistoryOrder(
   if (revision === cache.revision) cache.index = new HistoryOrderIndex(nodes);
 }
 
-function normalizedOids(oids: readonly string[]) {
+export function normalizedOids(oids: readonly string[]) {
   return [...new Set(oids)].sort();
 }
 

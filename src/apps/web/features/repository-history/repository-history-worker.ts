@@ -81,6 +81,7 @@ function connectReader(connection: ConnectRepositoryHistoryReader) {
           replica.synchronizationRequestId === event.data.requestId
         ) {
           replica.synchronization = replica.reconciling ? "stale" : "idle";
+          replica.reconciled = false;
           replica.reconciling = false;
           delete replica.synchronizationOwner;
           delete replica.synchronizationRequestId;
@@ -184,6 +185,8 @@ async function handleReaderMessage(
       if ((message.query.offset ?? 0) > 0) {
         reader.epoch.finish(message.requestId);
         reader.queries.delete(message.requestId);
+        replica.revision += 1;
+        publishSnapshot(replica);
         post(reader, {
           _tag: "RequestFailed",
           failure: { _tag: "Unavailable" },
@@ -255,6 +258,7 @@ async function handleReaderMessage(
         }
       } catch (error) {
         replica.synchronization = replica.reconciling ? "stale" : "idle";
+        replica.reconciled = false;
         replica.reconciling = false;
         delete replica.synchronizationOwner;
         delete replica.synchronizationRequestId;
@@ -282,6 +286,7 @@ async function handleReaderMessage(
         return;
       }
       replica.synchronization = replica.reconciling ? "stale" : "idle";
+      replica.reconciled = false;
       replica.reconciling = false;
       delete replica.synchronizationOwner;
       delete replica.synchronizationRequestId;
@@ -500,6 +505,7 @@ async function startSynchronization(
       replica.synchronizationRequestId === requestId
     ) {
       replica.synchronization = replica.reconciling ? "stale" : "idle";
+      replica.reconciled = false;
       replica.reconciling = false;
       delete replica.synchronizationOwner;
       delete replica.synchronizationRequestId;

@@ -660,9 +660,10 @@ describe("browser repository history reader", () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const commits = history(1);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
     let synchronizationAttempt = 0;
     const gateway: RepositoryHistoryGateway = {
-      read: vi.fn(async () => page(repositoryId, commits)),
+      read: vi.fn(async () => page(repositoryId, commits, [main])),
       synchronize: vi.fn(async (_request, accept) => {
         await accept(
           encodeRepositoryHistoryBatch({
@@ -686,7 +687,7 @@ describe("browser repository history reader", () => {
     await reader.read({
       limit: 100,
       order: "topological",
-      roots: [root("main")],
+      roots: [main],
     });
     await vi.waitFor(() => {
       expect(reader.getSnapshot()).toMatchObject({
@@ -699,12 +700,24 @@ describe("browser repository history reader", () => {
     await reader.read({
       limit: 100,
       order: "topological",
-      roots: [root("main")],
+      roots: [main],
     });
     await vi.waitFor(() => {
       expect(gateway.synchronize).toHaveBeenCalledTimes(2);
       expect(reader.getSnapshot().synchronization).toBe("complete");
     });
+    expect(gateway.read).toHaveBeenCalledOnce();
+    const revision = reader.getSnapshot().revision;
+    await expect(
+      reader.read({
+        limit: 1,
+        offset: 1,
+        order: "topological",
+        roots: [root("missing")],
+      }),
+    ).rejects.toBeInstanceOf(RepositoryHistoryUnavailable);
+    expect(reader.getSnapshot()).toMatchObject({ synchronization: "stale" });
+    expect(reader.getSnapshot().revision).toBeGreaterThan(revision);
     reader.close();
   });
 

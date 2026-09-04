@@ -25,7 +25,10 @@ import {
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
-import { historyOrderScopeKey } from "#web/features/repository-history/repository-history-query";
+import {
+  historyOrderScopeKey,
+  normalizedOids,
+} from "#web/features/repository-history/repository-history-query";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 export interface StoredRepositoryHistoryState {
@@ -349,10 +352,6 @@ export function storeRepositoryCommits(
     }
     await completed;
   });
-}
-
-function normalizedOids(oids: readonly string[]) {
-  return [...new Set(oids)].sort();
 }
 
 function topologicalPosition(commit: StoredCommit | undefined) {
