@@ -41,13 +41,31 @@ export async function searchStoredRepositoryHistory(
   )
     throw new Error("History search query exceeds its limits");
   signal?.throwIfAborted();
+  try {
+    return await withRepositoryHistoryDatabase(indexedDB, (database) =>
+      searchHistoryPage(environmentId, repositoryId, query, database, signal),
+    );
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw error;
+  }
+}
+
+async function searchHistoryPage(
+  environmentId: string,
+  repositoryId: string,
+  query: RepositoryHistorySearchQuery,
+  database: IDBDatabase,
+  signal?: AbortSignal,
+): Promise<RepositoryHistorySearchResult> {
   let after = decodeHistorySearchCursor(
     environmentId,
     repositoryId,
     query.text,
     query.cursor,
   );
-  const state = await readSearchState(environmentId, repositoryId, indexedDB);
+  const state = await readSearchState(environmentId, repositoryId, database);
+  signal?.throwIfAborted();
   const result = {
     replicaComplete:
       state?.completion !== undefined && state.pendingSnapshot === undefined,
@@ -64,7 +82,7 @@ export async function searchStoredRepositoryHistory(
       environmentId,
       repositoryId,
       after,
-      indexedDB,
+      database,
     );
     signal?.throwIfAborted();
     if (chunk.length === 0) return { ...result, commits };
@@ -93,52 +111,64 @@ export async function searchStoredRepositoryHistory(
   };
 }
 
-function readSearchState(
+async function readSearchState(
   environmentId: string,
   repositoryId: string,
-  indexedDB: IDBFactory,
+  database: IDBDatabase,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(repositoryStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const state = await requestResult<StoredRepository | undefined>(
-      transaction
-        .objectStore(repositoryStoreName)
-        .get(repositoryKey(environmentId, repositoryId)),
-    );
-    await completed;
-    return state;
-  });
+  const transaction = database.transaction(repositoryStoreName, "readonly");
+  const completed = transactionCompleted(transaction);
+  const state = await requestResult<StoredRepository | undefined>(
+    transaction
+      .objectStore(repositoryStoreName)
+      .get(repositoryKey(environmentId, repositoryId)),
+  );
+  await completed;
+  return state;
 }
 
-function readSearchChunk(
+async function readSearchChunk(
   environmentId: string,
   repositoryId: string,
   after: readonly [number, string] | undefined,
-  indexedDB: IDBFactory,
+  database: IDBDatabase,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(commitStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const range = IDBKeyRange.bound(
-      [environmentId, repositoryId, Number.MIN_SAFE_INTEGER, ""],
-      [
-        environmentId,
-        repositoryId,
-        ...(after ?? [Number.MAX_SAFE_INTEGER, "\uffff"]),
-      ],
-      false,
-      after !== undefined,
-    );
-    const records = await readCursorChunk(
-      transaction
-        .objectStore(commitStoreName)
-        .index(repositorySearchIndexName)
-        .openCursor(range, "prev"),
-    );
-    await completed;
-    return records;
-  });
+  const transaction = database.transaction(commitStoreName, "readonly");
+  const completed = transactionCompleted(transaction);
+  const range = IDBKeyRange.bound(
+    [environmentId, repositoryId, Number.MIN_SAFE_INTEGER, ""],
+    [
+      environmentId,
+      repositoryId,
+      ...(after ?? [Number.MAX_SAFE_INTEGER, "\uffff"]),
+    ],
+    false,
+    after !== undefined,
+  );
+  const index = transaction
+    .objectStore(commitStoreName)
+    .index(repositorySearchIndexName);
+  const records = supportsDirectionalBulkReads(index)
+    ? await requestResult(
+        index.getAll({ query: range, count: chunkSize, direction: "prev" }),
+      )
+    : await readCursorChunk(index.openCursor(range, "prev"));
+  await completed;
+  return records;
+}
+
+type HistoryBulkIndex = IDBIndex & {
+  getAll(options: {
+    readonly query: IDBKeyRange;
+    readonly count: number;
+    readonly direction: "prev";
+  }): IDBRequest<StoredCommit[]>;
+};
+
+function supportsDirectionalBulkReads(
+  index: IDBIndex,
+): index is HistoryBulkIndex {
+  return "getAllRecords" in index && typeof index.getAllRecords === "function";
 }
 
 function readCursorChunk(request: IDBRequest<IDBCursorWithValue | null>) {

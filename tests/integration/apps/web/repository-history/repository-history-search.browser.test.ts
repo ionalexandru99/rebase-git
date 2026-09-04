@@ -14,6 +14,88 @@ import {
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
 
 describe("browser metadata search", () => {
+  it("stops before another bulk chunk when cancellation arrives during a read", async () => {
+    const fixture = await seed(500);
+    const controller = new AbortController();
+    const prototype = IDBIndex.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "getAll");
+    const original = descriptor?.value;
+    if (typeof original !== "function")
+      throw new Error("Bulk reads are unavailable");
+    let reads = 0;
+    Object.defineProperty(prototype, "getAll", {
+      configurable: true,
+      value: function (this: IDBIndex, ...args: readonly unknown[]) {
+        reads += 1;
+        const request = Reflect.apply(
+          original,
+          this,
+          args,
+        ) as IDBRequest<unknown>;
+        request.addEventListener("success", () => controller.abort(), {
+          once: true,
+        });
+        return request;
+      },
+    });
+    try {
+      await expect(
+        searchStoredRepositoryHistory(
+          fixture.environmentId,
+          fixture.repositoryId,
+          { text: "absent", limit: 100 },
+          controller.signal,
+        ),
+      ).rejects.toMatchObject({ name: "AbortError" });
+      expect(reads).toBe(1);
+    } finally {
+      if (descriptor !== undefined)
+        Object.defineProperty(prototype, "getAll", descriptor);
+    }
+  });
+
+  it("keeps bulk reads and cursor fallback identical across sparse continuations", async () => {
+    const fixture = await seed(5_000);
+    const query = { text: "Commit 4999", limit: 100 };
+    const first = await searchStoredRepositoryHistory(
+      fixture.environmentId,
+      fixture.repositoryId,
+      query,
+    );
+    const second = await searchStoredRepositoryHistory(
+      fixture.environmentId,
+      fixture.repositoryId,
+      { ...query, cursor: continuation(first) },
+    );
+    const prototype = IDBIndex.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(
+      prototype,
+      "getAllRecords",
+    );
+    expect(typeof descriptor?.value).toBe("function");
+    Object.defineProperty(prototype, "getAllRecords", {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const fallbackFirst = await searchStoredRepositoryHistory(
+        fixture.environmentId,
+        fixture.repositoryId,
+        query,
+      );
+      const fallbackSecond = await searchStoredRepositoryHistory(
+        fixture.environmentId,
+        fixture.repositoryId,
+        { ...query, cursor: continuation(fallbackFirst) },
+      );
+      expect(fallbackFirst).toEqual(first);
+      expect(fallbackSecond).toEqual(second);
+    } finally {
+      if (descriptor !== undefined)
+        Object.defineProperty(prototype, "getAllRecords", descriptor);
+    }
+  });
+
   it("indexes already cached version-three commits during the compatible upgrade", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
