@@ -61,6 +61,10 @@ export function ApplicationShell({
     session.repositoryCatalog.getSnapshot,
   );
   const environmentStatus = environmentSessionPresentation(sessionState);
+  const lastConnectedEnvironmentId = useRef<string | undefined>(undefined);
+  if (sessionState._tag === "Connected") {
+    lastConnectedEnvironmentId.current = sessionState.environmentId;
+  }
   const sidebarRef = useRef<PanelImperativeHandle>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openProjectRequest, setOpenProjectRequest] = useState(0);
@@ -305,7 +309,10 @@ export function ApplicationShell({
                     environmentId={
                       sessionState._tag === "Connected"
                         ? sessionState.environmentId
-                        : undefined
+                        : sessionState._tag === "Reconnecting"
+                          ? (sessionState.environmentId ??
+                            lastConnectedEnvironmentId.current)
+                          : undefined
                     }
                     historyGateway={session.repositoryHistory}
                     refs={repositoryRefs}

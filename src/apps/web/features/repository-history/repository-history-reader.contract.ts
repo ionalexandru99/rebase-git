@@ -45,8 +45,22 @@ export class RepositoryHistoryUnavailable extends Data.TaggedError(
   "RepositoryHistoryUnavailable",
 ) {}
 
+export class RepositoryHistoryOffline extends Data.TaggedError(
+  "RepositoryHistoryOffline",
+) {}
+
+export class RepositoryHistoryStorageUnavailable extends Data.TaggedError(
+  "RepositoryHistoryStorageUnavailable",
+)<{ readonly cause?: unknown }> {
+  constructor(options: { readonly cause?: unknown } = {}) {
+    super(options);
+  }
+}
+
 export type RepositoryHistoryReaderError =
+  | RepositoryHistoryOffline
   | RepositoryHistoryRejected
+  | RepositoryHistoryStorageUnavailable
   | RepositoryHistoryUnavailable;
 
 export interface RepositoryHistoryTransport {

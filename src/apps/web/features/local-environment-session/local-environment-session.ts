@@ -14,6 +14,7 @@ import type {
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
 import {
   type RepositoryHistoryGateway,
+  RepositoryHistoryOffline,
   type RepositoryHistoryTransport,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
@@ -155,18 +156,20 @@ function maintainConnection(
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     let attempt = 0;
+    let environmentId: string | undefined;
     let lastObservedSequence: number | undefined;
     while (true) {
       yield* attempt === 0
         ? publish({ _tag: "Connecting" })
-        : reconnectAfter(options, publish, attempt);
+        : reconnectAfter(options, publish, attempt, environmentId);
       const connection = yield* Effect.result(
         Effect.scoped(
           options.gateway.connect(credential, lastObservedSequence).pipe(
             Effect.flatMap((active) =>
-              Effect.sync(() =>
-                repositoryHistory.connect(active.repositoryHistory),
-              ).pipe(
+              Effect.sync(() => {
+                repositoryHistory.connect(active.repositoryHistory);
+                environmentId = active.negotiated.environmentId;
+              }).pipe(
                 Effect.andThen(refreshRepositoryCatalog(repositoryCatalog)),
                 Effect.andThen(Effect.sync(repositoryRefs.invalidate)),
                 Effect.andThen(
@@ -224,7 +227,7 @@ function createRepositoryHistoryGateway() {
     read: (request, signal) => {
       const current = transport;
       if (current === undefined) {
-        return Promise.reject(new RepositoryHistoryUnavailable());
+        return Promise.reject(new RepositoryHistoryOffline());
       }
       return Effect.runPromise(
         current.read(request),
@@ -234,7 +237,7 @@ function createRepositoryHistoryGateway() {
     synchronize: (request, acceptBatch, signal) => {
       const current = transport;
       if (current === undefined) {
-        return Promise.reject(new RepositoryHistoryUnavailable());
+        return Promise.reject(new RepositoryHistoryOffline());
       }
       return Effect.runPromise(
         current.synchronize(request, (bytes) =>
@@ -286,9 +289,14 @@ function reconnectAfter(
   options: LocalEnvironmentSessionOptions,
   publish: PublishState,
   attempt: number,
+  environmentId?: string,
 ) {
   const delay = Math.min(250 * 2 ** (attempt - 1), 5_000);
-  return publish({ _tag: "Reconnecting", attempt }).pipe(
+  return publish({
+    _tag: "Reconnecting",
+    attempt,
+    ...(environmentId === undefined ? {} : { environmentId }),
+  }).pipe(
     Effect.andThen(
       options.waitBeforeReconnect?.(attempt) ?? Effect.sleep(delay),
     ),

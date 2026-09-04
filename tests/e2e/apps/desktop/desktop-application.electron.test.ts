@@ -32,6 +32,18 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
       "-m",
       "initial",
     ]);
+    await execFileAsync("git", [
+      "-C",
+      repositoryPath,
+      "-c",
+      "user.name=Rebase test",
+      "-c",
+      "user.email=rebase@example.test",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "follow-up",
+    ]);
     const environment = await createTestEnvironment(testHome);
     const application = await launchApplication(environment);
     try {
@@ -40,8 +52,10 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
       const commit = window
         .getByRole("listbox", { name: "Commit history" })
         .getByRole("option", { name: /^initial,/ });
-      await expect(commit).toHaveAttribute("aria-selected", "true");
+      await expect(commit).toHaveAttribute("aria-selected", "false");
       await commit.click();
+      await expect(commit).toHaveAttribute("aria-selected", "true");
+      await expect.poll(() => hasCompletedHistory(window)).toBe(true);
 
       const projects = window.getByRole("navigation", { name: "Projects" });
       await expect(
@@ -59,9 +73,18 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
       const repository = recentRepository(restartedWindow, "rebase-test");
       await expect(repository).toBeVisible();
       await repository.click();
+      const history = restartedWindow.getByRole("listbox", {
+        name: "Commit history",
+      });
+      const initial = history.getByRole("option", { name: /^initial,/ });
       await expect(
-        restartedWindow.getByRole("button", { name: "Close rebase-test" }),
+        history.getByRole("option", { name: /^follow-up,/ }),
       ).toBeVisible();
+
+      await restartedWindow.context().setOffline(true);
+      await initial.click();
+      await expect(initial).toHaveAttribute("aria-selected", "true");
+      await restartedWindow.context().setOffline(false);
     } finally {
       await restartedApplication.close();
     }
@@ -187,4 +210,48 @@ function recentRepository(window: Page, repositoryName: string) {
     .getByRole("option")
     .filter({ hasText: repositoryName })
     .first();
+}
+
+async function hasCompletedHistory(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<boolean>((resolve, reject) => {
+        const request = indexedDB.open("rebase-repository-history");
+        let createdDatabase = false;
+        request.onupgradeneeded = () => {
+          createdDatabase = true;
+          request.transaction?.abort();
+        };
+        request.onerror = () => {
+          if (createdDatabase) {
+            resolve(false);
+            return;
+          }
+          reject(request.error);
+        };
+        request.onsuccess = () => {
+          const database = request.result;
+          if (!database.objectStoreNames.contains("repositories")) {
+            database.close();
+            resolve(false);
+            return;
+          }
+          const transaction = database.transaction("repositories", "readonly");
+          const repositories = transaction.objectStore("repositories").getAll();
+          repositories.onerror = () => {
+            database.close();
+            reject(repositories.error);
+          };
+          repositories.onsuccess = () => {
+            database.close();
+            resolve(
+              repositories.result.some(
+                (repository: { completion?: unknown }) =>
+                  repository.completion !== undefined,
+              ),
+            );
+          };
+        };
+      }),
+  );
 }

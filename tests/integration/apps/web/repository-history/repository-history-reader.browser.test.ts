@@ -5,9 +5,17 @@ import {
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { withRepositoryHistoryDatabase } from "#web/features/repository-history/repository-history-database";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
-import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
-import { readRepositoryCommits } from "#web/features/repository-history/repository-history-store";
+import {
+  RepositoryHistoryOffline,
+  RepositoryHistoryStorageUnavailable,
+  RepositoryHistoryUnavailable,
+} from "#web/features/repository-history/repository-history-reader.contract";
+import {
+  readRepositoryCommits,
+  readStoredRepositoryHistoryState,
+} from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
   it("publishes only IndexedDB-committed synchronization progress", async () => {
@@ -30,6 +38,11 @@ describe("browser repository history reader", () => {
       gateway,
       repositoryId,
     });
+    const otherTab = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
     await reader.read({
       limit: 100,
       order: "topological",
@@ -37,6 +50,9 @@ describe("browser repository history reader", () => {
     });
     await vi.waitFor(() =>
       expect(reader.getSnapshot().synchronization).toBe("syncing"),
+    );
+    await vi.waitFor(() =>
+      expect(otherTab.getSnapshot().synchronization).toBe("syncing"),
     );
     const synchronized = history(3);
 
@@ -51,6 +67,9 @@ describe("browser repository history reader", () => {
     );
 
     expect(reader.getSnapshot().synchronizedCommitCount).toBe(3);
+    await vi.waitFor(() =>
+      expect(otherTab.getSnapshot().synchronizedCommitCount).toBe(3),
+    );
     await expect(
       readRepositoryCommits(environmentId, repositoryId, [
         synchronized[2]?.oid ?? "",
@@ -60,7 +79,11 @@ describe("browser repository history reader", () => {
     await vi.waitFor(() =>
       expect(reader.getSnapshot().synchronization).toBe("complete"),
     );
+    await vi.waitFor(() =>
+      expect(otherTab.getSnapshot().synchronization).toBe("complete"),
+    );
     reader.close();
+    otherTab.close();
   });
 
   it("cancels synchronization when the final reader closes", async () => {
@@ -159,7 +182,11 @@ describe("browser repository history reader", () => {
 
     await expect(stale).rejects.toBeInstanceOf(RepositoryHistoryUnavailable);
     await expect(current).resolves.toHaveLength(2);
-    expect(firstSignal?.aborted).toBe(true);
+    if (firstSignal === undefined) {
+      expect(gateway.read).toHaveBeenCalledOnce();
+    } else {
+      expect(firstSignal.aborted).toBe(true);
+    }
     expect(reader.getSnapshot().status).toBe("ready");
     reader.close();
   });
@@ -213,13 +240,287 @@ describe("browser repository history reader", () => {
     expect(reopened.getSnapshot().status).toBe("empty");
     reopened.close();
   });
+
+  it("starts one synchronization when readers load concurrently", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, history(1))),
+      synchronize: vi.fn(
+        (_request, _accept, signal) =>
+          new Promise<number>((_resolve, reject) => {
+            signal?.addEventListener(
+              "abort",
+              () => reject(new RepositoryHistoryOffline()),
+              { once: true },
+            );
+          }),
+      ),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+    const second = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+
+    await Promise.all([
+      first.read({
+        limit: 100,
+        order: "topological",
+        roots: [root("main")],
+      }),
+      second.read({
+        limit: 100,
+        order: "topological",
+        roots: [root("main")],
+      }),
+    ]);
+    await vi.waitFor(() => expect(gateway.synchronize).toHaveBeenCalledOnce());
+
+    first.close();
+    second.close();
+  });
+
+  it("preserves replacement synchronization after a closed reader batch fails", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(1);
+    let batchDispatched: (() => void) | undefined;
+    const batchWasDispatched = new Promise<void>((resolve) => {
+      batchDispatched = resolve;
+    });
+    const firstGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(async (_request, accept) => {
+        const pendingBatch = accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 1,
+          }),
+        );
+        batchDispatched?.();
+        await pendingBatch;
+        return commits.length;
+      }),
+    };
+    const secondGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(
+        (_request, _accept, signal) =>
+          new Promise<number>((_resolve, reject) => {
+            signal?.addEventListener(
+              "abort",
+              () => reject(new RepositoryHistoryOffline()),
+              { once: true },
+            );
+          }),
+      ),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: firstGateway,
+      repositoryId,
+    });
+    const second = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: secondGateway,
+      repositoryId,
+    });
+
+    await first.read({
+      limit: 100,
+      order: "topological",
+      roots: [root("main")],
+    });
+    await batchWasDispatched;
+    first.close();
+
+    await vi.waitFor(() =>
+      expect(secondGateway.synchronize).toHaveBeenCalledOnce(),
+    );
+    expect(second.getSnapshot().synchronization).toBe("syncing");
+    second.close();
+  });
+
+  it("retries synchronization after completion persistence fails", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(1);
+    let synchronizationAttempt = 0;
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+          }),
+        );
+        synchronizationAttempt += 1;
+        return synchronizationAttempt === 1 ? 2 : 1;
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway,
+      repositoryId,
+    });
+
+    await reader.read({
+      limit: 100,
+      order: "topological",
+      roots: [root("main")],
+    });
+    await vi.waitFor(() => {
+      expect(reader.getSnapshot()).toMatchObject({
+        error: expect.any(RepositoryHistoryUnavailable),
+        status: "error",
+        synchronization: "idle",
+      });
+    });
+
+    await reader.read({
+      limit: 100,
+      order: "topological",
+      roots: [root("main")],
+    });
+    await vi.waitFor(() => {
+      expect(gateway.synchronize).toHaveBeenCalledTimes(2);
+      expect(reader.getSnapshot().synchronization).toBe("complete");
+    });
+    reader.close();
+  });
+
+  it("reopens a completed repository from IndexedDB while offline", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const firstGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits, [main])),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: firstGateway,
+      repositoryId,
+    });
+    await first.read({ limit: 100, order: "topological", roots: [main] });
+    await vi.waitFor(() =>
+      expect(first.getSnapshot().synchronization).toBe("complete"),
+    );
+    first.close();
+
+    const offlineGateway: RepositoryHistoryGateway = {
+      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+    };
+    const reopened = createBrowserRepositoryHistoryReader({
+      environmentId,
+      gateway: offlineGateway,
+      repositoryId,
+    });
+
+    const cacheReadStartedAt = performance.now();
+    await expect(
+      reopened.read({ limit: 100, order: "topological", roots: [main] }),
+    ).resolves.toEqual(commits);
+    expect(performance.now() - cacheReadStartedAt).toBeLessThan(100);
+    await expect(
+      reopened.read({
+        limit: 100,
+        order: "topological",
+        roots: [{ ...main, oid: commits[1]?.oid ?? "" }],
+      }),
+    ).resolves.toEqual(commits.slice(1));
+    await expect(
+      reopened.getCommitSummaries(["e".repeat(40)]),
+    ).resolves.toEqual([]);
+    expect(offlineGateway.read).not.toHaveBeenCalled();
+    expect(reopened.getSnapshot()).toMatchObject({
+      status: "ready",
+      synchronization: "complete",
+      synchronizedCommitCount: commits.length,
+    });
+    reopened.close();
+  });
+
+  it("reports offline and IndexedDB failures with separate types", async () => {
+    const repositoryId = crypto.randomUUID();
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      gateway,
+      repositoryId,
+    });
+
+    await expect(
+      reader.read({ limit: 100, order: "topological", roots: [root("main")] }),
+    ).rejects.toBeInstanceOf(RepositoryHistoryOffline);
+    expect(reader.getSnapshot().error).toBeInstanceOf(RepositoryHistoryOffline);
+    reader.close();
+
+    const unavailableIndexedDb = {
+      open: () => {
+        throw new Error("Storage disabled");
+      },
+    } as unknown as IDBFactory;
+    const storageFailure = await readStoredRepositoryHistoryState(
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      unavailableIndexedDb,
+    ).catch((error: unknown) => error);
+    expect(storageFailure).toBeInstanceOf(RepositoryHistoryStorageUnavailable);
+    expect(storageFailure).toMatchObject({
+      cause: expect.objectContaining({ message: "Storage disabled" }),
+    });
+  });
+
+  it("does not classify application failures as storage failures", async () => {
+    const applicationFailure = new Error("Repository history is incomplete");
+
+    await expect(
+      withRepositoryHistoryDatabase(indexedDB, () =>
+        Promise.reject(applicationFailure),
+      ),
+    ).rejects.toBe(applicationFailure);
+  });
 });
 
-function page(repositoryId: string, commits: readonly RepositoryCommit[]) {
+function page(
+  repositoryId: string,
+  commits: readonly RepositoryCommit[],
+  refTargets = [root("main")],
+) {
   return encodeRepositoryHistoryPage({
     commits,
     objectFormat: "sha1",
-    refTargets: [root("main")],
+    refTargets,
     repositoryId,
     requestId: "00000000-0000-4000-8000-000000000011",
   });

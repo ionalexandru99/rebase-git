@@ -29,6 +29,7 @@ export type LocalEnvironmentSessionState =
   | {
       readonly _tag: "Reconnecting";
       readonly attempt: number;
+      readonly environmentId?: string;
     }
   | {
       readonly _tag: "AuthorizationFailed";
