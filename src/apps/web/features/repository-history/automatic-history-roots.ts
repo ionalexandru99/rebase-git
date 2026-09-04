@@ -81,7 +81,7 @@ export function resolveAutomaticHistorySelections(
   );
   addSelection(
     selections,
-    local === undefined
+    local?.target === undefined
       ? {
           _tag: "RemoteBranch",
           name: defaultBranch.name,

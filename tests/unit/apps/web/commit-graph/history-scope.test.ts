@@ -46,6 +46,35 @@ describe("history scope", () => {
     expect(resolved.roots).toContainEqual(root("branch", "release", 5));
   });
 
+  it("preserves a remote default when its local branch has no target", () => {
+    const current = refs({
+      branches: [
+        {
+          name: "topic",
+          target: commits[1],
+          upstream: upstream("upstream/topic"),
+          worktreePath: "/repo",
+        },
+        { name: "main" },
+      ],
+    });
+
+    const custom = toggleHistoryRef(
+      automaticHistoryScope,
+      tag("v1.0.0"),
+      current,
+      "/repo",
+    );
+
+    expect(custom).toEqual({
+      _tag: "Custom",
+      selections: [local("topic"), remote("upstream", "main"), tag("v1.0.0")],
+    });
+    expect(resolveHistoryScope(custom, current, "/repo").roots).toContainEqual(
+      root("remote-branch", "upstream/main", 4),
+    );
+  });
+
   it("treats a local branch and its current upstream as one group", () => {
     const custom = {
       _tag: "Custom",
