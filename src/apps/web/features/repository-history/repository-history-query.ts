@@ -176,10 +176,7 @@ export function readRepositoryHistory(
       (previous === undefined ||
         (!previous.complete && previous.basis === basis)) &&
       query.order === repository.cachedPage?.order &&
-      (repository.cachedPage.scopeKey === key ||
-        (repository.cachedPage.scopeKey === undefined &&
-          query.ancestry !== "first-parent" &&
-          (query.additionalParentEdges?.length ?? 0) === 0)) &&
+      canSelectCachedHistoryPage(query, repository.cachedPage.scopeKey) &&
       sameOids(roots, repository.cachedPage.rootOids) &&
       (offset + query.limit <= repository.cachedPage.oids.length ||
         repository.cachedPage.oids.length <
@@ -412,6 +409,29 @@ export function historyOrderScopeKey(
       )
       .sort(),
   ]);
+}
+
+function canSelectCachedHistoryPage(
+  query: RepositoryHistoryQuery,
+  scopeKey: string | undefined,
+) {
+  if (scopeKey === historyOrderScopeKey(query)) return true;
+  if ((query.additionalParentEdges?.length ?? 0) > 0) return false;
+  if (query.ancestry !== "first-parent") return scopeKey === undefined;
+  if ((query.offset ?? 0) !== 0) return false;
+  if (scopeKey === undefined) return true;
+  try {
+    const stored: unknown = JSON.parse(scopeKey);
+    return (
+      Array.isArray(stored) &&
+      ((stored.length === 2 && Array.isArray(stored[1])) ||
+        (stored[1] === "all" &&
+          Array.isArray(stored[2]) &&
+          stored[2].length === 0))
+    );
+  } catch {
+    return false;
+  }
 }
 
 function sameOids(left: readonly string[], right: readonly string[]) {

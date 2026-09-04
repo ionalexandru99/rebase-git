@@ -21,43 +21,58 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("local ordered history pages", () => {
-  it("reads legacy pages only for their original all-ancestry scope", async () => {
-    const source = await seed("main", false);
-    const environmentId = crypto.randomUUID();
-    const repositoryId = crypto.randomUUID();
-    const commits = source.commits.filter(({ subject }) => subject !== "new");
-    await initialPage(environmentId, repositoryId, "main", commits);
-    await withRepositoryHistoryDatabase(indexedDB, async (database) => {
-      const transaction = database.transaction(
-        repositoryStoreName,
-        "readwrite",
-      );
-      const completed = transactionCompleted(transaction);
-      const store = transaction.objectStore(repositoryStoreName);
-      const record = await requestResult<StoredRepository>(
-        store.get(repositoryKey(environmentId, repositoryId)),
-      );
-      if (record.cachedPage === undefined)
-        throw new Error("Missing cached page");
-      const { scopeKey: _scopeKey, ...cachedPage } = record.cachedPage;
-      store.put({ ...record, cachedPage });
-      await completed;
-    });
-    const query = {
-      roots: [root("main", "merge")],
-      order: "chronological" as const,
-      limit: 4,
-    };
-    expect(
-      await readRepositoryHistory(environmentId, repositoryId, query),
-    ).toEqual(commits);
-    expect(
-      await readRepositoryHistory(environmentId, repositoryId, {
-        ...query,
-        ancestry: "first-parent",
-      }),
-    ).toBeUndefined();
-  });
+  it.each([false, true])(
+    "derives an initial first-parent page from an all-ancestry cache (legacy=%s)",
+    async (legacy) => {
+      const source = await seed("main", false);
+      const environmentId = crypto.randomUUID();
+      const repositoryId = crypto.randomUUID();
+      const commits = source.commits.filter(({ subject }) => subject !== "new");
+      await initialPage(environmentId, repositoryId, "main", commits);
+      if (legacy)
+        await withRepositoryHistoryDatabase(indexedDB, async (database) => {
+          const transaction = database.transaction(
+            repositoryStoreName,
+            "readwrite",
+          );
+          const completed = transactionCompleted(transaction);
+          const store = transaction.objectStore(repositoryStoreName);
+          const record = await requestResult<StoredRepository>(
+            store.get(repositoryKey(environmentId, repositoryId)),
+          );
+          if (record.cachedPage === undefined)
+            throw new Error("Missing cached page");
+          const { scopeKey: _scopeKey, ...cachedPage } = record.cachedPage;
+          store.put({ ...record, cachedPage });
+          await completed;
+        });
+      const query = {
+        roots: [root("main", "merge")],
+        order: "chronological" as const,
+        limit: 4,
+      };
+      expect(
+        await readRepositoryHistory(environmentId, repositoryId, query),
+      ).toEqual(commits);
+      expect(
+        (
+          await readRepositoryHistory(environmentId, repositoryId, {
+            ...query,
+            ancestry: "first-parent",
+          })
+        )?.map(({ subject }) => subject),
+      ).toEqual(["merge", "left", "base"]);
+      expect(
+        await readRepositoryHistory(environmentId, repositoryId, {
+          ...query,
+          ancestry: "first-parent",
+          additionalParentEdges: [
+            { childOid: oid("merge"), parentOid: oid("right") },
+          ],
+        }),
+      ).toBeUndefined();
+    },
+  );
 
   it("does not reuse an initial page for another ancestry scope", async () => {
     const source = await seed("main", false);
