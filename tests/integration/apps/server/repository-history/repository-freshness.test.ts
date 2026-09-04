@@ -49,6 +49,8 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
           }),
         );
         try {
+          await git(fixture.local, "branch", "watcher-ready");
+          await vi.waitFor(() => expect(changes).toBeGreaterThan(0));
           const directory = join(gitDirectory, entry);
           const beforeReplacement = changes;
           await rename(directory, join(fixture.root, "previous-logs"));
