@@ -190,7 +190,15 @@ describe("commit graph", () => {
     const screen = await renderGraph(reader, undefined, {
       onCacheChanged: changed,
     });
-    await screen.getByRole("button", { name: "History options" }).click();
+    const options = screen.getByRole("button", { name: "History options" });
+    options.element().focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Fetch settings" }))
+      .toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    await expect.element(options).toHaveFocus();
+    await options.click();
     await screen.getByRole("menuitem", { name: "History storage" }).click();
     await screen
       .getByRole("button", { name: "Clear cache", exact: true })
@@ -552,6 +560,16 @@ describe("commit graph", () => {
       .getByRole("menuitem", { name: "Remove main from history" })
       .click();
     expect(toggle).toHaveBeenCalledTimes(2);
+    const label = screen.getByRole("button", { name: "Actions for main" });
+    label.element().focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Remove from history" }))
+      .toHaveFocus();
+    await expect.element(label).toHaveAttribute("aria-expanded", "true");
+    await userEvent.keyboard("{Escape}");
+    await expect.element(screen.getByRole("grid")).toHaveFocus();
+    await expect.element(label).toHaveAttribute("aria-expanded", "false");
     await expect
       .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .toHaveAttribute("aria-selected", "true");
@@ -578,6 +596,17 @@ describe("commit graph", () => {
       expect.objectContaining({ selectedOids: [] }),
     );
     await expect.element(row).toHaveAttribute("aria-selected", "false");
+    await expect.element(screen.getByRole("grid")).toHaveFocus();
+    row.getByRole("button", { name: "2 more refs" }).element().focus();
+    await userEvent.keyboard("{ArrowUp}");
+    await expect
+      .element(
+        screen.getByRole("menuitem", {
+          name: "topic/another-long-branch Add to history",
+        }),
+      )
+      .toHaveFocus();
+    await userEvent.keyboard("{Escape}");
     await expect.element(screen.getByRole("grid")).toHaveFocus();
   });
 

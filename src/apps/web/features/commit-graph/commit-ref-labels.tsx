@@ -2,6 +2,13 @@ import type {
   RepositoryHistoryRefTarget,
   RepositoryRefTarget,
 } from "@rebase/contracts";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useId,
+  useState,
+} from "react";
 import type {
   GraphCommandContext,
   GraphCommandId,
@@ -11,10 +18,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "#web-ui/components/ui/dropdown-menu";
 
-export function CommitRefLabels({
+export function CommitRefLabels(props: ComponentProps<typeof CommitRefMenu>) {
+  return props.labels.length === 0 ? null : <CommitRefMenu {...props} />;
+}
+
+function CommitRefMenu({
   labels,
   context,
   registry,
@@ -32,7 +42,47 @@ export function CommitRefLabels({
   ) => Promise<void>;
   readonly restoreFocus: () => void;
 }) {
-  if (labels.length === 0) return null;
+  const menuId = useId();
+  const [menu, setMenu] = useState<{
+    readonly anchor: HTMLButtonElement;
+    readonly key: string;
+    readonly focusKey?: "ArrowDown" | "ArrowUp";
+  }>();
+  const menuLabels =
+    menu?.key === "overflow"
+      ? labels.slice(2)
+      : labels.filter((label) => labelKey(label) === menu?.key);
+  useEffect(() => {
+    if (menu !== undefined && menuLabels.length === 0) setMenu(undefined);
+  }, [menu, menuLabels.length]);
+  const trigger = (
+    key: string,
+    className: string,
+    name: string,
+    children: ReactNode,
+    title?: string,
+  ) => (
+    <RefMenuTrigger
+      key={key}
+      className={className}
+      name={name}
+      title={title}
+      menuId={menu?.key === key ? menuId : undefined}
+      onOpen={(anchor, focusKey) => {
+        if (menu?.anchor === anchor) {
+          setMenu(undefined);
+          restoreFocus();
+        } else
+          setMenu({
+            anchor,
+            key,
+            ...(focusKey === undefined ? {} : { focusKey }),
+          });
+      }}
+    >
+      {children}
+    </RefMenuTrigger>
+  );
   return (
     <span className="flex min-w-0 max-w-[55%] shrink-0 items-center gap-1 overflow-hidden">
       {labels.slice(0, 2).map((label) => {
@@ -54,65 +104,51 @@ export function CommitRefLabels({
               {label.name}
             </span>
           );
-        return (
-          <DropdownMenu
-            key={`${label.type}\0${label.name}`}
-            onOpenChange={(open) => {
-              if (!open) restoreFocus();
-            }}
-          >
-            <DropdownMenuTrigger
-              className={className}
-              title={label.name}
-              aria-label={`Actions for ${label.name}`}
-              tabIndex={-1}
-              onClick={(event) => event.stopPropagation()}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                event.currentTarget.click();
-              }}
-              onKeyDown={(event) => event.stopPropagation()}
-            >
-              {label.name}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem
-                disabled={!command.enabled}
-                title={command.disabledReason}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void execute(command.id, target);
-                }}
-              >
-                {command.label}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        return trigger(
+          labelKey(label),
+          className,
+          `Actions for ${label.name}`,
+          label.name,
+          label.name,
         );
       })}
-      {labels.length <= 2 ? null : (
+      {labels.length <= 2
+        ? null
+        : trigger(
+            "overflow",
+            "shrink-0 rounded-sm border border-border px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground",
+            `${labels.length - 2} more refs`,
+            `+${labels.length - 2}`,
+          )}
+      {menu === undefined || menuLabels.length === 0 ? null : (
         <DropdownMenu
+          open
           onOpenChange={(open) => {
-            if (!open) restoreFocus();
+            if (!open) {
+              setMenu(undefined);
+              restoreFocus();
+            }
           }}
         >
-          <DropdownMenuTrigger
-            aria-label={`${labels.length - 2} more refs`}
-            className="shrink-0 rounded-sm border border-border px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground"
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              event.currentTarget.click();
+          <DropdownMenuContent
+            anchor={menu.anchor}
+            id={menuId}
+            finalFocus={false}
+            aria-label={menu.anchor.getAttribute("aria-label") ?? undefined}
+            onFocus={(event) => {
+              if (
+                event.target === event.currentTarget &&
+                menu.focusKey !== undefined
+              )
+                event.currentTarget.dispatchEvent(
+                  new KeyboardEvent("keydown", {
+                    bubbles: true,
+                    key: menu.focusKey,
+                  }),
+                );
             }}
           >
-            +{labels.length - 2}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            {labels.slice(2).map((label) => {
+            {menuLabels.map((label) => {
               const target = context(label);
               const command =
                 target === undefined
@@ -131,11 +167,17 @@ export function CommitRefLabels({
                       void execute(command.id, target);
                   }}
                 >
-                  <span className="font-mono">{label.name}</span>
-                  {command === undefined ? null : (
-                    <span className="ml-auto text-muted-foreground">
-                      {command.label}
-                    </span>
+                  {menu.key === "overflow" ? (
+                    <>
+                      <span className="font-mono">{label.name}</span>
+                      {command === undefined ? null : (
+                        <span className="ml-auto text-muted-foreground">
+                          {command.label}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    command?.label
                   )}
                 </DropdownMenuItem>
               );
@@ -145,6 +187,63 @@ export function CommitRefLabels({
       )}
     </span>
   );
+}
+
+function RefMenuTrigger({
+  children,
+  className,
+  menuId,
+  name,
+  onOpen,
+  title,
+}: {
+  readonly children: ReactNode;
+  readonly className: string;
+  readonly menuId: string | undefined;
+  readonly name: string;
+  readonly onOpen: (
+    anchor: HTMLButtonElement,
+    focusKey?: "ArrowDown" | "ArrowUp",
+  ) => void;
+  readonly title: string | undefined;
+}) {
+  return (
+    <button
+      type="button"
+      aria-controls={menuId}
+      aria-expanded={menuId !== undefined}
+      aria-haspopup="menu"
+      aria-label={name}
+      className={className}
+      title={title}
+      tabIndex={-1}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen(
+          event.currentTarget,
+          event.detail === 0 ? "ArrowDown" : undefined,
+        );
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpen(event.currentTarget);
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          onOpen(event.currentTarget, event.key);
+        }
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function labelKey(label: RepositoryHistoryRefTarget) {
+  return `${label.type}\0${label.name}`;
 }
 
 export function historyLabelTarget(

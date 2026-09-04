@@ -1,5 +1,5 @@
 import { IconArrowDown, IconDots } from "@tabler/icons-react";
-import { type Ref, useState } from "react";
+import { type Ref, useId, useState } from "react";
 import type { RepositoryHistoryCacheDialogProps } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
 import type { RepositoryFetchAction } from "#web/features/repository-history/freshness/repository-fetch-action.contract";
 import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
@@ -23,7 +23,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
 } from "#web-ui/components/ui/dropdown-menu";
 import { RepositoryHistoryCacheDialog } from "#web-ui/features/repository-history/diagnostics/repository-history-cache-dialog";
 import { RepositoryFetchSettings } from "#web-ui/features/repository-history/freshness/repository-fetch-settings";
@@ -61,6 +60,11 @@ export function CommitGraphToolbar({
     | undefined;
 }) {
   const [dialog, setDialog] = useState<"fetch" | "cache">();
+  const optionsId = useId();
+  const [options, setOptions] = useState<{
+    readonly anchor: HTMLButtonElement;
+    readonly focusKey?: "ArrowUp" | "ArrowDown";
+  }>();
   return (
     <>
       <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b px-3 py-2">
@@ -112,28 +116,78 @@ export function CommitGraphToolbar({
           <IconArrowDown aria-hidden="true" className="size-3.5" />
           {fetching ? "Fetching" : "Fetch"}
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            aria-label="History options"
-            render={<Button size="icon-sm" variant="ghost" />}
+        <Button
+          aria-label="History options"
+          aria-controls={options === undefined ? undefined : optionsId}
+          aria-expanded={options !== undefined}
+          aria-haspopup="menu"
+          size="icon-sm"
+          variant="ghost"
+          onClick={(event) => {
+            const anchor = event.currentTarget;
+            const keyboard = event.detail === 0;
+            setOptions((current) =>
+              current === undefined
+                ? {
+                    anchor,
+                    ...(keyboard ? { focusKey: "ArrowDown" as const } : {}),
+                  }
+                : undefined,
+            );
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setOptions({ anchor: event.currentTarget, focusKey: event.key });
+            }
+          }}
+        >
+          <IconDots aria-hidden="true" className="size-4" />
+        </Button>
+        {options === undefined ? null : (
+          <DropdownMenu
+            open
+            onOpenChange={(open) => {
+              if (!open) {
+                options.anchor.focus();
+                setOptions(undefined);
+              }
+            }}
           >
-            <IconDots aria-hidden="true" className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              disabled={reader === undefined}
-              onClick={() => setDialog("fetch")}
+            <DropdownMenuContent
+              align="end"
+              anchor={options.anchor}
+              id={optionsId}
+              finalFocus={false}
+              aria-label="History options"
+              onFocus={(event) => {
+                if (
+                  event.target === event.currentTarget &&
+                  options.focusKey !== undefined
+                )
+                  event.currentTarget.dispatchEvent(
+                    new KeyboardEvent("keydown", {
+                      bubbles: true,
+                      key: options.focusKey,
+                    }),
+                  );
+              }}
             >
-              Fetch settings
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={reader === undefined || cache === undefined}
-              onClick={() => setDialog("cache")}
-            >
-              History storage
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuItem
+                disabled={reader === undefined}
+                onClick={() => setDialog("fetch")}
+              >
+                Fetch settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={reader === undefined || cache === undefined}
+                onClick={() => setDialog("cache")}
+              >
+                History storage
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </header>
       {reader === undefined || dialog === undefined ? null : (
         <>
