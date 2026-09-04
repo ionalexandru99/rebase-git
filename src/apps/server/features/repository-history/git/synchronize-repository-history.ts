@@ -12,6 +12,7 @@ import {
 
 const batchSize = 256;
 const maximumBatchCharacters = 4 * 1_048_576;
+const maximumStashRootsBytes = 16 * 1_024;
 const synchronizationTimeoutMilliseconds = 30 * 60_000;
 
 export function synchronizeRepositoryHistory(
@@ -42,12 +43,12 @@ export function synchronizeRepositoryHistory(
     const stashOutput =
       stashTipOutput.trim() === ""
         ? ""
-        : yield* runGit(git, repositoryPath, [
-            "reflog",
-            "show",
-            "--format=%H",
-            "refs/stash",
-          ]);
+        : yield* runGit(
+            git,
+            repositoryPath,
+            ["reflog", "show", "--format=%H", "refs/stash"],
+            maximumStashRootsBytes,
+          );
     const objectFormat = yield* parseOutput(() =>
       parseObjectFormat(formatOutput),
     );

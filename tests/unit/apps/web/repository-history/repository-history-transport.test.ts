@@ -204,6 +204,53 @@ describe("repository history transport", () => {
     await Effect.runPromise(Fiber.interrupt(next));
   });
 
+  it("advances past a promoted synchronization that cannot be sent", async () => {
+    const failedRepositoryId = "00000000-0000-4000-8000-000000000002";
+    const nextRepositoryId = "00000000-0000-4000-8000-000000000003";
+    const send = vi.fn((value: string) => {
+      const message = JSON.parse(value) as {
+        readonly _tag: string;
+        readonly repositoryId?: string;
+      };
+      if (
+        message._tag === "SynchronizeRepositoryHistory" &&
+        message.repositoryId === failedRepositoryId
+      ) {
+        throw new Error("Socket send failed");
+      }
+    });
+    const transport = createRepositoryHistoryTransport(
+      { send } as unknown as WebSocket,
+      true,
+    );
+    const start = (repositoryId: string) =>
+      Effect.runFork(
+        transport.synchronize(
+          { priority: "background", repositoryId },
+          () => Effect.void,
+        ),
+      );
+    const active = start("00000000-0000-4000-8000-000000000001");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    const failed = start(failedRepositoryId);
+    const next = start(nextRepositoryId);
+
+    await Effect.runPromise(Fiber.interrupt(active));
+
+    await expect(Effect.runPromise(Fiber.join(failed))).rejects.toBeDefined();
+    await vi.waitFor(() =>
+      expect(
+        send.mock.calls.some(([value]) => {
+          const message = JSON.parse(value) as {
+            readonly repositoryId?: string;
+          };
+          return message.repositoryId === nextRepositoryId;
+        }),
+      ).toBe(true),
+    );
+    await Effect.runPromise(Fiber.interrupt(next));
+  });
+
   it("ignores terminal responses and fragments that arrive after cancellation", async () => {
     const send = vi.fn();
     const transport = createRepositoryHistoryTransport(

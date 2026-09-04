@@ -84,6 +84,10 @@ export function createRepositoryHistoryTransport(
         repositoryId: pending.repositoryId,
         requestId,
       },
+    ).pipe(
+      Effect.tapError((failure) =>
+        Deferred.fail(pending.result, failure).pipe(Effect.ignore),
+      ),
     );
   };
 
