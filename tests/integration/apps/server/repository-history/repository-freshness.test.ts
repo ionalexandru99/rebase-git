@@ -31,7 +31,14 @@ afterEach(async () => {
   await Promise.all(
     directories
       .splice(0)
-      .map((path) => rm(path, { force: true, recursive: true })),
+      .map((path) =>
+        rm(path, {
+          force: true,
+          recursive: true,
+          maxRetries: 3,
+          retryDelay: 100,
+        }),
+      ),
   );
 });
 
@@ -220,6 +227,7 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
           ),
         { timeout: 3_000 },
       );
+      await vi.waitFor(() => expect(states.at(-1)?.fetching).toBe(false));
     });
   });
 
