@@ -137,6 +137,25 @@ describe("commit graph page window", () => {
     window.dispose();
   });
 
+  it("finishes an automatic refresh after a pointer cancels pending navigation", async () => {
+    const reader = fakeReader(history(15));
+    const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
+    await window.loadInitial(query);
+    const pending = deferred<number | undefined>();
+    reader.locate.mockReturnValueOnce(pending.promise);
+    const refresh = window.reload(query, oid(2));
+    expect(window.getSnapshot().loading).toBe(true);
+    window.cancelNavigation();
+    pending.resolve(2);
+    await refresh;
+    expect(window.getSnapshot()).toMatchObject({
+      loading: false,
+      anchorOid: oid(2),
+    });
+    expect(reader.read).toHaveBeenCalledTimes(2);
+    window.dispose();
+  });
+
   it("keeps the newest keyboard move after cancelling an earlier pending page", async () => {
     const commits = history(15);
     const reader = fakeReader(commits);

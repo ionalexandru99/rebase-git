@@ -61,6 +61,7 @@ export function createCommitGraphPageWindow(
   let controller = new AbortController();
   let generation = 0;
   let navigationRequest = 0;
+  let initialRequest = 0;
   let jumping = false;
   let disposed = false;
   let replacing = false;
@@ -216,18 +217,18 @@ export function createCommitGraphPageWindow(
   ) => {
     if (disposed) return;
     cancelNavigation();
-    const request = navigationRequest;
+    const request = ++initialRequest;
     let offset = 0;
     if (anchorOid !== undefined) {
       publish({ loading: true, error: undefined });
       try {
         offset = (await reader.locate(query, anchorOid)) ?? 0;
       } catch (error) {
-        if (request === navigationRequest && !disposed)
+        if (request === initialRequest && !disposed)
           fail(0, error, () => loadInitial(query, anchorOid));
         return;
       }
-      if (request !== navigationRequest || disposed) return;
+      if (request !== initialRequest || disposed) return;
     }
     await replace(query, Math.floor(offset / pageSize) * pageSize, anchorOid);
   };
