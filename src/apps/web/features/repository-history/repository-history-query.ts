@@ -198,7 +198,10 @@ export function readRepositoryHistory(
       const selected = selectHistoryPage(result, query);
       rememberHistoryOrder(orderCache, key, {
         basis,
-        oids: selected.map(({ oid }) => oid),
+        oids:
+          query.ancestry === "first-parent"
+            ? selected.map(({ oid }) => oid)
+            : repository.cachedPage.oids,
         complete: false,
       });
       return selected;
@@ -394,8 +397,8 @@ export function historyOrderScopeKey(
   return JSON.stringify([
     query.order,
     query.ancestry ?? "all",
-    query.additionalParentEdges
-      ?.map(({ childOid, parentOid }) => `${childOid}\0${parentOid}`)
+    (query.additionalParentEdges ?? [])
+      .map(({ childOid, parentOid }) => `${childOid}\0${parentOid}`)
       .toSorted(),
     query.roots
       .map(({ name, type, oid }) =>

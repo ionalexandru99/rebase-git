@@ -13,6 +13,46 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("local ordered history pages", () => {
+  it("keeps absolute positions after reading a nonzero page from incomplete history", async () => {
+    const source = await seed("main", false);
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = ["merge", "right", "left", "base"].flatMap((subject) =>
+      source.commits.filter((commit) => commit.subject === subject),
+    );
+    await initialPage(environmentId, repositoryId, "main", commits);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const query = {
+      roots: [root("main", "merge")],
+      order: "chronological" as const,
+      offset: 2,
+      limit: 1,
+    };
+    expect(
+      (
+        await readRepositoryHistory(
+          environmentId,
+          repositoryId,
+          query,
+          indexedDB,
+          cache,
+        )
+      )?.map(({ subject }) => subject),
+    ).toEqual(["left"]);
+    expect(
+      await locateRepositoryHistoryCommits(
+        environmentId,
+        repositoryId,
+        query,
+        [oid("merge"), oid("left")],
+        cache,
+      ),
+    ).toEqual([
+      { oid: oid("merge"), index: 0 },
+      { oid: oid("left"), index: 2 },
+    ]);
+  });
+
   it("locates a batch without reading commit metadata once the ordered scope is cached", async () => {
     const fixture = await seed("main", false);
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
@@ -35,7 +75,7 @@ describe("local ordered history pages", () => {
         await locateRepositoryHistoryCommits(
           fixture.environmentId,
           fixture.repositoryId,
-          query,
+          { ...query, additionalParentEdges: [] },
           [oid("base"), oid("left"), oid("right"), oid("left")],
           cache,
         ),
