@@ -33,7 +33,16 @@ export function attachEnvironmentWebSocketServer(
     clientTracking: true,
     maxPayload: currentTransportLimits.maxWebSocketRequestBytes,
     noServer: true,
-    perMessageDeflate: { threshold: 1_024 },
+    perMessageDeflate: {
+      serverMaxWindowBits: 10,
+      serverNoContextTakeover: true,
+      threshold: 1_024,
+      zlibDeflateOptions: {
+        chunkSize: 1_024,
+        level: 3,
+        memLevel: 7,
+      },
+    },
   });
   const accessCapabilities = new WeakMap<
     WebSocket,
