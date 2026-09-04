@@ -176,6 +176,10 @@ export function readRepositoryHistory(
       (previous === undefined ||
         (!previous.complete && previous.basis === basis)) &&
       query.order === repository.cachedPage?.order &&
+      (repository.cachedPage.scopeKey === key ||
+        (repository.cachedPage.scopeKey === undefined &&
+          query.ancestry !== "first-parent" &&
+          (query.additionalParentEdges?.length ?? 0) === 0)) &&
       sameOids(roots, repository.cachedPage.rootOids) &&
       (offset + query.limit <= repository.cachedPage.oids.length ||
         repository.cachedPage.oids.length <
@@ -229,6 +233,8 @@ export function readRepositoryHistory(
         repository.cachedPage?.order === query.order &&
         (repository.cachedPage.scopeKey === key ||
           (repository.cachedPage.scopeKey === undefined &&
+            query.ancestry !== "first-parent" &&
+            (query.additionalParentEdges?.length ?? 0) === 0 &&
             sameOids(roots, repository.cachedPage.rootOids)))
           ? repository.cachedPage.oids
           : undefined;

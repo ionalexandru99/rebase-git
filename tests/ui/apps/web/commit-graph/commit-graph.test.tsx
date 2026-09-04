@@ -10,6 +10,36 @@ import {
 import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 describe("commit graph", () => {
+  it("clears the active descendant when a scope change hides its commit", async () => {
+    const commits = history(3);
+    const last = commits[2];
+    if (last === undefined) throw new Error("Missing fixture");
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    const list = screen.getByRole("listbox");
+    await screen.getByRole("option", { name: /^Commit 1,/ }).click();
+    await expect.element(list).toHaveAttribute("aria-activedescendant");
+    reader.read.mockResolvedValue(commits.slice(2));
+    await screen.rerender(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraph
+          reader={reader}
+          repositoryName="rebase-test"
+          roots={[{ name: "other", oid: last.oid, type: "branch" }]}
+        />
+      </div>,
+    );
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 1,/ }))
+      .not.toBeInTheDocument();
+    await expect.element(list).not.toHaveAttribute("aria-activedescendant");
+    list.element().focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect
+      .element(screen.getByRole("option", { name: /^Commit 2,/ }))
+      .toHaveAttribute("aria-selected", "true");
+  });
+
   it("expands nested merge lines without selecting them and clears a selection hidden by collapse", async () => {
     const commits = mergeHistory();
     const merge = commits[0];

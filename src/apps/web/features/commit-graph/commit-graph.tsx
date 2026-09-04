@@ -245,7 +245,12 @@ export function CommitGraph({
       !visibleCommits.some(({ oid }) => oid === selectedOid)
     )
       setSelectedOid(undefined);
-  }, [selectedOid, visibleCommits]);
+    if (
+      activeOid !== undefined &&
+      !visibleCommits.some(({ oid }) => oid === activeOid)
+    )
+      setActiveOid(undefined);
+  }, [activeOid, selectedOid, visibleCommits]);
 
   const previousSynchronization = useRef(historySnapshot.synchronization);
   useEffect(() => {
