@@ -29,16 +29,14 @@ const repositoryId = "00000000-0000-4000-8000-000000000001";
 
 afterEach(async () => {
   await Promise.all(
-    directories
-      .splice(0)
-      .map((path) =>
-        rm(path, {
-          force: true,
-          recursive: true,
-          maxRetries: 3,
-          retryDelay: 100,
-        }),
-      ),
+    directories.splice(0).map((path) =>
+      rm(path, {
+        force: true,
+        recursive: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      }),
+    ),
   );
 });
 
