@@ -1,6 +1,7 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import {
   defaultRangeExtractor,
+  observeElementRect,
   useVirtualizer,
   type VirtualItem,
 } from "@tanstack/react-virtual";
@@ -22,6 +23,7 @@ import type {
 
 const rowHeight = 36;
 const overscanRows = 6;
+const emptyViewport = { width: 0, height: 0 };
 
 export function CommitGraphVirtualWindow({
   ref,
@@ -49,28 +51,21 @@ export function CommitGraphVirtualWindow({
     readonly onScroll: UIEventHandler<HTMLTableElement>;
   }) => ReactNode;
 }) {
-  const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [horizontalOffset, setHorizontalOffset] = useState(0);
   const error = snapshot.error;
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (element === null) return;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry !== undefined)
-        setViewport({
-          height: entry.contentRect.height,
-          width: entry.contentRect.width,
-        });
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [scrollRef]);
   const virtualizer = useVirtualizer({
     count:
       snapshot.knownEndOffset +
       (commits.length > 0 && snapshot.hasOlder ? 1 : 0),
     estimateSize: () => rowHeight,
     getScrollElement: () => scrollRef.current,
+    observeElementRect: (instance, callback) =>
+      observeElementRect(instance, (rect) =>
+        callback({
+          width: instance.scrollElement?.clientWidth ?? rect.width,
+          height: instance.scrollElement?.clientHeight ?? rect.height,
+        }),
+      ),
     overscan: overscanRows,
     rangeExtractor: (range) => {
       const indexes = defaultRangeExtractor(range);
@@ -86,6 +81,7 @@ export function CommitGraphVirtualWindow({
       return indexes.sort((left, right) => left - right);
     },
   });
+  const viewport = virtualizer.scrollRect ?? emptyViewport;
   const absoluteRows = virtualizer.getVirtualItems();
   const [rowSlots, setRowSlots] = useState<readonly (string | undefined)[]>([]);
   const rowOids = absoluteRows.map(
