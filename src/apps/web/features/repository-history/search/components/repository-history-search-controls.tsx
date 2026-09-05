@@ -269,6 +269,7 @@ export function RepositoryHistorySearchView({
                   {!busy &&
                   search.error === undefined &&
                   search.text.trim() !== "" &&
+                  search.cursor === undefined &&
                   search.commits.length === 0 ? (
                     <p className="px-2 py-3 text-xs text-muted-foreground">
                       No matches in cached history.

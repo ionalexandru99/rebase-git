@@ -353,6 +353,11 @@ describe("history search controls", () => {
       }
       expect(reader.search).toHaveBeenCalledTimes(5);
       expect(onNavigate).toHaveBeenCalledTimes(1);
+      if (emptyPages) {
+        await expect
+          .element(page.getByText("No matches in cached history."))
+          .not.toBeInTheDocument();
+      }
     },
   );
 

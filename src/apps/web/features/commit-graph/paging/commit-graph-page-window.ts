@@ -155,11 +155,16 @@ export function createCommitGraphPageWindow(
     offset: number,
     anchorOid?: string,
     throughOffset = offset,
+    callerSignal?: AbortSignal,
   ) => {
     if (disposed) return;
+    callerSignal?.throwIfAborted();
     controller.abort();
     controller = new AbortController();
-    const signal = controller.signal;
+    const signal =
+      callerSignal === undefined
+        ? controller.signal
+        : AbortSignal.any([controller.signal, callerSignal]);
     const epoch = ++generation;
     loads.clear();
     queue = Promise.resolve();
@@ -459,7 +464,8 @@ export function createCommitGraphPageWindow(
         return undefined;
       const { offset, query } = target;
       const expectedEpoch = generation + 1;
-      await replace(query, Math.floor(offset / pageSize) * pageSize, oid);
+      const offsetStart = Math.floor(offset / pageSize) * pageSize;
+      await replace(query, offsetStart, oid, offsetStart, callerSignal);
       if (
         callerSignal?.aborted ||
         request !== navigationRequest ||
