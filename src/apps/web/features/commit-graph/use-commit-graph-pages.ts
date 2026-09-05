@@ -83,16 +83,20 @@ export function useCommitGraphPages(
   }, [reader, historySnapshot.historyRevision]);
   useEffect(() => {
     if (
-      (previousSynchronization.current !== "complete" &&
-        historySnapshot.synchronization === "complete") ||
-      (previousHistoryRevision.current !== historySnapshot.historyRevision &&
-        historySnapshot.status === "empty" &&
-        historySnapshot.synchronization === "idle")
+      previousHistoryRevision.current !== historySnapshot.historyRevision &&
+      historySnapshot.status === "empty" &&
+      historySnapshot.synchronization === "idle"
+    )
+      engine?.discard();
+    else if (
+      previousSynchronization.current !== "complete" &&
+      historySnapshot.synchronization === "complete"
     )
       setCompletion((value) => value + 1);
     previousSynchronization.current = historySnapshot.synchronization;
     previousHistoryRevision.current = historySnapshot.historyRevision;
   }, [
+    engine,
     historySnapshot.historyRevision,
     historySnapshot.status,
     historySnapshot.synchronization,

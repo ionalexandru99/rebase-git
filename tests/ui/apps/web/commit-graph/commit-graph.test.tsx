@@ -206,29 +206,55 @@ describe("commit graph", () => {
     await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledTimes(2));
   });
 
-  it("clears resident rows and selection when another reader clears the shared cache", async () => {
-    const reader = historyReader({ commits: history(2), status: "ready" });
-    reader.snapshot = { ...reader.snapshot, synchronization: "complete" };
-    const screen = await renderGraph(reader);
-    await screen.getByRole("row", { name: /^Commit 0,/ }).click();
-    await expect.element(screen.getByText("1 selected")).toBeVisible();
-    reader.read.mockResolvedValue([]);
-    reader.locateMany.mockResolvedValue([]);
-    reader.snapshot = {
-      revision: 1,
-      historyRevision: 1,
-      status: "empty",
-      synchronization: "idle",
-      synchronizedCommitCount: 0,
-    };
-    await expect
-      .element(screen.getByRole("status", { name: "Empty commit history" }))
-      .toBeVisible();
-    await expect.element(screen.getByText("0 selected")).toBeVisible();
-    await expect
-      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
-      .not.toBeInTheDocument();
-  });
+  it.each([false, true])(
+    "discards shared cache rows and selection without querying a closed reader (%s)",
+    async (removed) => {
+      const reader = historyReader({ commits: history(2), status: "ready" });
+      reader.snapshot = { ...reader.snapshot, synchronization: "complete" };
+      const screen = await renderGraph(reader);
+      await screen.getByRole("row", { name: /^Commit 0,/ }).click();
+      await expect.element(screen.getByText("1 selected")).toBeVisible();
+      expect(reader.read).toHaveBeenCalledTimes(1);
+      const reads = reader.read.mock.calls.length;
+      if (removed) {
+        reader.read.mockRejectedValue(new Error("Reader closed"));
+        reader.locate.mockRejectedValue(new Error("Reader closed"));
+        reader.locateMany.mockRejectedValue(new Error("Reader closed"));
+      } else {
+        reader.read.mockResolvedValue([]);
+        reader.locateMany.mockResolvedValue([]);
+      }
+      reader.snapshot = {
+        revision: 1,
+        historyRevision: 1,
+        status: "empty",
+        synchronization: "idle",
+        synchronizedCommitCount: 0,
+      };
+      await expect
+        .element(screen.getByRole("status", { name: "Empty commit history" }))
+        .toBeVisible();
+      await expect.element(screen.getByText("0 selected")).toBeVisible();
+      await expect
+        .element(screen.getByRole("row", { name: /^Commit 0,/ }))
+        .not.toBeInTheDocument();
+      expect(reader.read).toHaveBeenCalledTimes(reads);
+      if (!removed) {
+        reader.read.mockResolvedValue(history(2));
+        reader.snapshot = {
+          revision: 2,
+          historyRevision: 2,
+          status: "ready",
+          synchronization: "complete",
+          synchronizedCommitCount: 2,
+        };
+        await expect
+          .element(screen.getByRole("row", { name: /^Commit 0,/ }))
+          .toBeVisible();
+        await expect.element(screen.getByText("0 selected")).toBeVisible();
+      }
+    },
+  );
 
   it("opens cache recovery from the history menu and confirms the shared cache action", async () => {
     const reader = historyReader({ commits: history(2), status: "ready" });

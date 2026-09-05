@@ -56,6 +56,7 @@ export interface CommitGraphPageWindow {
   readonly getSnapshot: () => CommitGraphPageWindowSnapshot;
   readonly subscribe: (listener: () => void) => () => void;
   readonly dispose: () => void;
+  readonly discard: () => void;
   readonly loadInitial: (
     query: RepositoryHistoryQuery,
     anchorOid?: string,
