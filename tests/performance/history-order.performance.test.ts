@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
-import { expect, test } from "@playwright/test";
+import { test } from "@playwright/test";
 import { createServer } from "vite";
+import { assertTimingBudget } from "#tests-performance/timing-budget";
 
 test("cached order changes on 250,000 merge-heavy commits", async ({
   page,
@@ -143,7 +144,7 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
     process.stdout.write(
       `${JSON.stringify({ ...measurements, p95Milliseconds: p95 })}\n`,
     );
-    expect(p95).toBeLessThan(100);
+    assertTimingBudget("Cached history order p95", p95, 100);
   } finally {
     await server.close();
   }

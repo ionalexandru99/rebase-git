@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { createServer } from "vite";
+import { assertTimingBudget } from "#tests-performance/timing-budget";
 
-test("quota cleanup and cache rebuild keep graph interaction below 50 ms", async ({
+test("quota cleanup and cache rebuild keep graph interaction within its timing budget", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -146,8 +147,16 @@ test("quota cleanup and cache rebuild keep graph interaction below 50 ms", async
     });
     expect(metrics.feedbackSamples).toBeGreaterThanOrEqual(5);
     expect(metrics.feedbackSamples).toBe(metrics.keyboardEvents);
-    expect(metrics.maximumFeedbackMilliseconds).toBeLessThan(50);
-    expect(metrics.maximumLongTaskMilliseconds).toBeLessThan(50);
+    assertTimingBudget(
+      "History storage interaction feedback maximum",
+      metrics.maximumFeedbackMilliseconds,
+      50,
+    );
+    assertTimingBudget(
+      "History storage interaction long-task maximum",
+      metrics.maximumLongTaskMilliseconds,
+      50,
+    );
   } finally {
     await page
       .evaluate(() => window.__storageMaintenance?.close())

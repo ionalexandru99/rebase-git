@@ -18,6 +18,7 @@ import {
   type WebSocketRoute,
 } from "@playwright/test";
 import { WebSocketServer } from "ws";
+import { assertTimingBudget } from "#tests-performance/timing-budget";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve("src/apps/server/cli.ts");
@@ -40,114 +41,135 @@ const scenarios = [
 ] as const;
 
 for (const scenario of scenarios) {
-  test(`${scenario.name} commit graph budgets`, async ({ page }) => {
-    const testHome = await mkdtemp(join(tmpdir(), "rebase-performance-"));
-    const repositoryPath = join(testHome, "rebase-performance");
-    await createRepository(repositoryPath);
-    const server = startServer(testHome);
-    const session = await page.context().newCDPSession(page);
-    let historyReads = 0;
-    session.on("Network.webSocketFrameSent", ({ response }) => {
-      if (response.payloadData.includes('"ReadRepositoryHistory"'))
-        historyReads += 1;
-    });
-
-    try {
-      const socketProfile =
-        scenario.latency === 0
-          ? undefined
-          : await shapeGraphWebSockets(page, scenario.latency);
-      const readCount = () => socketProfile?.historyReads ?? historyReads;
-      await session.send("Network.enable");
-      await session.send("Network.emulateNetworkConditions", {
-        connectionType: scenario.latency === 0 ? "none" : "wifi",
-        downloadThroughput: scenario.latency === 0 ? -1 : networkBytesPerSecond,
-        latency: scenario.latency,
-        offline: false,
-        uploadThroughput: scenario.latency === 0 ? -1 : networkBytesPerSecond,
-      });
-      await installGraphMeasurements(page);
-      const pairingUrl = await server.waitForPairingUrl();
-      await page.goto(pairingUrl);
-      await expect(page.getByRole("status")).toHaveAttribute(
-        "data-connection-state",
-        "Connected",
-      );
-      await page.keyboard.press("Control+o");
-      const picker = page.getByRole("dialog", { name: "Choose repository" });
-      await picker
-        .getByRole("button", { name: /^rebase-performance Folder/ })
-        .click();
-      const trace = await startTrace(session);
-      await page.evaluate(() => window.__startGraphMeasurement());
-      await page.keyboard.press("Control+Enter");
-      const history = page.getByRole("grid", { name: "Commit history" });
-      await page.evaluate(async () => {
-        while (window.__graphMetrics.firstContent === undefined)
-          await new Promise(requestAnimationFrame);
-      });
-      const selectionFeedback = await measureSelectionFeedback(page);
-      const uncachedScopeFeedback = await measureHistoryScopeFeedback(
-        page,
-        true,
-      );
-      await exerciseVirtualRows(page);
-      const frameWork = await trace.stop();
-      await expect(history.getByRole("row").first()).toBeVisible();
-      const browserMetrics = await page.evaluate(() => window.__graphMetrics);
-      await measureHistoryScopeFeedback(page, false);
-      const readsBeforeCachedScope = readCount();
-      expect(readsBeforeCachedScope).toBeGreaterThan(0);
-      const scopeFeedback = await measureHistoryScopeFeedback(page, true);
-      expect(readCount()).toBe(readsBeforeCachedScope);
-      const correctedContentMilliseconds = await measureCorrectedContent(
-        page,
-        repositoryPath,
-      );
-      const metrics = {
-        correctedContentMilliseconds,
-        firstContentMilliseconds:
-          required(browserMetrics.firstContent) - browserMetrics.started,
-        frameWorkP95Milliseconds: percentile(frameWork, 0.95),
-        frameWorkP99Milliseconds: percentile(frameWork, 0.99),
-        graphLoadingMilliseconds:
-          required(browserMetrics.loadingFeedback) - browserMetrics.started,
-        openingFeedbackMilliseconds:
-          required(browserMetrics.openingFeedback) - browserMetrics.started,
-        postGitRenderMilliseconds:
-          required(browserMetrics.firstContent) -
-          required(browserMetrics.lastBinaryMessage),
-        selectionFeedbackMilliseconds: selectionFeedback,
-        scopeFeedbackMilliseconds: scopeFeedback,
-        uncachedScopeFeedbackMilliseconds: uncachedScopeFeedback,
-      };
-      process.stdout.write(`${scenario.name} ${JSON.stringify(metrics)}\n`);
-
-      expect(metrics.firstContentMilliseconds).toBeLessThanOrEqual(
-        scenario.firstContentLimit,
-      );
-      expect(metrics.openingFeedbackMilliseconds).toBeLessThanOrEqual(50);
-      expect(metrics.selectionFeedbackMilliseconds).toBeLessThanOrEqual(50);
-      expect(metrics.scopeFeedbackMilliseconds).toBeLessThanOrEqual(100);
-      expect(metrics.uncachedScopeFeedbackMilliseconds).toBeLessThanOrEqual(
-        scenario.firstContentLimit,
-      );
-      expect(metrics.postGitRenderMilliseconds).toBeLessThanOrEqual(100);
-      expect(metrics.correctedContentMilliseconds).toBeLessThanOrEqual(
-        scenario.correctedContentLimit,
-      );
-      expect(metrics.frameWorkP95Milliseconds).toBeLessThan(8.3);
-      expect(metrics.frameWorkP99Milliseconds).toBeLessThan(16.7);
-      if (socketProfile !== undefined) {
-        expect(socketProfile.sent).toBeGreaterThan(0);
-        expect(socketProfile.received).toBeGreaterThan(0);
-        expect(socketProfile.errors).toEqual([]);
+  test(`${scenario.name} commit graph budgets`, async ({ context }) => {
+    const samples: Awaited<ReturnType<typeof measureCommitGraph>>[] = [];
+    for (let sample = 1; sample <= 3; sample += 1) {
+      const page = await context.newPage();
+      try {
+        samples.push(await measureCommitGraph(page, scenario, sample));
+      } finally {
+        await page.close();
       }
-    } finally {
-      server.child.kill("SIGTERM");
-      await rm(testHome, { force: true, recursive: true });
     }
+    const timing = (
+      metric: keyof (typeof samples)[number],
+      targetMilliseconds: number,
+    ) =>
+      assertTimingBudget(
+        `${scenario.name} ${metric}`,
+        samples.map((sample) => sample[metric]),
+        targetMilliseconds,
+      );
+    timing("firstContentMilliseconds", scenario.firstContentLimit);
+    timing("openingFeedbackMilliseconds", 50);
+    timing("selectionFeedbackMilliseconds", 50);
+    timing("scopeFeedbackMilliseconds", 100);
+    timing("uncachedScopeFeedbackMilliseconds", scenario.firstContentLimit);
+    timing("postGitRenderMilliseconds", 100);
+    timing("correctedContentMilliseconds", scenario.correctedContentLimit);
+    timing("frameWorkP95Milliseconds", 8.3);
+    timing("frameWorkP99Milliseconds", 16.7);
   });
+}
+
+async function measureCommitGraph(
+  page: Page,
+  scenario: (typeof scenarios)[number],
+  sample: number,
+) {
+  const testHome = await mkdtemp(join(tmpdir(), "rebase-performance-"));
+  const repositoryPath = join(testHome, "rebase-performance");
+  await createRepository(repositoryPath);
+  const server = startServer(testHome);
+  const session = await page.context().newCDPSession(page);
+  let historyReads = 0;
+  session.on("Network.webSocketFrameSent", ({ response }) => {
+    if (response.payloadData.includes('"ReadRepositoryHistory"'))
+      historyReads += 1;
+  });
+
+  try {
+    const socketProfile =
+      scenario.latency === 0
+        ? undefined
+        : await shapeGraphWebSockets(page, scenario.latency);
+    const readCount = () => socketProfile?.historyReads ?? historyReads;
+    await session.send("Network.enable");
+    await session.send("Network.emulateNetworkConditions", {
+      connectionType: scenario.latency === 0 ? "none" : "wifi",
+      downloadThroughput: scenario.latency === 0 ? -1 : networkBytesPerSecond,
+      latency: scenario.latency,
+      offline: false,
+      uploadThroughput: scenario.latency === 0 ? -1 : networkBytesPerSecond,
+    });
+    await installGraphMeasurements(page);
+    const pairingUrl = await server.waitForPairingUrl();
+    await page.goto(pairingUrl);
+    await expect(page.getByRole("status")).toHaveAttribute(
+      "data-connection-state",
+      "Connected",
+    );
+    await page.keyboard.press("Control+o");
+    const picker = page.getByRole("dialog", { name: "Choose repository" });
+    await picker
+      .getByRole("button", { name: /^rebase-performance Folder/ })
+      .click();
+    const trace = await startTrace(session, sample);
+    await page.evaluate(() => window.__startGraphMeasurement());
+    await page.keyboard.press("Control+Enter");
+    const history = page.getByRole("grid", { name: "Commit history" });
+    await page.evaluate(async () => {
+      while (window.__graphMetrics.firstContent === undefined)
+        await new Promise(requestAnimationFrame);
+    });
+    const selectionFeedback = await measureSelectionFeedback(page);
+    const uncachedScopeFeedback = await measureHistoryScopeFeedback(page, true);
+    await exerciseVirtualRows(page);
+    const frameWork = await trace.stop();
+    await expect(history.getByRole("row").first()).toBeVisible();
+    const browserMetrics = await page.evaluate(() => window.__graphMetrics);
+    await measureHistoryScopeFeedback(page, false);
+    const readsBeforeCachedScope = readCount();
+    expect(readsBeforeCachedScope).toBeGreaterThan(0);
+    const scopeFeedback = await measureHistoryScopeFeedback(page, true);
+    expect(readCount()).toBe(readsBeforeCachedScope);
+    const correctedContentMilliseconds = await measureCorrectedContent(
+      page,
+      repositoryPath,
+    );
+    const metrics = {
+      correctedContentMilliseconds,
+      firstContentMilliseconds:
+        required(browserMetrics.firstContent) - browserMetrics.started,
+      frameWorkP95Milliseconds: percentile(frameWork, 0.95),
+      frameWorkP99Milliseconds: percentile(frameWork, 0.99),
+      graphLoadingMilliseconds:
+        required(browserMetrics.loadingFeedback) - browserMetrics.started,
+      openingFeedbackMilliseconds:
+        required(browserMetrics.openingFeedback) - browserMetrics.started,
+      postGitRenderMilliseconds:
+        required(browserMetrics.firstContent) -
+        required(browserMetrics.lastBinaryMessage),
+      selectionFeedbackMilliseconds: selectionFeedback,
+      scopeFeedbackMilliseconds: scopeFeedback,
+      uncachedScopeFeedbackMilliseconds: uncachedScopeFeedback,
+    };
+    process.stdout.write(
+      `${scenario.name} sample ${sample} ${JSON.stringify(metrics)}\n`,
+    );
+    if (socketProfile !== undefined) {
+      expect(socketProfile.sent).toBeGreaterThan(0);
+      expect(socketProfile.received).toBeGreaterThan(0);
+      expect(socketProfile.errors).toEqual([]);
+    }
+    return metrics;
+  } finally {
+    if (server.child.exitCode === null && server.child.signalCode === null) {
+      server.child.kill("SIGTERM");
+      await once(server.child, "exit");
+    }
+    await rm(testHome, { force: true, recursive: true });
+  }
 }
 
 test("calibrates WebSocket frame latency and bandwidth", async ({ page }) => {
@@ -438,7 +460,7 @@ async function exerciseVirtualRows(page: Page) {
   });
 }
 
-async function startTrace(session: CDPSession) {
+async function startTrace(session: CDPSession, sample: number) {
   const completed = new Promise<string>((resolveTrace, rejectTrace) => {
     session.once("Tracing.tracingComplete", async ({ stream }) => {
       try {
@@ -470,11 +492,14 @@ async function startTrace(session: CDPSession) {
     stop: async () => {
       await session.send("Tracing.end");
       const trace = await completed;
-      const path = test.info().outputPath("renderer-trace.json");
+      const path = test.info().outputPath(`renderer-trace-${sample}.json`);
       await writeFile(path, trace);
       await test
         .info()
-        .attach("renderer-trace", { path, contentType: "application/json" });
+        .attach(`renderer-trace-${sample}`, {
+          path,
+          contentType: "application/json",
+        });
       return frameWorkloads(JSON.parse(trace) as Trace);
     },
   };

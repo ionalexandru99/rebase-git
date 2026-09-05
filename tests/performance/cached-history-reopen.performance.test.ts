@@ -1,8 +1,11 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { createServer } from "vite";
+import { assertTimingBudget } from "#tests-performance/timing-budget";
 
-test("completed offline history reopens within 100 ms", async ({ page }) => {
+test("completed offline history reopens within its timing budget", async ({
+  page,
+}) => {
   const server = await createServer({
     configFile: resolve("src/apps/web/vite.config.ts"),
     root: resolve("src/apps/web"),
@@ -141,7 +144,11 @@ test("completed offline history reopens within 100 ms", async ({ page }) => {
     });
     expect(metrics.networkPageRequests).toBe(0);
     expect(metrics.durations).toHaveLength(30);
-    expect(metrics.maximumMilliseconds).toBeLessThan(100);
+    assertTimingBudget(
+      "Cached history reopen maximum",
+      metrics.maximumMilliseconds,
+      100,
+    );
   } finally {
     await server.close();
   }

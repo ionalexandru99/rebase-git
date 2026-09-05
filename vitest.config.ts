@@ -54,6 +54,9 @@ const browserProject = (
 export default defineConfig({
   resolve: {
     alias: {
+      "#tests-performance": fileURLToPath(
+        new URL("./tests/performance", import.meta.url),
+      ),
       "#tests-ui": fileURLToPath(new URL("./tests/ui", import.meta.url)),
       "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
     },
