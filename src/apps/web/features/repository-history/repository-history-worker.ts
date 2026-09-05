@@ -4,13 +4,13 @@ import {
   type RepositoryFreshness,
 } from "@rebase/contracts";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
+import { readCurrentRepositoryHistory } from "#web/features/repository-history/read-current-repository-history";
 import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
 import {
   locateRepositoryHistoryCommit,
   locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryCommits,
-  readRepositoryHistory,
 } from "#web/features/repository-history/repository-history-query";
 import {
   type RepositoryHistoryQuery,
@@ -360,12 +360,12 @@ async function handleReaderMessage(
         });
       }
       reader.queries.set(message.requestId, message.query);
-      const cached = await readRepositoryHistory(
+      const cached = await readCurrentRepositoryHistory(
         reader.connection.environmentId,
         reader.connection.logicalRepositoryId,
         message.query,
-        globalThis.indexedDB,
         replica.orderCache,
+        () => reader.epoch.isCurrent(message.requestId),
       );
       if (!reader.epoch.isCurrent(message.requestId)) {
         reader.queries.delete(message.requestId);
