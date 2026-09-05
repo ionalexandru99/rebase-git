@@ -118,6 +118,14 @@ export function repositoryKey(environmentId: string, repositoryId: string) {
   return `${environmentId}\0${repositoryId}`;
 }
 
+export function repositoryCommitRange(key: string, after?: string) {
+  return IDBKeyRange.bound(
+    after ?? `${key}\0`,
+    `${key}\0\uffff`,
+    after !== undefined,
+  );
+}
+
 export function commitKey(
   environmentId: string,
   repositoryId: string,

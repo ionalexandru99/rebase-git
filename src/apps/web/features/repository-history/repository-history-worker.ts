@@ -476,6 +476,7 @@ async function handleReaderMessage(
         )
           return;
         invalidateStoredHistory(replica);
+        replica.synchronizedCommitCount = completion.commitCount;
         if (completion.snapshot !== undefined) {
           replica.shallowOids = completion.snapshot.shallowOids ?? [];
           replica.refTargets = completion.snapshot.refTargets;
@@ -492,7 +493,6 @@ async function handleReaderMessage(
       replica.synchronization = "complete";
       replica.storingCommits = false;
       replica.reconciling = false;
-      replica.synchronizedCommitCount = message.commitCount;
       void prepareRepositoryHistoryOrder(
         reader.connection.environmentId,
         reader.connection.logicalRepositoryId,

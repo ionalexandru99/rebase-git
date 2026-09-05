@@ -16,6 +16,7 @@ import {
   commitKey,
   commitStoreName,
   emptyStoredRepository,
+  repositoryCommitRange,
   repositoryKey,
   repositoryStoreName,
   requestResult,
@@ -259,7 +260,10 @@ export function completeStoredRepositoryHistory(
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ) {
   return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(repositoryStoreName, "readwrite");
+    const transaction = database.transaction(
+      [commitStoreName, repositoryStoreName],
+      "readwrite",
+    );
     const completed = transactionCompleted(transaction);
     const repositories = transaction.objectStore(repositoryStoreName);
     const key = repositoryKey(environmentId, repositoryId);
@@ -270,11 +274,18 @@ export function completeStoredRepositoryHistory(
       throw new Error("Repository history has no synchronization state");
     }
     const snapshot = current.pendingSnapshot;
-    const completion = completeRepositoryHistory(
-      current.progress,
-      reportedCommitCount,
-      snapshot,
-    );
+    const completion = {
+      ...completeRepositoryHistory(
+        current.progress,
+        reportedCommitCount,
+        snapshot,
+      ),
+      commitCount: await requestResult(
+        transaction
+          .objectStore(commitStoreName)
+          .count(repositoryCommitRange(key)),
+      ),
+    };
     const {
       pendingSnapshot: _,
       pendingTopologicalEpoch: __,
