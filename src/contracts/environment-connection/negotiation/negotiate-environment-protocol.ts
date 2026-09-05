@@ -75,6 +75,8 @@ function negotiateCapabilities(
     const clientCapability = clientByName.get(serverCapability.name);
     if (
       clientCapability === undefined ||
+      (serverCapability.name === "repository-history" &&
+        serverCapability.version !== clientCapability.version) ||
       serverCapability.introducedInMinor > negotiatedMinor ||
       clientCapability.introducedInMinor > negotiatedMinor
     ) {

@@ -1,4 +1,8 @@
-import type { RepositoryCommit } from "@rebase/contracts";
+import type {
+  RepositoryCommit,
+  RepositoryFetchSetting,
+  RepositoryFreshness,
+} from "@rebase/contracts";
 import type { HistoryAncestryRoute } from "#web/features/repository-history/history-order.contract";
 import type {
   RepositoryHistoryGateway,
@@ -69,6 +73,8 @@ function connectBrowserRepositoryHistoryReader(
   const loads = new Map<string, AbortController>();
   const synchronizations = new Map<string, AbortController>();
   const pendingBatches = new Map<string, PendingBatch>();
+  const freshnessCommands = new Map<string, AbortController>();
+  let unsubscribeFreshness: (() => void) | undefined;
   let closed = false;
   let snapshot: RepositoryHistorySnapshot = {
     revision: 0,
@@ -78,6 +84,35 @@ function connectBrowserRepositoryHistoryReader(
 
   port.onmessage = (event: MessageEvent<RepositoryHistoryWorkerResponse>) => {
     const message = event.data;
+    if (message._tag === "SubscribeFreshness") {
+      unsubscribeFreshness?.();
+      unsubscribeFreshness = options.gateway.freshness?.subscribe(
+        options.repositoryId,
+        (freshness) =>
+          port.postMessage({
+            _tag: "FreshnessChanged",
+            freshness,
+          } satisfies RepositoryHistoryWorkerRequest),
+        (error) =>
+          port.postMessage({
+            _tag: "FreshnessFailed",
+            failure: workerFailure(error),
+          } satisfies RepositoryHistoryWorkerRequest),
+      );
+      return;
+    }
+    if (message._tag === "UnsubscribeFreshness") {
+      unsubscribeFreshness?.();
+      unsubscribeFreshness = undefined;
+      return;
+    }
+    if (
+      message._tag === "RunFetchHistory" ||
+      message._tag === "RunConfigureFetch"
+    ) {
+      runFreshnessCommand(message);
+      return;
+    }
     if (message._tag === "CacheRemoved") {
       onRemoved();
       return;
@@ -114,6 +149,14 @@ function connectBrowserRepositoryHistoryReader(
     if (message._tag === "SnapshotChanged") {
       onCachePaused(message.cachePaused ?? false);
       snapshot = {
+        shallowOids: message.shallowOids ?? [],
+        ...(message.freshness === undefined
+          ? {}
+          : { freshness: message.freshness }),
+        ...(message.freshnessFailure === undefined
+          ? {}
+          : { freshnessError: readerError(message.freshnessFailure) }),
+        storingCommits: message.storingCommits ?? false,
         ...(message.failure === undefined
           ? {}
           : { error: readerError(message.failure) }),
@@ -163,6 +206,10 @@ function connectBrowserRepositoryHistoryReader(
       request.resolve(message.positions);
       return;
     }
+    if (message._tag === "FreshnessResult") {
+      request.resolve(message.freshness);
+      return;
+    }
     if (message._tag === "CacheDiagnosticsResult") {
       request.resolve(message.diagnostics);
       return;
@@ -183,6 +230,7 @@ function connectBrowserRepositoryHistoryReader(
       ...(lifetimeLock === undefined ? {} : { lifetimeLock }),
       port: channel.port2,
       repositoryId: options.repositoryId,
+      supportsFreshness: options.gateway.freshness !== undefined,
     };
     worker.port.postMessage(connection, [channel.port2]);
     worker.port.start();
@@ -194,6 +242,47 @@ function connectBrowserRepositoryHistoryReader(
       } satisfies RepositoryHistoryWorkerRequest);
     },
   );
+
+  function runFreshnessCommand(
+    message: Extract<
+      RepositoryHistoryWorkerResponse,
+      { _tag: "RunFetchHistory" | "RunConfigureFetch" }
+    >,
+  ) {
+    const controller = new AbortController();
+    freshnessCommands.set(message.requestId, controller);
+    const gateway = options.gateway.freshness;
+    const operation =
+      gateway === undefined
+        ? Promise.reject(new RepositoryHistoryUnavailable())
+        : message._tag === "RunFetchHistory"
+          ? gateway.fetch(options.repositoryId, controller.signal)
+          : gateway.configure(
+              options.repositoryId,
+              message.setting,
+              controller.signal,
+            );
+    void operation
+      .then(
+        (freshness) => {
+          if (!closed)
+            port.postMessage({
+              _tag: "FreshnessCommandCompleted",
+              requestId: message.requestId,
+              freshness,
+            } satisfies RepositoryHistoryWorkerRequest);
+        },
+        (error: unknown) => {
+          if (!closed)
+            port.postMessage({
+              _tag: "FreshnessCommandFailed",
+              requestId: message.requestId,
+              failure: workerFailure(error),
+            } satisfies RepositoryHistoryWorkerRequest);
+        },
+      )
+      .finally(() => freshnessCommands.delete(message.requestId));
+  }
 
   function loadHistory(requestId: string, query: RepositoryHistoryQuery) {
     const controller = new AbortController();
@@ -348,6 +437,17 @@ function connectBrowserRepositoryHistoryReader(
         oid,
         requestId: createRepositoryHistoryRequestId(),
       }),
+    fetch: () =>
+      request<RepositoryFreshness>({
+        _tag: "FetchHistory",
+        requestId: createRepositoryHistoryRequestId(),
+      }),
+    configureFetch: (setting: RepositoryFetchSetting) =>
+      request<RepositoryFreshness>({
+        _tag: "ConfigureFetch",
+        setting,
+        requestId: createRepositoryHistoryRequestId(),
+      }),
     search: (query, signal) =>
       request<RepositoryHistorySearchResult>(
         {
@@ -374,6 +474,9 @@ function connectBrowserRepositoryHistoryReader(
       }
       closed = true;
       releaseLease();
+      unsubscribeFreshness?.();
+      for (const controller of freshnessCommands.values()) controller.abort();
+      freshnessCommands.clear();
       for (const controller of loads.values()) {
         controller.abort();
       }

@@ -1,6 +1,8 @@
 import type {
   ReadRepositoryHistory,
   RepositoryCommit,
+  RepositoryFetchSetting,
+  RepositoryFreshness,
   RepositoryHistoryOperationFailure,
   RepositoryHistoryRefTarget,
   SynchronizeRepositoryHistory,
@@ -11,12 +13,20 @@ import type {
   HistoryAncestryRoute,
   HistoryParentEdge,
 } from "#web/features/repository-history/history-order.contract";
+import type {
+  RepositoryFreshnessGateway,
+  RepositoryFreshnessTransport,
+} from "#web/features/repository-history/repository-freshness.contract";
 import type { RepositoryHistoryCacheManagement } from "#web/features/repository-history/repository-history-storage.contract";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
 export interface RepositoryHistorySnapshot {
+  readonly shallowOids?: readonly string[];
+  readonly freshness?: RepositoryFreshness;
+  readonly freshnessError?: RepositoryHistoryReaderError;
+  readonly storingCommits?: boolean;
   readonly historyRevision: number;
   readonly error?: RepositoryHistoryReaderError;
   readonly revision: number;
@@ -54,6 +64,10 @@ export interface RepositoryHistoryReader
     query: RepositoryHistoryQuery,
     oid: string,
   ) => Promise<number | undefined>;
+  readonly fetch: () => Promise<RepositoryFreshness>;
+  readonly configureFetch: (
+    setting: RepositoryFetchSetting,
+  ) => Promise<RepositoryFreshness>;
   readonly close: () => void;
   readonly getCommitSummaries: (
     oids: readonly string[],
@@ -93,6 +107,7 @@ export type RepositoryHistoryReaderError =
   | RepositoryHistoryUnavailable;
 
 export interface RepositoryHistoryTransport {
+  readonly freshness?: RepositoryFreshnessTransport;
   readonly read: (
     request: Omit<ReadRepositoryHistory, "requestId" | "_tag">,
   ) => Effect.Effect<
@@ -115,6 +130,7 @@ export interface RepositoryHistoryTransport {
 }
 
 export interface RepositoryHistoryGateway {
+  readonly freshness?: RepositoryFreshnessGateway;
   readonly read: (
     request: Omit<ReadRepositoryHistory, "requestId" | "_tag">,
     signal?: AbortSignal,

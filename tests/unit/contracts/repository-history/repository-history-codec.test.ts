@@ -77,6 +77,7 @@ describe("repository history binary codec", () => {
         refTargets: page.refTargets,
         resumable: true,
         rootOids: [page.commits[0]?.oid ?? ""],
+        shallowOids: ["b".repeat(40)],
       },
     } as const;
 

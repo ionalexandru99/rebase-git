@@ -50,6 +50,8 @@ function historyReader() {
     locateMany: vi.fn(async () => []),
     ancestryRoute: vi.fn(async () => undefined),
     locate: vi.fn(async () => undefined),
+    fetch: vi.fn<RepositoryHistoryReader["fetch"]>(),
+    configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(),
     close: vi.fn(),
     search: vi.fn(async () => ({
       commits: [],

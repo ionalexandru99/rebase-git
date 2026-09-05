@@ -2,6 +2,7 @@ import {
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   type RepositoryCommit,
+  type RepositoryFreshness,
 } from "@rebase/contracts";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
 import { selectHistoryPage } from "#web/features/repository-history/history-page-selection";
@@ -110,6 +111,7 @@ function connectReader(
         ) {
           replica.synchronization = replica.reconciling ? "stale" : "idle";
           replica.reconciled = false;
+          replica.storingCommits = false;
           replica.reconciling = false;
           delete replica.synchronizationOwner;
           delete replica.synchronizationRequestId;
@@ -142,6 +144,23 @@ function connectReader(
   };
   connection.port.start();
   postSnapshot(reader, replica);
+  assignFreshnessOwner(replica);
+}
+
+function rejectOversizedNavigation(
+  reader: ConnectedReader,
+  message: RepositoryHistoryWorkerRequest,
+): boolean {
+  const oversized =
+    (message._tag === "GetAncestryRoute" && message.roots.length > 256) ||
+    (message._tag === "LocateHistoryCommits" && message.oids.length > 1_000);
+  if (!oversized) return false;
+  post(reader, {
+    _tag: "RequestFailed",
+    requestId: message.requestId,
+    failure: { _tag: "Unavailable" },
+  });
+  return true;
 }
 
 async function handleReaderMessage(
@@ -152,6 +171,7 @@ async function handleReaderMessage(
   if (reader.closed) {
     return;
   }
+  if (rejectOversizedNavigation(reader, message)) return;
   await replica.initialization;
   if (reader.closed) {
     return;
@@ -202,7 +222,6 @@ async function handleReaderMessage(
       return;
     }
     case "GetAncestryRoute": {
-      if (message.roots.length > 256) throw new Error("Query is too large");
       const revision = replica.orderCache.revision;
       const state = await readStoredRepositoryHistoryState(
         reader.connection.environmentId,
@@ -244,6 +263,67 @@ async function handleReaderMessage(
         position,
         requestId: message.requestId,
       });
+      return;
+    }
+    case "FetchHistory":
+    case "ConfigureFetch": {
+      const owner = replica.freshnessOwner;
+      if (
+        owner === undefined ||
+        owner.closed ||
+        replica.freshness === undefined
+      ) {
+        post(reader, {
+          _tag: "RequestFailed",
+          requestId: message.requestId,
+          failure: { _tag: "Unavailable" },
+        });
+        return;
+      }
+      replica.freshnessCommands.set(message.requestId, reader);
+      post(
+        owner,
+        message._tag === "FetchHistory"
+          ? { _tag: "RunFetchHistory", requestId: message.requestId }
+          : {
+              _tag: "RunConfigureFetch",
+              requestId: message.requestId,
+              setting: message.setting,
+            },
+      );
+      return;
+    }
+    case "FreshnessChanged":
+      if (replica.freshnessOwner === reader)
+        await acceptFreshness(reader, replica, message.freshness);
+      return;
+    case "FreshnessFailed":
+      if (replica.freshnessOwner === reader) {
+        replica.freshnessFailure = message.failure;
+        replica.revision += 1;
+        publishSnapshot(replica);
+      }
+      return;
+    case "FreshnessCommandCompleted":
+    case "FreshnessCommandFailed": {
+      if (replica.freshnessOwner !== reader) return;
+      const requester = replica.freshnessCommands.get(message.requestId);
+      replica.freshnessCommands.delete(message.requestId);
+      if (message._tag === "FreshnessCommandCompleted") {
+        await acceptFreshness(reader, replica, message.freshness);
+        if (requester !== undefined)
+          post(requester, {
+            _tag: "FreshnessResult",
+            requestId: message.requestId,
+            freshness: message.freshness,
+          });
+      } else if (requester !== undefined) {
+        post(requester, {
+          _tag: "RequestFailed",
+          requestId: message.requestId,
+          failure: message.failure,
+        });
+      }
       return;
     }
     case "ManageCache":
@@ -386,26 +466,36 @@ async function handleReaderMessage(
       }
       try {
         const completion = await queueStorageWrite(() =>
-          completeStoredRepositoryHistory(
-            reader.connection.environmentId,
-            reader.connection.logicalRepositoryId,
-            message.commitCount,
-          ),
+          replica.synchronizationOwner !== reader ||
+          replica.synchronizationRequestId !== message.requestId
+            ? Promise.resolve(undefined)
+            : completeStoredRepositoryHistory(
+                reader.connection.environmentId,
+                reader.connection.logicalRepositoryId,
+                message.commitCount,
+              ),
         );
-        if (replica.synchronizationRequestId !== message.requestId) return;
+        if (
+          completion === undefined ||
+          replica.synchronizationRequestId !== message.requestId
+        )
+          return;
         invalidateStoredHistory(replica);
         if (completion.snapshot !== undefined) {
+          replica.shallowOids = completion.snapshot.shallowOids ?? [];
           replica.refTargets = completion.snapshot.refTargets;
         }
       } catch (error) {
         replica.synchronization = replica.reconciling ? "stale" : "idle";
         replica.reconciled = false;
+        replica.storingCommits = false;
         replica.reconciling = false;
         delete replica.synchronizationOwner;
         delete replica.synchronizationRequestId;
         throw error;
       }
       replica.synchronization = "complete";
+      replica.storingCommits = false;
       replica.reconciling = false;
       replica.synchronizedCommitCount = message.commitCount;
       void prepareRepositoryHistoryOrder(
@@ -418,6 +508,8 @@ async function handleReaderMessage(
       delete replica.synchronizationRequestId;
       replica.revision += 1;
       publishSnapshot(replica);
+      if (replica.needsReconciliation)
+        await startSynchronization(reader, replica);
       return;
     case "HistorySynchronizationFailed":
       if (
@@ -428,6 +520,7 @@ async function handleReaderMessage(
       }
       replica.synchronization = replica.reconciling ? "stale" : "idle";
       replica.reconciled = false;
+      replica.storingCommits = false;
       replica.reconciling = false;
       delete replica.synchronizationOwner;
       delete replica.synchronizationRequestId;
@@ -470,6 +563,7 @@ async function handleReaderMessage(
       });
       return;
     case "ReconcileHistory":
+      replica.needsReconciliation = true;
       if (replica.synchronization !== "syncing") {
         await startSynchronization(reader, replica);
       }
@@ -492,6 +586,7 @@ function closeReader(reader: ConnectedReader, replica: RepositoryReplica) {
     });
   }
   replica.readers.delete(reader);
+  closeFreshness(reader, replica);
   const ownedSynchronization = replica.synchronizationOwner === reader;
   if (ownedSynchronization) {
     cancelSynchronization(reader, replica);
@@ -626,6 +721,7 @@ async function acceptHistoryBatch(
     return;
   }
   replica.synchronizedCommitCount = synchronizedCommitCount;
+  if (batch.commits.length > 0) replica.storingCommits = true;
   invalidateStoredHistory(replica);
   replica.revision += 1;
   publishSnapshot(replica);
@@ -646,6 +742,8 @@ async function startSynchronization(
   }
   replica.reconciled = true;
   const requestId = createRepositoryHistoryRequestId();
+  replica.needsReconciliation = false;
+  replica.storingCommits = false;
   replica.reconciling =
     replica.synchronization === "complete" ||
     replica.synchronization === "stale";
@@ -701,6 +799,7 @@ function cancelSynchronization(
     post(reader, { _tag: "CancelHistorySynchronization", requestId });
   }
   replica.synchronization = replica.reconciling ? "stale" : "idle";
+  replica.storingCommits = false;
   delete replica.synchronizationOwner;
   delete replica.synchronizationRequestId;
 }
@@ -714,6 +813,14 @@ function publishSnapshot(replica: RepositoryReplica) {
 function postSnapshot(reader: ConnectedReader, replica: RepositoryReplica) {
   post(reader, {
     _tag: "SnapshotChanged",
+    shallowOids: replica.shallowOids,
+    ...(replica.freshness === undefined
+      ? {}
+      : { freshness: replica.freshness }),
+    ...(replica.freshnessFailure === undefined
+      ? {}
+      : { freshnessFailure: replica.freshnessFailure }),
+    storingCommits: replica.storingCommits,
     cachePaused: replica.cachePaused ?? false,
     ...(replica.failure === undefined ? {} : { failure: replica.failure }),
     revision: replica.revision,
@@ -740,7 +847,11 @@ function createReplica(
   const replica: RepositoryReplica = {
     orderCache: { queries: new Map(), revision: 0 },
     reconciled: false,
+    shallowOids: [],
     commits: new Map(),
+    freshnessCommands: new Map(),
+    needsReconciliation: false,
+    storingCommits: false,
     initialization: Promise.resolve(),
     readers: new Set(),
     refTargets: [],
@@ -783,6 +894,7 @@ async function restoreReplica(
         repositoryId,
         replica.orderCache,
       ).catch(() => undefined);
+      replica.shallowOids = state.completion.snapshot?.shallowOids ?? [];
       replica.synchronization = "complete";
       replica.synchronizedCommitCount = state.completion.commitCount;
       replica.status = state.completion.commitCount === 0 ? "empty" : "ready";
@@ -794,6 +906,62 @@ async function restoreReplica(
     replica.status = "error";
     replica.revision += 1;
     publishSnapshot(replica);
+  }
+}
+
+function assignFreshnessOwner(replica: RepositoryReplica) {
+  if (replica.freshnessOwner !== undefined) return;
+  const owner = [...replica.readers].find(
+    (reader) => !reader.closed && reader.connection.supportsFreshness,
+  );
+  if (owner === undefined) return;
+  replica.freshnessOwner = owner;
+  post(owner, { _tag: "SubscribeFreshness" });
+}
+
+async function acceptFreshness(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+  freshness: RepositoryFreshness,
+) {
+  const changed =
+    replica.freshness !== undefined &&
+    replica.freshness.revision !== freshness.revision;
+  replica.freshness = freshness;
+  delete replica.freshnessFailure;
+  replica.revision += 1;
+  publishSnapshot(replica);
+  if (!changed) return;
+  replica.needsReconciliation = true;
+  if (
+    replica.synchronization !== "syncing" &&
+    (replica.status === "ready" ||
+      replica.synchronization === "complete" ||
+      replica.synchronization === "stale")
+  )
+    await startSynchronization(reader, replica).catch((error) => {
+      replica.failure = workerFailure(error);
+      replica.revision += 1;
+      publishSnapshot(replica);
+    });
+}
+
+function closeFreshness(reader: ConnectedReader, replica: RepositoryReplica) {
+  for (const [requestId, requester] of replica.freshnessCommands) {
+    if (requester === reader || replica.freshnessOwner === reader) {
+      replica.freshnessCommands.delete(requestId);
+      if (requester !== reader)
+        post(requester, {
+          _tag: "RequestFailed",
+          requestId,
+          failure: { _tag: "Unavailable" },
+        });
+    }
+  }
+  if (replica.freshnessOwner === reader) {
+    post(reader, { _tag: "UnsubscribeFreshness" });
+    delete replica.freshnessOwner;
+    assignFreshnessOwner(replica);
   }
 }
 
@@ -983,6 +1151,13 @@ interface ConnectedReader {
 interface RepositoryReplica {
   reconciled: boolean;
   readonly orderCache: HistoryOrderCache;
+  shallowOids: readonly string[];
+  freshness?: RepositoryFreshness;
+  freshnessFailure?: RepositoryHistoryWorkerFailure;
+  freshnessOwner?: ConnectedReader;
+  readonly freshnessCommands: Map<string, ConnectedReader>;
+  needsReconciliation: boolean;
+  storingCommits: boolean;
   cachePaused?: boolean;
   storageExhausted?: boolean;
   readonly commits: Map<string, RepositoryCommit>;

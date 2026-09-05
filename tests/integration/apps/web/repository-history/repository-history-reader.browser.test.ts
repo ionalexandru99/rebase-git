@@ -17,9 +17,102 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
+import {
+  beginRepositoryHistorySynchronization,
+  completeStoredRepositoryHistory,
+  readStoredRepositoryHistoryState,
+  restartRepositoryHistorySynchronization,
+  storeRepositoryHistoryBatch,
+  storeRepositoryHistoryPage,
+} from "#web/features/repository-history/repository-history-store";
 
 describe("browser repository history reader", () => {
+  it("rejects oversized navigation requests without failing linked readers", async () => {
+    const environmentId = crypto.randomUUID();
+    const logicalRepositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const query = { limit: 100, order: "topological" as const, roots: [main] };
+    await storeRepositoryHistoryPage(
+      environmentId,
+      logicalRepositoryId,
+      {
+        commits,
+        objectFormat: "sha1",
+        repositoryId: logicalRepositoryId,
+        requestId: crypto.randomUUID(),
+        refTargets: [main],
+      },
+      query,
+    );
+    await beginRepositoryHistorySynchronization(
+      environmentId,
+      logicalRepositoryId,
+    );
+    await storeRepositoryHistoryBatch(environmentId, logicalRepositoryId, {
+      commits,
+      objectFormat: "sha1",
+      repositoryId: logicalRepositoryId,
+      requestId: crypto.randomUUID(),
+      sequence: 0,
+      snapshot: snapshot("a", main),
+    });
+    await completeStoredRepositoryHistory(
+      environmentId,
+      logicalRepositoryId,
+      commits.length,
+    );
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+      synchronize: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+    };
+    const readers = [0, 1].map(() =>
+      createBrowserRepositoryHistoryReader({
+        environmentId,
+        logicalRepositoryId,
+        repositoryId: crypto.randomUUID(),
+        gateway,
+      }),
+    );
+    const first = readers[0];
+    if (first === undefined) throw new Error("Missing reader");
+    try {
+      await Promise.all(readers.map((reader) => reader.getRefTargets()));
+      for (const request of [
+        () =>
+          first.ancestryRoute(
+            Array.from({ length: 257 }, () => main.oid),
+            main.oid,
+          ),
+        () =>
+          first.locateMany(
+            query,
+            Array.from({ length: 1_001 }, () => main.oid),
+          ),
+      ]) {
+        await expect(request()).rejects.toBeInstanceOf(
+          RepositoryHistoryUnavailable,
+        );
+        await Promise.all(readers.map((reader) => reader.getRefTargets()));
+        for (const reader of readers) {
+          expect(reader.getSnapshot().status).toBe("ready");
+          expect(reader.getSnapshot().error).toBeUndefined();
+          expect(await reader.locateMany(query, [main.oid])).toEqual([
+            { oid: main.oid, index: 0 },
+          ]);
+        }
+      }
+      expect(gateway.read).not.toHaveBeenCalled();
+      expect(gateway.synchronize).not.toHaveBeenCalled();
+    } finally {
+      for (const reader of readers) reader.close();
+    }
+  });
+
   it("does not retry failed synchronization when a non-owner reader closes", async () => {
     const repositoryId = crypto.randomUUID();
     const commits = history(3);
@@ -199,6 +292,67 @@ describe("browser repository history reader", () => {
     } finally {
       reader.close();
     }
+  });
+
+  it("repairs cached shallow parents and topology when unchanged refs gain ancestors", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(3);
+    const [tip, boundary, ancestor] = commits;
+    if (!tip || !boundary || !ancestor)
+      throw new Error("Missing history fixture");
+    const main = { ...root("main"), oid: tip.oid };
+    const query = { limit: 100, order: "topological" as const, roots: [main] };
+    const shallowCommits = [tip, { ...boundary, parents: [] }];
+    const initialSnapshot = {
+      ...snapshot("a", main),
+      shallowOids: [boundary.oid],
+    };
+    const batch = {
+      commits: shallowCommits,
+      objectFormat: "sha1" as const,
+      repositoryId,
+      requestId: crypto.randomUUID(),
+      sequence: 0,
+      snapshot: initialSnapshot,
+    };
+    await storeRepositoryHistoryPage(
+      environmentId,
+      repositoryId,
+      {
+        commits: shallowCommits,
+        objectFormat: "sha1",
+        repositoryId,
+        requestId: crypto.randomUUID(),
+        refTargets: [main],
+      },
+      query,
+    );
+    await beginRepositoryHistorySynchronization(environmentId, repositoryId);
+    await storeRepositoryHistoryBatch(environmentId, repositoryId, batch);
+    await completeStoredRepositoryHistory(environmentId, repositoryId, 2);
+    expect(
+      await beginRepositoryHistorySynchronization(environmentId, repositoryId),
+    ).toMatchObject({ _tag: "Complete", shallowOids: [boundary.oid] });
+    await restartRepositoryHistorySynchronization(environmentId, repositoryId);
+    expect(
+      await beginRepositoryHistorySynchronization(environmentId, repositoryId),
+    ).toBeUndefined();
+    await storeRepositoryHistoryBatch(environmentId, repositoryId, {
+      ...batch,
+      commits,
+      snapshot: { ...snapshot("b", main), shallowOids: [ancestor.oid] },
+    });
+    await completeStoredRepositoryHistory(environmentId, repositoryId, 3);
+    expect(
+      await readRepositoryHistory(environmentId, repositoryId, query),
+    ).toEqual(commits);
+    expect(
+      await readRepositoryCommits(environmentId, repositoryId, [boundary.oid]),
+    ).toEqual([boundary]);
+    expect(
+      await beginRepositoryHistorySynchronization(environmentId, repositoryId),
+    ).toMatchObject({ _tag: "Complete", shallowOids: [ancestor.oid] });
   });
 
   it("shares committed history between registered linked worktrees and isolates other repositories", async () => {
@@ -847,6 +1001,99 @@ describe("browser repository history reader", () => {
     );
     expect(second.getSnapshot().synchronization).toBe("syncing");
     second.close();
+  });
+
+  it("does not complete a superseded synchronization queued behind another write", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(1);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const name = crypto.randomUUID();
+    const control = new BroadcastChannel(`history-completion-${name}`);
+    const held = Promise.withResolvers<void>();
+    const closed = Promise.withResolvers<void>();
+    control.onmessage = (message) => {
+      if (message.data === "held") held.resolve();
+      if (message.data === "closed") closed.resolve();
+    };
+    const worker = new SharedWorker(
+      new URL("./fixtures/history-completion-worker.ts", import.meta.url),
+      { type: "module", name },
+    );
+    const firstGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: snapshot("a", main),
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const secondGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(
+        (_request, _accept, signal) =>
+          new Promise<number>((_resolve, reject) => {
+            signal?.addEventListener(
+              "abort",
+              () => reject(new RepositoryHistoryOffline()),
+              { once: true },
+            );
+          }),
+      ),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId,
+      gateway: firstGateway,
+      worker,
+    });
+    const second = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId,
+      gateway: secondGateway,
+      worker,
+    });
+    try {
+      await first.read({ limit: 100, order: "topological", roots: [main] });
+      await second.getRefTargets();
+      await held.promise;
+      first.close();
+      await closed.promise;
+      control.postMessage("release");
+      await vi.waitFor(() =>
+        expect(secondGateway.synchronize).toHaveBeenCalledOnce(),
+      );
+      expect(secondGateway.synchronize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          basis: expect.objectContaining({
+            _tag: "Incomplete",
+            committedCommitCount: 1,
+          }),
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+      const stored = await readStoredRepositoryHistoryState(
+        environmentId,
+        repositoryId,
+      );
+      expect(stored?.completion).toBeUndefined();
+      expect(stored?.pendingSnapshot?.id).toBe("a".repeat(64));
+    } finally {
+      control.postMessage("release");
+      first.close();
+      second.close();
+      control.close();
+      worker.port.close();
+    }
   });
 
   it("retries synchronization after completion persistence fails", async () => {

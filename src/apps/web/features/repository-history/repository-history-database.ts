@@ -233,6 +233,7 @@ export interface StoredRepository {
   readonly cacheFormatVersion?: number;
   readonly lastOpenedAt?: number;
   readonly cachedPage?: {
+    readonly exhausted?: boolean;
     readonly scopeKey?: string;
     readonly oids: readonly string[];
     readonly order: RepositoryHistoryQuery["order"];

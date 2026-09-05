@@ -250,7 +250,10 @@ function runEnvironmentConnection(
     const repositoryHistory = createRepositoryHistoryTransport(
       socket,
       repositoryHistoryVersion !== undefined && supportsBinaryFragmentation,
-      (repositoryHistoryVersion ?? 0) >= 2 && supportsBinaryFragmentation,
+      (repositoryHistoryVersion ?? 0) >= 4 && supportsBinaryFragmentation,
+      negotiated.capabilities.some(
+        (capability) => capability.name === "repository-history-freshness",
+      ),
     );
     yield* initializeEnvironmentSequence(state, hello, negotiated);
     yield* publishEnvironmentConnection(

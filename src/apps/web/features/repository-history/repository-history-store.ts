@@ -81,6 +81,7 @@ export function storeRepositoryHistoryPage(
       ...emptyStoredRepository(environmentId, repositoryId, page.objectFormat),
       ...current,
       cachedPage: {
+        exhausted: page.commits.length < query.limit,
         scopeKey: historyOrderScopeKey(query),
         oids: page.commits.map((commit) => commit.oid),
         order: query.order,
@@ -213,14 +214,23 @@ export function storeRepositoryHistoryBatch(
         ),
       );
       for (const [offset, commit] of batch.commits.entries()) {
-        if (topologicalPosition(existingCommits[offset]) === undefined) {
-          commits.put(
-            storedCommit(environmentId, repositoryId, commit, {
+        const existing = existingCommits[offset];
+        const position =
+          (batch.snapshot ?? current.pendingSnapshot)?.resumable === true
+            ? undefined
+            : topologicalPosition(existing);
+        commits.put({
+          ...existing,
+          ...storedCommit(
+            environmentId,
+            repositoryId,
+            commit,
+            position ?? {
               epoch: topologicalEpoch,
               order: topologicalOrder + offset,
-            }),
-          );
-        }
+            },
+          ),
+        });
       }
       repositories.put({
         ...current,
@@ -269,11 +279,21 @@ export function completeStoredRepositoryHistory(
       pendingSnapshot: _,
       pendingTopologicalEpoch: __,
       pendingTopologicalOrder: ___,
+      cachedPage,
       ...withoutPendingSynchronization
     } = current;
     repositories.put({
       ...withoutPendingSynchronization,
       completion,
+      ...(cachedPage === undefined
+        ? {}
+        : {
+            cachedPage:
+              snapshot !== undefined &&
+              current.completion?.snapshot?.id === snapshot.id
+                ? cachedPage
+                : { ...cachedPage, exhausted: false },
+          }),
       ...(snapshot === undefined ? {} : { refTargets: snapshot.refTargets }),
     } satisfies StoredRepository);
     await completed;
@@ -322,6 +342,9 @@ function synchronizationBasis(
       nextBatchSequence: repository.progress.nextBatchSequence,
       objectFormat: repository.pendingSnapshot.objectFormat,
       rootOids: repository.pendingSnapshot.rootOids,
+      ...(repository.pendingSnapshot.shallowOids === undefined
+        ? {}
+        : { shallowOids: repository.pendingSnapshot.shallowOids }),
       snapshotId: repository.pendingSnapshot.id,
     };
   }
@@ -333,6 +356,9 @@ function synchronizationBasis(
         commitCount: repository.completion?.commitCount ?? 0,
         objectFormat: snapshot.objectFormat,
         rootOids: snapshot.rootOids,
+        ...(snapshot.shallowOids === undefined
+          ? {}
+          : { shallowOids: snapshot.shallowOids }),
         snapshotId: snapshot.id,
       };
 }

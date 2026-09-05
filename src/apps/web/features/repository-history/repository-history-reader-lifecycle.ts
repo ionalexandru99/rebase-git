@@ -47,6 +47,11 @@ export function maintainRepositoryHistoryReader(
     locateMany: (query, oids) =>
       reader?.locateMany(query, oids) ??
       Promise.reject(new RepositoryHistoryOffline()),
+    fetch: () =>
+      reader?.fetch() ?? Promise.reject(new RepositoryHistoryOffline()),
+    configureFetch: (setting) =>
+      reader?.configureFetch(setting) ??
+      Promise.reject(new RepositoryHistoryOffline()),
     close: () => {
       if (closed) return;
       closed = true;

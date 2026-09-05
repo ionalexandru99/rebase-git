@@ -12,12 +12,7 @@ import type {
   LocalEnvironmentSessionState,
 } from "#web/features/local-environment-session/local-environment-session.contract";
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
-import {
-  type RepositoryHistoryGateway,
-  RepositoryHistoryOffline,
-  type RepositoryHistoryTransport,
-  RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+import { createRepositoryHistoryGateway } from "#web/features/repository-history/repository-history-gateway";
 import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 
 export function createLocalEnvironmentSession(
@@ -219,56 +214,6 @@ function maintainConnection(
       }
     }
   });
-}
-
-function createRepositoryHistoryGateway() {
-  let transport: RepositoryHistoryTransport | undefined;
-  const listeners = new Set<() => void>();
-  const gateway: RepositoryHistoryGateway = {
-    read: (request, signal) => {
-      const current = transport;
-      if (current === undefined) {
-        return Promise.reject(new RepositoryHistoryOffline());
-      }
-      return Effect.runPromise(
-        current.read(request),
-        signal === undefined ? undefined : { signal },
-      );
-    },
-    synchronize: (request, acceptBatch, signal) => {
-      const current = transport;
-      if (current === undefined) {
-        return Promise.reject(new RepositoryHistoryOffline());
-      }
-      return Effect.runPromise(
-        current.synchronize(request, (bytes) =>
-          Effect.tryPromise({
-            try: () => acceptBatch(bytes),
-            catch: () => new RepositoryHistoryUnavailable(),
-          }),
-        ),
-        signal === undefined ? undefined : { signal },
-      );
-    },
-    subscribeAvailability: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-  return {
-    connect: (next: RepositoryHistoryTransport) => {
-      transport = next;
-      for (const listener of listeners) {
-        listener();
-      }
-    },
-    disconnect: (current: RepositoryHistoryTransport) => {
-      if (transport === current) {
-        transport = undefined;
-      }
-    },
-    gateway,
-  };
 }
 
 function refreshRepositoryCatalog(

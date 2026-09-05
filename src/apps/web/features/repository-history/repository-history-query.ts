@@ -179,8 +179,9 @@ export function readRepositoryHistory(
       canSelectCachedHistoryPage(query, repository.cachedPage.scopeKey) &&
       sameOids(roots, repository.cachedPage.rootOids) &&
       (offset + query.limit <= repository.cachedPage.oids.length ||
-        repository.cachedPage.oids.length <
-          repository.cachedPage.requestedLimit)
+        (repository.cachedPage.exhausted ??
+          repository.cachedPage.oids.length <
+            repository.cachedPage.requestedLimit))
     ) {
       const cachedOids = repository.cachedPage.oids.slice(
         offset,
