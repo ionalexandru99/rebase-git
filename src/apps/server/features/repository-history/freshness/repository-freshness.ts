@@ -85,6 +85,11 @@ function createRepositoryFreshnessService(dependencies: {
     repository.controller.abort();
     repository.subscribers.clear();
   };
+  const cancelFetch = (repository: WatchedRepository) => {
+    repository.freshness = { ...repository.freshness, fetching: false };
+    publish(repository);
+    return repository.freshness;
+  };
   const schedule = (repository: WatchedRepository) => {
     clearTimeout(repository.timer);
     if (
@@ -141,7 +146,12 @@ function createRepositoryFreshnessService(dependencies: {
       .then(
         (failure) => completeFetch(repository, failure),
         () =>
-          completeFetch(repository, { _tag: "FetchFailed", reason: "Failed" }),
+          repository.fetchController?.signal.aborted
+            ? cancelFetch(repository)
+            : completeFetch(repository, {
+                _tag: "FetchFailed",
+                reason: "Failed",
+              }),
       )
       .finally(() => {
         delete repository.fetch;

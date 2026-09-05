@@ -20,11 +20,14 @@ afterEach(() => vi.useRealTimers());
 describe("repository freshness", () => {
   it("releases explicit fetch ownership when the caller is interrupted", async () => {
     const aborted = vi.fn();
+    const states: RepositoryFreshness[] = [];
     const fetch = vi.fn(() =>
       Effect.callback<ReturnType<typeof output>>(() => Effect.sync(aborted)),
     );
     await withService({ fetch }, async (service, watch) => {
-      await Effect.runPromise(service.subscribe(repositoryId, () => {}));
+      await Effect.runPromise(
+        service.subscribe(repositoryId, (state) => states.push(state)),
+      );
       const manual = Effect.runFork(service.fetch(repositoryId));
       await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
       const closeWriter = await Effect.runPromise(
@@ -35,16 +38,22 @@ describe("repository freshness", () => {
       await Effect.runPromise(Fiber.interrupt(manual));
       expect(aborted).toHaveBeenCalledOnce();
       expect(watch.close).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(states.at(-1)?.fetching).toBe(false));
+      expect(states.at(-1)?.stale).toBe(false);
+      expect(states.at(-1)?.failure).toBeUndefined();
     });
   });
 
   it("interrupts automatic fetch when the last writer leaves a read-only observer", async () => {
     const aborted = vi.fn();
+    const states: RepositoryFreshness[] = [];
     const fetch = vi.fn(() =>
       Effect.callback<ReturnType<typeof output>>(() => Effect.sync(aborted)),
     );
     await withService({ fetch }, async (service, watch) => {
-      await Effect.runPromise(service.subscribe(repositoryId, () => {}));
+      await Effect.runPromise(
+        service.subscribe(repositoryId, (state) => states.push(state)),
+      );
       const closeWriter = await Effect.runPromise(
         service.subscribe(linkedId, () => {}, { automaticFetch: true }),
       );
@@ -52,6 +61,9 @@ describe("repository freshness", () => {
       closeWriter();
       await vi.waitFor(() => expect(aborted).toHaveBeenCalledOnce());
       expect(watch.close).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(states.at(-1)?.fetching).toBe(false));
+      expect(states.at(-1)?.stale).toBe(false);
+      expect(states.at(-1)?.failure).toBeUndefined();
     });
   });
 
