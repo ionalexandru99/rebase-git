@@ -25,13 +25,10 @@ export interface OpenProjectScreenProps {
   readonly environments: readonly OpenProjectEnvironment[];
   readonly expandedEnvironmentIds: ReadonlySet<string>;
   readonly onBrowse: () => void;
-  readonly onCopyPath: (repository: OpenProjectRepository) => void;
   readonly onEnvironmentOpenChange: (
     environmentId: string,
     open: boolean,
   ) => void;
+  readonly onOpenSettings: (repository: OpenProjectRepository) => void;
   readonly onOpenRepository: (repository: OpenProjectRepository) => void;
-  readonly onRemoveRepository: (repository: OpenProjectRepository) => void;
-  readonly onRevealRepository: (repository: OpenProjectRepository) => void;
-  readonly revealAvailable: boolean;
 }

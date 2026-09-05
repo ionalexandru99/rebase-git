@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
+import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/history-cache.contract";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
 import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
-import { RepositoryHistoryCacheButton } from "#web-ui/features/repository-history/diagnostics/components/repository-history-cache-dialog";
+import { RepositoryCacheSettings } from "#web-ui/features/repository-settings/components/repository-cache-settings";
 
 const identity = {
   environmentId: "environment-1",
@@ -64,39 +64,24 @@ function historyReader() {
 async function openDialog(reader = historyReader()) {
   const changed = vi.fn();
   const screen = await render(
-    <RepositoryHistoryCacheButton
+    <RepositoryCacheSettings
+      connected
       reader={reader}
       identity={identity}
-      repositoryName="Rebase"
       onCacheChanged={changed}
     />,
   );
-  await screen.getByRole("button", { name: "History storage" }).click();
+  await screen.getByText("Storage details", { exact: true }).click();
   return { screen, reader, changed };
 }
 
-describe("history storage dialog", () => {
-  it("lists cache estimates, persistence and open protection, and closes with Escape", async () => {
-    const { screen } = await openDialog();
+describe("repository history storage", () => {
+  it("shows the repository cache size and protection details", async () => {
+    await openDialog();
+    await expect.element(page.getByText(/1.0 KB/)).toBeVisible();
     await expect
-      .element(page.getByRole("table", { name: "Repository history caches" }))
+      .element(page.getByText(/Open repositories are protected/))
       .toBeVisible();
-    await expect.element(page.getByText("Rebase (current)")).toBeVisible();
-    await expect
-      .element(page.getByText("repository-2", { exact: true }))
-      .toBeVisible();
-    await expect
-      .element(page.getByText("Persistent", { exact: true }))
-      .toBeVisible();
-    await expect.element(page.getByText("Open · Protected")).toBeVisible();
-    await expect
-      .element(page.getByText("1.0 KB", { exact: true }))
-      .toBeVisible();
-    await userEvent.keyboard("{Escape}");
-    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
-    await expect
-      .element(screen.getByRole("button", { name: "History storage" }))
-      .toHaveFocus();
   });
 
   it("requires confirmation and leaves history untouched when cancelled", async () => {
@@ -142,7 +127,7 @@ describe("history storage dialog", () => {
     expect(reader.manageCache).toHaveBeenCalledExactlyOnceWith("remove");
   });
 
-  it.each(["clear", "rebuild", "remove", "clear-all"] as const)(
+  it.each(["clear", "rebuild", "remove"] as const)(
     "confirms %s and reports the affected identity",
     async (action) => {
       const labels = {
@@ -162,9 +147,7 @@ describe("history storage dialog", () => {
       await expect
         .poll(() => reader.manageCache.mock.calls)
         .toEqual([[action]]);
-      await expect
-        .poll(() => changed.mock.calls)
-        .toEqual([[action, action === "clear-all" ? undefined : identity]]);
+      await expect.poll(() => changed.mock.calls).toEqual([[action, identity]]);
       await expect
         .element(page.getByRole("alertdialog"))
         .not.toBeInTheDocument();
@@ -200,9 +183,6 @@ describe("history storage dialog", () => {
     await expect
       .element(page.getByRole("button", { name: "Clear cache", exact: true }))
       .toBeDisabled();
-    await expect
-      .element(page.getByRole("button", { name: "Close", exact: true }))
-      .toBeEnabled();
     finish?.();
     reader.publish({
       status: "ready",
@@ -214,8 +194,6 @@ describe("history storage dialog", () => {
     await expect
       .element(page.getByText("Synchronizing history · 256 commits stored"))
       .toBeVisible();
-    await userEvent.keyboard("{Escape}");
-    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("recovers diagnostics and action failures and explains exhausted storage", async () => {
@@ -240,7 +218,7 @@ describe("history storage dialog", () => {
         page.getByText("Unable to read history storage. Try refreshing."),
       )
       .toBeVisible();
-    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
     await expect
       .element(page.getByText(/Browser storage is full/))
       .toBeVisible();

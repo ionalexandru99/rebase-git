@@ -29,13 +29,13 @@ import { useCommitGraphCommands } from "#web/features/commit-graph/hooks/use-com
 import { useCommitGraphPages } from "#web/features/commit-graph/hooks/use-commit-graph-pages";
 import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
 import { useCommitGraphViewport } from "#web/features/commit-graph/hooks/use-commit-graph-viewport";
-import type { RepositoryHistoryCacheDialogProps } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
 import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/hooks/use-repository-history-fetch";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
+import { useRepositoryHistoryOrder } from "#web/features/repository-settings/index";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitCommandMenu } from "#web-ui/features/commit-commands/commit-command-menu";
 import {
@@ -50,7 +50,6 @@ import {
   CommitGraphPageRetry,
 } from "#web-ui/features/commit-graph/components/commit-graph-status";
 import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
-import { CommitGraphToolbarDialogs } from "#web-ui/features/commit-graph/components/commit-graph-toolbar-dialogs";
 import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/components/commit-graph-virtual-window";
 import { HistoryScopeStrip } from "#web-ui/features/commit-graph/components/history-scope-strip";
 import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
@@ -63,7 +62,6 @@ export function CommitGraph({
   commandEnvironment,
   shortcuts,
   commandsActive = true,
-  onCacheChanged,
   onRemoveHistoryRef,
   onAddHistoryRef,
   onResetHistoryScope,
@@ -77,7 +75,6 @@ export function CommitGraph({
   readonly commandEnvironment?: GraphCommandEnvironment | undefined;
   readonly shortcuts?: GraphCommandShortcuts | undefined;
   readonly commandsActive?: boolean;
-  readonly onCacheChanged?: RepositoryHistoryCacheDialogProps["onCacheChanged"];
   readonly onAddHistoryRef?: () => void;
   readonly onResetHistoryScope?: () => void;
   readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
@@ -92,8 +89,10 @@ export function CommitGraph({
   const [expandedMerges, setExpandedMerges] = useState<
     ReadonlyMap<string, readonly string[]>
   >(new Map());
-  const [order, setOrder] =
-    useState<RepositoryHistoryQuery["order"]>("topological");
+  const order = useRepositoryHistoryOrder(
+    commandEnvironment?.environmentId,
+    commandEnvironment?.logicalRepositoryId,
+  );
   const selectedOidRef = useRef<string | undefined>(undefined);
   const [pageSize, setPageSize] = useState(12);
   const [pendingNavigation, setPendingNavigation] = useState<{
@@ -296,39 +295,11 @@ export function CommitGraph({
             }}
           />
         )}
-        <CommitGraphToolbar.Order order={order} onOrderChange={setOrder} />
         <CommitGraphToolbar.Fetch
           fetchAction={fetchAction}
           fetching={fetch.fetching}
         />
-        <CommitGraphToolbar.Options
-          fetchSettingsAvailable={reader !== undefined}
-          cacheAvailable={
-            reader !== undefined && commandEnvironment !== undefined
-          }
-        />
       </CommitGraphToolbar.Frame>
-      <CommitGraphToolbarDialogs
-        repositoryName={repositoryName}
-        reader={reader}
-        snapshot={historySnapshot}
-        offline={commandEnvironment?.connected === false}
-        canConfigure={
-          commandEnvironment?.connected === true &&
-          commandEnvironment.capabilities.has("repository.write")
-        }
-        cache={
-          commandEnvironment === undefined
-            ? undefined
-            : {
-                identity: {
-                  environmentId: commandEnvironment.environmentId,
-                  repositoryId: commandEnvironment.logicalRepositoryId,
-                },
-                onCacheChanged: onCacheChanged ?? (() => {}),
-              }
-        }
-      />
       {scope === undefined || selections === undefined ? null : (
         <HistoryScopeStrip
           onRemove={onRemoveHistoryRef}

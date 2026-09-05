@@ -1,30 +1,24 @@
 import type { JSX } from "react";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
 import { repositoryInitials } from "#web/features/open-project/open-project-state";
-import { RepositoryContextMenu } from "#web-ui/features/open-project/repository-context-menu";
+import { RepositorySettingsButton } from "#web/features/repository-settings/index";
 
 export function RepositoryRow({
   active,
   available,
   itemKey,
   onActivate,
-  onCopyPath,
   onOpen,
-  onRemove,
-  onReveal,
+  onOpenSettings,
   repository,
-  revealAvailable,
 }: {
   readonly active: boolean;
   readonly available: boolean;
   readonly itemKey: string;
   readonly onActivate: (key: string) => void;
-  readonly onCopyPath: (repository: OpenProjectRepository) => void;
+  readonly onOpenSettings: (repository: OpenProjectRepository) => void;
   readonly onOpen: (repository: OpenProjectRepository) => void;
-  readonly onRemove: (repository: OpenProjectRepository) => void;
-  readonly onReveal: (repository: OpenProjectRepository) => void;
   readonly repository: OpenProjectRepository;
-  readonly revealAvailable: boolean;
 }): JSX.Element {
   return (
     <div
@@ -55,13 +49,9 @@ export function RepositoryRow({
           </span>
         </span>
       </button>
-      <RepositoryContextMenu
-        available={available}
-        onCopyPath={onCopyPath}
-        onRemove={onRemove}
-        onReveal={onReveal}
-        repository={repository}
-        revealAvailable={revealAvailable}
+      <RepositorySettingsButton
+        name={repository.name}
+        onOpen={() => onOpenSettings(repository)}
       />
     </div>
   );

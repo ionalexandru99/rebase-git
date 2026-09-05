@@ -12,12 +12,10 @@ export interface RepositoryHistoryCacheIdentity {
   readonly repositoryId: string;
 }
 
-export interface RepositoryHistoryCacheDialogProps {
+export interface RepositoryHistoryCacheProps {
   readonly reader: RepositoryHistoryCacheReader;
   readonly identity: RepositoryHistoryCacheIdentity;
   readonly repositoryName: string;
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
   readonly onCacheChanged: (
     action: RepositoryHistoryCacheAction,
     identity?: RepositoryHistoryCacheIdentity,

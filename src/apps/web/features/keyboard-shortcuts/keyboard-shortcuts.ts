@@ -14,6 +14,13 @@ import { repositorySelectionPositions } from "#web/features/keyboard-shortcuts/k
 export const keyboardShortcutCommands = [
   {
     contexts: ["application"],
+    defaultBinding: { key: ",", modifiers: ["Mod", "Shift"] },
+    group: "Navigation",
+    id: "repository.openSettings",
+    label: "Open repository settings",
+  },
+  {
+    contexts: ["application"],
     defaultBinding: { key: "o", modifiers: ["Mod", "Shift"] },
     group: "Navigation",
     id: "projects.showOpenProject",
@@ -169,7 +176,11 @@ export function keyboardShortcutFromInput(
   input: KeyboardShortcutInput,
   platform: KeyboardShortcutPlatform,
 ): KeyboardShortcutBinding | undefined {
-  const key = normalizeKey(input.key);
+  const key = normalizeKey(
+    input.shiftKey && input.code === "Comma" && input.key === "<"
+      ? ","
+      : input.key,
+  );
   if (key === undefined || isModifierKey(key)) return undefined;
 
   const modifiers: KeyboardShortcutModifier[] = [];

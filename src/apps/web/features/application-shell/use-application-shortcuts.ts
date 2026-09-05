@@ -23,6 +23,8 @@ export function useApplicationShortcuts({
   hasSelectedRepository,
   openFolderPicker,
   openSettings,
+  openRepositorySettings,
+  repositorySettingsOpen,
   selectNextRepository,
   selectPreviousRepository,
   selectRepositoryByPosition,
@@ -38,6 +40,8 @@ export function useApplicationShortcuts({
   readonly focusSidebarFilter: () => void;
   readonly hasSelectedRepository: boolean;
   readonly openFolderPicker: () => void;
+  readonly openRepositorySettings: () => void;
+  readonly repositorySettingsOpen: boolean;
   readonly openSettings: (open: boolean) => void;
   readonly selectNextRepository: () => void;
   readonly selectPreviousRepository: () => void;
@@ -52,6 +56,11 @@ export function useApplicationShortcuts({
   useEffect(() => {
     const commands: readonly ShortcutCommand[] = [
       ["settings.open", true, () => openSettings(true)],
+      [
+        "repository.openSettings",
+        hasSelectedRepository,
+        openRepositorySettings,
+      ],
       ["projects.showOpenProject", true, showOpenProject],
       [
         "projects.browseRepository",
@@ -65,7 +74,11 @@ export function useApplicationShortcuts({
       ],
       ["projects.focusFilter", true, focusSidebarFilter],
       ["projects.toggleSidebar", true, toggleSidebar],
-      ["branches.focusSidebar", hasSelectedRepository, focusBranchesSidebar],
+      [
+        "branches.focusSidebar",
+        hasSelectedRepository && !repositorySettingsOpen,
+        focusBranchesSidebar,
+      ],
       [
         "projects.selectPreviousRepository",
         selectableRepositoryCount > 0,
@@ -121,6 +134,8 @@ export function useApplicationShortcuts({
     hasSelectedRepository,
     openFolderPicker,
     openSettings,
+    openRepositorySettings,
+    repositorySettingsOpen,
     platform,
     selectNextRepository,
     selectPreviousRepository,

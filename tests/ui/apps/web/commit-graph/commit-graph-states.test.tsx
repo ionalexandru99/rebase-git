@@ -1,4 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
+import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
@@ -10,6 +11,7 @@ import {
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph states", () => {
   it.each([
@@ -37,9 +39,15 @@ describe("commit graph states", () => {
           (query.offset ?? 0) + query.limit,
         ),
       );
-      await screen
-        .getByRole("combobox", { name: "History ordering" })
-        .selectOptions("chronological");
+      await act(() =>
+        saveRepositoryHistoryOrder(
+          {
+            environmentId: "test-environment",
+            repositoryId: "test-logical-repository",
+          },
+          "chronological",
+        ),
+      );
       await vi.waitFor(() =>
         expect(grid.element().scrollHeight > grid.element().clientHeight).toBe(
           after > 3,

@@ -14,6 +14,91 @@ import { KeyboardShortcutsProvider } from "#web-ui/features/keyboard-shortcuts/k
 import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
 
 describe("application shell", () => {
+  it("opens repository settings from the list without opening its graph", async () => {
+    const connected = connectedSession();
+    const recordOpened = vi.spyOn(
+      connected.session.repositoryCatalog,
+      "recordOpened",
+    );
+    connected.finishSynchronization();
+    await render(
+      <KeyboardShortcutsProvider runtime={keyboardShortcutRuntime()}>
+        <ApplicationShell
+          desktopUpdates={undefined}
+          productVersion="test"
+          session={connected.session}
+        />
+      </KeyboardShortcutsProvider>,
+    );
+    await page
+      .getByRole("button", { name: "Repository settings for rebase-test" })
+      .first()
+      .click();
+    await expect
+      .element(page.getByRole("main", { name: "Repository settings" }))
+      .toBeVisible();
+    expect(recordOpened).not.toHaveBeenCalled();
+    expect(connected.session.repositoryHistory.read).not.toHaveBeenCalled();
+    await expect
+      .element(page.getByRole("combobox", { name: "History ordering" }))
+      .toBeVisible();
+    await page
+      .getByRole("button", { name: "Open project", exact: true })
+      .click();
+    await expect
+      .element(page.getByRole("main", { name: "Open project" }))
+      .toBeVisible();
+  });
+
+  it("returns to the same graph selection from repository settings and applies saved ordering", async () => {
+    const connected = connectedSession();
+    connected.finishSynchronization();
+    await render(
+      <KeyboardShortcutsProvider runtime={keyboardShortcutRuntime()}>
+        <ApplicationShell
+          desktopUpdates={undefined}
+          productVersion="test"
+          session={connected.session}
+        />
+      </KeyboardShortcutsProvider>,
+    );
+    await page
+      .getByRole("main", { name: "Open project" })
+      .getByRole("option")
+      .first()
+      .click();
+    const graph = page.getByRole("grid", { name: "Commit history" });
+    const commit = graph.getByRole("row", { name: /^cached commit,/ });
+    await expect.element(commit).toBeVisible();
+    await commit.click();
+    const graphElement = graph.element();
+    await userEvent.keyboard("{Control>}{Shift>},{/Shift}{/Control}");
+    await expect
+      .element(page.getByRole("main", { name: "Repository settings" }))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("navigation", { name: "Branches" }))
+      .not.toBeInTheDocument();
+    await page
+      .getByRole("combobox", { name: "History ordering" })
+      .selectOptions("chronological");
+    await page
+      .getByRole("button", { name: "Open rebase-test", exact: true })
+      .click();
+    await expect.element(commit).toBeVisible();
+    expect(graph.element()).toBe(graphElement);
+    await expect.element(commit).toHaveAttribute("aria-selected", "true");
+    await expect
+      .element(page.getByRole("navigation", { name: "Branches" }))
+      .toBeVisible();
+    await page
+      .getByRole("button", { name: "Repository settings for rebase-test" })
+      .click();
+    await expect
+      .element(page.getByRole("combobox", { name: "History ordering" }))
+      .toHaveValue("chronological");
+  });
+
   it("renders the empty project shell and focuses repository search", async () => {
     await renderShell();
 
@@ -181,10 +266,7 @@ async function renderRepositoryWorkspace() {
           activeWorktreePath="/repo"
           branchesFocusRequest={0}
           environmentId={undefined}
-          historyGateway={{
-            read: async () => Promise.reject(new Error("Unavailable")),
-            synchronize: async () => Promise.reject(new Error("Unavailable")),
-          }}
+          historyReader={undefined}
           refs={{
             checkingOut: false,
             refs: {

@@ -4,8 +4,12 @@ import {
   type RepositoryCommit,
   type RepositoryHistoryPage,
 } from "@rebase/contracts";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import {
+  acquireSharedWorker,
+  createBrowserRepositoryHistoryReader,
+} from "#web/features/repository-history/browser-repository-history-reader";
 import {
   clearHistoryCache,
   describeHistoryCaches,
@@ -13,6 +17,7 @@ import {
   pruneHistoryCache,
 } from "#web/features/repository-history/cache/repository-history-storage";
 import { writeHistoryUnderPressure } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
+import { manageBrowserHistoryStorage } from "#web/features/repository-history/diagnostics/browser-history-storage";
 import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
 import {
   completeStoredRepositoryHistory,
@@ -37,6 +42,81 @@ import type { StoredRepository } from "#web/persistence/repository-history/repos
 import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";
 
 describe("history cache storage", () => {
+  it("releases the shared worker error listener after inspecting storage", async () => {
+    const worker = acquireSharedWorker();
+    const added = vi.spyOn(worker, "addEventListener");
+    const removed = vi.spyOn(worker, "removeEventListener");
+    try {
+      await Effect.runPromise(manageBrowserHistoryStorage("inspect"));
+      const listener = added.mock.calls.find(([type]) => type === "error")?.[1];
+      expect(listener).toBeDefined();
+      expect(removed).toHaveBeenCalledWith("error", listener);
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
+    }
+  });
+
+  it("rebuilds history from settings before a graph has requested a page", async () => {
+    const fixture = await seed();
+    const gateway = gatewayFor(fixture);
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: fixture.environmentId,
+      repositoryId: fixture.repositoryId,
+      gateway,
+    });
+    try {
+      await reader.getCacheDiagnostics();
+      expect(gateway.read).not.toHaveBeenCalled();
+      await reader.manageCache("rebuild");
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot().synchronization).toBe("complete"),
+      );
+      expect(gateway.synchronize).toHaveBeenCalledOnce();
+      expect(gateway.read).not.toHaveBeenCalled();
+      expect(
+        (await reader.getCacheDiagnostics()).caches.find(
+          ({ repositoryId }) => repositoryId === fixture.repositoryId,
+        )?.commitCount,
+      ).toBe(fixture.commits.length);
+    } finally {
+      reader.close();
+    }
+  });
+
+  it("inspects caches without an open repository and clears open readers through application settings", async () => {
+    const fixture = await seed();
+    const diagnostics = await Effect.runPromise(
+      manageBrowserHistoryStorage("inspect"),
+    );
+    expect(
+      diagnostics.caches.some(
+        ({ repositoryId }) => repositoryId === fixture.repositoryId,
+      ),
+    ).toBe(true);
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: fixture.environmentId,
+      repositoryId: fixture.repositoryId,
+      gateway: gatewayFor(fixture),
+    });
+    try {
+      await reader.getRefTargets();
+      await Effect.runPromise(manageBrowserHistoryStorage("clear"));
+      expect(
+        await reader.getCommitSummaries(fixture.commits.map(({ oid }) => oid)),
+      ).toEqual([]);
+      expect(
+        await reader.read({
+          roots: fixture.roots,
+          order: "topological",
+          limit: 10,
+        }),
+      ).toEqual([]);
+    } finally {
+      reader.close();
+    }
+  });
+
   it("does not restart history on a reader closed while rebuilding its shared cache", async () => {
     const fixture = await seed();
     const name = crypto.randomUUID();

@@ -21,31 +21,46 @@ import {
   workerFailure,
 } from "#web/features/repository-history/worker/replica-state";
 import { repositories } from "#web/features/repository-history/worker/repository-replicas";
-import { cancelSynchronization } from "#web/features/repository-history/worker/synchronization";
+import {
+  cancelSynchronization,
+  startSynchronization,
+} from "#web/features/repository-history/worker/synchronization";
 import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
+
+type CacheManagementRequest =
+  | { readonly action: "clear-all" }
+  | {
+      readonly action: Exclude<RepositoryHistoryCacheAction, "clear-all">;
+      readonly reader: ConnectedReader;
+      readonly replica: RepositoryReplica;
+    };
 
 export function scheduleCacheManagement(
   reader: ConnectedReader,
   replica: RepositoryReplica,
   action: RepositoryHistoryCacheAction,
 ) {
-  const operation = cacheManagement.then(() =>
-    runCacheManagement(reader, replica, action),
+  return scheduleCacheRequest(
+    action === "clear-all" ? { action } : { action, reader, replica },
   );
+}
+
+export function clearAllHistoryCaches() {
+  return scheduleCacheRequest({ action: "clear-all" });
+}
+
+function scheduleCacheRequest(request: CacheManagementRequest) {
+  const operation = cacheManagement.then(() => runCacheManagement(request));
   cacheManagement = operation.catch(() => undefined);
   return operation;
 }
 
-async function runCacheManagement(
-  reader: ConnectedReader,
-  replica: RepositoryReplica,
-  action: RepositoryHistoryCacheAction,
-) {
-  if (action !== "clear-all") return manageCache(reader, replica, action);
+async function runCacheManagement(request: CacheManagementRequest) {
+  if (request.action !== "clear-all") return manageCache(request);
   const completion = Promise.withResolvers<boolean>();
   clearingAllCaches = completion.promise;
   try {
-    await manageCache(reader, replica, action);
+    await manageCache(request);
     completion.resolve(true);
   } catch (error) {
     completion.resolve(false);
@@ -55,13 +70,11 @@ async function runCacheManagement(
   }
 }
 
-async function manageCache(
-  reader: ConnectedReader,
-  replica: RepositoryReplica,
-  action: RepositoryHistoryCacheAction,
-) {
+async function manageCache(request: CacheManagementRequest) {
   const targets =
-    action === "clear-all" ? [...repositories.values()] : [replica];
+    request.action === "clear-all"
+      ? [...repositories.values()]
+      : [request.replica];
   await Promise.all(targets.map((target) => target.initialization));
   const priorPauses = new Map(
     targets.map((target) => [target, target.cachePaused ?? false]),
@@ -87,19 +100,19 @@ async function manageCache(
   try {
     await queueStorageWrite(async () => {
       const caches =
-        action === "clear-all"
+        request.action === "clear-all"
           ? await readHistoryCacheRecords()
           : [
               {
-                environmentId: reader.connection.environmentId,
-                repositoryId: reader.connection.logicalRepositoryId,
+                environmentId: request.reader.connection.environmentId,
+                repositoryId: request.reader.connection.logicalRepositoryId,
               },
             ];
       for (const cache of caches)
         await clearHistoryCache(
           cache.environmentId,
           cache.repositoryId,
-          action === "remove",
+          request.action === "remove",
         );
     });
   } catch (error) {
@@ -116,7 +129,7 @@ async function manageCache(
   }
   for (const target of targets) {
     invalidateStoredHistory(target, true);
-    target.cachePaused = action !== "rebuild";
+    target.cachePaused = request.action !== "rebuild";
     target.reconciled = false;
     target.refTargets = [];
     target.status = "empty";
@@ -127,14 +140,16 @@ async function manageCache(
     target.revision += 1;
     publishSnapshot(target);
   }
-  if (action === "rebuild" && !reader.closed) {
-    const query = reader.lastQuery;
+  if (request.action === "rebuild" && !request.reader.closed) {
+    const query = request.reader.lastQuery;
     if (query !== undefined) {
-      await readHistory(reader, replica, {
+      await readHistory(request.reader, request.replica, {
         _tag: "ReadHistory",
         query,
         requestId: createRepositoryHistoryRequestId(),
       });
+    } else {
+      await startSynchronization(request.reader, request.replica);
     }
   }
 }

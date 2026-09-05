@@ -2,6 +2,7 @@ import type { DesktopUpdateSnapshot, DesktopUpdates } from "@rebase/contracts";
 import { type JSX, useEffect, useState } from "react";
 import type { SettingsSection } from "#web/features/settings/settings.contract";
 import { GeneralSettings } from "#web-ui/features/settings/general-settings";
+import { HistoryStorageSettings } from "#web-ui/features/settings/history-storage-settings";
 import { KeyboardShortcutsSettings } from "#web-ui/features/settings/keyboard-shortcuts-settings";
 import { SettingsSidebar } from "#web-ui/features/settings/settings-sidebar";
 
@@ -77,6 +78,8 @@ export function SettingsPanel({
             updateLoadError={updateLoadError}
             updateSnapshot={updateSnapshot}
           />
+        ) : section === "history-storage" ? (
+          <HistoryStorageSettings />
         ) : (
           <KeyboardShortcutsSettings />
         )}

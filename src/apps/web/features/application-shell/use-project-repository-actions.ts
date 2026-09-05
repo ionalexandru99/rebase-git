@@ -22,10 +22,12 @@ export function useProjectRepositoryActions({
   environmentId,
   session,
   setNavigation,
+  onRepositoryOpened,
 }: {
   readonly availability: EnvironmentAvailability;
   readonly environmentId: string;
   readonly session: LocalEnvironmentSession;
+  readonly onRepositoryOpened: () => void;
   readonly setNavigation: Dispatch<SetStateAction<ProjectNavigationState>>;
 }) {
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
@@ -40,6 +42,7 @@ export function useProjectRepositoryActions({
     ) => {
       if (availability !== "available") return;
 
+      onRepositoryOpened();
       void session.repositoryCatalog
         .recordOpened(repository.id)
         .catch(() => undefined);
@@ -51,7 +54,13 @@ export function useProjectRepositoryActions({
         ),
       );
     },
-    [availability, environmentId, session.repositoryCatalog, setNavigation],
+    [
+      availability,
+      environmentId,
+      session.repositoryCatalog,
+      setNavigation,
+      onRepositoryOpened,
+    ],
   );
 
   const selectOpenProjectRepository = useCallback(
@@ -83,6 +92,7 @@ export function useProjectRepositoryActions({
         throw new Error("The Environment is unavailable.");
       }
       const remembered = await session.repositoryCatalog.remember(path);
+      onRepositoryOpened();
       setNavigation((current) =>
         openProjectRepository(
           withAvailability(current, environmentId, availability),
@@ -94,22 +104,27 @@ export function useProjectRepositoryActions({
         ),
       );
     },
-    [availability, environmentId, session.repositoryCatalog, setNavigation],
+    [
+      availability,
+      environmentId,
+      session.repositoryCatalog,
+      setNavigation,
+      onRepositoryOpened,
+    ],
   );
 
   const copyRepositoryPath = useCallback(
     (repository: OpenProjectRepository) => {
-      void navigator.clipboard
-        .writeText(repository.path)
-        .catch(() => undefined);
+      return navigator.clipboard.writeText(repository.path);
     },
     [],
   );
 
   const revealRepository = useCallback((repository: OpenProjectRepository) => {
-    void window.rebaseHost
-      ?.revealRepository(repository.path)
-      .catch(() => undefined);
+    return (
+      window.rebaseHost?.revealRepository(repository.path) ??
+      Promise.reject(new Error("Reveal is unavailable in this client."))
+    );
   }, []);
 
   const closeSidebarRepository = useCallback(
@@ -144,7 +159,7 @@ export function useProjectRepositoryActions({
 
   const removeRepository = useCallback(
     (repository: OpenProjectRepository) => {
-      void session.repositoryCatalog
+      return session.repositoryCatalog
         .remove(repository.id)
         .then(() =>
           setNavigation((current) =>
@@ -154,8 +169,7 @@ export function useProjectRepositoryActions({
               repository.id,
             ),
           ),
-        )
-        .catch(() => undefined);
+        );
     },
     [session.repositoryCatalog, setNavigation],
   );

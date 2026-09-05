@@ -35,12 +35,9 @@ export function OpenProjectScreen({
   environments,
   expandedEnvironmentIds,
   onBrowse,
-  onCopyPath,
   onEnvironmentOpenChange,
   onOpenRepository,
-  onRemoveRepository,
-  onRevealRepository,
-  revealAvailable,
+  onOpenSettings,
 }: OpenProjectScreenProps): JSX.Element {
   const { bindings, platform } = useKeyboardShortcuts();
   const [query, setQuery] = useState("");
@@ -185,6 +182,7 @@ export function OpenProjectScreen({
               items={recentItems}
               onActivate={setActiveKey}
               onOpen={openRepository}
+              onOpenSettings={onOpenSettings}
             />
             <div className="mt-[2.4rem] space-y-[1.2rem]">
               {filteredEnvironments
@@ -195,15 +193,12 @@ export function OpenProjectScreen({
                     environment={environment}
                     key={environment.id}
                     onActivate={setActiveKey}
-                    onCopyPath={onCopyPath}
                     onOpenChange={(open) =>
                       onEnvironmentOpenChange(environment.id, open)
                     }
                     onOpenRepository={openRepository}
-                    onRemoveRepository={onRemoveRepository}
-                    onRevealRepository={onRevealRepository}
+                    onOpenSettings={onOpenSettings}
                     open={expandedEnvironmentIds.has(environment.id)}
-                    revealAvailable={revealAvailable}
                   />
                 ))}
             </div>

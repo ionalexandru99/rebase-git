@@ -2,26 +2,30 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import type { ComponentProps } from "react";
 import { vi } from "vitest";
 import { render } from "vitest-browser-react";
-import {
-  CommitGraph,
-  CommitGraphToolbarProvider,
-  useCommitGraphToolbarModel,
-} from "#web/features/commit-graph/index";
+import { CommitGraph } from "#web/features/commit-graph/index";
 import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 export async function renderGraph(
   reader: ReturnType<typeof historyReader>,
   roots = [{ name: "main", oid: "0".repeat(40), type: "branch" as const }],
   options: Pick<
     ComponentProps<typeof CommitGraph>,
-    "onRemoveHistoryRef" | "onCacheChanged" | "commandEnvironment" | "shortcuts"
+    "onRemoveHistoryRef" | "commandEnvironment" | "shortcuts"
   > = {},
 ) {
+  saveRepositoryHistoryOrder(
+    {
+      environmentId: "test-environment",
+      repositoryId: "test-logical-repository",
+    },
+    "topological",
+  );
   return render(
     <div style={{ height: 520, width: 900 }}>
       <CommitGraphFixture
@@ -186,10 +190,5 @@ export function identity(index: number) {
 }
 
 export function CommitGraphFixture(props: ComponentProps<typeof CommitGraph>) {
-  const toolbar = useCommitGraphToolbarModel();
-  return (
-    <CommitGraphToolbarProvider model={toolbar}>
-      <CommitGraph {...props} />
-    </CommitGraphToolbarProvider>
-  );
+  return <CommitGraph {...props} />;
 }

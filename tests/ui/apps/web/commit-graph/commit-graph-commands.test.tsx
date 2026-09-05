@@ -89,38 +89,6 @@ describe("commit graph commands", () => {
     await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledTimes(2));
   });
 
-  it("opens cache recovery from the history menu and confirms the shared cache action", async () => {
-    const reader = historyReader({ commits: history(2), status: "ready" });
-    const changed = vi.fn();
-    const screen = await renderGraph(reader, undefined, {
-      onCacheChanged: changed,
-    });
-    const options = screen.getByRole("button", { name: "History options" });
-    options.element().focus();
-    await userEvent.keyboard("{ArrowDown}");
-    await expect
-      .element(screen.getByRole("menuitem", { name: "Fetch settings" }))
-      .toHaveFocus();
-    await userEvent.keyboard("{Escape}");
-    await expect.element(options).toHaveFocus();
-    await options.click();
-    await screen.getByRole("menuitem", { name: "History storage" }).click();
-    await screen
-      .getByRole("button", { name: "Clear cache", exact: true })
-      .click();
-    await screen
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Clear cache", exact: true })
-      .click();
-    await vi.waitFor(() =>
-      expect(reader.manageCache).toHaveBeenCalledWith("clear"),
-    );
-    expect(changed).toHaveBeenCalledWith("clear", {
-      environmentId: "test-environment",
-      repositoryId: "test-logical-repository",
-    });
-  });
-
   it("uses the same history command from a ref label and the row keyboard menu", async () => {
     const commits = history(3);
     const reader = historyReader({ commits, status: "ready" });
