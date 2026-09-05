@@ -147,6 +147,8 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
       const changes = [
         () => git(fixture.local, "branch", "local-branch"),
         () => git(fixture.local, "tag", "local-tag"),
+        () => git(fixture.local, "commit", "--amend", "-m", "first amendment"),
+        () => git(fixture.local, "commit", "--amend", "-m", "second amendment"),
         () => git(linked, "commit", "--allow-empty", "-m", "detached worktree"),
         () => git(fixture.local, "pack-refs", "--all"),
       ];
