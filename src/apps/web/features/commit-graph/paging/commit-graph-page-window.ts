@@ -14,6 +14,11 @@ import { locateCommitGraphTarget } from "#web/features/commit-graph/paging/locat
 import { prepareCommitGraphPage } from "#web/features/commit-graph/paging/prepare-commit-graph-page";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
+interface PendingPageLoad {
+  readonly task: Promise<void>;
+  protectViewport: boolean;
+}
+
 interface PageView extends CommitGraphPageCache {
   readonly epoch: number;
   readonly query: RepositoryHistoryQuery;
@@ -68,6 +73,8 @@ export function createCommitGraphPageWindow(
   let queue = Promise.resolve();
   let retryTask: (() => Promise<void>) | undefined;
   let moving = false;
+  let viewport: { first: number; last: number } | undefined;
+  let scrollingBackwards = false;
   let pendingMove:
     | {
         offset: number;
@@ -80,7 +87,7 @@ export function createCommitGraphPageWindow(
         resolve: (value: { oid: string; offset: number } | undefined) => void;
       }
     | undefined;
-  const loads = new Map<number, Promise<void>>();
+  const loads = new Map<number, PendingPageLoad>();
   const listeners = new Set<() => void>();
 
   const publish = (changes: Partial<CommitGraphPageWindowSnapshot> = {}) => {
@@ -113,8 +120,17 @@ export function createCommitGraphPageWindow(
   const retain = (
     target: PageView,
     page: Awaited<ReturnType<typeof prepareCommitGraphPage>>,
+    protectViewport = false,
   ) => {
-    retainGraphPage(target, page, pageSize, maximumPages, maximumBytes);
+    retainGraphPage(
+      target,
+      page,
+      pageSize,
+      maximumPages,
+      maximumBytes,
+      protectViewport ? viewport : undefined,
+    );
+    if (!target.pages.has(page.offset)) return;
     target.knownEndOffset = Math.max(
       target.knownEndOffset,
       page.offset + page.commits.length,
@@ -148,6 +164,8 @@ export function createCommitGraphPageWindow(
     loads.clear();
     queue = Promise.resolve();
     replacing = true;
+    viewport = undefined;
+    scrollingBackwards = false;
     const next: PageView = {
       epoch,
       query: { ...query, limit: pageSize, offset: 0 },
@@ -233,7 +251,10 @@ export function createCommitGraphPageWindow(
     await replace(query, Math.floor(offset / pageSize) * pageSize, anchorOid);
   };
 
-  const prefetchOffset = (requestedOffset: number): Promise<void> => {
+  const prefetchOffset = (
+    requestedOffset: number,
+    protectViewport = false,
+  ): Promise<void> => {
     if (
       !Number.isInteger(requestedOffset) ||
       requestedOffset < 0 ||
@@ -247,62 +268,73 @@ export function createCommitGraphPageWindow(
     if (!view.hasOlder && offset >= view.knownEndOffset)
       return Promise.resolve();
     const existing = loads.get(offset);
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) {
+      existing.protectViewport ||= protectViewport;
+      return existing.task;
+    }
     const signal = controller.signal;
-    const task = queue.then(async () => {
-      if (signal.aborted || view === undefined) return;
-      const target: PageView = {
-        ...view,
-        pages: new Map(view.pages),
-        checkpoints: new Map(view.checkpoints),
-      };
-      if (offset < target.originOffset) {
-        const adjacent = offset + pageSize === snapshot.startOffset;
-        await replace(
-          target.query,
-          offset,
-          adjacent ? snapshot.pages[0]?.commits[0]?.oid : undefined,
-          adjacent ? snapshot.startOffset : offset,
-        );
-        return;
-      }
-      publish({ loading: true });
-      try {
-        const checkpointOffset = [...target.checkpoints.keys()]
-          .filter((position) => position <= offset)
-          .sort((left, right) => right - left)[0];
-        let cursor = checkpointOffset ?? target.originOffset;
-        let checkpoint =
-          target.checkpoints.get(cursor) ?? createCommitLaneCheckpoint();
-        while (cursor <= offset) {
-          const page = await prepareCommitGraphPage(
-            reader,
+    const load: PendingPageLoad = {
+      protectViewport,
+      task: queue.then(async () => {
+        if (signal.aborted || view === undefined) return;
+        const target: PageView = {
+          ...view,
+          pages: new Map(view.pages),
+          checkpoints: new Map(view.checkpoints),
+        };
+        if (offset < target.originOffset) {
+          const adjacent = offset + pageSize === snapshot.startOffset;
+          await replace(
             target.query,
-            cursor,
-            checkpoint,
-            signal,
+            offset,
+            adjacent ? snapshot.pages[0]?.commits[0]?.oid : undefined,
+            adjacent ? snapshot.startOffset : offset,
           );
-          retain(target, page);
-          checkpoint = page.outgoingCheckpoint;
-          cursor += pageSize;
-          if (page.commits.length < pageSize) break;
+          return;
         }
-        signal.throwIfAborted();
-        view = target;
-        const failedOffset = snapshot.error?.offset;
-        const recovered =
-          failedOffset === undefined ||
-          target.pages.has(Math.floor(failedOffset / pageSize) * pageSize);
-        if (recovered) retryTask = undefined;
-        publish({ loading: false, ...(recovered ? { error: undefined } : {}) });
-      } catch (error) {
-        if (!signal.aborted) fail(offset, error, () => prefetchOffset(offset));
-      }
-    });
-    loads.set(offset, task);
+        publish({ loading: true });
+        try {
+          const checkpointOffset = [...target.checkpoints.keys()]
+            .filter((position) => position <= offset)
+            .sort((left, right) => right - left)[0];
+          let cursor = checkpointOffset ?? target.originOffset;
+          let checkpoint =
+            target.checkpoints.get(cursor) ?? createCommitLaneCheckpoint();
+          while (cursor <= offset) {
+            const page = await prepareCommitGraphPage(
+              reader,
+              target.query,
+              cursor,
+              checkpoint,
+              signal,
+            );
+            retain(target, page, load.protectViewport);
+            checkpoint = page.outgoingCheckpoint;
+            cursor += pageSize;
+            if (page.commits.length < pageSize) break;
+          }
+          signal.throwIfAborted();
+          view = target;
+          const failedOffset = snapshot.error?.offset;
+          const recovered =
+            failedOffset === undefined ||
+            target.pages.has(Math.floor(failedOffset / pageSize) * pageSize);
+          if (recovered) retryTask = undefined;
+          publish({
+            loading: false,
+            ...(recovered ? { error: undefined } : {}),
+          });
+        } catch (error) {
+          if (!signal.aborted)
+            fail(offset, error, () => prefetchOffset(offset));
+        }
+      }),
+    };
+    const { task } = load;
+    loads.set(offset, load);
     queue = task.catch(() => undefined);
     const cleanup = () => {
-      if (loads.get(offset) === task) loads.delete(offset);
+      if (loads.get(offset) === load) loads.delete(offset);
     };
     void task.then(cleanup, cleanup);
     return task;
@@ -456,6 +488,8 @@ export function createCommitGraphPageWindow(
     loads.clear();
     queue = Promise.resolve();
     retryTask = undefined;
+    viewport = undefined;
+    scrollingBackwards = false;
     if (view !== undefined) {
       view = {
         ...view,
@@ -491,6 +525,8 @@ export function createCommitGraphPageWindow(
       pendingMove = undefined;
       loads.clear();
       view = undefined;
+      viewport = undefined;
+      scrollingBackwards = false;
       snapshot = emptyCommitGraphPageWindowSnapshot;
       listeners.clear();
     },
@@ -502,16 +538,28 @@ export function createCommitGraphPageWindow(
     },
     prefetchOffset,
     setViewport: (first, last) => {
-      if (
-        last >= snapshot.endOffset - Math.min(20, pageSize) &&
-        snapshot.hasOlder
-      )
-        void prefetchOffset(snapshot.endOffset);
-      else if (
-        first < snapshot.startOffset + Math.min(20, pageSize) &&
-        snapshot.startOffset > 0
-      )
-        void prefetchOffset(Math.max(0, snapshot.startOffset - pageSize));
+      if (viewport !== undefined && first !== viewport.first)
+        scrollingBackwards = first < viewport.first;
+      viewport = { first, last };
+      const lookahead = Math.max(1, (last - first + 1) * 2);
+      if (scrollingBackwards) {
+        const offset = Math.max(0, snapshot.startOffset - pageSize);
+        const lastVisiblePage = Math.floor(last / pageSize) * pageSize;
+        if (
+          first < snapshot.startOffset + lookahead &&
+          snapshot.startOffset > 0 &&
+          (lastVisiblePage - offset) / pageSize < maximumPages
+        )
+          void prefetchOffset(offset, true);
+      } else {
+        const firstVisiblePage = Math.floor(first / pageSize) * pageSize;
+        if (
+          last >= snapshot.endOffset - lookahead &&
+          snapshot.hasOlder &&
+          (snapshot.endOffset - firstVisiblePage) / pageSize < maximumPages
+        )
+          void prefetchOffset(snapshot.endOffset, true);
+      }
     },
     requestMove,
     requestLaneMove: (offset, direction) => {

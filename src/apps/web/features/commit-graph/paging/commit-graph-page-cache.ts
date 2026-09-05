@@ -25,6 +25,7 @@ export function retainGraphPage(
   pageSize: number,
   maximumPages: number,
   maximumBytes: number,
+  viewport?: { readonly first: number; readonly last: number },
 ) {
   if (
     page.estimatedBytes +
@@ -56,7 +57,15 @@ export function retainGraphPage(
         (left, right) =>
           Math.abs(right - page.offset) - Math.abs(left - page.offset),
       )[0];
-    if (farthest === undefined) break;
+    if (
+      farthest === undefined ||
+      (viewport !== undefined &&
+        farthest <= viewport.last &&
+        farthest + pageSize > viewport.first)
+    ) {
+      cache.pages.delete(page.offset);
+      break;
+    }
     cache.pages.delete(farthest);
   }
   const protectedOffsets = new Set(
