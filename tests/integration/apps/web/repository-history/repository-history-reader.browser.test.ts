@@ -683,14 +683,15 @@ describe("browser repository history reader", () => {
   it("publishes only IndexedDB-committed synchronization progress", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
-    let acceptBatch: ((bytes: Uint8Array) => Promise<void>) | undefined;
+    const synchronizationStarted =
+      Promise.withResolvers<(bytes: Uint8Array) => Promise<void>>();
     let finishSynchronization: ((count: number) => void) | undefined;
     const gateway: RepositoryHistoryGateway = {
       read: vi.fn(async () => page(repositoryId, history(2))),
       synchronize: vi.fn(
         (_request, accept) =>
           new Promise<number>((resolve) => {
-            acceptBatch = accept;
+            synchronizationStarted.resolve(accept);
             finishSynchronization = resolve;
           }),
       ),
@@ -718,7 +719,8 @@ describe("browser repository history reader", () => {
     );
     const synchronized = history(3);
 
-    await acceptBatch?.(
+    const acceptBatch = await synchronizationStarted.promise;
+    await acceptBatch(
       encodeRepositoryHistoryBatch({
         commits: synchronized,
         objectFormat: "sha1",
