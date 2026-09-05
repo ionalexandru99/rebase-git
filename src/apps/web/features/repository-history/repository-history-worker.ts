@@ -1,7 +1,6 @@
 import {
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
-  type RepositoryCommit,
   type RepositoryFreshness,
 } from "@rebase/contracts";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
@@ -376,10 +375,6 @@ async function handleReaderMessage(
       if (cached !== undefined) {
         reader.epoch.finish(message.requestId);
         reader.queries.delete(message.requestId);
-        for (const commit of cached) {
-          replica.commits.set(commit.oid, commit);
-        }
-        replica.visibleOids = cached.map((commit) => commit.oid);
         if (!replica.storageExhausted) delete replica.failure;
         replica.status = cached.length === 0 ? "empty" : "ready";
         replica.revision += 1;
@@ -647,14 +642,10 @@ async function acceptHistoryPage(
       reader.connection.logicalRepositoryId,
       page.commits.map((commit) => commit.oid),
     );
-    for (const commit of stored) {
-      replica.commits.set(commit.oid, commit);
-    }
     if (replica.refTargets.length === 0) {
       replica.refTargets = page.refTargets;
     }
     const selected = selectHistoryPage(stored, query);
-    replica.visibleOids = selected.map((commit) => commit.oid);
     delete replica.failure;
     replica.status = stored.length === 0 ? "empty" : "ready";
     replica.revision += 1;
@@ -848,7 +839,6 @@ function createReplica(
     orderCache: { queries: new Map(), revision: 0 },
     reconciled: false,
     shallowOids: [],
-    commits: new Map(),
     freshnessCommands: new Map(),
     needsReconciliation: false,
     storingCommits: false,
@@ -860,7 +850,6 @@ function createReplica(
     status: "empty",
     synchronization: "idle",
     synchronizedCommitCount: 0,
-    visibleOids: [],
   };
   replica.initialization = restoreReplica(replica, environmentId, repositoryId);
   return replica;
@@ -1106,8 +1095,6 @@ async function manageCache(
     invalidateStoredHistory(target, true);
     target.cachePaused = action !== "rebuild";
     target.reconciled = false;
-    target.commits.clear();
-    target.visibleOids = [];
     target.refTargets = [];
     target.status = "empty";
     target.synchronization = "idle";
@@ -1160,7 +1147,6 @@ interface RepositoryReplica {
   storingCommits: boolean;
   cachePaused?: boolean;
   storageExhausted?: boolean;
-  readonly commits: Map<string, RepositoryCommit>;
   failure?: RepositoryHistoryWorkerFailure;
   initialization: Promise<void>;
   revision: number;
@@ -1175,5 +1161,4 @@ interface RepositoryReplica {
   synchronizationOwner?: ConnectedReader;
   synchronizationRequestId?: string;
   synchronizedCommitCount: number;
-  visibleOids: readonly string[];
 }
