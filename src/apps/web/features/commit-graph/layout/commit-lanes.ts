@@ -68,10 +68,20 @@ export function appendCommitLanes(
         if (target === undefined) {
           throw new Error("Missing parent lane");
         }
-        parentLaneIds.push(target.id);
-        if (!nodeLane.remote && target.remote)
-          lanes[existingFirst] = { ...target, remote: false };
-        lanes.splice(nodeIndex, 1);
+        if (nodeLane.branchDepth < target.branchDepth) {
+          parentLaneIds.push(nodeLane.id);
+          lanes[nodeIndex] = {
+            ...nodeLane,
+            expectedOid: firstParent,
+            remote: nodeLane.remote && target.remote,
+          };
+          lanes.splice(existingFirst, 1);
+        } else {
+          parentLaneIds.push(target.id);
+          if (!nodeLane.remote && target.remote)
+            lanes[existingFirst] = { ...target, remote: false };
+          lanes.splice(nodeIndex, 1);
+        }
       } else {
         lanes[nodeIndex] = { ...nodeLane, expectedOid: firstParent };
         parentLaneIds.push(nodeLane.id);
@@ -88,10 +98,16 @@ export function appendCommitLanes(
             lanes[lanes.indexOf(existing)] = { ...existing, remote: false };
           continue;
         }
-        const created = lane(nextLaneId, parent, availableSlot(lanes), {
-          color: seeds.get(parent)?.color ?? nextLaneId % 8,
-          remote: nodeLane.remote,
-        });
+        const created = lane(
+          nextLaneId,
+          parent,
+          availableSlot(lanes),
+          {
+            color: seeds.get(parent)?.color ?? nextLaneId % 8,
+            remote: nodeLane.remote,
+          },
+          nodeLane.branchDepth + 1,
+        );
         nextLaneId += 1;
         lanes.splice(insertIndex, 0, created);
         insertIndex += 1;
@@ -120,8 +136,9 @@ function lane(
   expectedOid: string,
   slot: number,
   seed: CommitLaneSeed = { color: id % 8, remote: false },
+  branchDepth = 0,
 ): CommitLane {
-  return { ...seed, expectedOid, id, slot };
+  return { ...seed, expectedOid, id, slot, branchDepth };
 }
 
 function availableSlot(lanes: readonly CommitLane[]) {

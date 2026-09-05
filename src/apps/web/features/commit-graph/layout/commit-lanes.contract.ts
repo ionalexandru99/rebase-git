@@ -17,6 +17,7 @@ export interface CommitLaneSeed {
 
 export interface CommitLane extends CommitLanePosition {
   readonly expectedOid: string;
+  readonly branchDepth: number;
 }
 
 export interface CommitLaneCheckpoint {

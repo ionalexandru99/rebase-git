@@ -37,8 +37,11 @@ export function CommitGraphMergeControl({
       >
         <circle
           r="5.5"
-          fill={color}
-          fillOpacity={remote ? graphRemoteOpacity : 1}
+          fill={
+            remote
+              ? `color-mix(in srgb, ${color} ${graphRemoteOpacity * 100}%, var(--graph-row-background, var(--repository)))`
+              : color
+          }
         />
         <path
           d={state === "expanded" ? "M-2.5 0h5" : "M-2.5 0h5M0-2.5v5"}

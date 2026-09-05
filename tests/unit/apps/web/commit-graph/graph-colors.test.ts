@@ -10,6 +10,35 @@ import {
 } from "#web/features/commit-graph/layout/graph-colors";
 
 describe("graph branch colors", () => {
+  it("keeps the destination's first-parent lane regardless of its name or side-branch visit order", () => {
+    const seeds = graphLaneSeeds([
+      { name: "feature/customer-ledger", oid: "tip", type: "branch" },
+    ]);
+    const first = appendCommitLanes(
+      createCommitLaneCheckpoint(),
+      [
+        { oid: "tip", parents: ["dev-parent", "merged"] },
+        { oid: "merged", parents: ["shared"] },
+      ],
+      seeds,
+    );
+    const second = appendCommitLanes(
+      first.checkpoint,
+      [
+        { oid: "dev-parent", parents: ["shared"] },
+        { oid: "shared", parents: ["base"] },
+        { oid: "base", parents: [] },
+      ],
+      seeds,
+    );
+    expect(first.rows.map((row) => row.nodeLaneId)).toEqual([0, 1]);
+    expect(second.rows.map((row) => row.nodeLaneId)).toEqual([0, 0, 0]);
+    expect(second.rows[0]?.lanesAfter).toMatchObject([
+      { id: 0, slot: 0, color: first.checkpoint.lanes[0]?.color },
+    ]);
+    expect(first.checkpoint.lanes.map((lane) => lane.id)).toEqual([0, 1]);
+  });
+
   it("keeps remote history subdued until it reaches local history across pages", () => {
     const seeds = graphLaneSeeds([
       { name: "origin/dev", oid: "remote", type: "remote-branch" },

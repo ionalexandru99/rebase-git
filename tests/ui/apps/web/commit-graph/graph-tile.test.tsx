@@ -4,9 +4,44 @@ import {
   createCommitLaneCheckpoint,
 } from "#web/features/commit-graph/layout/commit-lanes";
 import { drawGraphTile } from "#web/features/commit-graph/layout/draw-graph-tile";
-import { graphLaneSeeds } from "#web/features/commit-graph/layout/graph-colors";
+import {
+  graphColors,
+  graphLaneSeeds,
+} from "#web/features/commit-graph/layout/graph-colors";
 
 describe("graph tile endpoints", () => {
+  it("keeps remote joins and merging curves at one opacity", () => {
+    const refs = [
+      { name: "origin/main", oid: "a", type: "remote-branch" as const },
+      { name: "upstream/main", oid: "b", type: "remote-branch" as const },
+    ];
+    const plan = appendCommitLanes(
+      createCommitLaneCheckpoint(),
+      [
+        { oid: "a", parents: ["c"] },
+        { oid: "b", parents: ["c"] },
+        { oid: "c", parents: ["d"] },
+        { oid: "d", parents: [] },
+      ],
+      graphLaneSeeds(refs),
+    );
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("Missing canvas context");
+    drawGraphTile(
+      canvas,
+      plan.rows,
+      0,
+      64,
+      1,
+      graphColors(plan.rows, refs).lanes,
+    );
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const alphas = pixels.filter((_, index) => index % 4 === 3);
+    expect(Math.max(...alphas)).toBe(128);
+    expect(context.getImageData(16, 26, 1, 1).data[3]).toBe(128);
+  });
+
   it("paints remote rails softer than local rails without changing their hue", () => {
     const plan = appendCommitLanes(
       createCommitLaneCheckpoint(),

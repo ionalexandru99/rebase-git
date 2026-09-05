@@ -11,6 +11,25 @@ const d = "d".repeat(40);
 const e = "e".repeat(40);
 
 describe("commit lanes", () => {
+  it("preserves first-parent continuations through nested merges", () => {
+    const first = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "tip", parents: ["destination", "side"] },
+      { oid: "side", parents: ["side-parent", "nested"] },
+      { oid: "nested", parents: ["side-base"] },
+    ]);
+    const second = appendCommitLanes(first.checkpoint, [
+      { oid: "side-parent", parents: ["side-base"] },
+      { oid: "destination", parents: ["base"] },
+      { oid: "side-base", parents: ["base"] },
+      { oid: "base", parents: [] },
+    ]);
+
+    expect(first.rows.map((row) => row.nodeLaneId)).toEqual([0, 1, 2]);
+    expect(second.rows.map((row) => row.nodeLaneId)).toEqual([1, 0, 1, 0]);
+    expect(second.rows[0]?.lanesAfter.map((lane) => lane.slot)).toEqual([0, 1]);
+    expect(second.rows[2]?.lanesAfter.map((lane) => lane.slot)).toEqual([0]);
+  });
+
   it("reuses vacant slots across successive merges without widening the graph", () => {
     const { rows } = appendCommitLanes(createCommitLaneCheckpoint(), [
       { oid: "a", parents: ["b", "c"] },

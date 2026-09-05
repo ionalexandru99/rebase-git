@@ -1,13 +1,6 @@
 import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes.contract";
-import {
-  graphLaneColor,
-  graphRemoteOpacity,
-} from "#web/features/commit-graph/layout/graph-colors";
-import {
-  commitGraphNodePosition,
-  graphLaneX,
-} from "#web/features/commit-graph/layout/graph-geometry";
 import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
+import { graphTilePaths } from "#web/features/commit-graph/layout/graph-tile-paths";
 
 export function drawGraphTile(
   canvas: HTMLCanvasElement,
@@ -32,73 +25,17 @@ export function drawGraphTile(
   const context = canvas.getContext("2d");
   if (context === null) return;
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.lineCap = "round";
+  context.lineCap = "butt";
   context.lineWidth = 2;
   context.clearRect(0, 0, width, height);
-  for (const [index, row] of rows.entries()) {
-    const top = index * graphRowHeight;
-    const center = top + graphRowHeight / 2;
-    const bottom = top + graphRowHeight;
-    const nodeX = commitGraphNodePosition(row) - left;
-    for (const lane of row.lanesBefore) {
-      if (lane.id === row.nodeLaneId && !row.nodeHasIncomingLane) continue;
-      const x = graphLaneX(lane.slot) - left;
-      if (x < -4 || x > width + 4) continue;
-      context.globalAlpha = lane.remote ? graphRemoteOpacity : 1;
-      drawLane(
-        context,
-        graphLaneColor(lane.id, colors),
-        x,
-        top,
-        x,
-        lane.id === row.nodeLaneId ? center : bottom,
-      );
-    }
-    for (const id of row.parentLaneIds) {
-      const parent = row.lanesAfter.find((lane) => lane.id === id);
-      if (parent === undefined) continue;
-      const parentX = graphLaneX(parent.slot) - left;
-      if (Math.max(parentX, nodeX) < -4 || Math.min(parentX, nodeX) > width + 4)
-        continue;
-      context.globalAlpha = row.nodeRemote ? graphRemoteOpacity : 1;
-      drawLane(
-        context,
-        graphLaneColor(id, colors),
-        nodeX,
-        center,
-        parentX,
-        bottom,
-      );
-    }
-    if (nodeX < -4 || nodeX > width + 4) continue;
-    context.strokeStyle = graphLaneColor(row.nodeLaneId, colors);
-    context.beginPath();
-    context.arc(nodeX, center, 3, 0, Math.PI * 2);
-    context.globalCompositeOperation = "destination-out";
-    context.globalAlpha = 1;
-    context.fill();
-    context.globalCompositeOperation = "source-over";
-    context.globalAlpha = row.nodeRemote ? graphRemoteOpacity : 1;
-    context.stroke();
+  const { strokes, centers } = graphTilePaths(rows, left, width, colors);
+  for (const { path, color, opacity } of strokes.values()) {
+    context.strokeStyle = color;
+    context.globalAlpha = opacity;
+    context.stroke(path);
   }
   context.globalAlpha = 1;
-}
-
-function drawLane(
-  context: CanvasRenderingContext2D,
-  color: string,
-  fromX: number,
-  fromY: number,
-  toX: number,
-  toY: number,
-) {
-  context.strokeStyle = color;
-  context.beginPath();
-  context.moveTo(fromX, fromY);
-  if (fromX === toX) context.lineTo(toX, toY);
-  else {
-    const middle = (fromY + toY) / 2;
-    context.bezierCurveTo(fromX, middle, toX, middle, toX, toY);
-  }
-  context.stroke();
+  context.globalCompositeOperation = "destination-out";
+  context.fill(centers);
+  context.globalCompositeOperation = "source-over";
 }
