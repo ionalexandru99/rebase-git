@@ -7,7 +7,7 @@ import {
 } from "@rebase/contracts";
 import { Effect, Fiber, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { runEnvironmentWebSocketSession } from "#server/features/environment-connection/websocket/environment-websocket-session";
@@ -51,6 +51,73 @@ describe("Environment WebSocket session", () => {
       reason: "HandshakeRequired",
     });
   });
+
+  it.each(["repository-history", "binary-fragmentation"])(
+    "rejects history requests without negotiated %s",
+    async (missingCapability) => {
+      for (const request of [
+        {
+          _tag: "ReadRepositoryHistory",
+          repositoryId: "00000000-0000-4000-8000-000000000001",
+          requestId: "read",
+          limit: 100,
+          order: "topological",
+          roots: [{ name: "main", oid: "a".repeat(40), type: "branch" }],
+        },
+        {
+          _tag: "SynchronizeRepositoryHistory",
+          repositoryId: "00000000-0000-4000-8000-000000000001",
+          requestId: "sync",
+          priority: "visible",
+        },
+      ]) {
+        const socket = new ControlledWebSocket();
+        const history = {
+          read: vi.fn(() => Effect.never),
+          synchronize: vi.fn(() => Effect.never),
+        };
+        const state: EnvironmentTransportState = {
+          discovery: createCurrentEnvironmentDiscovery(
+            "00000000-0000-4000-8000-000000000001",
+            "0.0.0",
+          ),
+          events: createEnvironmentEventPublisher(),
+          history,
+        };
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const session = yield* runEnvironmentWebSocketSession(
+              asWebSocket(socket),
+              state,
+            ).pipe(Effect.forkChild);
+            yield* Effect.yieldNow;
+            const hello = createCurrentEnvironmentHello("0.0.0");
+            socket.receive(
+              JSON.stringify({
+                ...hello,
+                capabilities: hello.capabilities.filter(
+                  (capability) => capability.name !== missingCapability,
+                ),
+              }),
+            );
+            yield* Effect.yieldNow;
+            socket.completeSend();
+            yield* Effect.yieldNow;
+            socket.receive(JSON.stringify(request));
+            yield* Effect.yieldNow;
+            socket.completeSend();
+            yield* Fiber.join(session);
+          }),
+        );
+        expect(socket.closedWith).toEqual({
+          code: 1008,
+          reason: "InvalidMessage",
+        });
+        expect(history.read).not.toHaveBeenCalled();
+        expect(history.synchronize).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it("queues events published while the hello response is in flight", async () => {
     const socket = new ControlledWebSocket();
