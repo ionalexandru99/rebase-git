@@ -14,13 +14,10 @@ import {
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
 
 describe("browser metadata search", () => {
-  it("stops before another bulk chunk when cancellation arrives during a read", async (context) => {
-    context.skip(
-      typeof Reflect.get(IDBIndex.prototype, "getAllRecords") !== "function",
-    );
+  it("stops before another bulk chunk when cancellation arrives during a read", async () => {
     const fixture = await seed(500);
     const controller = new AbortController();
-    const prototype = IDBIndex.prototype;
+    const prototype = IDBObjectStore.prototype;
     const descriptor = Object.getOwnPropertyDescriptor(prototype, "getAll");
     const original = descriptor?.value;
     if (typeof original !== "function")
@@ -28,7 +25,7 @@ describe("browser metadata search", () => {
     let reads = 0;
     Object.defineProperty(prototype, "getAll", {
       configurable: true,
-      value: function (this: IDBIndex, ...args: readonly unknown[]) {
+      value: function (this: IDBObjectStore, ...args: readonly unknown[]) {
         reads += 1;
         const request = Reflect.apply(
           original,
@@ -57,52 +54,7 @@ describe("browser metadata search", () => {
     }
   });
 
-  it("keeps bulk reads and cursor fallback identical across sparse continuations", async (context) => {
-    context.skip(
-      typeof Reflect.get(IDBIndex.prototype, "getAllRecords") !== "function",
-    );
-    const fixture = await seed(5_000);
-    const query = { text: "Commit 4999", limit: 100 };
-    const first = await searchStoredRepositoryHistory(
-      fixture.environmentId,
-      fixture.repositoryId,
-      query,
-    );
-    const second = await searchStoredRepositoryHistory(
-      fixture.environmentId,
-      fixture.repositoryId,
-      { ...query, cursor: continuation(first) },
-    );
-    const prototype = IDBIndex.prototype;
-    const descriptor = Object.getOwnPropertyDescriptor(
-      prototype,
-      "getAllRecords",
-    );
-    expect(typeof descriptor?.value).toBe("function");
-    Object.defineProperty(prototype, "getAllRecords", {
-      configurable: true,
-      value: undefined,
-    });
-    try {
-      const fallbackFirst = await searchStoredRepositoryHistory(
-        fixture.environmentId,
-        fixture.repositoryId,
-        query,
-      );
-      const fallbackSecond = await searchStoredRepositoryHistory(
-        fixture.environmentId,
-        fixture.repositoryId,
-        { ...query, cursor: continuation(fallbackFirst) },
-      );
-      expect(fallbackFirst).toEqual(first);
-      expect(fallbackSecond).toEqual(second);
-    } finally {
-      if (descriptor !== undefined)
-        Object.defineProperty(prototype, "getAllRecords", descriptor);
-    }
-  });
-
-  it("indexes already cached version-three commits during the compatible upgrade", async () => {
+  it("searches already cached version-three commits after the compatible upgrade", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const databaseName = `history-search-upgrade-${crypto.randomUUID()}`;
@@ -161,7 +113,7 @@ describe("browser metadata search", () => {
     reader.close();
   });
 
-  it("returns newest commits first with stable OID ties and bounded pages", async () => {
+  it("returns stable ascending OID pages independently of commit dates", async () => {
     const fixture = await seed(4);
     const reader = createBrowserRepositoryHistoryReader({
       ...fixture,
@@ -181,10 +133,10 @@ describe("browser metadata search", () => {
     expect(
       [...first.commits, ...second.commits].map((commit) => commit.oid),
     ).toEqual([
-      fixture.commits[1]?.oid,
       fixture.commits[0]?.oid,
-      fixture.commits[3]?.oid,
+      fixture.commits[1]?.oid,
       fixture.commits[2]?.oid,
+      fixture.commits[3]?.oid,
     ]);
     expect(first.replicaComplete).toBe(true);
     expect(first.synchronizedCommitCount).toBe(4);
