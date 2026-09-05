@@ -19,8 +19,10 @@ import type {
   RepositoryHistorySearchBindings,
 } from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
 import { useRepositoryHistorySearch } from "#web/features/repository-history/search/hooks/use-repository-history-search";
+import { useRepositoryHistorySearchModel } from "#web/features/repository-history/search/hooks/use-repository-history-search-model";
 import { historySearchPageSize } from "#web/features/repository-history/search/read-next-history-search-page";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
+import type { RepositoryHistorySearchModel } from "#web/features/repository-history/search/repository-history-search-model.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
 
@@ -34,7 +36,36 @@ export function RepositoryHistorySearchControls({
 }: {
   readonly reader: RepositoryHistorySearch;
   readonly snapshot: RepositoryHistorySnapshot;
-  readonly onNavigate: (oid: string) => Promise<void>;
+  readonly onNavigate: (oid: string, signal: AbortSignal) => Promise<void>;
+  readonly bindings?: RepositoryHistorySearchBindings;
+  readonly offline?: boolean;
+  readonly ref?: Ref<RepositoryHistorySearchActions>;
+}) {
+  const model = useRepositoryHistorySearchModel(
+    reader,
+    snapshot.historyRevision,
+    onNavigate,
+  );
+  return (
+    <RepositoryHistorySearchView
+      model={model}
+      snapshot={snapshot}
+      bindings={bindings}
+      offline={offline}
+      {...(ref === undefined ? {} : { ref })}
+    />
+  );
+}
+
+export function RepositoryHistorySearchView({
+  model,
+  snapshot,
+  bindings = {},
+  offline = false,
+  ref,
+}: {
+  readonly model: RepositoryHistorySearchModel | undefined;
+  readonly snapshot: RepositoryHistorySnapshot;
   readonly bindings?: RepositoryHistorySearchBindings;
   readonly offline?: boolean;
   readonly ref?: Ref<RepositoryHistorySearchActions>;
@@ -42,11 +73,7 @@ export function RepositoryHistorySearchControls({
   const input = useRef<HTMLInputElement>(null);
   const resultsId = useId();
   const [opened, setOpened] = useState(false);
-  const search = useRepositoryHistorySearch(
-    reader,
-    snapshot.historyRevision,
-    onNavigate,
-  );
+  const search = useRepositoryHistorySearch(model);
   const open = () => {
     setOpened(true);
     input.current?.focus();
@@ -242,6 +269,7 @@ export function RepositoryHistorySearchControls({
                   {!busy &&
                   search.error === undefined &&
                   search.text.trim() !== "" &&
+                  search.cursor === undefined &&
                   search.commits.length === 0 ? (
                     <p className="px-2 py-3 text-xs text-muted-foreground">
                       No matches in cached history.

@@ -15,4 +15,8 @@ export type {
   RepositoryHistorySearchQuery,
   RepositoryHistorySearchResult,
 } from "#web/features/repository-history/search/repository-history-search.contract";
+export type {
+  RepositoryHistorySearchModel,
+  RepositoryHistorySearchSnapshot,
+} from "#web/features/repository-history/search/repository-history-search-model.contract";
 export type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/transport/repository-history-transport.contract";

@@ -1,5 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { act, createRef } from "react";
+import { act, createRef, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
@@ -24,6 +24,44 @@ const bindings = {
 };
 
 describe("history search controls", () => {
+  it("keeps one request in Strict Mode and transfers the query on repository switching", async () => {
+    const signals: AbortSignal[] = [];
+    const search = vi.fn<RepositoryHistorySearch["search"]>(
+      (_query, signal) => {
+        if (signal !== undefined) signals.push(signal);
+        return new Promise(() => {});
+      },
+    );
+    const first = { search };
+    const second = { search };
+    const onNavigate = vi.fn(async () => {});
+    const screen = await render(
+      <StrictMode>
+        <RepositoryHistorySearchControls
+          reader={first}
+          snapshot={snapshot}
+          onNavigate={onNavigate}
+        />
+      </StrictMode>,
+    );
+    await page.getByRole("searchbox").fill("history");
+    await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1));
+    await screen.rerender(
+      <StrictMode>
+        <RepositoryHistorySearchControls
+          reader={second}
+          snapshot={snapshot}
+          onNavigate={onNavigate}
+        />
+      </StrictMode>,
+    );
+    await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+    expect(signals.map((signal) => signal.aborted)).toEqual([true, false]);
+    await expect.element(page.getByRole("searchbox")).toHaveValue("history");
+    await screen.unmount();
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
+
   it("continues sparse pages and shows cached metadata and partial offline coverage", async () => {
     const reader = {
       search: vi
@@ -100,20 +138,32 @@ describe("history search controls", () => {
       .toBeVisible();
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(commit(1).oid),
+      expect(onNavigate).toHaveBeenLastCalledWith(
+        commit(1).oid,
+        expect.any(AbortSignal),
+      ),
     );
     await page.getByRole("button", { name: "Next search result" }).click();
     await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(commit(2).oid),
+      expect(onNavigate).toHaveBeenLastCalledWith(
+        commit(2).oid,
+        expect.any(AbortSignal),
+      ),
     );
     await input.click();
     await userEvent.keyboard("{Shift>}{Enter}{/Shift}");
     await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(commit(1).oid),
+      expect(onNavigate).toHaveBeenLastCalledWith(
+        commit(1).oid,
+        expect.any(AbortSignal),
+      ),
     );
     actions.current?.next();
     await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(commit(2).oid),
+      expect(onNavigate).toHaveBeenLastCalledWith(
+        commit(2).oid,
+        expect.any(AbortSignal),
+      ),
     );
     await expect
       .element(page.getByRole("status"))
@@ -123,7 +173,10 @@ describe("history search controls", () => {
       .toBeEnabled();
     actions.current?.next();
     await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(commit(3).oid),
+      expect(onNavigate).toHaveBeenLastCalledWith(
+        commit(3).oid,
+        expect.any(AbortSignal),
+      ),
     );
     expect(reader.search).toHaveBeenLastCalledWith(
       { text: "history", cursor: "next", limit: 20 },
@@ -300,6 +353,11 @@ describe("history search controls", () => {
       }
       expect(reader.search).toHaveBeenCalledTimes(5);
       expect(onNavigate).toHaveBeenCalledTimes(1);
+      if (emptyPages) {
+        await expect
+          .element(page.getByText("No matches in cached history."))
+          .not.toBeInTheDocument();
+      }
     },
   );
 
