@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
+  type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
@@ -11,24 +12,36 @@ it.each(["startup", "runtime"] as const)(
     const leasesBefore = new Set(
       (await navigator.locks.query()).held?.map(({ name }) => name),
     );
-    const worker = new SharedWorker(
-      new URL(
-        failure === "startup"
-          ? "./fixtures/history-startup-failure-worker.ts"
-          : "./fixtures/history-runtime-failure-worker.ts",
-        import.meta.url,
-      ),
-      { type: "module", name: crypto.randomUUID() },
+    const workerUrl = new URL(
+      failure === "startup"
+        ? "./fixtures/history-startup-failure-worker.ts"
+        : "./fixtures/history-runtime-failure-worker.ts",
+      import.meta.url,
     );
+    const workerOptions = {
+      type: "module" as const,
+      name: crypto.randomUUID(),
+    };
+    const worker = new SharedWorker(workerUrl, workerOptions);
     worker.addEventListener("error", (event) => event.preventDefault());
     const unsubscribe = vi.fn();
     const connection = {
       environmentId: crypto.randomUUID(),
       repositoryId: crypto.randomUUID(),
       gateway: {
-        read: async () => {
-          throw new RepositoryHistoryOffline();
-        },
+        read: vi.fn(
+          (
+            _request: Parameters<RepositoryHistoryGateway["read"]>[0],
+            signal?: AbortSignal,
+          ) =>
+            new Promise<Uint8Array>((_resolve, reject) => {
+              signal?.addEventListener(
+                "abort",
+                () => reject(new RepositoryHistoryUnavailable()),
+                { once: true },
+              );
+            }),
+        ),
         synchronize: async () => {
           throw new RepositoryHistoryOffline();
         },
@@ -46,12 +59,30 @@ it.each(["startup", "runtime"] as const)(
       return notify;
     });
     try {
-      const results = await Promise.allSettled(
-        readers.flatMap((reader) => [
-          reader.getRefTargets(),
-          reader.getCommitSummaries([]),
-        ]),
+      if (failure === "runtime")
+        await Promise.all(readers.map((reader) => reader.getRefTargets()));
+      const settled = Promise.allSettled(
+        readers.flatMap((reader) =>
+          failure === "startup"
+            ? [reader.getRefTargets(), reader.getCommitSummaries([])]
+            : [
+                reader.read({
+                  limit: 1,
+                  order: "topological",
+                  roots: [
+                    { name: "main", type: "branch", oid: "a".repeat(40) },
+                  ],
+                }),
+              ],
+        ),
       );
+      if (failure === "runtime") {
+        await expect
+          .poll(() => connection.gateway.read.mock.calls.length)
+          .toBe(2);
+        worker.port.postMessage("fail");
+      }
+      const results = await settled;
       for (const result of results) {
         expect(result.status).toBe("rejected");
         if (result.status === "rejected")
@@ -86,12 +117,20 @@ it.each(["startup", "runtime"] as const)(
       }
       worker.port.close();
     }
-    const reopened = createBrowserRepositoryHistoryReader(connection);
+    const recoveredWorker =
+      failure === "runtime"
+        ? new SharedWorker(workerUrl, workerOptions)
+        : undefined;
+    const reopened = createBrowserRepositoryHistoryReader({
+      ...connection,
+      ...(recoveredWorker === undefined ? {} : { worker: recoveredWorker }),
+    });
     try {
       await expect(reopened.getRefTargets()).resolves.toEqual([]);
       expect(reopened.getSnapshot().status).not.toBe("error");
     } finally {
       reopened.close();
+      recoveredWorker?.port.close();
     }
   },
 );

@@ -55,6 +55,7 @@ function failWorker() {
       closeReader(reader, replica);
     }
   }
+  globalThis.close();
 }
 globalThis.addEventListener("error", failWorker);
 globalThis.addEventListener("unhandledrejection", failWorker);

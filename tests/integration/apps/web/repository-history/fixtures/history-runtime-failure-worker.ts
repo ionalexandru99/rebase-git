@@ -11,12 +11,10 @@ worker.onconnect = (event) => {
   if (sharedPort === undefined) return;
   const receive = sharedPort.onmessage;
   sharedPort.onmessage = (connection) => {
-    receive?.call(sharedPort, connection);
-    const port: MessagePort = connection.data.port;
-    port.onmessage = () => {
+    if (connection.data === "fail") {
       throw new Error("History worker stopped processing requests");
-    };
-    port.start();
+    }
+    receive?.call(sharedPort, connection);
   };
   sharedPort.start();
 };
