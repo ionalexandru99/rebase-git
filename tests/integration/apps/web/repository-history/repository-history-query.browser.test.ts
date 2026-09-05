@@ -10,6 +10,7 @@ import {
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
 import {
+  historyOrderScopeKey,
   locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryHistory,
@@ -217,6 +218,181 @@ describe("local ordered history pages", () => {
       expect(cache.index?.order([oid("merge")], "topological")).toHaveLength(4);
       await prepare();
       expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it("shares the compact index scan across simultaneous cold page queries", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    const read = () =>
+      readRepositoryHistory(
+        fixture.environmentId,
+        fixture.repositoryId,
+        {
+          roots: [root("main", "merge")],
+          order: "topological",
+          ancestry: "first-parent",
+          limit: 100,
+        },
+        indexedDB,
+        cache,
+      );
+    try {
+      const pages = await Promise.all([read(), read(), read()]);
+      expect(pages.map((page) => page?.map(({ subject }) => subject))).toEqual([
+        ["merge", "left", "base"],
+        ["merge", "left", "base"],
+        ["merge", "left", "base"],
+      ]);
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it("keeps an applied first-parent prefix usable while the complete index is cold", async () => {
+    const fixture = await seed("main", false);
+    const query = {
+      roots: [root("main", "merge")],
+      order: "chronological" as const,
+      ancestry: "first-parent" as const,
+      limit: 2,
+    };
+    await storeRepositoryHistoryPage(
+      fixture.environmentId,
+      fixture.repositoryId,
+      {
+        repositoryId: fixture.repositoryId,
+        requestId: crypto.randomUUID(),
+        objectFormat: "sha1",
+        refTargets: query.roots,
+        commits: fixture.commits.filter(({ subject }) =>
+          ["merge", "left"].includes(subject),
+        ),
+      },
+      query,
+    );
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    try {
+      expect(
+        (
+          await readRepositoryHistory(
+            fixture.environmentId,
+            fixture.repositoryId,
+            query,
+            indexedDB,
+            cache,
+          )
+        )?.map(({ subject }) => subject),
+      ).toEqual(["merge", "left"]);
+      expect(
+        await locateRepositoryHistoryCommits(
+          fixture.environmentId,
+          fixture.repositoryId,
+          query,
+          [oid("left"), oid("merge"), oid("left")],
+          { queries: new Map(), revision: 0 },
+        ),
+      ).toEqual([
+        { oid: oid("merge"), index: 0 },
+        { oid: oid("left"), index: 1 },
+      ]);
+      expect(reads).not.toHaveBeenCalled();
+      expect(
+        await locateRepositoryHistoryCommits(
+          fixture.environmentId,
+          fixture.repositoryId,
+          query,
+          [oid("base")],
+          cache,
+        ),
+      ).toEqual([{ oid: oid("base"), index: 2 }]);
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it.each([false, true])(
+    "does not trust an unapplied complete first-parent prefix (legacy=%s)",
+    async (legacy) => {
+      const fixture = await seed("main", false);
+      const query = {
+        roots: [root("main", "merge")],
+        order: "chronological" as const,
+        ancestry: "first-parent" as const,
+        limit: 2,
+      };
+      if (legacy)
+        await withRepositoryHistoryDatabase(indexedDB, async (database) => {
+          const transaction = database.transaction(
+            repositoryStoreName,
+            "readwrite",
+          );
+          const completed = transactionCompleted(transaction);
+          const store = transaction.objectStore(repositoryStoreName);
+          const repository = await requestResult<StoredRepository>(
+            store.get(
+              repositoryKey(fixture.environmentId, fixture.repositoryId),
+            ),
+          );
+          if (repository.cachedPage === undefined)
+            throw new Error("Cached page is missing");
+          const { offset: _offset, ...cachedPage } = repository.cachedPage;
+          store.put({
+            ...repository,
+            cachedPage: {
+              ...cachedPage,
+              scopeKey: historyOrderScopeKey(query),
+            },
+          });
+          await completed;
+        });
+      const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+      try {
+        const page = await readRepositoryHistory(
+          fixture.environmentId,
+          fixture.repositoryId,
+          query,
+        );
+        expect(page?.map(({ subject }) => subject)).toEqual(["merge", "left"]);
+        expect(reads).toHaveBeenCalledTimes(1);
+      } finally {
+        reads.mockRestore();
+      }
+    },
+  );
+
+  it("does not publish a cold query after its stored generation changes", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const getAll = IDBIndex.prototype.getAll;
+    const reads = vi
+      .spyOn(IDBIndex.prototype, "getAll")
+      .mockImplementationOnce(function (this: IDBIndex, ...args) {
+        cache.revision += 1;
+        return Reflect.apply(getAll, this, args);
+      });
+    try {
+      const page = await readRepositoryHistory(
+        fixture.environmentId,
+        fixture.repositoryId,
+        {
+          roots: [root("main", "merge")],
+          order: "topological",
+          ancestry: "first-parent",
+          limit: 100,
+        },
+        indexedDB,
+        cache,
+      );
+      expect(page).toBeUndefined();
+      expect(cache.index).toBeUndefined();
+      expect(cache.queries.size).toBe(0);
     } finally {
       reads.mockRestore();
     }
