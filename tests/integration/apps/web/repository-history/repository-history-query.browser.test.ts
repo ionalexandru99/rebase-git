@@ -54,6 +54,7 @@ describe("local ordered history pages", () => {
           expect(result).toBeUndefined();
           expect(reads).toHaveBeenCalledTimes(1);
         } else {
+          expect(reads).toHaveBeenCalledTimes(2);
           expect(result?.map(({ subject }) => subject)).toEqual([
             "merge",
             "left",
