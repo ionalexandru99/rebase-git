@@ -29,7 +29,7 @@ Everything should feel smooth, with as little lag as possible, regardless of the
 Commits should load on the computer without input lag and the app should react fast.
 Pressing on a button should show something happening as fast as possible, not wait.
 
-Run performance benchmarks only on local development machines. Do not run them in CI pipelines, including scheduled and manually triggered workflows.
+Run performance benchmarks only on local development machines. Do not run them in CI pipelines, including scheduled and manually triggered workflows. Keep timing budgets in the local benchmark suite; functional CI tests may use bounded waits to detect hangs.
 
 ## Userbase
 

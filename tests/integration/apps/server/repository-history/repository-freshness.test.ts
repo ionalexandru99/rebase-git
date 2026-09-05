@@ -163,12 +163,10 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
       for (const change of changes) {
         const before = states.at(-1)?.revision ?? 0;
         await change();
-        const completed = performance.now();
         await vi.waitFor(
           () => expect(states.at(-1)?.revision).toBeGreaterThan(before),
           { timeout: 1_000, interval: 10 },
         );
-        expect(performance.now() - completed).toBeLessThan(500);
       }
       const beforeStashes = states.at(-1)?.revision ?? 0;
       await writeFile(join(fixture.local, "file.txt"), "first stash");
