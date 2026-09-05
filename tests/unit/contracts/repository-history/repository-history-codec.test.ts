@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   createBinaryMessageReassembler,
   decodeRepositoryHistoryBatch,
@@ -15,6 +16,41 @@ const requestId = "00000000-0000-4000-8000-000000000011";
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 
 describe("repository history binary codec", () => {
+  it("preserves the established page and batch wire representation", () => {
+    const page = historyPage("sha1");
+    const digest = (bytes: Uint8Array) =>
+      createHash("sha256").update(bytes).digest("hex");
+    expect(digest(encodeRepositoryHistoryPage(page))).toBe(
+      "558553a55bbf109b37afdf5fbd956f0fd7d2e7476af4599c9211b8f217f93ee0",
+    );
+    expect(
+      digest(
+        encodeRepositoryHistoryBatch({
+          commits: page.commits,
+          objectFormat: page.objectFormat,
+          repositoryId,
+          requestId,
+          sequence: 7,
+        }),
+      ),
+    ).toBe("41d6749465b2eba48f8ade1042c4de43384a10809014f96866eba8f0a497ae94");
+  });
+
+  it("encodes multibyte fields through buffer growth and keeps byte limits", () => {
+    const page = historyPage("sha1");
+    const withSubject = (subject: string) => ({
+      ...page,
+      commits: page.commits.map((commit) => ({ ...commit, subject })),
+    });
+    const expanded = withSubject("Graph 🦀 漢字\u0000".repeat(2_000));
+    expect(
+      decodeRepositoryHistoryPage(encodeRepositoryHistoryPage(expanded)),
+    ).toEqual(expanded);
+    expect(() =>
+      encodeRepositoryHistoryPage(withSubject("漢".repeat(400_000))),
+    ).toThrow("String is too large");
+  });
+
   it.each(["sha1", "sha256"] as const)(
     "round trips %s commit metadata without text framing",
     (objectFormat) => {

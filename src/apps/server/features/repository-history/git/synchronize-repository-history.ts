@@ -7,17 +7,11 @@ import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-h
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import {
-  createGitHistoryBatchParser,
-  gitHistoryFormat,
-} from "#server/features/repository-history/git/parse-git-history";
+import { historyTraversalIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
-import { restoreShallowCommitParents } from "#server/features/repository-history/git/shallow-repository-history";
+import { streamRepositoryHistory } from "#server/features/repository-history/git/stream-repository-history";
 
-const batchSize = 256;
-const maximumBatchCharacters = 4 * 1_048_576;
 const maximumReconciliationPasses = 8;
-const synchronizationTimeoutMilliseconds = 30 * 60_000;
 
 type SynchronizationBasis = NonNullable<SynchronizeRepositoryHistory["basis"]>;
 
@@ -140,6 +134,16 @@ function initialSnapshot(
     )
       return yield* snapshotInvalidated();
     if (basis?._tag !== "Incomplete") return current;
+    if (
+      !basis.snapshotId.startsWith(
+        historyTraversalIdentity(
+          basis.objectFormat,
+          basis.rootOids,
+          basis.shallowOids ?? [],
+        ),
+      )
+    )
+      return yield* snapshotInvalidated();
     return {
       id: basis.snapshotId,
       objectFormat: basis.objectFormat,
@@ -197,106 +201,30 @@ function streamHistory(
   invalidBasisOnFailure: boolean,
   shallowOids: readonly string[],
 ) {
-  if (roots.length === 0) {
-    return Effect.succeed(0);
-  }
-  const stream = git.stream;
-  if (stream === undefined) {
-    return gitFailure("Git history streaming is unavailable");
-  }
-  let emitFailure: RepositoryHistoryError | undefined;
-  const shallowBoundaries = new Set(shallowOids);
-  let streamSignal: AbortSignal | undefined;
-  const parser = createGitHistoryBatchParser(
-    objectFormat,
-    batchSize,
-    (parsed) =>
-      Effect.runPromise(
-        restoreShallowCommitParents(
-          git,
-          repositoryPath,
-          parsed,
-          shallowBoundaries,
-        ).pipe(
-          Effect.flatMap((commits) =>
-            takeSequence(nextSequence).pipe(
-              Effect.flatMap((sequence) =>
-                emit({
-                  commits,
-                  objectFormat,
-                  repositoryId: request.repositoryId,
-                  requestId: request.requestId,
-                  sequence,
-                }),
-              ),
-            ),
-          ),
-          Effect.tapError((failure) =>
-            Effect.sync(() => {
-              emitFailure = failure;
-            }),
-          ),
-        ),
-        streamSignal === undefined ? undefined : { signal: streamSignal },
-      ),
-    maximumBatchCharacters,
-  );
-  return stream(
+  return streamRepositoryHistory(
+    git,
+    repositoryPath,
     {
-      arguments: [
-        "log",
-        "--stdin",
-        "--topo-order",
-        "--no-show-signature",
-        ...(skip === 0 ? [] : [`--skip=${skip}`]),
-        `--format=${gitHistoryFormat}`,
-        "-z",
-        "--",
-      ],
-      directory: repositoryPath,
-      input: historyInput(roots, excludedRoots),
-      timeoutMilliseconds: synchronizationTimeoutMilliseconds,
+      roots,
+      excludedRoots,
+      skip,
+      objectFormat,
+      shallowOids,
+      invalidBasisOnFailure,
     },
-    (chunk, signal) => {
-      streamSignal = signal;
-      return parser.accept(chunk);
-    },
-  ).pipe(
-    Effect.mapError((cause) => emitFailure ?? repositoryHistoryError(cause)),
-    Effect.flatMap((output) =>
-      output.exitCode === 0
-        ? parseOutput((signal) => {
-            streamSignal = signal;
-            return parser.finish();
-          }).pipe(Effect.mapError((failure) => emitFailure ?? failure))
-        : invalidBasisOnFailure
-          ? snapshotInvalidated()
-          : gitFailure(output.stderr.slice(0, 2_048)),
-    ),
+    (commits) =>
+      takeSequence(nextSequence).pipe(
+        Effect.flatMap((sequence) =>
+          emit({
+            commits,
+            objectFormat,
+            repositoryId: request.repositoryId,
+            requestId: request.requestId,
+            sequence,
+          }),
+        ),
+      ),
   );
-}
-
-function historyInput(
-  roots: readonly string[],
-  excludedRoots: readonly string[],
-) {
-  return `${roots.join("\n")}\n${excludedRoots.map((oid) => `^${oid}`).join("\n")}\n`;
-}
-
-function parseOutput<T>(parse: (signal: AbortSignal) => T | Promise<T>) {
-  return Effect.tryPromise({
-    try: async (signal) => parse(signal),
-    catch: (cause) =>
-      new RepositoryHistoryError({
-        cause,
-        failure: {
-          _tag: "GitFailed",
-          detail:
-            cause instanceof Error ? cause.message.slice(0, 2_048) : undefined,
-          reason: "Failed",
-        },
-      }),
-  });
 }
 
 function takeSequence(nextSequence: () => number) {

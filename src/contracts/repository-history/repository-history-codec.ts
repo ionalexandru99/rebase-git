@@ -362,51 +362,51 @@ function readRefType(code: number) {
 }
 
 class BinaryWriter {
-  readonly #chunks: Uint8Array[] = [];
+  #output = new Uint8Array(4_096);
+  #view = new DataView(this.#output.buffer);
   #length = 0;
+  readonly #encoder = new TextEncoder();
 
   bytes() {
-    const output = new Uint8Array(this.#length);
-    let offset = 0;
-    for (const chunk of this.#chunks) {
-      output.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return output;
+    return this.#output.slice(0, this.#length);
   }
 
   int16(value: number) {
-    const bytes = new Uint8Array(2);
-    new DataView(bytes.buffer).setInt16(0, value, false);
-    this.write(bytes);
+    this.reserve(2);
+    this.#view.setInt16(this.#length, value, false);
+    this.#length += 2;
   }
 
   int64(value: number) {
-    if (!Number.isSafeInteger(value)) {
-      throw new Error("Invalid timestamp");
-    }
-    const bytes = new Uint8Array(8);
-    new DataView(bytes.buffer).setBigInt64(0, BigInt(value), false);
-    this.write(bytes);
+    if (!Number.isSafeInteger(value)) throw new Error("Invalid timestamp");
+    this.reserve(8);
+    this.#view.setBigInt64(this.#length, BigInt(value), false);
+    this.#length += 8;
   }
 
   string(value: string) {
-    const encoded = new TextEncoder().encode(value);
-    if (encoded.byteLength > maximumStringBytes) {
+    if (value.length > maximumStringBytes)
       throw new Error("String is too large");
-    }
-    this.uint32(encoded.byteLength);
-    this.write(encoded);
+    this.reserve(4 + value.length * 3);
+    const { written } = this.#encoder.encodeInto(
+      value,
+      this.#output.subarray(this.#length + 4),
+    );
+    if (written > maximumStringBytes) throw new Error("String is too large");
+    this.#view.setUint32(this.#length, written, false);
+    this.#length += 4 + written;
   }
 
   uint8(value: number) {
-    this.write(Uint8Array.of(value));
+    this.reserve(1);
+    this.#view.setUint8(this.#length, value);
+    this.#length += 1;
   }
 
   uint16(value: number) {
-    const bytes = new Uint8Array(2);
-    new DataView(bytes.buffer).setUint16(0, value, false);
-    this.write(bytes);
+    this.reserve(2);
+    this.#view.setUint16(this.#length, value, false);
+    this.#length += 2;
   }
 
   uint32(value: number) {
@@ -414,17 +414,20 @@ class BinaryWriter {
       !Number.isInteger(value) ||
       value < 0 ||
       value > maximumRepositoryHistorySequence
-    ) {
+    )
       throw new Error("Invalid unsigned 32-bit integer");
-    }
-    const bytes = new Uint8Array(4);
-    new DataView(bytes.buffer).setUint32(0, value, false);
-    this.write(bytes);
+    this.reserve(4);
+    this.#view.setUint32(this.#length, value, false);
+    this.#length += 4;
   }
 
-  private write(bytes: Uint8Array) {
-    this.#chunks.push(bytes);
-    this.#length += bytes.byteLength;
+  private reserve(bytes: number) {
+    const required = this.#length + bytes;
+    if (required <= this.#output.length) return;
+    const output = new Uint8Array(Math.max(required, this.#output.length * 2));
+    output.set(this.#output.subarray(0, this.#length));
+    this.#output = output;
+    this.#view = new DataView(output.buffer);
   }
 }
 
