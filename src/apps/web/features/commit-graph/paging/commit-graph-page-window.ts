@@ -68,6 +68,8 @@ export function createCommitGraphPageWindow(
   let queue = Promise.resolve();
   let retryTask: (() => Promise<void>) | undefined;
   let moving = false;
+  let viewport: { first: number; last: number } | undefined;
+  let scrollingBackwards = false;
   let pendingMove:
     | {
         offset: number;
@@ -113,8 +115,17 @@ export function createCommitGraphPageWindow(
   const retain = (
     target: PageView,
     page: Awaited<ReturnType<typeof prepareCommitGraphPage>>,
+    protectViewport = false,
   ) => {
-    retainGraphPage(target, page, pageSize, maximumPages, maximumBytes);
+    retainGraphPage(
+      target,
+      page,
+      pageSize,
+      maximumPages,
+      maximumBytes,
+      protectViewport ? viewport : undefined,
+    );
+    if (!target.pages.has(page.offset)) return;
     target.knownEndOffset = Math.max(
       target.knownEndOffset,
       page.offset + page.commits.length,
@@ -148,6 +159,8 @@ export function createCommitGraphPageWindow(
     loads.clear();
     queue = Promise.resolve();
     replacing = true;
+    viewport = undefined;
+    scrollingBackwards = false;
     const next: PageView = {
       epoch,
       query: { ...query, limit: pageSize, offset: 0 },
@@ -233,7 +246,10 @@ export function createCommitGraphPageWindow(
     await replace(query, Math.floor(offset / pageSize) * pageSize, anchorOid);
   };
 
-  const prefetchOffset = (requestedOffset: number): Promise<void> => {
+  const prefetchOffset = (
+    requestedOffset: number,
+    protectViewport = false,
+  ): Promise<void> => {
     if (
       !Number.isInteger(requestedOffset) ||
       requestedOffset < 0 ||
@@ -282,7 +298,7 @@ export function createCommitGraphPageWindow(
             checkpoint,
             signal,
           );
-          retain(target, page);
+          retain(target, page, protectViewport);
           checkpoint = page.outgoingCheckpoint;
           cursor += pageSize;
           if (page.commits.length < pageSize) break;
@@ -456,6 +472,8 @@ export function createCommitGraphPageWindow(
     loads.clear();
     queue = Promise.resolve();
     retryTask = undefined;
+    viewport = undefined;
+    scrollingBackwards = false;
     if (view !== undefined) {
       view = {
         ...view,
@@ -491,6 +509,8 @@ export function createCommitGraphPageWindow(
       pendingMove = undefined;
       loads.clear();
       view = undefined;
+      viewport = undefined;
+      scrollingBackwards = false;
       snapshot = emptyCommitGraphPageWindowSnapshot;
       listeners.clear();
     },
@@ -502,16 +522,28 @@ export function createCommitGraphPageWindow(
     },
     prefetchOffset,
     setViewport: (first, last) => {
-      if (
-        last >= snapshot.endOffset - Math.min(20, pageSize) &&
-        snapshot.hasOlder
-      )
-        void prefetchOffset(snapshot.endOffset);
-      else if (
-        first < snapshot.startOffset + Math.min(20, pageSize) &&
-        snapshot.startOffset > 0
-      )
-        void prefetchOffset(Math.max(0, snapshot.startOffset - pageSize));
+      if (viewport !== undefined && first !== viewport.first)
+        scrollingBackwards = first < viewport.first;
+      viewport = { first, last };
+      const lookahead = Math.max(1, (last - first + 1) * 2);
+      if (scrollingBackwards) {
+        const offset = Math.max(0, snapshot.startOffset - pageSize);
+        const lastVisiblePage = Math.floor(last / pageSize) * pageSize;
+        if (
+          first < snapshot.startOffset + lookahead &&
+          snapshot.startOffset > 0 &&
+          (lastVisiblePage - offset) / pageSize < maximumPages
+        )
+          void prefetchOffset(offset, true);
+      } else {
+        const firstVisiblePage = Math.floor(first / pageSize) * pageSize;
+        if (
+          last >= snapshot.endOffset - lookahead &&
+          snapshot.hasOlder &&
+          (snapshot.endOffset - firstVisiblePage) / pageSize < maximumPages
+        )
+          void prefetchOffset(snapshot.endOffset, true);
+      }
     },
     requestMove,
     requestLaneMove: (offset, direction) => {

@@ -25,6 +25,7 @@ export function retainGraphPage(
   pageSize: number,
   maximumPages: number,
   maximumBytes: number,
+  viewport?: { readonly first: number; readonly last: number },
 ) {
   if (
     page.estimatedBytes +
@@ -51,12 +52,19 @@ export function retainGraphPage(
   ) {
     if (cache.pages.size <= 1) break;
     const farthest = [...cache.pages.keys()]
-      .filter((offset) => offset !== page.offset)
+      .filter((offset) =>
+        viewport === undefined
+          ? offset !== page.offset
+          : offset > viewport.last || offset + pageSize <= viewport.first,
+      )
       .sort(
         (left, right) =>
           Math.abs(right - page.offset) - Math.abs(left - page.offset),
       )[0];
-    if (farthest === undefined) break;
+    if (farthest === undefined) {
+      cache.pages.delete(page.offset);
+      break;
+    }
     cache.pages.delete(farthest);
   }
   const protectedOffsets = new Set(

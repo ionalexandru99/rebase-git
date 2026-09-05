@@ -15,6 +15,74 @@ const query: RepositoryHistoryQuery = {
 };
 
 describe("commit graph page window", () => {
+  it.each([2, 16])(
+    "keeps a moving viewport resident with 350 ms reads and a %i-page budget",
+    async (maximumPages) => {
+      vi.useFakeTimers();
+      const commits = history(3_000);
+      const reader = fakeReader(commits);
+      const window = createCommitGraphPageWindow(reader, { maximumPages });
+      try {
+        await window.loadInitial(query);
+        reader.read.mockImplementation(async (request) => {
+          await new Promise((resolve) => setTimeout(resolve, 350));
+          return commits.slice(
+            request.offset ?? 0,
+            (request.offset ?? 0) + request.limit,
+          );
+        });
+        const checkViewport = (first: number) => {
+          window.setViewport(first, first + 39);
+          const snapshot = window.getSnapshot();
+          expect(snapshot.pages.length).toBeLessThanOrEqual(maximumPages);
+          for (let offset = first; offset < first + 40; offset += 1) {
+            const page = snapshot.pages.find(
+              (item) =>
+                item.offset <= offset &&
+                item.offset + item.commits.length > offset,
+            );
+            expect(
+              page?.commits[offset - (page?.offset ?? 0)]?.oid,
+              `visible row ${offset} at viewport ${first}`,
+            ).toBe(oid(offset));
+          }
+        };
+        checkViewport(0);
+        for (let first = 6; first <= 2_100; first += 6) {
+          await vi.advanceTimersByTimeAsync(50);
+          checkViewport(first);
+        }
+        for (let first = 2_094; first >= 0; first -= 6) {
+          await vi.advanceTimersByTimeAsync(50);
+          checkViewport(first);
+        }
+      } finally {
+        window.dispose();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("keeps the cache bounded when a resize covers a pending speculative page", async () => {
+    const commits = history(300);
+    const reader = fakeReader(commits);
+    const window = createCommitGraphPageWindow(reader, { maximumPages: 2 });
+    await window.loadInitial(query);
+    await window.appendOlder();
+    const pending = deferred<readonly RepositoryCommit[]>();
+    reader.read.mockReturnValueOnce(pending.promise);
+    window.setViewport(100, 139);
+    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(3));
+    window.setViewport(0, 299);
+    pending.resolve(commits.slice(200));
+    await vi.waitFor(() => expect(window.getSnapshot().loading).toBe(false));
+    expect(window.getSnapshot().pages.map((page) => page.offset)).toEqual([
+      0, 100,
+    ]);
+    expect(window.getSnapshot().knownEndOffset).toBe(200);
+    window.dispose();
+  });
+
   it("discards resident history and pending navigation while preserving the query for rebuild", async () => {
     const commits = history(12);
     const reader = fakeReader(commits);
