@@ -114,7 +114,6 @@ async function measureCommitGraph(
     await picker
       .getByRole("button", { name: /^rebase-performance Folder/ })
       .click();
-    const trace = await startTrace(session, sample);
     await page.evaluate(() => window.__startGraphMeasurement());
     await page.keyboard.press("Control+Enter");
     const history = page.getByRole("grid", { name: "Commit history" });
@@ -124,6 +123,7 @@ async function measureCommitGraph(
     });
     const selectionFeedback = await measureSelectionFeedback(page);
     const uncachedScopeFeedback = await measureHistoryScopeFeedback(page, true);
+    const trace = await startTrace(session, sample);
     await exerciseVirtualRows(page);
     const frameWork = await trace.stop();
     await expect(history.getByRole("row").first()).toBeVisible();
