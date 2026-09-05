@@ -82,6 +82,8 @@ function connectReader(
   const replica =
     existing ??
     createReplica(connection.environmentId, connection.logicalRepositoryId);
+  if (replica.synchronization === "stale" || replica.synchronization === "idle")
+    replica.reconciled = false;
   if (cachePaused || (existing === undefined && connection.cachePaused))
     replica.cachePaused = true;
   const reader: ConnectedReader = {

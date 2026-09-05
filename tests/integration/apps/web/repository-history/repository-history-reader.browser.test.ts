@@ -1172,9 +1172,13 @@ describe("browser repository history reader", () => {
     reader.close();
   });
 
-  it.each(["offline", "unavailable"] as const)(
-    "preserves completed history after %s reconciliation failures",
-    async (failure) => {
+  it.each([
+    ["offline", "availability"],
+    ["offline", "new-reader"],
+    ["unavailable", "availability"],
+  ] as const)(
+    "preserves completed history after %s failures and recovers through %s",
+    async (failure, recovery) => {
       const environmentId = crypto.randomUUID();
       const repositoryId = crypto.randomUUID();
       const commits = history(3);
@@ -1229,6 +1233,9 @@ describe("browser repository history reader", () => {
         repositoryId,
       });
 
+      let connectedReader:
+        | ReturnType<typeof createBrowserRepositoryHistoryReader>
+        | undefined;
       try {
         await expect(
           reopened.read({ limit: 100, order: "topological", roots: [main] }),
@@ -1265,8 +1272,23 @@ describe("browser repository history reader", () => {
         expect(reopened.getSnapshot().synchronizedCommitCount).toBe(
           commits.length,
         );
-        recovered = true;
-        available?.();
+        if (recovery === "availability") {
+          recovered = true;
+          available?.();
+        } else {
+          connectedReader = createBrowserRepositoryHistoryReader({
+            environmentId,
+            repositoryId,
+            gateway: firstGateway,
+          });
+          await expect(
+            connectedReader.read({
+              limit: 100,
+              order: "topological",
+              roots: [main],
+            }),
+          ).resolves.toEqual(commits);
+        }
         await vi.waitFor(() =>
           expect(reopened.getSnapshot()).toMatchObject({
             synchronization: "complete",
@@ -1274,9 +1296,11 @@ describe("browser repository history reader", () => {
           }),
         );
         expect(offlineGateway.synchronize).toHaveBeenCalledTimes(
-          failure === "offline" ? 2 : 3,
+          (failure === "offline" ? 1 : 2) +
+            (recovery === "availability" ? 1 : 0),
         );
       } finally {
+        connectedReader?.close();
         reopened.close();
       }
     },
