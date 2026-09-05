@@ -8,8 +8,8 @@ import { selectHistoryPage } from "#web/features/repository-history/history-page
 import {
   commitKey,
   commitStoreName,
+  repositoryCommitRange,
   repositoryKey,
-  repositoryOrderIndexName,
   repositoryStoreName,
   requestResult,
   type StoredCommit,
@@ -400,39 +400,39 @@ async function readHistoryOrderNodes(
   environmentId: string,
   repositoryId: string,
 ) {
-  let lower = [environmentId, repositoryId, Number.MIN_SAFE_INTEGER, 0];
-  const upper = [
-    environmentId,
-    repositoryId,
-    Number.MAX_SAFE_INTEGER,
-    Number.MAX_SAFE_INTEGER,
-  ];
-  let open = false;
-  const result: HistoryOrderNode[] = [];
+  const key = repositoryKey(environmentId, repositoryId);
+  let after: string | undefined;
+  const result: (HistoryOrderNode & { epoch: number; order: number })[] = [];
   while (true) {
-    const records = await readChunk(IDBKeyRange.bound(lower, upper, open));
+    const records = await readChunk(repositoryCommitRange(key, after));
     for (const record of records) {
+      const epoch = record.topologicalEpoch;
+      const order = record.topologicalOrder;
+      if (
+        epoch === undefined ||
+        order === undefined ||
+        !Number.isSafeInteger(epoch) ||
+        !Number.isSafeInteger(order)
+      )
+        continue;
       result.push({
         oid: record.commit.oid,
         parents: record.commit.parents,
         timestamp: record.commit.committer.timestampSeconds,
+        epoch,
+        order,
       });
     }
     const last = records.at(-1);
-    if (
-      records.length < 2_048 ||
-      last?.topologicalEpoch === undefined ||
-      last.topologicalOrder === undefined
-    )
-      return result;
-    lower = [
-      environmentId,
-      repositoryId,
-      last.topologicalEpoch,
-      last.topologicalOrder,
-    ];
-    open = true;
+    if (records.length < 2_048 || last === undefined) break;
+    after = last.key;
   }
+  return result.sort(
+    (left, right) =>
+      left.epoch - right.epoch ||
+      left.order - right.order ||
+      (left.oid < right.oid ? -1 : left.oid > right.oid ? 1 : 0),
+  );
 }
 
 export function prepareRepositoryHistoryOrder(
@@ -472,10 +472,7 @@ async function buildRepositoryHistoryOrder(
         const transaction = database.transaction(commitStoreName, "readonly");
         const completed = transactionCompleted(transaction);
         const nodes = await requestResult<StoredCommit[]>(
-          transaction
-            .objectStore(commitStoreName)
-            .index(repositoryOrderIndexName)
-            .getAll(range, 2_048),
+          transaction.objectStore(commitStoreName).getAll(range, 2_048),
         );
         await completed;
         return nodes;
