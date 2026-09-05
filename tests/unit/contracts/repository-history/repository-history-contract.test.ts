@@ -1,5 +1,6 @@
 import {
   maximumRepositoryHistorySequence,
+  ReadRepositoryHistory,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { Schema } from "effect";
@@ -21,6 +22,33 @@ const request = {
 } as const;
 
 describe("repository history contract", () => {
+  it("preserves bounded foreground ancestry, offsets, and selected parent edges", () => {
+    const foreground = {
+      _tag: "ReadRepositoryHistory",
+      ancestry: "first-parent",
+      offset: 250_000,
+      limit: 100,
+      order: "topological",
+      roots: [{ name: "main", type: "branch", oid: "a".repeat(40) }],
+      additionalParentEdges: [
+        { childOid: "a".repeat(40), parentOid: "b".repeat(40) },
+      ],
+      repositoryId: request.repositoryId,
+      requestId: request.requestId,
+    };
+    const decode = Schema.decodeUnknownSync(ReadRepositoryHistory);
+    expect(decode(foreground)).toEqual(foreground);
+    expect(() => decode({ ...foreground, offset: -1 })).toThrow();
+    expect(() =>
+      decode({
+        ...foreground,
+        additionalParentEdges: Array.from(
+          { length: 1_001 },
+          () => foreground.additionalParentEdges[0],
+        ),
+      }),
+    ).toThrow();
+  });
   it("bounds resumable batch sequences to the unsigned wire range", () => {
     expect(
       Schema.decodeUnknownSync(SynchronizeRepositoryHistory)(request),

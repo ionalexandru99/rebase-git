@@ -170,22 +170,30 @@ export function readRepositoryHistory(
     const key = historyOrderScopeKey(query);
     const basis = JSON.stringify([orderCache.revision, roots]);
     const previous = orderCache.queries.get(key);
+    const cachedPage = [
+      repository.cachedPage,
+      ...(repository.foregroundPages ?? []),
+    ].find(
+      (page) =>
+        page !== undefined &&
+        query.order === page.order &&
+        canSelectCachedHistoryPage(query, page.scopeKey) &&
+        sameOids(roots, page.rootOids) &&
+        offset >= (page.offset ?? 0) &&
+        (offset + query.limit <= (page.offset ?? 0) + page.oids.length ||
+          (page.exhausted ?? page.oids.length < page.requestedLimit)),
+    );
     if (
+      cachedPage !== undefined &&
       (query.ancestry !== "first-parent" ||
-        (repository.completion === undefined && offset === 0)) &&
+        repository.completion === undefined) &&
       (previous === undefined ||
-        (!previous.complete && previous.basis === basis)) &&
-      query.order === repository.cachedPage?.order &&
-      canSelectCachedHistoryPage(query, repository.cachedPage.scopeKey) &&
-      sameOids(roots, repository.cachedPage.rootOids) &&
-      (offset + query.limit <= repository.cachedPage.oids.length ||
-        (repository.cachedPage.exhausted ??
-          repository.cachedPage.oids.length <
-            repository.cachedPage.requestedLimit))
+        (!previous.complete && previous.basis === basis))
     ) {
-      const cachedOids = repository.cachedPage.oids.slice(
-        offset,
-        offset + query.limit,
+      const relativeOffset = offset - (cachedPage.offset ?? 0);
+      const cachedOids = cachedPage.oids.slice(
+        relativeOffset,
+        relativeOffset + query.limit,
       );
       const result = await readCommitsByOid(
         commits,
@@ -193,19 +201,31 @@ export function readRepositoryHistory(
         repositoryId,
         cachedOids,
       );
-      if (result.length !== cachedOids.length) {
+      if (result.length !== cachedOids.length)
         throw new Error("Repository history cache is incomplete");
-      }
       await completed;
-      const selected = selectHistoryPage(result, query);
-      rememberHistoryOrder(orderCache, key, {
-        basis,
-        oids:
-          query.ancestry === "first-parent"
-            ? selected.map(({ oid }) => oid)
-            : repository.cachedPage.oids,
-        complete: false,
-      });
+      const appliedQuery =
+        cachedPage.offset !== undefined && cachedPage.scopeKey === key;
+      const selected = appliedQuery ? result : selectHistoryPage(result, query);
+      if (
+        !appliedQuery &&
+        selected.length < query.limit &&
+        !(
+          cachedPage.exhausted ??
+          cachedPage.oids.length < cachedPage.requestedLimit
+        ) &&
+        hasMissingSelectedParents(selected, query)
+      )
+        return undefined;
+      if ((cachedPage.offset ?? 0) === 0)
+        rememberHistoryOrder(orderCache, key, {
+          basis,
+          oids:
+            appliedQuery || query.ancestry !== "first-parent"
+              ? cachedPage.oids
+              : selected.map(({ oid }) => oid),
+          complete: false,
+        });
       return selected;
     }
     if (repository.completion === undefined) {
@@ -228,6 +248,7 @@ export function readRepositoryHistory(
         ),
       );
       const cachedPrefix =
+        (repository.cachedPage?.offset ?? 0) === 0 &&
         repository.cachedPage?.order === query.order &&
         (repository.cachedPage.scopeKey === key ||
           (repository.cachedPage.scopeKey === undefined &&
@@ -410,6 +431,27 @@ export function historyOrderScopeKey(
       )
       .sort(),
   ]);
+}
+
+function hasMissingSelectedParents(
+  commits: readonly RepositoryCommit[],
+  query: RepositoryHistoryQuery,
+) {
+  const available = new Set(commits.map(({ oid }) => oid));
+  if (query.roots.some(({ oid }) => !available.has(oid))) return true;
+  return commits.some((commit) => {
+    const parents =
+      query.ancestry === "first-parent"
+        ? commit.parents.slice(0, 1)
+        : commit.parents;
+    return (
+      parents.some((oid) => !available.has(oid)) ||
+      query.additionalParentEdges?.some(
+        ({ childOid, parentOid }) =>
+          childOid === commit.oid && !available.has(parentOid),
+      )
+    );
+  });
 }
 
 function canSelectCachedHistoryPage(

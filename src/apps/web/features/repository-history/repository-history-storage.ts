@@ -231,7 +231,11 @@ async function pruneUnreachableHistoryCommits(
           }
           commitCount -= unreachable.length;
           for (const commit of unreachable) commits.delete(commit.key);
-          const { cachedPage: _, ...withoutPage } = current;
+          const {
+            cachedPage: _,
+            foregroundPages: _foregroundPages,
+            ...withoutPage
+          } = current;
           repositories.put({
             ...withoutPage,
             completion: { ...current.completion, commitCount },

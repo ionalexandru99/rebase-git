@@ -237,17 +237,21 @@ export interface StoredCommit {
   readonly topologicalOrder?: number;
 }
 
+export interface StoredHistoryPage {
+  readonly offset?: number;
+  readonly exhausted?: boolean;
+  readonly scopeKey?: string;
+  readonly oids: readonly string[];
+  readonly order: RepositoryHistoryQuery["order"];
+  readonly requestedLimit: number;
+  readonly rootOids: readonly string[];
+}
+
 export interface StoredRepository {
   readonly cacheFormatVersion?: number;
   readonly lastOpenedAt?: number;
-  readonly cachedPage?: {
-    readonly exhausted?: boolean;
-    readonly scopeKey?: string;
-    readonly oids: readonly string[];
-    readonly order: RepositoryHistoryQuery["order"];
-    readonly requestedLimit: number;
-    readonly rootOids: readonly string[];
-  };
+  readonly cachedPage?: StoredHistoryPage;
+  readonly foregroundPages?: readonly StoredHistoryPage[];
   readonly completion?: RepositoryHistoryCompletionBasis;
   readonly environmentId: string;
   readonly key: string;

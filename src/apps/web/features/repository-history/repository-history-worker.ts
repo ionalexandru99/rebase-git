@@ -4,7 +4,6 @@ import {
   type RepositoryFreshness,
 } from "@rebase/contracts";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
-import { selectHistoryPage } from "#web/features/repository-history/history-page-selection";
 import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
 import {
   locateRepositoryHistoryCommit,
@@ -396,18 +395,6 @@ async function handleReaderMessage(
       if (replica.synchronization === "complete") {
         replica.synchronization = "stale";
       }
-      if ((message.query.offset ?? 0) > 0) {
-        reader.epoch.finish(message.requestId);
-        reader.queries.delete(message.requestId);
-        replica.revision += 1;
-        publishSnapshot(replica);
-        post(reader, {
-          _tag: "RequestFailed",
-          failure: { _tag: "Unavailable" },
-          requestId: message.requestId,
-        });
-        return;
-      }
       replica.status = "loading";
       publishSnapshot(replica);
       post(reader, {
@@ -645,14 +632,13 @@ async function acceptHistoryPage(
     if (replica.refTargets.length === 0) {
       replica.refTargets = page.refTargets;
     }
-    const selected = selectHistoryPage(stored, query);
     delete replica.failure;
     replica.status = stored.length === 0 ? "empty" : "ready";
     replica.revision += 1;
     publishSnapshot(replica);
     post(reader, {
       _tag: "HistoryResult",
-      commits: selected,
+      commits: stored,
       requestId,
     });
     if (replica.synchronization !== "syncing") {

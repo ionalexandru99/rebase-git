@@ -592,7 +592,13 @@ describe("browser repository history reader", () => {
     ];
     const roots = [{ ...root("main"), oid: merge.oid }];
     const gateway: RepositoryHistoryGateway = {
-      read: vi.fn(async () => page(repositoryId, commits, roots)),
+      read: vi.fn(async () =>
+        page(
+          repositoryId,
+          commits.filter(({ oid }) => oid !== side.oid),
+          roots,
+        ),
+      ),
       synchronize: vi.fn(async (_request, accept) => {
         await accept(
           encodeRepositoryHistoryBatch({
@@ -1148,6 +1154,9 @@ describe("browser repository history reader", () => {
     });
     expect(gateway.read).toHaveBeenCalledOnce();
     const revision = reader.getSnapshot().revision;
+    vi.mocked(gateway.read).mockRejectedValueOnce(
+      new RepositoryHistoryUnavailable(),
+    );
     await expect(
       reader.read({
         limit: 1,

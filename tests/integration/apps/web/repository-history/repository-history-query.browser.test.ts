@@ -93,7 +93,9 @@ describe("local ordered history pages", () => {
         requestId: crypto.randomUUID(),
         objectFormat: "sha1",
         refTargets: roots,
-        commits: source.commits.filter(({ subject }) => subject !== "new"),
+        commits: source.commits.filter(
+          ({ subject }) => subject !== "new" && subject !== "right",
+        ),
       },
       query,
     );

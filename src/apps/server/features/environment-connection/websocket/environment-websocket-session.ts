@@ -238,7 +238,7 @@ function handleClientMessage(
     case "ReadRepositoryHistory": {
       const history = state.history;
       if (
-        !capabilities.has("repository-history") ||
+        (capabilities.get("repository-history") ?? 0) < 5 ||
         !capabilities.has("binary-fragmentation") ||
         history === undefined ||
         historyRequests.has(message.requestId)
@@ -316,7 +316,7 @@ function handleClientMessage(
     case "SynchronizeRepositoryHistory": {
       const history = state.history;
       if (
-        (capabilities.get("repository-history") ?? 0) < 4 ||
+        (capabilities.get("repository-history") ?? 0) < 5 ||
         !capabilities.has("binary-fragmentation") ||
         history === undefined ||
         historyRequests.has(message.requestId)
