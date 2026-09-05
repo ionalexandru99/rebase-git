@@ -6,7 +6,10 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import {
+  acquireSharedWorker,
+  createBrowserRepositoryHistoryReader,
+} from "#web/features/repository-history/browser-repository-history-reader";
 import {
   clearHistoryCache,
   describeHistoryCaches,
@@ -39,6 +42,21 @@ import type { StoredRepository } from "#web/persistence/repository-history/repos
 import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";
 
 describe("history cache storage", () => {
+  it("releases the shared worker error listener after inspecting storage", async () => {
+    const worker = acquireSharedWorker();
+    const added = vi.spyOn(worker, "addEventListener");
+    const removed = vi.spyOn(worker, "removeEventListener");
+    try {
+      await Effect.runPromise(manageBrowserHistoryStorage("inspect"));
+      const listener = added.mock.calls.find(([type]) => type === "error")?.[1];
+      expect(listener).toBeDefined();
+      expect(removed).toHaveBeenCalledWith("error", listener);
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
+    }
+  });
+
   it("rebuilds history from settings before a graph has requested a page", async () => {
     const fixture = await seed();
     const gateway = gatewayFor(fixture);

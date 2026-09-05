@@ -286,6 +286,13 @@ export function ApplicationShell({
       : (settingsRepository?.logicalRepositoryId ?? settingsRepository?.id),
   );
 
+  const openSelectedRepositorySettings = useCallback(() => {
+    if (navigation.selectedRepositoryId !== undefined)
+      openRepositorySettings(localEnvironmentId, {
+        id: navigation.selectedRepositoryId,
+      });
+  }, [navigation.selectedRepositoryId, openRepositorySettings]);
+
   useApplicationShortcuts({
     availability: environmentStatus.availability,
     closeSelectedRepository,
@@ -297,10 +304,7 @@ export function ApplicationShell({
       navigation.selectedRepositoryId !== undefined,
     openFolderPicker: browseRepository,
     openSettings: setSettingsOpen,
-    openRepositorySettings: () => {
-      if (navigation.selectedRepositoryId !== undefined)
-        setRepositorySettingsId(navigation.selectedRepositoryId);
-    },
+    openRepositorySettings: openSelectedRepositorySettings,
     repositorySettingsOpen,
     selectNextRepository,
     selectPreviousRepository,

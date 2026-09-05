@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRepositoryHistoryOrder } from "#web/features/repository-settings/hooks/use-repository-history-order";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 import type { RepositorySettingsIdentity } from "#web/features/repository-settings/repository-settings.contract";
@@ -9,6 +9,7 @@ export function RepositoryOrderSettings({
 }: {
   readonly identity: RepositorySettingsIdentity;
 }) {
+  const descriptionId = useId();
   const order = useRepositoryHistoryOrder(
     identity.environmentId,
     identity.repositoryId,
@@ -19,9 +20,11 @@ export function RepositoryOrderSettings({
       <SettingsRow
         title="History ordering"
         description="Saved for this repository in this client."
+        descriptionId={descriptionId}
       >
         <select
           aria-label="History ordering"
+          aria-describedby={descriptionId}
           className="h-8 rounded-md border border-input bg-background px-3 text-sm"
           value={order}
           onChange={(event) => {

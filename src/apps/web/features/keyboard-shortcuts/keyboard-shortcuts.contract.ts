@@ -80,6 +80,7 @@ export type KeyboardShortcutPlatform = "mac" | "other";
 export type KeyboardShortcutClient = "browser" | "desktop";
 
 export interface KeyboardShortcutInput {
+  readonly code?: string;
   readonly altKey: boolean;
   readonly ctrlKey: boolean;
   readonly key: string;

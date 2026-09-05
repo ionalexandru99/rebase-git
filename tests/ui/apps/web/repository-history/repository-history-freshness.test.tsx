@@ -51,12 +51,20 @@ describe("repository fetch controls", () => {
       />,
     );
     const mode = page.getByRole("combobox", { name: "Automatic fetch" });
+    await expect
+      .element(mode)
+      .toHaveAccessibleDescription(
+        "Shared by clients connected to this repository.",
+      );
     await expect.element(mode).toHaveValue("Inherit");
     await mode.selectOptions("Interval");
     const interval = page.getByRole("spinbutton", {
       name: "Interval in seconds",
     });
     await expect.element(interval).toHaveValue(600);
+    await expect
+      .element(interval)
+      .toHaveAccessibleDescription("Fetch every 1 to 86,400 seconds.");
     await interval.fill("90");
     await screen.rerender(
       <Controls

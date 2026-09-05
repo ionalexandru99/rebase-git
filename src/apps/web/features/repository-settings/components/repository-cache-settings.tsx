@@ -1,3 +1,4 @@
+import { formatCacheSize } from "#web/features/repository-history/diagnostics/format-cache-size";
 import type { RepositoryHistoryCacheProps } from "#web/features/repository-history/diagnostics/history-cache.contract";
 import { historyCacheActions } from "#web/features/repository-history/diagnostics/history-cache-actions";
 import { useHistoryCacheManagement } from "#web/features/repository-history/diagnostics/hooks/use-history-cache-management";
@@ -34,7 +35,7 @@ export function RepositoryCacheSettings(
             ? cache.diagnostics === undefined
               ? "Reading storage…"
               : "No cached history"
-            : `${formatBytes(current.estimatedBytes)} · ${current.commitCount.toLocaleString()} commits`}
+            : `${formatCacheSize(current.estimatedBytes)} · ${current.commitCount.toLocaleString()} commits`}
         </span>
       </SettingsRow>
       <SettingsRow
@@ -159,10 +160,4 @@ export function RepositoryCacheSettings(
       </AlertDialog>
     </>
   );
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

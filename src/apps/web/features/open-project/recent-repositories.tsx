@@ -43,7 +43,6 @@ export function RecentRepositories({
               data-active={activeKey === item.key}
               disabled={item.disabled}
               id={openProjectItemId(item.key)}
-              key={item.key}
               onClick={() => onOpen(item.repository)}
               onFocus={() => onActivate(item.key)}
               role="option"

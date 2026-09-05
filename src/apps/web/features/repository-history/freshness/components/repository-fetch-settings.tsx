@@ -68,9 +68,11 @@ export function RepositoryFetchSettings({
         <SettingsRow
           title="Automatic fetch"
           description="Shared by clients connected to this repository."
+          descriptionId={`${id}-scope`}
         >
           <select
             aria-label="Automatic fetch"
+            aria-describedby={`${id}-scope`}
             className="h-8 rounded-md border border-input bg-background px-3 text-sm"
             value={mode}
             onChange={(event) => {
@@ -94,10 +96,15 @@ export function RepositoryFetchSettings({
           <SettingsRow
             title="Custom interval"
             description="Fetch every 1 to 86,400 seconds."
+            descriptionId={`${id}-interval`}
           >
             <Input
               aria-label="Interval in seconds"
-              aria-describedby={error === undefined ? undefined : `${id}-error`}
+              aria-describedby={
+                error === undefined
+                  ? `${id}-interval`
+                  : `${id}-interval ${id}-error`
+              }
               aria-invalid={error !== undefined}
               className="w-32"
               max={86_400}

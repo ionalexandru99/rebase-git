@@ -19,15 +19,34 @@ export function manageBrowserHistoryStorage(
   >((resume) => {
     const channel = new MessageChannel();
     let worker: SharedWorker | undefined;
-    const fail = () => resume(Effect.fail(new RepositoryHistoryUnavailable()));
+    let settled = false;
+    const finish = (
+      result: Effect.Effect<
+        RepositoryHistoryStorageDiagnostics,
+        RepositoryHistoryUnavailable
+      >,
+    ) => {
+      if (settled) return;
+      cleanup();
+      resume(result);
+    };
+    const fail = () => finish(Effect.fail(new RepositoryHistoryUnavailable()));
     const failWorker = () => {
+      if (settled) return;
       discardSharedWorker(worker);
       worker?.port.close();
       fail();
     };
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      worker?.removeEventListener("error", failWorker);
+      channel.port1.close();
+      channel.port2.close();
+    };
     channel.port1.onmessage = (event: MessageEvent<HistoryStorageResponse>) => {
       if (event.data._tag === "HistoryStorageResult")
-        resume(Effect.succeed(event.data.diagnostics));
+        finish(Effect.succeed(event.data.diagnostics));
       else if (event.data._tag === "WorkerFailed") failWorker();
       else fail();
     };
@@ -48,10 +67,6 @@ export function manageBrowserHistoryStorage(
     } catch {
       failWorker();
     }
-    return Effect.sync(() => {
-      worker?.removeEventListener("error", failWorker);
-      channel.port1.close();
-      channel.port2.close();
-    });
+    return Effect.sync(cleanup);
   });
 }

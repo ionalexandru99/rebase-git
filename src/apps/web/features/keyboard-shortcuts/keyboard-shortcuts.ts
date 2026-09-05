@@ -176,7 +176,11 @@ export function keyboardShortcutFromInput(
   input: KeyboardShortcutInput,
   platform: KeyboardShortcutPlatform,
 ): KeyboardShortcutBinding | undefined {
-  const key = normalizeKey(input.key);
+  const key = normalizeKey(
+    input.shiftKey && input.code === "Comma" && input.key === "<"
+      ? ","
+      : input.key,
+  );
   if (key === undefined || isModifierKey(key)) return undefined;
 
   const modifiers: KeyboardShortcutModifier[] = [];

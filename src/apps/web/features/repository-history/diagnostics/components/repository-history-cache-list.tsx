@@ -1,14 +1,10 @@
-import type { RepositoryHistoryCacheIdentity } from "#web/features/repository-history/diagnostics/history-cache.contract";
+import { formatCacheSize } from "#web/features/repository-history/diagnostics/format-cache-size";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 
 export function RepositoryHistoryCacheList({
   diagnostics,
-  identity,
-  repositoryName,
 }: {
   readonly diagnostics: RepositoryHistoryStorageDiagnostics;
-  readonly identity?: RepositoryHistoryCacheIdentity;
-  readonly repositoryName?: string;
 }) {
   return (
     <>
@@ -20,8 +16,8 @@ export function RepositoryHistoryCacheList({
         <div>
           <dt className="text-muted-foreground">Origin usage / quota</dt>
           <dd>
-            {formatBytes(diagnostics.usageBytes)} /{" "}
-            {formatBytes(diagnostics.quotaBytes)}
+            {formatCacheSize(diagnostics.usageBytes)} /{" "}
+            {formatCacheSize(diagnostics.quotaBytes)}
           </dd>
         </div>
       </dl>
@@ -41,9 +37,6 @@ export function RepositoryHistoryCacheList({
           </thead>
           <tbody>
             {diagnostics.caches.map((cache) => {
-              const current =
-                cache.environmentId === identity?.environmentId &&
-                cache.repositoryId === identity?.repositoryId;
               return (
                 <tr
                   className="border-t border-border align-top"
@@ -51,8 +44,7 @@ export function RepositoryHistoryCacheList({
                 >
                   <td className="max-w-64 px-3 py-2">
                     <div className="break-all font-medium">
-                      {current ? repositoryName : cache.repositoryId}
-                      {current && " (current)"}
+                      {cache.repositoryId}
                     </div>
                     <div className="mt-1 break-all text-muted-foreground">
                       Environment: {cache.environmentId}
@@ -71,7 +63,7 @@ export function RepositoryHistoryCacheList({
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                    {formatBytes(cache.estimatedBytes)}
+                    {formatCacheSize(cache.estimatedBytes)}
                   </td>
                 </tr>
               );
@@ -86,11 +78,4 @@ export function RepositoryHistoryCacheList({
       </div>
     </>
   );
-}
-
-function formatBytes(bytes: number | undefined): string {
-  if (bytes === undefined) return "Unavailable";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

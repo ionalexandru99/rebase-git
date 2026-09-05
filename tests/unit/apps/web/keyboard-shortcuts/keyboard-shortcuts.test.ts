@@ -11,6 +11,23 @@ import {
 import type { KeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
 
 describe("keyboard shortcuts", () => {
+  it("matches and captures shifted comma for repository settings", () => {
+    const input = {
+      ...keyboardInput({ ctrlKey: true, key: "<", shiftKey: true }),
+      code: "Comma",
+    };
+    const binding = defaultKeyboardShortcutBindings["repository.openSettings"];
+    expect(matchesKeyboardShortcut(input, binding, "other")).toBe(true);
+    expect(keyboardShortcutFromInput(input, "other")).toEqual(binding);
+    expect(
+      matchesKeyboardShortcut(
+        { ...input, ctrlKey: false, metaKey: true },
+        binding,
+        "mac",
+      ),
+    ).toBe(true);
+  });
+
   it("captures the primary platform modifier as Mod", () => {
     expect(
       keyboardShortcutFromInput(
