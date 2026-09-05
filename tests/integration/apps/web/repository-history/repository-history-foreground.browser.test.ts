@@ -1,5 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { expect, it } from "vitest";
+import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
 import { readRepositoryHistory } from "#web/features/repository-history/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,
@@ -8,7 +9,7 @@ import {
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/repository-history-store";
 
-it("reads foreground continuation windows before full synchronization while retaining the first page", async () => {
+it("reuses full foreground windows after older batches while retaining the first page", async () => {
   const environmentId = crypto.randomUUID();
   const repositoryId = crypto.randomUUID();
   const roots = [{ name: "main", oid: oid(0), type: "branch" as const }];
@@ -34,11 +35,38 @@ it("reads foreground continuation windows before full synchronization while reta
       { ...query, offset },
     );
   }
+  const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+  expect(
+    (
+      await readRepositoryHistory(
+        environmentId,
+        repositoryId,
+        query,
+        indexedDB,
+        cache,
+      )
+    )?.length,
+  ).toBe(100);
+  await beginRepositoryHistorySynchronization(environmentId, repositoryId);
+  await storeRepositoryHistoryBatch(environmentId, repositoryId, {
+    commits: [commit(200)],
+    objectFormat: "sha1",
+    repositoryId,
+    requestId: crypto.randomUUID(),
+    sequence: 0,
+  });
+  cache.revision += 1;
   for (const offset of [100, 0]) {
-    const page = await readRepositoryHistory(environmentId, repositoryId, {
-      ...query,
-      offset,
-    });
+    const page = await readRepositoryHistory(
+      environmentId,
+      repositoryId,
+      {
+        ...query,
+        offset,
+      },
+      indexedDB,
+      cache,
+    );
     expect(page?.map(({ oid }) => oid)).toEqual(
       Array.from({ length: 100 }, (_, index) => oid(offset + index)),
     );
@@ -48,6 +76,67 @@ it("reads foreground continuation windows before full synchronization while reta
       ...query,
       offset: 200,
     }),
+  ).toBeUndefined();
+});
+
+it("does not reuse an exhausted window after synchronization extends its history", async () => {
+  const environmentId = crypto.randomUUID();
+  const repositoryId = crypto.randomUUID();
+  const roots = [{ name: "main", oid: oid(0), type: "branch" as const }];
+  const query = {
+    roots,
+    ancestry: "first-parent" as const,
+    order: "topological" as const,
+    limit: 2,
+  };
+  const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+  for (const offset of [0, 2]) {
+    await storeRepositoryHistoryPage(
+      environmentId,
+      repositoryId,
+      {
+        commits: offset === 0 ? [commit(0), commit(1)] : [],
+        objectFormat: "sha1",
+        refTargets: roots,
+        repositoryId,
+        requestId: crypto.randomUUID(),
+      },
+      { ...query, offset },
+    );
+  }
+  await readRepositoryHistory(
+    environmentId,
+    repositoryId,
+    query,
+    indexedDB,
+    cache,
+  );
+  expect(
+    await readRepositoryHistory(
+      environmentId,
+      repositoryId,
+      { ...query, offset: 2 },
+      indexedDB,
+      cache,
+    ),
+  ).toEqual([]);
+  await beginRepositoryHistorySynchronization(environmentId, repositoryId);
+  await storeRepositoryHistoryBatch(environmentId, repositoryId, {
+    commits: [commit(2)],
+    objectFormat: "sha1",
+    repositoryId,
+    requestId: crypto.randomUUID(),
+    sequence: 0,
+  });
+  cache.revision += 1;
+  expect(
+    await readRepositoryHistory(
+      environmentId,
+      repositoryId,
+      { ...query, offset: 2 },
+      indexedDB,
+      cache,
+    ),
   ).toBeUndefined();
 });
 
