@@ -1,19 +1,8 @@
-import {
-  readTimingBaseline,
-  recordTimingBaseline,
-} from "#tests-performance/timing-baseline";
-
 export function assertTimingBudget(
   label: string,
   measuredMilliseconds: number | readonly number[] | undefined,
   targetMilliseconds: number,
 ) {
-  const recordingPath = process.env.PERFORMANCE_RECORD_BASELINE;
-  const baselinePath = process.env.PERFORMANCE_BASELINE;
-  if (recordingPath !== undefined && baselinePath !== undefined)
-    throw new Error(
-      "Performance baseline recording and comparison modes cannot be combined",
-    );
   if (!Number.isFinite(targetMilliseconds) || targetMilliseconds <= 0)
     throw new Error(
       `${label}: timing target must be finite and greater than zero`,
@@ -31,44 +20,10 @@ export function assertTimingBudget(
       `${label}: timing measurements must be finite, nonnegative, and nonempty`,
     );
   const measured = median(samples);
-  if (recordingPath !== undefined) {
-    recordTimingBaseline(recordingPath, label, measured, targetMilliseconds);
-    console.log(
-      `Performance baseline recorded: ${label}: ${measured.toFixed(2)} ms median, ${targetMilliseconds} ms target`,
-    );
-    return;
-  }
-  const baseline =
-    baselinePath === undefined
-      ? undefined
-      : readTimingBaseline(baselinePath, label, targetMilliseconds);
-  const reference = Math.max(
-    baseline ?? targetMilliseconds,
-    targetMilliseconds,
-  );
-  const referenceKind = baseline === undefined ? "target" : "timing gate";
-  const ratio = measured / reference;
-  const change = `${((ratio - 1) * 100).toFixed(1)}% over ${referenceKind}`;
-  const baselineChange =
-    baseline === undefined
-      ? ""
-      : baseline === 0
-        ? measured === 0
-          ? "0.0% over baseline"
-          : "increase from a zero baseline"
-        : `${((measured / baseline - 1) * 100).toFixed(1)}% over baseline`;
-  const detail = `${label}: ${measured.toFixed(2)} ms against ${reference} ms ${referenceKind} (${change}${baseline === undefined ? "" : `; ${baseline} ms baseline, ${baselineChange}; ${targetMilliseconds} ms target`})`;
-  if (baselinePath !== undefined)
-    console.log(`Performance timing comparison: ${detail}`);
+  const ratio = measured / targetMilliseconds;
+  const detail = `${label}: ${measured.toFixed(2)} ms against ${targetMilliseconds} ms target (${((ratio - 1) * 100).toFixed(1)}% over target)`;
   if (ratio >= 1.2) throw new Error(`Performance timing failure: ${detail}`);
-  if (ratio >= 1.1) {
-    const warning = `Performance timing warning: ${detail}`;
-    console.warn(
-      process.env.GITHUB_ACTIONS === "true"
-        ? `::warning title=Performance timing::${warning.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`
-        : warning,
-    );
-  }
+  if (ratio >= 1.1) console.warn(`Performance timing warning: ${detail}`);
 }
 
 function median(samples: readonly number[]) {

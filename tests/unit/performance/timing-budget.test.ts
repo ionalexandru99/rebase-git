@@ -1,24 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertTimingBudget } from "#tests-performance/timing-budget";
 
-beforeEach(() => {
-  vi.stubEnv("PERFORMANCE_RECORD_BASELINE", undefined);
-  vi.stubEnv("PERFORMANCE_BASELINE", undefined);
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllEnvs();
-});
+afterEach(() => vi.restoreAllMocks());
 
 describe("performance timing budgets", () => {
-  it("rejects conflicting baseline modes", () => {
-    vi.stubEnv("PERFORMANCE_RECORD_BASELINE", "record.jsonl");
-    vi.stubEnv("PERFORMANCE_BASELINE", "baseline.jsonl");
-    expect(() => assertTimingBudget("reopen", 100, 100)).toThrow(
-      "modes cannot be combined",
-    );
-  });
   it.each([0, 100, 109.999])(
     "accepts %s ms without warning against a 100 ms target",
     (measurement) => {
@@ -50,17 +35,6 @@ describe("performance timing budgets", () => {
       );
     },
   );
-
-  it("publishes warnings as escaped GitHub Actions annotations", () => {
-    vi.stubEnv("GITHUB_ACTIONS", "true");
-    const warning = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => undefined);
-    assertTimingBudget("reopen\n100%", 110, 100);
-    expect(warning).toHaveBeenCalledWith(
-      "::warning title=Performance timing::Performance timing warning: reopen%0A100%25: 110.00 ms against 100 ms target (10.0%25 over target)",
-    );
-  });
 
   it("uses the median of samples and preserves the measured values", () => {
     const samples = [5_000, 100, 90];
