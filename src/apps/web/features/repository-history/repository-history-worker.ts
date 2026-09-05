@@ -501,7 +501,7 @@ async function handleReaderMessage(
         return;
       }
       replica.synchronization = replica.reconciling ? "stale" : "idle";
-      replica.reconciled = false;
+      replica.reconciled = message.failure._tag === "Offline";
       replica.storingCommits = false;
       replica.reconciling = false;
       delete replica.synchronizationOwner;
@@ -727,7 +727,6 @@ async function startSynchronization(
   replica.synchronization = "syncing";
   replica.synchronizationOwner = reader;
   replica.synchronizationRequestId = requestId;
-  replica.synchronizedCommitCount = 0;
   replica.revision += 1;
   publishSnapshot(replica);
   let basis: Awaited<ReturnType<typeof beginRepositoryHistorySynchronization>>;

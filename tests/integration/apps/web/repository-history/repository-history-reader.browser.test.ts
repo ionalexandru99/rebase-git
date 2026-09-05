@@ -1172,69 +1172,115 @@ describe("browser repository history reader", () => {
     reader.close();
   });
 
-  it("reopens a completed repository from IndexedDB while offline", async () => {
-    const environmentId = crypto.randomUUID();
-    const repositoryId = crypto.randomUUID();
-    const commits = history(3);
-    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
-    const firstGateway: RepositoryHistoryGateway = {
-      read: vi.fn(async () => page(repositoryId, commits, [main])),
-      synchronize: vi.fn(async (_request, accept) => {
-        await accept(
-          encodeRepositoryHistoryBatch({
-            commits,
-            objectFormat: "sha1",
-            repositoryId,
-            requestId: crypto.randomUUID(),
-            sequence: 0,
+  it.each(["offline", "unavailable"] as const)(
+    "preserves completed history after %s reconciliation failures",
+    async (failure) => {
+      const environmentId = crypto.randomUUID();
+      const repositoryId = crypto.randomUUID();
+      const commits = history(3);
+      const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+      const firstGateway: RepositoryHistoryGateway = {
+        read: vi.fn(async () => page(repositoryId, commits, [main])),
+        synchronize: vi.fn(async (_request, accept) => {
+          await accept(
+            encodeRepositoryHistoryBatch({
+              commits,
+              objectFormat: "sha1",
+              repositoryId,
+              requestId: crypto.randomUUID(),
+              sequence: 0,
+            }),
+          );
+          return commits.length;
+        }),
+      };
+      const first = createBrowserRepositoryHistoryReader({
+        environmentId,
+        gateway: firstGateway,
+        repositoryId,
+      });
+      await first.read({ limit: 100, order: "topological", roots: [main] });
+      await vi.waitFor(() =>
+        expect(first.getSnapshot().synchronization).toBe("complete"),
+      );
+      first.close();
+
+      let recovered = false;
+      let available: (() => void) | undefined;
+      const offlineGateway: RepositoryHistoryGateway = {
+        subscribeAvailability: (listener) => {
+          available = listener;
+          return () => {
+            available = undefined;
+          };
+        },
+        read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
+        synchronize: vi.fn(async (request, accept, signal) => {
+          if (recovered)
+            return firstGateway.synchronize(request, accept, signal);
+          throw failure === "offline"
+            ? new RepositoryHistoryOffline()
+            : new RepositoryHistoryUnavailable();
+        }),
+      };
+      const reopened = createBrowserRepositoryHistoryReader({
+        environmentId,
+        gateway: offlineGateway,
+        repositoryId,
+      });
+
+      try {
+        await expect(
+          reopened.read({ limit: 100, order: "topological", roots: [main] }),
+        ).resolves.toEqual(commits);
+        await vi.waitFor(() =>
+          expect(reopened.getSnapshot()).toMatchObject({
+            synchronization: "stale",
+            synchronizedCommitCount: commits.length,
           }),
         );
-        return commits.length;
-      }),
-    };
-    const first = createBrowserRepositoryHistoryReader({
-      environmentId,
-      gateway: firstGateway,
-      repositoryId,
-    });
-    await first.read({ limit: 100, order: "topological", roots: [main] });
-    await vi.waitFor(() =>
-      expect(first.getSnapshot().synchronization).toBe("complete"),
-    );
-    first.close();
-
-    const offlineGateway: RepositoryHistoryGateway = {
-      read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
-      synchronize: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
-    };
-    const reopened = createBrowserRepositoryHistoryReader({
-      environmentId,
-      gateway: offlineGateway,
-      repositoryId,
-    });
-
-    await expect(
-      reopened.read({ limit: 100, order: "topological", roots: [main] }),
-    ).resolves.toEqual(commits);
-    await expect(
-      reopened.read({
-        limit: 100,
-        order: "topological",
-        roots: [{ ...main, oid: commits[1]?.oid ?? "" }],
-      }),
-    ).resolves.toEqual(commits.slice(1));
-    await expect(
-      reopened.getCommitSummaries(["e".repeat(40)]),
-    ).resolves.toEqual([]);
-    expect(offlineGateway.read).not.toHaveBeenCalled();
-    await vi.waitFor(() =>
-      expect(reopened.getSnapshot()).toMatchObject({
-        status: "ready",
-        synchronization: "stale",
-      }),
-    );
-    reopened.close();
-  });
+        await expect(
+          reopened.read({
+            limit: 100,
+            order: "topological",
+            roots: [{ ...main, oid: commits[1]?.oid ?? "" }],
+          }),
+        ).resolves.toEqual(commits.slice(1));
+        await expect(
+          reopened.getCommitSummaries(["e".repeat(40)]),
+        ).resolves.toEqual([]);
+        expect(offlineGateway.read).not.toHaveBeenCalled();
+        await vi.waitFor(() =>
+          expect(reopened.getSnapshot()).toMatchObject({
+            status: "ready",
+            synchronization: "stale",
+          }),
+        );
+        await vi.waitFor(() =>
+          expect(offlineGateway.synchronize).toHaveBeenCalledTimes(
+            failure === "offline" ? 1 : 2,
+          ),
+        );
+        await expect(reopened.getRefTargets()).resolves.toEqual([main]);
+        expect(reopened.getSnapshot().synchronizedCommitCount).toBe(
+          commits.length,
+        );
+        recovered = true;
+        available?.();
+        await vi.waitFor(() =>
+          expect(reopened.getSnapshot()).toMatchObject({
+            synchronization: "complete",
+            synchronizedCommitCount: commits.length,
+          }),
+        );
+        expect(offlineGateway.synchronize).toHaveBeenCalledTimes(
+          failure === "offline" ? 2 : 3,
+        );
+      } finally {
+        reopened.close();
+      }
+    },
+  );
 
   it("reports offline and IndexedDB failures with separate types", async () => {
     const repositoryId = crypto.randomUUID();
