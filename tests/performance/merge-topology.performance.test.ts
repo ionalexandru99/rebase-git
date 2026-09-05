@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { createServer } from "vite";
+import { assertTimingBudget } from "#tests-performance/timing-budget";
 
 test("256 active lanes stay within append and canvas budgets", async ({
   page,
@@ -105,8 +106,8 @@ test("256 active lanes stay within append and canvas budgets", async ({
       `${JSON.stringify({ maxLanes: metrics.maxLanes, redrawP95, maxAppend })}\n`,
     );
     expect(metrics.maxLanes).toBeGreaterThanOrEqual(256);
-    expect(maxAppend).toBeLessThan(50);
-    expect(redrawP95).toBeLessThan(2);
+    assertTimingBudget("Merge topology append maximum", maxAppend, 50);
+    assertTimingBudget("Merge topology canvas redraw p95", redrawP95, 2);
   } finally {
     await server.close();
   }

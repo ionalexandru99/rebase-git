@@ -8,6 +8,7 @@ import {
   parseGitHistory,
 } from "@rebase/server/features/repository-history/git/parse-git-history";
 import { createServer } from "vite";
+import { assertTimingBudget } from "#tests-performance/timing-budget";
 
 test("cached metadata search on repository history and 250,000 merge-heavy commits", async ({
   page,
@@ -332,7 +333,11 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
     }, fixture);
     expect(measurements).toHaveLength(onlyRepository ? 3 : 6);
     for (const measurement of measurements)
-      expect(measurement.firstPageMaximumMilliseconds).toBeLessThan(250);
+      assertTimingBudget(
+        `History search first-page maximum (${measurement.corpus}, ${measurement.text})`,
+        measurement.firstPageMaximumMilliseconds,
+        250,
+      );
     if (!onlyRepository)
       expect(
         measurements.find(
