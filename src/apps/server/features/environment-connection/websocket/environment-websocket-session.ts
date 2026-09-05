@@ -73,7 +73,7 @@ function runSession(
       runSessionEffect,
       writer,
       hello,
-      result,
+      { ...result, accessCapabilities: [...accessCapabilities] },
     );
     yield* processClientMessages(
       messages,

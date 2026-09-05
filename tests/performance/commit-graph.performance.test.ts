@@ -3,7 +3,7 @@ import {
   execFile,
   spawn,
 } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -51,8 +51,8 @@ for (const scenario of scenarios) {
       const trace = await startTrace(session);
       await page.evaluate(() => window.__startGraphMeasurement());
       await page.keyboard.press("Control+Enter");
-      const history = page.getByRole("listbox", { name: "Commit history" });
-      await expect(history.getByRole("option").first()).toBeVisible();
+      const history = page.getByRole("grid", { name: "Commit history" });
+      await expect(history.getByRole("row").first()).toBeVisible();
       const selectionFeedback = await measureSelectionFeedback(page);
       const scopeFeedback = await measureHistoryScopeFeedback(page);
       await exerciseVirtualRows(page);
@@ -118,7 +118,7 @@ async function installGraphMeasurements(page: Page) {
       }
       if (
         metrics.firstContent === undefined &&
-        document.querySelector('[role="option"][aria-setsize]') !== null
+        document.querySelector("tr[aria-rowindex]") !== null
       ) {
         metrics.firstContent = performance.now();
       }
@@ -141,6 +141,7 @@ async function installGraphMeasurements(page: Page) {
             const message = event as MessageEvent;
             if (
               window.__graphMetrics.started > 0 &&
+              window.__graphMetrics.firstContent === undefined &&
               typeof message.data !== "string"
             ) {
               window.__graphMetrics.lastBinaryMessage = performance.now();
@@ -168,9 +169,7 @@ async function installGraphMeasurements(page: Page) {
 
 async function measureSelectionFeedback(page: Page) {
   return page.evaluate(async () => {
-    const options = document.querySelectorAll<HTMLElement>(
-      '[role="option"][aria-setsize]',
-    );
+    const options = document.querySelectorAll<HTMLElement>("tr[aria-rowindex]");
     const target = options[1];
     if (target === undefined) {
       throw new Error("The second commit row is not rendered");
@@ -190,7 +189,7 @@ async function measureHistoryScopeFeedback(page: Page) {
       'button[aria-label="Add feature to history"]',
     );
     const history = document.querySelector<HTMLElement>(
-      '[role="listbox"][aria-label="Commit history"]',
+      '[role="grid"][aria-label="Commit history"]',
     );
     if (button === null || history === null) {
       throw new Error("The history scope controls are missing");
@@ -212,7 +211,7 @@ async function measureHistoryScopeFeedback(page: Page) {
 async function exerciseVirtualRows(page: Page) {
   await page.evaluate(async () => {
     const history = document.querySelector<HTMLElement>(
-      '[role="listbox"][aria-label="Commit history"]',
+      '[role="grid"][aria-label="Commit history"]',
     );
     if (history === null) {
       throw new Error("Commit history is missing");
@@ -255,7 +254,13 @@ async function startTrace(session: CDPSession) {
   return {
     stop: async () => {
       await session.send("Tracing.end");
-      return frameWorkloads(JSON.parse(await completed) as Trace);
+      const trace = await completed;
+      const path = test.info().outputPath("renderer-trace.json");
+      await writeFile(path, trace);
+      await test
+        .info()
+        .attach("renderer-trace", { path, contentType: "application/json" });
+      return frameWorkloads(JSON.parse(trace) as Trace);
     },
   };
 }

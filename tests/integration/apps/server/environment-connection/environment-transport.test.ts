@@ -66,6 +66,7 @@ describe("Environment transport", () => {
       );
       expect(accepted).toMatchObject({
         _tag: "HelloAccepted",
+        accessCapabilities: ["environment.read"],
         environmentId,
         protocol: { major: 1, minor: 3 },
       });

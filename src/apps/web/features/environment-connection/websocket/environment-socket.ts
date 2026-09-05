@@ -220,10 +220,11 @@ function isNegotiatedResultValid(
     hello,
     result.currentSequence,
   );
+  const { accessCapabilities: _accessCapabilities, ...negotiated } = result;
   return (
     expected._tag === "HelloAccepted" &&
     JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(expected)) ===
-      JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(result))
+      JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(negotiated))
   );
 }
 

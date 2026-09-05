@@ -36,10 +36,10 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
       projects.getByRole("button", { name: "Open rebase-test" }),
     ).toHaveAttribute("aria-current", "page");
 
-    const history = page.getByRole("listbox", { name: "Commit history" });
-    const initialCommit = history.getByRole("option", { name: /^initial,/ });
+    const history = page.getByRole("grid", { name: "Commit history" });
+    const initialCommit = history.getByRole("row", { name: /^initial,/ });
     await expect(
-      history.getByRole("option", { name: /^follow-up,/ }),
+      history.getByRole("row", { name: /^follow-up,/ }),
     ).toHaveAttribute("aria-selected", "false");
     await initialCommit.click();
     await expect(initialCommit).toHaveAttribute("aria-selected", "true");
@@ -75,10 +75,10 @@ test("reopens synchronized history and keeps browsing while offline", async ({
       "Connected",
     );
     await openRepository(page, "rebase-test");
-    const history = page.getByRole("listbox", { name: "Commit history" });
-    const initial = history.getByRole("option", { name: /^initial,/ });
+    const history = page.getByRole("grid", { name: "Commit history" });
+    const initial = history.getByRole("row", { name: /^initial,/ });
     await expect(
-      history.getByRole("option", { name: /^follow-up,/ }),
+      history.getByRole("row", { name: /^follow-up,/ }),
     ).toBeVisible();
     await expect.poll(() => hasCompletedHistory(page)).toBe(true);
 

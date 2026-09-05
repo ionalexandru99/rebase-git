@@ -110,7 +110,7 @@ it.each(["Automatic", "Custom"] as const)(
       </KeyboardShortcutsProvider>,
     );
     await expect
-      .element(screen.getByRole("option", { name: /^Cached commit,/ }))
+      .element(screen.getByRole("row", { name: /^Cached commit,/ }))
       .toBeVisible();
     await expect
       .element(

@@ -23,6 +23,13 @@ export const keyboardShortcutCommandIds = [
   "projects.selectRepository8",
   "projects.selectRepository9",
   "branches.focusSidebar",
+  "graph.focus",
+  "graph.search",
+  "graph.previousMatch",
+  "graph.nextMatch",
+  "graph.previousInLane",
+  "graph.nextInLane",
+  "graph.fetch",
   "settings.open",
   "search.focus",
   "repositoryPicker.openSelectedRepository",
@@ -31,11 +38,15 @@ export const keyboardShortcutCommandIds = [
 export type KeyboardShortcutCommandId =
   (typeof keyboardShortcutCommandIds)[number];
 
-export type KeyboardShortcutContext = "application" | "repository-picker";
+export type KeyboardShortcutContext =
+  | "application"
+  | "repository-picker"
+  | "commit-graph";
 
 export type KeyboardShortcutGroup =
   | "Navigation"
   | "Branches"
+  | "Commit graph"
   | "Search and lists"
   | "Folder picker";
 

@@ -1,6 +1,7 @@
 import {
   createCurrentEnvironmentDiscovery,
   createCurrentEnvironmentHello,
+  type EnvironmentAccessCapability,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
 import {
@@ -41,6 +42,8 @@ describe("local Environment session", () => {
     session.start();
     await expectState(session.getSnapshot, "Connected");
 
+    expect(session.getSnapshot()).toMatchObject({ accessCapabilities: [] });
+
     expect(gateway.exchangePairing).toHaveBeenCalledOnce();
     expect(gateway.connect).toHaveBeenCalledWith(
       "device-credential",
@@ -55,8 +58,11 @@ describe("local Environment session", () => {
   });
 
   it("owns one reconnect after the active connection closes", async () => {
-    const initial = createConnection(7);
-    const reconnected = createConnection(8);
+    const initial = createConnection(7, undefined, [
+      "repository.read",
+      "repository.write",
+    ]);
+    const reconnected = createConnection(8, undefined, ["repository.read"]);
     const gateway = createGateway(initial, reconnected);
     const repositoryCatalogGateway = createRepositoryCatalogGateway();
     const reconnect = deferred<void>();
@@ -74,6 +80,9 @@ describe("local Environment session", () => {
 
     session.start();
     await expectState(session.getSnapshot, "Connected");
+    expect(session.getSnapshot()).toMatchObject({
+      accessCapabilities: ["repository.read", "repository.write"],
+    });
     initial.disconnect.resolve(
       new EnvironmentResponseError({ responseTag: "WebSocket" }),
     );
@@ -86,6 +95,9 @@ describe("local Environment session", () => {
 
     reconnect.resolve();
     await expectState(session.getSnapshot, "Connected");
+    expect(session.getSnapshot()).toMatchObject({
+      accessCapabilities: ["repository.read"],
+    });
     expect(gateway.connect).toHaveBeenNthCalledWith(2, "device-credential", 7);
     expect(waitBeforeReconnect).toHaveBeenCalledOnce();
     expect(repositoryCatalogGateway.list).toHaveBeenCalledTimes(2);
@@ -226,6 +238,7 @@ function createConnection(
     read: () => Effect.die("History is not used"),
     synchronize: () => Effect.die("History is not used"),
   },
+  accessCapabilities?: readonly EnvironmentAccessCapability[],
 ) {
   const disconnect = deferred<EnvironmentResponseError>();
   const discovery = createCurrentEnvironmentDiscovery(
@@ -246,7 +259,10 @@ function createConnection(
     currentSequence: () => currentSequence,
     disconnect,
     discovery,
-    negotiated,
+    negotiated: {
+      ...negotiated,
+      ...(accessCapabilities === undefined ? {} : { accessCapabilities }),
+    },
     repositoryHistory,
     waitForSequence: vi.fn(() => Effect.never),
   } satisfies EnvironmentProtocolConnection & {

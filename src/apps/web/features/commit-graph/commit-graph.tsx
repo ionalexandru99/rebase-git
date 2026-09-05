@@ -3,51 +3,62 @@ import type {
   RepositoryHistoryRefTarget,
   RepositoryRefTarget,
 } from "@rebase/contracts";
-import { IconX } from "@tabler/icons-react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type JSX,
   type KeyboardEvent,
-  useCallback,
+  type Ref,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
+import type {
+  GraphCommandEnvironment,
+  GraphCommandShortcuts,
+} from "#web/features/commit-commands/graph-command.contract";
+import { useGraphCommands } from "#web/features/commit-commands/use-graph-commands";
+import type {
+  CommitGraphHandle,
+  CommitGraphViewportHandle,
+} from "#web/features/commit-graph/commit-graph.contract";
 import { describeRepositoryHistoryError } from "#web/features/commit-graph/commit-graph-messages";
-import {
-  appendCommitLanes,
-  createCommitLaneCheckpoint,
-} from "#web/features/commit-graph/commit-lanes";
+import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
 import type { HistoryScope } from "#web/features/commit-graph/history-scope.contract";
-import { visibleMergeTopology } from "#web/features/commit-graph/merge-visibility";
+import { useCommitGraphPages } from "#web/features/commit-graph/use-commit-graph-pages";
+import { useCommitGraphSelection } from "#web/features/commit-graph/use-commit-graph-selection";
+import { matchesKeyboardShortcut } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import { Button } from "#web-ui/components/ui/button";
+import { CommitCommandMenu } from "#web-ui/features/commit-commands/commit-command-menu";
 import {
   CommitGraphCanvas,
   commitGraphGutterWidth,
 } from "#web-ui/features/commit-graph/commit-graph-canvas";
 import { CommitGraphMergeControls } from "#web-ui/features/commit-graph/commit-graph-merge-controls";
+import {
+  CommitGraphFailure,
+  CommitGraphLoading,
+  CommitGraphPageRetry,
+} from "#web-ui/features/commit-graph/commit-graph-status";
+import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/commit-graph-virtual-window";
+import {
+  CommitRefLabels,
+  historyLabelTarget,
+} from "#web-ui/features/commit-graph/commit-ref-labels";
+import { HistoryScopeStrip } from "#web-ui/features/commit-graph/history-scope-strip";
 
 const rowHeight = 36;
-const overscanRows = 10;
-const loadingRowIds = Array.from(
-  { length: 12 },
-  (_, index) => `commit-loading-row-${index}`,
-);
-const emptyHistorySnapshot = {
-  revision: 0,
-  historyRevision: 0,
-  status: "empty",
-} as const;
-const noSnapshotSubscription = () => () => undefined;
 
 export function CommitGraph({
+  ref,
+  commandEnvironment,
+  shortcuts,
+  commandsActive = true,
   onRemoveHistoryRef,
   reader,
   repositoryName,
@@ -55,6 +66,10 @@ export function CommitGraph({
   scope,
   selections,
 }: {
+  readonly ref?: Ref<CommitGraphHandle>;
+  readonly commandEnvironment?: GraphCommandEnvironment | undefined;
+  readonly shortcuts?: GraphCommandShortcuts | undefined;
+  readonly commandsActive?: boolean;
   readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
   readonly reader: RepositoryHistoryReader | undefined;
   readonly repositoryName: string;
@@ -62,230 +77,90 @@ export function CommitGraph({
   readonly scope?: HistoryScope;
   readonly selections?: readonly RepositoryRefTarget[];
 }): JSX.Element {
-  const [commits, setCommits] = useState<readonly RepositoryCommit[]>([]);
-  const [loadedRoots, setLoadedRoots] = useState<readonly string[]>([]);
-  const [error, setError] =
-    useState<ReturnType<RepositoryHistoryReader["getSnapshot"]>["error"]>();
-  const [loading, setLoading] = useState(true);
-  const [selectedOid, setSelectedOid] = useState<string>();
-  const [activeOid, setActiveOid] = useState<string>();
+  const [menuOid, setMenuOid] = useState<string>();
   const [expandedMerges, setExpandedMerges] = useState<
     ReadonlyMap<string, readonly string[]>
   >(new Map());
-  const visible = useMemo(
-    () =>
-      visibleMergeTopology(
-        commits,
-        loadedRoots,
-        new Set(expandedMerges.keys()),
-      ),
-    [commits, loadedRoots, expandedMerges],
-  );
-  const visibleCommits = visible.commits;
   const [order, setOrder] =
     useState<RepositoryHistoryQuery["order"]>("topological");
   const previousOrder = useRef(order);
-  const selectedOidRef = useRef(selectedOid);
-  selectedOidRef.current = selectedOid;
-  const loadEpoch = useRef(0);
-  const commitsRef = useRef(commits);
-  commitsRef.current = visibleCommits;
+  const selectedOidRef = useRef<string | undefined>(undefined);
   const pendingViewportAnchor = useRef<ViewportAnchor | undefined>(undefined);
-  const previousReader = useRef(reader);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ height: 0, width: 0 });
-  const [horizontalOffset, setHorizontalOffset] = useState(0);
-  const [refTargets, setRefTargets] = useState<
-    readonly RepositoryHistoryRefTarget[]
-  >([]);
-  const historySnapshot = useSyncExternalStore(
-    reader?.subscribe ?? noSnapshotSubscription,
-    reader?.getSnapshot ?? (() => emptyHistorySnapshot),
-  );
-  const refTargetRefresh = `${historySnapshot.status}:${
-    historySnapshot.synchronization ?? ""
-  }`;
-  const refTargetsEpoch = useRef(0);
-  useEffect(() => {
-    if (refTargetRefresh.length === 0) return;
-    const epoch = ++refTargetsEpoch.current;
-    if (reader === undefined) {
-      setRefTargets([]);
-      return;
-    }
-    void reader.getRefTargets().then(
-      (next) => {
-        if (epoch === refTargetsEpoch.current) setRefTargets(next);
-      },
-      () => {
-        if (epoch === refTargetsEpoch.current) setRefTargets([]);
-      },
-    );
-    return () => {
-      refTargetsEpoch.current += 1;
-    };
-  }, [reader, refTargetRefresh]);
-
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (element === null) {
-      return;
-    }
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry === undefined) {
-        return;
-      }
-      setViewport({
-        height: entry.contentRect.height,
-        width: entry.contentRect.width,
-      });
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  const loadHistory = useCallback(() => {
-    const epoch = ++loadEpoch.current;
-    if (reader === undefined || roots === undefined) {
-      setLoading(true);
-      return;
-    }
-    if (roots.length === 0) {
-      setCommits([]);
-      setError(undefined);
-      setLoading(false);
-      setSelectedOid(undefined);
-      if (scrollRef.current !== null) {
-        scrollRef.current.scrollTop = 0;
-      }
-      return;
-    }
-    pendingViewportAnchor.current = viewportAnchor(
-      scrollRef.current,
-      commitsRef.current,
-    );
-    if (previousOrder.current !== order) {
-      previousOrder.current = order;
-      const selected = selectedOidRef.current;
-      if (selected !== undefined)
-        pendingViewportAnchor.current = { oid: selected, offset: 0 };
-    }
-    setLoading(true);
-    setError(undefined);
-    void reader
-      .read({
-        limit: 100,
-        order,
-        roots,
-        ancestry: "first-parent",
-        additionalParentEdges: [...expandedMerges].flatMap(
-          ([childOid, parents]) =>
-            parents.map((parentOid) => ({ childOid, parentOid })),
-        ),
-      })
-      .then(
-        (next) => {
-          if (epoch !== loadEpoch.current) {
-            return;
-          }
-          setCommits(next);
-          setLoadedRoots(roots.map(({ oid }) => oid));
-          setSelectedOid((selected) =>
-            next.some((commit) => commit.oid === selected)
-              ? selected
-              : undefined,
-          );
-        },
-        () => {
-          if (epoch !== loadEpoch.current) {
-            return;
-          }
-          setError(reader.getSnapshot().error);
-        },
+  const scrollRef = useRef<HTMLTableElement>(null);
+  const viewportRef = useRef<CommitGraphViewportHandle>(null);
+  const [pageSize, setPageSize] = useState(12);
+  const committedWindow = useRef<{
+    commits: readonly RepositoryCommit[];
+    start: number;
+  }>({ commits: [], start: 0 });
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    oid: string;
+    offset: number;
+    mode: CommitGraphSelectionMode;
+  }>();
+  const paging = useCommitGraphPages(
+    reader,
+    roots,
+    order,
+    expandedMerges,
+    () => {
+      const current = committedWindow.current;
+      let anchor = viewportAnchor(
+        scrollRef.current,
+        current.commits,
+        current.start,
+      );
+      if (
+        previousOrder.current !== order &&
+        selectedOidRef.current !== undefined
       )
-      .finally(() => {
-        if (epoch === loadEpoch.current) {
-          setLoading(false);
-        }
-      });
-  }, [reader, roots, order, expandedMerges]);
-
+        anchor = { oid: selectedOidRef.current, offset: 0 };
+      previousOrder.current = order;
+      pendingViewportAnchor.current = anchor;
+      return anchor;
+    },
+  );
+  const { commits, laneRows, refTargets, historySnapshot, loading } = paging;
+  const visibleCommits = commits;
+  const error = paging.snapshot.error;
+  const loadHistory = paging.reload;
+  const previousReader = useRef(reader);
   useEffect(() => {
     if (previousReader.current !== reader) {
       previousReader.current = reader;
-      setCommits([]);
-      setError(undefined);
-      setSelectedOid(undefined);
-      setActiveOid(undefined);
       setExpandedMerges(new Map());
-      if (scrollRef.current !== null) {
-        scrollRef.current.scrollTop = 0;
-      }
+      setPendingNavigation(undefined);
+      pendingViewportAnchor.current = undefined;
+      if (scrollRef.current !== null) scrollRef.current.scrollTop = 0;
     }
-    loadHistory();
-    return () => {
-      loadEpoch.current += 1;
-    };
-  }, [loadHistory, reader]);
-
+  }, [reader]);
   useLayoutEffect(() => {
+    committedWindow.current = { commits, start: paging.snapshot.startOffset };
     const anchor = pendingViewportAnchor.current;
     const element = scrollRef.current;
-    if (anchor === undefined || element === null) {
-      return;
-    }
+    if (anchor === undefined || element === null || loading) return;
     pendingViewportAnchor.current = undefined;
-    const index = visibleCommits.findIndex(
-      (commit) => commit.oid === anchor.oid,
-    );
-    if (index >= 0) {
-      element.scrollTop = index * rowHeight + anchor.offset;
-    }
-  }, [visibleCommits]);
-
-  useEffect(() => {
-    if (
-      selectedOid !== undefined &&
-      !visibleCommits.some(({ oid }) => oid === selectedOid)
-    )
-      setSelectedOid(undefined);
-    if (
-      activeOid !== undefined &&
-      !visibleCommits.some(({ oid }) => oid === activeOid)
-    )
-      setActiveOid(undefined);
-  }, [activeOid, selectedOid, visibleCommits]);
-
-  const previousSynchronization = useRef(historySnapshot.synchronization);
-  useEffect(() => {
-    if (
-      previousSynchronization.current !== "complete" &&
-      historySnapshot.synchronization === "complete"
-    )
-      loadHistory();
-    previousSynchronization.current = historySnapshot.synchronization;
-  }, [historySnapshot.synchronization, loadHistory]);
-
-  const laneRows = useMemo(
-    () =>
-      appendCommitLanes(createCommitLaneCheckpoint(), visible.topology).rows,
-    [visible.topology],
-  );
+    const index = commits.findIndex((commit) => commit.oid === anchor.oid);
+    if (index >= 0)
+      element.scrollTop =
+        (paging.snapshot.startOffset + index) * rowHeight + anchor.offset;
+  }, [commits, paging.snapshot.startOffset, loading]);
   const labelsByOid = useMemo(() => groupRefLabels(refTargets), [refTargets]);
   const gutterWidth = commitGraphGutterWidth(laneRows);
-  const virtualizer = useVirtualizer({
-    count: visibleCommits.length,
-    estimateSize: () => rowHeight,
-    getScrollElement: () => scrollRef.current,
-    overscan: overscanRows,
-  });
-  const virtualRows = virtualizer.getVirtualItems();
-  const activeCommitOid = activeOid ?? selectedOid;
+
+  const navigationIntent = useRef(0);
+  const beginNavigation = () => {
+    const intent = ++navigationIntent.current;
+    paging.engine?.cancelNavigation();
+    setPendingNavigation(undefined);
+    return intent;
+  };
 
   const toggleMerge = (oid: string, expand: boolean) => {
     const commit = commits.find((candidate) => candidate.oid === oid);
     if (commit === undefined || commit.parents.length < 2) return;
-    setActiveOid(oid);
+    beginNavigation();
+    navigation.select(oid, "activate");
     setExpandedMerges((current) => {
       if (expand === current.has(oid)) return current;
       const next = new Map(current);
@@ -296,33 +171,147 @@ export function CommitGraph({
     scrollRef.current?.focus();
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-      const oid = activeOid ?? selectedOid;
-      if (oid !== undefined && visible.merges.has(oid)) {
-        event.preventDefault();
-        toggleMerge(oid, event.key === "ArrowRight");
+  const visibleOids = useMemo(
+    () => visibleCommits.map(({ oid }) => oid),
+    [visibleCommits],
+  );
+  const navigation = useCommitGraphSelection({
+    reader,
+    query: paging.snapshot.query,
+    loading: paging.loading,
+    oids: visibleOids,
+    laneRows,
+    merges: paging.merges,
+    toggleMerge,
+    pageSize,
+    startOffset: paging.snapshot.startOffset,
+    viewEpoch: paging.snapshot.epoch,
+    oldestLoadedOffset: Math.max(0, paging.snapshot.knownEndOffset - 1),
+    onSelectionIntent: beginNavigation,
+    requestLaneMove: (offset, direction) => {
+      const intent = beginNavigation();
+      void paging.engine?.requestLaneMove(offset, direction).then((target) => {
+        if (intent === navigationIntent.current && target !== undefined)
+          setPendingNavigation({ ...target, mode: "replace" });
+      });
+    },
+    requestMove: (offset, mode) => {
+      const intent = beginNavigation();
+      void paging.engine?.requestMove(offset).then((target) => {
+        if (intent === navigationIntent.current && target !== undefined)
+          setPendingNavigation({ ...target, mode });
+      });
+    },
+    scrollToIndex: (index) =>
+      viewportRef.current?.scrollToIndex(index + paging.snapshot.startOffset),
+  });
+  useLayoutEffect(() => {
+    if (
+      pendingNavigation === undefined ||
+      !visibleOids.includes(pendingNavigation.oid)
+    )
+      return;
+    navigation.select(pendingNavigation.oid, pendingNavigation.mode);
+    viewportRef.current?.scrollToIndex(pendingNavigation.offset);
+    setPendingNavigation(undefined);
+  }, [pendingNavigation, visibleOids, navigation.select]);
+  useImperativeHandle(ref, () => ({
+    navigateToOid: async (oid) => {
+      const intent = beginNavigation();
+      const target = await paging.engine?.jumpToOid(oid);
+      if (intent !== navigationIntent.current) return;
+      if (target === undefined)
+        throw new Error("This commit is outside the selected history.");
+      setExpandedMerges((current) => {
+        const next = new Map(current);
+        for (const edge of target.query.additionalParentEdges ?? [])
+          next.set(edge.childOid, [
+            ...new Set([...(next.get(edge.childOid) ?? []), edge.parentOid]),
+          ]);
+        return next;
+      });
+      setPendingNavigation({ oid, offset: target.offset, mode: "replace" });
+      scrollRef.current?.focus();
+    },
+  }));
+  selectedOidRef.current = navigation.selection.activeOid;
+  const activeCommitOid = visibleOids.includes(
+    navigation.selection.activeOid ?? "",
+  )
+    ? navigation.selection.activeOid
+    : undefined;
+
+  const commands = useGraphCommands({
+    environment: commandEnvironment,
+    selectedOids: navigation.selection.selectedOids,
+    shortcuts,
+    active: commandsActive,
+    handlers: {
+      readCommit: async (oid) => (await reader?.getCommitSummaries([oid]))?.[0],
+      writeClipboard: (text) => navigator.clipboard.writeText(text),
+      ...(onRemoveHistoryRef === undefined
+        ? {}
+        : { toggleHistoryRef: onRemoveHistoryRef }),
+      actions: {
+        "graph.focus": { execute: () => scrollRef.current?.focus() },
+        "graph.previousInLane": { execute: () => navigation.moveInLane(-1) },
+        "graph.nextInLane": { execute: () => navigation.moveInLane(1) },
+      },
+    },
+  });
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented) return;
+    if (
+      (event.key === "ContextMenu" ||
+        (event.key === "F10" && event.shiftKey)) &&
+      activeCommitOid !== undefined
+    ) {
+      event.preventDefault();
+      const row = document.getElementById(commitRowId(activeCommitOid));
+      if (row !== null) {
+        const bounds = row.getBoundingClientRect();
+        row.dispatchEvent(
+          new MouseEvent("contextmenu", {
+            bubbles: true,
+            clientX: bounds.left + 32,
+            clientY: bounds.top + bounds.height / 2,
+          }),
+        );
       }
       return;
     }
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
-      return;
+    const context = commands.context(activeCommitOid);
+    if (context !== undefined && shortcuts !== undefined) {
+      const command = commands.registry
+        .commands(context)
+        .find(
+          (candidate) =>
+            candidate.enabled &&
+            candidate.shortcutId !== undefined &&
+            matchesKeyboardShortcut(
+              event,
+              shortcuts.bindings[candidate.shortcutId],
+              shortcuts.platform,
+            ),
+        );
+      if (command !== undefined) {
+        event.preventDefault();
+        void commands.execute(command.id, context);
+        return;
+      }
     }
-    event.preventDefault();
-    const current = visibleCommits.findIndex(
-      (commit) => commit.oid === (activeOid ?? selectedOid),
-    );
-    const next = Math.min(
-      visibleCommits.length - 1,
-      Math.max(0, current + (event.key === "ArrowDown" ? 1 : -1)),
-    );
-    const commit = visibleCommits[next];
-    if (commit === undefined) {
-      return;
-    }
-    setSelectedOid(commit.oid);
-    setActiveOid(commit.oid);
-    virtualizer.scrollToIndex(next, { align: "auto" });
+    navigation.onKeyDown(event);
+  };
+  const refCommandContext = (label: RepositoryHistoryRefTarget) => {
+    const target = historyLabelTarget(label);
+    return target === undefined
+      ? undefined
+      : commands.context(undefined, {
+          target,
+          included: (roots ?? []).some(
+            (root) => root.type === label.type && root.name === label.name,
+          ),
+        });
   };
 
   return (
@@ -373,211 +362,284 @@ export function CommitGraph({
           selections={selections}
         />
       )}
-      <div
-        className="grid h-8 shrink-0 items-center border-border/60 border-b text-[11px] text-muted-foreground"
-        style={{
-          gridTemplateColumns: `${gutterWidth}px minmax(16rem, 1fr) 10rem 7rem`,
-          minWidth: gutterWidth + 528,
-        }}
+      <CommitGraphVirtualWindow
+        ref={viewportRef}
+        scrollRef={scrollRef}
+        commits={commits}
+        snapshot={paging.snapshot}
+        engine={paging.engine}
+        activeOid={activeCommitOid}
+        onPageSize={setPageSize}
       >
-        <span className="px-3">Graph</span>
-        <span>Commit</span>
-        <span>Author</span>
-        <span>Date</span>
-      </div>
-      <div className="relative min-h-0 flex-1">
-        <div
-          aria-activedescendant={
-            activeCommitOid === undefined
-              ? undefined
-              : commitRowId(activeCommitOid)
-          }
-          aria-busy={loading}
-          aria-label="Commit history"
-          aria-multiselectable="false"
-          className="absolute inset-0 overflow-auto focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
-          onKeyDown={handleKeyDown}
-          onScroll={(event) =>
-            setHorizontalOffset(event.currentTarget.scrollLeft)
-          }
-          ref={scrollRef}
-          role="listbox"
-          tabIndex={0}
-        >
-          <div
-            className="relative"
-            role="presentation"
-            style={{
-              height: virtualizer.getTotalSize(),
-              minWidth: gutterWidth + 528,
-            }}
-          >
-            {virtualRows.map((virtualRow) => {
-              const commit = visibleCommits[virtualRow.index];
-              if (commit === undefined) {
-                return null;
-              }
-              const selected = commit.oid === selectedOid;
-              const labels = labelsByOid.get(commit.oid) ?? [];
-              return (
-                <div
-                  aria-label={commitAriaLabel(commit, labels)}
-                  aria-posinset={virtualRow.index + 1}
-                  aria-selected={selected}
-                  aria-setsize={visibleCommits.length}
-                  className={`absolute top-0 left-0 grid w-full cursor-default items-center border-border/40 border-b text-xs ${
-                    selected
-                      ? "bg-primary/12 text-foreground"
-                      : "text-foreground hover:bg-accent/35"
-                  }`}
-                  id={commitRowId(commit.oid)}
-                  key={commit.oid}
-                  onClick={() => {
-                    setSelectedOid(commit.oid);
-                    setActiveOid(commit.oid);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
+        {({
+          viewport,
+          horizontalOffset,
+          verticalOffset,
+          totalHeight,
+          virtualRows,
+          onScroll,
+        }) => (
+          <>
+            <div
+              className="grid h-8 shrink-0 items-center border-border/60 border-b text-[11px] text-muted-foreground"
+              style={{
+                gridTemplateColumns: `${gutterWidth}px minmax(16rem, 1fr) 10rem 7rem`,
+                minWidth: gutterWidth + 528,
+              }}
+            >
+              <span className="px-3">Graph</span>
+              <span>Commit</span>
+              <span>Author</span>
+              <span>Date</span>
+            </div>
+            <div className="relative min-h-0 flex-1">
+              <CommitCommandMenu
+                context={commands.context(menuOid)}
+                registry={commands.registry}
+                execute={commands.execute}
+                shortcuts={shortcuts}
+                tabIndex={0}
+                restoreFocus={() => scrollRef.current?.focus()}
+                refs={(labelsByOid.get(menuOid ?? "") ?? []).flatMap(
+                  (label) => {
+                    const context = refCommandContext(label);
+                    return context === undefined ? [] : [context];
+                  },
+                )}
+              >
+                <table
+                  aria-activedescendant={
+                    activeCommitOid === undefined
+                      ? undefined
+                      : commitRowId(activeCommitOid)
+                  }
+                  aria-busy={loading}
+                  aria-label="Commit history"
+                  aria-multiselectable="true"
+                  aria-colcount={4}
+                  aria-rowcount={
+                    paging.snapshot.hasOlder
+                      ? -1
+                      : paging.snapshot.knownEndOffset
+                  }
+                  className="absolute inset-0 block h-full w-full overflow-auto focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
+                  onKeyDown={handleKeyDown}
+                  onContextMenuCapture={(event) => {
+                    if (
+                      !(event.target instanceof Element) ||
+                      event.target.closest("tr[aria-rowindex]") === null
+                    ) {
                       event.preventDefault();
-                      setSelectedOid(commit.oid);
-                      setActiveOid(commit.oid);
+                      event.stopPropagation();
                     }
                   }}
-                  role="option"
-                  style={{
-                    gridTemplateColumns: `${gutterWidth}px minmax(16rem, 1fr) 10rem 7rem`,
-                    height: virtualRow.size,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                  tabIndex={-1}
+                  onScroll={onScroll}
+                  ref={scrollRef}
+                  role="grid"
+                  style={{ contain: "layout paint" }}
+                  tabIndex={0}
                 >
-                  <span aria-hidden="true" />
-                  <span className="flex min-w-0 items-center gap-2 pr-4">
-                    <span className="min-w-0 truncate">{commit.subject}</span>
-                    <CommitRefLabels labels={labels} />
-                  </span>
-                  <span className="truncate pr-4 text-muted-foreground">
-                    {commit.author.name}
-                  </span>
-                  <time
-                    className="truncate pr-3 text-muted-foreground"
-                    dateTime={new Date(
-                      commit.committer.timestampSeconds * 1_000,
-                    ).toISOString()}
+                  <tbody
+                    className="relative block"
+                    style={{
+                      height: totalHeight,
+                      minWidth: gutterWidth + 528,
+                    }}
                   >
-                    {formatCommitDate(commit.committer.timestampSeconds)}
-                  </time>
+                    {virtualRows.map((virtualRow) => {
+                      const commit = visibleCommits[virtualRow.index];
+                      if (commit === undefined) {
+                        if (
+                          error === undefined ||
+                          virtualRow.index + paging.snapshot.startOffset !==
+                            error.offset
+                        )
+                          return null;
+                        return (
+                          <tr
+                            key={`retry-${error.offset}`}
+                            aria-label="History page unavailable"
+                            className="absolute top-0 left-0 block w-full"
+                            style={{
+                              height: virtualRow.size,
+                              transform: `translateY(${virtualRow.start}px)`,
+                            }}
+                          >
+                            <td colSpan={4} className="block">
+                              <CommitGraphPageRetry
+                                error={error.message}
+                                retry={() => {
+                                  void paging.engine?.retry();
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      }
+                      const selected = navigation.selected.has(commit.oid);
+                      const labels = labelsByOid.get(commit.oid) ?? [];
+                      return (
+                        <tr
+                          key={commit.oid}
+                          aria-label={commitAriaLabel(commit, labels)}
+                          aria-rowindex={
+                            paging.snapshot.startOffset + virtualRow.index + 1
+                          }
+                          aria-expanded={
+                            paging.merges.has(commit.oid)
+                              ? paging.merges.get(commit.oid) === "expanded"
+                              : undefined
+                          }
+                          aria-selected={selected}
+                          className={`absolute top-0 left-0 grid w-full cursor-default items-center border-border/40 border-b text-xs data-[active=true]:outline data-[active=true]:outline-1 data-[active=true]:outline-primary/70 data-[active=true]:outline-offset-[-2px] ${
+                            selected
+                              ? "bg-primary/12 text-foreground"
+                              : "text-foreground hover:bg-accent/35"
+                          }`}
+                          data-active={
+                            navigation.selection.activeOid === commit.oid
+                              ? "true"
+                              : undefined
+                          }
+                          id={commitRowId(commit.oid)}
+                          onClick={(event) => {
+                            navigation.onClick(commit.oid, event);
+                            scrollRef.current?.focus();
+                          }}
+                          onContextMenu={() => {
+                            beginNavigation();
+                            setMenuOid(commit.oid);
+                            navigation.select(
+                              commit.oid,
+                              selected ? "activate" : "replace",
+                            );
+                          }}
+                          onKeyDown={handleKeyDown}
+                          style={{
+                            gridTemplateColumns: `${gutterWidth}px minmax(16rem, 1fr) 10rem 7rem`,
+                            height: virtualRow.size,
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                          tabIndex={-1}
+                        >
+                          <td
+                            role="gridcell"
+                            tabIndex={-1}
+                            aria-label={`${commit.parents.length} parents`}
+                          />
+                          <td
+                            role="gridcell"
+                            tabIndex={-1}
+                            className="flex min-w-0 items-center gap-2 pr-4"
+                          >
+                            <span className="min-w-0 truncate">
+                              {commit.subject}
+                            </span>
+                            <CommitRefLabels
+                              labels={labels}
+                              context={refCommandContext}
+                              registry={commands.registry}
+                              execute={commands.execute}
+                              restoreFocus={() => scrollRef.current?.focus()}
+                            />
+                          </td>
+                          <td
+                            role="gridcell"
+                            tabIndex={-1}
+                            className="truncate pr-4 text-muted-foreground"
+                          >
+                            {commit.author.name}
+                          </td>
+                          <td
+                            role="gridcell"
+                            tabIndex={-1}
+                            className="truncate pr-3 text-muted-foreground"
+                          >
+                            <time
+                              dateTime={new Date(
+                                commit.committer.timestampSeconds * 1_000,
+                              ).toISOString()}
+                            >
+                              {formatCommitDate(
+                                commit.committer.timestampSeconds,
+                              )}
+                            </time>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CommitCommandMenu>
+              {commits.length > 0 ? (
+                <CommitGraphCanvas
+                  height={viewport.height}
+                  horizontalOffset={horizontalOffset}
+                  laneRows={laneRows}
+                  virtualRows={virtualRows}
+                  verticalOffset={verticalOffset}
+                  width={Math.min(gutterWidth, viewport.width)}
+                />
+              ) : null}
+              <CommitGraphMergeControls
+                commits={visibleCommits}
+                horizontalOffset={horizontalOffset}
+                laneRows={laneRows}
+                merges={paging.merges}
+                onToggle={toggleMerge}
+                verticalOffset={verticalOffset}
+                virtualRows={virtualRows}
+              />
+              {loading && commits.length === 0 ? <CommitGraphLoading /> : null}
+              {!loading && error !== undefined && commits.length === 0 ? (
+                <CommitGraphFailure
+                  error={
+                    historySnapshot.error === undefined
+                      ? error.message
+                      : describeRepositoryHistoryError(historySnapshot.error)
+                  }
+                  retry={loadHistory}
+                />
+              ) : null}
+              {!loading && error === undefined && commits.length === 0 ? (
+                <div
+                  className="absolute inset-0 grid place-items-center text-sm text-muted-foreground"
+                  role="status"
+                >
+                  This repository has no commits yet.
                 </div>
-              );
-            })}
-          </div>
-        </div>
-        {commits.length > 0 ? (
-          <CommitGraphCanvas
-            height={viewport.height}
-            horizontalOffset={horizontalOffset}
-            laneRows={laneRows}
-            virtualRows={virtualRows}
-            verticalOffset={virtualizer.scrollOffset ?? 0}
-            width={Math.min(gutterWidth, viewport.width)}
-          />
-        ) : null}
-        <CommitGraphMergeControls
-          commits={visibleCommits}
-          horizontalOffset={horizontalOffset}
-          laneRows={laneRows}
-          merges={visible.merges}
-          onToggle={toggleMerge}
-          verticalOffset={virtualizer.scrollOffset ?? 0}
-          virtualRows={virtualRows}
+              ) : null}
+            </div>
+          </>
+        )}
+      </CommitGraphVirtualWindow>
+      {error !== undefined &&
+      commits.length > 0 &&
+      error.offset < paging.snapshot.endOffset ? (
+        <CommitGraphPageRetry
+          error={error.message}
+          retry={() => {
+            void paging.engine?.retry();
+          }}
         />
-        {loading && commits.length === 0 ? <CommitGraphLoading /> : null}
-        {!loading && error !== undefined ? (
-          <CommitGraphFailure
-            error={describeRepositoryHistoryError(error)}
-            retry={loadHistory}
-          />
-        ) : null}
-        {!loading && error === undefined && commits.length === 0 ? (
-          <div
-            className="absolute inset-0 grid place-items-center text-sm text-muted-foreground"
-            role="status"
-          >
-            This repository has no commits yet.
-          </div>
-        ) : null}
-      </div>
+      ) : null}
+      {loading && commits.length > 0 ? (
+        <p
+          className="m-0 shrink-0 border-border border-t px-3 py-1 text-xs text-muted-foreground"
+          role="status"
+        >
+          Loading history…
+        </p>
+      ) : null}
+      {commands.error === undefined ? null : (
+        <p
+          className="m-0 border-border border-t px-3 py-2 text-xs text-destructive"
+          role="alert"
+        >
+          {commands.error}
+        </p>
+      )}
     </section>
-  );
-}
-
-function HistoryScopeStrip({
-  onRemove,
-  roots,
-  scope,
-  selections,
-}: {
-  readonly onRemove: ((target: RepositoryRefTarget) => void) | undefined;
-  readonly roots: readonly RepositoryHistoryRefTarget[];
-  readonly scope: HistoryScope;
-  readonly selections: readonly RepositoryRefTarget[];
-}) {
-  const detachedHead = roots.find((root) => root.type === "head");
-  return (
-    <fieldset className="flex min-h-9 shrink-0 flex-wrap items-center gap-1.5 border-border/60 border-b bg-muted/20 px-3 py-1">
-      <legend className="sr-only">{scope._tag} history scope</legend>
-      <span className="mr-1 text-[10px] text-muted-foreground">Showing</span>
-      {selections.map((selection) => (
-        <span
-          className="inline-flex h-6 max-w-64 items-center gap-1 rounded-sm border border-border/70 bg-background/60 px-2 text-[11px] text-foreground"
-          key={scopeSelectionKey(selection)}
-        >
-          <span className="truncate">{scopeSelectionName(selection)}</span>
-          {onRemove === undefined ? null : (
-            <button
-              aria-label={`Remove ${scopeSelectionName(selection)} from history`}
-              className="-mr-1 grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-primary/70"
-              onClick={() => onRemove(selection)}
-              type="button"
-            >
-              <IconX aria-hidden="true" className="size-3" />
-            </button>
-          )}
-        </span>
-      ))}
-      {selections.length === 0 && detachedHead !== undefined ? (
-        <span className="inline-flex h-6 items-center rounded-sm border border-border/70 bg-background/60 px-2 text-[11px] text-foreground">
-          Detached HEAD
-        </span>
-      ) : null}
-      {selections.length === 0 && detachedHead === undefined ? (
-        <span className="text-[11px] text-muted-foreground">No refs</span>
-      ) : null}
-    </fieldset>
-  );
-}
-
-function CommitRefLabels({
-  labels,
-}: {
-  readonly labels: readonly RepositoryHistoryRefTarget[];
-}) {
-  if (labels.length === 0) return null;
-  return (
-    <span className="flex min-w-0 shrink items-center gap-1 overflow-hidden">
-      {labels.map((label) => (
-        <span
-          className={`max-w-40 truncate rounded-sm border px-1.5 py-0.5 font-mono text-[9px] leading-none ${
-            label.type === "tag"
-              ? "border-status-connecting/35 bg-status-connecting/10 text-status-connecting"
-              : "border-primary/30 bg-primary/8 text-foreground"
-          }`}
-          key={`${label.type}\0${label.name}`}
-        >
-          {label.name}
-        </span>
-      ))}
-    </span>
   );
 }
 
@@ -590,58 +652,6 @@ function groupRefLabels(refs: readonly RepositoryHistoryRefTarget[]) {
     else current.push(ref);
   }
   return labels;
-}
-
-function scopeSelectionName(selection: RepositoryRefTarget) {
-  return selection._tag === "RemoteBranch"
-    ? `${selection.remote}/${selection.name}`
-    : selection.name;
-}
-
-function scopeSelectionKey(selection: RepositoryRefTarget) {
-  return `${selection._tag}\0${scopeSelectionName(selection)}`;
-}
-
-function CommitGraphLoading() {
-  return (
-    <div
-      aria-label="Loading commit history"
-      className="pointer-events-none absolute inset-0 bg-repository"
-      role="status"
-    >
-      {loadingRowIds.map((rowId) => (
-        <div
-          className="grid h-9 grid-cols-[4rem_minmax(12rem,1fr)_10rem_7rem] items-center border-border/40 border-b px-3"
-          key={rowId}
-        >
-          <span className="h-px w-7 bg-border" />
-          <span className="h-2 w-2/5 rounded-sm bg-muted" />
-          <span className="h-2 w-20 rounded-sm bg-muted" />
-          <span className="h-2 w-12 rounded-sm bg-muted" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CommitGraphFailure({
-  error,
-  retry,
-}: {
-  readonly error: string;
-  readonly retry: () => void;
-}) {
-  return (
-    <div
-      className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center"
-      role="alert"
-    >
-      <p className="m-0 max-w-md text-sm text-muted-foreground">{error}</p>
-      <Button onClick={retry} size="sm" variant="outline">
-        Retry
-      </Button>
-    </div>
-  );
 }
 
 function commitAriaLabel(
@@ -665,14 +675,15 @@ function shortOid(oid: string) {
 }
 
 function viewportAnchor(
-  element: HTMLDivElement | null,
+  element: HTMLElement | null,
   commits: readonly RepositoryCommit[],
+  startOffset = 0,
 ): ViewportAnchor | undefined {
   if (element === null || element.scrollTop <= 0) {
     return undefined;
   }
   const index = Math.floor(element.scrollTop / rowHeight);
-  const commit = commits[index];
+  const commit = commits[index - startOffset];
   return commit === undefined
     ? undefined
     : { oid: commit.oid, offset: element.scrollTop - index * rowHeight };

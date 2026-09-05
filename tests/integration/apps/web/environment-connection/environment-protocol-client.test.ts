@@ -36,6 +36,7 @@ describe("browser Environment protocol client", () => {
       });
       expect(connection.negotiated).toMatchObject({
         _tag: "HelloAccepted",
+        accessCapabilities: ["environment.read"],
         environmentId,
       });
 

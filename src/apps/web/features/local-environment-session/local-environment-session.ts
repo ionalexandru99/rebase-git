@@ -171,6 +171,8 @@ function maintainConnection(
                   publish({
                     _tag: "Connected",
                     environmentId: active.negotiated.environmentId,
+                    accessCapabilities:
+                      active.negotiated.accessCapabilities ?? [],
                   }),
                 ),
                 Effect.andThen(
