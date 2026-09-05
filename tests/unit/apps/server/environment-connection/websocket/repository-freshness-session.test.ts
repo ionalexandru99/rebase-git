@@ -55,7 +55,7 @@ describe("repository freshness session", () => {
           new Promise<void>((resolve) => {
             finish = resolve;
           }),
-      ).pipe(Effect.as(fixture.release)),
+      ).pipe(Effect.as(Effect.sync(fixture.release))),
     );
     await withSession(fixture, ["repository.read"], async (handle) => {
       await handle({
@@ -95,7 +95,7 @@ function createFixture() {
   const release = vi.fn();
   const service = {
     subscribe: vi.fn<RepositoryFreshnessService["subscribe"]>(() =>
-      Effect.succeed(release),
+      Effect.succeed(Effect.sync(release)),
     ),
     fetch: vi.fn<RepositoryFreshnessService["fetch"]>(() =>
       Effect.die("unused"),

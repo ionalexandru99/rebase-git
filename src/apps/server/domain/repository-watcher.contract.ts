@@ -1,4 +1,4 @@
-import type { Effect } from "effect";
+import { Context, type Effect } from "effect";
 
 export interface RepositoryWatchHandle {
   readonly close: () => void;
@@ -10,3 +10,8 @@ export interface RepositoryWatcher {
     onChange: () => void,
   ) => Effect.Effect<RepositoryWatchHandle>;
 }
+
+export class RepositoryWatching extends Context.Service<
+  RepositoryWatching,
+  RepositoryWatcher
+>()("RepositoryWatching") {}

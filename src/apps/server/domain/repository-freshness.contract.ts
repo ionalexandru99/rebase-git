@@ -2,7 +2,7 @@ import type {
   RepositoryFetchSetting,
   RepositoryFreshness,
 } from "@rebase/contracts";
-import type { Effect } from "effect";
+import { Context, type Effect } from "effect";
 import type { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 
 export interface RepositoryFreshnessService {
@@ -10,7 +10,7 @@ export interface RepositoryFreshnessService {
     repositoryId: string,
     publish: (freshness: RepositoryFreshness) => void,
     authorization?: { readonly automaticFetch: boolean },
-  ) => Effect.Effect<() => void, RepositoryHistoryError>;
+  ) => Effect.Effect<Effect.Effect<void>, RepositoryHistoryError>;
   readonly fetch: (
     repositoryId: string,
   ) => Effect.Effect<RepositoryFreshness, RepositoryHistoryError>;
@@ -19,3 +19,8 @@ export interface RepositoryFreshnessService {
     setting: RepositoryFetchSetting,
   ) => Effect.Effect<RepositoryFreshness, RepositoryHistoryError>;
 }
+
+export class RepositoryFreshnessState extends Context.Service<
+  RepositoryFreshnessState,
+  RepositoryFreshnessService
+>()("RepositoryFreshnessState") {}

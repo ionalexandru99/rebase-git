@@ -7,7 +7,7 @@ import type { RepositoryFreshnessService } from "#server/domain/repository-fresh
 import type { EnvironmentWebSocketWriter } from "#server/features/environment-connection/websocket/environment-websocket-writer.contract";
 
 interface Subscription {
-  release?: () => void;
+  release?: Effect.Effect<void>;
 }
 
 export function acquireRepositoryFreshnessSession(
@@ -28,9 +28,10 @@ export function acquireRepositoryFreshnessSession(
     });
   const handle = (message: RepositoryFreshnessClientMessage) => {
     if (message._tag === "UnsubscribeRepositoryHistory") {
-      return Effect.sync(() => {
-        subscriptions.get(message.repositoryId)?.release?.();
+      return Effect.suspend(() => {
+        const release = subscriptions.get(message.repositoryId)?.release;
         subscriptions.delete(message.repositoryId);
+        return release ?? Effect.void;
       });
     }
     if (
@@ -89,13 +90,14 @@ export function acquireRepositoryFreshnessSession(
             )
             .pipe(
               Effect.tap((release) =>
-                Effect.sync(() => {
+                Effect.suspend(() => {
                   if (
                     closed ||
                     subscriptions.get(message.repositoryId) !== subscription
                   )
-                    release();
+                    return release;
                   else subscription.release = release;
+                  return Effect.void;
                 }),
               ),
               Effect.catch((error) => {
@@ -154,11 +156,13 @@ export function acquireRepositoryFreshnessSession(
     });
   };
   return Effect.acquireRelease(Effect.succeed(handle), () =>
-    Effect.sync(() => {
+    Effect.suspend(() => {
       closed = true;
-      for (const subscription of subscriptions.values())
-        subscription.release?.();
+      const releases = [...subscriptions.values()].flatMap((subscription) =>
+        subscription.release === undefined ? [] : [subscription.release],
+      );
       subscriptions.clear();
+      return Effect.all(releases, { discard: true });
     }),
   );
 }

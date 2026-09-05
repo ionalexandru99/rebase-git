@@ -1,4 +1,4 @@
-import { Data, type Effect } from "effect";
+import { Context, Data, type Effect } from "effect";
 
 export interface GitCommand {
   readonly arguments: readonly string[];
@@ -29,6 +29,11 @@ export type GitCommandFailureReason =
   | "Timeout"
   | "OutputTooLarge"
   | "Failed";
+
+export class GitCommands extends Context.Service<
+  GitCommands,
+  GitCommandRunner
+>()("GitCommands") {}
 
 export class GitCommandError extends Data.TaggedError("GitCommandError")<{
   readonly cause?: unknown;
