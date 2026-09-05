@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import type { EnvironmentFilesystem } from "#server/domain/environment-filesystem.contract";
 import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
+import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
 import type { RepositoryHistoryService } from "#server/domain/repository-history.contract";
 import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
@@ -38,5 +39,6 @@ export interface EnvironmentListenerOptions {
   readonly port?: number;
   readonly productVersion: string;
   readonly history?: RepositoryHistoryService;
+  readonly freshness?: RepositoryFreshnessService;
   readonly refs?: RepositoryRefsService;
 }

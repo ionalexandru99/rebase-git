@@ -1,4 +1,4 @@
-import { type FSWatcher, watch } from "node:fs";
+import { type FSWatcher, realpathSync, watch } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
 import type {
@@ -11,6 +11,7 @@ const watchedRootEntries = new Set([
   "packed-refs",
   "refs",
   "worktrees",
+  "logs",
 ]);
 const recursiveEntries = ["refs", "worktrees"] as const;
 
@@ -31,14 +32,50 @@ function watchGitDirectory(
     const watcher = tryWatch(join(gitDirectory, entry), true, () => onChange());
     if (watcher !== undefined) watchers.set(entry, watcher);
   };
+  const removeWatcher = (entry: string) => {
+    watchers.get(entry)?.close();
+    watchers.delete(entry);
+  };
+  const watchStashes = (replace?: "logs" | "logs/refs") => {
+    if (replace === "logs") removeWatcher("logs");
+    if (replace !== undefined) removeWatcher("logs/refs");
+    if (!watchers.has("logs")) {
+      const logs = tryWatch(join(gitDirectory, "logs"), false, (fileName) => {
+        if (fileName === undefined || fileName === "refs") {
+          watchStashes("logs/refs");
+          onChange();
+        }
+      });
+      if (logs !== undefined) watchers.set("logs", logs);
+    }
+    if (!watchers.has("logs/refs")) {
+      const refs = tryWatch(
+        join(gitDirectory, "logs", "refs"),
+        false,
+        (fileName) => {
+          if (
+            fileName === undefined ||
+            fileName === "stash" ||
+            fileName === "stash.lock"
+          )
+            onChange();
+        },
+      );
+      if (refs !== undefined) watchers.set("logs/refs", refs);
+    }
+  };
   const root = tryWatch(gitDirectory, false, (fileName) => {
-    if (fileName === undefined || !watchedRootEntries.has(fileName)) return;
-    if (fileName === "refs" || fileName === "worktrees")
+    if (fileName !== undefined && !watchedRootEntries.has(fileName)) return;
+    if (fileName === "refs" || fileName === "worktrees") {
+      removeWatcher(fileName);
       watchRecursively(fileName);
+    }
+    if (fileName === undefined || fileName === "logs") watchStashes("logs");
     onChange();
   });
   if (root !== undefined) watchers.set(".", root);
   for (const entry of recursiveEntries) watchRecursively(entry);
+  watchStashes();
 
   return {
     close: () => {
@@ -55,7 +92,7 @@ function tryWatch(
 ) {
   try {
     const watcher = watch(
-      path,
+      realpathSync.native(path),
       { persistent: false, recursive },
       (_, fileName) => listener(fileName === null ? undefined : fileName),
     );

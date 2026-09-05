@@ -79,6 +79,11 @@ describe("Environment protocol compatibility", () => {
       _tag: "HelloAccepted",
       capabilities: [
         {
+          introducedInMinor: 3,
+          name: "repository-history-freshness",
+          version: 1,
+        },
+        {
           introducedInMinor: 0,
           name: "environment-events",
           version: 1,
