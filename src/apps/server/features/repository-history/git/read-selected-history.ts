@@ -4,7 +4,7 @@ import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import { gitHistoryFormat } from "#server/features/repository-history/git/parse-git-history";
 
-const maximumHistoryOutputBytes = 8 * 1_048_576;
+export const maximumHistoryOutputBytes = 8 * 1_048_576;
 const maximumParentLineCharacters = 1_048_576;
 
 export function readSelectedHistory(

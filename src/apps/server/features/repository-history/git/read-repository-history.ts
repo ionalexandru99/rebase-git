@@ -9,13 +9,15 @@ import {
   gitHistoryFormat,
   parseGitHistory,
 } from "#server/features/repository-history/git/parse-git-history";
-import { readSelectedHistory } from "#server/features/repository-history/git/read-selected-history";
+import {
+  maximumHistoryOutputBytes,
+  readSelectedHistory,
+} from "#server/features/repository-history/git/read-selected-history";
 import {
   readShallowHistoryOids,
   restoreShallowCommitParents,
 } from "#server/features/repository-history/git/shallow-repository-history";
 
-const maximumHistoryOutputBytes = 8 * 1_048_576;
 const historyTimeoutMilliseconds = 30_000;
 
 export function readRepositoryHistory(
