@@ -68,10 +68,11 @@ function watchGitDirectory(
   };
   const root = tryWatch(gitDirectory, false, (fileName) => {
     if (fileName !== undefined && !watchedRootEntries.has(fileName)) return;
-    if (fileName === "refs" || fileName === "worktrees") {
-      removeWatcher(fileName);
-      watchRecursively(fileName);
-    }
+    for (const entry of recursiveEntries)
+      if (fileName === undefined || fileName === entry) {
+        removeWatcher(entry);
+        watchRecursively(entry);
+      }
     if (fileName === undefined || fileName === "logs") watchStashes("logs");
     onChange();
   });

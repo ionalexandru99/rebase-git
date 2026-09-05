@@ -24,7 +24,7 @@ export function watchGitDirectoryTree(
     if (directory) attach(path);
     else if (watchers.has(path)) remove(path);
   };
-  const refresh = (directory: string) => {
+  const refresh = (directory: string, replaced = false) => {
     try {
       const children = new Set(
         readdirSync(directory, { withFileTypes: true })
@@ -34,7 +34,10 @@ export function watchGitDirectoryTree(
       for (const path of watchers.keys()) {
         if (path.startsWith(`${directory}${sep}`)) {
           const child = path.slice(directory.length + 1).split(sep)[0];
-          if (child !== undefined && !children.has(join(directory, child)))
+          if (
+            replaced ||
+            (child !== undefined && !children.has(join(directory, child)))
+          )
             remove(path);
         }
       }
@@ -49,9 +52,9 @@ export function watchGitDirectoryTree(
     try {
       watcher = watch(directory, { persistent: false }, (event, name) => {
         if (watchers.get(directory) !== watcher) return;
-        onChange();
-        if (name === null) refresh(directory);
+        if (name === null) refresh(directory, true);
         else refreshChild(join(directory, name), event === "rename");
+        onChange();
       });
     } catch {
       return;
