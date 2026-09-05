@@ -1281,6 +1281,15 @@ describe("browser repository history reader", () => {
             repositoryId,
             gateway: firstGateway,
           });
+          await connectedReader.getRefTargets();
+          for (let read = 0; read < 3; read += 1) {
+            await reopened.read({
+              limit: 100,
+              order: "topological",
+              roots: [main],
+            });
+            await reopened.getRefTargets();
+          }
           await expect(
             connectedReader.read({
               limit: 100,

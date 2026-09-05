@@ -88,6 +88,7 @@ function connectReader(
     replica.cachePaused = true;
   const reader: ConnectedReader = {
     closed: false,
+    offline: false,
     connection,
     epoch: new RepositoryHistoryEpoch(),
     queries: new Map(),
@@ -503,7 +504,8 @@ async function handleReaderMessage(
         return;
       }
       replica.synchronization = replica.reconciling ? "stale" : "idle";
-      replica.reconciled = message.failure._tag === "Offline";
+      reader.offline = message.failure._tag === "Offline";
+      replica.reconciled = reader.offline;
       replica.storingCommits = false;
       replica.reconciling = false;
       delete replica.synchronizationOwner;
@@ -547,6 +549,7 @@ async function handleReaderMessage(
       });
       return;
     case "ReconcileHistory":
+      reader.offline = false;
       replica.needsReconciliation = true;
       if (replica.synchronization !== "syncing") {
         await startSynchronization(reader, replica);
@@ -584,7 +587,9 @@ function closeReader(reader: ConnectedReader, replica: RepositoryReplica) {
       `${reader.connection.environmentId}\0${reader.connection.logicalRepositoryId}`,
     );
   } else if (ownedSynchronization && replica.synchronization !== "complete") {
-    const replacement = replica.readers.values().next().value;
+    const replacement = [...replica.readers].find(
+      (candidate) => !candidate.offline,
+    );
     if (replacement !== undefined) {
       void startSynchronization(replacement, replica).catch((error) => {
         replica.failure = workerFailure(error);
@@ -713,6 +718,7 @@ async function startSynchronization(
 ) {
   if (
     reader.closed ||
+    reader.offline ||
     replica.cachePaused ||
     replica.storageExhausted ||
     replica.synchronization === "syncing"
@@ -1116,6 +1122,7 @@ interface ConnectedReader {
   stopWatchingLease: () => void;
   search?: { readonly requestId: string; readonly controller: AbortController };
   closed: boolean;
+  offline: boolean;
   lastQuery?: RepositoryHistoryQuery;
   readonly connection: ConnectRepositoryHistoryReader;
   readonly epoch: RepositoryHistoryEpoch;
