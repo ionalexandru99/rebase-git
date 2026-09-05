@@ -50,6 +50,24 @@ export async function locateRepositoryHistoryCommits(
 ): Promise<readonly RepositoryHistoryPosition[]> {
   if (oids.length > 1_000) throw new Error("Query is too large");
   if (oids.length === 0) return [];
+  const revision = cache.revision;
+  const roots = normalizedOids(query.roots.map(({ oid }) => oid));
+  const key = historyOrderScopeKey(query);
+  const previous = cache.queries.get(key);
+  if (
+    !previous?.complete ||
+    previous.basis !== JSON.stringify([revision, roots])
+  ) {
+    const known = await locateCachedHistoryPrefix(
+      environmentId,
+      repositoryId,
+      roots,
+      key,
+      oids,
+    );
+    if (cache.revision !== revision) return [];
+    if (known !== undefined) return known;
+  }
   const ordered = await resolveRepositoryHistoryOrder(
     environmentId,
     repositoryId,
@@ -57,6 +75,44 @@ export async function locateRepositoryHistoryCommits(
     cache,
   );
   if (ordered === undefined) return [];
+  return locateInHistoryOrder(ordered, oids);
+}
+
+async function locateCachedHistoryPrefix(
+  environmentId: string,
+  repositoryId: string,
+  roots: readonly string[],
+  scopeKey: string,
+  oids: readonly string[],
+) {
+  return withRepositoryHistoryDatabase(
+    globalThis.indexedDB,
+    async (database) => {
+      const transaction = database.transaction(repositoryStoreName, "readonly");
+      const completed = transactionCompleted(transaction);
+      const repository = await requestResult<StoredRepository | undefined>(
+        transaction
+          .objectStore(repositoryStoreName)
+          .get(repositoryKey(environmentId, repositoryId)),
+      );
+      await completed;
+      const page = repository?.cachedPage;
+      if (
+        page?.offset !== 0 ||
+        page.scopeKey !== scopeKey ||
+        !sameOids(roots, page.rootOids)
+      )
+        return undefined;
+      const known = locateInHistoryOrder(page.oids, oids);
+      return known.length === new Set(oids).size ? known : undefined;
+    },
+  );
+}
+
+function locateInHistoryOrder(
+  ordered: readonly string[],
+  oids: readonly string[],
+) {
   const remaining = new Set(oids);
   const result: RepositoryHistoryPosition[] = [];
   for (
@@ -187,7 +243,8 @@ export function readRepositoryHistory(
     if (
       cachedPage !== undefined &&
       (query.ancestry !== "first-parent" ||
-        repository.completion === undefined) &&
+        repository.completion === undefined ||
+        (cachedPage.offset === 0 && cachedPage.scopeKey === key)) &&
       (previous === undefined ||
         (!previous.complete && previous.basis === basis))
     ) {

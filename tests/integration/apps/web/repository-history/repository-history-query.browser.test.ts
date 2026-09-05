@@ -252,6 +252,91 @@ describe("local ordered history pages", () => {
     }
   });
 
+  it("keeps an applied first-parent prefix usable while the complete index is cold", async () => {
+    const fixture = await seed("main", false);
+    const query = {
+      roots: [root("main", "merge")],
+      order: "chronological" as const,
+      ancestry: "first-parent" as const,
+      limit: 2,
+    };
+    await storeRepositoryHistoryPage(
+      fixture.environmentId,
+      fixture.repositoryId,
+      {
+        repositoryId: fixture.repositoryId,
+        requestId: crypto.randomUUID(),
+        objectFormat: "sha1",
+        refTargets: query.roots,
+        commits: fixture.commits.filter(({ subject }) =>
+          ["merge", "left"].includes(subject),
+        ),
+      },
+      query,
+    );
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    try {
+      expect(
+        (
+          await readRepositoryHistory(
+            fixture.environmentId,
+            fixture.repositoryId,
+            query,
+            indexedDB,
+            cache,
+          )
+        )?.map(({ subject }) => subject),
+      ).toEqual(["merge", "left"]);
+      expect(
+        await locateRepositoryHistoryCommits(
+          fixture.environmentId,
+          fixture.repositoryId,
+          query,
+          [oid("left"), oid("merge"), oid("left")],
+          { queries: new Map(), revision: 0 },
+        ),
+      ).toEqual([
+        { oid: oid("merge"), index: 0 },
+        { oid: oid("left"), index: 1 },
+      ]);
+      expect(reads).not.toHaveBeenCalled();
+      expect(
+        await locateRepositoryHistoryCommits(
+          fixture.environmentId,
+          fixture.repositoryId,
+          query,
+          [oid("base")],
+          cache,
+        ),
+      ).toEqual([{ oid: oid("base"), index: 2 }]);
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it("does not treat an all-ancestry page as an applied complete first-parent prefix", async () => {
+    const fixture = await seed("main", false);
+    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    try {
+      const page = await readRepositoryHistory(
+        fixture.environmentId,
+        fixture.repositoryId,
+        {
+          roots: [root("main", "merge")],
+          order: "chronological",
+          ancestry: "first-parent",
+          limit: 2,
+        },
+      );
+      expect(page?.map(({ subject }) => subject)).toEqual(["merge", "left"]);
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
   it("does not publish a cold query after its stored generation changes", async () => {
     const fixture = await seed("main", false);
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
