@@ -9,6 +9,7 @@ import {
   RepositoryRemoved,
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import { requestEnvironmentJson } from "#web/features/environment-connection/http/environment-http-json";
 import {
   RepositoryCatalogRejected,
@@ -17,7 +18,7 @@ import {
 
 export function listEnvironmentRepositoriesEffect(
   origin: string,
-  credential: string,
+  credential: EnvironmentCredential,
 ) {
   return requestRepositoryCatalog(
     origin,
@@ -31,7 +32,7 @@ export function listEnvironmentRepositoriesEffect(
 
 export function rememberEnvironmentRepositoryEffect(
   origin: string,
-  credential: string,
+  credential: EnvironmentCredential,
   path: string,
 ) {
   return requestRepositoryCatalog(
@@ -47,7 +48,7 @@ export function rememberEnvironmentRepositoryEffect(
 
 export function recordEnvironmentRepositoryOpenedEffect(
   origin: string,
-  credential: string,
+  credential: EnvironmentCredential,
   repositoryId: string,
 ) {
   return requestRepositoryCatalog(
@@ -63,7 +64,7 @@ export function recordEnvironmentRepositoryOpenedEffect(
 
 export function removeEnvironmentRepositoryEffect(
   origin: string,
-  credential: string,
+  credential: EnvironmentCredential,
   repositoryId: string,
 ) {
   return requestRepositoryCatalog(
@@ -84,7 +85,7 @@ function requestRepositoryCatalog<
   origin: string,
   path: string,
   method: string,
-  credential: string,
+  credential: EnvironmentCredential,
   successSchema: S,
   failureSchema: F,
   body?: string,

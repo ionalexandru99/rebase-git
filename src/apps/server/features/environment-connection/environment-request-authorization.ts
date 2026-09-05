@@ -3,6 +3,7 @@ import { isIPv4 } from "node:net";
 import type { EnvironmentAuthorizationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
 import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
+import { readBrowserSessionCredential } from "#server/features/environment-authorization/http/environment-session-cookie";
 
 export function validateRequestHost(request: IncomingMessage) {
   const expectedHost = listeningHost(request);
@@ -16,7 +17,12 @@ export function validateRequestOrigin(
   required: boolean,
 ) {
   const origin = request.headers.origin;
-  if (origin === undefined && !required) {
+  const cookieWrite =
+    request.method !== "GET" &&
+    request.method !== "HEAD" &&
+    readBearerCredential(request) === undefined &&
+    readBrowserSessionCredential(request) !== undefined;
+  if (origin === undefined && !required && !cookieWrite) {
     return Effect.void;
   }
   return origin === expectedRequestOrigin(request)
@@ -48,6 +54,12 @@ export function readBearerCredential(request: IncomingMessage) {
   return authorization?.startsWith("Bearer ")
     ? authorization.slice("Bearer ".length)
     : undefined;
+}
+
+export function readRequestCredential(request: IncomingMessage) {
+  return request.headers.authorization === undefined
+    ? readBrowserSessionCredential(request)
+    : readBearerCredential(request);
 }
 
 export function authorizationFailureStatus(

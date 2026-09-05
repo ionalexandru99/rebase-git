@@ -11,6 +11,7 @@ import {
   EnvironmentResponseError,
   environmentResponseError,
 } from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import {
   fetchEnvironmentDiscovery,
@@ -45,7 +46,7 @@ export function connectCurrentEnvironment(
   origin: string,
   productVersion: string,
   options: {
-    readonly credential: string;
+    readonly credential: EnvironmentCredential;
     readonly lastObservedSequence?: number;
     readonly signal?: AbortSignal;
   },
@@ -65,7 +66,7 @@ export function connectCurrentEnvironmentEffect(
   origin: string,
   productVersion: string,
   options: {
-    readonly credential: string;
+    readonly credential: EnvironmentCredential;
     readonly lastObservedSequence?: number;
   },
 ) {
@@ -79,7 +80,7 @@ function openCurrentEnvironmentConnection(
   origin: string,
   productVersion: string,
   options: {
-    readonly credential: string;
+    readonly credential: EnvironmentCredential;
     readonly lastObservedSequence?: number;
   },
   signal?: AbortSignal,
@@ -103,7 +104,7 @@ export function connectEnvironment(
   origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
-  credential: string,
+  credential: EnvironmentCredential,
   signal?: AbortSignal,
 ): Promise<EnvironmentProtocolConnection> {
   return Effect.runPromise(
@@ -116,7 +117,7 @@ export function connectEnvironmentEffect(
   origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
-  credential: string,
+  credential: EnvironmentCredential,
 ) {
   return Effect.acquireRelease(
     openEnvironmentConnection(origin, discovery, hello, credential),
@@ -128,7 +129,7 @@ function openEnvironmentConnection(
   origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
-  credential: string,
+  credential: EnvironmentCredential,
   signal?: AbortSignal,
 ) {
   return startEnvironmentConnection(
@@ -151,7 +152,7 @@ function startEnvironmentConnection(
   origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
-  credential: string,
+  credential: EnvironmentCredential,
   externalSignal?: AbortSignal,
 ) {
   return Effect.gen(function* () {
@@ -210,7 +211,7 @@ function runEnvironmentConnection(
   origin: string,
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
-  credential: string,
+  credential: EnvironmentCredential,
   signal: AbortSignal,
   closeController: AbortController,
   connected: Deferred.Deferred<

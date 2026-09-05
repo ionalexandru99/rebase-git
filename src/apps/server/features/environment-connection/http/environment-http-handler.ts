@@ -35,7 +35,7 @@ import type {
 } from "#server/features/environment-connection/environment-connection.contract";
 import {
   authorizationFailureStatus,
-  readBearerCredential,
+  readRequestCredential,
   validateRequestHost,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
@@ -178,7 +178,7 @@ function respondToEnvironmentRequest(
       yield* requireEmptyBody(body);
       yield* validateRequestOrigin(request, false);
       yield* authorization.authorize(
-        readBearerCredential(request),
+        readRequestCredential(request),
         "environment.read",
       );
       writeJson(

@@ -190,12 +190,13 @@ async function pair(
   const pairing = await Effect.runPromise(
     authorization.createPairing({ capabilities: [], role }),
   );
-  return (
+  const exchanged = (
     await exchangeEnvironmentPairing(origin, {
       label: `${role} browser`,
       pairingMaterial: pairing.material,
     })
   ).credential;
+  return { type: "bearer" as const, value: exchanged };
 }
 
 async function createRepository(path: string) {

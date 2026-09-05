@@ -5,6 +5,7 @@ import type {
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import type { RepositoryRefsClientError } from "#web/features/repository-refs/repository-refs-client.contract";
 
 export type RepositoryRefsControllerStatus =
@@ -49,11 +50,11 @@ export interface RepositoryRefsController {
 
 export interface RepositoryRefsGateway {
   readonly checkout: (
-    credential: string,
+    credential: EnvironmentCredential,
     command: CheckoutRepositoryRef,
   ) => Effect.Effect<RepositoryCheckedOut, RepositoryRefsClientError>;
   readonly read: (
-    credential: string,
+    credential: EnvironmentCredential,
     repositoryId: string,
   ) => Effect.Effect<RepositoryRefs, RepositoryRefsClientError>;
 }

@@ -17,10 +17,13 @@ describe("repository catalog controller", () => {
     catalog.controller.subscribe(listener);
     const idle = catalog.controller.getSnapshot();
 
-    catalog.authorize("private-credential");
+    catalog.authorize({ type: "bearer", value: "private-credential" });
     await catalog.controller.refresh();
 
-    expect(gateway.list).toHaveBeenCalledWith("private-credential");
+    expect(gateway.list).toHaveBeenCalledWith({
+      type: "bearer",
+      value: "private-credential",
+    });
     expect(idle).toEqual({ repositories: [], status: "idle" });
     expect(catalog.controller.getSnapshot()).toEqual({
       repositories: [repository("alpha"), repository("bravo")],
@@ -37,7 +40,7 @@ describe("repository catalog controller", () => {
       remembered: alpha,
     });
     const catalog = createRepositoryCatalogController(gateway);
-    catalog.authorize("private-credential");
+    catalog.authorize({ type: "bearer", value: "private-credential" });
 
     await catalog.controller.remember(alpha.path);
     expect(catalog.controller.getSnapshot().repositories).toEqual([alpha]);
@@ -68,7 +71,7 @@ describe("repository catalog controller", () => {
     const alpha = repository("alpha");
     const gateway = createGateway({ list: [alpha] });
     const catalog = createRepositoryCatalogController(gateway);
-    catalog.authorize("private-credential");
+    catalog.authorize({ type: "bearer", value: "private-credential" });
     await catalog.controller.refresh();
     gateway.list.mockReturnValueOnce(
       Effect.fail(new RepositoryCatalogResponseError()),

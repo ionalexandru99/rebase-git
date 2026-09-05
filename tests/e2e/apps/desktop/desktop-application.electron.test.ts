@@ -48,6 +48,20 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
     const application = await launchApplication(environment);
     try {
       const window = await connectedWindow(application);
+      const credential = await window.evaluate(() =>
+        globalThis.window.rebaseHost?.getEnvironmentCredential(),
+      );
+      expect(credential).toMatch(/^rebase\.v1\./);
+      await window.reload();
+      await expect(window.getByRole("status")).toHaveAttribute(
+        "data-connection-state",
+        "Connected",
+      );
+      expect(
+        await window.evaluate(() =>
+          globalThis.window.rebaseHost?.getEnvironmentCredential(),
+        ),
+      ).toBe(credential);
       await openRepository(window, "rebase-test");
       const commit = window
         .getByRole("grid", { name: "Commit history" })

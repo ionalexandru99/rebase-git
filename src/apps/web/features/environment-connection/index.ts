@@ -1,3 +1,4 @@
+export type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 export {
   connectCurrentEnvironment,
   connectCurrentEnvironmentEffect,

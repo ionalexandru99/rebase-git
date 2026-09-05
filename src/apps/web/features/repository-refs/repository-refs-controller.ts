@@ -1,5 +1,6 @@
 import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import { applyRepositoryCheckout } from "#web/features/repository-refs/apply-repository-checkout";
 import {
   RepositoryRefsRejected,
@@ -23,7 +24,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   const listeners = new Set<() => void>();
   const cache = new Map<string, RepositoryRefs>();
   const stale = new Set<string>();
-  let credential: string | undefined;
+  let credential: EnvironmentCredential | undefined;
   let snapshot = idleSnapshot;
   const loading = new Map<string, Promise<void>>();
   let checkoutInFlight = false;
@@ -165,7 +166,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   };
 
   return {
-    authorize: (nextCredential: string) => {
+    authorize: (nextCredential: EnvironmentCredential) => {
       credential = nextCredential;
     },
     controller,

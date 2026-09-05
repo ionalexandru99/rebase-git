@@ -19,7 +19,7 @@ describe("repository refs controller", () => {
       [bravoId]: refs(bravoId),
     });
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.select(alphaId);
     await whenReady(session.controller);
     gateway.read.mockReturnValueOnce(
@@ -41,7 +41,7 @@ describe("repository refs controller", () => {
     session.controller.select(alphaId);
     await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(4));
     expect(gateway.read).toHaveBeenLastCalledWith(
-      "private-credential",
+      { type: "bearer", value: "private-credential" },
       alphaId,
     );
   });
@@ -54,7 +54,7 @@ describe("repository refs controller", () => {
     });
     gateway.read.mockImplementationOnce(() => Deferred.await(pending));
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.select(alphaId);
     session.controller.select(bravoId);
     await whenReady(session.controller);
@@ -65,7 +65,7 @@ describe("repository refs controller", () => {
     session.controller.select(alphaId);
     await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(3));
     expect(gateway.read).toHaveBeenLastCalledWith(
-      "private-credential",
+      { type: "bearer", value: "private-credential" },
       alphaId,
     );
   });
@@ -76,7 +76,7 @@ describe("repository refs controller", () => {
       [bravoId]: refs(bravoId),
     });
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.select(alphaId);
     await whenReady(session.controller);
     session.controller.select(bravoId);
@@ -89,7 +89,7 @@ describe("repository refs controller", () => {
     session.controller.select(alphaId);
     await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(3));
     expect(gateway.read).toHaveBeenLastCalledWith(
-      "private-credential",
+      { type: "bearer", value: "private-credential" },
       alphaId,
     );
   });
@@ -97,7 +97,7 @@ describe("repository refs controller", () => {
   it("loads refs for the selected repository with its private credential", async () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
 
     session.controller.select(alphaId);
     expect(session.controller.getSnapshot()).toEqual({
@@ -107,7 +107,10 @@ describe("repository refs controller", () => {
     });
     await session.controller.refresh();
 
-    expect(gateway.read).toHaveBeenCalledWith("private-credential", alphaId);
+    expect(gateway.read).toHaveBeenCalledWith(
+      { type: "bearer", value: "private-credential" },
+      alphaId,
+    );
     expect(session.controller.getSnapshot()).toEqual({
       checkingOut: false,
       refs: refs(alphaId),
@@ -121,7 +124,7 @@ describe("repository refs controller", () => {
     const gateway = createGateway({ [bravoId]: refs(bravoId) });
     gateway.read.mockImplementationOnce(() => Deferred.await(alphaRead));
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
 
     session.controller.select(alphaId);
     session.controller.select(bravoId);
@@ -141,7 +144,7 @@ describe("repository refs controller", () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
     gateway.read.mockImplementationOnce(() => Deferred.await(firstRead));
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.select(alphaId);
 
     session.controller.invalidate();
@@ -155,7 +158,7 @@ describe("repository refs controller", () => {
   it("applies a checkout to the cached refs without re-reading them", async () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.select(alphaId);
     await whenReady(session.controller);
 
@@ -166,11 +169,14 @@ describe("repository refs controller", () => {
       }),
     ).resolves.toEqual(checkedOut);
 
-    expect(gateway.checkout).toHaveBeenCalledWith("private-credential", {
-      repositoryId: alphaId,
-      target: { _tag: "LocalBranch", name: "feature" },
-      worktreePath: "/repo",
-    });
+    expect(gateway.checkout).toHaveBeenCalledWith(
+      { type: "bearer", value: "private-credential" },
+      {
+        repositoryId: alphaId,
+        target: { _tag: "LocalBranch", name: "feature" },
+        worktreePath: "/repo",
+      },
+    );
     expect(gateway.read).toHaveBeenCalledTimes(1);
     expect(session.controller.getSnapshot()).toMatchObject({
       checkingOut: false,
@@ -208,7 +214,7 @@ describe("repository refs controller", () => {
       [bravoId]: refs(bravoId),
     });
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.select(alphaId);
     await whenReady(session.controller);
     session.controller.select(bravoId);
@@ -235,7 +241,7 @@ describe("repository refs controller", () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
     gateway.checkout.mockImplementationOnce(() => Deferred.await(pending));
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.select(alphaId);
     await whenReady(session.controller);
 
@@ -264,7 +270,7 @@ describe("repository refs controller", () => {
     });
     gateway.checkout.mockImplementationOnce(() => Deferred.await(pending));
     const session = createRepositoryRefsController(gateway);
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.select(alphaId);
     await whenReady(session.controller);
 
@@ -308,7 +314,7 @@ describe("repository refs controller", () => {
     });
     expect(gateway.read).not.toHaveBeenCalled();
 
-    session.authorize("private-credential");
+    session.authorize({ type: "bearer", value: "private-credential" });
     session.controller.invalidate();
     await whenReady(session.controller);
     expect(gateway.read).toHaveBeenCalledTimes(1);

@@ -5,7 +5,6 @@ describe("browser local Environment bootstrap", () => {
   it("uses the desktop host bootstrap for a packaged renderer", () => {
     const bootstrap = {
       environmentOrigin: "http://127.0.0.1:43123",
-      pairingMaterial: "123-456",
     };
 
     expect(
@@ -13,7 +12,7 @@ describe("browser local Environment bootstrap", () => {
         { hash: "", origin: "null", pathname: "/index.html" },
         bootstrap,
       ),
-    ).toEqual(bootstrap);
+    ).toEqual({ ...bootstrap, pairingMaterial: undefined });
   });
 
   it("reads browser pairing material from the URL", () => {

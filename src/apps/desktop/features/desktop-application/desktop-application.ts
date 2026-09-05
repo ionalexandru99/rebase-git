@@ -1,3 +1,5 @@
+import { exchangeEnvironmentPairingEffect } from "@rebase/web/features/environment-connection";
+import { Effect } from "effect";
 import type {
   DesktopApplicationHost,
   DesktopApplicationOptions,
@@ -10,17 +12,23 @@ export async function startDesktopApplication(
   options: DesktopApplicationOptions,
 ) {
   const environment = await options.startEnvironment();
-  const application = new DesktopApplication(
-    options.host,
-    options.renderer,
-    environment,
-  );
-
   try {
+    const { credential } = await Effect.runPromise(
+      exchangeEnvironmentPairingEffect(environment.origin, {
+        label: "Rebase desktop",
+        pairingMaterial: new URL(environment.pairingUrl).hash.slice(1),
+      }),
+    );
+    const application = new DesktopApplication(
+      options.host,
+      options.renderer,
+      environment,
+      credential,
+    );
     await application.activate();
     return application;
   } catch (error) {
-    await application.stop();
+    await environment.stop();
     throw error;
   }
 }
@@ -33,6 +41,7 @@ export class DesktopApplication {
     private readonly host: DesktopApplicationHost,
     private readonly renderer: DesktopRenderer,
     private readonly environment: ManagedEnvironmentServer,
+    private readonly credential: string,
   ) {}
 
   async activate() {
@@ -40,7 +49,7 @@ export class DesktopApplication {
 
     await this.host.openWindow({
       environmentOrigin: this.environment.origin,
-      pairingMaterial: new URL(this.environment.pairingUrl).hash.slice(1),
+      credential: this.credential,
       renderer: this.renderer,
     });
   }

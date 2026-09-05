@@ -6,11 +6,13 @@ import type {
 } from "@rebase/contracts";
 import { contextBridge, ipcRenderer } from "electron";
 import { applicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc.contract";
+import { desktopApplicationIpc } from "#desktop/features/desktop-application/desktop-application-ipc.contract";
 import { repositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.contract";
 
 const host = Object.freeze({
   environmentOrigin: readRequiredArgument("--rebase-environment-origin="),
-  pairingMaterial: readRequiredArgument("--rebase-pairing-material="),
+  getEnvironmentCredential: () =>
+    ipcRenderer.invoke(desktopApplicationIpc.getEnvironmentCredential),
   revealRepository: (path: string) =>
     ipcRenderer.invoke(repositoryFilesystemIpc.revealRepository, path),
   updates: createDesktopUpdatesBridge(),

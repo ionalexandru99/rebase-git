@@ -72,6 +72,11 @@ export const EnvironmentPairingExchanged = Schema.Struct({
 export type EnvironmentPairingExchanged =
   typeof EnvironmentPairingExchanged.Type;
 
+export const EnvironmentBrowserSession = Schema.Struct({
+  authorization: EnvironmentDeviceAuthorization,
+});
+export type EnvironmentBrowserSession = typeof EnvironmentBrowserSession.Type;
+
 export const EnvironmentWebSocketTicket = Schema.Struct({
   expiresAt: IsoDate,
   ticket: SecretMaterial,
@@ -164,6 +169,23 @@ export const environmentAuthorizationRevocationPath =
   "/api/authorization/revocations";
 
 export const EnvironmentAuthorizationHttpApi = {
+  createBrowserSession: {
+    failure: EnvironmentPairingExchangeHttpFailure,
+    failureStatuses: [400, 401, 403, 409, 410, 413] as const,
+    method: "POST",
+    path: "/api/authorization/browser-session",
+    request: ExchangeEnvironmentPairing,
+    success: EnvironmentBrowserSession,
+    successStatus: 201,
+  },
+  readBrowserSession: {
+    failure: EnvironmentGrantHttpFailure,
+    failureStatuses: [400, 401, 403, 410, 413] as const,
+    method: "GET",
+    path: "/api/authorization/browser-session",
+    success: EnvironmentBrowserSession,
+    successStatus: 200,
+  },
   createPairing: {
     failure: EnvironmentGrantHttpFailure,
     failureStatuses: [400, 401, 403, 410, 413] as const,

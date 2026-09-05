@@ -38,6 +38,157 @@ afterEach(async () => {
 });
 
 describe("Environment authorization transport", () => {
+  it("resumes a browser session without exposing its credential and enforces revocation", async () => {
+    await withAuthorizedListener(async ({ authorization, origin, owner }) => {
+      const pairing = await run(
+        authorization.createPairing({ capabilities: [], role: "viewer" }),
+      );
+      const response = await postJson(
+        origin,
+        "/api/authorization/browser-session",
+        {
+          label: "Browser client",
+          pairingMaterial: pairing.material,
+        },
+      );
+      expect(response.status).toBe(201);
+      const session = await response.json();
+      expect(session).not.toHaveProperty("credential");
+      const cookieHeader = response.headers.get("set-cookie");
+      expect(cookieHeader).toContain("HttpOnly");
+      expect(cookieHeader).toContain("SameSite=Strict");
+      expect(cookieHeader).toContain("Path=/api");
+      const cookie = cookieHeader?.split(";")[0] ?? "";
+      const resumed = await fetch(
+        `${origin}/api/authorization/browser-session`,
+        {
+          headers: { cookie },
+        },
+      );
+      expect(await responseResult(resumed)).toEqual({
+        status: 200,
+        body: session,
+      });
+      const snapshot = await fetch(`${origin}${environmentSnapshotPath}`, {
+        headers: { cookie },
+      });
+      expect(snapshot.status).toBe(200);
+      await snapshot.body?.cancel();
+      const ticket = await fetch(
+        `${origin}${EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path}`,
+        {
+          method: "POST",
+          headers: { cookie, origin },
+        },
+      );
+      expect(ticket.status).toBe(201);
+      await ticket.body?.cancel();
+      await withAuthorizedListener(
+        async ({ origin: otherOrigin, owner: otherOwner }) => {
+          const other = await fetch(
+            `${otherOrigin}${environmentSnapshotPath}`,
+            {
+              headers: { cookie },
+            },
+          );
+          expect(await responseResult(other)).toEqual({
+            status: 401,
+            body: { _tag: "InvalidGrant" },
+          });
+          const bearer = await fetch(
+            `${otherOrigin}${environmentSnapshotPath}`,
+            {
+              headers: {
+                cookie,
+                authorization: `Bearer ${otherOwner.credential}`,
+              },
+            },
+          );
+          expect(bearer.status).toBe(200);
+          await bearer.body?.cancel();
+        },
+      );
+      const authorizationId = readString(session.authorization, "id");
+      await run(authorization.revoke(owner.credential, authorizationId));
+      const revoked = await fetch(
+        `${origin}/api/authorization/browser-session`,
+        {
+          headers: { cookie },
+        },
+      );
+      expect(await responseResult(revoked)).toEqual({
+        status: 401,
+        body: { _tag: "RevokedGrant" },
+      });
+    });
+  });
+
+  it("requires the server origin for browser pairing and cookie-authenticated writes", async () => {
+    await withAuthorizedListener(async ({ authorization, origin }) => {
+      const pairing = await run(
+        authorization.createPairing({ capabilities: [], role: "owner" }),
+      );
+      const body = JSON.stringify({
+        label: "Browser client",
+        pairingMaterial: pairing.material,
+      });
+      for (const requestOrigin of [
+        undefined,
+        "null",
+        "http://127.0.0.1:1",
+        "https://attacker.example",
+      ]) {
+        const denied = await fetch(
+          `${origin}/api/authorization/browser-session`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(requestOrigin === undefined ? {} : { origin: requestOrigin }),
+            },
+            body,
+          },
+        );
+        expect(await responseResult(denied)).toEqual({
+          status: 403,
+          body: { _tag: "InvalidOrigin" },
+        });
+      }
+      const paired = await fetch(
+        `${origin}/api/authorization/browser-session`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", origin },
+          body,
+        },
+      );
+      expect(paired.status).toBe(201);
+      const cookie = paired.headers.get("set-cookie")?.split(";")[0] ?? "";
+      await paired.body?.cancel();
+      for (const requestOrigin of [
+        undefined,
+        "null",
+        "http://127.0.0.1:1",
+        "https://attacker.example",
+      ]) {
+        const denied = await fetch(
+          `${origin}${EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path}`,
+          {
+            method: "POST",
+            headers: {
+              cookie,
+              ...(requestOrigin === undefined ? {} : { origin: requestOrigin }),
+            },
+          },
+        );
+        expect(await responseResult(denied)).toEqual({
+          status: 403,
+          body: { _tag: "InvalidOrigin" },
+        });
+      }
+    });
+  });
+
   it("rejects malformed, invalid, and excess JSON fields before exchanging a pairing", async () => {
     await withAuthorizedListener(async ({ authorization, origin }) => {
       const pairing = await run(
@@ -113,15 +264,14 @@ describe("Environment authorization transport", () => {
         pairingMaterial: pairing.material,
       });
       const connection = await connectCurrentEnvironment(origin, "0.0.0", {
-        credential: paired.credential,
+        credential: { type: "bearer", value: paired.credential },
       });
 
       await expect(
-        fetchEnvironmentSnapshot(
-          origin,
-          connection.discovery,
-          paired.credential,
-        ),
+        fetchEnvironmentSnapshot(origin, connection.discovery, {
+          type: "bearer",
+          value: paired.credential,
+        }),
       ).resolves.toEqual({ environmentId, sequence: 0 });
       connection.close();
     });
@@ -197,7 +347,10 @@ describe("Environment authorization transport", () => {
       });
       const discovery = await fetchEnvironmentDiscovery(origin);
       await expect(
-        fetchEnvironmentSnapshot(origin, discovery, viewer.credential),
+        fetchEnvironmentSnapshot(origin, discovery, {
+          type: "bearer",
+          value: viewer.credential,
+        }),
       ).rejects.toEqual(
         new EnvironmentAuthorizationRejected({
           failure: { _tag: "RevokedGrant" },
