@@ -64,7 +64,12 @@ function connectBrowserRepositoryHistoryReader(
   onCachePaused: (paused: boolean) => void,
   cachePaused: boolean,
 ): RepositoryHistoryReader {
-  const worker = options.worker ?? acquireSharedWorker();
+  let worker: SharedWorker | undefined;
+  try {
+    worker = options.worker ?? acquireSharedWorker();
+  } catch {
+    worker = undefined;
+  }
   requestPersistentStorage();
   const channel = new MessageChannel();
   const port = channel.port1;
@@ -76,6 +81,8 @@ function connectBrowserRepositoryHistoryReader(
   const freshnessCommands = new Map<string, AbortController>();
   let unsubscribeFreshness: (() => void) | undefined;
   let closed = false;
+  let releaseLease = () => {};
+  let unsubscribeAvailability: (() => void) | undefined;
   let snapshot: RepositoryHistorySnapshot = {
     revision: 0,
     historyRevision: 0,
@@ -84,6 +91,10 @@ function connectBrowserRepositoryHistoryReader(
 
   port.onmessage = (event: MessageEvent<RepositoryHistoryWorkerResponse>) => {
     const message = event.data;
+    if (message._tag === "WorkerFailed") {
+      failWorker();
+      return;
+    }
     if (message._tag === "SubscribeFreshness") {
       unsubscribeFreshness?.();
       unsubscribeFreshness = options.gateway.freshness?.subscribe(
@@ -221,7 +232,26 @@ function connectBrowserRepositoryHistoryReader(
     request.resolve(message.commits);
   };
   port.start();
-  const releaseLease = holdRepositoryHistoryReaderLease((lifetimeLock) => {
+  function failWorker() {
+    if (closed) return;
+    if (sharedWorker === worker) sharedWorker = undefined;
+    dispose();
+    worker?.port.close();
+    snapshot = {
+      ...snapshot,
+      revision: snapshot.revision + 1,
+      status: "error",
+      synchronization: "idle",
+      storingCommits: false,
+      error: new RepositoryHistoryUnavailable(),
+    };
+    for (const listener of listeners) listener();
+  }
+
+  worker?.addEventListener("error", failWorker);
+  port.addEventListener("messageerror", failWorker);
+  releaseLease = holdRepositoryHistoryReaderLease((lifetimeLock) => {
+    if (closed) return;
     const connection: ConnectRepositoryHistoryReader = {
       _tag: "ConnectRepositoryHistoryReader",
       environmentId: options.environmentId,
@@ -232,16 +262,48 @@ function connectBrowserRepositoryHistoryReader(
       repositoryId: options.repositoryId,
       supportsFreshness: options.gateway.freshness !== undefined,
     };
-    worker.port.postMessage(connection, [channel.port2]);
-    worker.port.start();
+    try {
+      if (worker === undefined) throw new RepositoryHistoryUnavailable();
+      worker.port.postMessage(connection, [channel.port2]);
+      worker.port.start();
+    } catch {
+      queueMicrotask(failWorker);
+    }
   });
-  const unsubscribeAvailability = options.gateway.subscribeAvailability?.(
-    () => {
-      port.postMessage({
-        _tag: "ReconcileHistory",
-      } satisfies RepositoryHistoryWorkerRequest);
-    },
-  );
+  unsubscribeAvailability = options.gateway.subscribeAvailability?.(() => {
+    port.postMessage({
+      _tag: "ReconcileHistory",
+    } satisfies RepositoryHistoryWorkerRequest);
+  });
+
+  function dispose() {
+    if (closed) return;
+    closed = true;
+    worker?.removeEventListener("error", failWorker);
+    port.removeEventListener("messageerror", failWorker);
+    port.onmessage = null;
+    releaseLease();
+    unsubscribeFreshness?.();
+    unsubscribeFreshness = undefined;
+    for (const controller of freshnessCommands.values()) controller.abort();
+    freshnessCommands.clear();
+    for (const controller of loads.values()) controller.abort();
+    loads.clear();
+    for (const controller of synchronizations.values()) controller.abort();
+    synchronizations.clear();
+    for (const batch of pendingBatches.values())
+      batch.reject(new RepositoryHistoryUnavailable());
+    pendingBatches.clear();
+    for (const current of pending.values())
+      current.reject(new RepositoryHistoryUnavailable());
+    pending.clear();
+    unsubscribeAvailability?.();
+    port.postMessage({
+      _tag: "CloseReader",
+    } satisfies RepositoryHistoryWorkerRequest);
+    port.close();
+    channel.port2.close();
+  }
 
   function runFreshnessCommand(
     message: Extract<
@@ -304,6 +366,7 @@ function connectBrowserRepositoryHistoryReader(
       )
       .then(
         (bytes) => {
+          if (closed) return;
           const message: RepositoryHistoryWorkerRequest = {
             _tag: "HistoryPageReceived",
             bytes,
@@ -312,6 +375,7 @@ function connectBrowserRepositoryHistoryReader(
           port.postMessage(message, [bytes.buffer]);
         },
         (error: unknown) => {
+          if (closed) return;
           const message: RepositoryHistoryWorkerRequest = {
             _tag: "HistoryPageFailed",
             failure: workerFailure(error),
@@ -337,6 +401,7 @@ function connectBrowserRepositoryHistoryReader(
           repositoryId: options.repositoryId,
         },
         (bytes) => {
+          if (closed) return Promise.reject(new RepositoryHistoryUnavailable());
           const batchId = createRepositoryHistoryRequestId();
           return new Promise<void>((resolve, reject) => {
             pendingBatches.set(batchId, { reject, requestId, resolve });
@@ -353,6 +418,7 @@ function connectBrowserRepositoryHistoryReader(
       )
       .then(
         (commitCount) => {
+          if (closed) return;
           port.postMessage({
             _tag: "HistorySynchronizationCompleted",
             commitCount,
@@ -360,6 +426,7 @@ function connectBrowserRepositoryHistoryReader(
           } satisfies RepositoryHistoryWorkerRequest);
         },
         (error: unknown) => {
+          if (closed) return;
           port.postMessage({
             _tag: "HistorySynchronizationFailed",
             failure: workerFailure(error),
@@ -473,37 +540,7 @@ function connectBrowserRepositoryHistoryReader(
         action,
         requestId: createRepositoryHistoryRequestId(),
       }),
-    close: () => {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      releaseLease();
-      unsubscribeFreshness?.();
-      for (const controller of freshnessCommands.values()) controller.abort();
-      freshnessCommands.clear();
-      for (const controller of loads.values()) {
-        controller.abort();
-      }
-      loads.clear();
-      for (const controller of synchronizations.values()) {
-        controller.abort();
-      }
-      synchronizations.clear();
-      for (const batch of pendingBatches.values()) {
-        batch.reject(new RepositoryHistoryUnavailable());
-      }
-      pendingBatches.clear();
-      for (const current of pending.values()) {
-        current.reject(new RepositoryHistoryUnavailable());
-      }
-      pending.clear();
-      unsubscribeAvailability?.();
-      port.postMessage({
-        _tag: "CloseReader",
-      } satisfies RepositoryHistoryWorkerRequest);
-      port.close();
-    },
+    close: dispose,
     getCommitSummaries: (oids) =>
       request<readonly RepositoryCommit[]>({
         _tag: "GetCommitSummaries",

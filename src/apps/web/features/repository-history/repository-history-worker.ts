@@ -47,6 +47,17 @@ import type {
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
 
 const repositories = new Map<string, RepositoryReplica>();
+function failWorker() {
+  for (const replica of repositories.values()) {
+    replica.cachePaused = true;
+    for (const reader of [...replica.readers]) {
+      post(reader, { _tag: "WorkerFailed" });
+      closeReader(reader, replica);
+    }
+  }
+}
+globalThis.addEventListener("error", failWorker);
+globalThis.addEventListener("unhandledrejection", failWorker);
 let cacheManagement: Promise<void> = Promise.resolve();
 let clearingAllCaches: Promise<boolean> | undefined;
 const worker = self as unknown as {

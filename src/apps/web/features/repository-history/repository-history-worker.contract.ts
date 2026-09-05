@@ -125,6 +125,7 @@ export type RepositoryHistoryWorkerRequest =
   | { readonly _tag: "CloseReader" };
 
 export type RepositoryHistoryWorkerResponse =
+  | { readonly _tag: "WorkerFailed" }
   | { readonly _tag: "SubscribeFreshness" }
   | { readonly _tag: "UnsubscribeFreshness" }
   | { readonly _tag: "RunFetchHistory"; readonly requestId: string }
