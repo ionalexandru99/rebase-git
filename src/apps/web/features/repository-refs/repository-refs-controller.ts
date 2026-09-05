@@ -25,9 +25,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   const stale = new Set<string>();
   let credential: string | undefined;
   let snapshot = idleSnapshot;
-  let generation = 0;
-  let loading: Promise<void> | undefined;
-  let invalidated = false;
+  const loading = new Map<string, Promise<void>>();
   let checkoutInFlight = false;
 
   const publish = (next: RepositoryRefsSnapshot) => {
@@ -35,27 +33,33 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
     for (const listener of listeners) listener();
   };
 
-  const load = (repositoryId: string, loadGeneration: number) => {
-    invalidated = false;
-    return readRefs(repositoryId)
+  const load = (repositoryId: string) => {
+    stale.delete(repositoryId);
+    let failed = false;
+    const pending = readRefs(repositoryId)
       .then(
         (refs) => {
           cache.set(repositoryId, refs);
-          stale.delete(repositoryId);
-          if (loadGeneration === generation) publish(withRefs(snapshot, refs));
+          if (snapshot.repositoryId === repositoryId)
+            publish(withRefs(snapshot, refs));
         },
         (error: unknown) => {
-          if (loadGeneration === generation) {
+          failed = true;
+          if (snapshot.repositoryId === repositoryId) {
             publish(withError(snapshot, normalizeControllerError(error)));
           }
         },
       )
       .finally(() => {
-        loading = undefined;
-        if (invalidated && loadGeneration === generation) {
-          loading = load(repositoryId, loadGeneration);
+        loading.delete(repositoryId);
+        const invalidated = stale.has(repositoryId);
+        if (failed) stale.add(repositoryId);
+        if (invalidated && snapshot.repositoryId === repositoryId) {
+          void load(repositoryId);
         }
       });
+    loading.set(repositoryId, pending);
+    return pending;
   };
 
   const readRefs = (repositoryId: string) =>
@@ -66,12 +70,12 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   const startLoad = () => {
     const repositoryId = snapshot.repositoryId;
     if (repositoryId === undefined) return Promise.resolve();
-    if (loading !== undefined) {
-      invalidated = true;
-      return loading;
+    const pending = loading.get(repositoryId);
+    if (pending !== undefined) {
+      stale.add(repositoryId);
+      return pending;
     }
-    loading = load(repositoryId, generation);
-    return loading;
+    return load(repositoryId);
   };
 
   const checkout = async (
@@ -122,15 +126,22 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   const controller: RepositoryRefsController = {
     checkout,
     getSnapshot: () => snapshot,
-    invalidate: () => {
-      for (const repositoryId of cache.keys()) stale.add(repositoryId);
-      void startLoad();
+    invalidate: (repositoryIds) => {
+      for (const repositoryId of repositoryIds ?? [
+        ...cache.keys(),
+        ...loading.keys(),
+      ])
+        stale.add(repositoryId);
+      if (
+        repositoryIds === undefined ||
+        (snapshot.repositoryId !== undefined &&
+          repositoryIds.includes(snapshot.repositoryId))
+      )
+        void startLoad();
     },
     refresh: startLoad,
     select: (repositoryId) => {
       if (repositoryId === snapshot.repositoryId) return;
-      generation += 1;
-      loading = undefined;
       if (repositoryId === undefined) {
         publish(idleSnapshot);
         return;
@@ -141,7 +152,11 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
           ? { checkingOut: false, repositoryId, status: "loading" }
           : { checkingOut: false, refs: cached, repositoryId, status: "ready" },
       );
-      if (cached === undefined || stale.has(repositoryId)) void startLoad();
+      if (
+        (cached === undefined || stale.has(repositoryId)) &&
+        !loading.has(repositoryId)
+      )
+        void load(repositoryId);
     },
     subscribe: (listener) => {
       listeners.add(listener);

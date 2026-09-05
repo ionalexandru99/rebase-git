@@ -6,6 +6,7 @@ export interface EnvironmentConnectionState {
   readonly currentSequence: number;
   readonly failure: EnvironmentConnectionFailure | undefined;
   readonly waiters: ReadonlyArray<SequenceWaiter>;
+  readonly changeListeners: Set<(repositoryIds?: readonly string[]) => void>;
 }
 
 interface SequenceWaiter {
@@ -18,6 +19,7 @@ export function createEnvironmentConnectionState(initialSequence: number) {
     currentSequence: initialSequence,
     failure: undefined,
     waiters: [],
+    changeListeners: new Set(),
   });
 }
 
@@ -52,6 +54,7 @@ export function waitForEnvironmentSequence(
 export function updateEnvironmentSequence(
   state: Ref.Ref<EnvironmentConnectionState>,
   sequence: number,
+  repositoryIds?: readonly string[],
 ) {
   return Effect.gen(function* () {
     const completed = yield* Ref.modify(state, (value) => {
@@ -70,6 +73,8 @@ export function updateEnvironmentSequence(
     yield* Effect.forEach(completed, (waiter) =>
       Deferred.succeed(waiter.deferred, sequence),
     );
+    for (const listener of Ref.getUnsafe(state).changeListeners)
+      listener(repositoryIds);
   });
 }
 

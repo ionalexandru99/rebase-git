@@ -18,9 +18,45 @@ const watchedRootEntries = new Set([
 const recursiveEntries = ["refs", "worktrees"] as const;
 
 export function createLocalRepositoryWatcher(): RepositoryWatcher {
+  const directories = new Map<
+    string,
+    {
+      readonly handle: RepositoryWatchHandle;
+      readonly listeners: Set<() => void>;
+    }
+  >();
   return {
     watch: (gitDirectory, onChange) =>
-      Effect.sync(() => watchGitDirectory(gitDirectory, onChange)),
+      Effect.sync(() => {
+        let canonical: string;
+        try {
+          canonical = realpathSync.native(gitDirectory);
+        } catch {
+          return { close: () => {} };
+        }
+        let directory = directories.get(canonical);
+        if (directory === undefined) {
+          const listeners = new Set<() => void>();
+          directory = {
+            listeners,
+            handle: watchGitDirectory(canonical, () => {
+              for (const listener of listeners) listener();
+            }),
+          };
+          directories.set(canonical, directory);
+        }
+        const owned = directory;
+        const listener = () => onChange();
+        owned.listeners.add(listener);
+        return {
+          close: () => {
+            if (!owned.listeners.delete(listener)) return;
+            if (owned.listeners.size > 0) return;
+            directories.delete(canonical);
+            owned.handle.close();
+          },
+        };
+      }),
   };
 }
 

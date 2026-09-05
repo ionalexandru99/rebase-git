@@ -14,7 +14,7 @@ import {
   fetchEnvironmentSnapshot,
 } from "@rebase/web/features/environment-connection";
 import { Effect } from "effect";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
@@ -29,6 +29,83 @@ const oversizedSnapshot = Buffer.from(
 );
 
 describe("browser Environment protocol client", () => {
+  it("invalidates all refs after a sequence gap and resumes targeted changes without replaying duplicates", async () => {
+    const events = createEnvironmentEventPublisher();
+    await withListener(
+      async (origin) => {
+        const connection = await connectCurrentEnvironment(origin, "0.0.0", {
+          credential,
+        });
+        const changed = vi.fn();
+        const unsubscribe = connection.subscribeChanges(changed);
+        try {
+          events.publishChanged([environmentId]);
+          events.publishChanged([environmentId]);
+          await Effect.runPromise(connection.waitForSequence(2));
+          expect(changed).toHaveBeenCalledExactlyOnceWith(undefined);
+          events.publishChanged([environmentId]);
+          events.publishChanged([environmentId]);
+          await Effect.runPromise(connection.waitForSequence(4));
+          expect(changed.mock.calls).toEqual([
+            [undefined],
+            [[environmentId]],
+            [[environmentId]],
+          ]);
+        } finally {
+          unsubscribe();
+          connection.close();
+        }
+      },
+      {
+        ...events,
+        subscribe: (listener) =>
+          events.subscribe((sequence, repositoryIds) => {
+            if (sequence === 1) return;
+            listener(sequence, repositoryIds);
+            listener(sequence, repositoryIds);
+          }),
+      },
+    );
+  });
+
+  for (const identified of [true, false])
+    it(`delivers repository changes with identity negotiation ${identified}`, async () => {
+      await withListener(async (origin, events) => {
+        const discovery = await fetchEnvironmentDiscovery(origin);
+        const hello = createCurrentEnvironmentHello("0.0.0");
+        const connection = await connectEnvironment(
+          origin,
+          discovery,
+          identified
+            ? hello
+            : {
+                ...hello,
+                protocol: { major: 1, minor: 3, minimumSupportedMinor: 0 },
+                capabilities: hello.capabilities.filter(
+                  (capability) => capability.name !== "repository-ref-events",
+                ),
+              },
+          credential,
+        );
+        const changed = vi.fn();
+        const unsubscribe = connection.subscribeChanges(changed);
+        try {
+          events.publishChanged([environmentId]);
+          await Effect.runPromise(connection.waitForSequence(1));
+          expect(changed).toHaveBeenCalledExactlyOnceWith(
+            identified ? [environmentId] : undefined,
+          );
+          unsubscribe();
+          events.publishChanged([environmentId]);
+          await Effect.runPromise(connection.waitForSequence(2));
+          expect(changed).toHaveBeenCalledOnce();
+        } finally {
+          unsubscribe();
+          connection.close();
+        }
+      });
+    });
+
   it("discovers, negotiates, and snapshots one Environment", async () => {
     await withListener(async (origin, events) => {
       const connection = await connectCurrentEnvironment(origin, "0.0.0", {
@@ -214,11 +291,11 @@ describe("browser Environment protocol client", () => {
 
 function withListener(
   run: (origin: string, events: EnvironmentEventPublisher) => Promise<void>,
+  events = createEnvironmentEventPublisher(),
 ) {
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const events = createEnvironmentEventPublisher();
         const listener = yield* acquireEnvironmentListener({
           authorization: testAuthorization,
           environmentId,

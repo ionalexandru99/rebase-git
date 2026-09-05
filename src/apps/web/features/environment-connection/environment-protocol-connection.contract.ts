@@ -18,6 +18,9 @@ export interface EnvironmentProtocolConnection {
   readonly discovery: EnvironmentDiscovery;
   readonly negotiated: NegotiatedEnvironment;
   readonly repositoryHistory: RepositoryHistoryTransport;
+  readonly subscribeChanges: (
+    listener: (repositoryIds?: readonly string[]) => void,
+  ) => () => void;
   readonly waitForSequence: (
     sequence: number,
   ) => Effect.Effect<number, EnvironmentConnectionFailure>;

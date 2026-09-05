@@ -41,7 +41,7 @@ export interface RepositoryRefsController {
     target: RepositoryRefTarget,
   ) => Promise<RepositoryCheckedOut>;
   readonly getSnapshot: () => RepositoryRefsSnapshot;
-  readonly invalidate: () => void;
+  readonly invalidate: (repositoryIds?: readonly string[]) => void;
   readonly refresh: () => Promise<void>;
   readonly select: (repositoryId: string | undefined) => void;
   readonly subscribe: (listener: () => void) => () => void;

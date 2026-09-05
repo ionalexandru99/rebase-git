@@ -54,11 +54,16 @@ export const ProductVersionSchema = ProductVersion;
 
 export const currentEnvironmentProtocol = {
   major: 1,
-  minor: 3,
+  minor: 4,
   minimumSupportedMinor: 0,
 } satisfies ProtocolRange;
 
 export const currentEnvironmentCapabilities = [
+  {
+    introducedInMinor: 4,
+    name: "repository-ref-events",
+    version: 1,
+  },
   {
     introducedInMinor: 3,
     name: "repository-history-freshness",

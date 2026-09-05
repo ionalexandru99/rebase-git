@@ -320,6 +320,13 @@ function publishEnvironmentConnection(
     negotiated,
     repositoryHistory,
     waitForSequence: (sequence) => waitForEnvironmentSequence(state, sequence),
+    subscribeChanges: (listener) => {
+      const listeners = Ref.getUnsafe(state).changeListeners;
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
   });
 }
 
