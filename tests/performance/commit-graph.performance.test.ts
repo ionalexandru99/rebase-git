@@ -141,6 +141,7 @@ for (const scenario of scenarios) {
       if (socketProfile !== undefined) {
         expect(socketProfile.sent).toBeGreaterThan(0);
         expect(socketProfile.received).toBeGreaterThan(0);
+        expect(socketProfile.errors).toEqual([]);
       }
     } finally {
       server.child.kill("SIGTERM");
@@ -150,7 +151,7 @@ for (const scenario of scenarios) {
 }
 
 test("calibrates WebSocket frame latency and bandwidth", async ({ page }) => {
-  await shapeGraphWebSockets(page, 80);
+  const profile = await shapeGraphWebSockets(page, 80);
   const http = createServer((_request, response) => {
     response.setHeader("content-type", "text/html");
     response.end("<title>Graph network calibration</title>");
@@ -191,6 +192,7 @@ test("calibrates WebSocket frame latency and bandwidth", async ({ page }) => {
     expect(timings[2]).toBeGreaterThanOrEqual(
       80 + ((2 * 256 * 1_024) / networkBytesPerSecond) * 1_000,
     );
+    expect(profile.errors).toEqual([]);
   } finally {
     for (const socket of server.clients) socket.terminate();
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -199,7 +201,12 @@ test("calibrates WebSocket frame latency and bandwidth", async ({ page }) => {
 });
 
 async function shapeGraphWebSockets(page: Page, latency: number) {
-  const frames = { sent: 0, received: 0, historyReads: 0 };
+  const frames = {
+    sent: 0,
+    received: 0,
+    historyReads: 0,
+    errors: [] as string[],
+  };
   await page.routeWebSocket("**/*", (browser) => {
     const server = browser.connectToServer();
     const controller = new AbortController();
@@ -246,7 +253,8 @@ async function shapeGraphWebSockets(page: Page, latency: number) {
               frames[direction] += 1;
             }
           } catch (error) {
-            if (!controller.signal.aborted) throw error;
+            if (!controller.signal.aborted)
+              frames.errors.push(`${direction}: ${String(error)}`);
           }
         });
       });

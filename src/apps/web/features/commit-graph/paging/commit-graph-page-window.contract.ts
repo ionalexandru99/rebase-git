@@ -9,13 +9,10 @@ import type {
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
 
-export interface CommitGraphPageReader
-  extends Pick<RepositoryHistoryReader, "read" | "locate" | "ancestryRoute"> {
-  readonly locateMany: (
-    query: RepositoryHistoryQuery,
-    oids: readonly string[],
-  ) => Promise<readonly { readonly oid: string; readonly index: number }[]>;
-}
+export type CommitGraphPageReader = Pick<
+  RepositoryHistoryReader,
+  "read" | "locate" | "locateMany" | "ancestryRoute"
+>;
 
 export interface CommitGraphPage {
   readonly merges: ReadonlyMap<string, "collapsed" | "expanded">;

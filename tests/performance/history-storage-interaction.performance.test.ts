@@ -99,6 +99,8 @@ test("quota cleanup and cache rebuild keep graph interaction below 50 ms", async
       try {
         const storage = await window.__storageMaintenance.run();
         clearInterval(timer);
+        while (pending !== undefined && performance.now() - pending < 50)
+          await new Promise(requestAnimationFrame);
         await new Promise(requestAnimationFrame);
         await new Promise((resolve) => setTimeout(resolve, 0));
         longTasks.push(
