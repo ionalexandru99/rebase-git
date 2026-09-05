@@ -19,6 +19,7 @@ import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
   RepositoryHistoryStorageUnavailable,
+  RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import {
   clearHistoryCache,
@@ -36,6 +37,64 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("history cache storage", () => {
+  it("does not restart history on a reader closed while rebuilding its shared cache", async () => {
+    const fixture = await seed();
+    const name = crypto.randomUUID();
+    const control = new BroadcastChannel(`history-clear-${name}`);
+    const waiting = Promise.withResolvers<void>();
+    const closed = Promise.withResolvers<void>();
+    control.onmessage = (message) => {
+      if (message.data === "waiting") waiting.resolve();
+      if (message.data === "closed") closed.resolve();
+    };
+    const worker = new SharedWorker(
+      new URL("./fixtures/history-cache-clear-worker.ts", import.meta.url),
+      { type: "module", name },
+    );
+    const gateway = gatewayFor(fixture);
+    const options = {
+      environmentId: fixture.environmentId,
+      repositoryId: fixture.repositoryId,
+      gateway,
+      worker,
+    };
+    const first = createBrowserRepositoryHistoryReader(options);
+    const second = createBrowserRepositoryHistoryReader(options);
+    const query = {
+      limit: 100,
+      order: "topological" as const,
+      roots: fixture.roots,
+    };
+    try {
+      await first.read(query);
+      await vi.waitFor(() =>
+        expect(first.getSnapshot().synchronization).toBe("complete"),
+      );
+      await second.getRefTargets();
+      const statuses: string[] = [];
+      second.subscribe(() => statuses.push(second.getSnapshot().status));
+      const rebuilding = expect(
+        first.manageCache("rebuild"),
+      ).rejects.toBeInstanceOf(RepositoryHistoryUnavailable);
+      await waiting.promise;
+      first.close();
+      await closed.promise;
+      control.postMessage("continue");
+      await rebuilding;
+      await second.manageCache("clear");
+      expect(statuses).not.toContain("loading");
+      expect(second.getSnapshot().status).toBe("empty");
+      expect(gateway.read).not.toHaveBeenCalled();
+      await second.manageCache("rebuild");
+      await expect(second.read(query)).resolves.toEqual(fixture.page.commits);
+    } finally {
+      first.close();
+      second.close();
+      control.close();
+      worker.port.close();
+    }
+  });
+
   it.each([false, true])(
     "initializes a repository opened during clear-all after it settles (failure=%s)",
     async (fail) => {

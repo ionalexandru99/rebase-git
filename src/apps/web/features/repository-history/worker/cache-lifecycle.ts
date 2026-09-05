@@ -127,7 +127,7 @@ async function manageCache(
     target.revision += 1;
     publishSnapshot(target);
   }
-  if (action === "rebuild") {
+  if (action === "rebuild" && !reader.closed) {
     const query = reader.lastQuery;
     if (query !== undefined) {
       await readHistory(reader, replica, {

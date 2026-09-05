@@ -3,6 +3,7 @@ import {
   commitStoreName,
   repositoryStoreName,
 } from "#web/features/repository-history/repository-history-database";
+import { queueHistoryStorageWrite } from "#web/features/repository-history/repository-history-storage-maintenance";
 
 const control = new BroadcastChannel(
   `history-clear-${(self as unknown as { name: string }).name}`,
@@ -10,6 +11,7 @@ const control = new BroadcastChannel(
 const getAll = IDBObjectStore.prototype.getAll;
 const deleteRecords = IDBObjectStore.prototype.delete;
 let held = false;
+let rebuilding = false;
 let failClear = false;
 
 const sharedWorker = self as unknown as {
@@ -25,6 +27,34 @@ sharedWorker.onconnect = (event) => {
     receive?.call(port, message);
     if (held && message.data._tag === "ConnectRepositoryHistoryReader")
       control.postMessage("connecting");
+    if (message.data._tag !== "ConnectRepositoryHistoryReader") return;
+    const readerPort: MessagePort = message.data.port;
+    const receiveReader = readerPort.onmessage;
+    if (receiveReader === null) return;
+    readerPort.onmessage = (request) => {
+      if (
+        !held &&
+        request.data._tag === "ManageCache" &&
+        request.data.action === "rebuild"
+      ) {
+        held = true;
+        rebuilding = true;
+        void queueHistoryStorageWrite(
+          () =>
+            new Promise<void>((resolve) => {
+              control.postMessage("waiting");
+              control.onmessage = () => {
+                rebuilding = false;
+                resolve();
+                control.close();
+              };
+            }),
+        );
+      }
+      receiveReader?.call(readerPort, request);
+      if (rebuilding && request.data._tag === "CloseReader")
+        control.postMessage("closed");
+    };
   };
 };
 
