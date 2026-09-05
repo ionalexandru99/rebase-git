@@ -15,8 +15,18 @@ const megabitsPerSecond = 20;
 const networkBytesPerSecond = (megabitsPerSecond * 1_024 * 1_024) / 8;
 
 const scenarios = [
-  { firstContentLimit: 250, latency: 0, name: "localhost" },
-  { firstContentLimit: 450, latency: 80, name: "80ms-rtt-20mbps" },
+  {
+    firstContentLimit: 250,
+    correctedContentLimit: 500,
+    latency: 0,
+    name: "localhost",
+  },
+  {
+    firstContentLimit: 450,
+    correctedContentLimit: 700,
+    latency: 80,
+    name: "80ms-rtt-20mbps",
+  },
 ] as const;
 
 for (const scenario of scenarios) {
@@ -62,7 +72,12 @@ for (const scenario of scenarios) {
       const frameWork = await trace.stop();
       await expect(history.getByRole("row").first()).toBeVisible();
       const browserMetrics = await page.evaluate(() => window.__graphMetrics);
+      const correctedContentMilliseconds = await measureCorrectedContent(
+        page,
+        repositoryPath,
+      );
       const metrics = {
+        correctedContentMilliseconds,
         firstContentMilliseconds:
           required(browserMetrics.firstContent) - browserMetrics.started,
         frameWorkP95Milliseconds: percentile(frameWork, 0.95),
@@ -86,6 +101,9 @@ for (const scenario of scenarios) {
       expect(metrics.selectionFeedbackMilliseconds).toBeLessThanOrEqual(50);
       expect(metrics.scopeFeedbackMilliseconds).toBeLessThanOrEqual(100);
       expect(metrics.postGitRenderMilliseconds).toBeLessThanOrEqual(100);
+      expect(metrics.correctedContentMilliseconds).toBeLessThanOrEqual(
+        scenario.correctedContentLimit,
+      );
       expect(metrics.frameWorkP95Milliseconds).toBeLessThan(8.3);
       expect(metrics.frameWorkP99Milliseconds).toBeLessThan(16.7);
     } finally {
@@ -93,6 +111,43 @@ for (const scenario of scenarios) {
       await rm(testHome, { force: true, recursive: true });
     }
   });
+}
+
+async function measureCorrectedContent(page: Page, repositoryPath: string) {
+  const subject = "externally amended commit";
+  await git(
+    repositoryPath,
+    "commit",
+    "--amend",
+    "--allow-empty",
+    "-m",
+    subject,
+  );
+  const completed = performance.now();
+  await page.evaluate(async (updatedSubject) => {
+    const started = performance.now();
+    while (performance.now() - started < 5_000) {
+      const history = document.querySelector<HTMLElement>(
+        '[role="grid"][aria-label="Commit history"]',
+      );
+      const row = [
+        ...(history?.querySelectorAll("tr[aria-rowindex]") ?? []),
+      ].find((candidate) => candidate.textContent?.includes(updatedSubject));
+      if (row !== undefined && history !== null) {
+        const rowBounds = row.getBoundingClientRect();
+        const historyBounds = history.getBoundingClientRect();
+        if (
+          rowBounds.height > 0 &&
+          rowBounds.bottom > historyBounds.top &&
+          rowBounds.top < historyBounds.bottom
+        )
+          return;
+      }
+      await new Promise(requestAnimationFrame);
+    }
+    throw new Error("The externally amended commit did not become visible");
+  }, subject);
+  return performance.now() - completed;
 }
 
 async function installGraphMeasurements(page: Page) {
