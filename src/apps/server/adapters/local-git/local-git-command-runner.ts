@@ -55,6 +55,7 @@ function streamLocalGitCommand(
         }
       });
       const exited = childExit(child);
+      void exited.catch(() => undefined);
       try {
         for await (const chunk of child.stdout) {
           await onStdout(String(chunk), combinedSignal);
