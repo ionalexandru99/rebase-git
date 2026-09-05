@@ -4,3 +4,4 @@ release/
 .plans/
 *.tsbuildinfo
 tests/.artifacts/
+.benchmark-corpus/

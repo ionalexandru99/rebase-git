@@ -43,6 +43,7 @@ A user on WSl should not be required to install the electron app on windows and 
 
 ## General code requirements
 
+- Editing `AGENTS.md` requires Alex's explicit permission. Never add, remove, or change its instructions without that permission.
 - We want the code to be as simple as possible, easy to extend
 - Use workspace package names for cross-package imports. Within a package, use its configured private aliases such as `#server/*`, `#web/*`, `#web-ui/*`, and `#desktop/*` for implementation imports. Do not use relative imports in source or tests, and do not expose implementation wildcards through package `exports` solely to resolve internal modules.
 - Keep cross-module contracts in domain-specific `*.contract.ts` files, separate from their implementations.

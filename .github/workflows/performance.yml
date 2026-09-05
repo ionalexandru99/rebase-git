@@ -1,0 +1,60 @@
+name: Performance
+
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmarks:
+    name: Linux history and graph benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HISTORY_PROCESS_CORPUS_PATH: ${{ github.workspace }}/.benchmark-corpus
+      HISTORY_SEARCH_REPOSITORY_PATH: ${{ github.workspace }}/.benchmark-corpus
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Check out Git v2.50.0 benchmark history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: git/git
+          ref: 16bd9f20a403117f2e0d9bcda6c6e621d3763e77
+          path: .benchmark-corpus
+          fetch-depth: 100000
+          fetch-tags: false
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Record benchmark environment
+        shell: bash
+        env:
+          RUNNER_IMAGE: ${{ runner.os }}-${{ runner.arch }}
+        run: |
+          mkdir -p tests/.artifacts
+          {
+            echo "Runner: $RUNNER_IMAGE"
+            echo "Image: $ImageOS $ImageVersion"
+            node --version
+            pnpm --version
+            git --version
+            git rev-parse HEAD
+            git -C "$HISTORY_PROCESS_CORPUS_PATH" rev-parse HEAD
+            git -C "$HISTORY_PROCESS_CORPUS_PATH" rev-list --all --count
+            lscpu
+            free -b
+          } > tests/.artifacts/benchmark-environment.txt
+      - name: Run performance tests
+        run: pnpm test:performance
+      - uses: ./.github/actions/upload-test-results
+        if: always()

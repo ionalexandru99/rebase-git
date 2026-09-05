@@ -9,8 +9,18 @@ export default defineConfig({
       use: devices["Desktop Chrome"],
     },
   ],
-  reporter: "list",
+  reporter: [
+    ["list"],
+    [
+      "html",
+      { open: "never", outputFolder: "tests/.artifacts/performance-report" },
+    ],
+    ["json", { outputFile: "tests/.artifacts/performance.json" }],
+  ],
   testDir: "tests/performance",
   timeout: 60_000,
+  use: {
+    screenshot: "only-on-failure",
+  },
   workers: 1,
 });
