@@ -1,0 +1,44 @@
+name: Package desktop
+description: Build native release artifacts with the selected version and channel, without publishing.
+inputs:
+  platform:
+    description: electron-builder platform, mac, linux, or win.
+    required: true
+  arch:
+    description: Target architecture, arm64 or x64.
+    required: true
+  version:
+    description: Effective application and artifact version.
+    required: true
+  channel:
+    description: Release channel, stable or nightly.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Build desktop application
+      shell: bash
+      env:
+        RELEASE_VERSION: ${{ inputs.version }}
+      run: |
+        pnpm exec install-electron
+        pnpm build:desktop-package
+    - name: Package desktop application
+      shell: bash
+      env:
+        TARGET_PLATFORM: ${{ inputs.platform }}
+        TARGET_ARCH: ${{ inputs.arch }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+      run: |
+        channel_args=()
+        case "$RELEASE_CHANNEL" in
+          nightly) channel_args=(--config.publish.channel=nightly) ;;
+          stable) ;;
+          *) echo "Unknown release channel: $RELEASE_CHANNEL" >&2; exit 1 ;;
+        esac
+        pnpm package:desktop \
+          "--$TARGET_PLATFORM" \
+          "--$TARGET_ARCH" \
+          "--config.extraMetadata.version=$RELEASE_VERSION" \
+          "${channel_args[@]}"

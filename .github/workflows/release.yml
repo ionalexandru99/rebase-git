@@ -338,13 +338,13 @@ jobs:
 
       - uses: ./.github/actions/setup-workspace
 
-      - name: Build desktop application
-        env:
-          RELEASE_VERSION: ${{ needs.package.outputs.version }}
-        run: pnpm build:desktop-package
-
       - name: Package desktop application
-        shell: bash
+        uses: ./.github/actions/package-desktop
+        with:
+          platform: ${{ matrix.platform }}
+          arch: ${{ matrix.arch }}
+          version: ${{ needs.package.outputs.version }}
+          channel: ${{ needs.package.outputs.channel }}
         env:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
@@ -352,17 +352,6 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ (matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '') || (matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true') }}
           CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
           CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true' && secrets.WINDOWS_CERTIFICATE || '' }}
-          RELEASE_CHANNEL: ${{ needs.package.outputs.channel }}
-        run: |
-          publish_channel_args=()
-          if [[ "$RELEASE_CHANNEL" == "nightly" ]]; then
-            publish_channel_args=(--config.publish.channel=nightly)
-          fi
-          pnpm package:desktop \
-            --${{ matrix.platform }} \
-            --${{ matrix.arch }} \
-            --config.extraMetadata.version="${{ needs.package.outputs.version }}" \
-            "${publish_channel_args[@]}"
 
       - name: Verify signature and notarization
         if: ${{ matrix.platform == 'mac' && env.HAS_MACOS_CERT == 'true' }}

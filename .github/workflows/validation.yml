@@ -20,11 +20,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - name: Check GitHub workflows
-        uses: docker://rhysd/actionlint:1.7.12
+        uses: docker://rhysd/actionlint@sha256:9d36088643581e728c969f35141f88139fec77280b2be23c1f66f8e40e1025e7
         with:
           args: -color
 
@@ -39,7 +39,7 @@ jobs:
           - 22.18.0
           - 24.19.0
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
@@ -54,7 +54,7 @@ jobs:
           npm pack --pack-destination package-artifact
       - name: Upload package
         if: matrix.node-version == '24.19.0'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: npm-package
           path: package-artifact/rebase-git-*.tgz
@@ -81,7 +81,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
@@ -109,13 +109,13 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version-file: .node-version
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: npm-package
           path: package-artifact
@@ -128,7 +128,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
@@ -145,7 +145,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
@@ -184,16 +184,30 @@ jobs:
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
-      - name: Prepare desktop application
+      - name: Select rehearsal version
+        id: rehearsal
+        shell: bash
         run: |
-          pnpm exec install-electron
-          pnpm build:desktop-package
+          base_version=$(node -p "require('./package.json').version")
+          echo "version=$base_version-nightly.20000101.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
       - name: Build release targets without publishing
-        run: pnpm package:desktop --${{ matrix.platform }} --${{ matrix.arch }}
+        uses: ./.github/actions/package-desktop
+        with:
+          platform: ${{ matrix.platform }}
+          arch: ${{ matrix.arch }}
+          version: ${{ steps.rehearsal.outputs.version }}
+          channel: nightly
+      - name: Verify nightly metadata and set expected smoke version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.rehearsal.outputs.version }}
+        run: |
+          compgen -G 'release/nightly*.yml'
+          npm pkg set "version=$RELEASE_VERSION"
       - name: Smoke-test packaged application
         if: runner.os != 'Linux'
         run: pnpm test:release-smoke:built
@@ -201,7 +215,7 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum pnpm test:release-smoke:built
       - name: Upload release targets
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: rehearsal-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
@@ -210,6 +224,7 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.exe
+            release/nightly*.yml
           if-no-files-found: error
           compression-level: 0
           retention-days: 1

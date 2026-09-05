@@ -21,11 +21,11 @@ jobs:
       HISTORY_PROCESS_CORPUS_PATH: ${{ github.workspace }}/.benchmark-corpus
       HISTORY_SEARCH_REPOSITORY_PATH: ${{ github.workspace }}/.benchmark-corpus
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false
       - name: Check out Git v2.50.0 benchmark history
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           repository: git/git
           ref: 16bd9f20a403117f2e0d9bcda6c6e621d3763e77
