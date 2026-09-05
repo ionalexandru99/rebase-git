@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  clearGraphSelection,
-  reconcileGraphSelection,
-  selectGraphCommit,
-} from "#web/features/commit-graph/commit-selection";
-import {
   type CommitGraphSelectionMode,
   emptyCommitGraphSelection,
 } from "#web/features/commit-graph/commit-selection.contract";
@@ -12,6 +7,11 @@ import {
   reconcileGraphQuerySelection,
   selectGraphQueryCommit,
 } from "#web/features/commit-graph/paging/commit-graph-query-selection";
+import {
+  clearGraphSelection,
+  reconcileGraphSelection,
+  selectGraphCommit,
+} from "#web/features/commit-graph/selection/commit-selection";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,

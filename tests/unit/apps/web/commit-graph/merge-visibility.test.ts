@@ -1,6 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it } from "vitest";
-import { visibleMergeTopology } from "#web/features/commit-graph/merge-visibility";
+import { visibleMergeTopology } from "#web/features/commit-graph/layout/merge-visibility";
 
 function commit(
   oid: string,

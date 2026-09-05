@@ -16,16 +16,17 @@ test("256 active lanes stay within append and canvas budgets", async ({
     if (url === undefined) throw new Error("Performance server has no URL");
     await page.goto(url);
     const metrics = await page.evaluate(async () => {
-      const lanesPath = "/features/commit-graph/commit-lanes.ts";
+      const lanesPath = "/features/commit-graph/layout/commit-lanes.ts";
       const {
         appendCommitLanes,
         createCommitLaneCheckpoint,
-      }: typeof import("#web/features/commit-graph/commit-lanes") =
+      }: typeof import("#web/features/commit-graph/layout/commit-lanes") =
         await import(lanesPath);
-      const canvasPath = "/features/commit-graph/commit-graph-canvas.tsx";
+      const canvasPath =
+        "/features/commit-graph/components/commit-graph-canvas.tsx";
       const {
         redrawCommitGraphCanvas,
-      }: typeof import("#web-ui/features/commit-graph/commit-graph-canvas") =
+      }: typeof import("#web-ui/features/commit-graph/components/commit-graph-canvas") =
         await import(canvasPath);
       const branches = 256;
       const depth = 8;
@@ -49,7 +50,7 @@ test("256 active lanes stay within append and canvas budgets", async ({
         { oid: base, parents: [] },
       ];
       let checkpoint = createCommitLaneCheckpoint();
-      const rows: import("#web/features/commit-graph/commit-lanes").CommitLaneRow[] =
+      const rows: import("#web/features/commit-graph/layout/commit-lanes").CommitLaneRow[] =
         [];
       const appendDurations: number[] = [];
       let firstPlans = "";

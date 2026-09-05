@@ -2,7 +2,7 @@ import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { historyRefKey } from "#web/features/commit-graph/history-scope";
+import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
 import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { KeyboardShortcutRuntime } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
 import {

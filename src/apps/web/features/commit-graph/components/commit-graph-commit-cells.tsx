@@ -1,6 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { type ComponentProps, memo } from "react";
-import { CommitRefLabels } from "#web-ui/features/commit-graph/commit-ref-labels";
+import { CommitRefLabels } from "#web-ui/features/commit-graph/components/commit-ref-labels";
 
 export const CommitGraphCommitCells = memo(
   function CommitGraphCommitCells({

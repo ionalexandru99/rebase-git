@@ -5,14 +5,17 @@ import type {
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { GraphCommandShortcuts } from "#web/features/commit-commands/graph-command.contract";
-import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/browser-history-filter-store";
+import type { HistoryScope } from "#web/features/commit-graph/index";
 import {
   automaticHistoryScope,
+  CommitGraph,
+  CommitGraphToolbarProvider,
+  createBrowserHistoryFilterStore,
   historyScopesEqual,
   resolveHistoryScope,
   toggleHistoryRef,
-} from "#web/features/commit-graph/history-scope";
-import type { HistoryScope } from "#web/features/commit-graph/history-scope.contract";
+  useCommitGraphToolbarModel,
+} from "#web/features/commit-graph/index";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import type {
   RepositoryHistoryGateway,
@@ -31,7 +34,6 @@ import {
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
-import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 const branchesSidebarSize = {
   default: "16.5rem",
@@ -135,6 +137,7 @@ function RepositoryWorkspaceContent({
   readonly retryRefs: () => void;
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
+  const toolbar = useCommitGraphToolbarModel();
   const [historyReader, setHistoryReader] = useState<RepositoryHistoryReader>();
   const [localBranchesFocusRequest, setLocalBranchesFocusRequest] = useState(0);
   useHistoryRefRefresh(historyReader, connected, retryRefs);
@@ -246,59 +249,61 @@ function RepositoryWorkspaceContent({
           aria-label="Repository workspace"
           className="h-full rounded-none bg-repository"
         >
-          <CommitGraph
-            onCacheChanged={(action, identity) =>
-              action === "clear-all"
-                ? clearAllCachedRepositoryRefs()
-                : identity === undefined
+          <CommitGraphToolbarProvider model={toolbar}>
+            <CommitGraph
+              onCacheChanged={(action, identity) =>
+                action === "clear-all"
+                  ? clearAllCachedRepositoryRefs()
+                  : identity === undefined
+                    ? undefined
+                    : clearCachedRepositoryRefs(
+                        identity.environmentId,
+                        identity.repositoryId,
+                      )
+              }
+              commandEnvironment={
+                environmentId === undefined ||
+                logicalRepositoryId === undefined ||
+                repositoryId === undefined
                   ? undefined
-                  : clearCachedRepositoryRefs(
-                      identity.environmentId,
-                      identity.repositoryId,
-                    )
-            }
-            commandEnvironment={
-              environmentId === undefined ||
-              logicalRepositoryId === undefined ||
-              repositoryId === undefined
-                ? undefined
-                : {
+                  : {
+                      environmentId,
+                      logicalRepositoryId,
+                      repositoryId,
+                      activeWorktreePath,
+                      ...(activeBranch === undefined ? {} : { activeBranch }),
+                      connected,
+                      capabilities: new Set(accessCapabilities),
+                      freshnessReady: false,
+                      operationState: "idle",
+                    }
+              }
+              commandsActive={commandsActive}
+              shortcuts={shortcuts}
+              onRemoveHistoryRef={toggleRef}
+              onAddHistoryRef={() =>
+                setLocalBranchesFocusRequest((request) => request + 1)
+              }
+              onResetHistoryScope={() => {
+                setHistoryScope(automaticHistoryScope);
+                if (
+                  environmentId !== undefined &&
+                  logicalRepositoryId !== undefined
+                ) {
+                  filterStore.save(
                     environmentId,
                     logicalRepositoryId,
-                    repositoryId,
-                    activeWorktreePath,
-                    ...(activeBranch === undefined ? {} : { activeBranch }),
-                    connected,
-                    capabilities: new Set(accessCapabilities),
-                    freshnessReady: false,
-                    operationState: "idle",
-                  }
-            }
-            commandsActive={commandsActive}
-            shortcuts={shortcuts}
-            onRemoveHistoryRef={toggleRef}
-            onAddHistoryRef={() =>
-              setLocalBranchesFocusRequest((request) => request + 1)
-            }
-            onResetHistoryScope={() => {
-              setHistoryScope(automaticHistoryScope);
-              if (
-                environmentId !== undefined &&
-                logicalRepositoryId !== undefined
-              ) {
-                filterStore.save(
-                  environmentId,
-                  logicalRepositoryId,
-                  automaticHistoryScope,
-                );
-              }
-            }}
-            reader={historyReader}
-            repositoryName={repositoryName}
-            roots={resolvedScope?.roots}
-            scope={resolvedScope?.scope ?? automaticHistoryScope}
-            selections={resolvedScope?.selections ?? []}
-          />
+                    automaticHistoryScope,
+                  );
+                }
+              }}
+              reader={historyReader}
+              repositoryName={repositoryName}
+              roots={resolvedScope?.roots}
+              scope={resolvedScope?.scope ?? automaticHistoryScope}
+              selections={resolvedScope?.selections ?? []}
+            />
+          </CommitGraphToolbarProvider>
         </main>
       </ResizablePanel>
     </ResizablePanelGroup>

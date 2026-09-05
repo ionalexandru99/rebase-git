@@ -2,6 +2,10 @@ import type { RepositoryFreshness } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import {
+  CommitGraphToolbarProvider,
+  useCommitGraphToolbarModel,
+} from "#web/features/commit-graph/index";
 import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
 import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/use-repository-history-fetch";
 import {
@@ -11,8 +15,10 @@ import {
   type RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
-import { CommitGraphToolbar } from "#web-ui/features/commit-graph/commit-graph-toolbar";
+import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
+import { CommitGraphToolbarDialogs } from "#web-ui/features/commit-graph/components/commit-graph-toolbar-dialogs";
 import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/repository-history-freshness-status";
+import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/repository-history-search-controls";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,
@@ -287,6 +293,7 @@ function Controls({
   readonly snapshot: RepositoryHistorySnapshot;
   readonly canConfigure?: boolean;
 }) {
+  const toolbar = useCommitGraphToolbarModel();
   const fetch = useRepositoryHistoryFetch(reader, snapshot);
   const fetchAction = {
     execute: fetch.execute,
@@ -296,21 +303,38 @@ function Controls({
   };
   return (
     <>
-      <CommitGraphToolbar
-        repositoryName="Rebase"
-        order="topological"
-        onOrderChange={() => {}}
-        searchRef={null}
-        onNavigate={async () => {}}
-        searchBindings={{}}
-        offline={snapshot.freshnessError !== undefined}
-        canConfigure={canConfigure}
-        cache={undefined}
-        fetchAction={fetchAction}
-        fetching={fetch.fetching}
-        reader={reader}
-        snapshot={snapshot}
-      />
+      <CommitGraphToolbarProvider model={toolbar}>
+        <CommitGraphToolbar.Frame>
+          <CommitGraphToolbar.Title repositoryName="Rebase" />
+          <RepositoryHistorySearchControls
+            reader={reader}
+            snapshot={snapshot}
+            onNavigate={async () => {}}
+            bindings={{}}
+            offline={snapshot.freshnessError !== undefined}
+          />
+          <CommitGraphToolbar.Order
+            order="topological"
+            onOrderChange={() => {}}
+          />
+          <CommitGraphToolbar.Fetch
+            fetchAction={fetchAction}
+            fetching={fetch.fetching}
+          />
+          <CommitGraphToolbar.Options
+            fetchSettingsAvailable
+            cacheAvailable={false}
+          />
+        </CommitGraphToolbar.Frame>
+        <CommitGraphToolbarDialogs
+          repositoryName="Rebase"
+          reader={reader}
+          snapshot={snapshot}
+          offline={snapshot.freshnessError !== undefined}
+          canConfigure={canConfigure}
+          cache={undefined}
+        />
+      </CommitGraphToolbarProvider>
       <RepositoryHistoryFreshnessStatus
         error={fetch.error}
         fetchAction={fetchAction}

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import {
   appendCommitLanes,
   createCommitLaneCheckpoint,
-} from "#web/features/commit-graph/commit-lanes";
+} from "#web/features/commit-graph/layout/commit-lanes";
 import { createCommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window";
 import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeRepositoryHistoryError } from "#web/features/commit-graph/commit-graph-messages";
+import { describeRepositoryHistoryError } from "#web/features/commit-graph/components/commit-graph-messages";
 import {
   RepositoryHistoryOffline,
   RepositoryHistoryStorageUnavailable,

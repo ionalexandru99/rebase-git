@@ -2,8 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   createBrowserHistoryFilterStore,
   historyFilterStorageKey,
-} from "#web/features/commit-graph/browser-history-filter-store";
-import { automaticHistoryScope } from "#web/features/commit-graph/history-scope";
+} from "#web/features/commit-graph/scope/browser-history-filter-store";
+import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const repositoryId = "00000000-0000-4000-8000-000000000002";

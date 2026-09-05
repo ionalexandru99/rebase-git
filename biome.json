@@ -30,7 +30,7 @@
     {
       "includes": [
         "src/apps/web/features/commit-graph/commit-graph.tsx",
-        "src/apps/web/features/commit-graph/commit-graph-commit-cells.tsx"
+        "src/apps/web/features/commit-graph/components/commit-graph-commit-cells.tsx"
       ],
       "linter": {
         "rules": {

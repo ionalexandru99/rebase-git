@@ -1,7 +1,7 @@
 import type { KeyboardEvent, MouseEvent } from "react";
-import type { CommitLaneRow } from "#web/features/commit-graph/commit-lanes";
 import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
-import { usePagedGraphSelection } from "#web/features/commit-graph/paging/use-paged-graph-selection";
+import { usePagedGraphSelection } from "#web/features/commit-graph/hooks/use-paged-graph-selection";
+import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,

@@ -3,7 +3,13 @@ import {
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
+import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  CommitGraph,
+  CommitGraphToolbarProvider,
+  useCommitGraphToolbarModel,
+} from "#web/features/commit-graph/index";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import type {
   RepositoryHistoryGateway,
@@ -15,7 +21,6 @@ import {
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/repository-history-store";
-import { CommitGraph } from "#web-ui/features/commit-graph/commit-graph";
 
 const environmentId = crypto.randomUUID();
 const name = crypto.randomUUID();
@@ -159,7 +164,7 @@ export async function prepareStorageInteraction() {
   document.body.append(container);
   const root = createRoot(container);
   root.render(
-    <CommitGraph
+    <StorageGraph
       reader={visibleReader}
       roots={visible.roots}
       repositoryName="Storage interaction"
@@ -201,4 +206,13 @@ declare global {
   interface Window {
     __storageMaintenance: Awaited<ReturnType<typeof prepareStorageInteraction>>;
   }
+}
+
+function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
+  const toolbar = useCommitGraphToolbarModel();
+  return (
+    <CommitGraphToolbarProvider model={toolbar}>
+      <CommitGraph {...props} />
+    </CommitGraphToolbarProvider>
+  );
 }
