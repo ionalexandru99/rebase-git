@@ -118,7 +118,10 @@ export function CommitGraphVirtualWindow({
     firstVirtual === undefined
       ? undefined
       : firstVirtual +
-        Math.ceil((viewport.height - graphHeaderHeight) / rowHeight);
+        Math.max(
+          0,
+          Math.ceil((viewport.height - graphHeaderHeight) / rowHeight),
+        );
   useEffect(() => {
     if (
       firstVirtual === undefined ||

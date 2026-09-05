@@ -10,6 +10,7 @@ import {
   historyReader,
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
@@ -134,7 +135,9 @@ describe("commit graph states", () => {
         .not.toHaveTextContent("selected");
       expect(
         element.querySelectorAll("tr[aria-rowindex]").length,
-      ).toBeLessThanOrEqual(Math.ceil(element.clientHeight / 26) + 13);
+      ).toBeLessThanOrEqual(
+        Math.ceil(element.clientHeight / graphRowHeight) + 13,
+      );
     },
   );
 

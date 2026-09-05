@@ -1,3 +1,4 @@
+import type { RepositoryCommit } from "@rebase/contracts";
 import {
   createContext,
   type ReactNode,
@@ -9,7 +10,6 @@ import {
 } from "react";
 import type {
   AuthorAvatarModel,
-  AvatarAuthor,
   GitHubRepository,
 } from "#web/features/author-avatars/author-avatar.contract";
 import { createAuthorAvatarModel } from "#web/features/author-avatars/author-avatar-model";
@@ -57,16 +57,20 @@ export function AuthorAvatars({
   );
 }
 
-export function AuthorAvatar({ commit }: { readonly commit: AvatarAuthor }) {
+export function AuthorAvatar({
+  commit,
+}: {
+  readonly commit: Pick<RepositoryCommit, "oid" | "author">;
+}) {
   const model = useContext(AvatarContext);
+  const oid = commit.oid;
+  const email = commit.author.email;
   const subscribe = useCallback(
-    (listener: () => void) => model?.subscribe(commit, listener) ?? (() => {}),
-    [model, commit],
+    (listener: () => void) =>
+      model?.subscribe({ oid, author: { email } }, listener) ?? (() => {}),
+    [model, oid, email],
   );
-  const get = useCallback(
-    () => model?.get(commit.author.email),
-    [model, commit.author.email],
-  );
+  const get = useCallback(() => model?.get(email), [model, email]);
   const url = useSyncExternalStore(subscribe, get);
   const [failed, setFailed] = useState<string>();
   const names = commit.author.name.trim().split(/\s+/).filter(Boolean);

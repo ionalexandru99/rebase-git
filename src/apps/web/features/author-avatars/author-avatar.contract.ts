@@ -1,8 +1,11 @@
-import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
+import type { RepositoryRefs } from "@rebase/contracts";
 import { Context, Data, type Effect } from "effect";
 
 export type GitHubRepository = NonNullable<RepositoryRefs["githubRepository"]>;
-export type AvatarAuthor = Pick<RepositoryCommit, "oid" | "author">;
+export interface AvatarAuthor {
+  readonly oid: string;
+  readonly author: { readonly email: string };
+}
 
 export class AvatarUnavailable extends Data.TaggedError("AvatarUnavailable")<{
   readonly retryAt?: number;
