@@ -284,17 +284,31 @@ function createRepositoryFreshnessService(dependencies: {
       }),
     fetch: (repositoryId) =>
       Effect.tryPromise({
-        try: async () => {
-          const repository = await active(repositoryId);
-          repository.manualFetchOwners += 1;
-          try {
-            return await fetch(repository);
-          } finally {
-            repository.manualFetchOwners -= 1;
-          }
-        },
+        try: () => active(repositoryId),
         catch: historyError,
-      }),
+      }).pipe(
+        Effect.flatMap((repository) =>
+          Effect.acquireUseRelease(
+            Effect.sync(() => {
+              repository.manualFetchOwners += 1;
+            }),
+            () =>
+              Effect.tryPromise({
+                try: () => fetch(repository),
+                catch: historyError,
+              }),
+            () =>
+              Effect.sync(() => {
+                repository.manualFetchOwners -= 1;
+                if (
+                  repository.manualFetchOwners === 0 &&
+                  repository.fetchOwners.size === 0
+                )
+                  repository.fetchController?.abort();
+              }),
+          ),
+        ),
+      ),
     configure: (repositoryId, setting: RepositoryFetchSetting) =>
       Effect.tryPromise({
         try: async () => {

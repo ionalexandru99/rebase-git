@@ -9,7 +9,7 @@ import type { RepositoryCatalog } from "@rebase/server/domain/repository-catalog
 import type { RepositoryFreshnessService } from "@rebase/server/domain/repository-freshness.contract";
 import { acquireRepositoryFreshnessSession } from "@rebase/server/features/environment-connection/websocket/repository-freshness-session";
 import { acquireRepositoryFreshnessService } from "@rebase/server/features/repository-history/freshness/repository-freshness";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -18,6 +18,26 @@ const linkedId = "00000000-0000-4000-8000-000000000002";
 afterEach(() => vi.useRealTimers());
 
 describe("repository freshness", () => {
+  it("releases explicit fetch ownership when the caller is interrupted", async () => {
+    const aborted = vi.fn();
+    const fetch = vi.fn(() =>
+      Effect.callback<ReturnType<typeof output>>(() => Effect.sync(aborted)),
+    );
+    await withService({ fetch }, async (service, watch) => {
+      await Effect.runPromise(service.subscribe(repositoryId, () => {}));
+      const manual = Effect.runFork(service.fetch(repositoryId));
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+      const closeWriter = await Effect.runPromise(
+        service.subscribe(linkedId, () => {}, { automaticFetch: true }),
+      );
+      closeWriter();
+      expect(aborted).not.toHaveBeenCalled();
+      await Effect.runPromise(Fiber.interrupt(manual));
+      expect(aborted).toHaveBeenCalledOnce();
+      expect(watch.close).not.toHaveBeenCalled();
+    });
+  });
+
   it("interrupts automatic fetch when the last writer leaves a read-only observer", async () => {
     const aborted = vi.fn();
     const fetch = vi.fn(() =>
