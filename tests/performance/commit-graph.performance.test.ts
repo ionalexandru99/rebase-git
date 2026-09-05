@@ -3,16 +3,26 @@ import {
   execFile,
   spawn,
 } from "node:child_process";
+import { once } from "node:events";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
-import { type CDPSession, expect, type Page, test } from "@playwright/test";
+import {
+  type CDPSession,
+  expect,
+  type Page,
+  test,
+  type WebSocketRoute,
+} from "@playwright/test";
+import { WebSocketServer } from "ws";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve("src/apps/server/cli.ts");
 const megabitsPerSecond = 20;
-const networkBytesPerSecond = (megabitsPerSecond * 1_024 * 1_024) / 8;
+const networkBytesPerSecond = (megabitsPerSecond * 1_000_000) / 8;
 
 const scenarios = [
   {
@@ -36,8 +46,18 @@ for (const scenario of scenarios) {
     await createRepository(repositoryPath);
     const server = startServer(testHome);
     const session = await page.context().newCDPSession(page);
+    let historyReads = 0;
+    session.on("Network.webSocketFrameSent", ({ response }) => {
+      if (response.payloadData.includes('"ReadRepositoryHistory"'))
+        historyReads += 1;
+    });
 
     try {
+      const socketProfile =
+        scenario.latency === 0
+          ? undefined
+          : await shapeGraphWebSockets(page, scenario.latency);
+      const readCount = () => socketProfile?.historyReads ?? historyReads;
       await session.send("Network.enable");
       await session.send("Network.emulateNetworkConditions", {
         connectionType: scenario.latency === 0 ? "none" : "wifi",
@@ -67,11 +87,19 @@ for (const scenario of scenarios) {
           await new Promise(requestAnimationFrame);
       });
       const selectionFeedback = await measureSelectionFeedback(page);
-      const scopeFeedback = await measureHistoryScopeFeedback(page);
+      const uncachedScopeFeedback = await measureHistoryScopeFeedback(
+        page,
+        true,
+      );
       await exerciseVirtualRows(page);
       const frameWork = await trace.stop();
       await expect(history.getByRole("row").first()).toBeVisible();
       const browserMetrics = await page.evaluate(() => window.__graphMetrics);
+      await measureHistoryScopeFeedback(page, false);
+      const readsBeforeCachedScope = readCount();
+      expect(readsBeforeCachedScope).toBeGreaterThan(0);
+      const scopeFeedback = await measureHistoryScopeFeedback(page, true);
+      expect(readCount()).toBe(readsBeforeCachedScope);
       const correctedContentMilliseconds = await measureCorrectedContent(
         page,
         repositoryPath,
@@ -91,6 +119,7 @@ for (const scenario of scenarios) {
           required(browserMetrics.lastBinaryMessage),
         selectionFeedbackMilliseconds: selectionFeedback,
         scopeFeedbackMilliseconds: scopeFeedback,
+        uncachedScopeFeedbackMilliseconds: uncachedScopeFeedback,
       };
       process.stdout.write(`${scenario.name} ${JSON.stringify(metrics)}\n`);
 
@@ -100,17 +129,132 @@ for (const scenario of scenarios) {
       expect(metrics.openingFeedbackMilliseconds).toBeLessThanOrEqual(50);
       expect(metrics.selectionFeedbackMilliseconds).toBeLessThanOrEqual(50);
       expect(metrics.scopeFeedbackMilliseconds).toBeLessThanOrEqual(100);
+      expect(metrics.uncachedScopeFeedbackMilliseconds).toBeLessThanOrEqual(
+        scenario.firstContentLimit,
+      );
       expect(metrics.postGitRenderMilliseconds).toBeLessThanOrEqual(100);
       expect(metrics.correctedContentMilliseconds).toBeLessThanOrEqual(
         scenario.correctedContentLimit,
       );
       expect(metrics.frameWorkP95Milliseconds).toBeLessThan(8.3);
       expect(metrics.frameWorkP99Milliseconds).toBeLessThan(16.7);
+      if (socketProfile !== undefined) {
+        expect(socketProfile.sent).toBeGreaterThan(0);
+        expect(socketProfile.received).toBeGreaterThan(0);
+      }
     } finally {
       server.child.kill("SIGTERM");
       await rm(testHome, { force: true, recursive: true });
     }
   });
+}
+
+test("calibrates WebSocket frame latency and bandwidth", async ({ page }) => {
+  await shapeGraphWebSockets(page, 80);
+  const http = createServer((_request, response) => {
+    response.setHeader("content-type", "text/html");
+    response.end("<title>Graph network calibration</title>");
+  });
+  const server = new WebSocketServer({ server: http });
+  server.on("connection", (socket) => {
+    socket.on("message", (message) => socket.send(message));
+  });
+  try {
+    http.listen(0, "127.0.0.1");
+    await once(http, "listening");
+    const address = http.address();
+    if (address === null || typeof address === "string")
+      throw new Error("Expected TCP address");
+    await page.goto(`http://127.0.0.1:${address.port}`);
+    const timings = await page.evaluate(async (port) => {
+      const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+      await new Promise((resolve, reject) => {
+        socket.addEventListener("open", resolve, { once: true });
+        socket.addEventListener("error", reject, { once: true });
+      });
+      const samples: number[] = [];
+      for (const bytes of [4, 4, 256 * 1_024]) {
+        const received = new Promise((resolve) =>
+          socket.addEventListener("message", resolve, { once: true }),
+        );
+        const started = performance.now();
+        socket.send(new Uint8Array(bytes));
+        await received;
+        samples.push(performance.now() - started);
+      }
+      socket.close();
+      return samples;
+    }, address.port);
+    process.stdout.write(`WebSocket round trips ${JSON.stringify(timings)}\n`);
+    expect(timings[0]).toBeGreaterThanOrEqual(80);
+    expect(timings[1]).toBeGreaterThanOrEqual(80);
+    expect(timings[2]).toBeGreaterThanOrEqual(
+      80 + ((2 * 256 * 1_024) / networkBytesPerSecond) * 1_000,
+    );
+  } finally {
+    for (const socket of server.clients) socket.terminate();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => http.close(() => resolve()));
+  }
+});
+
+async function shapeGraphWebSockets(page: Page, latency: number) {
+  const frames = { sent: 0, received: 0, historyReads: 0 };
+  await page.routeWebSocket("**/*", (browser) => {
+    const server = browser.connectToServer();
+    const controller = new AbortController();
+    browser.onClose(async (code, reason) => {
+      controller.abort();
+      await server.close({
+        ...(code === undefined ? {} : { code }),
+        ...(reason === undefined ? {} : { reason }),
+      });
+    });
+    server.onClose(async (code, reason) => {
+      controller.abort();
+      await browser.close({
+        ...(code === undefined ? {} : { code }),
+        ...(reason === undefined ? {} : { reason }),
+      });
+    });
+    const shapeDirection = (
+      source: WebSocketRoute,
+      target: WebSocketRoute,
+      direction: "sent" | "received",
+    ) => {
+      let transmissionEnd = 0;
+      let pending = Promise.resolve();
+      source.onMessage((message) => {
+        if (
+          direction === "sent" &&
+          typeof message === "string" &&
+          message.includes('"ReadRepositoryHistory"')
+        )
+          frames.historyReads += 1;
+        transmissionEnd =
+          Math.max(performance.now(), transmissionEnd) +
+          (Buffer.byteLength(message) / networkBytesPerSecond) * 1_000;
+        const deliverAt = transmissionEnd + latency / 2;
+        pending = pending.then(async () => {
+          try {
+            while (!controller.signal.aborted && performance.now() < deliverAt)
+              await delay(Math.ceil(deliverAt - performance.now()), undefined, {
+                signal: controller.signal,
+              });
+            if (!controller.signal.aborted) {
+              target.send(message);
+              frames[direction] += 1;
+            }
+          } catch (error) {
+            if (!controller.signal.aborted) throw error;
+          }
+        });
+      });
+    };
+    shapeDirection(browser, server, "sent");
+    shapeDirection(server, browser, "received");
+  });
+  return frames;
 }
 
 async function measureCorrectedContent(page: Page, repositoryPath: string) {
@@ -242,10 +386,16 @@ async function measureSelectionFeedback(page: Page) {
   });
 }
 
-async function measureHistoryScopeFeedback(page: Page) {
-  return page.evaluate(async () => {
+async function measureHistoryScopeFeedback(page: Page, include: boolean) {
+  return page.evaluate(async (add) => {
+    const action = add
+      ? "Add feature to history"
+      : "Remove feature from history";
+    const completed = add
+      ? "Remove feature from history"
+      : "Add feature to history";
     const button = document.querySelector<HTMLButtonElement>(
-      'button[aria-label="Add feature to history"]',
+      `button[aria-label="${action}"]`,
     );
     const history = document.querySelector<HTMLElement>(
       '[role="grid"][aria-label="Commit history"]',
@@ -256,15 +406,13 @@ async function measureHistoryScopeFeedback(page: Page) {
     const started = performance.now();
     button.click();
     while (
-      document.querySelector(
-        'button[aria-label="Remove feature from history"]',
-      ) === null ||
+      document.querySelector(`button[aria-label="${completed}"]`) === null ||
       history.getAttribute("aria-busy") !== "false"
     ) {
       await new Promise(requestAnimationFrame);
     }
     return performance.now() - started;
-  });
+  }, include);
 }
 
 async function exerciseVirtualRows(page: Page) {
