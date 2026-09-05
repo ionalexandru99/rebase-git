@@ -12,7 +12,6 @@ import {
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
-import { operationStatuses } from "#server/domain/environment-state.contract";
 
 export const environmentTable = sqliteTable(
   "environment",
@@ -70,27 +69,6 @@ export const authorizationCapabilityTable = sqliteTable(
     check(
       "authorization_capability_value_check",
       sql`${authorizationCapability.capability} IN (${sql.raw(sqlValues(environmentAccessCapabilities))})`,
-    ),
-  ],
-);
-
-export const operationActivityTable = sqliteTable(
-  "operation_activity",
-  {
-    finishedAt: text("finished_at"),
-    id: text("id").primaryKey(),
-    kind: text("kind").notNull(),
-    startedAt: text("started_at").notNull(),
-    status: text("status", { enum: operationStatuses }).notNull(),
-  },
-  (operation) => [
-    check(
-      "operation_activity_status_check",
-      sql`${operation.status} IN (${sql.raw(sqlValues(operationStatuses))})`,
-    ),
-    index("operation_activity_started_at").on(
-      sql`${operation.startedAt} DESC`,
-      sql`${operation.id} DESC`,
     ),
   ],
 );

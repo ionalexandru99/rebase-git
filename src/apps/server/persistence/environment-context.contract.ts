@@ -4,11 +4,6 @@ import type { EnvironmentStorageError } from "#server/domain/environment-storage
 
 export interface EnvironmentContext {
   readonly database: NodeSQLiteDatabase;
-  readonly databaseSettings: {
-    readonly busyTimeout: number;
-    readonly foreignKeys: boolean;
-    readonly journalMode: string;
-  };
   readonly serverSecret: string;
   readonly read: <Value>(
     message: string,
