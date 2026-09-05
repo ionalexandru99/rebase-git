@@ -1,15 +1,20 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
+import type {
+  CommitLaneRow,
+  CommitLaneSeed,
+} from "#web/features/commit-graph/layout/commit-lanes.contract";
+
+export const graphRemoteOpacity = 0.5;
 
 const palette = [
   "#4C9AFF",
-  "#2DD4BF",
+  "#22C55E",
   "#B38AFF",
-  "#FF866E",
-  "#A7D45D",
-  "#38C9E8",
-  "#F079B1",
-  "#E7BD66",
+  "#F97316",
+  "#84CC16",
+  "#06B6D4",
+  "#EF4444",
+  "#F59E0B",
 ] as const;
 
 export function graphLaneColor(
@@ -26,11 +31,24 @@ export function graphRefName(ref: RepositoryHistoryRefTarget) {
 }
 
 export function graphBranchColorIndex(name: string) {
-  if (name === "main" || name === "master") return 0;
+  if (["main", "master", "dev", "develop"].includes(name)) return 0;
   let hash = 0;
   for (const character of name)
     hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return 1 + (hash % (palette.length - 1));
+}
+
+export function graphLaneSeeds(refs: readonly RepositoryHistoryRefTarget[]) {
+  const seeds = new Map<string, CommitLaneSeed>();
+  for (const ref of refs) {
+    if (ref.type !== "branch" && ref.type !== "remote-branch") continue;
+    if (seeds.get(ref.oid)?.remote === false) continue;
+    seeds.set(ref.oid, {
+      color: graphBranchColorIndex(graphRefName(ref)),
+      remote: ref.type === "remote-branch",
+    });
+  }
+  return seeds;
 }
 
 export function graphColors(

@@ -63,6 +63,7 @@ describe("commit reference pills", () => {
   });
 
   it("reports a failed clipboard write inside the pill", async () => {
+    vi.spyOn(document, "execCommand").mockReturnValue(false);
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
       new Error("Unavailable"),
     );
@@ -75,5 +76,33 @@ describe("commit reference pills", () => {
     await expect
       .element(screen.getByRole("status"))
       .toHaveTextContent("Could not copy feature/cache");
+  });
+
+  it("falls back to selection copying after an async clipboard rejection", async () => {
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
+      new Error("Denied"),
+    );
+    const fallback = vi
+      .spyOn(document, "execCommand")
+      .mockImplementation(() => {
+        const field = document.activeElement;
+        expect(field).toBeInstanceOf(HTMLTextAreaElement);
+        expect((field as HTMLTextAreaElement).value).toBe("origin/main");
+        return true;
+      });
+    const screen = await render(
+      <CommitRefLabels
+        labels={[{ name: "origin/main", oid: "a", type: "remote-branch" }]}
+      />,
+    );
+    const pill = screen.getByRole("button", { name: "Copy origin/main" });
+    pill.element().focus();
+    await userEvent.keyboard("{Enter}");
+    await expect
+      .element(screen.getByRole("status"))
+      .toHaveTextContent("Copied origin/main");
+    expect(fallback).toHaveBeenCalledWith("copy");
+    expect(document.activeElement).toBe(pill.element());
+    expect(document.querySelector("textarea")).toBeNull();
   });
 });

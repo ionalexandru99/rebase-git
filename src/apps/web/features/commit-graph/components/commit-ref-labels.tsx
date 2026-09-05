@@ -42,10 +42,9 @@ export function CommitRefPill({
           graphBranchColorIndex(graphRefName({ ...label, oid: "" })),
         ));
   const local = label.type === "branch";
-  const remote =
-    label.type === "remote-branch"
-      ? label.name.slice(0, label.name.indexOf("/"))
-      : undefined;
+  const separator =
+    label.type === "remote-branch" ? label.name.indexOf("/") : -1;
+  const remote = separator > 0 ? label.name.slice(0, separator) : undefined;
   return (
     <CopyPill
       value={label.name}

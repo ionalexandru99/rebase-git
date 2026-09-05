@@ -3,10 +3,46 @@ import { userEvent } from "vitest/browser";
 import {
   history,
   historyReader,
+  mergeHistory,
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 
 describe("commit graph layout", () => {
+  it("centers merge symbols on their circles in both states", async () => {
+    const screen = await renderGraph(
+      historyReader({ commits: mergeHistory(), status: "ready" }),
+    );
+    const button = screen.getByRole("button", {
+      name: /^(Expand|Collapse) merge Commit 0$/,
+    });
+    await expect.element(button).toBeVisible();
+    const assertCentered = () => {
+      const element = button.element();
+      const circle = element.querySelector("circle");
+      const symbol = element.querySelector("path");
+      if (circle === null || symbol === null)
+        throw new Error("Missing merge marker");
+      const circleBounds = circle.getBoundingClientRect();
+      const symbolBounds = symbol.getBoundingClientRect();
+      const rowBounds = element.closest("tr")?.getBoundingClientRect();
+      expect(symbolBounds.x + symbolBounds.width / 2).toBe(
+        circleBounds.x + circleBounds.width / 2,
+      );
+      expect(symbolBounds.y + symbolBounds.height / 2).toBe(
+        circleBounds.y + circleBounds.height / 2,
+      );
+      expect(circleBounds.y + circleBounds.height / 2).toBe(
+        (rowBounds?.y ?? 0) + 13,
+      );
+    };
+    assertCentered();
+    await button.click();
+    await expect
+      .element(screen.getByRole("button", { name: "Collapse merge Commit 0" }))
+      .toBeVisible();
+    assertCentered();
+  });
+
   it("keeps wide merge rails and buttons beneath the fixed metadata", async () => {
     const commits = history(193).map((commit, index) => ({
       ...commit,

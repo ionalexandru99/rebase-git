@@ -11,7 +11,7 @@ import type {
 
 export type CommitGraphPageReader = Pick<
   RepositoryHistoryReader,
-  "read" | "locate" | "locateMany" | "ancestryRoute"
+  "read" | "locate" | "locateMany" | "ancestryRoute" | "getRefTargets"
 >;
 
 export interface CommitGraphPage {

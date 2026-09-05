@@ -533,6 +533,7 @@ export function CommitGraph({
                                       state={merge}
                                       onToggle={toggleMerge}
                                       position={commitGraphNodePosition(lane)}
+                                      remote={lane.nodeRemote}
                                       color={graphLaneColor(
                                         lane.nodeLaneId,
                                         colors.lanes,

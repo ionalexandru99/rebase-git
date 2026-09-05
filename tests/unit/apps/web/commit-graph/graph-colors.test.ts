@@ -4,12 +4,84 @@ import {
   createCommitLaneCheckpoint,
 } from "#web/features/commit-graph/layout/commit-lanes";
 import {
-  graphBranchColorIndex,
   graphColors,
   graphLaneColor,
+  graphLaneSeeds,
 } from "#web/features/commit-graph/layout/graph-colors";
 
 describe("graph branch colors", () => {
+  it("keeps remote history subdued until it reaches local history across pages", () => {
+    const seeds = graphLaneSeeds([
+      { name: "origin/dev", oid: "remote", type: "remote-branch" },
+      { name: "dev", oid: "local", type: "branch" },
+    ]);
+    const first = appendCommitLanes(
+      createCommitLaneCheckpoint(),
+      [{ oid: "remote", parents: ["middle"] }],
+      seeds,
+    );
+    const second = appendCommitLanes(
+      first.checkpoint,
+      [
+        { oid: "middle", parents: ["local"] },
+        { oid: "local", parents: ["base"] },
+        { oid: "base", parents: [] },
+      ],
+      seeds,
+    );
+
+    expect(first.rows[0]?.nodeRemote).toBe(true);
+    expect(second.rows.map((row) => row.nodeRemote)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    expect(second.rows[1]?.lanesBefore[0]?.remote).toBe(true);
+    expect(second.rows[1]?.lanesAfter[0]?.remote).toBe(false);
+    expect(first.checkpoint.lanes[0]?.remote).toBe(true);
+    expect(
+      new Set([...first.rows, ...second.rows].map((row) => row.nodeLaneId))
+        .size,
+    ).toBe(1);
+  });
+
+  it("makes shared ancestry vivid when diverged local and remote branches join", () => {
+    const refs = [
+      { name: "origin/main", oid: "remote", type: "remote-branch" as const },
+      { name: "main", oid: "local", type: "branch" as const },
+    ];
+    const plan = appendCommitLanes(
+      createCommitLaneCheckpoint(),
+      [
+        { oid: "remote", parents: ["shared"] },
+        { oid: "local", parents: ["shared"] },
+        { oid: "shared", parents: ["base"] },
+        { oid: "base", parents: [] },
+      ],
+      graphLaneSeeds(refs),
+    );
+    expect(plan.rows.map((row) => row.nodeRemote)).toEqual([
+      true,
+      false,
+      false,
+      false,
+    ]);
+    expect(plan.rows[0]?.lanesAfter[0]?.remote).toBe(true);
+    expect(plan.rows[1]?.lanesAfter[0]?.remote).toBe(false);
+  });
+
+  it("prefers vivid local tips when refs share a commit regardless of ref order", () => {
+    const refs = [
+      { name: "dev", oid: "shared", type: "branch" as const },
+      { name: "origin/dev", oid: "shared", type: "remote-branch" as const },
+    ];
+    expect(graphLaneSeeds(refs).get("shared")).toEqual({
+      color: 0,
+      remote: false,
+    });
+    expect(graphLaneSeeds(refs.toReversed())).toEqual(graphLaneSeeds(refs));
+  });
+
   it("keeps local and remote tips on separate lanes the same color across page checkpoints", () => {
     const refs = [
       { name: "main", oid: "a", type: "branch" as const },
@@ -21,10 +93,7 @@ describe("graph branch colors", () => {
         { oid: "a", parents: ["c"] },
         { oid: "b", parents: ["d"] },
       ],
-      new Map([
-        ["a", graphBranchColorIndex("main")],
-        ["b", graphBranchColorIndex("main")],
-      ]),
+      graphLaneSeeds(refs),
     );
     const second = appendCommitLanes(first.checkpoint, [
       { oid: "c", parents: ["e"] },
@@ -46,10 +115,7 @@ describe("graph branch colors", () => {
       { name: "main", oid: "a", type: "branch" as const },
       { name: "feature/cache", oid: "b", type: "branch" as const },
     ];
-    const seeds = new Map([
-      ["a", graphBranchColorIndex("main")],
-      ["b", graphBranchColorIndex("feature/cache")],
-    ]);
+    const seeds = graphLaneSeeds(refs);
     const first = appendCommitLanes(
       createCommitLaneCheckpoint(),
       [{ oid: "a", parents: ["b"] }],

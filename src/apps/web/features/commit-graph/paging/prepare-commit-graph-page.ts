@@ -3,10 +3,7 @@ import {
   appendCommitLanes,
   type CommitLaneCheckpoint,
 } from "#web/features/commit-graph/layout/commit-lanes";
-import {
-  graphBranchColorIndex,
-  graphRefName,
-} from "#web/features/commit-graph/layout/graph-colors";
+import { graphLaneSeeds } from "#web/features/commit-graph/layout/graph-colors";
 import type {
   CommitGraphPage,
   CommitGraphPageReader,
@@ -21,7 +18,10 @@ export async function prepareCommitGraphPage(
   signal: AbortSignal,
 ): Promise<CommitGraphPage> {
   signal.throwIfAborted();
-  const commits = await reader.read({ ...query, offset });
+  const [commits, refs] = await Promise.all([
+    reader.read({ ...query, offset }),
+    reader.getRefTargets().catch(() => query.roots),
+  ]);
   signal.throwIfAborted();
   if (commits.length > query.limit)
     throw new Error("History page exceeds its requested size");
@@ -82,13 +82,7 @@ export async function prepareCommitGraphPage(
   const plan = appendCommitLanes(
     incomingCheckpoint,
     topology,
-    new Map(
-      query.roots
-        .filter(
-          (root) => root.type === "branch" || root.type === "remote-branch",
-        )
-        .map((root) => [root.oid, graphBranchColorIndex(graphRefName(root))]),
-    ),
+    graphLaneSeeds([...query.roots, ...refs]),
   );
   const merges = new Map<string, "collapsed" | "expanded">();
   for (const commit of commits) {

@@ -7,6 +7,12 @@ export interface CommitLanePosition {
   readonly id: number;
   readonly slot: number;
   readonly color: number;
+  readonly remote: boolean;
+}
+
+export interface CommitLaneSeed {
+  readonly color: number;
+  readonly remote: boolean;
 }
 
 export interface CommitLane extends CommitLanePosition {
@@ -22,6 +28,8 @@ export interface CommitLaneRow {
   readonly lanesAfter: readonly CommitLanePosition[];
   readonly lanesBefore: readonly CommitLanePosition[];
   readonly nodeLaneId: number;
+  readonly nodeHasIncomingLane: boolean;
+  readonly nodeRemote: boolean;
   readonly oid: string;
   readonly parentLaneIds: readonly number[];
 }

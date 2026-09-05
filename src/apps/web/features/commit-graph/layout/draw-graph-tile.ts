@@ -1,5 +1,8 @@
 import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes.contract";
-import { graphLaneColor } from "#web/features/commit-graph/layout/graph-colors";
+import {
+  graphLaneColor,
+  graphRemoteOpacity,
+} from "#web/features/commit-graph/layout/graph-colors";
 import {
   commitGraphNodePosition,
   graphLaneX,
@@ -38,8 +41,10 @@ export function drawGraphTile(
     const bottom = top + graphRowHeight;
     const nodeX = commitGraphNodePosition(row) - left;
     for (const lane of row.lanesBefore) {
+      if (lane.id === row.nodeLaneId && !row.nodeHasIncomingLane) continue;
       const x = graphLaneX(lane.slot) - left;
       if (x < -4 || x > width + 4) continue;
+      context.globalAlpha = lane.remote ? graphRemoteOpacity : 1;
       drawLane(
         context,
         graphLaneColor(lane.id, colors),
@@ -55,6 +60,7 @@ export function drawGraphTile(
       const parentX = graphLaneX(parent.slot) - left;
       if (Math.max(parentX, nodeX) < -4 || Math.min(parentX, nodeX) > width + 4)
         continue;
+      context.globalAlpha = row.nodeRemote ? graphRemoteOpacity : 1;
       drawLane(
         context,
         graphLaneColor(id, colors),
@@ -69,10 +75,13 @@ export function drawGraphTile(
     context.beginPath();
     context.arc(nodeX, center, 3, 0, Math.PI * 2);
     context.globalCompositeOperation = "destination-out";
+    context.globalAlpha = 1;
     context.fill();
     context.globalCompositeOperation = "source-over";
+    context.globalAlpha = row.nodeRemote ? graphRemoteOpacity : 1;
     context.stroke();
   }
+  context.globalAlpha = 1;
 }
 
 function drawLane(

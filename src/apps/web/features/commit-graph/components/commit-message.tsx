@@ -1,6 +1,7 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { useCommitMessageScroll } from "#web/features/commit-graph/hooks/use-commit-message-scroll";
+import { graphMetadataWidth } from "#web/features/commit-graph/layout/graph-metrics";
 import {
   Popover,
   PopoverContent,
@@ -77,7 +78,8 @@ export function CommitMessage({
       {edges.room ? null : (
         <Popover>
           <PopoverTrigger
-            className="absolute inset-y-0 right-[339px] z-[3] bg-[var(--graph-row-background)] px-2 text-[10px] text-muted-foreground"
+            className="absolute inset-y-0 z-[3] bg-[var(--graph-row-background)] px-2 text-[10px] text-muted-foreground"
+            style={{ right: graphMetadataWidth }}
             onClick={(event) => event.stopPropagation()}
             aria-label="Show message hidden by wide graph"
           >

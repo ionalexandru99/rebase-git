@@ -30,6 +30,26 @@ const ready: RepositoryHistorySnapshot = {
 };
 
 describe("repository fetch controls", () => {
+  it("shows unavailable fetching when a subscription fails with stale history", async () => {
+    await render(
+      <Controls
+        reader={createReader()}
+        snapshot={{
+          ...ready,
+          freshness: { ...fresh, stale: true },
+          freshnessError: new RepositoryHistoryRejected({
+            failure: { _tag: "AuthorizationDenied" },
+          }),
+        }}
+      />,
+    );
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent(
+        "Fetching is unavailable. Cached history is available.",
+      );
+  });
+
   it("updates clean settings from other clients while preserving an edited interval", async () => {
     const reader = createReader();
     const screen = await render(

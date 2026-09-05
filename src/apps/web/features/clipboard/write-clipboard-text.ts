@@ -1,8 +1,14 @@
 export async function writeClipboardText(text: string): Promise<void> {
   if (navigator.clipboard?.writeText !== undefined) {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard
+      .writeText(text)
+      .catch(() => writeLegacyClipboardText(text));
     return;
   }
+  writeLegacyClipboardText(text);
+}
+
+function writeLegacyClipboardText(text: string) {
   const active = document.activeElement;
   const field = document.createElement("textarea");
   field.value = text;

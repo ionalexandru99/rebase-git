@@ -272,10 +272,11 @@ describe("commit graph navigation", () => {
       .toHaveAttribute("aria-selected", "true");
     await vi.waitFor(() => expect(grid.element().scrollTop).toBe(10 * 26 + 7));
     const reads = reader.read.mock.calls.length;
+    const refReads = reader.getRefTargets.mock.calls.length;
     await act(async () => {
       reader.snapshot = { ...reader.snapshot, revision: 2 };
     });
-    expect(reader.getRefTargets).toHaveBeenCalledTimes(2);
+    expect(reader.getRefTargets).toHaveBeenCalledTimes(refReads);
     expect(reader.read).toHaveBeenCalledTimes(reads);
   });
 

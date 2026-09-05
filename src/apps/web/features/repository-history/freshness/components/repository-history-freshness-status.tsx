@@ -22,10 +22,10 @@ export function RepositoryHistoryFreshnessStatus({
     : fetching
       ? "Fetching"
       : (error ??
-        (failed
-          ? `Fetch failed. ${describeCachedHistory(snapshot)}`
-          : snapshot.freshnessError !== undefined
-            ? `Fetching is unavailable. ${describeCachedHistory(snapshot)}`
+        (snapshot.freshnessError !== undefined
+          ? `Fetching is unavailable. ${describeCachedHistory(snapshot)}`
+          : failed
+            ? `Fetch failed. ${describeCachedHistory(snapshot)}`
             : undefined));
   return (
     <div className="flex min-h-7 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-border/60 border-t px-3 py-1 text-[10px] text-muted-foreground">

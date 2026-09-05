@@ -1,5 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { IconMinus, IconPlus } from "@tabler/icons-react";
+import { graphRemoteOpacity } from "#web/features/commit-graph/layout/graph-colors";
 
 export function CommitGraphMergeControl({
   commit,
@@ -7,14 +7,15 @@ export function CommitGraphMergeControl({
   onToggle,
   position,
   color,
+  remote,
 }: {
   readonly commit: RepositoryCommit;
   readonly state: "collapsed" | "expanded";
   readonly onToggle: (oid: string, expand: boolean) => void;
   readonly position: number;
   readonly color: string;
+  readonly remote: boolean;
 }) {
-  const Icon = state === "expanded" ? IconMinus : IconPlus;
   return (
     <button
       aria-label={`${state === "expanded" ? "Collapse" : "Expand"} merge ${commit.subject}`}
@@ -29,12 +30,24 @@ export function CommitGraphMergeControl({
       tabIndex={-1}
       type="button"
     >
-      <span
-        className="grid size-[11px] place-items-center rounded-full text-repository"
-        style={{ background: color }}
+      <svg
+        aria-hidden="true"
+        className="size-3 text-repository"
+        viewBox="-6 -6 12 12"
       >
-        <Icon aria-hidden="true" size={9} stroke={2} />
-      </span>
+        <circle
+          r="5.5"
+          fill={color}
+          fillOpacity={remote ? graphRemoteOpacity : 1}
+        />
+        <path
+          d={state === "expanded" ? "M-2.5 0h5" : "M-2.5 0h5M0-2.5v5"}
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1"
+        />
+      </svg>
     </button>
   );
 }

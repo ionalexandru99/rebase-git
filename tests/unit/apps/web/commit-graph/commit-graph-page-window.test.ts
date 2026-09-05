@@ -551,6 +551,9 @@ describe("commit graph page window", () => {
 
 function fakeReader(commits: readonly RepositoryCommit[]) {
   return {
+    getRefTargets: vi.fn<CommitGraphPageReader["getRefTargets"]>(
+      async () => [],
+    ),
     read: vi.fn<CommitGraphPageReader["read"]>(async (request) =>
       commits.slice(request.offset ?? 0, (request.offset ?? 0) + request.limit),
     ),
