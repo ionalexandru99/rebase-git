@@ -246,7 +246,11 @@ export function readRepositoryHistory(
         repository.completion === undefined ||
         (cachedPage.offset === 0 && cachedPage.scopeKey === key)) &&
       (previous === undefined ||
-        (!previous.complete && previous.basis === basis))
+        (!previous.complete && previous.basis === basis) ||
+        (repository.completion === undefined &&
+          cachedPage.offset !== undefined &&
+          cachedPage.scopeKey === key &&
+          offset + query.limit <= cachedPage.offset + cachedPage.oids.length))
     ) {
       const relativeOffset = offset - (cachedPage.offset ?? 0);
       const cachedOids = cachedPage.oids.slice(
