@@ -33,18 +33,22 @@ describe("browser repository freshness", () => {
       repositoryId: firstId,
       gateway: firstGateway.gateway,
     });
-    await vi.waitFor(() =>
-      expect(first.getSnapshot().freshness).toEqual(fresh),
-    );
-    const second = createBrowserRepositoryHistoryReader({
-      environmentId,
-      logicalRepositoryId,
-      repositoryId: secondId,
-      gateway: secondGateway.gateway,
-    });
+    let second:
+      | ReturnType<typeof createBrowserRepositoryHistoryReader>
+      | undefined;
     try {
+      await first.getRefTargets();
       await vi.waitFor(() =>
-        expect(second.getSnapshot().freshness).toEqual(fresh),
+        expect(first.getSnapshot().freshness).toEqual(fresh),
+      );
+      second = createBrowserRepositoryHistoryReader({
+        environmentId,
+        logicalRepositoryId,
+        repositoryId: secondId,
+        gateway: secondGateway.gateway,
+      });
+      await vi.waitFor(() =>
+        expect(second?.getSnapshot().freshness).toEqual(fresh),
       );
       expect(firstGateway.subscribe).toHaveBeenCalledOnce();
       expect(secondGateway.subscribe).not.toHaveBeenCalled();
@@ -74,7 +78,7 @@ describe("browser repository freshness", () => {
       expect(secondGateway.fetch).toHaveBeenCalledOnce();
     } finally {
       first.close();
-      second.close();
+      second?.close();
     }
     expect(secondGateway.release).toHaveBeenCalledOnce();
   });
