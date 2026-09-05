@@ -15,7 +15,7 @@ import {
   storedCommit,
 } from "#web/persistence/repository-history/repository-history-records";
 
-it.each([2, 4])(
+it.each([2, 4, 5])(
   "preserves history and ordering when upgrading a version-%i cache",
   async (version) => {
     const factory = isolatedFactory();
@@ -44,7 +44,7 @@ it.each([2, 4])(
     await createOldCache(factory, version, legacyRecords, repository);
     try {
       await withRepositoryHistoryDatabase(factory, async (database) => {
-        expect(database.version).toBe(5);
+        expect(database.version).toBe(6);
         const transaction = database.transaction([
           commitStoreName,
           repositoryStoreName,

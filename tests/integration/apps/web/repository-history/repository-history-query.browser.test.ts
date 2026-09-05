@@ -1,5 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
 import { readCurrentRepositoryHistory } from "#web/features/repository-history/query/read-current-repository-history";
 import {
@@ -23,6 +24,48 @@ import type { StoredRepository } from "#web/persistence/repository-history/repos
 import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";
 
 describe("local ordered history pages", () => {
+  it("reopens saved topology without scanning commit metadata and rebuilds it after a commit changes", async () => {
+    const fixture = await seed("main", false);
+    const prepare = async () => {
+      const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+      await prepareRepositoryHistoryOrder(
+        fixture.environmentId,
+        fixture.repositoryId,
+        cache,
+      );
+      return cache.index;
+    };
+    const first = await prepare();
+    const reads = vi.spyOn(IDBObjectStore.prototype, "getAll");
+    try {
+      const reopened = await prepare();
+      expect(reopened?.order([oid("merge")], "topological")).toEqual(
+        first?.order([oid("merge")], "topological"),
+      );
+      expect(reads).not.toHaveBeenCalled();
+      const merge = fixture.commits.find(
+        (commit) => commit.subject === "merge",
+      );
+      if (merge === undefined) throw new Error("Missing merge");
+      await initialPage(fixture.environmentId, fixture.repositoryId, "main", [
+        { ...merge, parents: [oid("left")] },
+      ]);
+      const changed = await prepare();
+      expect(changed?.order([oid("merge")], "topological")).toEqual(
+        ["merge", "left", "base"].map(oid),
+      );
+      await clearHistoryCache(
+        fixture.environmentId,
+        fixture.repositoryId,
+        false,
+      );
+      const cleared = await prepare();
+      expect(cleared?.order([oid("merge")], "topological")).toEqual([]);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
   it("uses the cached page when a moved branch tip is newer than the prepared index", async () => {
     const fixture = await seed("main", false);
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };

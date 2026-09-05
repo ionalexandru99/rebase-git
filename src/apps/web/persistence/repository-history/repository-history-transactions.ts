@@ -4,6 +4,7 @@ import {
   repositoryCommitRange,
   repositoryStoreName,
   requestResult,
+  topologyStoreName,
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/persistence/repository-history/repository-history-database";
@@ -41,11 +42,18 @@ export function updateStoredHistory<T>(
 ) {
   return withRepositoryHistoryDatabase(indexedDB, (database) => {
     const transaction = database.transaction(
-      [commitStoreName, repositoryStoreName],
+      [commitStoreName, repositoryStoreName, topologyStoreName],
       "readwrite",
     );
     const commits = transaction.objectStore(commitStoreName);
     const repositories = transaction.objectStore(repositoryStoreName);
+    const topologies = transaction.objectStore(topologyStoreName);
+    const invalidated = new Set<string>();
+    const invalidateTopology = (key: string) => {
+      if (invalidated.has(key)) return;
+      invalidated.add(key);
+      topologies.delete(key);
+    };
     return update({
       ...historyReadTransaction(transaction),
       storeRepository: (record) => {
@@ -53,6 +61,9 @@ export function updateStoredHistory<T>(
       },
       storeCommit: (record) => {
         commits.put(record);
+        invalidateTopology(
+          repositoryKey(record.environmentId, record.repositoryId),
+        );
       },
       readCommitChunk: (key, after, limit) =>
         requestResult<StoredCommit[]>(
@@ -62,12 +73,15 @@ export function updateStoredHistory<T>(
         requestResult(commits.count(repositoryCommitRange(key))),
       deleteCommit: (key) => {
         commits.delete(key);
+        invalidateTopology(key.slice(0, key.lastIndexOf("\0")));
       },
       deleteRepositoryCommits: (key) => {
         commits.delete(repositoryCommitRange(key));
+        invalidateTopology(key);
       },
       deleteRepository: (key) => {
         repositories.delete(key);
+        invalidateTopology(key);
       },
     });
   });
@@ -110,27 +124,6 @@ export function readStoredRepository(
   });
 }
 
-export function readStoredCommitChunk(
-  key: string,
-  after: string | undefined,
-  limit: number,
-  indexedDB: IDBFactory | undefined,
-  isCurrent: () => boolean,
-) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    if (!isCurrent()) return [];
-    const transaction = database.transaction(commitStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const records = await requestResult<StoredCommit[]>(
-      transaction
-        .objectStore(commitStoreName)
-        .getAll(repositoryCommitRange(key, after), limit),
-    );
-    await completed;
-    return records;
-  });
-}
-
 export function readStoredCommits(
   environmentId: string,
   repositoryId: string,
@@ -160,9 +153,15 @@ export function storeRepositoryCommits(
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ) {
   return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(commitStoreName, "readwrite");
+    const transaction = database.transaction(
+      [commitStoreName, topologyStoreName],
+      "readwrite",
+    );
     const completed = transactionCompleted(transaction);
     const store = transaction.objectStore(commitStoreName);
+    transaction
+      .objectStore(topologyStoreName)
+      .delete(repositoryKey(environmentId, repositoryId));
     for (const commit of commits)
       store.put(storedCommit(environmentId, repositoryId, commit));
     await completed;

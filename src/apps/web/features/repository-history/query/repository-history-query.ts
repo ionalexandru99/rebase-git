@@ -15,9 +15,9 @@ import {
   commitKey,
   repositoryKey,
 } from "#web/persistence/repository-history/repository-history-records";
+import { readStoredHistoryTopology } from "#web/persistence/repository-history/repository-history-topology";
 import type { RepositoryHistoryReadTransaction } from "#web/persistence/repository-history/repository-history-transaction.contract";
 import {
-  readStoredCommitChunk,
   readStoredCommits,
   readStoredHistory,
   readStoredRepository,
@@ -451,16 +451,15 @@ async function buildRepositoryHistoryOrder(
   revision: number,
   indexedDB: IDBFactory | undefined,
 ) {
-  const nodes = await readHistoryOrderNodes((after) =>
-    readStoredCommitChunk(
-      repositoryKey(environmentId, repositoryId),
-      after,
-      2_048,
-      indexedDB,
-      () => revision === cache.revision,
-    ),
+  const topology = await readStoredHistoryTopology(
+    repositoryKey(environmentId, repositoryId),
+    indexedDB,
+    async (readChunk) =>
+      new HistoryOrderIndex(await readHistoryOrderNodes(readChunk)).snapshot(),
+    () => revision === cache.revision,
   );
-  if (revision === cache.revision) cache.index = new HistoryOrderIndex(nodes);
+  if (revision === cache.revision)
+    cache.index = new HistoryOrderIndex(topology);
 }
 
 export function normalizedOids(oids: readonly string[]) {

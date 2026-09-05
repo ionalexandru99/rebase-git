@@ -184,8 +184,12 @@ describe("commit graph layout", () => {
       .getByRole("button", { name: "Copy main", exact: true });
     await expect.element(local).toBeVisible();
     await expect.element(remote).toBeVisible();
-    const filled = getComputedStyle(local.element());
-    const hollow = getComputedStyle(remote.element());
+    const filled = getComputedStyle(
+      local.element().parentElement as HTMLElement,
+    );
+    const hollow = getComputedStyle(
+      remote.element().parentElement as HTMLElement,
+    );
     expect(filled.backgroundColor).toBe(hollow.color);
     expect(hollow.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
     const author = screen

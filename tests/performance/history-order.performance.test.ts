@@ -103,6 +103,56 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
       );
       const indexMilliseconds = performance.now() - indexStarted;
       console.log(`history-order: index prepared in ${indexMilliseconds}ms`);
+      const readerPath =
+        "/features/repository-history/browser-repository-history-reader.ts";
+      const {
+        createBrowserRepositoryHistoryReader,
+      }: typeof import("#web/features/repository-history/browser-repository-history-reader") =
+        await import(readerPath);
+      const graphPath =
+        "/features/commit-graph/paging/commit-graph-page-window.ts";
+      const {
+        createCommitGraphPageWindow,
+      }: typeof import("#web/features/commit-graph/paging/commit-graph-page-window") =
+        await import(graphPath);
+      const reopenStarted = performance.now();
+      const worker = new SharedWorker(
+        "/features/repository-history/worker/repository-history-worker.ts",
+        { type: "module", name: crypto.randomUUID() },
+      );
+      const reader = createBrowserRepositoryHistoryReader({
+        environmentId,
+        repositoryId,
+        worker,
+        gateway: {
+          read: async () => {
+            throw new Error("Cached history requested the network");
+          },
+          synchronize: async () => {
+            throw new Error("Offline benchmark");
+          },
+        },
+      });
+      const graph = createCommitGraphPageWindow(reader);
+      let freshWorkerGraphMilliseconds: number;
+      try {
+        await graph.loadInitial({
+          roots,
+          order: "topological",
+          ancestry: "first-parent",
+          limit: 100,
+        });
+        freshWorkerGraphMilliseconds = performance.now() - reopenStarted;
+        if (
+          graph.getSnapshot().error !== undefined ||
+          graph.getSnapshot().endOffset !== 100
+        )
+          throw new Error("Fresh worker could not prepare the first graph");
+      } finally {
+        graph.dispose();
+        reader.close();
+        worker.port.close();
+      }
       const durations: number[] = [];
       for (let run = 0; run < 30; run += 1) {
         cache.queries.clear();
@@ -164,7 +214,12 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
       const firstExpansionMilliseconds = performance.now() - expansionStarted;
       if (!expandedPage?.some((commit) => commit.oid === oid(2)))
         throw new Error("Expanded merge page is inconsistent");
-      return { indexMilliseconds, durations, firstExpansionMilliseconds };
+      return {
+        indexMilliseconds,
+        durations,
+        firstExpansionMilliseconds,
+        freshWorkerGraphMilliseconds,
+      };
     });
     const durations = measurements.durations.toSorted((a, b) => a - b);
     const p95 = durations[Math.ceil(durations.length * 0.95) - 1] ?? Infinity;
@@ -172,6 +227,11 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
       `${JSON.stringify({ ...measurements, p95Milliseconds: p95 })}\n`,
     );
     assertTimingBudget("Cached history order p95", p95, 100);
+    assertTimingBudget(
+      "First graph from stored topology in a fresh worker",
+      measurements.freshWorkerGraphMilliseconds,
+      250,
+    );
     assertTimingBudget(
       "First merge expansion with prepared history",
       measurements.firstExpansionMilliseconds,

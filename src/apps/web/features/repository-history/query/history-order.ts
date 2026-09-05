@@ -1,3 +1,4 @@
+import type { HistoryTopology } from "#web/domain/repository-history/history-topology.contract";
 import { findHistoryAncestryRoute } from "#web/features/repository-history/query/history-ancestry-route";
 import type {
   HistoryOrderIndexReader,
@@ -12,7 +13,15 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
   private readonly offsets: Uint32Array;
   private readonly timestamps: Float64Array;
 
-  constructor(nodes: readonly HistoryOrderNode[]) {
+  constructor(nodes: readonly HistoryOrderNode[] | HistoryTopology) {
+    if ("oids" in nodes) {
+      this.oids = nodes.oids;
+      this.positions = new Map(this.oids.map((oid, index) => [oid, index]));
+      this.parents = nodes.parents;
+      this.offsets = nodes.offsets;
+      this.timestamps = nodes.timestamps;
+      return;
+    }
     this.oids = nodes.map(({ oid }) => oid);
     this.positions = new Map(this.oids.map((oid, index) => [oid, index]));
     this.offsets = new Uint32Array(nodes.length + 1);
@@ -34,6 +43,15 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
 
   has(oid: string) {
     return this.positions.has(oid);
+  }
+
+  snapshot(): HistoryTopology {
+    return {
+      oids: this.oids,
+      parents: this.parents,
+      offsets: this.offsets,
+      timestamps: this.timestamps,
+    };
   }
 
   ancestryRoute(roots: readonly string[], targetOid: string) {

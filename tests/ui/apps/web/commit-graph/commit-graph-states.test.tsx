@@ -187,9 +187,28 @@ describe("commit graph states", () => {
     ).toHaveLength(1);
     await expect.element(screen.getByText("hidden")).not.toBeInTheDocument();
 
-    await screen
-      .getByRole("button", { name: "Remove main from history" })
-      .click();
+    const removePill = screen.getByRole("button", {
+      name: "Remove main from history",
+    });
+    const copyPill = screen
+      .getByRole("group", { name: "Custom history scope" })
+      .getByRole("button", { name: "Copy main", exact: true });
+    expect(getComputedStyle(removePill.element()).opacity).toBe("0");
+    const pill = copyPill.element().parentElement;
+    if (pill === null) throw new Error("Missing pill");
+    const bounds = pill.getBoundingClientRect();
+    await copyPill.hover();
+    expect(getComputedStyle(removePill.element()).opacity).toBe("1");
+    expect(
+      removePill.element().getBoundingClientRect().right,
+    ).toBeLessThanOrEqual(bounds.right);
+    expect(pill.getBoundingClientRect().width).toBe(bounds.width);
+    await firstCommit.hover();
+    copyPill.element().focus();
+    await userEvent.keyboard("{Tab}");
+    expect(document.activeElement).toBe(removePill.element());
+    expect(getComputedStyle(removePill.element()).opacity).toBe("1");
+    await userEvent.keyboard("{Enter}");
     expect(remove).toHaveBeenCalledWith(selection);
     await screen.getByRole("button", { name: "+ Add ref" }).click();
     expect(add).toHaveBeenCalledOnce();
