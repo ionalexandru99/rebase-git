@@ -1,4 +1,5 @@
 import type {
+  JsonMessageFragment,
   RepositoryHistoryFailed,
   RepositoryHistorySynchronized,
 } from "@rebase/contracts";
@@ -10,8 +11,8 @@ import type { RepositoryFreshnessTransportRuntime } from "#web/features/reposito
 export interface RepositoryHistoryTransportRuntime
   extends RepositoryHistoryTransport {
   readonly freshness: RepositoryFreshnessTransportRuntime;
-  readonly acceptBinary: (
-    frame: Uint8Array,
+  readonly acceptJson: (
+    frame: JsonMessageFragment,
   ) => Effect.Effect<void, EnvironmentConnectionFailure>;
   readonly acceptFailure: (
     message: RepositoryHistoryFailed,

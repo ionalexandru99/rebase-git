@@ -23,7 +23,7 @@ const maximumConcurrentHistoryRequests = 2;
 const maximumRetiredHistorySynchronizations = 64;
 const historyBatchAcknowledgementTimeoutMilliseconds = 30_000;
 
-type HistoryWriter = Pick<EnvironmentWebSocketWriter, "send" | "sendBinary">;
+type HistoryWriter = Pick<EnvironmentWebSocketWriter, "send" | "sendJson">;
 
 export function acquireRepositoryHistorySession(
   history: RepositoryHistoryService | undefined,
@@ -69,7 +69,7 @@ export function acquireRepositoryHistorySession(
         { kind: "page" },
         service.read(message).pipe(
           Effect.flatMap((page) =>
-            writer.sendBinary({
+            writer.sendJson({
               logicalMessageId: ++logicalMessageId,
               payload: encodeRepositoryHistoryPage(page),
               requestId: message.requestId,
@@ -272,7 +272,7 @@ function sendHistoryBatch(
     const deferred = yield* Deferred.make<void>();
     request.lastSentSequence = sequence;
     request.acknowledgement = { deferred, sequence };
-    yield* writer.sendBinary({ logicalMessageId, payload, requestId });
+    yield* writer.sendJson({ logicalMessageId, payload, requestId });
     yield* Deferred.await(deferred).pipe(
       Effect.timeout(historyBatchAcknowledgementTimeoutMilliseconds),
     );

@@ -100,13 +100,13 @@ describe("Environment protocol compatibility", () => {
         },
         {
           introducedInMinor: 3,
-          name: "binary-fragmentation",
+          name: "json-fragmentation",
           version: 1,
         },
         {
           introducedInMinor: 3,
           name: "repository-history",
-          version: 5,
+          version: 6,
         },
       ],
       protocol: { major: 1, minor: 4 },
@@ -123,7 +123,7 @@ describe("Environment protocol compatibility", () => {
       const hello = createCurrentEnvironmentHello("0.0.0");
       const older = (capability: (typeof discovery.capabilities)[number]) =>
         capability.name === "repository-history"
-          ? { ...capability, version: 4 }
+          ? { ...capability, version: 5 }
           : capability;
       const result = negotiateEnvironmentHello(
         side === "server"

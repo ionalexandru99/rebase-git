@@ -202,8 +202,8 @@ function handleClientMessage(
     case "ReadRepositoryHistory":
     case "SynchronizeRepositoryHistory":
       if (
-        (capabilities.get("repository-history") ?? 0) < 5 ||
-        !capabilities.has("binary-fragmentation")
+        (capabilities.get("repository-history") ?? 0) < 6 ||
+        !capabilities.has("json-fragmentation")
       ) {
         return rejectSession("InvalidMessage");
       }

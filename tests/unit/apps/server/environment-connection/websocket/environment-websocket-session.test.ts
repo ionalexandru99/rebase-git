@@ -52,7 +52,7 @@ describe("Environment WebSocket session", () => {
     });
   });
 
-  it.each(["repository-history", "binary-fragmentation"])(
+  it.each(["repository-history", "json-fragmentation"])(
     "rejects history requests without negotiated %s",
     async (missingCapability) => {
       for (const request of [

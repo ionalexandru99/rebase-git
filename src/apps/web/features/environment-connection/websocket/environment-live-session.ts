@@ -37,17 +37,6 @@ function readEnvironmentServerMessage(session: EnvironmentLiveSession) {
     if (event._tag !== "Message") {
       return yield* Effect.fail(environmentResponseError("WebSocket"));
     }
-    if (typeof event.event.data !== "string") {
-      if (
-        !session.negotiated.capabilities.some(
-          (capability) => capability.name === "binary-fragmentation",
-        )
-      ) {
-        return yield* Effect.fail(environmentResponseError("WebSocket"));
-      }
-      const bytes = yield* binaryMessageBytes(event.event.data);
-      return { _tag: "RepositoryHistoryBinary" as const, bytes };
-    }
     return yield* decodeEnvironmentServerMessage(
       event.event,
       session.hello,
@@ -59,11 +48,14 @@ function readEnvironmentServerMessage(session: EnvironmentLiveSession) {
 function handleEnvironmentServerMessage(
   session: EnvironmentLiveSession,
   capabilities: ReadonlySet<EnvironmentCapabilityName>,
-  message: ReceivedEnvironmentMessage,
+  message: EnvironmentServerMessage,
 ) {
   switch (message._tag) {
-    case "RepositoryHistoryBinary":
-      return session.repositoryHistory.acceptBinary(message.bytes);
+    case "JsonMessageFragment":
+      return capabilities.has("repository-history") &&
+        capabilities.has("json-fragmentation")
+        ? session.repositoryHistory.acceptJson(message)
+        : Effect.fail(environmentResponseError("WebSocket"));
     case "RepositoryHistoryFailed":
       return session.repositoryHistory.acceptFailure(message);
     case "RepositoryHistorySynchronized":
@@ -79,28 +71,6 @@ function handleEnvironmentServerMessage(
     default:
       return Effect.fail(environmentResponseError("WebSocket"));
   }
-}
-
-type ReceivedEnvironmentMessage =
-  | EnvironmentServerMessage
-  | { readonly _tag: "RepositoryHistoryBinary"; readonly bytes: Uint8Array };
-
-function binaryMessageBytes(data: unknown) {
-  return Effect.tryPromise({
-    try: async () => {
-      if (data instanceof ArrayBuffer) {
-        return new Uint8Array(data);
-      }
-      if (data instanceof Blob) {
-        return new Uint8Array(await data.arrayBuffer());
-      }
-      if (ArrayBuffer.isView(data)) {
-        return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-      }
-      throw new Error("Invalid binary message");
-    },
-    catch: () => environmentResponseError("WebSocket"),
-  });
 }
 
 function handleEnvironmentChanged(

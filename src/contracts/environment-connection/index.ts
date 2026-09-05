@@ -25,7 +25,6 @@ export {
   ProtocolRange,
 } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
 export { negotiateEnvironmentHello } from "@rebase/contracts/environment-connection/negotiation/negotiate-environment-protocol";
-export * from "@rebase/contracts/environment-connection/websocket/binary-message-fragment";
 export {
   createCurrentEnvironmentHello,
   EnvironmentChanged,
@@ -41,3 +40,5 @@ export {
   ResnapshotRequired,
   SnapshotApplied,
 } from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
+export * from "@rebase/contracts/environment-connection/websocket/json-message-fragment";
+export * from "@rebase/contracts/environment-connection/websocket/json-message-fragment.contract";

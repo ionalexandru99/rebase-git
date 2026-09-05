@@ -149,7 +149,7 @@ async function measureCommitGraph(
         required(browserMetrics.openingFeedback) - browserMetrics.started,
       postGitRenderMilliseconds:
         required(browserMetrics.firstContent) -
-        required(browserMetrics.lastBinaryMessage),
+        required(browserMetrics.lastHistoryMessage),
       selectionFeedbackMilliseconds: selectionFeedback,
       scopeFeedbackMilliseconds: scopeFeedback,
       uncachedScopeFeedbackMilliseconds: uncachedScopeFeedback,
@@ -375,9 +375,10 @@ async function installGraphMeasurements(page: Page) {
             if (
               window.__graphMetrics.started > 0 &&
               window.__graphMetrics.firstContent === undefined &&
-              typeof message.data !== "string"
+              typeof message.data === "string" &&
+              message.data.includes('"_tag":"JsonMessageFragment"')
             ) {
-              window.__graphMetrics.lastBinaryMessage = performance.now();
+              window.__graphMetrics.lastHistoryMessage = performance.now();
             }
             return Reflect.apply(listener, this, [message]);
           };
@@ -641,7 +642,7 @@ function waitForOutput(
 
 interface GraphMetrics {
   firstContent?: number;
-  lastBinaryMessage?: number;
+  lastHistoryMessage?: number;
   loadingFeedback?: number;
   openingFeedback?: number;
   started: number;

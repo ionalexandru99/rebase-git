@@ -1,6 +1,6 @@
 import type {
-  BinaryLogicalMessage,
   EnvironmentServerMessage,
+  JsonLogicalMessage,
   TransportLimits,
 } from "@rebase/contracts";
 import type { Effect } from "effect";
@@ -13,8 +13,8 @@ export interface EnvironmentWebSocketWriter {
   readonly send: (
     message: EnvironmentServerMessage,
   ) => Effect.Effect<void, EnvironmentWebSocketWriteError>;
-  readonly sendBinary: (
-    message: BinaryLogicalMessage,
+  readonly sendJson: (
+    message: JsonLogicalMessage,
   ) => Effect.Effect<void, EnvironmentWebSocketWriteError>;
   readonly enqueue: (
     message: EnvironmentServerMessage,

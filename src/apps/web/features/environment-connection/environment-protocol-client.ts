@@ -242,16 +242,16 @@ function runEnvironmentConnection(
       hello,
       discovery,
     );
-    const supportsBinaryFragmentation = negotiated.capabilities.some(
-      (capability) => capability.name === "binary-fragmentation",
+    const supportsJsonFragmentation = negotiated.capabilities.some(
+      (capability) => capability.name === "json-fragmentation",
     );
     const repositoryHistoryVersion = negotiated.capabilities.find(
       (capability) => capability.name === "repository-history",
     )?.version;
     const repositoryHistory = createRepositoryHistoryTransport(
       socket,
-      (repositoryHistoryVersion ?? 0) >= 5 && supportsBinaryFragmentation,
-      (repositoryHistoryVersion ?? 0) >= 5 && supportsBinaryFragmentation,
+      (repositoryHistoryVersion ?? 0) >= 6 && supportsJsonFragmentation,
+      (repositoryHistoryVersion ?? 0) >= 6 && supportsJsonFragmentation,
       negotiated.capabilities.some(
         (capability) => capability.name === "repository-history-freshness",
       ),
