@@ -86,6 +86,27 @@ describe("commit graph page window", () => {
     },
   );
 
+  it("protects an existing read when the viewport requests the same page", async () => {
+    const commits = history(300);
+    const reader = fakeReader(commits);
+    const window = createCommitGraphPageWindow(reader, { maximumPages: 2 });
+    await window.loadInitial(query);
+    await window.appendOlder();
+    const pending = deferred<readonly RepositoryCommit[]>();
+    reader.read.mockReturnValueOnce(pending.promise);
+    const loading = window.appendOlder();
+    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(3));
+    window.setViewport(100, 139);
+    window.setViewport(0, 299);
+    pending.resolve(commits.slice(200));
+    await loading;
+    expect(window.getSnapshot().pages.map((page) => page.offset)).toEqual([
+      0, 100,
+    ]);
+    expect(reader.read).toHaveBeenCalledTimes(3);
+    window.dispose();
+  });
+
   it("discards resident history and pending navigation while preserving the query for rebuild", async () => {
     const commits = history(12);
     const reader = fakeReader(commits);
