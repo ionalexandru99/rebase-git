@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto";
 import type { RepositoryHistorySnapshot } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { historySnapshotIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
 import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history";
 
 const maximumRefsOutputBytes = 16 * 1_048_576;
@@ -85,7 +85,7 @@ export function readRepositoryHistorySnapshot(
       ),
     );
     return {
-      id: snapshotId(objectFormat, targets, rootOids, shallowOids),
+      id: historySnapshotIdentity(objectFormat, targets, rootOids, shallowOids),
       objectFormat,
       refTargets: targets,
       resumable: true,
@@ -150,24 +150,6 @@ function parseOids(output: string, objectFormat: "sha1" | "sha256") {
     .split("\n")
     .map((line) => line.trim())
     .filter((oid) => isOid(oid, objectFormat));
-}
-
-function snapshotId(
-  objectFormat: "sha1" | "sha256",
-  refs: RepositoryHistorySnapshot["refTargets"],
-  rootOids: readonly string[],
-  shallowOids: readonly string[],
-) {
-  const hash = createHash("sha256");
-  hash.update(objectFormat);
-  for (const ref of refs) {
-    hash.update(`\0${ref.type}\0${ref.name}\0${ref.oid}`);
-  }
-  for (const oid of rootOids) {
-    hash.update(`\0root\0${oid}`);
-  }
-  for (const oid of shallowOids) hash.update(`\0shallow\0${oid}`);
-  return hash.digest("hex");
 }
 
 function parseObjectFormat(

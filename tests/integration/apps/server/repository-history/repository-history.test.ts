@@ -26,6 +26,7 @@ import type { EnvironmentAuthorization } from "@rebase/server/features/environme
 import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
 import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
+import { readRepositoryHistorySnapshot } from "@rebase/server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "@rebase/server/features/repository-history/git/synchronize-repository-history";
 import { createRepositoryHistoryService } from "@rebase/server/features/repository-history/repository-history";
 import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
@@ -597,6 +598,90 @@ describe("repository history", { timeout: 30_000 }, () => {
     expect(count).toBe(300);
   });
 
+  it("resumes across bounded merge pages while captured refs move", async () => {
+    const root = await createTemporaryDirectory();
+    const path = join(root, "bounded-resume");
+    await createRepository(path, "sha1", 10_001);
+    await git(path, "checkout", "-b", "side", "main~7500");
+    await git(path, "commit", "--allow-empty", "-m", "side commit");
+    await git(path, "checkout", "main");
+    await git(path, "merge", "--no-ff", "side", "-m", "merge side");
+    const initial: RepositoryHistoryBatch[] = [];
+    await runSynchronization(path, undefined, initial);
+    const commits = initial.flatMap((batch) => batch.commits);
+    expect(commits).toHaveLength(10_003);
+    expect(new Set(commits.map((commit) => commit.oid)).size).toBe(10_003);
+    const expectedParents = new Map(
+      (await gitOutput(path, "rev-list", "--parents", "main"))
+        .split("\n")
+        .map((line) => {
+          const [oid, ...parents] = line.split(" ");
+          return [oid, parents] as const;
+        }),
+    );
+    const seen = new Set<string>();
+    for (const commit of commits) {
+      expect(commit.parents).toEqual(expectedParents.get(commit.oid));
+      expect(commit.parents.some((parent) => seen.has(parent))).toBe(false);
+      seen.add(commit.oid);
+    }
+    const prefix: RepositoryCommit[] = [];
+    let nextSequence = 0;
+    for (const batch of initial) {
+      if (batch.commits.length === 0) continue;
+      prefix.push(...batch.commits);
+      nextSequence = batch.sequence + 1;
+      if (prefix.length > 5_000) break;
+    }
+    await git(path, "commit", "--allow-empty", "-m", "new tip");
+    const snapshot = lastSnapshot(initial);
+    const resumed: RepositoryHistoryBatch[] = [];
+    const count = await runSynchronization(
+      path,
+      {
+        _tag: "Incomplete",
+        committedCommitCount: prefix.length,
+        nextBatchSequence: nextSequence,
+        objectFormat: snapshot.objectFormat,
+        rootOids: snapshot.rootOids,
+        snapshotId: snapshot.id,
+        shallowOids: snapshot.shallowOids ?? [],
+      },
+      resumed,
+    );
+    const combined = [...prefix, ...resumed.flatMap((batch) => batch.commits)];
+    expect(count).toBe(10_004);
+    expect(combined).toHaveLength(10_004);
+    expect(new Set(combined.map((commit) => commit.oid)).size).toBe(10_004);
+    expect(resumed[0]?.sequence).toBe(nextSequence);
+  });
+
+  it("rejects a legacy traversal basis before skipping any commits", async () => {
+    const root = await createTemporaryDirectory();
+    const path = join(root, "legacy-traversal");
+    await createRepository(path, "sha1", 3);
+    const snapshot = await Effect.runPromise(
+      readRepositoryHistorySnapshot(createLocalGitCommandRunner(), path),
+    );
+    const emitted: RepositoryHistoryBatch[] = [];
+    await expect(
+      runSynchronization(
+        path,
+        {
+          _tag: "Incomplete",
+          committedCommitCount: 1,
+          nextBatchSequence: 2,
+          objectFormat: snapshot.objectFormat,
+          rootOids: snapshot.rootOids,
+          snapshotId: "e".repeat(64),
+          shallowOids: [],
+        },
+        emitted,
+      ),
+    ).rejects.toMatchObject({ failure: { _tag: "SnapshotInvalidated" } });
+    expect(emitted).toEqual([]);
+  });
+
   it("sends only the delta for a completed basis and reconciles force resets", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "completed-basis");
@@ -690,6 +775,12 @@ describe("repository history", { timeout: 30_000 }, () => {
     const repositoryPath = join(root, "exhausted-sequence");
     await createRepository(repositoryPath, "sha1", 1);
     const oid = await gitOutput(repositoryPath, "rev-parse", "HEAD");
+    const snapshot = await Effect.runPromise(
+      readRepositoryHistorySnapshot(
+        createLocalGitCommandRunner(),
+        repositoryPath,
+      ),
+    );
     const emitted: RepositoryHistoryBatch[] = [];
 
     const failure = await Effect.runPromise(
@@ -706,7 +797,7 @@ describe("repository history", { timeout: 30_000 }, () => {
               shallowOids: [],
               objectFormat: "sha1",
               rootOids: [oid],
-              snapshotId: "e".repeat(64),
+              snapshotId: snapshot.id,
             },
             priority: "visible",
             repositoryId: environmentId,
