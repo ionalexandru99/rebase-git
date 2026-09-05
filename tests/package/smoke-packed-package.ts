@@ -362,10 +362,12 @@ function spawnProcess(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
 ): RunningProcess {
-  const child = spawn(command, arguments_, {
+  const windowsShim = process.platform === "win32" && command.endsWith(".cmd");
+  const executable = windowsShim ? (process.env.ComSpec ?? "cmd.exe") : command;
+  const args = windowsShim ? ["/d", "/c", command, ...arguments_] : arguments_;
+  const child = spawn(executable, args, {
     cwd,
     env,
-    shell: process.platform === "win32" && command.endsWith(".cmd"),
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (child.stdout === null || child.stderr === null) {
