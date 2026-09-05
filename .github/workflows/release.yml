@@ -65,12 +65,40 @@ jobs:
           [[ "$previous_sha" == "$GITHUB_SHA" ]] && has_changes=false || has_changes=true
           echo "has_changes=$has_changes" >> "$GITHUB_OUTPUT"
 
-  package:
-    name: Build package
+  validation:
+    name: Require Validation for release commit
     needs: check-nightly-changes
     if: |
       !failure() && !cancelled() &&
       needs.check-nightly-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require successful main Validation for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          run_id=$(gh run list --workflow validation.yml --event push --branch main \
+            --commit "$RELEASE_SHA" --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [[ -z "$run_id" ]]; then
+            echo "No main Validation run exists for release commit $RELEASE_SHA." >&2
+            exit 1
+          fi
+
+          gh run watch "$run_id" --exit-status --interval 15
+          gh run view "$run_id" --json headSha,status,conclusion,url > validation.json
+          jq -e '.headSha == env.RELEASE_SHA and .status == "completed" and .conclusion == "success"' validation.json
+          jq -r '"Validated release commit: " + .headSha + "\nValidation: " + .url' validation.json >> "$GITHUB_STEP_SUMMARY"
+
+  package:
+    name: Build package
+    needs: validation
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -93,15 +121,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+      - uses: ./.github/actions/setup-workspace
 
       - id: request
         name: Validate release request
@@ -213,17 +233,8 @@ jobs:
             echo "version=$version"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check formatting and linting
-        run: pnpm check
-
-      - name: Check types
-        run: pnpm typecheck
-
-      - name: Run unit tests
-        run: pnpm test:unit
+      - name: Validate quality
+        run: pnpm validate:quality
 
       - id: release
         name: Pack package
@@ -251,6 +262,9 @@ jobs:
           path: package-artifact/rebase-git-*
           if-no-files-found: error
           retention-days: 7
+
+      - uses: ./.github/actions/upload-test-results
+        if: always()
 
   smoke:
     name: Smoke packed package (${{ matrix.name }})
@@ -322,18 +336,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
 
       - name: Build desktop application
         env:
@@ -355,13 +358,11 @@ jobs:
           if [[ "$RELEASE_CHANNEL" == "nightly" ]]; then
             publish_channel_args=(--config.publish.channel=nightly)
           fi
-          pnpm exec electron-builder \
-            --config electron-builder.config.js \
+          pnpm package:desktop \
             --${{ matrix.platform }} \
             --${{ matrix.arch }} \
             --config.extraMetadata.version="${{ needs.package.outputs.version }}" \
-            "${publish_channel_args[@]}" \
-            --publish never
+            "${publish_channel_args[@]}"
 
       - name: Verify signature and notarization
         if: ${{ matrix.platform == 'mac' && env.HAS_MACOS_CERT == 'true' }}
@@ -517,7 +518,7 @@ jobs:
         run: |
           mkdir desktop-release
           mac_manifest=$(basename "$(find desktop-artifacts/desktop-mac-arm64 -name '*-mac.yml')")
-          yq eval-all '. as $item ireduce ({}; . *+ $item) | .files |= unique_by(.url)' \
+          yq eval-all ". as \$item ireduce ({}; . *+ \$item) | .files |= unique_by(.url)" \
             "desktop-artifacts/desktop-mac-arm64/$mac_manifest" \
             "desktop-artifacts/desktop-mac-x64/$mac_manifest" \
             > "desktop-release/$mac_manifest"

@@ -69,6 +69,11 @@ A user on WSl should not be required to install the electron app on windows and 
 
 ### Test strategy
 
+- Follow [the validation guide](docs/validation.md) before handing off a code change. Run `pnpm validate:quality` and the relevant boundary commands on the final tree. Record the tested commit, commands, results, and checks that could not run locally.
+- Revalidate affected checks after rebasing or editing tested code. Native platform and release claims require results from those environments. A same-commit rerun that passes does not establish a fix for the original failure.
+- Keep local and CI validation on the same package scripts. Required test projects must fail when no tests match. Preserve the aggregate `Validation` gate when adding, renaming, or removing jobs.
+- Keep test reports under `tests/.artifacts/` and upload them after failures. Release publishing requires successful main-branch Validation for the exact release commit. Packaging validation must never publish or use signing credentials.
+
 - Test behavior at the lowest layer that can prove it. A reviewer can reject an E2E case when a unit, integration, or UI test covers the same risk with less setup.
 - Unit tests cover server and domain behavior in isolation. Typed fakes are allowed; infrastructure implementation details do not belong here.
 - Integration tests cross one real adapter or resource boundary, such as Git, SQLite, the filesystem, a process, IPC, browser storage, or a network connection.

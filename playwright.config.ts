@@ -3,7 +3,11 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   outputDir: "tests/.artifacts/playwright",
-  reporter: process.env.CI ? "github" : "list",
+  reporter: [
+    [process.env.CI ? "github" : "list"],
+    ["html", { open: "never", outputFolder: "tests/.artifacts/e2e-report" }],
+    ["junit", { outputFile: "tests/.artifacts/e2e.xml" }],
+  ],
   testDir: "tests/e2e",
   webServer: {
     command: "pnpm dev:web --host 127.0.0.1 --strictPort",
@@ -11,6 +15,7 @@ export default defineConfig({
     url: "http://127.0.0.1:4173",
   },
   use: {
+    screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   projects: [

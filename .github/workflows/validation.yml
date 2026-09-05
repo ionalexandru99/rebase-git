@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 concurrency:
   group: validation-${{ github.event.pull_request.number || github.ref }}
@@ -14,6 +15,19 @@ permissions:
   contents: read
 
 jobs:
+  workflows:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check GitHub workflows
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+
   quality:
     name: Quality (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
@@ -25,42 +39,19 @@ jobs:
           - 22.18.0
           - 24.19.0
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
+      - uses: ./.github/actions/setup-workspace
         with:
           node-version: ${{ matrix.node-version }}
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check formatting and linting
-        run: pnpm check
-
-      - name: Check types
-        run: pnpm typecheck
-
-      - name: Run unit tests
-        run: pnpm test:unit
-
-      - name: Build packages
-        run: pnpm build
-
+      - name: Validate quality
+        run: pnpm validate:quality
       - name: Pack package
         if: matrix.node-version == '24.19.0'
         run: |
           mkdir package-artifact
           npm pack --pack-destination package-artifact
-
       - name: Upload package
         if: matrix.node-version == '24.19.0'
         uses: actions/upload-artifact@v7
@@ -69,6 +60,10 @@ jobs:
           path: package-artifact/rebase-git-*.tgz
           if-no-files-found: error
           retention-days: 1
+      - uses: ./.github/actions/upload-test-results
+        if: always()
+        with:
+          name: quality-node-${{ matrix.node-version }}
 
   integration:
     name: Integration (${{ matrix.name }})
@@ -86,33 +81,17 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build desktop application
-        run: pnpm build:desktop-package
-
-      - name: Run integration tests
-        run: pnpm test:integration:prepared
-
+      - uses: ./.github/actions/setup-workspace
+      - name: Validate integration
+        run: pnpm validate:integration
       - name: Verify macOS signing keychain
         if: runner.os == 'macOS'
         run: node --test tests/package/macos-keychain.test.ts
+      - uses: ./.github/actions/upload-test-results
+        if: always()
 
   package-smoke:
     name: Package smoke (${{ matrix.name }})
@@ -130,119 +109,128 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
-
-      - name: Download package
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
           name: npm-package
           path: package-artifact
-
       - name: Smoke-test clean npm installation
         run: node tests/package/smoke-packed-package.ts package-artifact
 
-  complete-tests:
-    name: Complete tests
+  browser:
+    name: Browser tests
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Validate browser
+        run: pnpm validate:browser
+      - uses: ./.github/actions/upload-test-results
+        if: always()
+
+  desktop-tests:
+    name: Desktop journeys
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run compatibility tests
-        run: pnpm test:compatibility
-
+      - uses: ./.github/actions/setup-workspace
       - name: Install browser
         run: pnpm exec playwright install --with-deps chromium
+      - name: Validate desktop
+        run: xvfb-run --auto-servernum pnpm validate:desktop
+      - uses: ./.github/actions/upload-test-results
+        if: always()
 
-      - name: Run browser integration tests
-        run: pnpm test:integration:browser
-
-      - name: Run UI tests
-        run: pnpm test:ui
-
-      - name: Prepare desktop test application
+  release-targets:
+    name: Release targets (${{ matrix.name }})
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-latest
+            platform: mac
+            arch: arm64
+          - name: macOS x64
+            runner: macos-15-intel
+            platform: mac
+            arch: x64
+          - name: Linux x64
+            runner: ubuntu-latest
+            platform: linux
+            arch: x64
+          - name: Windows x64
+            runner: windows-latest
+            platform: win
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Prepare desktop application
         run: |
           pnpm exec install-electron
           pnpm build:desktop-package
-
-      - name: Run end-to-end tests
-        run: xvfb-run --auto-servernum pnpm test:e2e:prepared
-
-      - name: Run release smoke tests
-        run: xvfb-run --auto-servernum pnpm test:release-smoke:prepared
-
-  windows-release-smoke:
-    name: Windows release smoke
-    needs: quality
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
+      - name: Build release targets without publishing
+        run: pnpm package:desktop --${{ matrix.platform }} --${{ matrix.arch }}
+      - name: Smoke-test packaged application
+        if: runner.os != 'Linux'
+        run: pnpm test:release-smoke:built
+      - name: Smoke-test packaged application under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm test:release-smoke:built
+      - name: Upload release targets
+        uses: actions/upload-artifact@v7
         with:
-          persist-credentials: false
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build desktop application
-        run: pnpm build:desktop-package
-
-      - name: Run release smoke tests
-        run: pnpm test:release-smoke:prepared
+          name: rehearsal-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/*.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - uses: ./.github/actions/upload-test-results
+        if: always()
 
   validation:
     name: Validation
     if: always()
     needs:
+      - workflows
       - quality
       - integration
       - package-smoke
-      - complete-tests
-      - windows-release-smoke
+      - browser
+      - desktop-tests
+      - release-targets
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
       - name: Verify validation jobs
-        if: >-
-          needs.quality.result != 'success' ||
-          needs.integration.result != 'success' ||
-          needs.package-smoke.result != 'success' ||
-          needs.complete-tests.result != 'success' ||
-          needs.windows-release-smoke.result != 'success'
-        run: exit 1
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: echo "$JOB_RESULTS" | jq -e 'all(.[]; .result == "success")'
