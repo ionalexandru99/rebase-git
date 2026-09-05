@@ -2,6 +2,7 @@ import type { RepositoryFreshness } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
 import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/use-repository-history-fetch";
 import {
   RepositoryHistoryOffline,
@@ -9,6 +10,7 @@ import {
   RepositoryHistoryRejected,
   type RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import { CommitGraphToolbar } from "#web-ui/features/commit-graph/commit-graph-toolbar";
 import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/repository-history-freshness-status";
 
@@ -281,7 +283,7 @@ function Controls({
   snapshot,
   canConfigure = true,
 }: {
-  readonly reader: RepositoryHistoryReader;
+  readonly reader: ReturnType<typeof createReader>;
   readonly snapshot: RepositoryHistorySnapshot;
   readonly canConfigure?: boolean;
 }) {
@@ -333,10 +335,6 @@ function createReader() {
       replicaComplete: true,
       synchronizedCommitCount: 0,
     }),
-    ancestryRoute: async () => undefined,
-    locate: async () => undefined,
-    locateMany: async () => [],
-    close: vi.fn(),
     fetch: vi.fn<RepositoryHistoryReader["fetch"]>(async () => fresh),
     configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(
       async (setting) => ({
@@ -345,9 +343,8 @@ function createReader() {
       }),
     ),
     getSnapshot: () => ready,
-    getRefTargets: async () => [],
-    getCommitSummaries: async () => [],
-    read: async () => [],
     subscribe: () => () => {},
-  } satisfies RepositoryHistoryReader;
+  } satisfies RepositoryHistoryCacheReader &
+    RepositoryHistorySearch &
+    Pick<RepositoryHistoryReader, "fetch" | "configureFetch">;
 }

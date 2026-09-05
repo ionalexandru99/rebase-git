@@ -18,10 +18,7 @@ const state: RepositoryFreshness = {
 describe("repository freshness transport", () => {
   it("keeps observing after a failed fetch and unsubscribes on cancellation", async () => {
     const send = vi.fn();
-    const transport = createRepositoryFreshnessTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryFreshnessTransport({ send }, true);
     const publish = vi.fn();
     const observing = Effect.runFork(transport.observe(repositoryId, publish));
     await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
@@ -71,10 +68,7 @@ describe("repository freshness transport", () => {
 
   it("matches commands to their repository and rejects pending work when disconnected", async () => {
     const send = vi.fn();
-    const transport = createRepositoryFreshnessTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryFreshnessTransport({ send }, true);
     const configured = Effect.runPromise(
       transport.configure(repositoryId, { _tag: "Disabled" }),
     );
@@ -135,12 +129,9 @@ describe("repository freshness transport", () => {
   });
 });
 
-function historyTransport(send: ReturnType<typeof vi.fn>) {
+function historyTransport(send: WebSocket["send"]) {
   return {
-    freshness: createRepositoryFreshnessTransport(
-      { send } as unknown as WebSocket,
-      true,
-    ),
+    freshness: createRepositoryFreshnessTransport({ send }, true),
     read: () => Effect.die("unused"),
     synchronize: () => Effect.die("unused"),
   } satisfies RepositoryHistoryTransport;

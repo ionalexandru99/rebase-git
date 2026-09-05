@@ -9,6 +9,7 @@ import { Effect, Ref, Schema, Semaphore } from "effect";
 import { WebSocket } from "ws";
 import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
 import { EnvironmentWebSocketWriteError } from "#server/features/environment-connection/websocket/environment-websocket-error.contract";
+import type { EnvironmentWebSocketWriter } from "#server/features/environment-connection/websocket/environment-websocket-writer.contract";
 import {
   createOutgoingMessageQueue,
   dequeueOutgoingMessage,
@@ -17,26 +18,6 @@ import {
   replaceWithResnapshotMessage,
   resetOutgoingMessageQueue,
 } from "#server/features/environment-connection/websocket/outgoing-message-queue";
-
-export interface EnvironmentWebSocketWriter {
-  readonly acknowledgeSnapshot: (
-    sequence: number,
-  ) => Effect.Effect<boolean, EnvironmentWebSocketWriteError>;
-  readonly send: (
-    message: EnvironmentServerMessage,
-  ) => Effect.Effect<void, EnvironmentWebSocketWriteError>;
-  readonly sendBinary: (
-    message: BinaryLogicalMessage,
-  ) => Effect.Effect<void, EnvironmentWebSocketWriteError>;
-  readonly enqueue: (
-    message: EnvironmentServerMessage,
-  ) => Effect.Effect<boolean, EnvironmentWebSocketWriteError>;
-  readonly flush: Effect.Effect<void, EnvironmentWebSocketWriteError>;
-  readonly setNegotiatedContract: (
-    negotiatedLimits: TransportLimits,
-    negotiatedSupportsResnapshot: boolean,
-  ) => Effect.Effect<void>;
-}
 
 interface WriterState {
   readonly limits: TransportLimits;

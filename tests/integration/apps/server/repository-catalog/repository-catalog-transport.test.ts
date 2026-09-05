@@ -13,14 +13,14 @@ import { environmentPaths } from "@rebase/server/persistence/storage/environment
 import { exchangeEnvironmentPairing } from "@rebase/web/features/environment-connection";
 import {
   EnvironmentFilesystemRejected,
-  listEnvironmentDirectory,
+  listEnvironmentDirectoryEffect,
 } from "@rebase/web/features/environment-filesystem";
 import {
-  listEnvironmentRepositories,
+  listEnvironmentRepositoriesEffect,
   RepositoryCatalogRejected,
-  recordEnvironmentRepositoryOpened,
-  rememberEnvironmentRepository,
-  removeEnvironmentRepository,
+  recordEnvironmentRepositoryOpenedEffect,
+  rememberEnvironmentRepositoryEffect,
+  removeEnvironmentRepositoryEffect,
 } from "@rebase/web/features/repository-catalog";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -46,23 +46,21 @@ describe("repository catalog transport", () => {
       const owner = await pair(origin, authorization, "owner");
       const viewer = await pair(origin, authorization, "viewer");
 
-      const remembered = await rememberEnvironmentRepository(
-        origin,
-        owner,
-        repositoryPath,
+      const remembered = await Effect.runPromise(
+        rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
       );
       await expect(
-        listEnvironmentRepositories(origin, viewer),
+        Effect.runPromise(listEnvironmentRepositoriesEffect(origin, viewer)),
       ).resolves.toEqual([remembered]);
-      const opened = await recordEnvironmentRepositoryOpened(
-        origin,
-        viewer,
-        remembered.id,
+      const opened = await Effect.runPromise(
+        recordEnvironmentRepositoryOpenedEffect(origin, viewer, remembered.id),
       );
       expect(opened.lastOpenedAt >= remembered.lastOpenedAt).toBe(true);
 
       await expect(
-        removeEnvironmentRepository(origin, viewer, remembered.id),
+        Effect.runPromise(
+          removeEnvironmentRepositoryEffect(origin, viewer, remembered.id),
+        ),
       ).rejects.toEqual(
         new RepositoryCatalogRejected({
           failure: {
@@ -73,12 +71,14 @@ describe("repository catalog transport", () => {
         }),
       );
       await expect(
-        removeEnvironmentRepository(origin, owner, remembered.id),
+        Effect.runPromise(
+          removeEnvironmentRepositoryEffect(origin, owner, remembered.id),
+        ),
       ).resolves.toEqual({
         repositoryId: remembered.id,
       });
       await expect(
-        listEnvironmentRepositories(origin, viewer),
+        Effect.runPromise(listEnvironmentRepositoriesEffect(origin, viewer)),
       ).resolves.toEqual([]);
     });
   });
@@ -88,7 +88,13 @@ describe("repository catalog transport", () => {
       const owner = await pair(origin, authorization, "owner");
 
       await expect(
-        rememberEnvironmentRepository(origin, owner, join(root, "missing")),
+        Effect.runPromise(
+          rememberEnvironmentRepositoryEffect(
+            origin,
+            owner,
+            join(root, "missing"),
+          ),
+        ),
       ).rejects.toEqual(
         new RepositoryCatalogRejected({
           failure: {
@@ -100,7 +106,9 @@ describe("repository catalog transport", () => {
       );
       const missingId = "00000000-0000-4000-8000-000000000099";
       await expect(
-        recordEnvironmentRepositoryOpened(origin, owner, missingId),
+        Effect.runPromise(
+          recordEnvironmentRepositoryOpenedEffect(origin, owner, missingId),
+        ),
       ).rejects.toEqual(
         new RepositoryCatalogRejected({
           failure: { _tag: "RepositoryMissing", repositoryId: missingId },
@@ -117,7 +125,9 @@ describe("repository catalog transport", () => {
       const owner = await pair(origin, authorization, "owner");
       const viewer = await pair(origin, authorization, "viewer");
 
-      const listing = await listEnvironmentDirectory(origin, owner);
+      const listing = await Effect.runPromise(
+        listEnvironmentDirectoryEffect(origin, owner),
+      );
 
       expect(listing.path).toBe(root);
       expect(listing.entries).toEqual(
@@ -127,7 +137,7 @@ describe("repository catalog transport", () => {
         ]),
       );
       await expect(
-        listEnvironmentDirectory(origin, viewer, root),
+        Effect.runPromise(listEnvironmentDirectoryEffect(origin, viewer, root)),
       ).rejects.toEqual(
         new EnvironmentFilesystemRejected({
           failure: {

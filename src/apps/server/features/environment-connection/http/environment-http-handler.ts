@@ -14,6 +14,7 @@ import type {
   EnvironmentFilesystem,
   EnvironmentFilesystemError,
 } from "#server/domain/environment-filesystem.contract";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type {
   RepositoryCatalog,
   RepositoryCatalogError,
@@ -47,7 +48,6 @@ import {
 import { respondToEnvironmentFilesystemRequest } from "#server/features/environment-filesystem/http/environment-filesystem-http-handler";
 import { respondToRepositoryCatalogRequest } from "#server/features/repository-catalog/http/repository-catalog-http-handler";
 import { respondToRepositoryRefsRequest } from "#server/features/repository-refs/http/repository-refs-http-handler";
-import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function createEnvironmentHttpHandler(
   state: EnvironmentTransportState,

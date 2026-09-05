@@ -30,7 +30,7 @@ interface Subscription {
 }
 
 export function createRepositoryFreshnessTransport(
-  socket: WebSocket,
+  socket: Pick<WebSocket, "send">,
   enabled: boolean,
 ): RepositoryFreshnessTransportRuntime {
   const commands = new Map<string, PendingCommand>();

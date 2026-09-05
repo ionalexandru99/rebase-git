@@ -6,11 +6,11 @@ import {
   emptyStoredRepository,
   repositoryStoreName,
   requestResult,
-  type StoredCommit,
   storedCommit,
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
+import type { StoredCommit } from "#web/features/repository-history/repository-history-database.contract";
 import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/repository-history-query";
 
 it.each([2, 4])(

@@ -13,7 +13,7 @@ export function RepositoryFetchSettings({
   disabledReason,
   onSaved,
 }: {
-  readonly reader: RepositoryHistoryReader;
+  readonly reader: Pick<RepositoryHistoryReader, "configureFetch">;
   readonly setting: RepositoryFetchSetting;
   readonly defaultIntervalSeconds: number;
   readonly disabled: boolean;

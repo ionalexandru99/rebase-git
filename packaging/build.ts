@@ -8,18 +8,20 @@ const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
   readonly version: string;
 };
 const outputDirectory = "dist";
+const packageManagerCommand =
+  process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
+const packageManagerArguments =
+  process.platform === "win32"
+    ? ["/d", "/c", "pnpm.cmd", "--filter", "@rebase/web", "build:web"]
+    : ["--filter", "@rebase/web", "build:web"];
 
 await rm(outputDirectory, { force: true, recursive: true });
-await execute(
-  process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-  ["--filter", "@rebase/web", "build:web"],
-  {
-    env: {
-      ...process.env,
-      REBASE_PRODUCT_VERSION: packageMetadata.version,
-    },
+await execute(packageManagerCommand, packageManagerArguments, {
+  env: {
+    ...process.env,
+    REBASE_PRODUCT_VERSION: packageMetadata.version,
   },
-);
+});
 
 await mkdir(outputDirectory, { recursive: true });
 await Promise.all([

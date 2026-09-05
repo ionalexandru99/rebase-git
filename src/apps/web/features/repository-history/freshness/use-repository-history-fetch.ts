@@ -6,16 +6,16 @@ import type {
 } from "#web/features/repository-history/repository-history-reader.contract";
 
 interface FetchAttempt {
-  readonly reader: RepositoryHistoryReader;
+  readonly reader: Pick<RepositoryHistoryReader, "fetch">;
   readonly pending: boolean;
   readonly error?: string;
 }
 
 export function useRepositoryHistoryFetch(
-  reader: RepositoryHistoryReader | undefined,
+  reader: Pick<RepositoryHistoryReader, "fetch"> | undefined,
   snapshot: RepositoryHistorySnapshot,
 ) {
-  const pending = useRef(new Set<RepositoryHistoryReader>());
+  const pending = useRef(new Set<Pick<RepositoryHistoryReader, "fetch">>());
   const [attempt, setAttempt] = useState<FetchAttempt>();
   const execute = useCallback(() => {
     if (

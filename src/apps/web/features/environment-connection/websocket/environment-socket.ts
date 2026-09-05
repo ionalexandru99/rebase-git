@@ -186,7 +186,7 @@ export function decodeEnvironmentServerMessage(
 
 export function sendEnvironmentSocketMessage<
   S extends Schema.ConstraintEncoder<unknown, never>,
->(socket: WebSocket, schema: S, message: S["Type"]) {
+>(socket: Pick<WebSocket, "send">, schema: S, message: S["Type"]) {
   return Effect.try({
     try: () => socket.send(JSON.stringify(Schema.encodeSync(schema)(message))),
     catch: () => environmentResponseError("WebSocket"),

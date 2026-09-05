@@ -26,7 +26,7 @@ type RequestFailure =
   | RepositoryHistoryUnavailable;
 
 export function createRepositoryHistoryTransport(
-  socket: WebSocket,
+  socket: Pick<WebSocket, "send">,
   enabled: boolean,
   synchronizationEnabled = enabled,
   freshnessEnabled = false,
@@ -281,7 +281,10 @@ export function createRepositoryHistoryTransport(
   };
 }
 
-function cancelServerRequest(socket: WebSocket, requestId: string) {
+function cancelServerRequest(
+  socket: Pick<WebSocket, "send">,
+  requestId: string,
+) {
   return sendEnvironmentSocketMessage(socket, RepositoryHistoryClientMessage, {
     _tag: "CancelRepositoryHistory",
     requestId,

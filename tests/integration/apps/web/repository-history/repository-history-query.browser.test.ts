@@ -6,10 +6,10 @@ import {
   repositoryKey,
   repositoryStoreName,
   requestResult,
-  type StoredRepository,
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
+import type { StoredRepository } from "#web/features/repository-history/repository-history-database.contract";
 import {
   historyOrderScopeKey,
   locateRepositoryHistoryCommits,

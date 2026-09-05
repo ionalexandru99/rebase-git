@@ -6,11 +6,13 @@ import {
   repositoryKey,
   repositoryStoreName,
   requestResult,
-  type StoredCommit,
-  type StoredRepository,
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
+import type {
+  StoredCommit,
+  StoredRepository,
+} from "#web/features/repository-history/repository-history-database.contract";
 import {
   matchingHistoryMetadata,
   normalizeHistorySearch,

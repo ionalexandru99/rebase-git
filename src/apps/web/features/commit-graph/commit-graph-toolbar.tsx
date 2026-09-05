@@ -1,6 +1,9 @@
 import { IconArrowDown, IconDots } from "@tabler/icons-react";
 import { type Ref, useId, useState } from "react";
-import type { RepositoryHistoryCacheDialogProps } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
+import type {
+  RepositoryHistoryCacheDialogProps,
+  RepositoryHistoryCacheReader,
+} from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
 import type { RepositoryFetchAction } from "#web/features/repository-history/freshness/repository-fetch-action.contract";
 import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
 import type {
@@ -8,6 +11,7 @@ import type {
   RepositoryHistoryReader,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import type {
   RepositoryHistorySearchActions,
   RepositoryHistorySearchBindings,
@@ -44,7 +48,11 @@ export function CommitGraphToolbar({
   cache,
 }: {
   readonly repositoryName: string;
-  readonly reader: RepositoryHistoryReader | undefined;
+  readonly reader:
+    | (RepositoryHistoryCacheReader &
+        RepositoryHistorySearch &
+        Pick<RepositoryHistoryReader, "configureFetch">)
+    | undefined;
   readonly snapshot: RepositoryHistorySnapshot;
   readonly order: RepositoryHistoryQuery["order"];
   readonly onOrderChange: (order: RepositoryHistoryQuery["order"]) => void;

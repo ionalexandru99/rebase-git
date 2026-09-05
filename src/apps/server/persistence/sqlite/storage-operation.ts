@@ -1,6 +1,6 @@
 import { Effect, type Semaphore } from "effect";
+import { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import { errorMessage } from "#server/error-inspection";
-import { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function serializedPromise<A>(
   writer: Semaphore.Semaphore,

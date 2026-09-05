@@ -4,13 +4,24 @@
   <p><strong>A fast local Git client for macOS, Windows, and Linux.</strong></p>
 </div>
 
-Rebase is a Git GUI for people who commit dozens of times a day. It runs against the Git binary on
-your machine and keeps repository work in a separate local server, so the browser or desktop window
-stays responsive in large repositories.
+Rebase is a desktop and browser app for working with Git repositories. Browse commit history,
+switch branches, and move between projects in a fast interface built for large codebases.
 
 The project is under active development and is not ready for day-to-day use yet.
 
-## Run with npx
+## Install the desktop app
+
+Install Git 2.34 or newer, then download Rebase from the
+[latest release](https://github.com/ionalexandru99/rebase-git/releases/latest).
+
+| System | Download | Install |
+| --- | --- | --- |
+| macOS | `.dmg`, `arm64` for Apple silicon or `x64` for Intel | Open the disk image and drag Rebase into Applications. |
+| Windows | `.exe` | Run the installer. |
+| Linux | `.AppImage` | Allow the file to run as a program in its properties, then open it. |
+| Debian / Ubuntu | `.deb` | Open the package with your software installer. |
+
+## Run in your browser
 
 Install Node.js 24 and Git 2.34 or newer, then run:
 
@@ -18,8 +29,7 @@ Install Node.js 24 and Git 2.34 or newer, then run:
 npx rebase-git@latest
 ```
 
-Rebase listens on `127.0.0.1`, prints the local and pairing URLs, and tries to open the UI in your
-default browser. It does not expose a remote-listening option.
+Rebase runs locally and opens in your default browser. On WSL, run the command in your Linux terminal.
 
 To install the command instead:
 
@@ -27,9 +37,6 @@ To install the command instead:
 npm install --global rebase-git
 rebase serve
 ```
-
-Use `rebase --version` to print the product and Environment protocol versions. Pass
-`rebase serve --port <port>` to select a loopback port.
 
 ## Run from source
 
@@ -51,12 +58,6 @@ pnpm dev:electron
 ```
 
 Every other command lives in `package.json`.
-
-## Contributing
-
-Issues and pull requests are welcome in
-[GitHub Issues](https://github.com/ionalexandru99/rebase-git/issues). `AGENTS.md` documents the
-conventions this repository follows.
 
 ## License
 

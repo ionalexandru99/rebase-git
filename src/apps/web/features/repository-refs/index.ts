@@ -1,7 +1,5 @@
 export {
-  checkoutRepositoryRef,
   checkoutRepositoryRefEffect,
-  readRepositoryRefs,
   readRepositoryRefsEffect,
 } from "#web/features/repository-refs/repository-refs-client";
 export {

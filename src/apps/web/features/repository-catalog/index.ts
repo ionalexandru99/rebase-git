@@ -1,11 +1,7 @@
 export {
-  listEnvironmentRepositories,
   listEnvironmentRepositoriesEffect,
-  recordEnvironmentRepositoryOpened,
   recordEnvironmentRepositoryOpenedEffect,
-  rememberEnvironmentRepository,
   rememberEnvironmentRepositoryEffect,
-  removeEnvironmentRepository,
   removeEnvironmentRepositoryEffect,
 } from "#web/features/repository-catalog/repository-catalog-client";
 export {

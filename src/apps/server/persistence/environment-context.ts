@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { Effect, type Scope, Semaphore } from "effect";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { environmentTable } from "#server/persistence/environment-state.schema";
 import {
@@ -21,7 +22,6 @@ import {
 } from "#server/persistence/storage/environment-paths";
 import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
 import { ensureServerSecret } from "#server/persistence/storage/server-secret";
-import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function acquireEnvironmentContext(
   paths: EnvironmentPaths = defaultEnvironmentPaths(),

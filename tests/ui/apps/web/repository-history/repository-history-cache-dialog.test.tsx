@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import type {
-  RepositoryHistoryReader,
-  RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
+import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
 import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 import { RepositoryHistoryCacheButton } from "#web-ui/features/repository-history/diagnostics/repository-history-cache-dialog";
@@ -47,20 +45,6 @@ function historyReader() {
     synchronization: "complete",
   };
   return {
-    locateMany: vi.fn(async () => []),
-    ancestryRoute: vi.fn(async () => undefined),
-    locate: vi.fn(async () => undefined),
-    fetch: vi.fn<RepositoryHistoryReader["fetch"]>(),
-    configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(),
-    close: vi.fn(),
-    search: vi.fn(async () => ({
-      commits: [],
-      replicaComplete: false,
-      synchronizedCommitCount: 0,
-    })),
-    getCommitSummaries: vi.fn(async () => []),
-    getRefTargets: vi.fn(async () => []),
-    read: vi.fn(async () => []),
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
@@ -72,7 +56,7 @@ function historyReader() {
       snapshot = value;
       for (const listener of listeners) listener();
     },
-  } satisfies RepositoryHistoryReader & {
+  } satisfies RepositoryHistoryCacheReader & {
     publish: (value: RepositoryHistorySnapshot) => void;
   };
 }

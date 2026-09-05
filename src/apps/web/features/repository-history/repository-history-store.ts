@@ -9,9 +9,11 @@ import type {
 import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,
-  type RepositoryHistoryCompletionBasis,
-  type RepositoryHistorySynchronizationProgress,
 } from "#web/features/repository-history/repository-history-completion";
+import type {
+  RepositoryHistoryCompletionBasis,
+  RepositoryHistorySynchronizationProgress,
+} from "#web/features/repository-history/repository-history-completion.contract";
 import {
   commitKey,
   commitStoreName,
@@ -20,12 +22,14 @@ import {
   repositoryKey,
   repositoryStoreName,
   requestResult,
-  type StoredCommit,
-  type StoredRepository,
   storedCommit,
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
+import type {
+  StoredCommit,
+  StoredRepository,
+} from "#web/features/repository-history/repository-history-database.contract";
 import {
   historyOrderScopeKey,
   normalizedOids,
