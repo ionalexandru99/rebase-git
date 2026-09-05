@@ -1,10 +1,14 @@
 name: Upload test results
-description: Retain reports, screenshots, traces, and benchmark measurements.
+description: Retain test reports, screenshots, and traces.
 inputs:
   name:
     description: Distinguish matrix entries within a job.
     required: false
     default: ${{ github.job }}
+  path:
+    description: Test artifacts directory.
+    required: false
+    default: tests/.artifacts/
 runs:
   using: composite
   steps:
@@ -13,7 +17,7 @@ runs:
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: test-results-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ github.run_attempt }}
-        path: tests/.artifacts/
+        path: ${{ inputs.path }}
         include-hidden-files: true
         if-no-files-found: ignore
         retention-days: 7
