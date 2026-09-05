@@ -1,6 +1,7 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
+import { readCurrentRepositoryHistory } from "#web/features/repository-history/read-current-repository-history";
 import {
   repositoryKey,
   repositoryStoreName,
@@ -22,6 +23,48 @@ import {
 } from "#web/features/repository-history/repository-history-store";
 
 describe("local ordered history pages", () => {
+  it.each([false, true])(
+    "retries a generation change unless the query was superseded (superseded=%s)",
+    async (superseded) => {
+      const fixture = await seed("main", false);
+      const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+      let current = true;
+      const getAll = IDBObjectStore.prototype.getAll;
+      const reads = vi
+        .spyOn(IDBObjectStore.prototype, "getAll")
+        .mockImplementationOnce(function (this: IDBObjectStore, ...args) {
+          cache.revision += 1;
+          current = !superseded;
+          return Reflect.apply(getAll, this, args);
+        });
+      try {
+        const result = await readCurrentRepositoryHistory(
+          fixture.environmentId,
+          fixture.repositoryId,
+          {
+            roots: [root("main", "merge")],
+            order: "topological",
+            ancestry: "first-parent",
+            limit: 100,
+          },
+          cache,
+          () => current,
+        );
+        if (superseded) {
+          expect(result).toBeUndefined();
+          expect(reads).toHaveBeenCalledTimes(1);
+        } else {
+          expect(result?.map(({ subject }) => subject)).toEqual([
+            "merge",
+            "left",
+            "base",
+          ]);
+        }
+      } finally {
+        reads.mockRestore();
+      }
+    },
+  );
   it.each([false, true])(
     "derives an initial first-parent page from an all-ancestry cache (legacy=%s)",
     async (legacy) => {
