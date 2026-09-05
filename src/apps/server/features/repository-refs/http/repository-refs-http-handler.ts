@@ -6,7 +6,7 @@ import {
   RepositoryRefsHttpApi,
   RepositoryRefs as RepositoryRefsSchema,
 } from "@rebase/contracts";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
@@ -14,7 +14,12 @@ import {
   readBearerCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
-import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body.contract";
+import {
+  decodeRequestBody,
+  decodeRequestValue,
+  requireEmptyBody,
+  requireMethod,
+} from "#server/features/environment-connection/http/environment-http-request-validation";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
 export function respondToRepositoryRefsRequest(
@@ -38,7 +43,7 @@ export function respondToRepositoryRefsRequest(
         readBearerCredential(request),
         "repository.read",
       );
-      const query = yield* decodeValue(
+      const query = yield* decodeRequestValue(
         ReadRepositoryRefs,
         Object.fromEntries(url.searchParams),
       );
@@ -62,10 +67,7 @@ export function respondToRepositoryRefsRequest(
         readBearerCredential(request),
         "repository.write",
       );
-      const command = yield* decodeValue(
-        CheckoutRepositoryRef,
-        yield* parseBody(body),
-      );
+      const command = yield* decodeRequestBody(CheckoutRepositoryRef, body);
       writeJson(
         response,
         RepositoryRefsHttpApi.checkout.successStatus,
@@ -85,43 +87,4 @@ function requestUrl(request: IncomingMessage) {
   } catch {
     return undefined;
   }
-}
-
-function requireMethod(
-  request: IncomingMessage,
-  response: ServerResponse,
-  method: string,
-) {
-  if (request.method === method) return Effect.void;
-  return Effect.sync(() =>
-    response.writeHead(405, { allow: method }).end(),
-  ).pipe(Effect.andThen(Effect.interrupt));
-}
-
-function requireEmptyBody(body: Buffer) {
-  return body.byteLength === 0 ? Effect.void : Effect.fail(invalidMessage());
-}
-
-function parseBody(body: Buffer) {
-  return Effect.try({
-    try: () => JSON.parse(body.toString("utf8")) as unknown,
-    catch: invalidMessage,
-  });
-}
-
-function decodeValue<S extends Schema.ConstraintDecoder<unknown, never>>(
-  schema: S,
-  value: unknown,
-) {
-  return Effect.try({
-    try: () =>
-      Schema.decodeUnknownSync(schema)(value, { onExcessProperty: "error" }),
-    catch: invalidMessage,
-  });
-}
-
-function invalidMessage() {
-  return new EnvironmentHttpBodyError({
-    failure: { _tag: "InvalidMessage" },
-  });
 }
