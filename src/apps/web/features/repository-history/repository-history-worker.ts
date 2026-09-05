@@ -47,6 +47,29 @@ import type {
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
 
 const repositories = new Map<string, RepositoryReplica>();
+const pendingConnections = new Set<ConnectRepositoryHistoryReader>();
+let failed = false;
+function failWorker() {
+  if (failed) return;
+  failed = true;
+  for (const connection of pendingConnections) {
+    connection.port.postMessage({
+      _tag: "WorkerFailed",
+    } satisfies RepositoryHistoryWorkerResponse);
+    connection.port.close();
+  }
+  pendingConnections.clear();
+  for (const replica of repositories.values()) {
+    replica.cachePaused = true;
+    for (const reader of [...replica.readers]) {
+      post(reader, { _tag: "WorkerFailed" });
+      closeReader(reader, replica);
+    }
+  }
+  globalThis.close();
+}
+globalThis.addEventListener("error", failWorker);
+globalThis.addEventListener("unhandledrejection", failWorker);
 let cacheManagement: Promise<void> = Promise.resolve();
 let clearingAllCaches: Promise<boolean> | undefined;
 const worker = self as unknown as {
@@ -64,6 +87,7 @@ worker.onconnect = (event) => {
     if (message.data._tag !== "ConnectRepositoryHistoryReader") {
       return;
     }
+    pendingConnections.add(message.data);
     if (clearingAllCaches === undefined) connectReader(message.data);
     else
       void clearingAllCaches.then((cleared) =>
@@ -77,6 +101,7 @@ function connectReader(
   connection: ConnectRepositoryHistoryReader,
   cachePaused = false,
 ) {
+  if (failed) return;
   const key = `${connection.environmentId}\0${connection.logicalRepositoryId}`;
   const existing = repositories.get(key);
   const replica =
@@ -93,6 +118,7 @@ function connectReader(
   };
   replica.readers.add(reader);
   repositories.set(key, replica);
+  pendingConnections.delete(connection);
   reader.stopWatchingLease = watchRepositoryHistoryReaderLease(
     connection.lifetimeLock,
     () => closeReader(reader, replica),
