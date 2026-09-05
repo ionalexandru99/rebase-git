@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
       - "!v*-nightly.*"
   schedule:
-    - cron: "0 */3 * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       channel:
@@ -233,9 +233,6 @@ jobs:
             echo "version=$version"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Validate quality
-        run: pnpm validate:quality
-
       - id: release
         name: Pack package
         shell: bash
@@ -263,46 +260,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - uses: ./.github/actions/upload-test-results
-        if: always()
-
-  smoke:
-    name: Smoke packed package (${{ matrix.name }})
-    needs: package
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Linux
-            runner: ubuntu-latest
-          - name: macOS
-            runner: macos-latest
-          - name: Windows
-            runner: windows-latest
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 10
-    steps:
-      - name: Check out release commit
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: .node-version
-
-      - name: Download package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: npm-package
-          path: package-artifact
-
-      - name: Smoke-test clean package installation
-        run: node tests/package/smoke-packed-package.ts package-artifact
-
   desktop:
-    name: Build desktop (${{ matrix.name }})
+    name: Package and test (${{ matrix.name }})
     needs: package
     if: ${{ !failure() && !cancelled() && needs.package.result == 'success' }}
     strategy:
@@ -338,6 +297,21 @@ jobs:
 
       - uses: ./.github/actions/setup-workspace
 
+      - name: Download npm package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: npm-package
+          path: package-artifact
+
+      - name: Smoke-test clean npm installation
+        run: node tests/package/smoke-packed-package.ts package-artifact
+
+      - name: Set expected application version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: npm pkg set "version=$RELEASE_VERSION"
+
       - name: Package desktop application
         uses: ./.github/actions/package-desktop
         with:
@@ -352,6 +326,14 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ (matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE != '') || (matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true') }}
           CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE_PASSWORD || matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true' && secrets.WINDOWS_CERTIFICATE_PASSWORD || '' }}
           CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true' && secrets.WINDOWS_CERTIFICATE || '' }}
+
+      - name: Smoke-test packaged application
+        if: runner.os != 'Linux'
+        run: pnpm test:release-smoke:built
+
+      - name: Smoke-test packaged application under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm test:release-smoke:built
 
       - name: Verify signature and notarization
         if: ${{ matrix.platform == 'mac' && env.HAS_MACOS_CERT == 'true' }}
@@ -401,9 +383,12 @@ jobs:
           compression-level: 0
           retention-days: 1
 
+      - uses: ./.github/actions/upload-test-results
+        if: always()
+
   publish-npm:
     name: Publish npm package
-    needs: [package, smoke, desktop]
+    needs: [package, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -481,6 +466,11 @@ jobs:
 
           echo "npm metadata did not converge to the expected version, dist-tag, integrity, and provenance." >&2
           exit 1
+
+      - name: Smoke-test clean registry installation
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: node tests/package/smoke-packed-package.ts "npm:rebase-git@$RELEASE_VERSION"
 
   publish-github:
     name: Publish GitHub release
@@ -570,39 +560,6 @@ jobs:
             echo "GitHub release metadata does not match the selected channel: $release" >&2
             exit 1
           fi
-
-  verify-registry:
-    name: Smoke published package (${{ matrix.name }})
-    needs: [package, publish-github]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Linux
-            runner: ubuntu-latest
-          - name: macOS
-            runner: macos-latest
-          - name: Windows
-            runner: windows-latest
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 10
-    steps:
-      - name: Check out release commit
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version-file: .node-version
-          registry-url: https://registry.npmjs.org
-
-      - name: Smoke-test clean registry installation
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.package.outputs.version }}
-        run: node tests/package/smoke-packed-package.ts "npm:rebase-git@$RELEASE_VERSION"
 
   finalize:
     name: Finalize stable release version

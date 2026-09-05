@@ -15,10 +15,10 @@ permissions:
   contents: read
 
 jobs:
-  workflows:
-    name: Workflow lint
+  quality:
+    name: Quality
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -27,218 +27,92 @@ jobs:
         uses: docker://rhysd/actionlint@sha256:9d36088643581e728c969f35141f88139fec77280b2be23c1f66f8e40e1025e7
         with:
           args: -color
-
-  quality:
-    name: Quality (Node ${{ matrix.node-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version:
-          - 22.18.0
-          - 24.19.0
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
-        with:
-          node-version: ${{ matrix.node-version }}
       - name: Validate quality
         run: pnpm validate:quality
       - name: Verify release validation gate without publishing
         run: node --test tests/package/release-validation.test.ts
-      - name: Pack package
-        if: matrix.node-version == '24.19.0'
-        run: |
-          mkdir package-artifact
-          npm pack --pack-destination package-artifact
-      - name: Upload package
-        if: matrix.node-version == '24.19.0'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: npm-package
-          path: package-artifact/rebase-git-*.tgz
-          if-no-files-found: error
-          retention-days: 1
       - uses: ./.github/actions/upload-test-results
         if: always()
-        with:
-          name: quality-node-${{ matrix.node-version }}
 
-  integration:
-    name: Integration (${{ matrix.name }})
-    needs: quality
+  platforms:
+    name: Platform (${{ matrix.name }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Linux
+          - name: Linux, Node 22
             runner: ubuntu-latest
+            node-version: 22.18.0
           - name: macOS
             runner: macos-latest
+            node-version: ""
           - name: Windows
             runner: windows-latest
+            node-version: ""
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-workspace
-      - name: Build npm package from a path with spaces
-        shell: bash
-        run: |
-          package_workspace="$RUNNER_TEMP/rebase npm package"
-          mkdir -p "$package_workspace"
-          git archive HEAD | (cd "$package_workspace" && tar -xf -)
-          cd "$package_workspace"
-          pnpm install --frozen-lockfile
-          pnpm build:package
-      - name: Validate integration
-        run: pnpm validate:integration
-      - name: Verify macOS signing keychain
-        if: runner.os == 'macOS'
-        run: node --test tests/package/macos-keychain.test.ts
-      - uses: ./.github/actions/upload-test-results
-        if: always()
-
-  package-smoke:
-    name: Package smoke (${{ matrix.name }})
-    needs: quality
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Linux
-            runner: ubuntu-latest
-          - name: macOS
-            runner: macos-latest
-          - name: Windows
-            runner: windows-latest
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .node-version
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: npm-package
-          path: package-artifact
-      - name: Smoke-test clean npm installation
-        run: node tests/package/smoke-packed-package.ts package-artifact
-
-  browser:
-    name: Browser tests
-    needs: quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-workspace
-      - name: Install browser
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Validate browser
-        run: pnpm validate:browser
-      - uses: ./.github/actions/upload-test-results
-        if: always()
-
-  desktop-tests:
-    name: Desktop journeys
-    needs: quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-workspace
-      - name: Install browser
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Validate desktop
-        run: xvfb-run --auto-servernum pnpm validate:desktop
-      - uses: ./.github/actions/upload-test-results
-        if: always()
-
-  release-targets:
-    name: Release targets (${{ matrix.name }})
-    needs: quality
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS arm64
-            runner: macos-latest
-            platform: mac
-            arch: arm64
-          - name: macOS x64
-            runner: macos-15-intel
-            platform: mac
-            arch: x64
-          - name: Linux x64
-            runner: ubuntu-latest
-            platform: linux
-            arch: x64
-          - name: Windows x64
-            runner: windows-latest
-            platform: win
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: workspace with spaces
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
+          path: workspace with spaces
+          persist-credentials: false
+      - uses: ./workspace with spaces/.github/actions/setup-workspace
+        with:
+          node-version: ${{ matrix.node-version }}
+          working-directory: workspace with spaces
+      - name: Test Node 22 compatibility
+        if: matrix.node-version == '22.18.0'
+        run: pnpm test:unit
+      - name: Build desktop and run integration tests
+        run: pnpm validate:integration
+      - name: Verify macOS signing keychain
+        if: runner.os == 'macOS'
+        run: node --test tests/package/macos-keychain.test.ts
+      - name: Pack npm package
+        shell: bash
+        run: |
+          mkdir package-artifact
+          npm pack --pack-destination package-artifact
+      - name: Smoke-test clean npm installation
+        run: node tests/package/smoke-packed-package.ts package-artifact
+      - name: Install Electron
+        run: pnpm exec install-electron
+      - name: Package and launch desktop application
+        if: runner.os != 'Linux'
+        run: pnpm test:release-smoke:prepared
+      - name: Package and launch desktop application under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum pnpm test:release-smoke:prepared
+      - uses: ./workspace with spaces/.github/actions/upload-test-results
+        if: always()
+        with:
+          path: workspace with spaces/tests/.artifacts/
+
+  browser:
+    name: Browser and desktop journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
-      - name: Select rehearsal version
-        id: rehearsal
-        shell: bash
+      - name: Install browser and Electron
         run: |
-          base_version=$(node -p "require('./package.json').version")
-          echo "version=$base_version-nightly.20000101.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
-      - name: Build release targets without publishing
-        uses: ./.github/actions/package-desktop
-        with:
-          platform: ${{ matrix.platform }}
-          arch: ${{ matrix.arch }}
-          version: ${{ steps.rehearsal.outputs.version }}
-          channel: nightly
-      - name: Verify nightly metadata and set expected smoke version
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ steps.rehearsal.outputs.version }}
-        run: |
-          compgen -G 'release/nightly*.yml'
-          npm pkg set "version=$RELEASE_VERSION"
-      - name: Smoke-test packaged application
-        if: runner.os != 'Linux'
-        run: pnpm test:release-smoke:built
-      - name: Smoke-test packaged application under Xvfb
-        if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum pnpm test:release-smoke:built
-      - name: Upload release targets
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: rehearsal-${{ matrix.platform }}-${{ matrix.arch }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/*.AppImage
-            release/*.deb
-            release/*.exe
-            release/nightly*.yml
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec install-electron
+      - name: Validate browser
+        run: pnpm validate:browser
+      - name: Build desktop application
+        run: pnpm build:desktop-package
+      - name: Run browser and desktop journeys
+        run: xvfb-run --auto-servernum pnpm test:e2e:prepared
       - uses: ./.github/actions/upload-test-results
         if: always()
 
@@ -246,13 +120,9 @@ jobs:
     name: Validation
     if: always()
     needs:
-      - workflows
       - quality
-      - integration
-      - package-smoke
+      - platforms
       - browser
-      - desktop-tests
-      - release-targets
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
