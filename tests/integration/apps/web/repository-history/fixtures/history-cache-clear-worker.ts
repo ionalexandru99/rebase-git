@@ -41,6 +41,13 @@ IDBObjectStore.prototype.getAll = function (...args) {
     request.addEventListener("success", (event) => {
       control.postMessage("waiting");
       control.onmessage = (message) => {
+        if (message.data === "crash") {
+          void Promise.reject(
+            new Error("History worker failed during cache clear"),
+          );
+          control.close();
+          return;
+        }
         failClear = message.data === "fail";
         accept?.call(request, event);
         control.close();

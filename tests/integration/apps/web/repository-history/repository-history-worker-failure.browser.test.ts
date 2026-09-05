@@ -6,6 +6,71 @@ import {
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
 
+it("settles a connection awaiting cache clear after an unhandled worker rejection", async () => {
+  const name = crypto.randomUUID();
+  const control = new BroadcastChannel(`history-clear-${name}`);
+  const waiting = Promise.withResolvers<void>();
+  const connecting = Promise.withResolvers<void>();
+  control.onmessage = (message) => {
+    if (message.data === "waiting") waiting.resolve();
+    if (message.data === "connecting") connecting.resolve();
+  };
+  const workerUrl = new URL(
+    "./fixtures/history-cache-clear-worker.ts",
+    import.meta.url,
+  );
+  const workers = [
+    new SharedWorker(workerUrl, { type: "module", name }),
+    new SharedWorker(workerUrl, { type: "module", name }),
+  ] as const;
+  const errors = vi.fn();
+  for (const worker of workers) worker.addEventListener("error", errors);
+  const gateway: RepositoryHistoryGateway = {
+    read: async () => {
+      throw new RepositoryHistoryOffline();
+    },
+    synchronize: async () => {
+      throw new RepositoryHistoryOffline();
+    },
+  };
+  const first = createBrowserRepositoryHistoryReader({
+    environmentId: crypto.randomUUID(),
+    repositoryId: crypto.randomUUID(),
+    gateway,
+    worker: workers[0],
+  });
+  let second:
+    | ReturnType<typeof createBrowserRepositoryHistoryReader>
+    | undefined;
+  try {
+    await first.getRefTargets();
+    const clearing = Promise.allSettled([first.manageCache("clear-all")]);
+    await waiting.promise;
+    second = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      repositoryId: crypto.randomUUID(),
+      gateway,
+      worker: workers[1],
+    });
+    const pending = Promise.allSettled([second.getRefTargets()]);
+    await connecting.promise;
+    control.postMessage("crash");
+    await expect.poll(() => first.getSnapshot().status).toBe("error");
+    await expect.poll(() => second?.getSnapshot().status).toBe("error");
+    for (const result of [...(await clearing), ...(await pending)]) {
+      expect(result.status).toBe("rejected");
+      if (result.status === "rejected")
+        expect(result.reason).toBeInstanceOf(RepositoryHistoryUnavailable);
+    }
+    expect(errors).not.toHaveBeenCalled();
+  } finally {
+    first.close();
+    second?.close();
+    control.close();
+    for (const worker of workers) worker.port.close();
+  }
+});
+
 it.each(["startup", "runtime"] as const)(
   "settles readers and releases their leases after worker %s failure",
   async (failure) => {
