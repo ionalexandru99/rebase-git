@@ -1,6 +1,7 @@
-import { type FSWatcher, realpathSync, watch } from "node:fs";
+import { realpathSync, watch } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { watchGitDirectoryTree } from "#server/adapters/local-git/watch-git-directory-tree";
 import type {
   RepositoryWatcher,
   RepositoryWatchHandle,
@@ -27,7 +28,7 @@ function watchGitDirectory(
   gitDirectory: string,
   onChange: () => void,
 ): RepositoryWatchHandle {
-  const watchers = new Map<string, FSWatcher>();
+  const watchers = new Map<string, RepositoryWatchHandle>();
   const watchRecursively = (entry: (typeof recursiveEntries)[number]) => {
     if (watchers.has(entry)) return;
     const watcher = tryWatch(join(gitDirectory, entry), true, () => onChange());
@@ -67,10 +68,11 @@ function watchGitDirectory(
   };
   const root = tryWatch(gitDirectory, false, (fileName) => {
     if (fileName !== undefined && !watchedRootEntries.has(fileName)) return;
-    if (fileName === "refs" || fileName === "worktrees") {
-      removeWatcher(fileName);
-      watchRecursively(fileName);
-    }
+    for (const entry of recursiveEntries)
+      if (fileName === undefined || fileName === entry) {
+        removeWatcher(entry);
+        watchRecursively(entry);
+      }
     if (fileName === undefined || fileName === "logs") watchStashes("logs");
     onChange();
   });
@@ -92,6 +94,10 @@ function tryWatch(
   listener: (fileName: string | undefined) => void,
 ) {
   try {
+    if (recursive)
+      return watchGitDirectoryTree(realpathSync.native(path), () =>
+        listener(undefined),
+      );
     const watcher = watch(
       realpathSync.native(path),
       { persistent: false, recursive },
