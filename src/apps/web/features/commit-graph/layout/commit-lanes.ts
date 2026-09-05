@@ -1,26 +1,16 @@
-export interface CommitTopology {
-  readonly oid: string;
-  readonly parents: readonly string[];
-}
+import type {
+  CommitLane,
+  CommitLaneCheckpoint,
+  CommitLaneRow,
+  CommitTopology,
+} from "#web/features/commit-graph/layout/commit-lanes.contract";
 
-export interface CommitLane {
-  readonly color: number;
-  readonly expectedOid: string;
-  readonly id: number;
-}
-
-export interface CommitLaneCheckpoint {
-  readonly lanes: readonly CommitLane[];
-  readonly nextLaneId: number;
-}
-
-export interface CommitLaneRow {
-  readonly lanesAfter: readonly number[];
-  readonly lanesBefore: readonly number[];
-  readonly nodeLaneId: number;
-  readonly oid: string;
-  readonly parentLaneIds: readonly number[];
-}
+export type {
+  CommitLane,
+  CommitLaneCheckpoint,
+  CommitLaneRow,
+  CommitTopology,
+} from "#web/features/commit-graph/layout/commit-lanes.contract";
 
 export function createCommitLaneCheckpoint(): CommitLaneCheckpoint {
   return { lanes: [], nextLaneId: 0 };
@@ -29,6 +19,7 @@ export function createCommitLaneCheckpoint(): CommitLaneCheckpoint {
 export function appendCommitLanes(
   checkpoint: CommitLaneCheckpoint,
   commits: readonly CommitTopology[],
+  colors: ReadonlyMap<string, number> = new Map(),
 ) {
   const lanes = checkpoint.lanes.map((lane) => ({ ...lane }));
   let nextLaneId = checkpoint.nextLaneId;
@@ -37,7 +28,14 @@ export function appendCommitLanes(
   for (const commit of commits) {
     let nodeIndex = lanes.findIndex((lane) => lane.expectedOid === commit.oid);
     if (nodeIndex < 0) {
-      lanes.push(lane(nextLaneId, commit.oid));
+      lanes.push(
+        lane(
+          nextLaneId,
+          commit.oid,
+          availableSlot(lanes),
+          colors.get(commit.oid),
+        ),
+      );
       nodeIndex = lanes.length - 1;
       nextLaneId += 1;
     }
@@ -45,7 +43,7 @@ export function appendCommitLanes(
     if (nodeLane === undefined) {
       throw new Error("Missing commit lane");
     }
-    const lanesBefore = lanes.map((current) => current.id);
+    const lanesBefore = [...lanes];
     const parentLaneIds: number[] = [];
 
     if (commit.parents.length === 0) {
@@ -80,7 +78,12 @@ export function appendCommitLanes(
           parentLaneIds.push(existing.id);
           continue;
         }
-        const created = lane(nextLaneId, parent);
+        const created = lane(
+          nextLaneId,
+          parent,
+          availableSlot(lanes),
+          colors.get(parent),
+        );
         nextLaneId += 1;
         lanes.splice(insertIndex, 0, created);
         insertIndex += 1;
@@ -89,7 +92,7 @@ export function appendCommitLanes(
     }
 
     rows.push({
-      lanesAfter: lanes.map((current) => current.id),
+      lanesAfter: [...lanes],
       lanesBefore,
       nodeLaneId: nodeLane.id,
       oid: commit.oid,
@@ -102,6 +105,18 @@ export function appendCommitLanes(
   };
 }
 
-function lane(id: number, expectedOid: string): CommitLane {
-  return { color: id % 8, expectedOid, id };
+function lane(
+  id: number,
+  expectedOid: string,
+  slot: number,
+  color = id % 8,
+): CommitLane {
+  return { color, expectedOid, id, slot };
+}
+
+function availableSlot(lanes: readonly CommitLane[]) {
+  const occupied = new Set(lanes.map((lane) => lane.slot));
+  let slot = 0;
+  while (occupied.has(slot)) slot += 1;
+  return slot;
 }

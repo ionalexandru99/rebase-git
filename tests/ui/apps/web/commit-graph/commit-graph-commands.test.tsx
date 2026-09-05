@@ -180,7 +180,7 @@ describe("commit graph commands", () => {
       .element(screen.getByRole("menuitem", { name: "Add to history" }))
       .toBeVisible();
     const grid = screen.getByRole("grid");
-    grid.element().scrollTop = 60 * 36;
+    grid.element().scrollTop = 60 * 26;
     grid.element().dispatchEvent(new Event("scroll"));
     const row = grid.getByRole("row", { name: /^Commit 61,/ });
     await expect.element(row).toBeVisible();

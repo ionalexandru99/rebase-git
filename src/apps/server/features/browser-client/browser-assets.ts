@@ -99,7 +99,7 @@ function browserAssetHeaders(
 ) {
   return {
     "cache-control": cache ? "public, max-age=31536000, immutable" : "no-store",
-    "content-security-policy": `default-src 'self'; base-uri 'none'; connect-src 'self' ws://${webSocketHost}:*; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'`,
+    "content-security-policy": `default-src 'self'; base-uri 'none'; connect-src 'self' ws://${webSocketHost}:* https://api.github.com; form-action 'none'; frame-ancestors 'none'; img-src 'self' data: https://avatars.githubusercontent.com; object-src 'none'; script-src 'self'; style-src 'self'`,
     "content-type": contentTypes[extension] ?? "application/octet-stream",
     "x-content-type-options": "nosniff",
   };

@@ -76,6 +76,12 @@ export const RepositoryRefsTruncation = Schema.Struct({
 export type RepositoryRefsTruncation = typeof RepositoryRefsTruncation.Type;
 
 export const RepositoryRefs = Schema.Struct({
+  githubRepository: Schema.optionalKey(
+    Schema.Struct({
+      owner: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9-]{1,39}$/)),
+      name: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9_.-]{1,100}$/)),
+    }),
+  ),
   branches: Schema.Array(LocalBranch).check(Schema.isMaxLength(10_000)),
   logicalRepositoryId: Schema.optionalKey(RepositoryId),
   remoteBranches: Schema.Array(RemoteBranch).check(Schema.isMaxLength(20_000)),

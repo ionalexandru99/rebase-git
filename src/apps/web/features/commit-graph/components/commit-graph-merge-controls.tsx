@@ -1,54 +1,40 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
-import type { VirtualItem } from "@tanstack/react-virtual";
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
-import { commitGraphNodePosition } from "#web-ui/features/commit-graph/components/commit-graph-canvas";
 
-export function CommitGraphMergeControls({
-  commits,
-  horizontalOffset,
-  laneRows,
-  merges,
+export function CommitGraphMergeControl({
+  commit,
+  state,
   onToggle,
-  verticalOffset,
-  virtualRows,
+  position,
+  color,
 }: {
-  readonly commits: readonly RepositoryCommit[];
-  readonly horizontalOffset: number;
-  readonly laneRows: readonly CommitLaneRow[];
-  readonly merges: ReadonlyMap<string, "collapsed" | "expanded">;
+  readonly commit: RepositoryCommit;
+  readonly state: "collapsed" | "expanded";
   readonly onToggle: (oid: string, expand: boolean) => void;
-  readonly verticalOffset: number;
-  readonly virtualRows: readonly VirtualItem[];
+  readonly position: number;
+  readonly color: string;
 }) {
+  const Icon = state === "expanded" ? IconMinus : IconPlus;
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {virtualRows.map((virtualRow) => {
-        const commit = commits[virtualRow.index];
-        const lane = laneRows[virtualRow.index];
-        const state = commit === undefined ? undefined : merges.get(commit.oid);
-        if (commit === undefined || lane === undefined || state === undefined)
-          return null;
-        const Icon = state === "expanded" ? IconMinus : IconPlus;
-        return (
-          <button
-            aria-label={`${state === "expanded" ? "Collapse" : "Expand"} merge ${commit.subject}`}
-            aria-expanded={state === "expanded"}
-            className="pointer-events-auto absolute z-10 grid size-5 place-items-center rounded-full border border-primary bg-repository text-primary"
-            key={commit.oid}
-            onClick={() => onToggle(commit.oid, state !== "expanded")}
-            onPointerDown={(event) => event.preventDefault()}
-            style={{
-              left: commitGraphNodePosition(lane) - horizontalOffset - 10,
-              top: virtualRow.start - verticalOffset + virtualRow.size / 2 - 10,
-            }}
-            tabIndex={-1}
-            type="button"
-          >
-            <Icon aria-hidden="true" size={12} stroke={2} />
-          </button>
-        );
-      })}
-    </div>
+    <button
+      aria-label={`${state === "expanded" ? "Collapse" : "Expand"} merge ${commit.subject}`}
+      aria-expanded={state === "expanded"}
+      className="absolute top-px z-[3] grid size-6 place-items-center"
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle(commit.oid, state !== "expanded");
+      }}
+      onPointerDown={(event) => event.preventDefault()}
+      style={{ left: position - 12 }}
+      tabIndex={-1}
+      type="button"
+    >
+      <span
+        className="grid size-[11px] place-items-center rounded-full text-repository"
+        style={{ background: color }}
+      >
+        <Icon aria-hidden="true" size={9} stroke={2} />
+      </span>
+    </button>
   );
 }

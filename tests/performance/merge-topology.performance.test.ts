@@ -23,11 +23,10 @@ test("256 active lanes stay within append and canvas budgets", async ({
         createCommitLaneCheckpoint,
       }: typeof import("#web/features/commit-graph/layout/commit-lanes") =
         await import(lanesPath);
-      const canvasPath =
-        "/features/commit-graph/components/commit-graph-canvas.tsx";
+      const canvasPath = "/features/commit-graph/layout/draw-graph-tile.ts";
       const {
-        redrawCommitGraphCanvas,
-      }: typeof import("#web-ui/features/commit-graph/components/commit-graph-canvas") =
+        drawGraphTile,
+      }: typeof import("#web/features/commit-graph/layout/draw-graph-tile") =
         await import(canvasPath);
       const branches = 256;
       const depth = 8;
@@ -74,23 +73,15 @@ test("256 active lanes stay within append and canvas budgets", async ({
       for (let frame = 0; frame < 130; frame += 1) {
         await new Promise(requestAnimationFrame);
         const first = 1 + frame * 5;
-        const virtualRows = Array.from({ length: 36 }, (_, offset) => ({
-          index: first + offset,
-          start: (first + offset) * 36,
-          end: (first + offset + 1) * 36,
-          size: 36,
-          lane: 0,
-          key: first + offset,
-        }));
         const started = performance.now();
-        redrawCommitGraphCanvas(canvas, {
-          height: 900,
-          width: 1024,
-          laneRows: rows,
-          virtualRows,
-          horizontalOffset: frame % 2 === 0 ? 0 : 2048,
-          verticalOffset: first * 36,
-        });
+        drawGraphTile(
+          canvas,
+          rows.slice(first, first + 32),
+          frame % 2 === 0 ? 0 : 2048,
+          1024,
+          Math.min(window.devicePixelRatio || 1, 2),
+          new Map(),
+        );
         if (frame >= 10) redrawDurations.push(performance.now() - started);
       }
       return {

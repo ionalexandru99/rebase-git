@@ -81,7 +81,7 @@ describe("commit graph navigation", () => {
           release = resolve;
         }),
     );
-    grid.element().scrollTop = 80 * 36;
+    grid.element().scrollTop = 80 * 26;
     grid.element().dispatchEvent(new Event("scroll"));
     await vi.waitFor(() =>
       expect(reader.read).toHaveBeenCalledWith(
@@ -105,7 +105,7 @@ describe("commit graph navigation", () => {
       reader.read.mock.calls.filter(([query]) => query.offset === 100),
     ).toHaveLength(1);
     reader.read.mockRejectedValueOnce(new Error("Older page failed"));
-    grid.element().scrollTop = 180 * 36;
+    grid.element().scrollTop = 180 * 26;
     grid.element().dispatchEvent(new Event("scroll"));
     await expect
       .element(screen.getByRole("alert"))
@@ -114,7 +114,7 @@ describe("commit graph navigation", () => {
       .element(grid.getByRole("row", { name: /^Commit 180,/ }))
       .toBeVisible();
     await screen.getByRole("button", { name: "Retry loading history" }).click();
-    await expect.element(grid).toHaveAttribute("aria-rowcount", "230");
+    await expect.element(grid).toHaveAttribute("aria-rowcount", "231");
     grid.element().focus();
     await userEvent.keyboard("{End}");
     await expect
@@ -146,7 +146,7 @@ describe("commit graph navigation", () => {
     await vi.waitFor(() => expect(release).toBeDefined());
     await grid.getByRole("row", { name: /^Commit 98,/ }).click();
     release?.(commits.slice(100, 200));
-    await expect.element(grid).toHaveAttribute("aria-rowcount", "130");
+    await expect.element(grid).toHaveAttribute("aria-rowcount", "131");
     await expect
       .element(grid.getByRole("row", { name: /^Commit 98,/ }))
       .toHaveAttribute("aria-selected", "true");
@@ -248,7 +248,7 @@ describe("commit graph navigation", () => {
     await expect
       .element(grid.getByRole("row", { name: /^Commit 0,/ }))
       .toBeVisible();
-    grid.element().scrollTop = 20 * 36 + 7;
+    grid.element().scrollTop = 20 * 26 + 7;
     grid.element().dispatchEvent(new Event("scroll"));
     await grid.getByRole("row", { name: /^Commit 22,/ }).click();
     reader.getRefTargets.mockResolvedValue([
@@ -270,7 +270,7 @@ describe("commit graph navigation", () => {
     await expect
       .element(grid.getByRole("row", { name: /^Commit 22,/ }))
       .toHaveAttribute("aria-selected", "true");
-    await vi.waitFor(() => expect(grid.element().scrollTop).toBe(10 * 36 + 7));
+    await vi.waitFor(() => expect(grid.element().scrollTop).toBe(10 * 26 + 7));
     const reads = reader.read.mock.calls.length;
     await act(async () => {
       reader.snapshot = { ...reader.snapshot, revision: 2 };
@@ -415,6 +415,7 @@ describe("commit graph navigation", () => {
       grid
         .getByRole("row")
         .all()
+        .filter((row) => row.element().hasAttribute("aria-rowindex"))
         .every(
           (candidate) =>
             candidate.element().getAttribute("aria-selected") === "false",
@@ -461,6 +462,7 @@ describe("commit graph navigation", () => {
         .getByRole("grid")
         .getByRole("row")
         .all()
+        .filter((row) => row.element().hasAttribute("aria-rowindex"))
         .every(
           (row) => row.element().getAttribute("aria-selected") === "false",
         ),
@@ -545,7 +547,7 @@ describe("commit graph navigation", () => {
       .toHaveAttribute("aria-busy", "false");
   });
 
-  it.each([7, 20 * 36 + 7])(
+  it.each([7, 20 * 26 + 7])(
     "keeps the selected row and viewport anchored from scroll offset %i",
     async (scrollTop) => {
       const commits = history(100);
@@ -569,7 +571,7 @@ describe("commit graph navigation", () => {
       const grid = screen.getByRole("grid", { name: "Commit history" });
       grid.element().scrollTop = scrollTop;
       grid.element().dispatchEvent(new Event("scroll"));
-      const selectedIndex = Math.floor(scrollTop / 36) + 2;
+      const selectedIndex = Math.floor(scrollTop / 26) + 2;
       const selected = grid.getByRole("row", {
         name: new RegExp(`^Commit ${selectedIndex},`),
       });
@@ -607,7 +609,7 @@ describe("commit graph navigation", () => {
         )
         .toHaveAttribute("aria-selected", "true");
       await vi.waitFor(() =>
-        expect(grid.element().scrollTop).toBe(scrollTop + 36),
+        expect(grid.element().scrollTop).toBe(scrollTop + 26),
       );
     },
   );

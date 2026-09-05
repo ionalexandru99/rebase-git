@@ -4,6 +4,7 @@ import type {
 } from "@rebase/contracts";
 import {
   type ComponentProps,
+  type CSSProperties,
   type ReactNode,
   useEffect,
   useId,
@@ -31,6 +32,7 @@ function CommitRefMenu({
   registry,
   execute,
   restoreFocus,
+  colors,
 }: {
   readonly labels: readonly RepositoryHistoryRefTarget[];
   readonly context: (
@@ -42,6 +44,7 @@ function CommitRefMenu({
     context: GraphCommandContext,
   ) => Promise<void>;
   readonly restoreFocus: () => void;
+  readonly colors?: ReadonlyMap<string, string> | undefined;
 }) {
   const menuId = useId();
   const [menu, setMenu] = useState<{
@@ -74,10 +77,12 @@ function CommitRefMenu({
     name: string,
     children: ReactNode,
     title?: string,
+    style?: CSSProperties,
   ) => (
     <RefMenuTrigger
       key={key}
       className={className}
+      style={style}
       name={name}
       title={title}
       menuId={menu?.key === key ? menuId : undefined}
@@ -97,7 +102,7 @@ function CommitRefMenu({
     </RefMenuTrigger>
   );
   return (
-    <span className="flex min-w-0 max-w-[55%] shrink-0 items-center gap-1 overflow-hidden">
+    <span className="flex shrink-0 items-center gap-1">
       {labels.slice(0, 2).map((label) => {
         const target = context(label);
         const command =
@@ -106,11 +111,22 @@ function CommitRefMenu({
             : registry
                 .commands(target)
                 .find(({ id }) => id === "history.toggleRef");
-        const className = `min-w-0 max-w-32 truncate rounded-sm border px-1.5 py-0.5 font-mono text-[10px] leading-none ${label.type === "tag" ? "border-status-connecting/35 bg-status-connecting/10 text-status-connecting" : label.type === "branch" ? "border-status-available/30 bg-status-available/8 text-status-available" : "border-primary/30 bg-primary/8 text-primary"}`;
+        const className =
+          "shrink-0 max-w-48 truncate rounded-sm border px-1.5 py-0.5 font-mono text-[10px] leading-none";
+        const color =
+          label.type === "tag"
+            ? "#c6a663"
+            : (colors?.get(label.name) ?? "#719cff");
+        const style = {
+          borderColor: color,
+          color: label.type === "branch" ? "var(--repository)" : color,
+          background: label.type === "branch" ? color : "transparent",
+        };
         if (command === undefined || target === undefined)
           return (
             <span
               className={className}
+              style={style}
               title={label.name}
               key={`${label.type}\0${label.name}`}
             >
@@ -123,6 +139,7 @@ function CommitRefMenu({
           `Actions for ${label.name}`,
           label.name,
           label.name,
+          style,
         );
       })}
       {labels.length <= 2
@@ -209,6 +226,7 @@ function RefMenuTrigger({
   name,
   onOpen,
   title,
+  style,
 }: {
   readonly children: ReactNode;
   readonly className: string;
@@ -219,6 +237,7 @@ function RefMenuTrigger({
     focusKey?: "ArrowDown" | "ArrowUp",
   ) => void;
   readonly title: string | undefined;
+  readonly style?: CSSProperties | undefined;
 }) {
   return (
     <button
@@ -228,6 +247,7 @@ function RefMenuTrigger({
       aria-haspopup="menu"
       aria-label={name}
       className={className}
+      style={style}
       title={title}
       tabIndex={-1}
       onClick={(event) => {

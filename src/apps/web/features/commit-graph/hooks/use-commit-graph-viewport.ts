@@ -10,12 +10,11 @@ import type {
   CommitGraphViewportAnchor,
   CommitGraphViewportHandle,
 } from "#web/features/commit-graph/commit-graph.contract";
+import { graphRowHeight as rowHeight } from "#web/features/commit-graph/layout/graph-metrics";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
-
-const rowHeight = 36;
 
 export function useCommitGraphViewport({
   reader,

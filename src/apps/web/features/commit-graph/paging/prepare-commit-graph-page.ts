@@ -3,6 +3,10 @@ import {
   appendCommitLanes,
   type CommitLaneCheckpoint,
 } from "#web/features/commit-graph/layout/commit-lanes";
+import {
+  graphBranchColorIndex,
+  graphRefName,
+} from "#web/features/commit-graph/layout/graph-colors";
 import type {
   CommitGraphPage,
   CommitGraphPageReader,
@@ -75,7 +79,17 @@ export async function prepareCommitGraphPage(
           )
         : commit.parents,
   }));
-  const plan = appendCommitLanes(incomingCheckpoint, topology);
+  const plan = appendCommitLanes(
+    incomingCheckpoint,
+    topology,
+    new Map(
+      query.roots
+        .filter(
+          (root) => root.type === "branch" || root.type === "remote-branch",
+        )
+        .map((root) => [root.oid, graphBranchColorIndex(graphRefName(root))]),
+    ),
+  );
   const merges = new Map<string, "collapsed" | "expanded">();
   for (const commit of commits) {
     if (
@@ -99,7 +113,7 @@ export async function prepareCommitGraphPage(
         bytes +
         160 +
         2 * row.oid.length +
-        8 *
+        24 *
           (row.lanesBefore.length +
             row.lanesAfter.length +
             row.parentLaneIds.length),

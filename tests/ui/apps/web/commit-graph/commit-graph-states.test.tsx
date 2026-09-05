@@ -1,6 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import {
@@ -14,6 +14,9 @@ import { RepositoryHistoryUnavailable } from "#web/features/repository-history/r
 import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph states", () => {
+  beforeEach(async () => {
+    await page.viewport(1280, 720);
+  });
   it.each([
     [3, 100],
     [100, 3],
@@ -129,7 +132,9 @@ describe("commit graph states", () => {
       await expect
         .element(screen.getByRole("status"))
         .not.toHaveTextContent("selected");
-      expect(element.querySelectorAll("tr").length).toBeLessThan(60);
+      expect(
+        element.querySelectorAll("tr[aria-rowindex]").length,
+      ).toBeLessThanOrEqual(Math.ceil(element.clientHeight / 26) + 13);
     },
   );
 
@@ -218,7 +223,7 @@ describe("commit graph states", () => {
       .element(grid.getByRole("row", { name: /Commit 0/ }))
       .toBeVisible();
     expect(grid.getByRole("row").all().length).toBeLessThan(40);
-    await expect.element(grid.getByRole("rowgroup")).toBeInTheDocument();
+    expect(grid.getByRole("rowgroup").all()).toHaveLength(2);
     expect(document.querySelector("canvas")).not.toBeNull();
 
     const second = grid.getByRole("row", { name: /^Commit 1,/ });

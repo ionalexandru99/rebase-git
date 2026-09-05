@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
 import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
+import { readGitHubRepository } from "#server/features/repository-refs/git/github-repository";
 import {
   forEachRefFormat,
   localBranchFromRecord,
@@ -52,11 +53,15 @@ export function readRepositoryRefs(
         ),
         tags: listRefs(git, repository.path, "refs/tags", "-creatordate"),
         worktrees: readWorktrees(git, repository.path),
+        githubRepository: readGitHubRepository(git, repository.path),
       },
       { concurrency: "unbounded" },
     );
     const worktrees = yield* canonicalizeWorktrees(output.worktrees);
     return fitRepositoryRefs({
+      ...(output.githubRepository === undefined
+        ? {}
+        : { githubRepository: output.githubRepository }),
       branches: canonicalizeBranchWorktrees(
         output.branches.flatMap(withDefined(localBranchFromRecord)),
         output.worktrees,

@@ -11,6 +11,34 @@ const d = "d".repeat(40);
 const e = "e".repeat(40);
 
 describe("commit lanes", () => {
+  it("reuses vacant slots across successive merges without widening the graph", () => {
+    const { rows } = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "a", parents: ["b", "c"] },
+      { oid: "b", parents: [] },
+      { oid: "c", parents: ["d", "e"] },
+      { oid: "d", parents: [] },
+      { oid: "e", parents: ["f", "g"] },
+    ]);
+    expect(
+      Math.max(
+        ...rows.flatMap((row) => row.lanesAfter.map((lane) => lane.slot)),
+      ),
+    ).toBe(1);
+  });
+  it("keeps surviving rails in their slots when a neighboring branch ends", () => {
+    const result = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: a, parents: [b, c, d] },
+      { oid: b, parents: [] },
+      { oid: c, parents: [e] },
+    ]);
+
+    expect(result.rows[1]?.lanesAfter.map((lane) => lane.slot)).toEqual([1, 2]);
+    expect(result.rows[2]?.lanesBefore.map((lane) => lane.slot)).toEqual([
+      1, 2,
+    ]);
+    expect(result.checkpoint.lanes.map((lane) => lane.slot)).toEqual([1, 2]);
+  });
+
   it("keeps prior row plans unchanged when older commits append", () => {
     const first = appendCommitLanes(createCommitLaneCheckpoint(), [
       { oid: a, parents: [b, c] },

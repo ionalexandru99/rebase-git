@@ -583,7 +583,8 @@ export function createCommitGraphPageWindow(
       const row = page?.rows[offset - pageOffset];
       if (
         row === undefined ||
-        (direction > 0 && !row.lanesAfter.includes(row.nodeLaneId))
+        (direction > 0 &&
+          !row.lanesAfter.some((lane) => lane.id === row.nodeLaneId))
       )
         return Promise.resolve(undefined);
       return requestMove(offset + direction, {

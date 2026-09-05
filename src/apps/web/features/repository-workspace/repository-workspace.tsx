@@ -218,6 +218,7 @@ function RepositoryWorkspaceContent({
           className="h-full rounded-none bg-repository"
         >
           <CommitGraph
+            githubRepository={refs.refs?.githubRepository}
             commandEnvironment={
               environmentId === undefined ||
               logicalRepositoryId === undefined ||
