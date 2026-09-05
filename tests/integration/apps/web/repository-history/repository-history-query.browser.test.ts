@@ -222,6 +222,67 @@ describe("local ordered history pages", () => {
     }
   });
 
+  it("shares the compact index scan across simultaneous cold page queries", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    const read = () =>
+      readRepositoryHistory(
+        fixture.environmentId,
+        fixture.repositoryId,
+        {
+          roots: [root("main", "merge")],
+          order: "topological",
+          ancestry: "first-parent",
+          limit: 100,
+        },
+        indexedDB,
+        cache,
+      );
+    try {
+      const pages = await Promise.all([read(), read(), read()]);
+      expect(pages.map((page) => page?.map(({ subject }) => subject))).toEqual([
+        ["merge", "left", "base"],
+        ["merge", "left", "base"],
+        ["merge", "left", "base"],
+      ]);
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it("does not publish a cold query after its stored generation changes", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    const getAll = IDBIndex.prototype.getAll;
+    const reads = vi
+      .spyOn(IDBIndex.prototype, "getAll")
+      .mockImplementationOnce(function (this: IDBIndex, ...args) {
+        cache.revision += 1;
+        return Reflect.apply(getAll, this, args);
+      });
+    try {
+      const page = await readRepositoryHistory(
+        fixture.environmentId,
+        fixture.repositoryId,
+        {
+          roots: [root("main", "merge")],
+          order: "topological",
+          ancestry: "first-parent",
+          limit: 100,
+        },
+        indexedDB,
+        cache,
+      );
+      expect(page).toBeUndefined();
+      expect(cache.index).toBeUndefined();
+      expect(cache.queries.size).toBe(0);
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
   it("restarts index preparation when the stored generation changes", async () => {
     const fixture = await seed("main", false);
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
