@@ -1003,6 +1003,99 @@ describe("browser repository history reader", () => {
     second.close();
   });
 
+  it("does not complete a superseded synchronization queued behind another write", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(1);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const name = crypto.randomUUID();
+    const control = new BroadcastChannel(`history-completion-${name}`);
+    const held = Promise.withResolvers<void>();
+    const closed = Promise.withResolvers<void>();
+    control.onmessage = (message) => {
+      if (message.data === "held") held.resolve();
+      if (message.data === "closed") closed.resolve();
+    };
+    const worker = new SharedWorker(
+      new URL("./fixtures/history-completion-worker.ts", import.meta.url),
+      { type: "module", name },
+    );
+    const firstGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(async (_request, accept) => {
+        await accept(
+          encodeRepositoryHistoryBatch({
+            commits,
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: snapshot("a", main),
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const secondGateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => page(repositoryId, commits)),
+      synchronize: vi.fn(
+        (_request, _accept, signal) =>
+          new Promise<number>((_resolve, reject) => {
+            signal?.addEventListener(
+              "abort",
+              () => reject(new RepositoryHistoryOffline()),
+              { once: true },
+            );
+          }),
+      ),
+    };
+    const first = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId,
+      gateway: firstGateway,
+      worker,
+    });
+    const second = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId,
+      gateway: secondGateway,
+      worker,
+    });
+    try {
+      await first.read({ limit: 100, order: "topological", roots: [main] });
+      await second.getRefTargets();
+      await held.promise;
+      first.close();
+      await closed.promise;
+      control.postMessage("release");
+      await vi.waitFor(() =>
+        expect(secondGateway.synchronize).toHaveBeenCalledOnce(),
+      );
+      expect(secondGateway.synchronize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          basis: expect.objectContaining({
+            _tag: "Incomplete",
+            committedCommitCount: 1,
+          }),
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+      const stored = await readStoredRepositoryHistoryState(
+        environmentId,
+        repositoryId,
+      );
+      expect(stored?.completion).toBeUndefined();
+      expect(stored?.pendingSnapshot?.id).toBe("a".repeat(64));
+    } finally {
+      control.postMessage("release");
+      first.close();
+      second.close();
+      control.close();
+      worker.port.close();
+    }
+  });
+
   it("retries synchronization after completion persistence fails", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();

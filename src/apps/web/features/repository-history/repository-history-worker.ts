@@ -466,13 +466,20 @@ async function handleReaderMessage(
       }
       try {
         const completion = await queueStorageWrite(() =>
-          completeStoredRepositoryHistory(
-            reader.connection.environmentId,
-            reader.connection.logicalRepositoryId,
-            message.commitCount,
-          ),
+          replica.synchronizationOwner !== reader ||
+          replica.synchronizationRequestId !== message.requestId
+            ? Promise.resolve(undefined)
+            : completeStoredRepositoryHistory(
+                reader.connection.environmentId,
+                reader.connection.logicalRepositoryId,
+                message.commitCount,
+              ),
         );
-        if (replica.synchronizationRequestId !== message.requestId) return;
+        if (
+          completion === undefined ||
+          replica.synchronizationRequestId !== message.requestId
+        )
+          return;
         invalidateStoredHistory(replica);
         if (completion.snapshot !== undefined) {
           replica.shallowOids = completion.snapshot.shallowOids ?? [];
