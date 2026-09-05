@@ -110,6 +110,10 @@ jobs:
       - name: Run integration tests
         run: pnpm test:integration:prepared
 
+      - name: Verify macOS signing keychain
+        if: runner.os == 'macOS'
+        run: node --test tests/package/macos-keychain.test.ts
+
   package-smoke:
     name: Package smoke (${{ matrix.name }})
     needs: quality
