@@ -74,7 +74,7 @@ export function CommitRefPill({
         <button
           type="button"
           aria-label={`Remove ${label.name} from history`}
-          className="pointer-events-none mr-0.5 grid size-3.5 shrink-0 place-items-center rounded-[3px] opacity-0 outline-none hover:bg-black/10 focus-visible:ring-1 focus-visible:ring-primary group-focus-within/ref:pointer-events-auto group-focus-within/ref:opacity-100 group-hover/ref:pointer-events-auto group-hover/ref:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+          className="pointer-events-none grid h-3.5 w-0 shrink-0 place-items-center overflow-hidden rounded-[3px] opacity-0 outline-none hover:bg-black/10 focus-visible:ring-1 focus-visible:ring-primary group-focus-within/ref:pointer-events-auto group-focus-within/ref:mr-0.5 group-focus-within/ref:w-3.5 group-focus-within/ref:opacity-100 group-hover/ref:pointer-events-auto group-hover/ref:mr-0.5 group-hover/ref:w-3.5 group-hover/ref:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:mr-0.5 [@media(hover:none)]:w-3.5 [@media(hover:none)]:opacity-100"
           onClick={onRemove}
         >
           <IconX aria-hidden="true" className="size-3" />

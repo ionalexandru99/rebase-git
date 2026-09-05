@@ -197,13 +197,15 @@ describe("commit graph states", () => {
     const pill = copyPill.element().parentElement;
     if (pill === null) throw new Error("Missing pill");
     const bounds = pill.getBoundingClientRect();
+    expect(removePill.element().getBoundingClientRect().width).toBe(0);
     await copyPill.hover();
     expect(getComputedStyle(removePill.element()).opacity).toBe("1");
     expect(
       removePill.element().getBoundingClientRect().right,
-    ).toBeLessThanOrEqual(bounds.right);
-    expect(pill.getBoundingClientRect().width).toBe(bounds.width);
+    ).toBeLessThanOrEqual(pill.getBoundingClientRect().right);
+    expect(pill.getBoundingClientRect().width).toBeGreaterThan(bounds.width);
     await firstCommit.hover();
+    expect(pill.getBoundingClientRect().width).toBe(bounds.width);
     copyPill.element().focus();
     await userEvent.keyboard("{Tab}");
     expect(document.activeElement).toBe(removePill.element());

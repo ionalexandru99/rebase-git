@@ -10,6 +10,34 @@ import {
 } from "#web/features/commit-graph/layout/graph-colors";
 
 describe("graph branch colors", () => {
+  it("keeps known local ancestry vivid when its only named ref is remote", () => {
+    const first = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "local", parents: ["older"] },
+    ]);
+    const refs = [
+      { name: "origin/main", oid: "local", type: "remote-branch" as const },
+    ];
+    const seeds = graphLaneSeeds(refs, first.rows);
+    expect(seeds.get("local")?.remote).toBe(false);
+  });
+
+  it("keeps the filter color when its tip leaves the loaded pages", () => {
+    const refs = [{ name: "dev", oid: "tip", type: "branch" as const }];
+    const first = appendCommitLanes(
+      createCommitLaneCheckpoint(),
+      [{ oid: "tip", parents: ["older"] }],
+      new Map([["tip", { color: 3, remote: false }]]),
+    );
+    const second = appendCommitLanes(first.checkpoint, [
+      { oid: "older", parents: [] },
+    ]);
+    const before = graphColors(first.rows, refs);
+    const after = graphColors(second.rows, refs, before.refs);
+    expect(before.refs.get("dev")).toBe("#F97316");
+    expect(after.refs.get("dev")).toBe(before.refs.get("dev"));
+    expect(after.refs.get("dev")).toBe(after.lanes.get(0));
+  });
+
   it("keeps the destination's first-parent lane regardless of its name or side-branch visit order", () => {
     const seeds = graphLaneSeeds([
       { name: "feature/customer-ledger", oid: "tip", type: "branch" },

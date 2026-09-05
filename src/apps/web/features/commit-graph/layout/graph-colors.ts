@@ -56,7 +56,7 @@ export function graphLaneSeeds(
     if (node !== undefined)
       seeds.set(row.oid, {
         color: node.color,
-        remote: seeds.get(row.oid)?.remote ?? row.nodeRemote,
+        remote: seeds.get(row.oid)?.remote === false ? false : row.nodeRemote,
       });
   }
   return seeds;
@@ -65,6 +65,7 @@ export function graphLaneSeeds(
 export function graphColors(
   rows: readonly CommitLaneRow[],
   refs: readonly RepositoryHistoryRefTarget[],
+  previousRefs?: ReadonlyMap<string, string>,
 ) {
   const lanes = new Map<number, string>();
   const byOid = new Map<string, number>();
@@ -85,7 +86,8 @@ export function graphColors(
           return [
             ref.name,
             id === undefined
-              ? graphLaneColor(graphBranchColorIndex(graphRefName(ref)))
+              ? (previousRefs?.get(ref.name) ??
+                graphLaneColor(graphBranchColorIndex(graphRefName(ref))))
               : graphLaneColor(id, lanes),
           ];
         }),

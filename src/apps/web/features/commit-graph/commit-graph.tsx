@@ -35,10 +35,8 @@ import { useCommitGraphCommands } from "#web/features/commit-graph/hooks/use-com
 import { useCommitGraphPages } from "#web/features/commit-graph/hooks/use-commit-graph-pages";
 import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
 import { useCommitGraphViewport } from "#web/features/commit-graph/hooks/use-commit-graph-viewport";
-import {
-  graphColors,
-  graphLaneColor,
-} from "#web/features/commit-graph/layout/graph-colors";
+import { useGraphColors } from "#web/features/commit-graph/hooks/use-graph-colors";
+import { graphLaneColor } from "#web/features/commit-graph/layout/graph-colors";
 import {
   commitGraphGutterWidth,
   commitGraphNodePosition,
@@ -137,10 +135,7 @@ export function CommitGraph({
       ),
     [paging.merges, expandedMerges],
   );
-  const colors = useMemo(
-    () => graphColors(laneRows, refTargets),
-    [laneRows, refTargets],
-  );
+  const colors = useGraphColors(reader, laneRows, refTargets);
   const viewport = useCommitGraphViewport({
     reader,
     order,
