@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useEffect,
   useId,
+  useRef,
   useState,
 } from "react";
 import type {
@@ -48,13 +49,25 @@ function CommitRefMenu({
     readonly key: string;
     readonly focusKey?: "ArrowDown" | "ArrowUp";
   }>();
+  const menuLifetime = useRef({ open: false, restoreFocus });
+  menuLifetime.current.open = menu !== undefined;
+  menuLifetime.current.restoreFocus = restoreFocus;
+  useEffect(
+    () => () => {
+      if (menuLifetime.current.open) menuLifetime.current.restoreFocus();
+    },
+    [],
+  );
   const menuLabels =
     menu?.key === "overflow"
       ? labels.slice(2)
       : labels.filter((label) => labelKey(label) === menu?.key);
   useEffect(() => {
-    if (menu !== undefined && menuLabels.length === 0) setMenu(undefined);
-  }, [menu, menuLabels.length]);
+    if (menu !== undefined && menuLabels.length === 0) {
+      setMenu(undefined);
+      restoreFocus();
+    }
+  }, [menu, menuLabels.length, restoreFocus]);
   const trigger = (
     key: string,
     className: string,
