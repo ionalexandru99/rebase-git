@@ -70,7 +70,7 @@ describe("feature HTTP clients", () => {
   it.each(["declared", "streamed"])(
     "rejects a %s oversized response",
     async (mode) => {
-      const body = " ".repeat(
+      const body = JSON.stringify({ repositories: [] }).padEnd(
         currentClientReceiveLimits.maxHttpResponseBytes + 1,
       );
       await withServer(
