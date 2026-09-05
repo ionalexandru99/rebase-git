@@ -4,7 +4,7 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
-import type { EnvironmentWebSocketWriter } from "#server/features/environment-connection/websocket/environment-websocket-writer";
+import type { EnvironmentWebSocketWriter } from "#server/features/environment-connection/websocket/environment-websocket-writer.contract";
 
 interface Subscription {
   release?: () => void;

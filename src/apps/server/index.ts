@@ -1,3 +1,4 @@
+export { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 export {
   RuntimeMarkerError,
   RuntimeRequirementsError,
@@ -8,4 +9,3 @@ export type {
 } from "#server/features/environment-server/server/environment-server.contract";
 export { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
 export { startEnvironmentServer } from "#server/features/environment-server/server/start-environment-server";
-export { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";

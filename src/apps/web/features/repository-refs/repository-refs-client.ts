@@ -14,18 +14,6 @@ import {
   RepositoryRefsResponseError,
 } from "#web/features/repository-refs/repository-refs-client.contract";
 
-export function readRepositoryRefs(
-  origin: string,
-  credential: string,
-  repositoryId: string,
-  signal?: AbortSignal,
-) {
-  return Effect.runPromise(
-    readRepositoryRefsEffect(origin, credential, repositoryId),
-    signal === undefined ? undefined : { signal },
-  );
-}
-
 export function readRepositoryRefsEffect(
   origin: string,
   credential: string,
@@ -39,22 +27,6 @@ export function readRepositoryRefsEffect(
     credential,
     RepositoryRefs,
     RepositoryRefsHttpApi.read.failure,
-  );
-}
-
-export function checkoutRepositoryRef(
-  origin: string,
-  credential: string,
-  command: {
-    readonly repositoryId: string;
-    readonly target: RepositoryRefTarget;
-    readonly worktreePath: string;
-  },
-  signal?: AbortSignal,
-) {
-  return Effect.runPromise(
-    checkoutRepositoryRefEffect(origin, credential, command),
-    signal === undefined ? undefined : { signal },
   );
 }
 

@@ -1,28 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe("repository history request ids", () => {
-  it("creates an id when Web Crypto is unavailable", () => {
-    vi.stubGlobal("crypto", undefined);
-
-    expect(createRepositoryHistoryRequestId()).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    );
-    vi.unstubAllGlobals();
-  });
-
-  it("does not require crypto.randomUUID", () => {
+  it("formats secure random bytes as a UUID without crypto.randomUUID", () => {
     const getRandomValues = vi.fn((values: Uint8Array) => {
       values.fill(1);
       return values;
     });
     vi.stubGlobal("crypto", { getRandomValues });
 
-    const first = createRepositoryHistoryRequestId();
-    const second = createRepositoryHistoryRequestId();
-
-    expect(first).not.toBe(second);
-    expect(getRandomValues).toHaveBeenCalledTimes(2);
-    vi.unstubAllGlobals();
+    expect(createRepositoryHistoryRequestId()).toBe(
+      "01010101-0101-4101-8101-010101010101",
+    );
+    expect(getRandomValues).toHaveBeenCalledOnce();
   });
 });

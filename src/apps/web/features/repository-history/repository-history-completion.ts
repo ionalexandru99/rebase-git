@@ -1,15 +1,8 @@
-import type { RepositoryHistorySnapshot } from "@rebase/contracts";
 import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
-
-export interface RepositoryHistorySynchronizationProgress {
-  readonly committedCommitCount: number;
-  readonly nextBatchSequence: number;
-}
-
-export interface RepositoryHistoryCompletionBasis {
-  readonly commitCount: number;
-  readonly snapshot?: Omit<RepositoryHistorySnapshot, "resumable">;
-}
+import type {
+  RepositoryHistoryCompletionBasis,
+  RepositoryHistorySynchronizationProgress,
+} from "#web/features/repository-history/repository-history-completion.contract";
 
 export function completeRepositoryHistory(
   progress: RepositoryHistorySynchronizationProgress,

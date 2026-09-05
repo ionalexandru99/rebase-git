@@ -3,6 +3,7 @@ import { Effect, type Scope } from "effect";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import type { Environment } from "#server/domain/environment-state.contract";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
@@ -33,7 +34,6 @@ import { acquireEnvironmentContext } from "#server/persistence/environment-conte
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { environmentTable } from "#server/persistence/environment-state.schema";
 import { defaultEnvironmentPaths } from "#server/persistence/storage/environment-paths";
-import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 import { productVersion } from "#server/product-version";
 
 export function startEnvironmentServer(

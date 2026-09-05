@@ -6,7 +6,7 @@ import type {
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
-import type { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 
 export interface RepositoryHistoryService {
   readonly read: (

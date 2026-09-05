@@ -87,6 +87,15 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - name: Validate integration
         run: pnpm validate:integration
+      - name: Build npm package from a path with spaces
+        shell: bash
+        run: |
+          package_workspace="$RUNNER_TEMP/rebase npm package"
+          mkdir -p "$package_workspace"
+          git archive HEAD | tar -x -C "$package_workspace"
+          cd "$package_workspace"
+          pnpm install --frozen-lockfile
+          pnpm build:package
       - name: Verify macOS signing keychain
         if: runner.os == 'macOS'
         run: node --test tests/package/macos-keychain.test.ts

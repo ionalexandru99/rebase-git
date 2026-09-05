@@ -5,6 +5,7 @@ import type {
   CreateEnvironmentPairing,
   EnvironmentAuthorizationRole,
 } from "@rebase/contracts";
+import { EnvironmentStorageError } from "@rebase/server/domain/environment-storage-error.contract";
 import { createEnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization";
 import type {
   EnvironmentAuthorization,
@@ -14,7 +15,6 @@ import { acquireEnvironmentContext } from "@rebase/server/persistence/environmen
 import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
 import { authorizationMetadataTable } from "@rebase/server/persistence/environment-state.schema";
 import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
-import { EnvironmentStorageError } from "@rebase/server/persistence/storage/storage-error.contract";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";

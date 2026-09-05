@@ -14,11 +14,11 @@ import { createRepositoryRefsService } from "@rebase/server/features/repository-
 import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
 import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { exchangeEnvironmentPairing } from "@rebase/web/features/environment-connection";
-import { rememberEnvironmentRepository } from "@rebase/web/features/repository-catalog";
+import { rememberEnvironmentRepositoryEffect } from "@rebase/web/features/repository-catalog";
 import {
-  checkoutRepositoryRef,
+  checkoutRepositoryRefEffect,
   RepositoryRefsRejected,
-  readRepositoryRefs,
+  readRepositoryRefsEffect,
 } from "@rebase/web/features/repository-refs";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -43,24 +43,26 @@ describe("repository refs transport", () => {
       await createRepository(repositoryPath);
       const owner = await pair(origin, authorization, "owner");
       const viewer = await pair(origin, authorization, "viewer");
-      const remembered = await rememberEnvironmentRepository(
-        origin,
-        owner,
-        repositoryPath,
+      const remembered = await Effect.runPromise(
+        rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
       );
 
-      const refs = await readRepositoryRefs(origin, viewer, remembered.id);
+      const refs = await Effect.runPromise(
+        readRepositoryRefsEffect(origin, viewer, remembered.id),
+      );
       expect(refs.repositoryId).toBe(remembered.id);
       expect(refs.branches.map((branch) => branch.name)).toEqual(
         expect.arrayContaining(["main", "feature"]),
       );
 
       await expect(
-        checkoutRepositoryRef(origin, viewer, {
-          repositoryId: remembered.id,
-          target: { _tag: "LocalBranch", name: "feature" },
-          worktreePath: repositoryPath,
-        }),
+        Effect.runPromise(
+          checkoutRepositoryRefEffect(origin, viewer, {
+            repositoryId: remembered.id,
+            target: { _tag: "LocalBranch", name: "feature" },
+            worktreePath: repositoryPath,
+          }),
+        ),
       ).rejects.toEqual(
         new RepositoryRefsRejected({
           failure: { _tag: "CapabilityDenied", capability: "repository.write" },
@@ -68,17 +70,21 @@ describe("repository refs transport", () => {
         }),
       );
       await expect(
-        checkoutRepositoryRef(origin, owner, {
-          repositoryId: remembered.id,
-          target: { _tag: "LocalBranch", name: "feature" },
-          worktreePath: repositoryPath,
-        }),
+        Effect.runPromise(
+          checkoutRepositoryRefEffect(origin, owner, {
+            repositoryId: remembered.id,
+            target: { _tag: "LocalBranch", name: "feature" },
+            worktreePath: repositoryPath,
+          }),
+        ),
       ).resolves.toMatchObject({ head: { branch: "feature" }, stash: "none" });
       await expect(
-        readRepositoryRefs(
-          origin,
-          viewer,
-          "00000000-0000-4000-8000-000000000099",
+        Effect.runPromise(
+          readRepositoryRefsEffect(
+            origin,
+            viewer,
+            "00000000-0000-4000-8000-000000000099",
+          ),
         ),
       ).rejects.toEqual(
         new RepositoryRefsRejected({

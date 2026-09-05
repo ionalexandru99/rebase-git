@@ -24,10 +24,8 @@ import {
   acquireEnvironmentWebSocketInbox,
   type EnvironmentSocketMessage,
 } from "#server/features/environment-connection/websocket/environment-websocket-inbox";
-import {
-  createEnvironmentWebSocketWriter,
-  type EnvironmentWebSocketWriter,
-} from "#server/features/environment-connection/websocket/environment-websocket-writer";
+import { createEnvironmentWebSocketWriter } from "#server/features/environment-connection/websocket/environment-websocket-writer";
+import type { EnvironmentWebSocketWriter } from "#server/features/environment-connection/websocket/environment-websocket-writer.contract";
 import { acquireRepositoryFreshnessSession } from "#server/features/environment-connection/websocket/repository-freshness-session";
 
 const maximumConcurrentHistoryRequests = 2;

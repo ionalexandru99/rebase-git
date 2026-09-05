@@ -31,10 +31,7 @@ describe("repository history transport", () => {
     ],
   ] as const)("forwards a %s synchronization basis", async (_name, basis) => {
     const send = vi.fn();
-    const transport = createRepositoryHistoryTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryHistoryTransport({ send }, true);
     const synchronization = Effect.runFork(
       transport.synchronize(
         {
@@ -55,10 +52,7 @@ describe("repository history transport", () => {
 
   it("acknowledges a synchronization batch only after it is committed", async () => {
     const send = vi.fn();
-    const transport = createRepositoryHistoryTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryHistoryTransport({ send }, true);
     let commitBatch: (() => void) | undefined;
     const committed = new Promise<void>((resolve) => {
       commitBatch = resolve;
@@ -115,10 +109,7 @@ describe("repository history transport", () => {
 
   it("runs one synchronization at a time and prioritizes visible repositories", async () => {
     const send = vi.fn();
-    const transport = createRepositoryHistoryTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryHistoryTransport({ send }, true);
     const start = (repositoryId: string, priority: "background" | "visible") =>
       Effect.runFork(
         transport.synchronize({ priority, repositoryId }, () => Effect.void),
@@ -159,10 +150,7 @@ describe("repository history transport", () => {
         throw new Error("Socket closed");
       })
       .mockImplementation(() => undefined);
-    const transport = createRepositoryHistoryTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryHistoryTransport({ send }, true);
 
     await expect(
       Effect.runPromise(
@@ -196,10 +184,7 @@ describe("repository history transport", () => {
   it("releases the synchronization slot when an acknowledgement cannot be sent", async () => {
     const send = vi.fn();
     send.mockImplementation(() => undefined);
-    const transport = createRepositoryHistoryTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryHistoryTransport({ send }, true);
     const first = Effect.runFork(
       transport.synchronize(
         {
@@ -265,10 +250,7 @@ describe("repository history transport", () => {
         throw new Error("Socket send failed");
       }
     });
-    const transport = createRepositoryHistoryTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryHistoryTransport({ send }, true);
     const start = (repositoryId: string) =>
       Effect.runFork(
         transport.synchronize(
@@ -299,10 +281,7 @@ describe("repository history transport", () => {
 
   it("ignores terminal responses and fragments that arrive after cancellation", async () => {
     const send = vi.fn();
-    const transport = createRepositoryHistoryTransport(
-      { send } as unknown as WebSocket,
-      true,
-    );
+    const transport = createRepositoryHistoryTransport({ send }, true);
     const read = Effect.runFork(
       transport.read({
         limit: 100,

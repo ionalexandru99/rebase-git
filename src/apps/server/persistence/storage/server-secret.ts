@@ -9,9 +9,9 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
+import { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import { errorMessage, isFileSystemError } from "#server/error-inspection";
 import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
-import { EnvironmentStorageError } from "#server/persistence/storage/storage-error.contract";
 
 export function ensureServerSecret(paths: EnvironmentPaths) {
   return Effect.tryPromise({

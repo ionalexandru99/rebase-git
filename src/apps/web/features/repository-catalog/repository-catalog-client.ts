@@ -16,17 +16,6 @@ import {
   RepositoryCatalogResponseError,
 } from "#web/features/repository-catalog/repository-catalog-client.contract";
 
-export function listEnvironmentRepositories(
-  origin: string,
-  credential: string,
-  signal?: AbortSignal,
-) {
-  return Effect.runPromise(
-    listEnvironmentRepositoriesEffect(origin, credential),
-    signal === undefined ? undefined : { signal },
-  );
-}
-
 export function listEnvironmentRepositoriesEffect(
   origin: string,
   credential: string,
@@ -39,18 +28,6 @@ export function listEnvironmentRepositoriesEffect(
     RepositoryCatalog,
     RepositoryCatalogHttpApi.list.failure,
   ).pipe(Effect.map((catalog) => catalog.repositories));
-}
-
-export function rememberEnvironmentRepository(
-  origin: string,
-  credential: string,
-  path: string,
-  signal?: AbortSignal,
-) {
-  return Effect.runPromise(
-    rememberEnvironmentRepositoryEffect(origin, credential, path),
-    signal === undefined ? undefined : { signal },
-  );
 }
 
 export function rememberEnvironmentRepositoryEffect(
@@ -69,18 +46,6 @@ export function rememberEnvironmentRepositoryEffect(
   );
 }
 
-export function recordEnvironmentRepositoryOpened(
-  origin: string,
-  credential: string,
-  repositoryId: string,
-  signal?: AbortSignal,
-) {
-  return Effect.runPromise(
-    recordEnvironmentRepositoryOpenedEffect(origin, credential, repositoryId),
-    signal === undefined ? undefined : { signal },
-  );
-}
-
 export function recordEnvironmentRepositoryOpenedEffect(
   origin: string,
   credential: string,
@@ -94,18 +59,6 @@ export function recordEnvironmentRepositoryOpenedEffect(
     RepositoryCatalogHttpApi.recordOpened.success,
     RepositoryCatalogHttpApi.recordOpened.failure,
     encodeRequest(RecordRepositoryOpened, { repositoryId }),
-  );
-}
-
-export function removeEnvironmentRepository(
-  origin: string,
-  credential: string,
-  repositoryId: string,
-  signal?: AbortSignal,
-) {
-  return Effect.runPromise(
-    removeEnvironmentRepositoryEffect(origin, credential, repositoryId),
-    signal === undefined ? undefined : { signal },
   );
 }
 

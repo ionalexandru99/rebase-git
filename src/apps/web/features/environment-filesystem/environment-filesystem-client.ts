@@ -12,18 +12,6 @@ import {
   EnvironmentFilesystemResponseError,
 } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
 
-export function listEnvironmentDirectory(
-  origin: string,
-  credential: string,
-  path?: string,
-  signal?: AbortSignal,
-) {
-  return Effect.runPromise(
-    listEnvironmentDirectoryEffect(origin, credential, path),
-    signal === undefined ? undefined : { signal },
-  );
-}
-
 export function listEnvironmentDirectoryEffect(
   origin: string,
   credential: string,
