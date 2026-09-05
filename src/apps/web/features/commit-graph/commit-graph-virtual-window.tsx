@@ -67,11 +67,7 @@ export function CommitGraphVirtualWindow({
         const previous = instance.scrollRect;
         const { width, height } = entry.contentRect;
         callback({ width, height });
-        if (
-          previous !== null &&
-          previous.width !== width &&
-          previous.height === height
-        )
+        if (previous !== null && previous.width !== width)
           instance.options.onChange?.(instance, false);
       });
       observer.observe(element);
