@@ -30,11 +30,6 @@ test("prepared corpus stays within server and Git process budgets", async () => 
   const revision = (
     await execute("git", ["-C", corpusPath, "rev-parse", "HEAD"])
   ).stdout.trim();
-  const expectedCount = Number(
-    (
-      await execute("git", ["-C", corpusPath, "rev-list", "--count", "HEAD"])
-    ).stdout.trim(),
-  );
   const child = spawn(
     process.execPath,
     [
@@ -129,6 +124,7 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     let received = 0;
     let batches = 0;
     let wireBytes = 0;
+    let snapshotRoots: readonly string[] | undefined;
     const requestId = crypto.randomUUID();
     const synchronizationStarted = performance.now();
     const completed = new Promise<void>((resolveDone, reject) => {
@@ -147,6 +143,8 @@ test("prepared corpus stays within server and Git process budgets", async () => 
           const complete = reassembler.accept(bytes);
           if (complete === undefined) return;
           const batch = decodeRepositoryHistoryBatch(complete.payload);
+          if (batch.snapshot !== undefined)
+            snapshotRoots = batch.snapshot.rootOids;
           received += batch.commits.length;
           batches += 1;
           socket.send(
@@ -172,6 +170,18 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     await completed;
     await sample();
     const elapsed = performance.now() - synchronizationStarted;
+    clearInterval(timer);
+    if (snapshotRoots === undefined)
+      throw new Error("Synchronization did not publish its snapshot");
+    const count = execute("git", [
+      "-C",
+      corpusPath,
+      "rev-list",
+      "--count",
+      "--stdin",
+    ]);
+    count.child.stdin?.end(`${snapshotRoots.join("\n")}\n`);
+    const expectedCount = Number((await count).stdout.trim());
     const metrics = {
       corpusPath,
       revision,
