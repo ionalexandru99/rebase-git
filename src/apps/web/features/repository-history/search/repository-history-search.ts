@@ -1,8 +1,9 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import {
+  commitKey,
   commitStoreName,
+  repositoryCommitRange,
   repositoryKey,
-  repositorySearchIndexName,
   repositoryStoreName,
   requestResult,
   type StoredCommit,
@@ -87,7 +88,7 @@ async function searchHistoryPage(
     signal?.throwIfAborted();
     if (chunk.length === 0) return { ...result, commits };
     for (const record of chunk) {
-      after = [record.commit.committer.timestampSeconds, record.commit.oid];
+      after = record.commit.oid;
       scanned += 1;
       if (matches(record.commit)) commits.push(record.commit);
       if (commits.length === query.limit) break;
@@ -130,63 +131,20 @@ async function readSearchState(
 async function readSearchChunk(
   environmentId: string,
   repositoryId: string,
-  after: readonly [number, string] | undefined,
+  after: string | undefined,
   database: IDBDatabase,
 ) {
   const transaction = database.transaction(commitStoreName, "readonly");
   const completed = transactionCompleted(transaction);
-  const range = IDBKeyRange.bound(
-    [environmentId, repositoryId, Number.MIN_SAFE_INTEGER, ""],
-    [
-      environmentId,
-      repositoryId,
-      ...(after ?? [Number.MAX_SAFE_INTEGER, "\uffff"]),
-    ],
-    false,
-    after !== undefined,
+  const range = repositoryCommitRange(
+    repositoryKey(environmentId, repositoryId),
+    after === undefined
+      ? undefined
+      : commitKey(environmentId, repositoryId, after),
   );
-  const index = transaction
-    .objectStore(commitStoreName)
-    .index(repositorySearchIndexName);
-  const records = supportsDirectionalBulkReads(index)
-    ? await requestResult(
-        index.getAll({ query: range, count: chunkSize, direction: "prev" }),
-      )
-    : await readCursorChunk(index.openCursor(range, "prev"));
+  const records = await requestResult<StoredCommit[]>(
+    transaction.objectStore(commitStoreName).getAll(range, chunkSize),
+  );
   await completed;
   return records;
-}
-
-type HistoryBulkIndex = IDBIndex & {
-  getAll(options: {
-    readonly query: IDBKeyRange;
-    readonly count: number;
-    readonly direction: "prev";
-  }): IDBRequest<StoredCommit[]>;
-};
-
-function supportsDirectionalBulkReads(
-  index: IDBIndex,
-): index is HistoryBulkIndex {
-  return "getAllRecords" in index && typeof index.getAllRecords === "function";
-}
-
-function readCursorChunk(request: IDBRequest<IDBCursorWithValue | null>) {
-  return new Promise<StoredCommit[]>((resolve, reject) => {
-    const records: StoredCommit[] = [];
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (cursor === null) {
-        resolve(records);
-        return;
-      }
-      records.push(cursor.value as StoredCommit);
-      if (records.length === chunkSize) {
-        resolve(records);
-        return;
-      }
-      cursor.continue();
-    };
-  });
 }

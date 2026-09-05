@@ -58,12 +58,12 @@ describe("history metadata matching", () => {
 });
 
 describe("history search continuation", () => {
-  it("retains its repository, normalized query, date and OID position", () => {
+  it("retains its repository, normalized query and OID position", () => {
     const cursor = encodeHistorySearchCursor(
       "environment",
       "repository",
       "Alex  graph",
-      [12, commit.oid],
+      commit.oid,
     );
     expect(
       decodeHistorySearchCursor(
@@ -72,7 +72,7 @@ describe("history search continuation", () => {
         " alex graph ",
         cursor,
       ),
-    ).toEqual([12, commit.oid]);
+    ).toEqual(commit.oid);
   });
 
   it.each([
@@ -84,10 +84,19 @@ describe("history search continuation", () => {
       "environment",
       "repository",
       "graph",
-      [12, commit.oid],
+      commit.oid,
     );
     expect(() =>
       decodeHistorySearchCursor(environmentId, repositoryId, text, cursor),
+    ).toThrow("does not match");
+  });
+
+  it("rejects a legacy date-ordered cursor instead of skipping primary-key results", () => {
+    const cursor = encodeURIComponent(
+      JSON.stringify([1, "environment", "repository", "graph", 12, commit.oid]),
+    );
+    expect(() =>
+      decodeHistorySearchCursor("environment", "repository", "graph", cursor),
     ).toThrow("does not match");
   });
 

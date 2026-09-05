@@ -4,15 +4,15 @@ export function encodeHistorySearchCursor(
   environmentId: string,
   repositoryId: string,
   text: string,
-  position: readonly [number, string],
+  oid: string,
 ) {
   return encodeURIComponent(
     JSON.stringify([
-      1,
+      2,
       environmentId,
       repositoryId,
       normalizeHistorySearch(text),
-      ...position,
+      oid,
     ]),
   );
 }
@@ -22,23 +22,21 @@ export function decodeHistorySearchCursor(
   repositoryId: string,
   text: string,
   cursor: string | undefined,
-): readonly [number, string] | undefined {
+): string | undefined {
   if (cursor === undefined) return undefined;
   try {
     const value: unknown = JSON.parse(decodeURIComponent(cursor));
     if (
       Array.isArray(value) &&
-      value.length === 6 &&
-      value[0] === 1 &&
+      value.length === 5 &&
+      value[0] === 2 &&
       value[1] === environmentId &&
       value[2] === repositoryId &&
       value[3] === normalizeHistorySearch(text) &&
-      typeof value[4] === "number" &&
-      Number.isSafeInteger(value[4]) &&
-      typeof value[5] === "string" &&
-      /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(value[5])
+      typeof value[4] === "string" &&
+      /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(value[4])
     )
-      return [value[4], value[5]];
+      return value[4];
   } catch {}
   throw new Error("History search cursor does not match this query");
 }
