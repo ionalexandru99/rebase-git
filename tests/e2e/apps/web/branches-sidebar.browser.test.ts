@@ -59,12 +59,30 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
   }
 });
 
-test("reopens synchronized history and keeps browsing while offline", async ({
+test("reopens cached history and reveals a merged commit through offline search", async ({
   page,
 }) => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-history-e2e-"));
   const repositoryPath = join(testHome, "rebase-test");
   await createRepository(repositoryPath);
+  await git(repositoryPath, "switch", "-c", "merged-topic", "HEAD~1");
+  await git(
+    repositoryPath,
+    "commit",
+    "--allow-empty",
+    "-m",
+    "hidden feature work",
+  );
+  await git(repositoryPath, "switch", "main");
+  await git(
+    repositoryPath,
+    "merge",
+    "--no-ff",
+    "merged-topic",
+    "-m",
+    "merge feature",
+  );
+  await git(repositoryPath, "branch", "-d", "merged-topic");
   const server = startServer(testHome);
 
   try {
@@ -98,6 +116,16 @@ test("reopens synchronized history and keeps browsing while offline", async ({
     );
     await initial.click();
     await expect(initial).toHaveAttribute("aria-selected", "true");
+    const hidden = history.getByRole("row", { name: /^hidden feature work,/ });
+    await expect(hidden).not.toBeVisible();
+    await page
+      .getByRole("searchbox", { name: "Search history" })
+      .fill("hidden feature work");
+    await page.getByRole("button", { name: /^hidden feature work / }).click();
+    await expect(hidden).toHaveAttribute("aria-selected", "true");
+    await expect(
+      history.getByRole("row", { name: /^merge feature,/ }),
+    ).toHaveAttribute("aria-expanded", "true");
   } finally {
     if (server.child.exitCode === null) server.child.kill("SIGTERM");
     await rm(testHome, { force: true, recursive: true });

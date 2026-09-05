@@ -8,5 +8,6 @@ export interface CommitGraphViewportAnchor {
 }
 
 export interface CommitGraphViewportHandle {
+  readonly getScrollOffset: () => number;
   readonly scrollToIndex: (index: number) => void;
 }

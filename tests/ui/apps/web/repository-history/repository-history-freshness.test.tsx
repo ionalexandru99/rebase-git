@@ -9,7 +9,7 @@ import {
   RepositoryHistoryRejected,
   type RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { RepositoryHistoryFetchControls } from "#web-ui/features/repository-history/freshness/repository-history-fetch-controls";
+import { CommitGraphToolbar } from "#web-ui/features/commit-graph/commit-graph-toolbar";
 import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/repository-history-freshness-status";
 
 const fresh: RepositoryFreshness = {
@@ -20,8 +20,8 @@ const fresh: RepositoryFreshness = {
   setting: { _tag: "Inherit" },
 };
 const ready: RepositoryHistorySnapshot = {
-  revision: 0,
   historyRevision: 0,
+  revision: 0,
   status: "ready",
   freshness: fresh,
   synchronization: "complete",
@@ -39,9 +39,7 @@ describe("repository fetch controls", () => {
         }}
       />,
     );
-    await page
-      .getByRole("button", { name: "Repository fetch settings" })
-      .click();
+    await openFetchSettings();
     await screen.rerender(
       <Controls
         reader={reader}
@@ -153,9 +151,10 @@ describe("repository fetch controls", () => {
     const reader = createReader();
     await render(<Controls reader={reader} snapshot={ready} />);
     const settings = page.getByRole("button", {
-      name: "Repository fetch settings",
+      name: "History options",
     });
     settings.element().focus();
+    await userEvent.keyboard("{Enter}");
     await userEvent.keyboard("{Enter}");
     await page.getByRole("radio", { name: "Custom interval" }).click();
     await page
@@ -171,12 +170,13 @@ describe("repository fetch controls", () => {
       .not.toBeInTheDocument();
     await expect.element(settings).toHaveFocus();
     await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard("{Enter}");
     await page.getByRole("radio", { name: "Off", exact: true }).click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     expect(reader.configureFetch).toHaveBeenLastCalledWith({
       _tag: "Disabled",
     });
-    await settings.click();
+    await openFetchSettings();
     await page
       .getByRole("radio", { name: "Use server default (5 minutes)" })
       .click();
@@ -193,9 +193,9 @@ describe("repository fetch controls", () => {
     );
     await render(<Controls reader={reader} snapshot={ready} />);
     const settings = page.getByRole("button", {
-      name: "Repository fetch settings",
+      name: "History options",
     });
-    await settings.click();
+    await openFetchSettings();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .element(page.getByRole("alert"))
@@ -219,7 +219,9 @@ describe("repository fetch controls", () => {
       storingCommits: false,
       shallowOids: ["a".repeat(40)],
     };
-    await render(<Controls reader={reader} snapshot={offline} />);
+    const screen = await render(
+      <Controls reader={reader} snapshot={offline} />,
+    );
     await expect
       .element(page.getByRole("button", { name: "Fetch", exact: true }))
       .toBeDisabled();
@@ -232,9 +234,7 @@ describe("repository fetch controls", () => {
     await expect
       .element(page.getByText("Syncing", { exact: true }))
       .not.toBeInTheDocument();
-    await page
-      .getByRole("button", { name: "Repository fetch settings" })
-      .click();
+    await openFetchSettings();
     await expect
       .element(page.getByRole("button", { name: "Save", exact: true }))
       .toBeDisabled();
@@ -248,15 +248,42 @@ describe("repository fetch controls", () => {
         ),
       )
       .not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await screen.rerender(
+      <Controls
+        reader={reader}
+        snapshot={{ ...offline, synchronizedCommitCount: 0 }}
+      />,
+    );
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Offline. No cached history is available.");
+  });
+
+  it("keeps settings read-only without repository write access", async () => {
+    const reader = createReader();
+    await render(
+      <Controls reader={reader} snapshot={ready} canConfigure={false} />,
+    );
+    await openFetchSettings();
+    await expect
+      .element(page.getByRole("radio", { name: "Custom interval" }))
+      .toBeDisabled();
+    await expect
+      .element(page.getByRole("button", { name: "Save", exact: true }))
+      .toBeDisabled();
+    expect(reader.configureFetch).not.toHaveBeenCalled();
   });
 });
 
 function Controls({
   reader,
   snapshot,
+  canConfigure = true,
 }: {
   readonly reader: RepositoryHistoryReader;
   readonly snapshot: RepositoryHistorySnapshot;
+  readonly canConfigure?: boolean;
 }) {
   const fetch = useRepositoryHistoryFetch(reader, snapshot);
   const fetchAction = {
@@ -267,7 +294,16 @@ function Controls({
   };
   return (
     <>
-      <RepositoryHistoryFetchControls
+      <CommitGraphToolbar
+        repositoryName="Rebase"
+        order="topological"
+        onOrderChange={() => {}}
+        searchRef={null}
+        onNavigate={async () => {}}
+        searchBindings={{}}
+        offline={snapshot.freshnessError !== undefined}
+        canConfigure={canConfigure}
+        cache={undefined}
         fetchAction={fetchAction}
         fetching={fetch.fetching}
         reader={reader}
@@ -283,10 +319,15 @@ function Controls({
   );
 }
 
+async function openFetchSettings() {
+  await page.getByRole("button", { name: "History options" }).click();
+  await page.getByRole("menuitem", { name: "Fetch settings" }).click();
+}
+
 function createReader() {
   return {
     getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
-    manageCache: async () => undefined,
+    manageCache: async () => {},
     search: async () => ({
       commits: [],
       replicaComplete: true,

@@ -15,6 +15,49 @@ const query: RepositoryHistoryQuery = {
 };
 
 describe("commit graph page window", () => {
+  it("discards resident history and pending navigation while preserving the query for rebuild", async () => {
+    const commits = history(12);
+    const reader = fakeReader(commits);
+    const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
+    await window.loadInitial(query);
+    reader.read.mockRejectedValueOnce(new Error("Disconnected"));
+    await window.appendOlder();
+    expect(window.getSnapshot().error).toBeDefined();
+    const pending = deferred<readonly RepositoryCommit[]>();
+    reader.read.mockReturnValueOnce(pending.promise);
+    const loading = window.prefetchOffset(5);
+    const move = window.requestMove(6);
+    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(3));
+    const epoch = window.getSnapshot().epoch;
+
+    window.discard();
+
+    await expect(move).resolves.toBeUndefined();
+    expect(window.getSnapshot()).toMatchObject({
+      query: { ...query, limit: 5, offset: 0 },
+      pages: [],
+      loading: false,
+      error: undefined,
+      pendingMove: undefined,
+      hasOlder: false,
+      checkpointCount: 0,
+      startOffset: 0,
+      endOffset: 0,
+    });
+    expect(window.getSnapshot().epoch).toBeGreaterThan(epoch);
+    await window.retry();
+    await window.appendOlder();
+    expect(reader.read).toHaveBeenCalledTimes(3);
+    pending.resolve(commits.slice(5, 10));
+    await loading;
+    expect(window.getSnapshot().pages).toEqual([]);
+
+    await window.reload(query);
+    expect(window.getSnapshot().endOffset).toBe(5);
+    expect(reader.read).toHaveBeenCalledTimes(4);
+    window.dispose();
+  });
+
   it("automatically appends older rows from a checkpoint without changing prior plans", async () => {
     const commits = history(15).map((commit, index) =>
       index === 0

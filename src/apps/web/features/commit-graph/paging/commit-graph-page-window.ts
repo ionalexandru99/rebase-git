@@ -442,6 +442,39 @@ export function createCommitGraphPageWindow(
     }
   };
 
+  const discard = () => {
+    if (disposed) return;
+    controller.abort();
+    controller = new AbortController();
+    generation += 1;
+    navigationRequest += 1;
+    initialRequest += 1;
+    pendingMove?.resolve(undefined);
+    pendingMove = undefined;
+    jumping = false;
+    replacing = false;
+    loads.clear();
+    queue = Promise.resolve();
+    retryTask = undefined;
+    if (view !== undefined) {
+      view = {
+        ...view,
+        epoch: generation,
+        originOffset: 0,
+        pages: new Map(),
+        checkpoints: new Map(),
+        knownEndOffset: 0,
+        hasOlder: false,
+      };
+    }
+    publish({
+      loading: false,
+      error: undefined,
+      anchorOid: undefined,
+      hasOlder: false,
+    });
+  };
+
   return {
     getSnapshot: () => snapshot,
     subscribe: (listener) => {
@@ -462,6 +495,7 @@ export function createCommitGraphPageWindow(
       listeners.clear();
     },
     loadInitial,
+    discard,
     reload: loadInitial,
     appendOlder: async () => {
       if (snapshot.hasOlder) await prefetchOffset(snapshot.endOffset);

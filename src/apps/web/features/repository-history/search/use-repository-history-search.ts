@@ -50,7 +50,11 @@ export function useRepositoryHistorySearch(
     const controller = new AbortController();
     session.current = controller;
     pending.current = false;
-    setState({ ...emptyState, loading: request.text.trim() !== "" });
+    setState(
+      request.text.trim() === ""
+        ? emptyState
+        : { ...emptyState, loading: true },
+    );
     if (request.text.trim() !== "") {
       pending.current = true;
       const selected =

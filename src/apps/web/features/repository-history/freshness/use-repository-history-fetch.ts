@@ -12,13 +12,18 @@ interface FetchAttempt {
 }
 
 export function useRepositoryHistoryFetch(
-  reader: RepositoryHistoryReader,
+  reader: RepositoryHistoryReader | undefined,
   snapshot: RepositoryHistorySnapshot,
 ) {
   const pending = useRef(new Set<RepositoryHistoryReader>());
   const [attempt, setAttempt] = useState<FetchAttempt>();
   const execute = useCallback(() => {
-    if (pending.current.has(reader) || snapshot.freshness?.fetching) return;
+    if (
+      reader === undefined ||
+      pending.current.has(reader) ||
+      snapshot.freshness?.fetching
+    )
+      return;
     pending.current.add(reader);
     setAttempt({ reader, pending: true });
     void reader
@@ -41,7 +46,7 @@ export function useRepositoryHistoryFetch(
     execute,
     fetching:
       snapshot.freshness?.fetching === true ||
-      (attempt?.reader === reader && attempt.pending),
-    error: attempt?.reader === reader ? attempt.error : undefined,
+      (attempt?.reader === reader && attempt?.pending === true),
+    error: attempt?.reader === reader ? attempt?.error : undefined,
   };
 }

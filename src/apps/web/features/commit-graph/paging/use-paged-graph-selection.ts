@@ -62,6 +62,12 @@ export function usePagedGraphSelection({
     }
     previousWindow.current = { startOffset, viewEpoch };
     const current = selectionRef.current;
+    if (!loading && startOffset === 0 && oids.length === 0) {
+      intent.current += 1;
+      needsReconciliation.current = false;
+      updateSelection(emptyCommitGraphSelection);
+      return;
+    }
     if (previous.viewEpoch !== viewEpoch) {
       const request = ++intent.current;
       if (reader !== undefined && query !== undefined) {

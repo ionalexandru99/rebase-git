@@ -81,9 +81,6 @@ export function redrawCommitGraphCanvas(
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.lineCap = "round";
   context.lineWidth = 1.5;
-  const repositoryColor = getComputedStyle(canvas)
-    .getPropertyValue("--repository")
-    .trim();
   context.clearRect(0, 0, width, height);
 
   for (const virtualRow of virtualRows) {
@@ -131,9 +128,10 @@ export function redrawCommitGraphCanvas(
     context.beginPath();
     context.arc(nodeX, center, 4, 0, Math.PI * 2);
     context.fill();
-    context.strokeStyle = repositoryColor || "#0b0b0e";
+    context.globalCompositeOperation = "destination-out";
     context.lineWidth = 2;
     context.stroke();
+    context.globalCompositeOperation = "source-over";
     context.lineWidth = 1.5;
   }
 }
