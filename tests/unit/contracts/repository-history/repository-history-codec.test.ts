@@ -96,6 +96,16 @@ describe("repository history JSON codec", () => {
         sequence: maximumRepositoryHistorySequence + 1,
       }),
     ).toThrow();
+    expect(() =>
+      readRepositoryHistoryBatchSequence(
+        new TextEncoder().encode(
+          JSON.stringify({
+            ...batch,
+            sequence: maximumRepositoryHistorySequence + 1,
+          }),
+        ),
+      ),
+    ).toThrow();
   });
 
   it("round trips a resumable snapshot basis before publishing refs", () => {
