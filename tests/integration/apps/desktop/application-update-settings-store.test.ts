@@ -1,8 +1,8 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApplicationUpdateSettingsStore } from "@rebase/desktop";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store";
 
 describe("application update settings store", () => {
   let directory: string | undefined;

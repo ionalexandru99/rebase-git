@@ -1,9 +1,9 @@
+import { describe, expect, it } from "vite-plus/test";
 import {
   assertSupportedGitVersion,
   assertSupportedNodeVersion,
   parseGitVersion,
-} from "@rebase/server/features/environment-server/runtime/runtime-requirements";
-import { describe, expect, it } from "vite-plus/test";
+} from "#server/features/environment-server/runtime/runtime-requirements";
 
 describe("runtime requirements", () => {
   it.each(["22.18.0", "22.23.2", "24.0.0", "24.19.0", "24.99.99"])(

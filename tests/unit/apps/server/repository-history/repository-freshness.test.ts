@@ -5,19 +5,6 @@ import type {
   RepositoryFreshness,
 } from "@rebase/contracts";
 import {
-  GitCommandError,
-  type GitCommandRunner,
-  GitCommands,
-} from "@rebase/server/domain/git-command.contract";
-import { RepositoryCatalogAccess } from "@rebase/server/domain/repository-catalog.contract";
-import {
-  type RepositoryFreshnessService,
-  RepositoryFreshnessState,
-} from "@rebase/server/domain/repository-freshness.contract";
-import { RepositoryWatching } from "@rebase/server/domain/repository-watcher.contract";
-import { acquireRepositoryFreshnessSession } from "@rebase/server/features/environment-connection/websocket/repository-freshness-session";
-import { repositoryFreshnessLayer } from "@rebase/server/features/repository-history/freshness/repository-freshness";
-import {
   Context,
   Deferred,
   Effect,
@@ -29,6 +16,19 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it, vi } from "vite-plus/test";
+import {
+  GitCommandError,
+  type GitCommandRunner,
+  GitCommands,
+} from "#server/domain/git-command.contract";
+import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import {
+  type RepositoryFreshnessService,
+  RepositoryFreshnessState,
+} from "#server/domain/repository-freshness.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { acquireRepositoryFreshnessSession } from "#server/features/environment-connection/websocket/repository-freshness-session";
+import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const linkedId = "00000000-0000-4000-8000-000000000002";

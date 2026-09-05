@@ -9,10 +9,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
-import { ensureServerSecret } from "@rebase/server/persistence/storage/server-secret";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { ensureServerSecret } from "#server/persistence/storage/server-secret";
 
 const pendingWrite = vi.hoisted(() => ({
   pause: undefined as (() => Promise<void>) | undefined,

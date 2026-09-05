@@ -5,13 +5,13 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { RepositoryHistoryBatch } from "@rebase/contracts";
-import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "@rebase/server/adapters/local-git/local-repository-watcher";
-import { readRepositoryHistory } from "@rebase/server/features/repository-history/git/read-repository-history";
-import { readRepositoryHistorySnapshot } from "@rebase/server/features/repository-history/git/read-repository-history-snapshot";
-import { synchronizeRepositoryHistory } from "@rebase/server/features/repository-history/git/synchronize-repository-history";
 import { Effect } from "effect";
 import { expect, it, vi } from "vite-plus/test";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
+import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
+import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
 
 const exec = promisify(execFile);
 const repositoryId = "00000000-0000-4000-8000-000000000001";

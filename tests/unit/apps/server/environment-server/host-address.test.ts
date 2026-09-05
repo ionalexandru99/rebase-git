@@ -1,5 +1,5 @@
-import { resolveHostAddress } from "@rebase/server/features/environment-server/server/host-address";
 import { describe, expect, it } from "vite-plus/test";
+import { resolveHostAddress } from "#server/features/environment-server/server/host-address";
 
 const interfaces = {
   eth0: [

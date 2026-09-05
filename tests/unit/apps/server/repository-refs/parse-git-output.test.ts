@@ -1,15 +1,15 @@
 import { currentTransportLimits } from "@rebase/contracts";
-import { fitRepositoryRefs } from "@rebase/server/features/repository-refs/git/fit-repository-refs";
+import { describe, expect, it } from "vite-plus/test";
+import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
 import {
   localBranchFromRecord,
   parseForEachRef,
   remoteBranchFromRecord,
   remoteDefaultBranchFromRecord,
   tagFromRecord,
-} from "@rebase/server/features/repository-refs/git/parse-for-each-ref";
-import { parseWorktreeList } from "@rebase/server/features/repository-refs/git/parse-worktree-list";
-import { checkoutFailure } from "@rebase/server/features/repository-refs/git/repository-refs-failures";
-import { describe, expect, it } from "vite-plus/test";
+} from "#server/features/repository-refs/git/parse-for-each-ref";
+import { parseWorktreeList } from "#server/features/repository-refs/git/parse-worktree-list";
+import { checkoutFailure } from "#server/features/repository-refs/git/repository-refs-failures";
 
 const commit = "a".repeat(40);
 

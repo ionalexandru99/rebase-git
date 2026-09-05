@@ -3,13 +3,6 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createEnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import { createEnvironmentFilesystem } from "@rebase/server/features/environment-filesystem/environment-filesystem";
-import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
-import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
-import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { exchangeEnvironmentPairing } from "@rebase/web/features/environment-connection";
 import {
   EnvironmentFilesystemRejected,
@@ -24,6 +17,13 @@ import {
 } from "@rebase/web/features/repository-catalog";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
+import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { acquireEnvironmentContext } from "#server/persistence/environment-context";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();

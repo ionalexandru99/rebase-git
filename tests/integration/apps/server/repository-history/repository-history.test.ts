@@ -17,22 +17,22 @@ import {
   type RepositoryHistoryBatch,
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
-import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
+import { Effect } from "effect";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import {
   RepositoryHistoryError,
   type RepositoryHistoryService,
-} from "@rebase/server/domain/repository-history.contract";
-import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
-import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
-import { readRepositoryHistorySnapshot } from "@rebase/server/features/repository-history/git/read-repository-history-snapshot";
-import { synchronizeRepositoryHistory } from "@rebase/server/features/repository-history/git/synchronize-repository-history";
-import { createRepositoryHistoryService } from "@rebase/server/features/repository-history/repository-history";
-import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
-import { Effect } from "effect";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+} from "#server/domain/repository-history.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
+import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
+import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
+import { acquireEnvironmentContext } from "#server/persistence/environment-context";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();

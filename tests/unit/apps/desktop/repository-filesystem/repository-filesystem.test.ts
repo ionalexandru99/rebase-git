@@ -1,8 +1,6 @@
-import {
-  createRepositoryFilesystem,
-  type RepositoryFilesystemPlatform,
-} from "@rebase/desktop";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { createRepositoryFilesystem } from "#desktop/features/repository-filesystem/repository-filesystem";
+import type { RepositoryFilesystemPlatform } from "#desktop/features/repository-filesystem/repository-filesystem.contract";
 
 describe("repository filesystem", () => {
   it("reveals a non-empty absolute repository path", async () => {

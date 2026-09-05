@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { ReadRepositoryHistory } from "@rebase/contracts";
-import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
-import { readRepositoryHistory } from "@rebase/server/features/repository-history/git/read-repository-history";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 
 const execute = promisify(execFile);
 const directories: string[] = [];

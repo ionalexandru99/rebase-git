@@ -1,9 +1,9 @@
+import { describe, expect, it } from "vite-plus/test";
 import {
   createGitHistoryBatchParser,
   gitHistoryFormat,
   parseGitHistory,
-} from "@rebase/server/features/repository-history/git/parse-git-history";
-import { describe, expect, it } from "vite-plus/test";
+} from "#server/features/repository-history/git/parse-git-history";
 
 describe("Git history metadata", () => {
   it("streams fragmented records into bounded batches", async () => {

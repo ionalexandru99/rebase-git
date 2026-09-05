@@ -5,19 +5,19 @@ import type {
   CreateEnvironmentPairing,
   EnvironmentAuthorizationRole,
 } from "@rebase/contracts";
-import { EnvironmentStorageError } from "@rebase/server/domain/environment-storage-error.contract";
-import { createEnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization";
-import type {
-  EnvironmentAuthorization,
-  EnvironmentAuthorizationClock,
-} from "@rebase/server/features/environment-authorization/environment-authorization.contract";
-import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
-import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
-import { authorizationMetadataTable } from "@rebase/server/persistence/environment-state.schema";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import type {
+  EnvironmentAuthorization,
+  EnvironmentAuthorizationClock,
+} from "#server/features/environment-authorization/environment-authorization.contract";
+import { acquireEnvironmentContext } from "#server/persistence/environment-context";
+import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import { authorizationMetadataTable } from "#server/persistence/environment-state.schema";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
 const directories = new Set<string>();
 

@@ -1,10 +1,10 @@
+import { describe, expect, it } from "vite-plus/test";
 import {
   createOutgoingMessageQueue,
   dequeueOutgoingMessage,
   enqueueOutgoingMessage,
   resetOutgoingMessageQueue,
-} from "@rebase/server/features/environment-connection/websocket/outgoing-message-queue";
-import { describe, expect, it } from "vite-plus/test";
+} from "#server/features/environment-connection/websocket/outgoing-message-queue";
 
 describe("outgoing Environment messages", () => {
   it("replaces an overflowing queue with one resnapshot response", () => {

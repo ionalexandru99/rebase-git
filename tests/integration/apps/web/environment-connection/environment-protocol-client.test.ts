@@ -4,10 +4,6 @@ import {
   createCurrentEnvironmentHello,
   currentTransportLimits,
 } from "@rebase/contracts";
-import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import type { EnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher.contract";
-import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
 import {
   connectCurrentEnvironment,
   connectCurrentEnvironmentEffect,
@@ -19,6 +15,10 @@ import {
 } from "@rebase/web/features/environment-connection";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
+import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const credential = "test-device-credential";

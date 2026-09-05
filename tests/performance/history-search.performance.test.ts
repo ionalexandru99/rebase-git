@@ -3,11 +3,11 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import type { RepositoryCommit } from "@rebase/contracts";
+import { createServer } from "vite";
 import {
   gitHistoryFormat,
   parseGitHistory,
-} from "@rebase/server/features/repository-history/git/parse-git-history";
-import { createServer } from "vite";
+} from "#server/features/repository-history/git/parse-git-history";
 import { assertTimingBudget } from "#tests-performance/timing-budget";
 
 test("cached metadata search on repository history and 250,000 merge-heavy commits", async ({

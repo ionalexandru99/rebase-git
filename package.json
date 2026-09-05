@@ -13,6 +13,18 @@
     "url": "https://github.com/ionalexandru99/rebase-git/issues"
   },
   "type": "module",
+  "imports": {
+    "#desktop/*": {
+      "rebase-source": "./src/apps/desktop/*.ts",
+      "types": "./src/apps/desktop/dist/*.d.ts",
+      "default": "./src/apps/desktop/dist/*.js"
+    },
+    "#server/*": {
+      "rebase-source": "./src/apps/server/*.ts",
+      "types": "./src/apps/server/dist/*.d.ts",
+      "default": "./src/apps/server/dist/*.js"
+    }
+  },
   "bin": {
     "rebase": "./dist/cli.js",
     "rebase-git": "./dist/cli.js"

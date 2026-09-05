@@ -9,12 +9,6 @@ import {
   environmentLivePath,
   environmentSnapshotPath,
 } from "@rebase/contracts";
-import { createEnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization";
-import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
-import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import {
   connectCurrentEnvironment,
   EnvironmentAuthorizationRejected,
@@ -24,6 +18,12 @@ import {
 } from "@rebase/web/features/environment-connection";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+import { acquireEnvironmentContext } from "#server/persistence/environment-context";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const directories = new Set<string>();
