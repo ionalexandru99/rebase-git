@@ -494,12 +494,10 @@ async function startTrace(session: CDPSession, sample: number) {
       const trace = await completed;
       const path = test.info().outputPath(`renderer-trace-${sample}.json`);
       await writeFile(path, trace);
-      await test
-        .info()
-        .attach(`renderer-trace-${sample}`, {
-          path,
-          contentType: "application/json",
-        });
+      await test.info().attach(`renderer-trace-${sample}`, {
+        path,
+        contentType: "application/json",
+      });
       return frameWorkloads(JSON.parse(trace) as Trace);
     },
   };
