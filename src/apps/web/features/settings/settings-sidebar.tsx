@@ -1,5 +1,6 @@
 import {
   IconArrowLeft,
+  IconDatabase,
   IconKeyboard,
   IconSearch,
   IconSettings,
@@ -16,6 +17,7 @@ const sections = [
     id: "keyboard-shortcuts",
     label: "Keyboard shortcuts",
   },
+  { icon: IconDatabase, id: "history-storage", label: "History storage" },
 ] as const satisfies ReadonlyArray<{
   readonly icon: typeof IconSettings;
   readonly id: SettingsSection;

@@ -1,4 +1,4 @@
-import type { RepositoryHistoryCacheIdentity } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
+import type { RepositoryHistoryCacheIdentity } from "#web/features/repository-history/diagnostics/history-cache.contract";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 
 export function RepositoryHistoryCacheList({
@@ -7,8 +7,8 @@ export function RepositoryHistoryCacheList({
   repositoryName,
 }: {
   readonly diagnostics: RepositoryHistoryStorageDiagnostics;
-  readonly identity: RepositoryHistoryCacheIdentity;
-  readonly repositoryName: string;
+  readonly identity?: RepositoryHistoryCacheIdentity;
+  readonly repositoryName?: string;
 }) {
   return (
     <>
@@ -42,8 +42,8 @@ export function RepositoryHistoryCacheList({
           <tbody>
             {diagnostics.caches.map((cache) => {
               const current =
-                cache.environmentId === identity.environmentId &&
-                cache.repositoryId === identity.repositoryId;
+                cache.environmentId === identity?.environmentId &&
+                cache.repositoryId === identity?.repositoryId;
               return (
                 <tr
                   className="border-t border-border align-top"

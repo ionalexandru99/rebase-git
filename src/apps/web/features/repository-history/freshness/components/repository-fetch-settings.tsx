@@ -4,6 +4,7 @@ import { describeRepositoryFetchError } from "#web/features/repository-history/f
 import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
+import { SettingsRow } from "#web-ui/features/settings/components/settings-layout";
 
 export function RepositoryFetchSettings({
   reader,
@@ -18,7 +19,7 @@ export function RepositoryFetchSettings({
   readonly defaultIntervalSeconds: number;
   readonly disabled: boolean;
   readonly disabledReason?: string;
-  readonly onSaved: () => void;
+  readonly onSaved?: () => void;
 }) {
   const id = useId();
   const [draft, setDraft] = useState<{
@@ -55,7 +56,7 @@ export function RepositoryFetchSettings({
       .then(
         () => {
           setDraft(undefined);
-          onSaved();
+          onSaved?.();
         },
         (cause: unknown) => setError(describeRepositoryFetchError(cause)),
       )
@@ -63,54 +64,42 @@ export function RepositoryFetchSettings({
   };
   return (
     <form onSubmit={save}>
-      <fieldset
-        className="m-0 space-y-3 border-0 p-0"
-        disabled={disabled || saving}
-      >
-        <legend className="mb-2 text-sm font-medium">Automatic fetch</legend>
-        <p className="m-0 text-xs text-muted-foreground">
-          Applies to this repository in every open client.
-        </p>
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            checked={mode === "Inherit"}
-            className="accent-primary"
-            name={id}
-            onChange={() => setDraft({ mode: "Inherit", seconds })}
-            type="radio"
-            value="Inherit"
-          />
-          Use server default ({formatFetchInterval(defaultIntervalSeconds)})
-        </label>
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            checked={mode === "Disabled"}
-            className="accent-primary"
-            name={id}
-            onChange={() => setDraft({ mode: "Disabled", seconds })}
-            type="radio"
-            value="Disabled"
-          />
-          Off
-        </label>
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            checked={mode === "Interval"}
-            className="accent-primary"
-            name={id}
-            onChange={() => setDraft({ mode: "Interval", seconds })}
-            type="radio"
-            value="Interval"
-          />
-          Custom interval
-        </label>
+      <fieldset className="m-0 border-0 p-0" disabled={disabled || saving}>
+        <SettingsRow
+          title="Automatic fetch"
+          description="Shared by clients connected to this repository."
+        >
+          <select
+            aria-label="Automatic fetch"
+            className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+            value={mode}
+            onChange={(event) => {
+              const mode = event.currentTarget.value;
+              if (
+                mode === "Inherit" ||
+                mode === "Disabled" ||
+                mode === "Interval"
+              )
+                setDraft({ mode, seconds });
+            }}
+          >
+            <option value="Inherit">
+              Server default · {formatFetchInterval(defaultIntervalSeconds)}
+            </option>
+            <option value="Disabled">Off</option>
+            <option value="Interval">Custom interval</option>
+          </select>
+        </SettingsRow>
         {mode === "Interval" ? (
-          <label className="block space-y-1 text-xs" htmlFor={`${id}-interval`}>
-            <span>Interval in seconds</span>
+          <SettingsRow
+            title="Custom interval"
+            description="Fetch every 1 to 86,400 seconds."
+          >
             <Input
+              aria-label="Interval in seconds"
               aria-describedby={error === undefined ? undefined : `${id}-error`}
               aria-invalid={error !== undefined}
-              id={`${id}-interval`}
+              className="w-32"
               max={86_400}
               min={1}
               onChange={(event) =>
@@ -121,7 +110,7 @@ export function RepositoryFetchSettings({
               type="number"
               value={seconds}
             />
-          </label>
+          </SettingsRow>
         ) : null}
       </fieldset>
       {error === undefined ? null : (
@@ -138,7 +127,7 @@ export function RepositoryFetchSettings({
           {disabledReason ?? "Fetch settings are unavailable."}
         </p>
       ) : null}
-      <div className="mt-4 flex justify-end">
+      <div className="mt-2 flex justify-end px-4">
         <Button
           disabled={disabled || saving}
           size="sm"

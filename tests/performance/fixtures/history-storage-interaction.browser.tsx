@@ -5,11 +5,7 @@ import {
 } from "@rebase/contracts";
 import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  CommitGraph,
-  CommitGraphToolbarProvider,
-  useCommitGraphToolbarModel,
-} from "#web/features/commit-graph/index";
+import { CommitGraph } from "#web/features/commit-graph/index";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
   beginRepositoryHistorySynchronization,
@@ -209,10 +205,5 @@ declare global {
 }
 
 function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
-  const toolbar = useCommitGraphToolbarModel();
-  return (
-    <CommitGraphToolbarProvider model={toolbar}>
-      <CommitGraph {...props} />
-    </CommitGraphToolbarProvider>
-  );
+  return <CommitGraph {...props} />;
 }

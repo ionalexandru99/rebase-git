@@ -13,6 +13,7 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph navigation", () => {
   it.each([false, true])(
@@ -522,9 +523,15 @@ describe("commit graph navigation", () => {
           finish = resolve;
         }),
     );
-    await screen
-      .getByRole("combobox", { name: "History ordering" })
-      .selectOptions("chronological");
+    await act(() =>
+      saveRepositoryHistoryOrder(
+        {
+          environmentId: "test-environment",
+          repositoryId: "test-logical-repository",
+        },
+        "chronological",
+      ),
+    );
     await expect
       .element(screen.getByRole("grid"))
       .toHaveAttribute("aria-busy", "true");

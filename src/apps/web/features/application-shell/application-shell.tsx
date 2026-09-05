@@ -3,6 +3,7 @@ import { IconDeviceLaptop } from "@tabler/icons-react";
 import {
   type JSX,
   useCallback,
+  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -23,6 +24,8 @@ import {
   showOpenProject,
   toggleEnvironment,
 } from "#web/features/project-navigation/project-navigation-state";
+import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
+import { RepositorySettingsPage } from "#web/features/repository-settings/index";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -69,6 +72,28 @@ export function ApplicationShell({
   }
   const sidebarRef = useRef<PanelImperativeHandle>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [repositorySettingsId, setRepositorySettingsId] = useState<string>();
+  const closeRepositorySettings = useCallback(
+    () => setRepositorySettingsId(undefined),
+    [],
+  );
+  const openRepositorySettings = useCallback(
+    (environmentId: string, repository: { readonly id: string }) => {
+      if (environmentId === localEnvironmentId)
+        setRepositorySettingsId(repository.id);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (
+      repositorySettingsId !== undefined &&
+      repositoryCatalog.status === "ready" &&
+      !repositoryCatalog.repositories.some(
+        ({ id }) => id === repositorySettingsId,
+      )
+    )
+      closeRepositorySettings();
+  }, [repositorySettingsId, repositoryCatalog, closeRepositorySettings]);
   const [openProjectRequest, setOpenProjectRequest] = useState(0);
   const [sidebarFilterRequest, setSidebarFilterRequest] = useState(0);
   const [navigation, setNavigation] = useState<ProjectNavigationState>(() => ({
@@ -128,6 +153,7 @@ export function ApplicationShell({
     setCollapsed(false);
   }, [setCollapsed]);
   const showOpenProjectScreen = useCallback(() => {
+    setRepositorySettingsId(undefined);
     setNavigation((current) => showOpenProject(current));
     setOpenProjectRequest((current) => current + 1);
   }, []);
@@ -151,6 +177,7 @@ export function ApplicationShell({
     environmentId: localEnvironmentId,
     session,
     setNavigation,
+    onRepositoryOpened: closeRepositorySettings,
   });
   const {
     activeWorktreePath,
@@ -177,12 +204,14 @@ export function ApplicationShell({
     setSidebarFilterRequest((current) => current + 1);
   }, [expandSidebar]);
   const updateNavigation = useCallback(
-    (update: (current: ProjectNavigationState) => ProjectNavigationState) =>
+    (update: (current: ProjectNavigationState) => ProjectNavigationState) => {
+      setRepositorySettingsId(undefined);
       setNavigation((current) =>
         update(
           navigationWithAvailability(current, environmentStatus.availability),
         ),
-      ),
+      );
+    },
     [environmentStatus.availability],
   );
   const selectPreviousRepository = useCallback(
@@ -217,6 +246,46 @@ export function ApplicationShell({
     (repository) => repository.id === navigation.selectedRepositoryId,
   );
 
+  const settingsRepository = repositoryCatalog.repositories.find(
+    ({ id }) => id === repositorySettingsId,
+  );
+  const historyEnvironmentId =
+    sessionState._tag === "Connected"
+      ? sessionState.environmentId
+      : sessionState._tag === "Reconnecting"
+        ? (sessionState.environmentId ?? lastConnectedEnvironmentId.current)
+        : lastConnectedEnvironmentId.current;
+  const repositorySettingsOpen = settingsRepository !== undefined;
+  const canWrite =
+    sessionState._tag === "Connected" &&
+    sessionState.accessCapabilities.includes("repository.write");
+  const settingsTarget =
+    settingsRepository === undefined
+      ? undefined
+      : { ...settingsRepository, environmentId: localEnvironmentId };
+
+  const graphRepository =
+    navigation.workspaceView === "repository" ? selectedRepository : undefined;
+  const graphReader = useRepositoryHistoryReader(
+    session.repositoryHistory,
+    historyEnvironmentId,
+    graphRepository?.id,
+    graphRepository?.logicalRepositoryId ?? graphRepository?.id,
+  );
+  const sameHistory =
+    graphRepository !== undefined &&
+    settingsRepository !== undefined &&
+    (graphRepository.logicalRepositoryId ?? graphRepository.id) ===
+      (settingsRepository.logicalRepositoryId ?? settingsRepository.id);
+  const settingsReader = useRepositoryHistoryReader(
+    session.repositoryHistory,
+    historyEnvironmentId,
+    sameHistory ? undefined : settingsRepository?.id,
+    sameHistory
+      ? undefined
+      : (settingsRepository?.logicalRepositoryId ?? settingsRepository?.id),
+  );
+
   useApplicationShortcuts({
     availability: environmentStatus.availability,
     closeSelectedRepository,
@@ -228,6 +297,11 @@ export function ApplicationShell({
       navigation.selectedRepositoryId !== undefined,
     openFolderPicker: browseRepository,
     openSettings: setSettingsOpen,
+    openRepositorySettings: () => {
+      if (navigation.selectedRepositoryId !== undefined)
+        setRepositorySettingsId(navigation.selectedRepositoryId);
+    },
+    repositorySettingsOpen,
     selectNextRepository,
     selectPreviousRepository,
     selectRepositoryByPosition,
@@ -271,6 +345,7 @@ export function ApplicationShell({
                   navigation={visibleNavigation}
                   openProject={showOpenProjectScreen}
                   openSettings={() => setSettingsOpen(true)}
+                  openRepositorySettings={openRepositorySettings}
                   selectRepository={selectSidebarRepository}
                   toggleEnvironment={(environmentId) =>
                     setNavigation((current) =>
@@ -285,54 +360,90 @@ export function ApplicationShell({
                 id="repository"
                 minSize="40%"
               >
-                {navigation.workspaceView === "open-project" ? (
-                  <OpenProjectScreen
-                    active={!settingsOpen}
-                    browseAvailable={
-                      environmentStatus.availability === "available"
-                    }
-                    environments={openProjectEnvironments}
-                    expandedEnvironmentIds={expandedEnvironmentIds}
-                    key={openProjectRequest}
-                    onBrowse={browseRepository}
-                    onCopyPath={copyRepositoryPath}
-                    onEnvironmentOpenChange={setEnvironmentExpanded}
-                    onOpenRepository={selectOpenProjectRepository}
-                    onRemoveRepository={removeRepository}
-                    onRevealRepository={revealRepository}
-                    revealAvailable={
-                      window.rebaseHost?.revealRepository !== undefined
-                    }
-                  />
-                ) : (
-                  <RepositoryWorkspace
-                    accessCapabilities={
-                      sessionState._tag === "Connected"
-                        ? sessionState.accessCapabilities
-                        : []
-                    }
-                    connected={sessionState._tag === "Connected"}
-                    commandsActive={!settingsOpen && !folderPickerOpen}
-                    shortcuts={shortcuts}
-                    activeWorktreePath={activeWorktreePath}
-                    branchesFocusRequest={branchesFocusRequest}
-                    environmentId={
-                      sessionState._tag === "Connected"
-                        ? sessionState.environmentId
-                        : sessionState._tag === "Reconnecting"
-                          ? (sessionState.environmentId ??
-                            lastConnectedEnvironmentId.current)
-                          : undefined
-                    }
-                    historyGateway={session.repositoryHistory}
+                <div
+                  className={`h-full ${repositorySettingsOpen ? "hidden" : ""}`}
+                  inert={repositorySettingsOpen}
+                >
+                  {navigation.workspaceView === "open-project" ? (
+                    <OpenProjectScreen
+                      active={!settingsOpen && !repositorySettingsOpen}
+                      browseAvailable={
+                        environmentStatus.availability === "available"
+                      }
+                      environments={openProjectEnvironments}
+                      expandedEnvironmentIds={expandedEnvironmentIds}
+                      key={openProjectRequest}
+                      onBrowse={browseRepository}
+                      onEnvironmentOpenChange={setEnvironmentExpanded}
+                      onOpenRepository={selectOpenProjectRepository}
+                      onOpenSettings={(repository) =>
+                        openRepositorySettings(
+                          repository.environmentId,
+                          repository,
+                        )
+                      }
+                    />
+                  ) : (
+                    <RepositoryWorkspace
+                      accessCapabilities={
+                        sessionState._tag === "Connected"
+                          ? sessionState.accessCapabilities
+                          : []
+                      }
+                      connected={sessionState._tag === "Connected"}
+                      commandsActive={
+                        !settingsOpen &&
+                        !repositorySettingsOpen &&
+                        !folderPickerOpen
+                      }
+                      shortcuts={shortcuts}
+                      activeWorktreePath={activeWorktreePath}
+                      branchesFocusRequest={branchesFocusRequest}
+                      environmentId={historyEnvironmentId}
+                      historyReader={graphReader}
+                      logicalRepositoryId={
+                        selectedRepository?.logicalRepositoryId
+                      }
+                      refs={repositoryRefs}
+                      repositoryId={navigation.selectedRepositoryId}
+                      repositoryName={selectedRepository?.name ?? "Repository"}
+                      retryRefs={retryRefs}
+                      selectRef={selectRef}
+                    />
+                  )}
+                </div>
+                {settingsTarget === undefined ||
+                settingsRepository === undefined ? null : (
+                  <RepositorySettingsPage
+                    key={JSON.stringify([
+                      historyEnvironmentId,
+                      settingsRepository.id,
+                    ])}
+                    repository={settingsTarget}
+                    environmentId={historyEnvironmentId}
                     logicalRepositoryId={
-                      selectedRepository?.logicalRepositoryId
+                      settingsRepository.logicalRepositoryId ??
+                      settingsRepository.id
                     }
-                    refs={repositoryRefs}
-                    repositoryId={navigation.selectedRepositoryId}
-                    repositoryName={selectedRepository?.name ?? "Repository"}
-                    retryRefs={retryRefs}
-                    selectRef={selectRef}
+                    environmentName={
+                      visibleNavigation.environments.find(
+                        ({ id }) => id === localEnvironmentId,
+                      )?.name ?? "Environment"
+                    }
+                    reader={sameHistory ? graphReader : settingsReader}
+                    connected={sessionState._tag === "Connected"}
+                    canConfigure={canWrite}
+                    canRemove={canWrite}
+                    copyPath={() => copyRepositoryPath(settingsTarget)}
+                    reveal={
+                      window.rebaseHost?.revealRepository === undefined
+                        ? undefined
+                        : () => revealRepository(settingsTarget)
+                    }
+                    remove={async () => {
+                      await removeRepository(settingsTarget);
+                      closeRepositorySettings();
+                    }}
                   />
                 )}
               </ResizablePanel>

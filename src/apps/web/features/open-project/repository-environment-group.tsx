@@ -15,24 +15,18 @@ export function RepositoryEnvironmentGroup({
   activeKey,
   environment,
   onActivate,
-  onCopyPath,
   onOpenChange,
   onOpenRepository,
-  onRemoveRepository,
-  onRevealRepository,
+  onOpenSettings,
   open,
-  revealAvailable,
 }: {
   readonly activeKey: string | undefined;
   readonly environment: OpenProjectEnvironment;
   readonly onActivate: (key: string) => void;
-  readonly onCopyPath: (repository: OpenProjectRepository) => void;
   readonly onOpenChange: (open: boolean) => void;
+  readonly onOpenSettings: (repository: OpenProjectRepository) => void;
   readonly onOpenRepository: (repository: OpenProjectRepository) => void;
-  readonly onRemoveRepository: (repository: OpenProjectRepository) => void;
-  readonly onRevealRepository: (repository: OpenProjectRepository) => void;
   readonly open: boolean;
-  readonly revealAvailable: boolean;
 }): JSX.Element {
   const EnvironmentIcon = environment.icon;
 
@@ -75,12 +69,9 @@ export function RepositoryEnvironmentGroup({
               itemKey={itemKey}
               key={repository.id}
               onActivate={onActivate}
-              onCopyPath={onCopyPath}
               onOpen={onOpenRepository}
-              onRemove={onRemoveRepository}
-              onReveal={onRevealRepository}
+              onOpenSettings={onOpenSettings}
               repository={repository}
-              revealAvailable={revealAvailable}
             />
           );
         })}

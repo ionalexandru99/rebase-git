@@ -1,4 +1,9 @@
+import type { HistoryStorageRequest } from "#web/features/repository-history/diagnostics/history-storage.contract";
 import { clearingAllCaches } from "#web/features/repository-history/worker/cache-lifecycle";
+import {
+  failHistoryStorageRequests,
+  handleHistoryStorageRequest,
+} from "#web/features/repository-history/worker/history-storage-messages";
 import {
   closeReader,
   connectReader,
@@ -17,6 +22,7 @@ let failed = false;
 function failWorker() {
   if (failed) return;
   failed = true;
+  failHistoryStorageRequests();
   for (const connection of pendingConnections) {
     connection.port.postMessage({
       _tag: "WorkerFailed",
@@ -44,14 +50,21 @@ worker.onconnect = (event) => {
   const sharedPort = event.ports[0];
   if (sharedPort === undefined) return;
   sharedPort.onmessage = (
-    message: MessageEvent<ConnectRepositoryHistoryReader>,
+    message: MessageEvent<
+      ConnectRepositoryHistoryReader | HistoryStorageRequest
+    >,
   ) => {
+    if (message.data._tag === "HistoryStorageRequest") {
+      void handleHistoryStorageRequest(message.data);
+      return;
+    }
     if (message.data._tag !== "ConnectRepositoryHistoryReader") return;
-    pendingConnections.add(message.data);
-    if (clearingAllCaches === undefined) registerPendingReader(message.data);
+    const connection = message.data;
+    pendingConnections.add(connection);
+    if (clearingAllCaches === undefined) registerPendingReader(connection);
     else
       void clearingAllCaches.then((cleared) =>
-        registerPendingReader(message.data, cleared),
+        registerPendingReader(connection, cleared),
       );
   };
   sharedPort.start();

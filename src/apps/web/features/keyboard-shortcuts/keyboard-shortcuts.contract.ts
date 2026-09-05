@@ -31,6 +31,7 @@ export const keyboardShortcutCommandIds = [
   "graph.nextInLane",
   "graph.fetch",
   "settings.open",
+  "repository.openSettings",
   "search.focus",
   "repositoryPicker.openSelectedRepository",
 ] as const;

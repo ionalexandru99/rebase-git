@@ -19,6 +19,7 @@ import type {
   ProjectNavigationState,
 } from "#web/features/project-navigation/project-navigation.contract";
 import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state";
+import { RepositorySettingsButton } from "#web/features/repository-settings/index";
 import { Button } from "#web-ui/components/ui/button";
 import {
   Collapsible,
@@ -42,6 +43,7 @@ export function ProjectsSidebar({
   navigation,
   openProject,
   openSettings,
+  openRepositorySettings,
   selectRepository,
   toggleEnvironment,
 }: {
@@ -56,6 +58,10 @@ export function ProjectsSidebar({
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
   readonly openSettings: () => void;
+  readonly openRepositorySettings: (
+    environmentId: string,
+    repository: ProjectNavigationRepository,
+  ) => void;
   readonly selectRepository: (
     environmentId: string,
     repository: ProjectNavigationRepository,
@@ -97,6 +103,7 @@ export function ProjectsSidebar({
           navigation={navigation}
           openProject={openProject}
           openSettings={openSettings}
+          openRepositorySettings={openRepositorySettings}
           selectRepository={selectRepository}
           setFilterQuery={setFilterQuery}
           toggleEnvironment={toggleEnvironment}
@@ -115,6 +122,7 @@ function ExpandedProjectsSidebar({
   navigation,
   openProject,
   openSettings,
+  openRepositorySettings,
   selectRepository,
   setFilterQuery,
   toggleEnvironment,
@@ -130,6 +138,10 @@ function ExpandedProjectsSidebar({
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
   readonly openSettings: () => void;
+  readonly openRepositorySettings: (
+    environmentId: string,
+    repository: ProjectNavigationRepository,
+  ) => void;
   readonly selectRepository: (
     environmentId: string,
     repository: ProjectNavigationRepository,
@@ -251,7 +263,7 @@ function ExpandedProjectsSidebar({
                 {filterEnvironmentRepositories(environment, filterQuery).map(
                   (repository) => (
                     <div
-                      className={`group grid h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.875rem] items-center rounded-lg pr-1.5 pl-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
+                      className={`group grid h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.875rem_1.875rem] items-center rounded-lg pr-1.5 pl-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
                       key={repository.id}
                     >
                       <button
@@ -276,6 +288,15 @@ function ExpandedProjectsSidebar({
                           {repository.name}
                         </span>
                       </button>
+                      <RepositorySettingsButton
+                        name={repository.name}
+                        active={
+                          navigation.selectedRepositoryId === repository.id
+                        }
+                        onOpen={() =>
+                          openRepositorySettings(environment.id, repository)
+                        }
+                      />
                       <button
                         aria-label={`Close ${repository.name}`}
                         aria-keyshortcuts={

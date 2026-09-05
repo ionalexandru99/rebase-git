@@ -9,22 +9,12 @@ import type { HistoryScope } from "#web/features/commit-graph/index";
 import {
   automaticHistoryScope,
   CommitGraph,
-  CommitGraphToolbarProvider,
   createBrowserHistoryFilterStore,
   historyScopesEqual,
   resolveHistoryScope,
   toggleHistoryRef,
-  useCommitGraphToolbarModel,
 } from "#web/features/commit-graph/index";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
-import type {
-  RepositoryHistoryGateway,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
-import {
-  clearAllCachedRepositoryRefs,
-  clearCachedRepositoryRefs,
-} from "#web/features/repository-refs/browser-repository-refs-cache";
+import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
 import { useHistoryRefRefresh } from "#web/features/repository-workspace/use-history-ref-refresh";
@@ -49,7 +39,7 @@ export function RepositoryWorkspace({
   activeWorktreePath,
   branchesFocusRequest,
   environmentId,
-  historyGateway,
+  historyReader,
   logicalRepositoryId: catalogLogicalRepositoryId,
   refs,
   repositoryId,
@@ -64,7 +54,7 @@ export function RepositoryWorkspace({
   readonly activeWorktreePath: string;
   readonly branchesFocusRequest: number;
   readonly environmentId: string | undefined;
-  readonly historyGateway: RepositoryHistoryGateway;
+  readonly historyReader: RepositoryHistoryReader | undefined;
   readonly logicalRepositoryId?: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly repositoryId: string | undefined;
@@ -91,7 +81,7 @@ export function RepositoryWorkspace({
       activeWorktreePath={activeWorktreePath}
       branchesFocusRequest={branchesFocusRequest}
       environmentId={environmentId}
-      historyGateway={historyGateway}
+      historyReader={historyReader}
       key={`${environmentId ?? ""}\0${logicalRepositoryId ?? ""}`}
       logicalRepositoryId={logicalRepositoryId}
       refs={cachedRefs.snapshot}
@@ -112,7 +102,7 @@ function RepositoryWorkspaceContent({
   activeWorktreePath,
   branchesFocusRequest,
   environmentId,
-  historyGateway,
+  historyReader,
   logicalRepositoryId,
   refs,
   refsRestored,
@@ -128,7 +118,7 @@ function RepositoryWorkspaceContent({
   readonly activeWorktreePath: string;
   readonly branchesFocusRequest: number;
   readonly environmentId: string | undefined;
-  readonly historyGateway: RepositoryHistoryGateway;
+  readonly historyReader: RepositoryHistoryReader | undefined;
   readonly logicalRepositoryId: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly refsRestored: boolean;
@@ -137,8 +127,6 @@ function RepositoryWorkspaceContent({
   readonly retryRefs: () => void;
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
-  const toolbar = useCommitGraphToolbarModel();
-  const [historyReader, setHistoryReader] = useState<RepositoryHistoryReader>();
   const [localBranchesFocusRequest, setLocalBranchesFocusRequest] = useState(0);
   useHistoryRefRefresh(historyReader, connected, retryRefs);
   const activeBranch = refs.refs?.worktrees.find(
@@ -150,26 +138,6 @@ function RepositoryWorkspaceContent({
       ? automaticHistoryScope
       : filterStore.load(environmentId, logicalRepositoryId),
   );
-  useEffect(() => {
-    if (
-      environmentId === undefined ||
-      repositoryId === undefined ||
-      logicalRepositoryId === undefined
-    ) {
-      setHistoryReader(undefined);
-      return;
-    }
-    const reader = createBrowserRepositoryHistoryReader({
-      environmentId,
-      gateway: historyGateway,
-      logicalRepositoryId,
-      repositoryId,
-    });
-    setHistoryReader(reader);
-    return () => {
-      reader.close();
-    };
-  }, [environmentId, historyGateway, logicalRepositoryId, repositoryId]);
   const resolvedScope = useMemo(
     () =>
       refs.refs === undefined
@@ -249,61 +217,49 @@ function RepositoryWorkspaceContent({
           aria-label="Repository workspace"
           className="h-full rounded-none bg-repository"
         >
-          <CommitGraphToolbarProvider model={toolbar}>
-            <CommitGraph
-              onCacheChanged={(action, identity) =>
-                action === "clear-all"
-                  ? clearAllCachedRepositoryRefs()
-                  : identity === undefined
-                    ? undefined
-                    : clearCachedRepositoryRefs(
-                        identity.environmentId,
-                        identity.repositoryId,
-                      )
-              }
-              commandEnvironment={
-                environmentId === undefined ||
-                logicalRepositoryId === undefined ||
-                repositoryId === undefined
-                  ? undefined
-                  : {
-                      environmentId,
-                      logicalRepositoryId,
-                      repositoryId,
-                      activeWorktreePath,
-                      ...(activeBranch === undefined ? {} : { activeBranch }),
-                      connected,
-                      capabilities: new Set(accessCapabilities),
-                      freshnessReady: false,
-                      operationState: "idle",
-                    }
-              }
-              commandsActive={commandsActive}
-              shortcuts={shortcuts}
-              onRemoveHistoryRef={toggleRef}
-              onAddHistoryRef={() =>
-                setLocalBranchesFocusRequest((request) => request + 1)
-              }
-              onResetHistoryScope={() => {
-                setHistoryScope(automaticHistoryScope);
-                if (
-                  environmentId !== undefined &&
-                  logicalRepositoryId !== undefined
-                ) {
-                  filterStore.save(
+          <CommitGraph
+            commandEnvironment={
+              environmentId === undefined ||
+              logicalRepositoryId === undefined ||
+              repositoryId === undefined
+                ? undefined
+                : {
                     environmentId,
                     logicalRepositoryId,
-                    automaticHistoryScope,
-                  );
-                }
-              }}
-              reader={historyReader}
-              repositoryName={repositoryName}
-              roots={resolvedScope?.roots}
-              scope={resolvedScope?.scope ?? automaticHistoryScope}
-              selections={resolvedScope?.selections ?? []}
-            />
-          </CommitGraphToolbarProvider>
+                    repositoryId,
+                    activeWorktreePath,
+                    ...(activeBranch === undefined ? {} : { activeBranch }),
+                    connected,
+                    capabilities: new Set(accessCapabilities),
+                    freshnessReady: false,
+                    operationState: "idle",
+                  }
+            }
+            commandsActive={commandsActive}
+            shortcuts={shortcuts}
+            onRemoveHistoryRef={toggleRef}
+            onAddHistoryRef={() =>
+              setLocalBranchesFocusRequest((request) => request + 1)
+            }
+            onResetHistoryScope={() => {
+              setHistoryScope(automaticHistoryScope);
+              if (
+                environmentId !== undefined &&
+                logicalRepositoryId !== undefined
+              ) {
+                filterStore.save(
+                  environmentId,
+                  logicalRepositoryId,
+                  automaticHistoryScope,
+                );
+              }
+            }}
+            reader={historyReader}
+            repositoryName={repositoryName}
+            roots={resolvedScope?.roots}
+            scope={resolvedScope?.scope ?? automaticHistoryScope}
+            selections={resolvedScope?.selections ?? []}
+          />
         </main>
       </ResizablePanel>
     </ResizablePanelGroup>

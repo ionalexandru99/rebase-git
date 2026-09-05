@@ -14,6 +14,13 @@ import { repositorySelectionPositions } from "#web/features/keyboard-shortcuts/k
 export const keyboardShortcutCommands = [
   {
     contexts: ["application"],
+    defaultBinding: { key: ",", modifiers: ["Mod", "Shift"] },
+    group: "Navigation",
+    id: "repository.openSettings",
+    label: "Open repository settings",
+  },
+  {
+    contexts: ["application"],
     defaultBinding: { key: "o", modifiers: ["Mod", "Shift"] },
     group: "Navigation",
     id: "projects.showOpenProject",

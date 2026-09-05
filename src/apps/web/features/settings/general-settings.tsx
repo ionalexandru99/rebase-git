@@ -9,6 +9,7 @@ import { IconChevronDown } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
 import { Button } from "#web-ui/components/ui/button";
 import { Switch } from "#web-ui/components/ui/switch";
+import { SettingsRow as SettingRow } from "#web-ui/features/settings/components/settings-layout";
 
 const releaseChannelLabels: Record<ReleaseChannel, string> = {
   nightly: "Nightly",
@@ -232,37 +233,6 @@ export function GeneralSettings({
           </SettingRow>
         </div>
       </section>
-    </div>
-  );
-}
-
-function SettingRow({
-  children,
-  description,
-  descriptionId,
-  liveDescription = false,
-  title,
-}: {
-  readonly children: JSX.Element;
-  readonly description: string;
-  readonly descriptionId: string;
-  readonly liveDescription?: boolean;
-  readonly title: string;
-}) {
-  return (
-    <div className="flex min-h-20 flex-col items-start justify-between gap-3 rounded-xl px-3 py-4 hover:bg-background/35 sm:px-4 md:flex-row md:items-center md:gap-8">
-      <div className="min-w-0">
-        <h3 className="text-sm font-medium">{title}</h3>
-        <p
-          aria-atomic={liveDescription || undefined}
-          aria-live={liveDescription ? "polite" : undefined}
-          className="mt-1 text-[13px] leading-5 text-muted-foreground"
-          id={descriptionId}
-        >
-          {description}
-        </p>
-      </div>
-      {children}
     </div>
   );
 }

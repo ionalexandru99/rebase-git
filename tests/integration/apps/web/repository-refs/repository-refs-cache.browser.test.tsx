@@ -1,3 +1,4 @@
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import "@rebase/web/styles.css";
 import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
 import { expect, it, vi } from "vitest";
@@ -73,6 +74,17 @@ it.each(["Automatic", "Custom"] as const)(
       { limit: 100, order: "topological", roots },
     );
     const read = vi.fn(() => Promise.reject(new RepositoryHistoryOffline()));
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId: refs.repositoryId,
+      logicalRepositoryId: logicalId,
+      gateway: {
+        read,
+        synchronize: async () => {
+          throw new RepositoryHistoryOffline();
+        },
+      },
+    });
     const screen = await render(
       <KeyboardShortcutsProvider
         runtime={{
@@ -92,12 +104,7 @@ it.each(["Automatic", "Custom"] as const)(
             logicalRepositoryId={logicalId}
             repositoryId={refs.repositoryId}
             repositoryName="Cached repository"
-            historyGateway={{
-              read,
-              synchronize: async () => {
-                throw new RepositoryHistoryOffline();
-              },
-            }}
+            historyReader={reader}
             refs={{
               checkingOut: false,
               repositoryId: refs.repositoryId,
@@ -128,6 +135,7 @@ it.each(["Automatic", "Custom"] as const)(
           }),
       )
       .toBeVisible();
+    reader.close();
     expect(read).not.toHaveBeenCalled();
     expect(filterStore.load(environmentId, logicalId)).toEqual(
       mode === "Automatic" ? { _tag: "Automatic" } : custom,

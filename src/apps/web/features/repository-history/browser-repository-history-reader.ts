@@ -234,7 +234,7 @@ function connectBrowserRepositoryHistoryReader(
   port.start();
   function failWorker() {
     if (closed) return;
-    if (sharedWorker === worker) sharedWorker = undefined;
+    discardSharedWorker(worker);
     dispose();
     worker?.port.close();
     snapshot = {
@@ -567,12 +567,16 @@ function connectBrowserRepositoryHistoryReader(
   return reader;
 }
 
-function acquireSharedWorker() {
+export function acquireSharedWorker() {
   sharedWorker ??= new SharedWorker(
     new URL("./worker/repository-history-worker.ts", import.meta.url),
     { name: "rebase-repository-history", type: "module" },
   );
   return sharedWorker;
+}
+
+export function discardSharedWorker(worker: SharedWorker | undefined) {
+  if (sharedWorker === worker) sharedWorker = undefined;
 }
 
 function readerError(

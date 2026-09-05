@@ -1,24 +1,18 @@
 import type { RepositoryFreshness } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import {
-  CommitGraphToolbarProvider,
-  useCommitGraphToolbarModel,
-} from "#web/features/commit-graph/index";
-import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
 import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/hooks/use-repository-history-fetch";
+import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
 import {
   RepositoryHistoryOffline,
   type RepositoryHistoryReader,
   RepositoryHistoryRejected,
   type RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
-import { CommitGraphToolbarDialogs } from "#web-ui/features/commit-graph/components/commit-graph-toolbar-dialogs";
+import { RepositoryFetchSettings } from "#web-ui/features/repository-history/freshness/components/repository-fetch-settings";
 import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
-import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/components/repository-history-search-controls";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,
@@ -47,7 +41,6 @@ describe("repository fetch controls", () => {
         }}
       />,
     );
-    await openFetchSettings();
     await screen.rerender(
       <Controls
         reader={reader}
@@ -57,12 +50,9 @@ describe("repository fetch controls", () => {
         }}
       />,
     );
-    await expect
-      .element(
-        page.getByRole("radio", { name: "Use server default (10 minutes)" }),
-      )
-      .toBeChecked();
-    await page.getByRole("radio", { name: "Custom interval" }).click();
+    const mode = page.getByRole("combobox", { name: "Automatic fetch" });
+    await expect.element(mode).toHaveValue("Inherit");
+    await mode.selectOptions("Interval");
     const interval = page.getByRole("spinbutton", {
       name: "Interval in seconds",
     });
@@ -81,9 +71,7 @@ describe("repository fetch controls", () => {
         }}
       />,
     );
-    await expect
-      .element(page.getByRole("radio", { name: "Custom interval" }))
-      .toBeChecked();
+    await expect.element(mode).toHaveValue("Interval");
     await expect.element(interval).toHaveValue(90);
     await page.getByRole("button", { name: "Save", exact: true }).click();
     expect(reader.configureFetch).toHaveBeenLastCalledWith({
@@ -155,16 +143,11 @@ describe("repository fetch controls", () => {
       .toBeEnabled();
   });
 
-  it("opens settings from the keyboard and saves custom, disabled and inherited intervals", async () => {
+  it("saves custom, disabled, and inherited intervals", async () => {
     const reader = createReader();
     await render(<Controls reader={reader} snapshot={ready} />);
-    const settings = page.getByRole("button", {
-      name: "History options",
-    });
-    settings.element().focus();
-    await userEvent.keyboard("{Enter}");
-    await userEvent.keyboard("{Enter}");
-    await page.getByRole("radio", { name: "Custom interval" }).click();
+    const mode = page.getByRole("combobox", { name: "Automatic fetch" });
+    await mode.selectOptions("Interval");
     await page
       .getByRole("spinbutton", { name: "Interval in seconds" })
       .fill("120");
@@ -173,26 +156,17 @@ describe("repository fetch controls", () => {
       _tag: "Interval",
       seconds: 120,
     });
-    await expect
-      .element(page.getByRole("radio", { name: "Custom interval" }))
-      .not.toBeInTheDocument();
-    await expect.element(settings).toHaveFocus();
-    await userEvent.keyboard("{Enter}");
-    await userEvent.keyboard("{Enter}");
-    await page.getByRole("radio", { name: "Off", exact: true }).click();
+    await mode.selectOptions("Disabled");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     expect(reader.configureFetch).toHaveBeenLastCalledWith({
       _tag: "Disabled",
     });
-    await openFetchSettings();
-    await page
-      .getByRole("radio", { name: "Use server default (5 minutes)" })
-      .click();
+    await mode.selectOptions("Inherit");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     expect(reader.configureFetch).toHaveBeenLastCalledWith({ _tag: "Inherit" });
   });
 
-  it("keeps settings open after a save fails and closes them with Escape", async () => {
+  it("keeps the edited interval available after a failed save", async () => {
     const reader = createReader();
     reader.configureFetch.mockRejectedValueOnce(
       new RepositoryHistoryRejected({
@@ -200,10 +174,12 @@ describe("repository fetch controls", () => {
       }),
     );
     await render(<Controls reader={reader} snapshot={ready} />);
-    const settings = page.getByRole("button", {
-      name: "History options",
-    });
-    await openFetchSettings();
+    await page
+      .getByRole("combobox", { name: "Automatic fetch" })
+      .selectOptions("Interval");
+    await page
+      .getByRole("spinbutton", { name: "Interval in seconds" })
+      .fill("90");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .element(page.getByRole("alert"))
@@ -211,24 +187,28 @@ describe("repository fetch controls", () => {
         "You do not have permission to change this repository.",
       );
     await expect
+      .element(page.getByRole("spinbutton", { name: "Interval in seconds" }))
+      .toHaveValue(90);
+    await expect
       .element(page.getByRole("button", { name: "Save", exact: true }))
       .toBeEnabled();
-    await userEvent.keyboard("{Escape}");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
-    await expect.element(settings).toHaveFocus();
   });
 
-  it("shows offline cached history and keeps no-change reconciliations quiet", async () => {
+  it("shows offline history and disables fetch configuration", async () => {
     const reader = createReader();
-    const offline = {
-      ...ready,
-      freshnessError: new RepositoryHistoryOffline(),
-      synchronization: "syncing" as const,
-      storingCommits: false,
-      shallowOids: ["a".repeat(40)],
-    };
-    const screen = await render(
-      <Controls reader={reader} snapshot={offline} />,
+    await render(
+      <Controls
+        reader={reader}
+        snapshot={{
+          ...ready,
+          freshnessError: new RepositoryHistoryOffline(),
+          synchronization: "syncing",
+          storingCommits: false,
+          shallowOids: ["a".repeat(40)],
+        }}
+      />,
     );
     await expect
       .element(page.getByRole("button", { name: "Fetch", exact: true }))
@@ -240,32 +220,18 @@ describe("repository fetch controls", () => {
       .element(page.getByText("Shallow history", { exact: true }))
       .toBeVisible();
     await expect
-      .element(page.getByText("Syncing", { exact: true }))
-      .not.toBeInTheDocument();
-    await openFetchSettings();
+      .element(page.getByRole("combobox", { name: "Automatic fetch" }))
+      .toBeDisabled();
     await expect
       .element(page.getByRole("button", { name: "Save", exact: true }))
       .toBeDisabled();
     await expect
-      .element(page.getByText("Reconnect to the server and try again."))
-      .toBeVisible();
-    await expect
       .element(
-        page.getByText(
-          "Connect with repository write access to change fetch settings.",
-        ),
+        page.getByText("Reconnect to the server and try again.", {
+          exact: true,
+        }),
       )
-      .not.toBeInTheDocument();
-    await userEvent.keyboard("{Escape}");
-    await screen.rerender(
-      <Controls
-        reader={reader}
-        snapshot={{ ...offline, synchronizedCommitCount: 0 }}
-      />,
-    );
-    await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Offline. No cached history is available.");
+      .toBeVisible();
   });
 
   it("keeps settings read-only without repository write access", async () => {
@@ -273,9 +239,8 @@ describe("repository fetch controls", () => {
     await render(
       <Controls reader={reader} snapshot={ready} canConfigure={false} />,
     );
-    await openFetchSettings();
     await expect
-      .element(page.getByRole("radio", { name: "Custom interval" }))
+      .element(page.getByRole("combobox", { name: "Automatic fetch" }))
       .toBeDisabled();
     await expect
       .element(page.getByRole("button", { name: "Save", exact: true }))
@@ -293,7 +258,6 @@ function Controls({
   readonly snapshot: RepositoryHistorySnapshot;
   readonly canConfigure?: boolean;
 }) {
-  const toolbar = useCommitGraphToolbarModel();
   const fetch = useRepositoryHistoryFetch(reader, snapshot);
   const fetchAction = {
     execute: fetch.execute,
@@ -303,38 +267,26 @@ function Controls({
   };
   return (
     <>
-      <CommitGraphToolbarProvider model={toolbar}>
-        <CommitGraphToolbar.Frame>
-          <CommitGraphToolbar.Title repositoryName="Rebase" />
-          <RepositoryHistorySearchControls
-            reader={reader}
-            snapshot={snapshot}
-            onNavigate={async () => {}}
-            bindings={{}}
-            offline={snapshot.freshnessError !== undefined}
-          />
-          <CommitGraphToolbar.Order
-            order="topological"
-            onOrderChange={() => {}}
-          />
-          <CommitGraphToolbar.Fetch
-            fetchAction={fetchAction}
-            fetching={fetch.fetching}
-          />
-          <CommitGraphToolbar.Options
-            fetchSettingsAvailable
-            cacheAvailable={false}
-          />
-        </CommitGraphToolbar.Frame>
-        <CommitGraphToolbarDialogs
-          repositoryName="Rebase"
-          reader={reader}
-          snapshot={snapshot}
-          offline={snapshot.freshnessError !== undefined}
-          canConfigure={canConfigure}
-          cache={undefined}
+      <CommitGraphToolbar.Frame>
+        <CommitGraphToolbar.Title repositoryName="Rebase" />
+        <CommitGraphToolbar.Fetch
+          fetchAction={fetchAction}
+          fetching={fetch.fetching}
         />
-      </CommitGraphToolbarProvider>
+      </CommitGraphToolbar.Frame>
+      <RepositoryFetchSettings
+        reader={reader}
+        setting={snapshot.freshness?.setting ?? { _tag: "Inherit" }}
+        defaultIntervalSeconds={
+          snapshot.freshness?.defaultIntervalSeconds ?? 300
+        }
+        disabled={!canConfigure || snapshot.freshnessError !== undefined}
+        disabledReason={
+          snapshot.freshnessError === undefined
+            ? "Connect with repository write access to change fetch settings."
+            : describeRepositoryFetchError(snapshot.freshnessError)
+        }
+      />
       <RepositoryHistoryFreshnessStatus
         error={fetch.error}
         fetchAction={fetchAction}
@@ -345,30 +297,11 @@ function Controls({
   );
 }
 
-async function openFetchSettings() {
-  await page.getByRole("button", { name: "History options" }).click();
-  await page.getByRole("menuitem", { name: "Fetch settings" }).click();
-}
-
 function createReader() {
   return {
-    getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
-    manageCache: async () => {},
-    search: async () => ({
-      commits: [],
-      replicaComplete: true,
-      synchronizedCommitCount: 0,
-    }),
     fetch: vi.fn<RepositoryHistoryReader["fetch"]>(async () => fresh),
     configureFetch: vi.fn<RepositoryHistoryReader["configureFetch"]>(
-      async (setting) => ({
-        ...fresh,
-        setting,
-      }),
+      async (setting) => ({ ...fresh, setting }),
     ),
-    getSnapshot: () => ready,
-    subscribe: () => () => {},
-  } satisfies RepositoryHistoryCacheReader &
-    RepositoryHistorySearch &
-    Pick<RepositoryHistoryReader, "fetch" | "configureFetch">;
+  };
 }
