@@ -200,9 +200,11 @@ export function CommitGraph({
     viewportRef.current?.scrollToIndex(pendingNavigation.offset);
     setPendingNavigation(undefined);
   }, [pendingNavigation, visibleOids, navigation.select, viewportRef]);
-  const navigateToOid = async (oid: string) => {
+  const navigateToOid = async (oid: string, signal?: AbortSignal) => {
+    signal?.throwIfAborted();
     const intent = beginNavigation();
-    const target = await paging.engine?.jumpToOid(oid);
+    const target = await paging.engine?.jumpToOid(oid, signal);
+    signal?.throwIfAborted();
     if (intent !== navigationIntent.current) return;
     if (target === undefined)
       throw new Error("This commit is outside the selected history.");

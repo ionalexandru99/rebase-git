@@ -8,12 +8,53 @@ import {
 } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
+import { createRepositoryHistorySearchModel } from "#web/features/repository-history/search/repository-history-search-model";
 import {
   emptyStoredRepository,
   storedCommit,
 } from "#web/persistence/repository-history/repository-history-records";
 
 describe("browser metadata search", () => {
+  it("runs the search model through the worker and cached storage without network access", async () => {
+    const fixture = await seed(30);
+    const gateway = offlineGateway();
+    const reader = createBrowserRepositoryHistoryReader({
+      ...fixture,
+      gateway,
+    });
+    const navigate = vi.fn(async () => {});
+    const model = createRepositoryHistorySearchModel(reader, navigate);
+    try {
+      model.setText("Commit");
+      await vi.waitFor(() =>
+        expect(model.getSnapshot()).toMatchObject({
+          loading: false,
+          count: 30,
+          complete: true,
+        }),
+      );
+      expect(model.getSnapshot().commits).toHaveLength(20);
+      model.navigate(20);
+      await vi.waitFor(() =>
+        expect(model.getSnapshot()).toMatchObject({
+          loading: false,
+          navigating: false,
+          selected: 20,
+        }),
+      );
+      expect(model.getSnapshot().commits).toHaveLength(30);
+      expect(navigate).toHaveBeenCalledWith(
+        fixture.commits[20]?.oid,
+        expect.any(AbortSignal),
+      );
+      expect(gateway.read).not.toHaveBeenCalled();
+      expect(gateway.synchronize).not.toHaveBeenCalled();
+    } finally {
+      await model.dispose();
+      reader.close();
+    }
+  });
+
   it("stops before another bulk chunk when cancellation arrives during a read", async () => {
     const fixture = await seed(500);
     const controller = new AbortController();

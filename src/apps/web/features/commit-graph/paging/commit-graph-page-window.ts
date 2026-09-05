@@ -433,13 +433,17 @@ export function createCommitGraphPageWindow(
     }
   };
 
-  const jumpToOid = async (oid: string) => {
+  const jumpToOid = async (oid: string, callerSignal?: AbortSignal) => {
+    callerSignal?.throwIfAborted();
     if (view === undefined || disposed) return undefined;
     initialRequest += 1;
     cancelNavigation();
     const request = navigationRequest;
     jumping = true;
-    const signal = controller.signal;
+    const signal =
+      callerSignal === undefined
+        ? controller.signal
+        : AbortSignal.any([controller.signal, callerSignal]);
     try {
       const target = await locateCommitGraphTarget(
         reader,
@@ -447,12 +451,17 @@ export function createCommitGraphPageWindow(
         oid,
         signal,
       );
-      if (target === undefined || request !== navigationRequest)
+      if (
+        signal.aborted ||
+        target === undefined ||
+        request !== navigationRequest
+      )
         return undefined;
       const { offset, query } = target;
       const expectedEpoch = generation + 1;
       await replace(query, Math.floor(offset / pageSize) * pageSize, oid);
       if (
+        callerSignal?.aborted ||
         request !== navigationRequest ||
         snapshot.error !== undefined ||
         disposed ||

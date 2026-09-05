@@ -15,6 +15,26 @@ const query: RepositoryHistoryQuery = {
 };
 
 describe("commit graph page window", () => {
+  it("does not replace the graph when a search is canceled during its target lookup", async () => {
+    const reader = fakeReader(history(15));
+    const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
+    await window.loadInitial(query);
+    const pending = deferred<number | undefined>();
+    reader.locate.mockReturnValueOnce(pending.promise);
+    const controller = new AbortController();
+    const navigation = window.jumpToOid(oid(10), controller.signal);
+    controller.abort();
+    pending.resolve(10);
+    await expect(navigation).resolves.toBeUndefined();
+    expect(window.getSnapshot()).toMatchObject({
+      startOffset: 0,
+      loading: false,
+    });
+    expect(window.getSnapshot().error).toBeUndefined();
+    expect(reader.read).toHaveBeenCalledTimes(1);
+    window.dispose();
+  });
+
   it.each([2, 16])(
     "keeps a moving viewport resident with 350 ms reads and a %i-page budget",
     async (maximumPages) => {
