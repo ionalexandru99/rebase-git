@@ -244,9 +244,14 @@ describe("repository history", { timeout: 30_000 }, () => {
     });
   });
 
-  it.each(["sha1", "sha256"] as const)(
-    "delivers the first 100 %s commits through fragmented JSON text messages",
-    async (objectFormat) => {
+  it.each([
+    { objectFormat: "sha1", smallFrames: false },
+    { objectFormat: "sha256", smallFrames: false },
+    { objectFormat: "sha1", smallFrames: true },
+    { objectFormat: "sha256", smallFrames: true },
+  ] as const)(
+    "delivers the first 100 $objectFormat commits with small frames: $smallFrames",
+    async ({ objectFormat, smallFrames }) => {
       await withHistoryListener(async ({ catalog, origin, root }) => {
         const repositoryPath = join(root, objectFormat);
         await createRepository(repositoryPath, objectFormat, 110);
@@ -254,7 +259,10 @@ describe("repository history", { timeout: 30_000 }, () => {
           catalog.remember(repositoryPath),
         );
         const head = await gitOutput(repositoryPath, "rev-parse", "main");
-        const socket = await openHistorySocket(origin, smallFrameHello());
+        const hello = smallFrames
+          ? smallFrameHello()
+          : createCurrentEnvironmentHello("0.0.0");
+        const socket = await openHistorySocket(origin, hello);
         const reassembler = createJsonMessageReassembler();
         const fragments: string[] = [];
         const received = collectJsonMessage(socket, reassembler, fragments);
@@ -272,9 +280,12 @@ describe("repository history", { timeout: 30_000 }, () => {
         const complete = await received;
         socket.close();
 
-        expect(fragments.length).toBeGreaterThan(1);
+        if (smallFrames) expect(fragments.length).toBeGreaterThan(1);
+        else expect(fragments).toHaveLength(1);
         for (const frame of fragments) {
-          expect(Buffer.byteLength(frame)).toBeLessThanOrEqual(1_024);
+          expect(Buffer.byteLength(frame)).toBeLessThanOrEqual(
+            hello.receiveLimits.maxWebSocketResponseBytes,
+          );
           expect(JSON.parse(frame)).toHaveProperty(
             "_tag",
             "JsonMessageFragment",

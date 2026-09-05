@@ -1,5 +1,6 @@
 import {
   createJsonMessageReassembler,
+  currentTransportLimits,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   encodeRepositoryHistoryBatch,
@@ -61,10 +62,12 @@ describe("repository history JSON codec", () => {
     },
   );
 
-  it("round trips acknowledged synchronization batches", () => {
+  it("delivers a full synchronization batch in one JSON frame by default", () => {
     const page = historyPage("sha1");
     const batch = {
-      commits: page.commits,
+      commits: page.commits.flatMap((commit) =>
+        Array.from({ length: 512 }, () => commit),
+      ),
       objectFormat: page.objectFormat,
       repositoryId,
       requestId,
@@ -74,6 +77,11 @@ describe("repository history JSON codec", () => {
 
     expect(readRepositoryHistoryBatchSequence(encoded)).toBe(7);
     expect(decodeRepositoryHistoryBatch(encoded)).toEqual(batch);
+    const frames = fragmentJsonMessage(
+      { logicalMessageId: 7, payload: encoded, requestId },
+      currentTransportLimits.maxWebSocketResponseBytes,
+    );
+    expect(frames).toHaveLength(1);
   });
 
   it("rejects batch sequences outside the unsigned wire range", () => {
