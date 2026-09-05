@@ -1,10 +1,13 @@
 import type {
+  EnvironmentAccessCapability,
+  EnvironmentServerMessage,
   RepositoryCatalogEntry,
   RepositoryFreshness,
 } from "@rebase/contracts";
 import type { GitCommandRunner } from "@rebase/server/domain/git-command.contract";
 import type { RepositoryCatalog } from "@rebase/server/domain/repository-catalog.contract";
 import type { RepositoryFreshnessService } from "@rebase/server/domain/repository-freshness.contract";
+import { acquireRepositoryFreshnessSession } from "@rebase/server/features/environment-connection/websocket/repository-freshness-session";
 import { acquireRepositoryFreshnessService } from "@rebase/server/features/repository-history/freshness/repository-freshness";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -15,6 +18,107 @@ const linkedId = "00000000-0000-4000-8000-000000000002";
 afterEach(() => vi.useRealTimers());
 
 describe("repository freshness", () => {
+  it("interrupts automatic fetch when the last writer leaves a read-only observer", async () => {
+    const aborted = vi.fn();
+    const fetch = vi.fn(() =>
+      Effect.callback<ReturnType<typeof output>>(() => Effect.sync(aborted)),
+    );
+    await withService({ fetch }, async (service, watch) => {
+      await Effect.runPromise(service.subscribe(repositoryId, () => {}));
+      const closeWriter = await Effect.runPromise(
+        service.subscribe(linkedId, () => {}, { automaticFetch: true }),
+      );
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+      closeWriter();
+      await vi.waitFor(() => expect(aborted).toHaveBeenCalledOnce());
+      expect(watch.close).not.toHaveBeenCalled();
+    });
+  });
+
+  it("preserves a shared fetch while an explicit caller still owns it", async () => {
+    const aborted = vi.fn();
+    let finish: (() => void) | undefined;
+    const fetch = vi.fn(() =>
+      Effect.callback<ReturnType<typeof output>>((resume) => {
+        finish = () => resume(Effect.succeed(output()));
+        return Effect.sync(aborted);
+      }),
+    );
+    await withService({ fetch }, async (service) => {
+      await Effect.runPromise(service.subscribe(repositoryId, () => {}));
+      const manual = Effect.runPromise(service.fetch(repositoryId));
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+      const closeWriter = await Effect.runPromise(
+        service.subscribe(linkedId, () => {}, { automaticFetch: true }),
+      );
+      closeWriter();
+      expect(aborted).not.toHaveBeenCalled();
+      finish?.();
+      expect(await manual).toMatchObject({ stale: false, fetching: false });
+    });
+  });
+
+  it("keeps read-only sessions observing while automatic fetch belongs to subscribed writers", async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(() => Effect.succeed(output()));
+    const messages: EnvironmentServerMessage[] = [];
+    await withService({ fetch }, async (service, watch) => {
+      await withSession(
+        service,
+        ["repository.read"],
+        messages,
+        async (reader) => {
+          await Effect.runPromise(
+            reader({
+              _tag: "SubscribeRepositoryHistory",
+              repositoryId,
+              requestId: repositoryId,
+            }),
+          );
+          await vi.advanceTimersByTimeAsync(300_000);
+          expect(fetch).not.toHaveBeenCalled();
+          watch.change();
+          await vi.advanceTimersByTimeAsync(50);
+          expect(messages.at(-1)).toMatchObject({ freshness: { revision: 1 } });
+          await withSession(
+            service,
+            ["repository.read", "repository.write"],
+            [],
+            async (writer) => {
+              await Effect.runPromise(
+                writer({
+                  _tag: "SubscribeRepositoryHistory",
+                  repositoryId,
+                  requestId: linkedId,
+                }),
+              );
+              await vi.advanceTimersByTimeAsync(0);
+              expect(fetch).toHaveBeenCalledTimes(1);
+              await Effect.runPromise(
+                writer({
+                  _tag: "FetchRepositoryHistory",
+                  repositoryId,
+                  requestId: linkedId,
+                }),
+              );
+              await vi.advanceTimersByTimeAsync(0);
+              expect(fetch).toHaveBeenCalledTimes(2);
+              await vi.advanceTimersByTimeAsync(300_000);
+              expect(fetch).toHaveBeenCalledTimes(3);
+            },
+          );
+          await vi.advanceTimersByTimeAsync(600_000);
+          expect(fetch).toHaveBeenCalledTimes(3);
+          expect(watch.close).not.toHaveBeenCalled();
+          watch.change();
+          await vi.advanceTimersByTimeAsync(50);
+          expect(messages.at(-1)).toMatchObject({ freshness: { revision: 5 } });
+        },
+      );
+      expect(watch.close).toHaveBeenCalledOnce();
+    });
+  });
+
   it("clears a defective manual fetch so it can be retried with automatic fetch disabled", async () => {
     const fetch = vi
       .fn()
@@ -77,7 +181,9 @@ describe("repository freshness", () => {
     await withService({ fetch }, async (service, watch) => {
       const [closeFirst, closeSecond] = await Promise.all([
         Effect.runPromise(
-          service.subscribe(repositoryId, (state) => states.push(state)),
+          service.subscribe(repositoryId, (state) => states.push(state), {
+            automaticFetch: true,
+          }),
         ),
         Effect.runPromise(service.subscribe(linkedId, () => {})),
       ]);
@@ -103,7 +209,9 @@ describe("repository freshness", () => {
     const states: RepositoryFreshness[] = [];
     await withService({ fetch, setting: "0" }, async (service) => {
       await Effect.runPromise(
-        service.subscribe(repositoryId, (state) => states.push(state)),
+        service.subscribe(repositoryId, (state) => states.push(state), {
+          automaticFetch: true,
+        }),
       );
       expect(fetch).not.toHaveBeenCalled();
       await Effect.runPromise(
@@ -166,7 +274,7 @@ describe("repository freshness", () => {
     );
     await withService({ fetch }, async (service) => {
       const close = await Effect.runPromise(
-        service.subscribe(repositoryId, () => {}),
+        service.subscribe(repositoryId, () => {}, { automaticFetch: true }),
       );
       await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
       close();
@@ -177,6 +285,39 @@ describe("repository freshness", () => {
 
 function output(exitCode = 0, stdout = "") {
   return { exitCode, stdout, stderr: "" };
+}
+
+function withSession(
+  service: RepositoryFreshnessService,
+  access: readonly EnvironmentAccessCapability[],
+  messages: EnvironmentServerMessage[],
+  use: (
+    handle: Effect.Success<
+      ReturnType<typeof acquireRepositoryFreshnessSession>
+    >,
+  ) => Promise<void>,
+) {
+  const jobs: Promise<void>[] = [];
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const handle = yield* acquireRepositoryFreshnessSession(
+        service,
+        {
+          send: (message) =>
+            Effect.sync(() => {
+              messages.push(message);
+            }),
+        },
+        new Map([["repository-history-freshness", 1]]),
+        new Set(access),
+        (effect) => {
+          jobs.push(Effect.runPromise(effect));
+        },
+      );
+      yield* Effect.promise(() => use(handle));
+      yield* Effect.promise(() => Promise.all(jobs));
+    }).pipe(Effect.scoped),
+  );
 }
 
 function withService(

@@ -67,22 +67,26 @@ export function acquireRepositoryFreshnessSession(
       return Effect.sync(() => {
         run(
           freshness
-            .subscribe(message.repositoryId, (state) => {
-              if (
-                !closed &&
-                subscriptions.get(message.repositoryId) === subscription
-              )
-                run(
-                  writer
-                    .send({
-                      _tag: "RepositoryHistoryFreshness",
-                      repositoryId: message.repositoryId,
-                      requestId: message.requestId,
-                      freshness: state,
-                    })
-                    .pipe(Effect.catch(() => Effect.void)),
-                );
-            })
+            .subscribe(
+              message.repositoryId,
+              (state) => {
+                if (
+                  !closed &&
+                  subscriptions.get(message.repositoryId) === subscription
+                )
+                  run(
+                    writer
+                      .send({
+                        _tag: "RepositoryHistoryFreshness",
+                        repositoryId: message.repositoryId,
+                        requestId: message.requestId,
+                        freshness: state,
+                      })
+                      .pipe(Effect.catch(() => Effect.void)),
+                  );
+              },
+              { automaticFetch: access.has("repository.write") },
+            )
             .pipe(
               Effect.tap((release) =>
                 Effect.sync(() => {

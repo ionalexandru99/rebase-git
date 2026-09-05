@@ -9,6 +9,7 @@ export interface RepositoryFreshnessService {
   readonly subscribe: (
     repositoryId: string,
     publish: (freshness: RepositoryFreshness) => void,
+    authorization?: { readonly automaticFetch: boolean },
   ) => Effect.Effect<() => void, RepositoryHistoryError>;
   readonly fetch: (
     repositoryId: string,
