@@ -5,7 +5,7 @@ import {
   historyRefKey,
   resolveHistoryScope,
   toggleHistoryRef,
-} from "#web/features/commit-graph/history-scope";
+} from "#web/features/commit-graph/scope/history-scope";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const commits = Array.from({ length: 9 }, (_, index) =>

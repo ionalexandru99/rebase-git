@@ -23,6 +23,7 @@ const browserProject = (
   extends: "./src/apps/web/vite.config.ts",
   resolve: {
     alias: {
+      "#tests-ui": fileURLToPath(new URL("./tests/ui", import.meta.url)),
       "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
       "#web-ui": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
     },
@@ -53,6 +54,7 @@ const browserProject = (
 export default defineConfig({
   resolve: {
     alias: {
+      "#tests-ui": fileURLToPath(new URL("./tests/ui", import.meta.url)),
       "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
     },
   },

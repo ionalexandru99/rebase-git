@@ -2,7 +2,7 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import {
   appendCommitLanes,
   type CommitLaneCheckpoint,
-} from "#web/features/commit-graph/commit-lanes";
+} from "#web/features/commit-graph/layout/commit-lanes";
 import type {
   CommitGraphPage,
   CommitGraphPageReader,

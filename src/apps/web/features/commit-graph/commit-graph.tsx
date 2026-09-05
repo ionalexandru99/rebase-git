@@ -17,23 +17,18 @@ import {
 import type {
   GraphCommandEnvironment,
   GraphCommandShortcuts,
-  GraphShortcutCommandId,
 } from "#web/features/commit-commands/graph-command.contract";
-import { useGraphCommands } from "#web/features/commit-commands/use-graph-commands";
 import type {
   CommitGraphHandle,
-  CommitGraphViewportHandle,
+  CommitGraphViewportAnchor,
 } from "#web/features/commit-graph/commit-graph.contract";
-import { describeRepositoryHistoryError } from "#web/features/commit-graph/commit-graph-messages";
 import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
+import { describeRepositoryHistoryError } from "#web/features/commit-graph/components/commit-graph-messages";
 import type { HistoryScope } from "#web/features/commit-graph/history-scope.contract";
-import { useCommitGraphPages } from "#web/features/commit-graph/use-commit-graph-pages";
-import { useCommitGraphSelection } from "#web/features/commit-graph/use-commit-graph-selection";
-import {
-  keyboardShortcutAria,
-  keyboardShortcutLabel,
-  matchesKeyboardShortcut,
-} from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
+import { useCommitGraphCommands } from "#web/features/commit-graph/hooks/use-commit-graph-commands";
+import { useCommitGraphPages } from "#web/features/commit-graph/hooks/use-commit-graph-pages";
+import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
+import { useCommitGraphViewport } from "#web/features/commit-graph/hooks/use-commit-graph-viewport";
 import type { RepositoryHistoryCacheDialogProps } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
 import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/use-repository-history-fetch";
 import type {
@@ -46,21 +41,21 @@ import { CommitCommandMenu } from "#web-ui/features/commit-commands/commit-comma
 import {
   CommitGraphCanvas,
   commitGraphGutterWidth,
-} from "#web-ui/features/commit-graph/commit-graph-canvas";
-import { CommitGraphCommitCells } from "#web-ui/features/commit-graph/commit-graph-commit-cells";
-import { CommitGraphMergeControls } from "#web-ui/features/commit-graph/commit-graph-merge-controls";
+} from "#web-ui/features/commit-graph/components/commit-graph-canvas";
+import { CommitGraphCommitCells } from "#web-ui/features/commit-graph/components/commit-graph-commit-cells";
+import { CommitGraphMergeControls } from "#web-ui/features/commit-graph/components/commit-graph-merge-controls";
 import {
   CommitGraphFailure,
   CommitGraphLoading,
   CommitGraphPageRetry,
-} from "#web-ui/features/commit-graph/commit-graph-status";
-import { CommitGraphToolbar } from "#web-ui/features/commit-graph/commit-graph-toolbar";
-import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/commit-graph-virtual-window";
-import { historyLabelTarget } from "#web-ui/features/commit-graph/commit-ref-labels";
-import { HistoryScopeStrip } from "#web-ui/features/commit-graph/history-scope-strip";
+} from "#web-ui/features/commit-graph/components/commit-graph-status";
+import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
+import { CommitGraphToolbarDialogs } from "#web-ui/features/commit-graph/components/commit-graph-toolbar-dialogs";
+import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/components/commit-graph-virtual-window";
+import { HistoryScopeStrip } from "#web-ui/features/commit-graph/components/history-scope-strip";
 import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/repository-history-freshness-status";
+import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/repository-history-search-controls";
 
-const rowHeight = 36;
 const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 
 export function CommitGraph({
@@ -99,16 +94,8 @@ export function CommitGraph({
   >(new Map());
   const [order, setOrder] =
     useState<RepositoryHistoryQuery["order"]>("topological");
-  const previousOrder = useRef(order);
   const selectedOidRef = useRef<string | undefined>(undefined);
-  const pendingViewportAnchor = useRef<ViewportAnchor | undefined>(undefined);
-  const scrollRef = useRef<HTMLTableElement>(null);
-  const viewportRef = useRef<CommitGraphViewportHandle>(null);
   const [pageSize, setPageSize] = useState(12);
-  const committedWindow = useRef<{
-    commits: readonly RepositoryCommit[];
-    start: number;
-  }>({ commits: [], start: 0 });
   const [pendingNavigation, setPendingNavigation] = useState<{
     oid: string;
     offset: number;
@@ -119,24 +106,18 @@ export function CommitGraph({
     roots,
     order,
     expandedMerges,
-    () => {
-      const current = committedWindow.current;
-      let anchor = viewportAnchor(
-        viewportRef.current?.getScrollOffset() ?? 0,
-        current.commits,
-        current.start,
-      );
-      if (
-        previousOrder.current !== order &&
-        selectedOidRef.current !== undefined
-      )
-        anchor = { oid: selectedOidRef.current, offset: 0 };
-      previousOrder.current = order;
-      pendingViewportAnchor.current = anchor;
-      return anchor;
-    },
+    (): CommitGraphViewportAnchor | undefined => viewport.captureAnchor(),
   );
   const { commits, laneRows, refTargets, historySnapshot, loading } = paging;
+  const viewport = useCommitGraphViewport({
+    reader,
+    order,
+    selectedOidRef,
+    commits,
+    startOffset: paging.snapshot.startOffset,
+    loading,
+  });
+  const { scrollRef, viewportRef } = viewport;
   const fetch = useRepositoryHistoryFetch(reader, historySnapshot);
   const visibleCommits = commits;
   const error = paging.snapshot.error;
@@ -147,21 +128,8 @@ export function CommitGraph({
       previousReader.current = reader;
       setExpandedMerges(new Map());
       setPendingNavigation(undefined);
-      pendingViewportAnchor.current = undefined;
-      if (scrollRef.current !== null) scrollRef.current.scrollTop = 0;
     }
   }, [reader]);
-  useLayoutEffect(() => {
-    committedWindow.current = { commits, start: paging.snapshot.startOffset };
-    const anchor = pendingViewportAnchor.current;
-    const element = scrollRef.current;
-    if (anchor === undefined || element === null || loading) return;
-    pendingViewportAnchor.current = undefined;
-    const index = commits.findIndex((commit) => commit.oid === anchor.oid);
-    if (index >= 0)
-      element.scrollTop =
-        (paging.snapshot.startOffset + index) * rowHeight + anchor.offset;
-  }, [commits, paging.snapshot.startOffset, loading]);
   const labelsByOid = useMemo(() => groupRefLabels(refTargets), [refTargets]);
   const gutterWidth = commitGraphGutterWidth(laneRows);
 
@@ -231,7 +199,7 @@ export function CommitGraph({
     navigation.select(pendingNavigation.oid, pendingNavigation.mode);
     viewportRef.current?.scrollToIndex(pendingNavigation.offset);
     setPendingNavigation(undefined);
-  }, [pendingNavigation, visibleOids, navigation.select]);
+  }, [pendingNavigation, visibleOids, navigation.select, viewportRef]);
   const navigateToOid = async (oid: string) => {
     const intent = beginNavigation();
     const target = await paging.engine?.jumpToOid(oid);
@@ -257,102 +225,26 @@ export function CommitGraph({
     ? navigation.selection.activeOid
     : undefined;
 
-  const commands = useGraphCommands({
-    environment:
-      commandEnvironment === undefined
-        ? undefined
-        : {
-            ...commandEnvironment,
-            freshnessReady:
-              historySnapshot.freshness !== undefined &&
-              historySnapshot.freshnessError === undefined,
-            operationState: fetch.fetching
-              ? "fetching"
-              : commandEnvironment.operationState,
-          },
-    selectedOids: navigation.selection.selectedOids,
+  const {
+    commands,
+    binding,
+    fetchAction,
+    handleCommandKeyDown,
+    refCommandContext,
+  } = useCommitGraphCommands({
+    commandEnvironment,
     shortcuts,
-    active: commandsActive,
-    handlers: {
-      readCommit: async (oid) => (await reader?.getCommitSummaries([oid]))?.[0],
-      writeClipboard: (text) => navigator.clipboard.writeText(text),
-      ...(onRemoveHistoryRef === undefined
-        ? {}
-        : { toggleHistoryRef: onRemoveHistoryRef }),
-      actions: {
-        "graph.focus": { execute: () => scrollRef.current?.focus() },
-        "graph.previousInLane": { execute: () => navigation.moveInLane(-1) },
-        "graph.nextInLane": { execute: () => navigation.moveInLane(1) },
-        ...(reader === undefined
-          ? {}
-          : {
-              "graph.search": { execute: () => searchRef.current?.open() },
-              "graph.previousMatch": {
-                execute: () => searchRef.current?.previous(),
-              },
-              "graph.nextMatch": { execute: () => searchRef.current?.next() },
-              "graph.fetch": { execute: fetch.execute },
-            }),
-      },
-    },
+    commandsActive,
+    reader,
+    historySnapshot,
+    fetch,
+    navigation,
+    activeCommitOid,
+    scrollRef,
+    searchRef,
+    roots,
+    onRemoveHistoryRef,
   });
-  const binding = (id: GraphShortcutCommandId) => {
-    if (shortcuts === undefined) return {};
-    const shortcut = keyboardShortcutLabel(
-      shortcuts.bindings[id],
-      shortcuts.platform,
-    );
-    const ariaKeyShortcuts = keyboardShortcutAria(
-      shortcuts.bindings[id],
-      shortcuts.platform,
-    );
-    return {
-      ...(shortcut === "" ? {} : { shortcut }),
-      ...(ariaKeyShortcuts === undefined ? {} : { ariaKeyShortcuts }),
-    };
-  };
-  const fetchContext = commands.context();
-  const fetchCommand =
-    fetchContext === undefined
-      ? undefined
-      : commands.registry
-          .commands(fetchContext)
-          .find(({ id }) => id === "graph.fetch");
-  const fetchAction = {
-    ...binding("graph.fetch"),
-    execute: () => {
-      void commands.execute("graph.fetch", commands.context());
-    },
-    disabled: fetchCommand?.enabled !== true,
-    ...(fetchCommand?.disabledReason === undefined
-      ? {}
-      : { disabledReason: fetchCommand.disabledReason }),
-  };
-  const handleCommandKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (
-      event.defaultPrevented ||
-      !commandsActive ||
-      event.nativeEvent.isComposing
-    )
-      return;
-    const context = commands.context(activeCommitOid);
-    if (context === undefined || shortcuts === undefined) return;
-    const command = commands.registry
-      .commands(context)
-      .find(
-        (candidate) =>
-          candidate.enabled &&
-          candidate.shortcutId !== undefined &&
-          matchesKeyboardShortcut(
-            event,
-            shortcuts.bindings[candidate.shortcutId],
-            shortcuts.platform,
-          ),
-      );
-    if (command === undefined) return;
-    event.preventDefault();
-    void commands.execute(command.id, context);
-  };
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
     if (
@@ -379,17 +271,6 @@ export function CommitGraph({
     navigation.onKeyDown(event);
   };
   const restoreGraphFocus = () => scrollRef.current?.focus();
-  const refCommandContext = (label: RepositoryHistoryRefTarget) => {
-    const target = historyLabelTarget(label);
-    return target === undefined
-      ? undefined
-      : commands.context(undefined, {
-          target,
-          included: (roots ?? []).some(
-            (root) => root.type === label.type && root.name === label.name,
-          ),
-        });
-  };
 
   return (
     <section
@@ -397,22 +278,39 @@ export function CommitGraph({
       onKeyDown={handleCommandKeyDown}
       className="flex h-full min-h-0 flex-col bg-repository"
     >
-      <CommitGraphToolbar
+      <CommitGraphToolbar.Frame>
+        <CommitGraphToolbar.Title repositoryName={repositoryName} />
+        {reader === undefined ? null : (
+          <RepositoryHistorySearchControls
+            ref={searchRef}
+            reader={reader}
+            snapshot={historySnapshot}
+            onNavigate={navigateToOid}
+            offline={commandEnvironment?.connected === false}
+            bindings={{
+              open: binding("graph.search"),
+              next: binding("graph.nextMatch"),
+              previous: binding("graph.previousMatch"),
+            }}
+          />
+        )}
+        <CommitGraphToolbar.Order order={order} onOrderChange={setOrder} />
+        <CommitGraphToolbar.Fetch
+          fetchAction={fetchAction}
+          fetching={fetch.fetching}
+        />
+        <CommitGraphToolbar.Options
+          fetchSettingsAvailable={reader !== undefined}
+          cacheAvailable={
+            reader !== undefined && commandEnvironment !== undefined
+          }
+        />
+      </CommitGraphToolbar.Frame>
+      <CommitGraphToolbarDialogs
         repositoryName={repositoryName}
         reader={reader}
         snapshot={historySnapshot}
-        order={order}
-        onOrderChange={setOrder}
-        searchRef={searchRef}
-        onNavigate={navigateToOid}
         offline={commandEnvironment?.connected === false}
-        searchBindings={{
-          open: binding("graph.search"),
-          next: binding("graph.nextMatch"),
-          previous: binding("graph.previousMatch"),
-        }}
-        fetchAction={fetchAction}
-        fetching={fetch.fetching}
         canConfigure={
           commandEnvironment?.connected === true &&
           commandEnvironment.capabilities.has("repository.write")
@@ -739,24 +637,4 @@ function commitRowId(oid: string) {
 
 function shortOid(oid: string) {
   return oid.slice(0, 8);
-}
-
-function viewportAnchor(
-  scrollTop: number,
-  commits: readonly RepositoryCommit[],
-  startOffset = 0,
-): ViewportAnchor | undefined {
-  if (scrollTop <= 0) {
-    return undefined;
-  }
-  const index = Math.floor(scrollTop / rowHeight);
-  const commit = commits[index - startOffset];
-  return commit === undefined
-    ? undefined
-    : { oid: commit.oid, offset: scrollTop - index * rowHeight };
-}
-
-interface ViewportAnchor {
-  readonly offset: number;
-  readonly oid: string;
 }

@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { useCommitGraphSelection } from "#web/features/commit-graph/use-commit-graph-selection";
+import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,

@@ -3,7 +3,7 @@ import type {
   CommitLaneCheckpoint,
   CommitLaneRow,
   CommitTopology,
-} from "#web/features/commit-graph/commit-lanes";
+} from "#web/features/commit-graph/layout/commit-lanes";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,

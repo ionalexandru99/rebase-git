@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { emptyCommitGraphSelection } from "#web/features/commit-graph/commit-selection.contract";
 import {
   clearGraphSelection,
   moveGraphSelection,
   reconcileGraphSelection,
   selectGraphCommit,
-} from "#web/features/commit-graph/commit-selection";
-import { emptyCommitGraphSelection } from "#web/features/commit-graph/commit-selection.contract";
+} from "#web/features/commit-graph/selection/commit-selection";
 
 const rows = ["a", "b", "c", "d", "e"];
 

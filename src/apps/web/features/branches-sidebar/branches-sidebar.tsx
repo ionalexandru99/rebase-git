@@ -25,7 +25,7 @@ import {
   stepRow,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
-import { historyRefKey } from "#web/features/commit-graph/history-scope";
+import { historyRefKey } from "#web/features/commit-graph/index";
 import { keyboardShortcutAria } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { Button } from "#web-ui/components/ui/button";

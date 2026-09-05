@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import type { GraphCommandContext } from "#web/features/commit-commands/graph-command.contract";
 import { createGraphCommandRegistry } from "#web/features/commit-commands/graph-command-registry";
-import { CommitRefLabels } from "#web-ui/features/commit-graph/commit-ref-labels";
+import { CommitRefLabels } from "#web-ui/features/commit-graph/components/commit-ref-labels";
 
 describe("commit ref menu focus", () => {
   it.each([{ remaining: ["next"] }, { remaining: [] }])(

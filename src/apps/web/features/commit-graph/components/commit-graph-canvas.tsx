@@ -1,6 +1,6 @@
 import type { VirtualItem } from "@tanstack/react-virtual";
 import { type JSX, useLayoutEffect, useRef } from "react";
-import type { CommitLaneRow } from "#web/features/commit-graph/commit-lanes";
+import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
 
 const lanePitch = 14;
 const laneInset = 14;

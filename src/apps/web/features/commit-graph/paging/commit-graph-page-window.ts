@@ -1,4 +1,4 @@
-import { createCommitLaneCheckpoint } from "#web/features/commit-graph/commit-lanes";
+import { createCommitLaneCheckpoint } from "#web/features/commit-graph/layout/commit-lanes";
 import {
   type CommitGraphPageCache,
   estimateGraphPageCache,

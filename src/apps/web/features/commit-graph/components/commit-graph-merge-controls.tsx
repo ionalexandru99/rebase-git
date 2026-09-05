@@ -1,8 +1,8 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import type { VirtualItem } from "@tanstack/react-virtual";
-import type { CommitLaneRow } from "#web/features/commit-graph/commit-lanes";
-import { commitGraphNodePosition } from "#web-ui/features/commit-graph/commit-graph-canvas";
+import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
+import { commitGraphNodePosition } from "#web-ui/features/commit-graph/components/commit-graph-canvas";
 
 export function CommitGraphMergeControls({
   commits,
