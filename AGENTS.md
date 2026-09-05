@@ -43,6 +43,7 @@ A user on WSl should not be required to install the electron app on windows and 
 
 ## General code requirements
 
+- Editing `AGENTS.md` requires Alex's explicit permission. Never add, remove, or change its instructions without that permission.
 - We want the code to be as simple as possible, easy to extend
 - Use workspace package names for cross-package imports. Within a package, use its configured private aliases such as `#server/*`, `#web/*`, `#web-ui/*`, and `#desktop/*` for implementation imports. Do not use relative imports in source or tests, and do not expose implementation wildcards through package `exports` solely to resolve internal modules.
 - Keep cross-module contracts in domain-specific `*.contract.ts` files, separate from their implementations.
@@ -68,15 +69,6 @@ A user on WSl should not be required to install the electron app on windows and 
 - source code will be in root/src, tests will be in root/tests
 
 ### Test strategy
-
-- Before handing off a code change, run `pnpm validate:quality` and the relevant boundary commands on the final tree. Record the tested commit, commands, results, and checks that could not run locally.
-- Use `pnpm validate:integration` for server, Git, SQLite, filesystem, or process changes; `pnpm validate:browser` for browser storage, UI, or protocol changes; and `pnpm validate:desktop` for Electron, preload, or startup changes. `pnpm validate` runs all four groups. Install Playwright Chromium first; on headless Linux use `CI=1 xvfb-run --auto-servernum pnpm validate`. Do not reuse a daily development server or profile.
-- Revalidate affected checks after rebasing or editing tested code. Native platform and release claims require results from those environments. A same-commit rerun that passes does not establish a fix for the original failure.
-- Keep local and CI validation on the same package scripts. Required test projects must fail when no tests match. Preserve the aggregate `Validation` gate when adding, renaming, or removing jobs.
-- Keep test reports under `tests/.artifacts/` and upload them after failures. Release publishing requires successful main-branch Validation for the exact release commit. Packaging validation must never publish or use signing credentials.
-- For packaging changes, run `pnpm validate:release` with `CSC_IDENTITY_AUTO_DISCOVERY=false`, using Xvfb on headless Linux. It builds the current OS/architecture's configured installers and launches the unpacked app. Native CI covers every release target; installer construction and unpacked launch do not prove installation, signing, or notarization.
-- For history/graph performance changes, run the relevant `pnpm test:performance` cases. Process benchmarks need Linux and `HISTORY_PROCESS_CORPUS_PATH`; search benchmarks use `HISTORY_SEARCH_REPOSITORY_PATH`. The Performance workflow pins its Git corpus and retains runner metadata. Record missing-corpus skips as unverified; compare equivalent hardware and corpus revisions.
-- Lint workflow edits with actionlint 1.7.12. Scripts ending in `:prepared` require current build outputs, and `test:release-smoke:built` requires an already packaged application. Required suites must not pass an empty test selection.
 
 - Test behavior at the lowest layer that can prove it. A reviewer can reject an E2E case when a unit, integration, or UI test covers the same risk with less setup.
 - Unit tests cover server and domain behavior in isolation. Typed fakes are allowed; infrastructure implementation details do not belong here.

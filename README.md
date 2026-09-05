@@ -58,9 +58,6 @@ Issues and pull requests are welcome in
 [GitHub Issues](https://github.com/ionalexandru99/rebase-git/issues). `AGENTS.md` documents the
 conventions this repository follows.
 
-Start code changes with `pnpm validate:quality`, then run the boundary checks for
-the changed area as described in `AGENTS.md`.
-
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
