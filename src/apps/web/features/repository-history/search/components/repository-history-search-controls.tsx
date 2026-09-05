@@ -145,11 +145,6 @@ export function RepositoryHistorySearchView({
           onClick={() => setOpened(true)}
           placeholder="Search history"
           ref={input}
-          title={
-            bindings.open?.shortcut === undefined
-              ? "Search history"
-              : `Search history (${bindings.open.shortcut})`
-          }
           type="search"
           value={search.text}
         />
@@ -204,7 +199,6 @@ export function RepositoryHistorySearchView({
                     disabled={!search.canPrevious}
                     onClick={search.previous}
                     size="icon-xs"
-                    title={bindings.previous?.shortcut}
                     variant="ghost"
                   >
                     <IconArrowUp />
@@ -215,7 +209,6 @@ export function RepositoryHistorySearchView({
                     disabled={!search.canNext}
                     onClick={search.next}
                     size="icon-xs"
-                    title={bindings.next?.shortcut}
                     variant="ghost"
                   >
                     <IconArrowDown />
@@ -224,7 +217,6 @@ export function RepositoryHistorySearchView({
                     aria-label="Close history search"
                     onClick={close}
                     size="icon-xs"
-                    title="Escape"
                     variant="ghost"
                   >
                     <IconX />
@@ -248,10 +240,7 @@ export function RepositoryHistorySearchView({
                         <span className="block truncate text-xs">
                           {commit.subject}
                         </span>
-                        <span
-                          className="mt-0.5 block truncate text-[10px] text-muted-foreground"
-                          title={`${commit.author.name} <${commit.author.email}>`}
-                        >
+                        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
                           {commit.author.name} · {commit.author.email}
                         </span>
                       </span>

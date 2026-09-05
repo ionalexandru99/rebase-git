@@ -2,281 +2,68 @@ import type {
   RepositoryHistoryRefTarget,
   RepositoryRefTarget,
 } from "@rebase/contracts";
+import { CopyPill } from "#web/features/clipboard/index";
 import {
-  type ComponentProps,
-  type CSSProperties,
-  type ReactNode,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
-import type {
-  GraphCommandContext,
-  GraphCommandId,
-  GraphCommandRegistry,
-} from "#web/features/commit-commands/graph-command.contract";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "#web-ui/components/ui/dropdown-menu";
+  graphBranchColorIndex,
+  graphLaneColor,
+  graphRefName,
+} from "#web/features/commit-graph/layout/graph-colors";
+import { GitProviderIcon } from "#web-ui/features/commit-graph/components/git-provider-icon";
+import { useGraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";
 
-export function CommitRefLabels(props: ComponentProps<typeof CommitRefMenu>) {
-  return props.labels.length === 0 ? null : <CommitRefMenu {...props} />;
-}
-
-function CommitRefMenu({
+export function CommitRefLabels({
   labels,
-  context,
-  registry,
-  execute,
-  restoreFocus,
-  colors,
 }: {
   readonly labels: readonly RepositoryHistoryRefTarget[];
-  readonly context: (
-    label: RepositoryHistoryRefTarget,
-  ) => GraphCommandContext | undefined;
-  readonly registry: GraphCommandRegistry;
-  readonly execute: (
-    id: GraphCommandId,
-    context: GraphCommandContext,
-  ) => Promise<void>;
-  readonly restoreFocus: () => void;
-  readonly colors?: ReadonlyMap<string, string> | undefined;
 }) {
-  const menuId = useId();
-  const [menu, setMenu] = useState<{
-    readonly anchor: HTMLButtonElement;
-    readonly key: string;
-    readonly focusKey?: "ArrowDown" | "ArrowUp";
-  }>();
-  const menuLifetime = useRef({ open: false, restoreFocus });
-  menuLifetime.current.open = menu !== undefined;
-  menuLifetime.current.restoreFocus = restoreFocus;
-  useEffect(
-    () => () => {
-      if (menuLifetime.current.open) menuLifetime.current.restoreFocus();
-    },
-    [],
-  );
-  const menuLabels =
-    menu?.key === "overflow"
-      ? labels.slice(2)
-      : labels.filter((label) => labelKey(label) === menu?.key);
-  useEffect(() => {
-    if (menu !== undefined && menuLabels.length === 0) {
-      setMenu(undefined);
-      restoreFocus();
-    }
-  }, [menu, menuLabels.length, restoreFocus]);
-  const trigger = (
-    key: string,
-    className: string,
-    name: string,
-    children: ReactNode,
-    title?: string,
-    style?: CSSProperties,
-  ) => (
-    <RefMenuTrigger
-      key={key}
-      className={className}
-      style={style}
-      name={name}
-      title={title}
-      menuId={menu?.key === key ? menuId : undefined}
-      onOpen={(anchor, focusKey) => {
-        if (menu?.anchor === anchor) {
-          setMenu(undefined);
-          restoreFocus();
-        } else
-          setMenu({
-            anchor,
-            key,
-            ...(focusKey === undefined ? {} : { focusKey }),
-          });
-      }}
-    >
-      {children}
-    </RefMenuTrigger>
-  );
+  const local = labels.some((label) => label.type === "branch");
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {labels.slice(0, 2).map((label) => {
-        const target = context(label);
-        const command =
-          target === undefined
-            ? undefined
-            : registry
-                .commands(target)
-                .find(({ id }) => id === "history.toggleRef");
-        const className =
-          "shrink-0 max-w-48 truncate rounded-sm border px-1.5 py-0.5 font-mono text-[10px] leading-none";
-        const color =
-          label.type === "tag"
-            ? "#c6a663"
-            : (colors?.get(label.name) ?? "#719cff");
-        const style = {
-          borderColor: color,
-          color: label.type === "branch" ? "var(--repository)" : color,
-          background: label.type === "branch" ? color : "transparent",
-        };
-        if (command === undefined || target === undefined)
-          return (
-            <span
-              className={className}
-              style={style}
-              title={label.name}
-              key={`${label.type}\0${label.name}`}
-            >
-              {label.name}
-            </span>
-          );
-        return trigger(
-          labelKey(label),
-          className,
-          `Actions for ${label.name}`,
-          label.name,
-          label.name,
-          style,
-        );
-      })}
-      {labels.length <= 2
-        ? null
-        : trigger(
-            "overflow",
-            "shrink-0 rounded-sm border border-border px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground",
-            `${labels.length - 2} more refs`,
-            `+${labels.length - 2}`,
-          )}
-      {menu === undefined || menuLabels.length === 0 ? null : (
-        <DropdownMenu
-          open
-          onOpenChange={(open) => {
-            if (!open) {
-              setMenu(undefined);
-              restoreFocus();
-            }
-          }}
-        >
-          <DropdownMenuContent
-            anchor={menu.anchor}
-            id={menuId}
-            finalFocus={false}
-            aria-label={menu.anchor.getAttribute("aria-label") ?? undefined}
-            onFocus={(event) => {
-              if (
-                event.target === event.currentTarget &&
-                menu.focusKey !== undefined
-              )
-                event.currentTarget.dispatchEvent(
-                  new KeyboardEvent("keydown", {
-                    bubbles: true,
-                    key: menu.focusKey,
-                  }),
-                );
-            }}
-          >
-            {menuLabels.map((label) => {
-              const target = context(label);
-              const command =
-                target === undefined
-                  ? undefined
-                  : registry
-                      .commands(target)
-                      .find(({ id }) => id === "history.toggleRef");
-              return (
-                <DropdownMenuItem
-                  key={`${label.type}\0${label.name}`}
-                  disabled={command === undefined || !command.enabled}
-                  title={command?.disabledReason}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (command !== undefined && target !== undefined)
-                      void execute(command.id, target);
-                  }}
-                >
-                  {menu.key === "overflow" ? (
-                    <>
-                      <span className="font-mono">{label.name}</span>
-                      {command === undefined ? null : (
-                        <span className="ml-auto text-muted-foreground">
-                          {command.label}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    command?.label
-                  )}
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      {labels
+        .filter((label) => !(local && label.type === "remote-branch"))
+        .map((label) => (
+          <CommitRefPill key={`${label.type}\0${label.name}`} label={label} />
+        ))}
     </span>
   );
 }
 
-function RefMenuTrigger({
-  children,
-  className,
-  menuId,
-  name,
-  onOpen,
-  title,
-  style,
+export function CommitRefPill({
+  label,
 }: {
-  readonly children: ReactNode;
-  readonly className: string;
-  readonly menuId: string | undefined;
-  readonly name: string;
-  readonly onOpen: (
-    anchor: HTMLButtonElement,
-    focusKey?: "ArrowDown" | "ArrowUp",
-  ) => void;
-  readonly title: string | undefined;
-  readonly style?: CSSProperties | undefined;
+  readonly label: Pick<RepositoryHistoryRefTarget, "name" | "type">;
 }) {
+  const { colors } = useGraphRefAppearance();
+  const color =
+    label.type === "tag"
+      ? "#D3BE8B"
+      : (colors.get(label.name) ??
+        graphLaneColor(
+          graphBranchColorIndex(graphRefName({ ...label, oid: "" })),
+        ));
+  const local = label.type === "branch";
+  const remote =
+    label.type === "remote-branch"
+      ? label.name.slice(0, label.name.indexOf("/"))
+      : undefined;
   return (
-    <button
-      type="button"
-      aria-controls={menuId}
-      aria-expanded={menuId !== undefined}
-      aria-haspopup="menu"
-      aria-label={name}
-      className={className}
-      style={style}
-      title={title}
-      tabIndex={-1}
-      onClick={(event) => {
-        event.stopPropagation();
-        onOpen(
-          event.currentTarget,
-          event.detail === 0 ? "ArrowDown" : undefined,
-        );
-      }}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onOpen(event.currentTarget);
-      }}
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault();
-          onOpen(event.currentTarget, event.key);
-        }
+    <CopyPill
+      value={label.name}
+      className="rounded-[5px] border px-1.5 py-0.5 font-mono text-[10px] leading-none outline-none focus-visible:ring-1 focus-visible:ring-primary"
+      style={{
+        color: local ? "#0e141c" : color,
+        borderColor: local
+          ? color
+          : `color-mix(in srgb, ${color} 24%, var(--repository))`,
+        background: local
+          ? color
+          : `color-mix(in srgb, ${color} 17%, var(--repository))`,
       }}
     >
-      {children}
-    </button>
+      {remote === undefined ? null : <GitProviderIcon remote={remote} />}
+      {remote === undefined ? label.name : label.name.slice(remote.length + 1)}
+    </CopyPill>
   );
-}
-
-function labelKey(label: RepositoryHistoryRefTarget) {
-  return `${label.type}\0${label.name}`;
 }
 
 export function historyLabelTarget(

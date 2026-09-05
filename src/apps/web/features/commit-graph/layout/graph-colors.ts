@@ -2,14 +2,14 @@ import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
 
 const palette = [
-  "#719cff",
-  "#bb8af0",
-  "#59c9a5",
-  "#e7b65a",
-  "#ee8297",
-  "#63bada",
-  "#de9568",
-  "#a4be71",
+  "#4C9AFF",
+  "#2DD4BF",
+  "#B38AFF",
+  "#FF866E",
+  "#A7D45D",
+  "#38C9E8",
+  "#F079B1",
+  "#E7BD66",
 ] as const;
 
 export function graphLaneColor(

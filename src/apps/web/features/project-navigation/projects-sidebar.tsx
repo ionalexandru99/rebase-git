@@ -10,10 +10,7 @@ import {
 } from "@tabler/icons-react";
 import { type JSX, type RefObject, useEffect, useRef, useState } from "react";
 import type { EnvironmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
-import {
-  keyboardShortcutAria,
-  keyboardShortcutTitle,
-} from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
+import { keyboardShortcutAria } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type {
   ProjectNavigationRepository,
   ProjectNavigationState,
@@ -27,11 +24,6 @@ import {
   CollapsibleTrigger,
 } from "#web-ui/components/ui/collapsible";
 import { Input } from "#web-ui/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "#web-ui/components/ui/tooltip";
 import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 
 export function ProjectsSidebar({
@@ -357,59 +349,35 @@ function CollapsedProjectsSidebar({
 
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger
-          aria-label="Expand Projects sidebar"
-          aria-keyshortcuts={keyboardShortcutAria(
-            toggleSidebarShortcut,
-            platform,
-          )}
-          className="mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
-          onClick={expand}
-          title={keyboardShortcutTitle(
-            "Expand Projects sidebar",
-            toggleSidebarShortcut,
-            platform,
-          )}
-        >
-          <IconLayoutSidebarLeftExpand aria-hidden="true" className="size-5" />
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          {keyboardShortcutTitle(
-            "Expand Projects sidebar",
-            toggleSidebarShortcut,
-            platform,
-          )}
-        </TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger
-          aria-current={
-            navigation.workspaceView === "open-project" ? "page" : undefined
-          }
-          aria-label="Open project"
-          aria-keyshortcuts={keyboardShortcutAria(
-            showOpenProjectShortcut,
-            platform,
-          )}
-          className={`mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
-          onClick={openProject}
-          title={keyboardShortcutTitle(
-            "Open project",
-            showOpenProjectShortcut,
-            platform,
-          )}
-        >
-          <IconFolderPlus aria-hidden="true" className="size-5" />
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          {keyboardShortcutTitle(
-            "Open project",
-            showOpenProjectShortcut,
-            platform,
-          )}
-        </TooltipContent>
-      </Tooltip>
+      <button
+        type="button"
+        aria-label="Expand Projects sidebar"
+        aria-keyshortcuts={keyboardShortcutAria(
+          toggleSidebarShortcut,
+          platform,
+        )}
+        className="mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+        onClick={expand}
+      >
+        <IconLayoutSidebarLeftExpand aria-hidden="true" className="size-5" />
+      </button>
+
+      <button
+        type="button"
+        aria-current={
+          navigation.workspaceView === "open-project" ? "page" : undefined
+        }
+        aria-label="Open project"
+        aria-keyshortcuts={keyboardShortcutAria(
+          showOpenProjectShortcut,
+          platform,
+        )}
+        className={`mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
+        onClick={openProject}
+      >
+        <IconFolderPlus aria-hidden="true" className="size-5" />
+      </button>
+
       <div className="flex min-h-0 flex-1 flex-col items-center gap-1.5 pt-3">
         {navigation.environments.length === 0 ? (
           <span
@@ -427,17 +395,16 @@ function CollapsedProjectsSidebar({
               className="grid justify-items-center gap-1.5"
               key={environment.id}
             >
-              <Tooltip>
-                <TooltipTrigger
-                  aria-expanded={environment.expanded}
-                  aria-label={environmentLabel}
-                  className={`grid size-10 place-items-center rounded-md outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
-                  onClick={() => toggleEnvironment(environment.id)}
-                >
-                  <IconDeviceLaptop aria-hidden="true" className="size-5" />
-                </TooltipTrigger>
-                <TooltipContent side="right">{environmentLabel}</TooltipContent>
-              </Tooltip>
+              <button
+                type="button"
+                aria-expanded={environment.expanded}
+                aria-label={environmentLabel}
+                className={`grid size-10 place-items-center rounded-md outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+                onClick={() => toggleEnvironment(environment.id)}
+              >
+                <IconDeviceLaptop aria-hidden="true" className="size-5" />
+              </button>
+
               {environment.expanded
                 ? filterEnvironmentRepositories(environment, filterQuery).map(
                     (repository) => (
@@ -455,7 +422,6 @@ function CollapsedProjectsSidebar({
                         onClick={() =>
                           selectRepository(environment.id, repository)
                         }
-                        title={`${repository.name} · ${environment.name}`}
                         type="button"
                       >
                         {repositoryInitials(repository.name)}
@@ -484,27 +450,15 @@ function SidebarSettings({
 
   if (collapsed) {
     return (
-      <Tooltip>
-        <TooltipTrigger
-          aria-label="Settings"
-          aria-keyshortcuts={keyboardShortcutAria(
-            openSettingsShortcut,
-            platform,
-          )}
-          className="mx-auto mb-3 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
-          onClick={openSettings}
-          title={keyboardShortcutTitle(
-            "Settings",
-            openSettingsShortcut,
-            platform,
-          )}
-        >
-          <IconSettings aria-hidden="true" className="size-5" />
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          {keyboardShortcutTitle("Settings", openSettingsShortcut, platform)}
-        </TooltipContent>
-      </Tooltip>
+      <button
+        type="button"
+        aria-label="Settings"
+        aria-keyshortcuts={keyboardShortcutAria(openSettingsShortcut, platform)}
+        className="mx-auto mb-3 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+        onClick={openSettings}
+      >
+        <IconSettings aria-hidden="true" className="size-5" />
+      </button>
     );
   }
   return (

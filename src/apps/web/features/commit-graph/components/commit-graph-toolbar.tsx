@@ -12,10 +12,7 @@ function Frame({ children }: { readonly children: ReactNode }) {
 }
 function Title({ repositoryName }: { readonly repositoryName: string }) {
   return (
-    <h1
-      className="mr-auto min-w-0 max-w-48 truncate text-[13px] font-semibold text-foreground"
-      title={repositoryName}
-    >
+    <h1 className="mr-auto min-w-0 max-w-48 truncate text-[13px] font-semibold text-foreground">
       {repositoryName}
     </h1>
   );
@@ -34,12 +31,6 @@ function Fetch({
       disabled={fetchAction.disabled || fetching}
       onClick={fetchAction.execute}
       size="sm"
-      title={
-        fetchAction.disabledReason ??
-        (fetchAction.shortcut === undefined
-          ? "Fetch"
-          : `Fetch (${fetchAction.shortcut})`)
-      }
       variant="ghost"
     >
       <IconArrowDown aria-hidden="true" className="size-3.5" />

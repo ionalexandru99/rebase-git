@@ -9,7 +9,6 @@ import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
 import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
-import { readGitHubRepository } from "#server/features/repository-refs/git/github-repository";
 import {
   forEachRefFormat,
   localBranchFromRecord,
@@ -19,6 +18,7 @@ import {
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
 import { parseWorktreeList } from "#server/features/repository-refs/git/parse-worktree-list";
+import { readRemoteMetadata } from "#server/features/repository-refs/git/read-remote-metadata";
 import {
   gitCommandFailed,
   requireSuccessfulOutput,
@@ -53,15 +53,16 @@ export function readRepositoryRefs(
         ),
         tags: listRefs(git, repository.path, "refs/tags", "-creatordate"),
         worktrees: readWorktrees(git, repository.path),
-        githubRepository: readGitHubRepository(git, repository.path),
+        remoteMetadata: readRemoteMetadata(git, repository.path),
       },
       { concurrency: "unbounded" },
     );
     const worktrees = yield* canonicalizeWorktrees(output.worktrees);
     return fitRepositoryRefs({
-      ...(output.githubRepository === undefined
+      remoteProviders: output.remoteMetadata.remoteProviders,
+      ...(output.remoteMetadata.githubRepository === undefined
         ? {}
-        : { githubRepository: output.githubRepository }),
+        : { githubRepository: output.remoteMetadata.githubRepository }),
       branches: canonicalizeBranchWorktrees(
         output.branches.flatMap(withDefined(localBranchFromRecord)),
         output.worktrees,

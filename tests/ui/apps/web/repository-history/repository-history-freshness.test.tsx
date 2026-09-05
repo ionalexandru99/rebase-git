@@ -96,9 +96,6 @@ describe("repository fetch controls", () => {
     await expect
       .element(fetch)
       .toHaveAttribute("aria-keyshortcuts", "Control+Shift+F");
-    await expect
-      .element(fetch)
-      .toHaveAttribute("title", "Fetch (Ctrl+Shift+F)");
     await fetch.click();
     await expect
       .element(page.getByRole("status"))
@@ -106,8 +103,8 @@ describe("repository fetch controls", () => {
     expect(reader.fetch).toHaveBeenCalledOnce();
     await page.getByRole("button", { name: "Retry fetch" }).click();
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Automatic fetch every 5 minutes");
+      .element(page.getByRole("button", { name: "Retry fetch" }))
+      .not.toBeInTheDocument();
     expect(reader.fetch).toHaveBeenCalledTimes(2);
   });
 

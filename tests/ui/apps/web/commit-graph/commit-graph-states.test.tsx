@@ -183,8 +183,13 @@ describe("commit graph states", () => {
       .element(firstCommit.getByText("main", { exact: true }))
       .toBeVisible();
     await expect
-      .element(firstCommit.getByText("origin/main", { exact: true }))
-      .toBeVisible();
+      .element(
+        firstCommit.getByRole("button", {
+          name: "Copy origin/main",
+          exact: true,
+        }),
+      )
+      .not.toBeInTheDocument();
     await expect.element(screen.getByText("hidden")).not.toBeInTheDocument();
 
     await screen
@@ -193,7 +198,7 @@ describe("commit graph states", () => {
     expect(remove).toHaveBeenCalledWith(selection);
     await screen.getByRole("button", { name: "+ Add ref" }).click();
     expect(add).toHaveBeenCalledOnce();
-    await screen.getByRole("button", { name: "Reset to Automatic" }).click();
+    await screen.getByRole("button", { name: "Reset filters" }).click();
     expect(reset).toHaveBeenCalledOnce();
   });
 

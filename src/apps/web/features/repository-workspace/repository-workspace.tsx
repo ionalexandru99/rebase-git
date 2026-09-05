@@ -219,6 +219,7 @@ function RepositoryWorkspaceContent({
         >
           <CommitGraph
             githubRepository={refs.refs?.githubRepository}
+            remoteProviders={refs.refs?.remoteProviders}
             commandEnvironment={
               environmentId === undefined ||
               logicalRepositoryId === undefined ||

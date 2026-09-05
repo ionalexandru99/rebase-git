@@ -1,6 +1,7 @@
 import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
+  RepositoryRefs,
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import {
@@ -62,6 +63,7 @@ import {
 } from "#web-ui/features/commit-graph/components/commit-graph-status";
 import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
 import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/components/commit-graph-virtual-window";
+import { GraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";
 import { HistoryScopeStrip } from "#web-ui/features/commit-graph/components/history-scope-strip";
 import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
 import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/components/repository-history-search-controls";
@@ -82,6 +84,7 @@ export function CommitGraph({
   scope,
   selections,
   githubRepository,
+  remoteProviders,
 }: {
   readonly ref?: Ref<CommitGraphHandle>;
   readonly commandEnvironment?: GraphCommandEnvironment | undefined;
@@ -95,6 +98,7 @@ export function CommitGraph({
   readonly roots: RepositoryHistoryQuery["roots"] | undefined;
   readonly scope?: HistoryScope;
   readonly selections?: readonly RepositoryRefTarget[];
+  readonly remoteProviders?: RepositoryRefs["remoteProviders"];
   readonly githubRepository?: GitHubRepository | undefined;
 }): JSX.Element {
   const searchRef = useRef<RepositoryHistorySearchActions>(null);
@@ -246,26 +250,21 @@ export function CommitGraph({
     ? navigation.selection.activeOid
     : undefined;
 
-  const {
-    commands,
-    binding,
-    fetchAction,
-    handleCommandKeyDown,
-    refCommandContext,
-  } = useCommitGraphCommands({
-    commandEnvironment,
-    shortcuts,
-    commandsActive,
-    reader,
-    historySnapshot,
-    fetch,
-    navigation,
-    activeCommitOid,
-    scrollRef,
-    searchRef,
-    roots,
-    onRemoveHistoryRef,
-  });
+  const { commands, binding, fetchAction, handleCommandKeyDown } =
+    useCommitGraphCommands({
+      commandEnvironment,
+      shortcuts,
+      commandsActive,
+      reader,
+      historySnapshot,
+      fetch,
+      navigation,
+      activeCommitOid,
+      scrollRef,
+      searchRef,
+      roots,
+      onRemoveHistoryRef,
+    });
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
     if (
@@ -289,9 +288,14 @@ export function CommitGraph({
     }
     handleCommandKeyDown(event);
     if (event.defaultPrevented) return;
+    if (
+      event.target instanceof Element &&
+      event.target.closest("button, input, select, textarea, [role=dialog]") !==
+        null
+    )
+      return;
     navigation.onKeyDown(event);
   };
-  const restoreGraphFocus = () => scrollRef.current?.focus();
 
   return (
     <section
@@ -320,263 +324,261 @@ export function CommitGraph({
           fetching={fetch.fetching}
         />
       </CommitGraphToolbar.Frame>
-      {scope === undefined || selections === undefined ? null : (
-        <HistoryScopeStrip
-          onRemove={onRemoveHistoryRef}
-          onAdd={onAddHistoryRef}
-          onReset={onResetHistoryScope}
-          roots={roots ?? []}
-          scope={scope}
-          selections={selections}
-        />
-      )}
-      <AuthorAvatars repository={githubRepository}>
-        <CommitGraphVirtualWindow
-          ref={viewportRef}
-          scrollRef={scrollRef}
-          commits={commits}
-          snapshot={paging.snapshot}
-          engine={paging.engine}
-          activeOid={activeCommitOid}
-          onPageSize={setPageSize}
-        >
-          {({ viewport, totalHeight, virtualRows }) => (
-            <>
-              <div className="relative min-h-0 flex-1">
-                <CommitCommandMenu
-                  context={commands.context(menuOid)}
-                  registry={commands.registry}
-                  execute={commands.execute}
-                  shortcuts={shortcuts}
-                  tabIndex={0}
-                  restoreFocus={() => scrollRef.current?.focus()}
-                  refs={(labelsByOid.get(menuOid ?? "") ?? []).flatMap(
-                    (label) => {
-                      const context = refCommandContext(label);
-                      return context === undefined ? [] : [context];
-                    },
-                  )}
-                >
-                  <table
-                    aria-activedescendant={
-                      activeCommitOid === undefined
-                        ? undefined
-                        : commitRowId(activeCommitOid)
-                    }
-                    aria-busy={loading}
-                    aria-label="Commit history"
-                    aria-multiselectable="true"
-                    aria-colcount={5}
-                    aria-rowcount={
-                      paging.snapshot.hasOlder
-                        ? -1
-                        : paging.snapshot.knownEndOffset + 1
-                    }
-                    className="absolute inset-0 block h-full w-full overflow-auto focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
-                    onKeyDown={handleKeyDown}
-                    onContextMenuCapture={(event) => {
-                      if (
-                        !(event.target instanceof Element) ||
-                        event.target.closest("tr[aria-rowindex]") === null
-                      ) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }
-                    }}
-                    ref={scrollRef}
-                    role="grid"
-                    style={
-                      {
-                        contain: "layout paint",
-                        "--graph-row-background": "var(--repository)",
-                      } as CSSProperties
-                    }
+      <GraphRefAppearance
+        colors={colors.refs}
+        remoteProviders={remoteProviders}
+      >
+        {scope === undefined || selections === undefined ? null : (
+          <HistoryScopeStrip
+            onRemove={onRemoveHistoryRef}
+            onAdd={onAddHistoryRef}
+            onReset={onResetHistoryScope}
+            roots={roots ?? []}
+            scope={scope}
+            selections={selections}
+          />
+        )}
+        <AuthorAvatars repository={githubRepository}>
+          <CommitGraphVirtualWindow
+            ref={viewportRef}
+            scrollRef={scrollRef}
+            commits={commits}
+            snapshot={paging.snapshot}
+            engine={paging.engine}
+            activeOid={activeCommitOid}
+            onPageSize={setPageSize}
+          >
+            {({ viewport, totalHeight, virtualRows }) => (
+              <>
+                <div className="relative min-h-0 flex-1">
+                  <CommitCommandMenu
+                    context={commands.context(menuOid)}
+                    registry={commands.registry}
+                    execute={commands.execute}
+                    shortcuts={shortcuts}
                     tabIndex={0}
+                    restoreFocus={() => scrollRef.current?.focus()}
                   >
-                    <thead
-                      className="sticky top-0 z-20 block h-7 bg-repository"
-                      style={{ minWidth: gutterWidth + 560 }}
+                    <table
+                      aria-activedescendant={
+                        activeCommitOid === undefined
+                          ? undefined
+                          : commitRowId(activeCommitOid)
+                      }
+                      aria-busy={loading}
+                      aria-label="Commit history"
+                      aria-multiselectable="true"
+                      aria-colcount={5}
+                      aria-rowcount={
+                        paging.snapshot.hasOlder
+                          ? -1
+                          : paging.snapshot.knownEndOffset + 1
+                      }
+                      className="absolute inset-0 block h-full w-full overflow-auto focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
+                      onKeyDown={handleKeyDown}
+                      onContextMenuCapture={(event) => {
+                        if (
+                          !(event.target instanceof Element) ||
+                          event.target.closest("tr[aria-rowindex]") === null
+                        ) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }
+                      }}
+                      ref={scrollRef}
+                      role="grid"
+                      style={
+                        {
+                          contain: "layout paint",
+                          "--graph-row-background": "var(--repository)",
+                        } as CSSProperties
+                      }
+                      tabIndex={0}
                     >
-                      <tr
-                        className="grid h-7 items-center border-border/60 border-b text-left text-[11px] font-normal text-muted-foreground"
+                      <thead
+                        className="sticky top-0 z-20 block h-7 bg-repository"
+                        style={{ minWidth: gutterWidth + 560 }}
+                      >
+                        <tr
+                          className="grid h-7 items-center border-border/60 border-b text-left text-[11px] font-normal text-muted-foreground"
+                          style={{
+                            gridTemplateColumns: `minmax(0, 1fr) ${graphMetadataColumns}`,
+                          }}
+                        >
+                          <th colSpan={2} className="pl-3 font-normal">
+                            Graph / Commit
+                          </th>
+                          <th className="sticky right-[190px] h-full bg-repository pl-3 font-normal leading-7">
+                            Author
+                          </th>
+                          <th className="sticky right-28 h-full bg-repository font-normal leading-7">
+                            SHA
+                          </th>
+                          <th className="sticky right-0 h-full bg-repository font-normal leading-7">
+                            Date
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody
+                        className="relative block"
                         style={{
-                          gridTemplateColumns: `minmax(0, 1fr) ${graphMetadataColumns}`,
+                          height: totalHeight,
+                          minWidth: gutterWidth + 560,
                         }}
                       >
-                        <th colSpan={2} className="pl-3 font-normal">
-                          Graph / Commit
-                        </th>
-                        <th className="sticky right-[190px] h-full bg-repository pl-3 font-normal leading-7">
-                          Author
-                        </th>
-                        <th className="sticky right-28 h-full bg-repository font-normal leading-7">
-                          SHA
-                        </th>
-                        <th className="sticky right-0 h-full bg-repository font-normal leading-7">
-                          Date
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody
-                      className="relative block"
-                      style={{
-                        height: totalHeight,
-                        minWidth: gutterWidth + 560,
-                      }}
-                    >
-                      <CommitGraphCanvas
-                        laneRows={laneRows}
-                        virtualRows={virtualRows}
-                        colors={colors.lanes}
-                        scrollRef={scrollRef}
-                        viewportWidth={viewport.width}
-                      />
-                      {virtualRows.map((virtualRow) => {
-                        const commit = visibleCommits[virtualRow.index];
-                        if (commit === undefined) {
-                          if (
-                            error === undefined ||
-                            virtualRow.index + paging.snapshot.startOffset !==
-                              error.offset
-                          )
-                            return null;
+                        <CommitGraphCanvas
+                          laneRows={laneRows}
+                          virtualRows={virtualRows}
+                          colors={colors.lanes}
+                          scrollRef={scrollRef}
+                          viewportWidth={viewport.width}
+                        />
+                        {virtualRows.map((virtualRow) => {
+                          const commit = visibleCommits[virtualRow.index];
+                          if (commit === undefined) {
+                            if (
+                              error === undefined ||
+                              virtualRow.index + paging.snapshot.startOffset !==
+                                error.offset
+                            )
+                              return null;
+                            return (
+                              <tr
+                                key={`retry-${error.offset}`}
+                                aria-label="History page unavailable"
+                                className="absolute top-0 left-0 block w-full"
+                                style={{
+                                  height: virtualRow.size,
+                                  transform: `translateY(${virtualRow.start}px)`,
+                                }}
+                              >
+                                <td colSpan={5} className="block">
+                                  <CommitGraphPageRetry
+                                    error={error.message}
+                                    retry={() => {
+                                      void paging.engine?.retry();
+                                    }}
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          }
+                          const selected = navigation.selected.has(commit.oid);
+                          const labels =
+                            labelsByOid.get(commit.oid) ?? emptyRefLabels;
+                          const lane = laneRows[virtualRow.index];
+                          const merge = paging.merges.get(commit.oid);
                           return (
                             <tr
-                              key={`retry-${error.offset}`}
-                              aria-label="History page unavailable"
-                              className="absolute top-0 left-0 block w-full"
-                              style={{
-                                height: virtualRow.size,
-                                transform: `translateY(${virtualRow.start}px)`,
+                              key={virtualRow.key}
+                              aria-label={commitAriaLabel(commit, labels)}
+                              aria-rowindex={
+                                paging.snapshot.startOffset +
+                                virtualRow.index +
+                                2
+                              }
+                              aria-expanded={
+                                paging.merges.has(commit.oid)
+                                  ? paging.merges.get(commit.oid) === "expanded"
+                                  : undefined
+                              }
+                              aria-selected={selected}
+                              className={`absolute left-0 grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-xs after:pointer-events-none after:absolute after:inset-0 after:z-[5] data-[active=true]:after:border data-[active=true]:after:border-primary/70 ${
+                                selected
+                                  ? "text-foreground"
+                                  : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_35%,var(--repository))]"
+                              }`}
+                              data-active={
+                                navigation.selection.activeOid === commit.oid
+                                  ? "true"
+                                  : undefined
+                              }
+                              id={commitRowId(commit.oid)}
+                              onClick={(event) => {
+                                navigation.onClick(commit.oid, event);
+                                scrollRef.current?.focus();
                               }}
+                              onContextMenu={() => {
+                                beginNavigation();
+                                setMenuOid(commit.oid);
+                                navigation.select(
+                                  commit.oid,
+                                  selected ? "activate" : "replace",
+                                );
+                              }}
+                              onKeyDown={handleKeyDown}
+                              style={
+                                {
+                                  gridTemplateColumns: `${lane === undefined ? 28 : commitGraphGutterWidth([lane])}px minmax(0, 1fr) ${graphMetadataColumns}`,
+                                  height: virtualRow.size,
+                                  top: virtualRow.start,
+                                  ...(selected
+                                    ? {
+                                        "--graph-row-background":
+                                          "color-mix(in oklab, var(--primary) 12%, var(--repository))",
+                                      }
+                                    : {}),
+                                } as CSSProperties
+                              }
+                              tabIndex={-1}
                             >
-                              <td colSpan={5} className="block">
-                                <CommitGraphPageRetry
-                                  error={error.message}
-                                  retry={() => {
-                                    void paging.engine?.retry();
-                                  }}
-                                />
-                              </td>
+                              <CommitGraphCommitCells
+                                commit={commit}
+                                labels={labels}
+                                graph={
+                                  lane === undefined ||
+                                  merge === undefined ? undefined : (
+                                    <CommitGraphMergeControl
+                                      commit={commit}
+                                      state={merge}
+                                      onToggle={toggleMerge}
+                                      position={commitGraphNodePosition(lane)}
+                                      color={graphLaneColor(
+                                        lane.nodeLaneId,
+                                        colors.lanes,
+                                      )}
+                                    />
+                                  )
+                                }
+                              />
                             </tr>
                           );
-                        }
-                        const selected = navigation.selected.has(commit.oid);
-                        const labels =
-                          labelsByOid.get(commit.oid) ?? emptyRefLabels;
-                        const lane = laneRows[virtualRow.index];
-                        const merge = paging.merges.get(commit.oid);
-                        return (
-                          <tr
-                            key={virtualRow.key}
-                            aria-label={commitAriaLabel(commit, labels)}
-                            aria-rowindex={
-                              paging.snapshot.startOffset + virtualRow.index + 2
-                            }
-                            aria-expanded={
-                              paging.merges.has(commit.oid)
-                                ? paging.merges.get(commit.oid) === "expanded"
-                                : undefined
-                            }
-                            aria-selected={selected}
-                            className={`absolute left-0 grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-xs data-[active=true]:outline data-[active=true]:outline-1 data-[active=true]:outline-primary/70 data-[active=true]:outline-offset-[-2px] ${
-                              selected
-                                ? "text-foreground"
-                                : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_35%,var(--repository))]"
-                            }`}
-                            data-active={
-                              navigation.selection.activeOid === commit.oid
-                                ? "true"
-                                : undefined
-                            }
-                            id={commitRowId(commit.oid)}
-                            onClick={(event) => {
-                              navigation.onClick(commit.oid, event);
-                              scrollRef.current?.focus();
-                            }}
-                            onContextMenu={() => {
-                              beginNavigation();
-                              setMenuOid(commit.oid);
-                              navigation.select(
-                                commit.oid,
-                                selected ? "activate" : "replace",
-                              );
-                            }}
-                            onKeyDown={handleKeyDown}
-                            style={
-                              {
-                                gridTemplateColumns: `${lane === undefined ? 28 : commitGraphGutterWidth([lane])}px minmax(0, 1fr) ${graphMetadataColumns}`,
-                                height: virtualRow.size,
-                                top: virtualRow.start,
-                                ...(selected
-                                  ? {
-                                      "--graph-row-background":
-                                        "color-mix(in oklab, var(--primary) 12%, var(--repository))",
-                                    }
-                                  : {}),
-                              } as CSSProperties
-                            }
-                            tabIndex={-1}
-                          >
-                            <CommitGraphCommitCells
-                              commit={commit}
-                              labels={labels}
-                              context={refCommandContext}
-                              registry={commands.registry}
-                              execute={commands.execute}
-                              restoreFocus={restoreGraphFocus}
-                              colors={colors.refs}
-                              graph={
-                                lane === undefined ||
-                                merge === undefined ? undefined : (
-                                  <CommitGraphMergeControl
-                                    commit={commit}
-                                    state={merge}
-                                    onToggle={toggleMerge}
-                                    position={commitGraphNodePosition(lane)}
-                                    color={graphLaneColor(
-                                      lane.nodeLaneId,
-                                      colors.lanes,
-                                    )}
-                                  />
-                                )
-                              }
-                            />
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </CommitCommandMenu>
-                {loading && commits.length === 0 ? (
-                  <CommitGraphLoading />
-                ) : null}
-                {!loading && error !== undefined && commits.length === 0 ? (
-                  <CommitGraphFailure
-                    error={
-                      historySnapshot.error === undefined
-                        ? error.message
-                        : describeRepositoryHistoryError(historySnapshot.error)
-                    }
-                    retry={loadHistory}
-                  />
-                ) : null}
-                {!loading && error === undefined && commits.length === 0 ? (
-                  <div
-                    aria-label="Empty commit history"
-                    className="absolute inset-0 grid place-items-center text-sm text-muted-foreground"
-                    role="status"
-                  >
-                    {(roots?.length ?? 0) > 0
-                      ? "No cached commits in this history scope."
-                      : "This repository has no commits yet."}
-                  </div>
-                ) : null}
-              </div>
-            </>
-          )}
-        </CommitGraphVirtualWindow>
-      </AuthorAvatars>
+                        })}
+                      </tbody>
+                    </table>
+                  </CommitCommandMenu>
+                  {loading && commits.length === 0 ? (
+                    <CommitGraphLoading />
+                  ) : null}
+                  {!loading && error !== undefined && commits.length === 0 ? (
+                    <CommitGraphFailure
+                      error={
+                        historySnapshot.error === undefined
+                          ? error.message
+                          : describeRepositoryHistoryError(
+                              historySnapshot.error,
+                            )
+                      }
+                      retry={loadHistory}
+                    />
+                  ) : null}
+                  {!loading && error === undefined && commits.length === 0 ? (
+                    <div
+                      aria-label="Empty commit history"
+                      className="absolute inset-0 grid place-items-center text-sm text-muted-foreground"
+                      role="status"
+                    >
+                      {(roots?.length ?? 0) > 0
+                        ? "No cached commits in this history scope."
+                        : "This repository has no commits yet."}
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </CommitGraphVirtualWindow>
+        </AuthorAvatars>
+      </GraphRefAppearance>
       {error !== undefined &&
       commits.length > 0 &&
       error.offset < paging.snapshot.endOffset ? (

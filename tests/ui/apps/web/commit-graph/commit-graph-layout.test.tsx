@@ -124,7 +124,7 @@ describe("commit graph layout", () => {
     expect(row.element().getBoundingClientRect().height).toBe(26);
   });
 
-  it("pins metadata over long messages and uses matching filled and hollow branch pills", async () => {
+  it("pins metadata over long messages and uses matching solid and tinted branch pills", async () => {
     const commits = history(4).map((commit, index) => ({
       ...commit,
       subject: index === 2 ? "Long message ".repeat(50) : commit.subject,
@@ -142,16 +142,16 @@ describe("commit graph layout", () => {
     const screen = await renderGraph(reader);
     const local = screen
       .getByRole("row", { name: /^Commit 0,/ })
-      .getByText("main", { exact: true });
+      .getByRole("button", { name: "Copy main", exact: true });
     const remote = screen
       .getByRole("row", { name: /^Commit 1,/ })
-      .getByText("origin/main", { exact: true });
+      .getByRole("button", { name: "Copy origin/main", exact: true });
     await expect.element(local).toBeVisible();
     await expect.element(remote).toBeVisible();
     const filled = getComputedStyle(local.element());
     const hollow = getComputedStyle(remote.element());
-    expect(filled.backgroundColor).toBe(hollow.borderColor);
-    expect(hollow.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(filled.backgroundColor).toBe(hollow.color);
+    expect(hollow.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
     const author = screen
       .getByRole("row", { name: /^Long message/ })
       .getByRole("gridcell", { name: "Author Alexandru Ion" })

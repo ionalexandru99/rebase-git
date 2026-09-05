@@ -1,67 +1,79 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import type { GraphCommandContext } from "#web/features/commit-commands/graph-command.contract";
-import { createGraphCommandRegistry } from "#web/features/commit-commands/graph-command-registry";
 import { CommitRefLabels } from "#web-ui/features/commit-graph/components/commit-ref-labels";
+import { GraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";
 
-describe("commit ref menu focus", () => {
-  it.each([{ remaining: ["next"] }, { remaining: [] }])(
-    "restores focus when the open ref disappears and remaining labels are $remaining",
-    async ({ remaining }) => {
-      const focusTarget = createRef<HTMLButtonElement>();
-      const registry = createGraphCommandRegistry({
-        readCommit: async () => undefined,
-        writeClipboard: async () => {},
-        toggleHistoryRef: () => {},
-      });
-      const view = (names: readonly string[]) => (
-        <>
-          <button ref={focusTarget} type="button">
-            Commit history
-          </button>
-          <CommitRefLabels
-            labels={names.map((name) => ({
-              name,
-              oid: "0".repeat(40),
-              type: "branch",
-            }))}
-            context={(label): GraphCommandContext => ({
-              environmentId: "environment",
-              logicalRepositoryId: "logical",
-              repositoryId: "registered",
-              connected: true,
-              freshnessReady: true,
-              operationState: "idle",
-              capabilities: new Set(),
-              selectedOids: [],
-              ref: {
-                target: { _tag: "LocalBranch", name: label.name },
-                included: true,
-              },
-            })}
-            registry={registry}
-            execute={async () => {}}
-            restoreFocus={() => focusTarget.current?.focus()}
-          />
-        </>
-      );
-      const screen = await render(view(["main"]));
-      screen
-        .getByRole("button", { name: "Actions for main" })
-        .element()
-        .focus();
-      await userEvent.keyboard("{ArrowDown}");
-      await expect
-        .element(screen.getByRole("menuitem", { name: "Remove from history" }))
-        .toHaveFocus();
-      await screen.rerender(view(remaining));
-      await expect.element(screen.getByRole("menu")).not.toBeInTheDocument();
-      await expect
-        .element(screen.getByRole("button", { name: "Commit history" }))
-        .toHaveFocus();
-    },
-  );
+afterEach(() => vi.restoreAllMocks());
+
+describe("commit reference pills", () => {
+  it("copies the full remote name on keyboard activation and preserves pill width", async () => {
+    const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    const screen = await render(
+      <GraphRefAppearance
+        colors={new Map([["origin/feature/cache", "#2DD4BF"]])}
+        remoteProviders={[{ remote: "origin", provider: "github" }]}
+      >
+        <CommitRefLabels
+          labels={[
+            { name: "origin/feature/cache", oid: "a", type: "remote-branch" },
+          ]}
+        />
+      </GraphRefAppearance>,
+    );
+    const pill = screen.getByRole("button", {
+      name: "Copy origin/feature/cache",
+    });
+    expect(pill.element().textContent).toBe("feature/cache");
+    expect(pill.element().querySelector("svg")).not.toBeNull();
+    const width = pill.element().getBoundingClientRect().width;
+    pill.element().focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() =>
+      expect(copy).toHaveBeenCalledWith("origin/feature/cache"),
+    );
+    await expect
+      .element(screen.getByRole("status"))
+      .toHaveTextContent("Copied origin/feature/cache");
+    expect(pill.element().getBoundingClientRect().width).toBe(width);
+    await expect.element(screen.getByRole("status")).toHaveTextContent("");
+  });
+
+  it("keeps local refs and tags when the remote tip is on the same commit", async () => {
+    const screen = await render(
+      <CommitRefLabels
+        labels={[
+          { name: "main", oid: "a", type: "branch" },
+          { name: "origin/main", oid: "a", type: "remote-branch" },
+          { name: "v1", oid: "a", type: "tag" },
+        ]}
+      />,
+    );
+    await expect
+      .element(screen.getByRole("button", { name: "Copy main", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Copy v1", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("button", { name: "Copy origin/main", exact: true }),
+      )
+      .not.toBeInTheDocument();
+  });
+
+  it("reports a failed clipboard write inside the pill", async () => {
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
+      new Error("Unavailable"),
+    );
+    const screen = await render(
+      <CommitRefLabels
+        labels={[{ name: "feature/cache", oid: "a", type: "branch" }]}
+      />,
+    );
+    await screen.getByRole("button", { name: "Copy feature/cache" }).click();
+    await expect
+      .element(screen.getByRole("status"))
+      .toHaveTextContent("Could not copy feature/cache");
+  });
 });
-
-import { createRef } from "react";

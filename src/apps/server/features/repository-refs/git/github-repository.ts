@@ -1,24 +1,4 @@
 import type { RepositoryRefs } from "@rebase/contracts";
-import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-
-export function readGitHubRepository(git: GitCommandRunner, directory: string) {
-  return git
-    .run({
-      arguments: ["config", "--get-regexp", "^remote\\..*\\.url$"],
-      directory,
-      timeoutMilliseconds: 5_000,
-      maxOutputBytes: 65_536,
-    })
-    .pipe(
-      Effect.map((result) =>
-        result.exitCode === 0
-          ? githubRepositoryFromRemotes(result.stdout)
-          : undefined,
-      ),
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
-}
 
 export function githubRepositoryFromRemotes(
   output: string,
