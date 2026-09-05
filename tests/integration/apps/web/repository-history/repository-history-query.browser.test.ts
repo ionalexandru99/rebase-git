@@ -10,6 +10,7 @@ import {
   withRepositoryHistoryDatabase,
 } from "#web/features/repository-history/repository-history-database";
 import {
+  historyOrderScopeKey,
   locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryHistory,
@@ -316,26 +317,55 @@ describe("local ordered history pages", () => {
     }
   });
 
-  it("does not treat an all-ancestry page as an applied complete first-parent prefix", async () => {
-    const fixture = await seed("main", false);
-    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
-    try {
-      const page = await readRepositoryHistory(
-        fixture.environmentId,
-        fixture.repositoryId,
-        {
-          roots: [root("main", "merge")],
-          order: "chronological",
-          ancestry: "first-parent",
-          limit: 2,
-        },
-      );
-      expect(page?.map(({ subject }) => subject)).toEqual(["merge", "left"]);
-      expect(reads).toHaveBeenCalledTimes(1);
-    } finally {
-      reads.mockRestore();
-    }
-  });
+  it.each([false, true])(
+    "does not trust an unapplied complete first-parent prefix (legacy=%s)",
+    async (legacy) => {
+      const fixture = await seed("main", false);
+      const query = {
+        roots: [root("main", "merge")],
+        order: "chronological" as const,
+        ancestry: "first-parent" as const,
+        limit: 2,
+      };
+      if (legacy)
+        await withRepositoryHistoryDatabase(indexedDB, async (database) => {
+          const transaction = database.transaction(
+            repositoryStoreName,
+            "readwrite",
+          );
+          const completed = transactionCompleted(transaction);
+          const store = transaction.objectStore(repositoryStoreName);
+          const repository = await requestResult<StoredRepository>(
+            store.get(
+              repositoryKey(fixture.environmentId, fixture.repositoryId),
+            ),
+          );
+          if (repository.cachedPage === undefined)
+            throw new Error("Cached page is missing");
+          const { offset: _offset, ...cachedPage } = repository.cachedPage;
+          store.put({
+            ...repository,
+            cachedPage: {
+              ...cachedPage,
+              scopeKey: historyOrderScopeKey(query),
+            },
+          });
+          await completed;
+        });
+      const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+      try {
+        const page = await readRepositoryHistory(
+          fixture.environmentId,
+          fixture.repositoryId,
+          query,
+        );
+        expect(page?.map(({ subject }) => subject)).toEqual(["merge", "left"]);
+        expect(reads).toHaveBeenCalledTimes(1);
+      } finally {
+        reads.mockRestore();
+      }
+    },
+  );
 
   it("does not publish a cold query after its stored generation changes", async () => {
     const fixture = await seed("main", false);
