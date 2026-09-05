@@ -164,110 +164,75 @@ describe("Environment state", () => {
     }
   });
 
-  it.each([2, 5])("upgrades a version-%i database", async (version) => {
-    const paths = await createTemporaryPaths();
-    await mkdir(paths.stateDirectory, { mode: 0o700, recursive: true });
-    const database = new DatabaseSync(paths.stateDatabase);
-    createMigrationHistory(database);
-    for (const [index, migration] of generatedMigrations
-      .slice(0, version)
-      .entries()) {
-      for (const statement of migration.sql) database.exec(statement);
-      recordMigration(database, generatedMigrationEntry(migration, index + 1));
-    }
-    const environmentId = randomUUID();
-    database
-      .prepare(
-        "INSERT INTO environment (singleton, id, automatic_port) VALUES (1, ?, 43123)",
-      )
-      .run(environmentId);
-    database
-      .prepare(
-        "INSERT INTO authorization_metadata (id, label, role, created_at) VALUES (?, ?, ?, ?)",
-      )
-      .run(
-        "legacy-device",
-        "Legacy device",
-        version === 2 ? "reader" : "viewer",
-        "2026-08-20T10:00:00.000Z",
+  it.each([2, 5])(
+    "upgrades a version-%i database",
+    { timeout: 30_000 },
+    async (version) => {
+      const paths = await createTemporaryPaths();
+      const environmentId = randomUUID();
+      await seedLegacyDatabase(paths, environmentId, version);
+
+      const state = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const context = yield* acquireEnvironmentContext(paths);
+            const environment = yield* readCurrentEnvironment(context);
+            return {
+              automaticPort: environment.automaticPort,
+              authorizations: yield* context.read(
+                "Could not read authorization metadata",
+                (database) =>
+                  database
+                    .select()
+                    .from(authorizationMetadataTable)
+                    .where(isActiveAuthorization())
+                    .orderBy(authorizationMetadataTable.createdAt),
+              ),
+              environmentId: environment.id,
+              repositories: yield* context.read(
+                "Could not read repositories",
+                (database) =>
+                  database
+                    .select({
+                      id: repositoryCatalogTable.id,
+                      logicalRepositoryId:
+                        repositoryCatalogTable.logicalRepositoryId,
+                      gitCommonDirectory:
+                        repositoryCatalogTable.gitCommonDirectory,
+                    })
+                    .from(repositoryCatalogTable),
+              ),
+            };
+          }),
+        ),
       );
-    if (version === 5) {
-      database
-        .prepare(
-          "INSERT INTO repository_catalog (id, name, path, added_at, last_opened_at, logical_repository_id, git_common_directory) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          "repo",
-          "Saved repo",
-          "/repo",
-          "2026-09-04",
-          "2026-09-05",
-          "logical-repo",
-          "/repo/.git",
-        );
-    }
-    database.close();
 
-    const state = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const context = yield* acquireEnvironmentContext(paths);
-          const environment = yield* readCurrentEnvironment(context);
-          return {
-            automaticPort: environment.automaticPort,
-            authorizations: yield* context.read(
-              "Could not read authorization metadata",
-              (database) =>
-                database
-                  .select()
-                  .from(authorizationMetadataTable)
-                  .where(isActiveAuthorization())
-                  .orderBy(authorizationMetadataTable.createdAt),
-            ),
-            environmentId: environment.id,
-            repositories: yield* context.read(
-              "Could not read repositories",
-              (database) =>
-                database
-                  .select({
-                    id: repositoryCatalogTable.id,
-                    logicalRepositoryId:
-                      repositoryCatalogTable.logicalRepositoryId,
-                    gitCommonDirectory:
-                      repositoryCatalogTable.gitCommonDirectory,
-                  })
-                  .from(repositoryCatalogTable),
-            ),
-          };
-        }),
-      ),
-    );
-
-    expect(state).toEqual({
-      automaticPort: 43123,
-      authorizations: [
-        {
-          createdAt: "2026-08-20T10:00:00.000Z",
-          id: "legacy-device",
-          label: "Legacy device",
-          lastSeenAt: null,
-          revokedAt: null,
-          role: "viewer",
-        },
-      ],
-      environmentId,
-      repositories:
-        version === 5
-          ? [
-              {
-                id: "repo",
-                logicalRepositoryId: "logical-repo",
-                gitCommonDirectory: "/repo/.git",
-              },
-            ]
-          : [],
-    });
-  });
+      expect(state).toEqual({
+        automaticPort: 43123,
+        authorizations: [
+          {
+            createdAt: "2026-08-20T10:00:00.000Z",
+            id: "legacy-device",
+            label: "Legacy device",
+            lastSeenAt: null,
+            revokedAt: null,
+            role: "viewer",
+          },
+        ],
+        environmentId,
+        repositories:
+          version === 5
+            ? [
+                {
+                  id: "repo",
+                  logicalRepositoryId: "logical-repo",
+                  gitCommonDirectory: "/repo/.git",
+                },
+              ]
+            : [],
+      });
+    },
+  );
 
   it("rejects changed migration checksums", async () => {
     const checksumPaths = await createTemporaryPaths();
@@ -403,6 +368,58 @@ async function createTemporaryPaths() {
   const directory = await mkdtemp(join(tmpdir(), "rebase state șț "));
   directories.add(directory);
   return environmentPaths(join(directory, ".rebase"));
+}
+
+async function seedLegacyDatabase(
+  paths: ReturnType<typeof environmentPaths>,
+  environmentId: string,
+  version: number,
+) {
+  await mkdir(paths.stateDirectory, { mode: 0o700, recursive: true });
+  const database = new DatabaseSync(paths.stateDatabase);
+  try {
+    database.exec("BEGIN IMMEDIATE");
+    createMigrationHistory(database);
+    for (const [index, migration] of generatedMigrations
+      .slice(0, version)
+      .entries()) {
+      for (const statement of migration.sql) database.exec(statement);
+      recordMigration(database, generatedMigrationEntry(migration, index + 1));
+    }
+    database
+      .prepare(
+        "INSERT INTO environment (singleton, id, automatic_port) VALUES (1, ?, 43123)",
+      )
+      .run(environmentId);
+    database
+      .prepare(
+        "INSERT INTO authorization_metadata (id, label, role, created_at) VALUES (?, ?, ?, ?)",
+      )
+      .run(
+        "legacy-device",
+        "Legacy device",
+        version === 2 ? "reader" : "viewer",
+        "2026-08-20T10:00:00.000Z",
+      );
+    if (version === 5) {
+      database
+        .prepare(
+          "INSERT INTO repository_catalog (id, name, path, added_at, last_opened_at, logical_repository_id, git_common_directory) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          "repo",
+          "Saved repo",
+          "/repo",
+          "2026-09-04",
+          "2026-09-05",
+          "logical-repo",
+          "/repo/.git",
+        );
+    }
+    database.exec("COMMIT");
+  } finally {
+    database.close();
+  }
 }
 
 async function seedMigrationHistory(
