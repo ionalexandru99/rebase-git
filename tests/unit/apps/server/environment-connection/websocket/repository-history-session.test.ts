@@ -1,6 +1,6 @@
 import type {
-  BinaryLogicalMessage,
   EnvironmentServerMessage,
+  JsonLogicalMessage,
   ReadRepositoryHistory,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
@@ -14,13 +14,13 @@ const repositoryId = "00000000-0000-4000-8000-000000000001";
 const synchronization: SynchronizeRepositoryHistory = {
   _tag: "SynchronizeRepositoryHistory",
   repositoryId,
-  requestId: "sync",
+  requestId: "00000000-0000-4000-8000-000000000011",
   priority: "visible",
 };
 const page: ReadRepositoryHistory = {
   _tag: "ReadRepositoryHistory",
   repositoryId,
-  requestId: "page",
+  requestId: "00000000-0000-4000-8000-000000000012",
   limit: 100,
   order: "topological",
   roots: [{ name: "main", oid: "a".repeat(40), type: "branch" }],
@@ -47,7 +47,7 @@ describe("repository history session", () => {
         yield* session.handle(page);
         yield* session.handle(synchronization);
         yield* Effect.yieldNow;
-        expect(fixture.binary).toHaveLength(1);
+        expect(fixture.json).toHaveLength(1);
         expect(pageReleased).not.toHaveBeenCalled();
         expect(synchronizationReleased).not.toHaveBeenCalled();
       }).pipe(Effect.scoped),
@@ -79,23 +79,26 @@ describe("repository history session", () => {
         yield* Effect.yieldNow;
         yield* session.handle({
           _tag: "CancelRepositoryHistory",
-          requestId: "sync",
+          requestId: "00000000-0000-4000-8000-000000000011",
         });
         yield* Deferred.await(cleanupStarted);
         yield* session.handle({
           _tag: "AcknowledgeRepositoryHistoryBatch",
-          requestId: "sync",
+          requestId: "00000000-0000-4000-8000-000000000011",
           sequence: 0,
         });
         yield* session.handle(synchronization);
         yield* Effect.yieldNow;
         yield* Deferred.succeed(finishCleanup, undefined);
         yield* Effect.yieldNow;
-        yield* session.handle({ ...synchronization, requestId: "other" });
+        yield* session.handle({
+          ...synchronization,
+          requestId: "00000000-0000-4000-8000-000000000013",
+        });
         expect(fixture.messages).toEqual([
           {
             _tag: "RepositoryHistoryFailed",
-            requestId: "other",
+            requestId: "00000000-0000-4000-8000-000000000013",
             failure: {
               _tag: "GitFailed",
               reason: "Failed",
@@ -105,18 +108,18 @@ describe("repository history session", () => {
         ]);
         yield* session.handle({
           _tag: "AcknowledgeRepositoryHistoryBatch",
-          requestId: "sync",
+          requestId: "00000000-0000-4000-8000-000000000011",
           sequence: 0,
         });
         yield* Effect.yieldNow;
         expect(fixture.messages.at(-1)).toEqual({
           _tag: "RepositoryHistorySynchronized",
-          requestId: "sync",
+          requestId: "00000000-0000-4000-8000-000000000011",
           commitCount: 0,
         });
-        expect(
-          fixture.binary.map((message) => message.logicalMessageId),
-        ).toEqual([1, 2]);
+        expect(fixture.json.map((message) => message.logicalMessageId)).toEqual(
+          [1, 2],
+        );
       }).pipe(Effect.scoped),
     );
   });
@@ -130,7 +133,7 @@ describe("repository history session", () => {
         yield* Effect.yieldNow;
         const acknowledgement = {
           _tag: "AcknowledgeRepositoryHistoryBatch",
-          requestId: "sync",
+          requestId: "00000000-0000-4000-8000-000000000011",
           sequence: 0,
         } as const;
         yield* session.handle(acknowledgement);
@@ -139,7 +142,7 @@ describe("repository history session", () => {
         expect(fixture.messages).toEqual([
           {
             _tag: "RepositoryHistorySynchronized",
-            requestId: "sync",
+            requestId: "00000000-0000-4000-8000-000000000011",
             commitCount: 0,
           },
         ]);
@@ -165,7 +168,7 @@ describe("repository history session", () => {
         expect(fixture.messages).toEqual([
           {
             _tag: "RepositoryHistoryFailed",
-            requestId: "sync",
+            requestId: "00000000-0000-4000-8000-000000000011",
             failure: {
               _tag: "GitFailed",
               reason: "Failed",
@@ -173,11 +176,14 @@ describe("repository history session", () => {
             },
           },
         ]);
-        yield* session.handle({ ...synchronization, requestId: "next" });
+        yield* session.handle({
+          ...synchronization,
+          requestId: "00000000-0000-4000-8000-000000000014",
+        });
         yield* Effect.yieldNow;
-        expect(fixture.binary.map((message) => message.requestId)).toEqual([
-          "sync",
-          "next",
+        expect(fixture.json.map((message) => message.requestId)).toEqual([
+          "00000000-0000-4000-8000-000000000011",
+          "00000000-0000-4000-8000-000000000014",
         ]);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
     );
@@ -196,10 +202,10 @@ function batch(requestId: string) {
 
 function createFixture() {
   const messages: EnvironmentServerMessage[] = [];
-  const binary: BinaryLogicalMessage[] = [];
+  const json: JsonLogicalMessage[] = [];
   return {
     messages,
-    binary,
+    json,
     history: {
       read: vi.fn<RepositoryHistoryService["read"]>(() => Effect.never),
       synchronize: vi.fn<RepositoryHistoryService["synchronize"]>(
@@ -211,9 +217,9 @@ function createFixture() {
         Effect.sync(() => {
           messages.push(message);
         }),
-      sendBinary: (message: BinaryLogicalMessage) =>
+      sendJson: (message: JsonLogicalMessage) =>
         Effect.sync(() => {
-          binary.push(message);
+          json.push(message);
         }),
     },
   };

@@ -11,6 +11,7 @@ import {
   ProductVersionSchema,
   ProtocolRange,
 } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
+import { JsonMessageFragment } from "@rebase/contracts/environment-connection/websocket/json-message-fragment.contract";
 import {
   RepositoryFreshnessClientMessage,
   RepositoryHistoryFreshness,
@@ -129,6 +130,7 @@ export const EnvironmentServerMessage = Schema.Union([
   RepositoryHistoryFailed,
   RepositoryHistorySynchronized,
   RepositoryHistoryFreshness,
+  JsonMessageFragment,
 ]);
 
 export type EnvironmentServerMessage = typeof EnvironmentServerMessage.Type;

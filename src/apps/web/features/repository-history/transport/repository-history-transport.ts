@@ -1,9 +1,9 @@
 import {
-  createBinaryMessageReassembler,
+  createJsonMessageReassembler,
+  type JsonMessageFragment,
   RepositoryHistoryClientMessage,
   type RepositoryHistoryFailed,
   type RepositoryHistorySynchronized,
-  readBinaryFragmentRequestId,
   readRepositoryHistoryBatchSequence,
 } from "@rebase/contracts";
 import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
@@ -33,7 +33,7 @@ export function createRepositoryHistoryTransport(
 ): RepositoryHistoryTransportRuntime {
   const requests = new Map<string, PendingRequest>();
   const synchronizationQueue: string[] = [];
-  const reassembler = createBinaryMessageReassembler();
+  const reassembler = createJsonMessageReassembler();
   let activeSynchronization: string | undefined;
   const freshness = createRepositoryFreshnessTransport(
     socket,
@@ -156,10 +156,10 @@ export function createRepositoryHistoryTransport(
 
   return {
     freshness,
-    acceptBinary(frame: Uint8Array) {
+    acceptJson(frame: JsonMessageFragment) {
       return Effect.try({
         try: () => {
-          const requestId = readBinaryFragmentRequestId(frame);
+          const requestId = frame.requestId;
           if (!requests.has(requestId)) {
             reassembler.discard(requestId);
             return undefined;
@@ -293,7 +293,7 @@ function cancelServerRequest(
 
 function cleanRequest(
   requests: Map<string, PendingRequest>,
-  reassembler: ReturnType<typeof createBinaryMessageReassembler>,
+  reassembler: ReturnType<typeof createJsonMessageReassembler>,
   requestId: string,
 ) {
   return Effect.sync(() => {

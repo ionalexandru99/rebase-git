@@ -6,12 +6,14 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import {
-  createBinaryMessageReassembler,
   createCurrentEnvironmentHello,
+  createJsonMessageReassembler,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   environmentLivePath,
+  JsonMessageFragment,
 } from "@rebase/contracts";
+import { Schema } from "effect";
 
 const execute = promisify(execFile);
 const corpusPath = process.env.HISTORY_PROCESS_CORPUS_PATH;
@@ -93,7 +95,6 @@ test("prepared corpus stays within server and Git process budgets", async () => 
   const socket = new WebSocket(
     `${started.origin.replace("http://", "ws://")}${environmentLivePath}?ticket=benchmark`,
   );
-  socket.binaryType = "arraybuffer";
   try {
     await new Promise<void>((resolveOpen, reject) => {
       socket.onopen = () => resolveOpen();
@@ -104,7 +105,7 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     await hello;
     const firstPages: number[] = [];
     for (let iteration = 0; iteration <= 30; iteration += 1) {
-      const pending = binary(socket);
+      const pending = historyMessage(socket);
       const start = performance.now();
       socket.send(
         JSON.stringify({
@@ -120,7 +121,7 @@ test("prepared corpus stays within server and Git process budgets", async () => 
       expect(page.commits).toHaveLength(100);
       if (iteration > 0) firstPages.push(performance.now() - start);
     }
-    const reassembler = createBinaryMessageReassembler();
+    const reassembler = createJsonMessageReassembler();
     let received = 0;
     let batches = 0;
     let wireBytes = 0;
@@ -130,17 +131,18 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     const completed = new Promise<void>((resolveDone, reject) => {
       socket.onmessage = (event) => {
         try {
-          if (typeof event.data === "string") {
-            const response = JSON.parse(event.data);
-            if (response._tag === "RepositoryHistorySynchronized")
-              resolveDone();
-            else if (response._tag.includes("Failed"))
-              reject(new Error(event.data));
+          if (typeof event.data !== "string")
+            throw new Error("Expected JSON text");
+          const response = JSON.parse(event.data);
+          if (response._tag === "RepositoryHistorySynchronized") {
+            resolveDone();
             return;
           }
-          const bytes = new Uint8Array(event.data as ArrayBuffer);
-          wireBytes += bytes.byteLength;
-          const complete = reassembler.accept(bytes);
+          if (response._tag.includes("Failed")) throw new Error(event.data);
+          wireBytes += Buffer.byteLength(event.data);
+          const complete = reassembler.accept(
+            Schema.decodeUnknownSync(JsonMessageFragment)(response),
+          );
           if (complete === undefined) return;
           const batch = decodeRepositoryHistoryBatch(complete.payload);
           if (batch.snapshot !== undefined)
@@ -236,16 +238,23 @@ function message(socket: WebSocket) {
   });
 }
 
-async function binary(socket: WebSocket) {
-  const reassembler = createBinaryMessageReassembler();
-  while (true) {
-    const event = await message(socket);
-    if (typeof event.data === "string") throw new Error(event.data);
-    const complete = reassembler.accept(
-      new Uint8Array(event.data as ArrayBuffer),
-    );
-    if (complete !== undefined) return complete.payload;
-  }
+function historyMessage(socket: WebSocket) {
+  const reassembler = createJsonMessageReassembler();
+  return new Promise<Uint8Array>((resolveMessage, reject) => {
+    socket.onmessage = (event) => {
+      try {
+        if (typeof event.data !== "string")
+          throw new Error("Expected JSON text");
+        const complete = reassembler.accept(
+          Schema.decodeUnknownSync(JsonMessageFragment)(JSON.parse(event.data)),
+        );
+        if (complete !== undefined) resolveMessage(complete.payload);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    socket.onerror = () => reject(new Error("WebSocket failed"));
+  });
 }
 
 function statistics(values: number[]) {

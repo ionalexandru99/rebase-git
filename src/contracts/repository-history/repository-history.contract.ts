@@ -139,43 +139,92 @@ export const RepositoryHistorySynchronized = Schema.TaggedStruct(
 export type RepositoryHistorySynchronized =
   typeof RepositoryHistorySynchronized.Type;
 
-export interface RepositoryCommitIdentity {
-  readonly email: string;
-  readonly name: string;
-  readonly timestampSeconds: number;
-  readonly timezoneOffsetMinutes: number;
-}
+const HistoryString = Schema.String.check(
+  Schema.makeFilter(
+    (value) =>
+      new TextEncoder().encode(value).byteLength <= 1_048_576 ||
+      "String is too large",
+  ),
+);
 
-export interface RepositoryCommit {
-  readonly author: RepositoryCommitIdentity;
-  readonly committer: RepositoryCommitIdentity;
-  readonly oid: string;
-  readonly parents: readonly string[];
-  readonly subject: string;
-}
+export const RepositoryCommitIdentity = Schema.Struct({
+  email: HistoryString,
+  name: HistoryString,
+  timestampSeconds: Schema.Int,
+  timezoneOffsetMinutes: Schema.Int.check(
+    Schema.isBetween({ minimum: -32_768, maximum: 32_767 }),
+  ),
+});
+export type RepositoryCommitIdentity = typeof RepositoryCommitIdentity.Type;
 
-export interface RepositoryHistoryPage {
+export const RepositoryCommit = Schema.Struct({
+  author: RepositoryCommitIdentity,
+  committer: RepositoryCommitIdentity,
+  oid: ObjectId,
+  parents: Schema.Array(ObjectId).check(Schema.isMaxLength(4_096)),
+  subject: HistoryString,
+});
+export type RepositoryCommit = typeof RepositoryCommit.Type;
+
+const ObjectFormat = Schema.Literals(["sha1", "sha256"]);
+
+export const RepositoryHistorySnapshot = Schema.Struct({
+  shallowOids: Schema.optionalKey(SnapshotRootOids),
+  id: SnapshotId,
+  objectFormat: ObjectFormat,
+  refTargets: Schema.Array(RepositoryHistoryRefTarget).check(
+    Schema.isMaxLength(40_512),
+  ),
+  resumable: Schema.Boolean,
+  rootOids: SnapshotRootOids,
+});
+export type RepositoryHistorySnapshot = typeof RepositoryHistorySnapshot.Type;
+
+export const RepositoryHistoryPage = Schema.Struct({
+  commits: Schema.Array(RepositoryCommit).check(Schema.isMaxLength(1_000)),
+  objectFormat: ObjectFormat,
+  refTargets: Schema.Array(RepositoryHistoryRefTarget).check(
+    Schema.isMaxLength(256),
+  ),
+  repositoryId: RepositoryId,
+  requestId: EnvironmentRequestId,
+}).check(Schema.makeFilter(hasMatchingObjectIds));
+export type RepositoryHistoryPage = typeof RepositoryHistoryPage.Type;
+
+export const RepositoryHistoryBatch = Schema.Struct({
+  commits: Schema.Array(RepositoryCommit).check(Schema.isMaxLength(512)),
+  objectFormat: ObjectFormat,
+  repositoryId: RepositoryId,
+  requestId: EnvironmentRequestId,
+  sequence: RepositoryHistorySequence,
+  snapshot: Schema.optionalKey(RepositoryHistorySnapshot),
+}).check(
+  Schema.makeFilter((batch) => {
+    if (!hasMatchingObjectIds(batch)) return false;
+    const snapshot = batch.snapshot;
+    if (snapshot === undefined) return true;
+    const oidLength = batch.objectFormat === "sha1" ? 40 : 64;
+    return (
+      snapshot.objectFormat === batch.objectFormat &&
+      snapshot.refTargets.every((ref) => ref.oid.length === oidLength) &&
+      snapshot.rootOids.every((oid) => oid.length === oidLength) &&
+      (snapshot.shallowOids ?? []).every((oid) => oid.length === oidLength)
+    );
+  }),
+);
+export type RepositoryHistoryBatch = typeof RepositoryHistoryBatch.Type;
+
+function hasMatchingObjectIds(history: {
+  readonly objectFormat: "sha1" | "sha256";
   readonly commits: readonly RepositoryCommit[];
-  readonly objectFormat: "sha1" | "sha256";
-  readonly refTargets: readonly RepositoryHistoryRefTarget[];
-  readonly repositoryId: string;
-  readonly requestId: string;
-}
-
-export interface RepositoryHistoryBatch {
-  readonly commits: readonly RepositoryCommit[];
-  readonly objectFormat: "sha1" | "sha256";
-  readonly repositoryId: string;
-  readonly requestId: string;
-  readonly sequence: number;
-  readonly snapshot?: RepositoryHistorySnapshot;
-}
-
-export interface RepositoryHistorySnapshot {
-  readonly shallowOids?: readonly string[];
-  readonly id: string;
-  readonly objectFormat: "sha1" | "sha256";
-  readonly refTargets: readonly RepositoryHistoryRefTarget[];
-  readonly resumable: boolean;
-  readonly rootOids: readonly string[];
+  readonly refTargets?: readonly RepositoryHistoryRefTarget[];
+}) {
+  const oidLength = history.objectFormat === "sha1" ? 40 : 64;
+  return (
+    history.commits.every(
+      (commit) =>
+        commit.oid.length === oidLength &&
+        commit.parents.every((oid) => oid.length === oidLength),
+    ) && (history.refTargets ?? []).every((ref) => ref.oid.length === oidLength)
+  );
 }

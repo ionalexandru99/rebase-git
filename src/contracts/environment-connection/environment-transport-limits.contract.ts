@@ -39,7 +39,7 @@ export const currentTransportLimits = {
   maxQueuedEventBytes: 262_144,
   maxQueuedEvents: 128,
   maxWebSocketRequestBytes: 4_194_304,
-  maxWebSocketResponseBytes: 16_384,
+  maxWebSocketResponseBytes: 1_048_576,
 } satisfies TransportLimits;
 
 export const currentClientReceiveLimits = {

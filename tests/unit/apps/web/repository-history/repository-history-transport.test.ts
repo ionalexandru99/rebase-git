@@ -1,6 +1,7 @@
 import {
   encodeRepositoryHistoryBatch,
-  fragmentBinaryMessage,
+  fragmentJsonMessage,
+  type JsonMessageFragment,
 } from "@rebase/contracts";
 import { Effect, Fiber } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -77,12 +78,12 @@ describe("repository history transport", () => {
       requestId: request.requestId,
       sequence: 0,
     });
-    const [frame] = fragmentBinaryMessage(
+    const [frame] = fragmentJsonMessage(
       { logicalMessageId: 1, payload, requestId: request.requestId },
       16_384,
     );
     const accepting = Effect.runFork(
-      transport.acceptBinary(frame ?? new Uint8Array()),
+      transport.acceptJson(requireFragment(frame)),
     );
 
     await Promise.resolve();
@@ -208,13 +209,13 @@ describe("repository history transport", () => {
       requestId: request.requestId,
       sequence: 0,
     });
-    const [frame] = fragmentBinaryMessage(
+    const [frame] = fragmentJsonMessage(
       { logicalMessageId: 1, payload, requestId: request.requestId },
       16_384,
     );
 
     await expect(
-      Effect.runPromise(transport.acceptBinary(frame ?? new Uint8Array())),
+      Effect.runPromise(transport.acceptJson(requireFragment(frame))),
     ).rejects.toBeDefined();
     await expect(Effect.runPromise(Fiber.join(first))).rejects.toBeDefined();
     const next = Effect.runFork(
@@ -294,25 +295,25 @@ describe("repository history transport", () => {
     const request = JSON.parse(String(send.mock.calls[0]?.[0])) as {
       readonly requestId: string;
     };
-    const frames = fragmentBinaryMessage(
+    const frames = fragmentJsonMessage(
       {
         logicalMessageId: 1,
         payload: new Uint8Array(100),
         requestId: request.requestId,
       },
-      96,
+      256,
     );
     const first = frames[0];
     expect(first).toBeDefined();
-    await Effect.runPromise(transport.acceptBinary(first ?? new Uint8Array()));
+    await Effect.runPromise(transport.acceptJson(requireFragment(first)));
 
     await Effect.runPromise(Fiber.interrupt(read));
 
     await expect(
-      Effect.runPromise(transport.acceptBinary(first ?? new Uint8Array())),
+      Effect.runPromise(transport.acceptJson(requireFragment(first))),
     ).resolves.toBeUndefined();
     await expect(
-      Effect.runPromise(transport.acceptBinary(first ?? new Uint8Array())),
+      Effect.runPromise(transport.acceptJson(requireFragment(first))),
     ).resolves.toBeUndefined();
     await expect(
       Effect.runPromise(
@@ -325,3 +326,8 @@ describe("repository history transport", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+function requireFragment(fragment: JsonMessageFragment | undefined) {
+  if (fragment === undefined) throw new Error("Missing fragment");
+  return fragment;
+}

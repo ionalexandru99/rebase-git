@@ -81,12 +81,12 @@ export const currentEnvironmentCapabilities = [
   },
   {
     introducedInMinor: 3,
-    name: "binary-fragmentation",
+    name: "json-fragmentation",
     version: 1,
   },
   {
     introducedInMinor: 3,
     name: "repository-history",
-    version: 5,
+    version: 6,
   },
 ] satisfies ReadonlyArray<EnvironmentCapability>;

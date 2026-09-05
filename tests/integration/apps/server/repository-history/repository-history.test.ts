@@ -5,19 +5,20 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
-  createBinaryMessageReassembler,
   createCurrentEnvironmentHello,
+  createJsonMessageReassembler,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   type EnvironmentAccessCapability,
   type EnvironmentHello,
   environmentLivePath,
+  JsonMessageFragment,
   maximumRepositoryHistorySequence,
   type RepositoryCommit,
   type RepositoryHistoryBatch,
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import {
@@ -67,9 +68,9 @@ describe("repository history", { timeout: 30_000 }, () => {
         createCurrentEnvironmentHello("0.0.0"),
       );
       expect(socket.extensions).toContain("permessage-deflate");
-      const first = collectBinaryMessage(
+      const first = collectJsonMessage(
         socket,
-        createBinaryMessageReassembler(),
+        createJsonMessageReassembler(),
         [],
       );
       socket.send(
@@ -83,9 +84,9 @@ describe("repository history", { timeout: 30_000 }, () => {
       await first;
       expect(continuedAfterFirst).not.toHaveBeenCalled();
 
-      const second = collectBinaryMessage(
+      const second = collectJsonMessage(
         socket,
-        createBinaryMessageReassembler(),
+        createJsonMessageReassembler(),
         [],
       );
       socket.send(
@@ -243,9 +244,14 @@ describe("repository history", { timeout: 30_000 }, () => {
     });
   });
 
-  it.each(["sha1", "sha256"] as const)(
-    "delivers the first 100 %s commits through fragmented binary messages",
-    async (objectFormat) => {
+  it.each([
+    { objectFormat: "sha1", smallFrames: false },
+    { objectFormat: "sha256", smallFrames: false },
+    { objectFormat: "sha1", smallFrames: true },
+    { objectFormat: "sha256", smallFrames: true },
+  ] as const)(
+    "delivers the first 100 $objectFormat commits with small frames: $smallFrames",
+    async ({ objectFormat, smallFrames }) => {
       await withHistoryListener(async ({ catalog, origin, root }) => {
         const repositoryPath = join(root, objectFormat);
         await createRepository(repositoryPath, objectFormat, 110);
@@ -253,10 +259,13 @@ describe("repository history", { timeout: 30_000 }, () => {
           catalog.remember(repositoryPath),
         );
         const head = await gitOutput(repositoryPath, "rev-parse", "main");
-        const socket = await openHistorySocket(origin, smallFrameHello());
-        const reassembler = createBinaryMessageReassembler();
-        const fragments: Uint8Array[] = [];
-        const received = collectBinaryMessage(socket, reassembler, fragments);
+        const hello = smallFrames
+          ? smallFrameHello()
+          : createCurrentEnvironmentHello("0.0.0");
+        const socket = await openHistorySocket(origin, hello);
+        const reassembler = createJsonMessageReassembler();
+        const fragments: string[] = [];
+        const received = collectJsonMessage(socket, reassembler, fragments);
         socket.send(
           JSON.stringify({
             _tag: "ReadRepositoryHistory",
@@ -271,7 +280,17 @@ describe("repository history", { timeout: 30_000 }, () => {
         const complete = await received;
         socket.close();
 
-        expect(fragments.length).toBeGreaterThan(1);
+        if (smallFrames) expect(fragments.length).toBeGreaterThan(1);
+        else expect(fragments).toHaveLength(1);
+        for (const frame of fragments) {
+          expect(Buffer.byteLength(frame)).toBeLessThanOrEqual(
+            hello.receiveLimits.maxWebSocketResponseBytes,
+          );
+          expect(JSON.parse(frame)).toHaveProperty(
+            "_tag",
+            "JsonMessageFragment",
+          );
+        }
         const page = decodeRepositoryHistoryPage(complete.payload);
         expect(page.objectFormat).toBe(objectFormat);
         expect(page.commits).toHaveLength(100);
@@ -955,9 +974,9 @@ async function readHistoryPage(
   oid: string,
 ) {
   const socket = await openHistorySocket(origin, smallFrameHello());
-  const received = collectBinaryMessage(
+  const received = collectJsonMessage(
     socket,
-    createBinaryMessageReassembler(),
+    createJsonMessageReassembler(),
     [],
   );
   socket.send(
@@ -978,7 +997,7 @@ async function readHistoryPage(
 async function synchronizeHistory(origin: string, repositoryId: string) {
   const socket = await openHistorySocket(origin, smallFrameHello());
   const synchronizationRequestId = crypto.randomUUID();
-  const reassembler = createBinaryMessageReassembler();
+  const reassembler = createJsonMessageReassembler();
   const commits: RepositoryCommit[] = [];
   const completed = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(
@@ -987,27 +1006,27 @@ async function synchronizeHistory(origin: string, repositoryId: string) {
     );
     socket.addEventListener("message", (event) => {
       void Promise.resolve()
-        .then(async () => {
-          if (typeof event.data === "string") {
-            const message = JSON.parse(event.data) as {
-              readonly _tag: string;
-              readonly requestId?: string;
-            };
-            if (
-              message._tag === "RepositoryHistorySynchronized" &&
-              message.requestId === synchronizationRequestId
-            ) {
-              clearTimeout(timeout);
-              resolve();
-            }
+        .then(() => {
+          expect(typeof event.data).toBe("string");
+          const message = JSON.parse(event.data) as {
+            readonly _tag: string;
+            readonly requestId?: string;
+          };
+          if (
+            message._tag === "RepositoryHistorySynchronized" &&
+            message.requestId === synchronizationRequestId
+          ) {
+            clearTimeout(timeout);
+            resolve();
             return;
           }
-          const fragment = await binaryBytes(event.data);
-          const message = reassembler.accept(fragment);
-          if (message === undefined) {
+          const fragment =
+            Schema.decodeUnknownSync(JsonMessageFragment)(message);
+          const complete = reassembler.accept(fragment);
+          if (complete === undefined) {
             return;
           }
-          const batch = decodeRepositoryHistoryBatch(message.payload);
+          const batch = decodeRepositoryHistoryBatch(complete.payload);
           commits.push(...batch.commits);
           socket.send(
             JSON.stringify({
@@ -1084,33 +1103,34 @@ function nextTextMessage(socket: WebSocket) {
   );
 }
 
-function collectBinaryMessage(
+function collectJsonMessage(
   socket: WebSocket,
-  reassembler: ReturnType<typeof createBinaryMessageReassembler>,
-  fragments: Uint8Array[],
+  reassembler: ReturnType<typeof createJsonMessageReassembler>,
+  fragments: string[],
 ) {
   return new Promise<NonNullable<ReturnType<typeof reassembler.accept>>>(
     (resolveMessage, rejectMessage) => {
       const timeout = setTimeout(() => {
         cleanup();
-        rejectMessage(new Error("Timed out waiting for binary history"));
+        rejectMessage(new Error("Timed out waiting for JSON history"));
       }, 10_000);
       const received = (event: MessageEvent) => {
-        void binaryBytes(event.data).then(
-          (fragment) => {
-            fragments.push(fragment);
-            const complete = reassembler.accept(fragment);
-            if (complete === undefined) {
-              return;
-            }
-            cleanup();
-            resolveMessage(complete);
-          },
-          (error: unknown) => {
-            cleanup();
-            rejectMessage(error);
-          },
-        );
+        try {
+          expect(typeof event.data).toBe("string");
+          fragments.push(event.data);
+          const fragment = Schema.decodeUnknownSync(JsonMessageFragment)(
+            JSON.parse(event.data),
+          );
+          const complete = reassembler.accept(fragment);
+          if (complete === undefined) {
+            return;
+          }
+          cleanup();
+          resolveMessage(complete);
+        } catch (error) {
+          cleanup();
+          rejectMessage(error);
+        }
       };
       const cleanup = () => {
         clearTimeout(timeout);
@@ -1119,19 +1139,6 @@ function collectBinaryMessage(
       socket.addEventListener("message", received);
     },
   );
-}
-
-async function binaryBytes(data: unknown) {
-  if (data instanceof ArrayBuffer) {
-    return new Uint8Array(data);
-  }
-  if (data instanceof Blob) {
-    return new Uint8Array(await data.arrayBuffer());
-  }
-  if (ArrayBuffer.isView(data)) {
-    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  }
-  throw new Error(`Expected binary history, received ${String(data)}`);
 }
 
 function nextMessage<T>(
