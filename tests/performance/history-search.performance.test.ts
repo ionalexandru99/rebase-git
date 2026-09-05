@@ -78,7 +78,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
     const measurements = await page.evaluate(async (fixture) => {
       const { repositoryCommitCount, onlyRepository } = fixture;
       const storePath =
-        "/features/repository-history/repository-history-store.ts";
+        "/features/repository-history/replica/repository-history-store.ts";
       const store: typeof import("#web/features/repository-history/replica/repository-history-store") =
         await import(storePath);
       const searchPath =
