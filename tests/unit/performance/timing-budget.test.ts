@@ -1,5 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertTimingBudget } from "#tests-performance/timing-budget";
+
+beforeEach(() => {
+  vi.stubEnv("PERFORMANCE_RECORD_BASELINE", undefined);
+  vi.stubEnv("PERFORMANCE_BASELINE", undefined);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -7,6 +12,13 @@ afterEach(() => {
 });
 
 describe("performance timing budgets", () => {
+  it("rejects conflicting baseline modes", () => {
+    vi.stubEnv("PERFORMANCE_RECORD_BASELINE", "record.jsonl");
+    vi.stubEnv("PERFORMANCE_BASELINE", "baseline.jsonl");
+    expect(() => assertTimingBudget("reopen", 100, 100)).toThrow(
+      "modes cannot be combined",
+    );
+  });
   it.each([0, 100, 109.999])(
     "accepts %s ms without warning against a 100 ms target",
     (measurement) => {
