@@ -90,7 +90,7 @@ jobs:
         run: |
           package_workspace="$RUNNER_TEMP/rebase npm package"
           mkdir -p "$package_workspace"
-          git archive HEAD | tar -x -C "$package_workspace"
+          git archive HEAD | (cd "$package_workspace" && tar -xf -)
           cd "$package_workspace"
           pnpm install --frozen-lockfile
           pnpm build:package
