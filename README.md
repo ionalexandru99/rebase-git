@@ -38,6 +38,27 @@ npm install --global rebase-git
 rebase serve
 ```
 
+## Run from source
+
+You need Node.js 24, pnpm 11.22.0, and Git 2.34 or newer.
+
+```bash
+git clone https://github.com/ionalexandru99/rebase-git.git
+cd rebase-git
+corepack enable pnpm
+pnpm install
+pnpm build:web
+pnpm dev:server
+```
+
+For the desktop host, run:
+
+```bash
+pnpm dev:electron
+```
+
+Every other command lives in `package.json`.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
