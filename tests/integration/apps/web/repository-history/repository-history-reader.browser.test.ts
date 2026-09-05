@@ -1261,7 +1261,7 @@ describe("browser repository history reader", () => {
             failure === "offline" ? 1 : 2,
           ),
         );
-        await reopened.getRefTargets();
+        await expect(reopened.getRefTargets()).resolves.toEqual([main]);
         expect(reopened.getSnapshot().synchronizedCommitCount).toBe(
           commits.length,
         );
