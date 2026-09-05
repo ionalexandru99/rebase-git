@@ -2,6 +2,7 @@ import {
   commitKey,
   commitStoreName,
   emptyStoredRepository,
+  repositoryCommitRange,
   repositoryKey,
   repositoryStoreName,
   requestResult,
@@ -294,12 +295,4 @@ async function visitHistoryCacheCommits(
     if (lastKey === undefined) return;
     after = lastKey;
   }
-}
-
-function repositoryCommitRange(key: string, after?: string) {
-  return IDBKeyRange.bound(
-    after ?? `${key}\0`,
-    `${key}\0\uffff`,
-    after !== undefined,
-  );
 }
