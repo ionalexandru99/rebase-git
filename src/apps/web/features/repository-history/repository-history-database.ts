@@ -12,11 +12,9 @@ import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-hi
 
 export const commitStoreName = "commits";
 export const repositoryStoreName = "repositories";
-export const repositoryOrderIndexName = "repositoryOrder";
-export const repositorySearchIndexName = "repositorySearch";
 
 const databaseName = "rebase-repository-history";
-const databaseVersion = 4;
+const databaseVersion = 5;
 
 export function withRepositoryHistoryDatabase<T>(
   indexedDB: IDBFactory | undefined,
@@ -149,28 +147,10 @@ function openDatabase(indexedDB: IDBFactory) {
       const commits = database.objectStoreNames.contains(commitStoreName)
         ? request.transaction?.objectStore(commitStoreName)
         : database.createObjectStore(commitStoreName, { keyPath: "key" });
-      if (commits !== undefined && event.oldVersion < 3) {
-        if (commits.indexNames.contains(repositoryOrderIndexName)) {
-          commits.deleteIndex(repositoryOrderIndexName);
-        }
-        commits.createIndex(repositoryOrderIndexName, [
-          "environmentId",
-          "repositoryId",
-          "topologicalEpoch",
-          "topologicalOrder",
-        ]);
-        backfillTopologicalEpoch(commits);
-      }
-      if (
-        commits !== undefined &&
-        !commits.indexNames.contains(repositorySearchIndexName)
-      ) {
-        commits.createIndex(repositorySearchIndexName, [
-          "environmentId",
-          "repositoryId",
-          "commit.committer.timestampSeconds",
-          "commit.oid",
-        ]);
+      if (commits !== undefined) {
+        if (event.oldVersion < 3) backfillTopologicalEpoch(commits);
+        for (const index of ["repositoryOrder", "repositorySearch"])
+          if (commits.indexNames.contains(index)) commits.deleteIndex(index);
       }
       if (!database.objectStoreNames.contains(repositoryStoreName)) {
         database.createObjectStore(repositoryStoreName, { keyPath: "key" });

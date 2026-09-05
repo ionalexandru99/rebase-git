@@ -200,7 +200,7 @@ describe("local ordered history pages", () => {
   it("shares one cold index scan across concurrent readers and retries after a scan failure", async () => {
     const fixture = await seed("main", false);
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
-    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    const reads = vi.spyOn(IDBObjectStore.prototype, "getAll");
     const prepare = () =>
       prepareRepositoryHistoryOrder(
         fixture.environmentId,
@@ -226,7 +226,7 @@ describe("local ordered history pages", () => {
   it("shares the compact index scan across simultaneous cold page queries", async () => {
     const fixture = await seed("main", false);
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
-    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    const reads = vi.spyOn(IDBObjectStore.prototype, "getAll");
     const read = () =>
       readRepositoryHistory(
         fixture.environmentId,
@@ -276,7 +276,7 @@ describe("local ordered history pages", () => {
       query,
     );
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
-    const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+    const reads = vi.spyOn(IDBObjectStore.prototype, "getAll");
     try {
       expect(
         (
@@ -352,7 +352,7 @@ describe("local ordered history pages", () => {
           });
           await completed;
         });
-      const reads = vi.spyOn(IDBIndex.prototype, "getAll");
+      const reads = vi.spyOn(IDBObjectStore.prototype, "getAll");
       try {
         const page = await readRepositoryHistory(
           fixture.environmentId,
@@ -370,10 +370,10 @@ describe("local ordered history pages", () => {
   it("does not publish a cold query after its stored generation changes", async () => {
     const fixture = await seed("main", false);
     const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
-    const getAll = IDBIndex.prototype.getAll;
+    const getAll = IDBObjectStore.prototype.getAll;
     const reads = vi
-      .spyOn(IDBIndex.prototype, "getAll")
-      .mockImplementationOnce(function (this: IDBIndex, ...args) {
+      .spyOn(IDBObjectStore.prototype, "getAll")
+      .mockImplementationOnce(function (this: IDBObjectStore, ...args) {
         cache.revision += 1;
         return Reflect.apply(getAll, this, args);
       });
