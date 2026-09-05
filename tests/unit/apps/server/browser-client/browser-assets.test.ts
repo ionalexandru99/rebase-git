@@ -1,9 +1,9 @@
 import { resolve } from "node:path";
+import { describe, expect, it } from "vite-plus/test";
 import {
   browserAssetPath,
   resolveBrowserAsset,
-} from "@rebase/server/features/browser-client/browser-assets";
-import { describe, expect, it } from "vite-plus/test";
+} from "#server/features/browser-client/browser-assets";
 
 const assetsRoot = resolve("browser-assets");
 

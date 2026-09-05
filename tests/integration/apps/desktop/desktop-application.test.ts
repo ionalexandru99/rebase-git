@@ -1,14 +1,16 @@
 import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   type DesktopApplication,
-  type DesktopApplicationHost,
-  type DesktopWindowOptions,
   startDesktopApplication,
-  startManagedEnvironmentServer,
-} from "@rebase/desktop";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+} from "#desktop/features/desktop-application/desktop-application";
+import type {
+  DesktopApplicationHost,
+  DesktopWindowOptions,
+} from "#desktop/features/desktop-application/desktop-application.contract";
+import { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
 
 const directories = new Set<string>();
 

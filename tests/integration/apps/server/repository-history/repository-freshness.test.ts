@@ -11,25 +11,25 @@ import {
   type RepositoryFreshness,
   type RepositoryFreshnessClientMessage,
 } from "@rebase/contracts";
-import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "@rebase/server/adapters/local-git/local-repository-watcher";
-import { GitCommands } from "@rebase/server/domain/git-command.contract";
+import { Context, Effect, Layer } from "effect";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { GitCommands } from "#server/domain/git-command.contract";
 import {
   type RepositoryCatalog,
   RepositoryCatalogAccess,
-} from "@rebase/server/domain/repository-catalog.contract";
+} from "#server/domain/repository-catalog.contract";
 import {
   type RepositoryFreshnessService,
   RepositoryFreshnessState,
-} from "@rebase/server/domain/repository-freshness.contract";
-import { RepositoryWatching } from "@rebase/server/domain/repository-watcher.contract";
-import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
-import { repositoryFreshnessLayer } from "@rebase/server/features/repository-history/freshness/repository-freshness";
-import { createRepositoryHistoryService } from "@rebase/server/features/repository-history/repository-history";
-import { Context, Effect, Layer } from "effect";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+} from "#server/domain/repository-freshness.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
+import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
 
 const exec = promisify(execFile);
 const directories: string[] = [];

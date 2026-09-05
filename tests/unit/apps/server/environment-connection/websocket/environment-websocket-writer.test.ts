@@ -2,11 +2,11 @@ import {
   createCurrentEnvironmentDiscovery,
   currentTransportLimits,
 } from "@rebase/contracts";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import { createEnvironmentWebSocketWriter } from "@rebase/server/features/environment-connection/websocket/environment-websocket-writer";
 import { Effect, Fiber } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { createEnvironmentWebSocketWriter } from "#server/features/environment-connection/websocket/environment-websocket-writer";
 
 describe("Environment WebSocket writer", () => {
   it("keeps the latest snapshot target while the bounded queue is paused", async () => {

@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { currentTransportLimits } from "@rebase/contracts";
-import { createEnvironmentFilesystem } from "@rebase/server/features/environment-filesystem/environment-filesystem";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
 
 const directories = new Set<string>();
 

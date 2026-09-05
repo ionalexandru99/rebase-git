@@ -3,10 +3,10 @@ import type {
   EnvironmentServerMessage,
   RepositoryFreshnessClientMessage,
 } from "@rebase/contracts";
-import type { RepositoryFreshnessService } from "@rebase/server/domain/repository-freshness.contract";
-import { acquireRepositoryFreshnessSession } from "@rebase/server/features/environment-connection/websocket/repository-freshness-session";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
+import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
+import { acquireRepositoryFreshnessSession } from "#server/features/environment-connection/websocket/repository-freshness-session";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const requestId = "00000000-0000-4000-8000-000000000002";

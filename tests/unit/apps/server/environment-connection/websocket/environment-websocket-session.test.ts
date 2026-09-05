@@ -5,12 +5,12 @@ import {
   EnvironmentHelloResult,
   EnvironmentServerMessage,
 } from "@rebase/contracts";
-import type { EnvironmentTransportState } from "@rebase/server/features/environment-connection/environment-connection.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import { runEnvironmentWebSocketSession } from "@rebase/server/features/environment-connection/websocket/environment-websocket-session";
 import { Effect, Fiber, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vite-plus/test";
+import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { runEnvironmentWebSocketSession } from "#server/features/environment-connection/websocket/environment-websocket-session";
 
 describe("Environment WebSocket session", () => {
   it("rejects a client that misses the hello deadline", async () => {

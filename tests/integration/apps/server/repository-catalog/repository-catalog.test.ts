@@ -10,15 +10,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { EnvironmentStorageError } from "@rebase/server/domain/environment-storage-error.contract";
-import { RepositoryCatalogError } from "@rebase/server/domain/repository-catalog.contract";
-import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
-import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
-import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
-import { repositoryCatalogTable } from "@rebase/server/persistence/environment-state.schema";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
+import { RepositoryCatalogError } from "#server/domain/repository-catalog.contract";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { acquireEnvironmentContext } from "#server/persistence/environment-context";
+import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();

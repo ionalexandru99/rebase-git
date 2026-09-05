@@ -3,23 +3,23 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import {
-  hasNoAutomaticPort,
-  isActiveAuthorization,
-  isCurrentEnvironment,
-} from "@rebase/server/features/environment-server/environment-state.specifications";
-import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
-import type { EnvironmentContext } from "@rebase/server/persistence/environment-context.contract";
-import {
-  authorizationMetadataTable,
-  environmentTable,
-  repositoryCatalogTable,
-} from "@rebase/server/persistence/environment-state.schema";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { and, sql } from "drizzle-orm";
 import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import {
+  hasNoAutomaticPort,
+  isActiveAuthorization,
+  isCurrentEnvironment,
+} from "#server/features/environment-server/environment-state.specifications";
+import { acquireEnvironmentContext } from "#server/persistence/environment-context";
+import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import {
+  authorizationMetadataTable,
+  environmentTable,
+  repositoryCatalogTable,
+} from "#server/persistence/environment-state.schema";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
 const directories = new Set<string>();
 const generatedMigrations = readMigrationFiles({

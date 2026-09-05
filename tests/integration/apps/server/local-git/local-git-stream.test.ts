@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { promisify } from "node:util";
-import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 
 const execute = promisify(execFile);
 

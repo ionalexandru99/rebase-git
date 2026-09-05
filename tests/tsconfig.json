@@ -8,6 +8,8 @@
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "noEmit": true,
     "paths": {
+      "#desktop/*": ["./../src/apps/desktop/*.ts"],
+      "#server/*": ["./../src/apps/server/*.ts"],
       "#tests-performance/*": ["./performance/*.ts"],
       "#tests-ui/*": ["./ui/*.tsx"],
       "#web/*": ["./../src/apps/web/*.ts", "./../src/apps/web/*.tsx"],

@@ -1,8 +1,8 @@
+import { describe, expect, it } from "vitest";
 import {
   historySnapshotIdentity,
   historyTraversalIdentity,
-} from "@rebase/server/features/repository-history/git/history-snapshot-identity";
-import { describe, expect, it } from "vitest";
+} from "#server/features/repository-history/git/history-snapshot-identity";
 
 describe("history snapshot identity", () => {
   const roots = ["a".repeat(40)];

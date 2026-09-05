@@ -1,15 +1,15 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
-import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
-import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
-import { createRepositoryHistoryService } from "@rebase/server/features/repository-history/repository-history";
-import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { Effect } from "effect";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
+import { acquireEnvironmentContext } from "#server/persistence/environment-context";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
 const repositoryPath = process.argv[2];
 if (repositoryPath === undefined)

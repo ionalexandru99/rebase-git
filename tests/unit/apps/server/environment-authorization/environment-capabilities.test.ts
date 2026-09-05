@@ -1,6 +1,6 @@
 import type { EnvironmentAuthorizationRole } from "@rebase/contracts";
-import { capabilitiesForRole } from "@rebase/server/features/environment-authorization/environment-capabilities";
 import { describe, expect, it } from "vite-plus/test";
+import { capabilitiesForRole } from "#server/features/environment-authorization/environment-capabilities";
 
 describe("Environment authorization roles", () => {
   it.each([

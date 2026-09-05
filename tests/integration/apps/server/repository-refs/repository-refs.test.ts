@@ -10,17 +10,17 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "@rebase/server/adapters/local-git/local-repository-watcher";
-import type { GitCommandRunner } from "@rebase/server/domain/git-command.contract";
-import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
-import { createRepositoryCatalog } from "@rebase/server/features/repository-catalog/repository-catalog";
-import { acquireRepositoryChangePublisher } from "@rebase/server/features/repository-refs/repository-change-publisher";
-import { createRepositoryRefsService } from "@rebase/server/features/repository-refs/repository-refs";
-import { acquireEnvironmentContext } from "@rebase/server/persistence/environment-context";
-import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
+import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
+import { acquireEnvironmentContext } from "#server/persistence/environment-context";
+import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
