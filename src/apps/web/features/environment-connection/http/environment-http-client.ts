@@ -2,6 +2,7 @@ import {
   currentClientReceiveLimits,
   EnvironmentAuthorizationHttpApi,
   type EnvironmentAuthorizationHttpFailure,
+  EnvironmentBrowserSession,
   EnvironmentDiscovery,
   EnvironmentHttpApi,
   EnvironmentPairingExchanged,
@@ -16,6 +17,8 @@ import {
   type EnvironmentResponseError,
   environmentResponseError,
 } from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
+import { environmentCredentialRequest } from "#web/features/environment-connection/http/environment-credential-request";
 import { readBoundedEnvironmentResponseBody } from "#web/features/environment-connection/http/environment-http-response-body";
 
 export function fetchEnvironmentDiscovery(
@@ -48,7 +51,7 @@ export function fetchEnvironmentDiscoveryEffect(origin: string) {
 export function fetchEnvironmentSnapshot(
   origin: string,
   discovery: EnvironmentDiscovery,
-  credential: string,
+  credential: EnvironmentCredential,
   signal?: AbortSignal,
 ): Promise<EnvironmentSnapshot> {
   return Effect.runPromise(
@@ -60,7 +63,7 @@ export function fetchEnvironmentSnapshot(
 export function fetchEnvironmentSnapshotEffect(
   origin: string,
   discovery: EnvironmentDiscovery,
-  credential: string,
+  credential: EnvironmentCredential,
   signal?: AbortSignal,
 ) {
   return fetchEnvironmentSnapshotWithinLimitEffect(
@@ -78,7 +81,7 @@ export function fetchEnvironmentSnapshotEffect(
 export function fetchEnvironmentSnapshotWithinLimit(
   origin: string,
   discovery: EnvironmentDiscovery,
-  credential: string,
+  credential: EnvironmentCredential,
   maxResponseBytes: number,
   signal?: AbortSignal,
 ) {
@@ -96,7 +99,7 @@ export function fetchEnvironmentSnapshotWithinLimit(
 export function fetchEnvironmentSnapshotWithinLimitEffect(
   origin: string,
   discovery: EnvironmentDiscovery,
-  credential: string,
+  credential: EnvironmentCredential,
   maxResponseBytes: number,
   signal?: AbortSignal,
 ) {
@@ -106,7 +109,7 @@ export function fetchEnvironmentSnapshotWithinLimitEffect(
       EnvironmentHttpApi.snapshot.method,
       "Snapshot",
       signal,
-      authenticatedHeaders(credential),
+      environmentCredentialRequest(credential),
     );
     const snapshot = yield* decodeResponse(
       response,
@@ -146,8 +149,12 @@ export function exchangeEnvironmentPairingEffect(
       EnvironmentAuthorizationHttpApi.exchangePairing.method,
       "Authorization",
       undefined,
-      { "content-type": "application/json" },
-      JSON.stringify(Schema.encodeSync(ExchangeEnvironmentPairing)(exchange)),
+      {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          Schema.encodeSync(ExchangeEnvironmentPairing)(exchange),
+        ),
+      },
     );
     return yield* decodeResponse(
       response,
@@ -159,9 +166,62 @@ export function exchangeEnvironmentPairingEffect(
   });
 }
 
+export function createEnvironmentBrowserSessionEffect(
+  origin: string,
+  exchange: typeof ExchangeEnvironmentPairing.Type,
+) {
+  const api = EnvironmentAuthorizationHttpApi.createBrowserSession;
+  return fetchResponse(
+    new URL(api.path, normalizeOrigin(origin)),
+    api.method,
+    "Authorization",
+    undefined,
+    {
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        Schema.encodeSync(ExchangeEnvironmentPairing)(exchange),
+      ),
+    },
+  ).pipe(
+    Effect.flatMap((response) =>
+      decodeResponse(
+        response,
+        EnvironmentBrowserSession,
+        api.failure,
+        currentClientReceiveLimits.maxHttpResponseBytes,
+        "Authorization",
+      ),
+    ),
+  );
+}
+
+export function readEnvironmentBrowserSessionEffect(origin: string) {
+  const api = EnvironmentAuthorizationHttpApi.readBrowserSession;
+  return fetchResponse(
+    new URL(api.path, normalizeOrigin(origin)),
+    api.method,
+    "Authorization",
+    undefined,
+    {
+      credentials: "same-origin",
+    },
+  ).pipe(
+    Effect.flatMap((response) =>
+      decodeResponse(
+        response,
+        EnvironmentBrowserSession,
+        api.failure,
+        currentClientReceiveLimits.maxHttpResponseBytes,
+        "Authorization",
+      ),
+    ),
+  );
+}
+
 export function mintEnvironmentWebSocketTicketEffect(
   origin: string,
-  credential: string,
+  credential: EnvironmentCredential,
   signal?: AbortSignal,
 ) {
   return Effect.gen(function* () {
@@ -173,7 +233,7 @@ export function mintEnvironmentWebSocketTicketEffect(
       EnvironmentAuthorizationHttpApi.mintWebSocketTicket.method,
       "Authorization",
       signal,
-      authenticatedHeaders(credential),
+      environmentCredentialRequest(credential),
     );
     return yield* decodeResponse(
       response,
@@ -190,14 +250,13 @@ function fetchResponse(
   method: string,
   responseTag: EnvironmentResponseError["responseTag"],
   externalSignal?: AbortSignal,
-  headers?: Record<string, string>,
-  body?: string,
+  options: Pick<RequestInit, "headers" | "body" | "credentials"> = {},
 ) {
   return Effect.tryPromise({
     try: (effectSignal) =>
       fetch(url, {
-        ...(body === undefined ? {} : { body }),
-        ...(headers === undefined ? {} : { headers }),
+        credentials: "omit",
+        ...options,
         method,
         signal:
           externalSignal === undefined
@@ -206,10 +265,6 @@ function fetchResponse(
       }),
     catch: () => environmentResponseError(responseTag),
   });
-}
-
-function authenticatedHeaders(credential: string) {
-  return { authorization: `Bearer ${credential}` };
 }
 
 function decodeResponse<

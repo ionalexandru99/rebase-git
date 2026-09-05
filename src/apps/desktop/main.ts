@@ -14,6 +14,7 @@ import type {
   DesktopRenderer,
   DesktopWindowOptions,
 } from "#desktop/features/desktop-application/desktop-application.contract";
+import { desktopApplicationIpc } from "#desktop/features/desktop-application/desktop-application-ipc.contract";
 import { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
 import { createElectronRepositoryFilesystem } from "#desktop/features/repository-filesystem/electron-repository-filesystem";
 import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc";
@@ -85,7 +86,6 @@ async function openWindow(options: DesktopWindowOptions) {
     webPreferences: {
       additionalArguments: [
         `--rebase-environment-origin=${options.environmentOrigin}`,
-        `--rebase-pairing-material=${options.pairingMaterial}`,
       ],
       contextIsolation: true,
       nodeIntegration: false,
@@ -96,6 +96,7 @@ async function openWindow(options: DesktopWindowOptions) {
   });
 
   configureEnvironmentWebSocketOrigin(window, options.environmentOrigin);
+  registerEnvironmentCredentialIpc(window, options);
   preventUntrustedNavigation(window, options.renderer);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.once("ready-to-show", () => window.show());
@@ -110,6 +111,26 @@ async function openWindow(options: DesktopWindowOptions) {
     window.destroy();
     throw error;
   }
+}
+
+function registerEnvironmentCredentialIpc(
+  window: BrowserWindow,
+  options: DesktopWindowOptions,
+) {
+  window.webContents.ipc.handle(
+    desktopApplicationIpc.getEnvironmentCredential,
+    (event) => {
+      if (
+        event.senderFrame !== window.webContents.mainFrame ||
+        !isTrustedRendererLocation(options.renderer, event.senderFrame.url)
+      ) {
+        throw new Error(
+          "Environment credentials require the main Rebase window.",
+        );
+      }
+      return options.credential;
+    },
+  );
 }
 
 function preventUntrustedNavigation(

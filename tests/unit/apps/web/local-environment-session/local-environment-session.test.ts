@@ -5,6 +5,7 @@ import {
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
 import {
+  EnvironmentAuthorizationRejected,
   EnvironmentHelloRejected,
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,
@@ -44,7 +45,6 @@ describe("local Environment session", () => {
     const session = createLocalEnvironmentSession({
       filesystemGateway: createFilesystemGateway(),
       gateway: createGateway(connection),
-      pairingMaterial: "123-456",
       repositoryCatalogGateway: createRepositoryCatalogGateway(),
       repositoryRefsGateway: refs,
     });
@@ -69,16 +69,13 @@ describe("local Environment session", () => {
     await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
   });
 
-  it("exchanges the pairing material and opens the initial connection", async () => {
+  it("authorizes before opening the initial connection", async () => {
     const connection = createConnection();
     const gateway = createGateway(connection);
     const repositoryCatalogGateway = createRepositoryCatalogGateway();
-    const pairingSucceeded = vi.fn();
     const session = createLocalEnvironmentSession({
       filesystemGateway: createFilesystemGateway(),
       gateway,
-      pairingMaterial: "123-456",
-      pairingSucceeded,
       repositoryCatalogGateway,
       repositoryRefsGateway: createRepositoryRefsGateway(),
     });
@@ -88,18 +85,53 @@ describe("local Environment session", () => {
 
     expect(session.getSnapshot()).toMatchObject({ accessCapabilities: [] });
 
-    expect(gateway.exchangePairing).toHaveBeenCalledOnce();
+    expect(gateway.authorize).toHaveBeenCalledOnce();
     expect(gateway.connect).toHaveBeenCalledWith(
-      "device-credential",
+      { type: "bearer", value: "device-credential" },
       undefined,
     );
-    expect(pairingSucceeded).toHaveBeenCalledOnce();
-    expect(repositoryCatalogGateway.list).toHaveBeenCalledWith(
-      "device-credential",
-    );
+    expect(repositoryCatalogGateway.list).toHaveBeenCalledWith({
+      type: "bearer",
+      value: "device-credential",
+    });
     session.stop();
     await vi.waitFor(() => expect(connection.close).toHaveBeenCalledOnce());
   });
+
+  it.each(["InvalidGrant", "RevokedGrant"] as const)(
+    "stops when authorization fails with %s",
+    async (failure) => {
+      const gateway = createGateway();
+      gateway.authorize.mockReturnValue(
+        Effect.fail(
+          new EnvironmentAuthorizationRejected({
+            failure: { _tag: failure },
+            status: 401,
+          }),
+        ),
+      );
+      const session = createLocalEnvironmentSession({
+        filesystemGateway: createFilesystemGateway(),
+        gateway,
+        repositoryCatalogGateway: createRepositoryCatalogGateway(),
+        repositoryRefsGateway: createRepositoryRefsGateway(),
+      });
+
+      session.start();
+      try {
+        await expectState(
+          session.getSnapshot,
+          failure === "InvalidGrant"
+            ? "PairingRequired"
+            : "AuthorizationFailed",
+        );
+        expect(gateway.authorize).toHaveBeenCalledOnce();
+        expect(gateway.connect).not.toHaveBeenCalled();
+      } finally {
+        session.stop();
+      }
+    },
+  );
 
   it("owns one reconnect after the active connection closes", async () => {
     const initial = createConnection(7, undefined, [
@@ -116,7 +148,6 @@ describe("local Environment session", () => {
     const session = createLocalEnvironmentSession({
       filesystemGateway: createFilesystemGateway(),
       gateway,
-      pairingMaterial: "123-456",
       repositoryCatalogGateway,
       repositoryRefsGateway: createRepositoryRefsGateway(),
       waitBeforeReconnect,
@@ -142,7 +173,11 @@ describe("local Environment session", () => {
     expect(session.getSnapshot()).toMatchObject({
       accessCapabilities: ["repository.read"],
     });
-    expect(gateway.connect).toHaveBeenNthCalledWith(2, "device-credential", 7);
+    expect(gateway.connect).toHaveBeenNthCalledWith(
+      2,
+      { type: "bearer", value: "device-credential" },
+      7,
+    );
     expect(waitBeforeReconnect).toHaveBeenCalledOnce();
     expect(repositoryCatalogGateway.list).toHaveBeenCalledTimes(2);
     session.stop();
@@ -167,7 +202,6 @@ describe("local Environment session", () => {
     const session = createLocalEnvironmentSession({
       filesystemGateway: createFilesystemGateway(),
       gateway,
-      pairingMaterial: "123-456",
       repositoryCatalogGateway,
       repositoryRefsGateway: createRepositoryRefsGateway(),
       waitBeforeReconnect,
@@ -193,7 +227,6 @@ describe("local Environment session", () => {
     const session = createLocalEnvironmentSession({
       filesystemGateway: createFilesystemGateway(),
       gateway: createGateway(connection),
-      pairingMaterial: "123-456",
       repositoryCatalogGateway: createRepositoryCatalogGateway(),
       repositoryRefsGateway: createRepositoryRefsGateway(),
     });
@@ -231,14 +264,12 @@ function createGateway(...connections: ReturnType<typeof createConnection>[]) {
         Effect.sync(active.close),
       );
     }),
-    exchangePairing: vi.fn<LocalEnvironmentGateway["exchangePairing"]>(() =>
-      Effect.succeed({ credential: "device-credential" }),
+    authorize: vi.fn<LocalEnvironmentGateway["authorize"]>(() =>
+      Effect.succeed({ type: "bearer", value: "device-credential" }),
     ),
   } satisfies LocalEnvironmentGateway & {
     connect: ReturnType<typeof vi.fn<LocalEnvironmentGateway["connect"]>>;
-    exchangePairing: ReturnType<
-      typeof vi.fn<LocalEnvironmentGateway["exchangePairing"]>
-    >;
+    authorize: ReturnType<typeof vi.fn<LocalEnvironmentGateway["authorize"]>>;
   };
 }
 

@@ -27,6 +27,34 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
       "Connected",
     );
 
+    await expect(page).toHaveURL(new URL("/", pairingUrl).href);
+    const cookies = await page
+      .context()
+      .cookies(`${new URL(pairingUrl).origin}/api`);
+    expect(cookies).toContainEqual(
+      expect.objectContaining({
+        httpOnly: true,
+        sameSite: "Strict",
+        path: "/api",
+      }),
+    );
+    await page.reload();
+    await expect(projects.getByRole("status")).toHaveAttribute(
+      "data-connection-state",
+      "Connected",
+    );
+
+    const reopened = await page.context().newPage();
+    try {
+      await reopened.goto(new URL("/", pairingUrl).href);
+      await expect(reopened.getByRole("status")).toHaveAttribute(
+        "data-connection-state",
+        "Connected",
+      );
+    } finally {
+      await reopened.close();
+    }
+
     await page.keyboard.press("Control+o");
     const picker = page.getByRole("dialog", { name: "Choose repository" });
     await picker.getByRole("button", { name: /^rebase-test Folder/ }).click();

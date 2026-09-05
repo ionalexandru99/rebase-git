@@ -4,6 +4,7 @@ import {
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
 } from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
 import type {
   LocalEnvironmentSession,
@@ -28,12 +29,8 @@ export function createLocalEnvironmentSession(
   );
   const repositoryHistory = createRepositoryHistoryGateway();
   const listeners = new Set<() => void>();
-  const pairingMaterial = options.pairingMaterial;
-  let state: LocalEnvironmentSessionState =
-    pairingMaterial === undefined
-      ? { _tag: "PairingRequired" }
-      : { _tag: "Authorizing" };
-  let credential: string | undefined;
+  let credential: EnvironmentCredential | undefined;
+  let state: LocalEnvironmentSessionState = { _tag: "Authorizing" };
   let fiber: Fiber.Fiber<void, never> | undefined;
   let running = false;
 
@@ -47,10 +44,7 @@ export function createLocalEnvironmentSession(
 
   const runSession = Effect.gen(function* () {
     if (credential === undefined) {
-      if (pairingMaterial === undefined) {
-        return;
-      }
-      credential = yield* exchangePairing(options, pairingMaterial, publish);
+      credential = yield* authorizeSession(options, publish);
     }
     repositoryCatalogSession.authorize(credential);
     filesystemSession.authorize(credential);
@@ -66,10 +60,7 @@ export function createLocalEnvironmentSession(
   });
 
   const start = () => {
-    if (
-      running ||
-      (credential === undefined && pairingMaterial === undefined)
-    ) {
+    if (running) {
       return;
     }
 
@@ -111,26 +102,26 @@ export function createLocalEnvironmentSession(
   };
 }
 
-function exchangePairing(
+function authorizeSession(
   options: LocalEnvironmentSessionOptions,
-  pairingMaterial: string,
   publish: PublishState,
-): Effect.Effect<string> {
+): Effect.Effect<EnvironmentCredential> {
   return Effect.gen(function* () {
     let attempt = 0;
     while (true) {
       yield* attempt === 0
         ? publish({ _tag: "Authorizing" })
         : reconnectAfter(options, publish, attempt);
-      const exchanged = yield* Effect.result(
-        options.gateway.exchangePairing(pairingMaterial),
-      );
-      if (Result.isSuccess(exchanged)) {
-        options.pairingSucceeded?.();
-        return exchanged.success.credential;
+      const authorized = yield* Effect.result(options.gateway.authorize());
+      if (Result.isSuccess(authorized)) {
+        return authorized.success;
       }
 
-      const terminal = terminalState(exchanged.failure);
+      const terminal =
+        authorized.failure instanceof EnvironmentAuthorizationRejected &&
+        authorized.failure.failure._tag === "InvalidGrant"
+          ? { _tag: "PairingRequired" as const }
+          : terminalState(authorized.failure);
       if (terminal !== undefined) {
         yield* publish(terminal);
         return yield* Effect.interrupt;
@@ -142,7 +133,7 @@ function exchangePairing(
 
 function maintainConnection(
   options: LocalEnvironmentSessionOptions,
-  credential: string,
+  credential: EnvironmentCredential,
   repositoryCatalog: LocalEnvironmentSession["repositoryCatalog"],
   repositoryRefs: LocalEnvironmentSession["repositoryRefs"],
   repositoryHistory: ReturnType<typeof createRepositoryHistoryGateway>,

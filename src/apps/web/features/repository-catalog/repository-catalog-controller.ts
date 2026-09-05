@@ -1,5 +1,6 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import {
   RepositoryCatalogRejected,
   RepositoryCatalogResponseError,
@@ -16,7 +17,7 @@ export function createRepositoryCatalogController(
   gateway: RepositoryCatalogGateway,
 ) {
   const listeners = new Set<() => void>();
-  let credential: string | undefined;
+  let credential: EnvironmentCredential | undefined;
   let snapshot: RepositoryCatalogControllerSnapshot = {
     repositories: [],
     status: "idle",
@@ -39,7 +40,7 @@ export function createRepositoryCatalogController(
 
   const run = <Value>(
     operation: (
-      authorizedCredential: string,
+      authorizedCredential: EnvironmentCredential,
     ) => Effect.Effect<Value, RepositoryCatalogControllerError>,
     update: (
       repositories: readonly RepositoryCatalogEntry[],
@@ -105,7 +106,7 @@ export function createRepositoryCatalogController(
   };
 
   return {
-    authorize: (nextCredential: string) => {
+    authorize: (nextCredential: EnvironmentCredential) => {
       credential = nextCredential;
     },
     controller,

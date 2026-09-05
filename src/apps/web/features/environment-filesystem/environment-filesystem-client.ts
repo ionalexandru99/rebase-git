@@ -4,6 +4,7 @@ import {
   ListEnvironmentDirectory,
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import { requestEnvironmentJson } from "#web/features/environment-connection/http/environment-http-json";
 import {
   EnvironmentFilesystemRejected,
@@ -12,7 +13,7 @@ import {
 
 export function listEnvironmentDirectoryEffect(
   origin: string,
-  credential: string,
+  credential: EnvironmentCredential,
   path?: string,
 ) {
   return Effect.gen(function* () {

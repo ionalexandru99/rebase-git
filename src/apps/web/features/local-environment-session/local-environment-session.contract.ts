@@ -4,6 +4,7 @@ import type {
   EnvironmentAuthorizationRejected,
   EnvironmentConnectionFailure,
 } from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import type {
   EnvironmentFilesystemController,
@@ -55,17 +56,15 @@ export interface LocalEnvironmentSession {
 
 export interface LocalEnvironmentGateway {
   readonly connect: (
-    credential: string,
+    credential: EnvironmentCredential,
     lastObservedSequence: number | undefined,
   ) => Effect.Effect<
     EnvironmentProtocolConnection,
     EnvironmentConnectionFailure,
     Scope.Scope
   >;
-  readonly exchangePairing: (
-    pairingMaterial: string,
-  ) => Effect.Effect<
-    { readonly credential: string },
+  readonly authorize: () => Effect.Effect<
+    EnvironmentCredential,
     EnvironmentConnectionFailure
   >;
 }
@@ -73,8 +72,6 @@ export interface LocalEnvironmentGateway {
 export interface LocalEnvironmentSessionOptions {
   readonly filesystemGateway: EnvironmentFilesystemGateway;
   readonly gateway: LocalEnvironmentGateway;
-  readonly pairingMaterial: string | undefined;
-  readonly pairingSucceeded?: () => void;
   readonly repositoryCatalogGateway: RepositoryCatalogGateway;
   readonly repositoryRefsGateway: RepositoryRefsGateway;
   readonly waitBeforeReconnect?: (attempt: number) => Effect.Effect<void>;

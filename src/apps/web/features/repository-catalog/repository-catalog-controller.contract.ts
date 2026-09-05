@@ -1,5 +1,6 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import type { RepositoryCatalogClientError } from "#web/features/repository-catalog/repository-catalog-client.contract";
 
 export type RepositoryCatalogControllerStatus =
@@ -35,21 +36,21 @@ export interface RepositoryCatalogController {
 
 export interface RepositoryCatalogGateway {
   readonly list: (
-    credential: string,
+    credential: EnvironmentCredential,
   ) => Effect.Effect<
     readonly RepositoryCatalogEntry[],
     RepositoryCatalogClientError
   >;
   readonly recordOpened: (
-    credential: string,
+    credential: EnvironmentCredential,
     repositoryId: string,
   ) => Effect.Effect<RepositoryCatalogEntry, RepositoryCatalogClientError>;
   readonly remember: (
-    credential: string,
+    credential: EnvironmentCredential,
     path: string,
   ) => Effect.Effect<RepositoryCatalogEntry, RepositoryCatalogClientError>;
   readonly remove: (
-    credential: string,
+    credential: EnvironmentCredential,
     repositoryId: string,
   ) => Effect.Effect<unknown, RepositoryCatalogClientError>;
 }

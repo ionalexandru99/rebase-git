@@ -21,7 +21,7 @@ import type { EnvironmentEventPublisher } from "#server/features/environment-con
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
-const credential = "test-device-credential";
+const credential = { type: "bearer", value: "test-device-credential" } as const;
 const testAuthorization = createTestAuthorization();
 const encodedSnapshot = JSON.stringify({ environmentId, sequence: 0 });
 const oversizedSnapshot = Buffer.from(

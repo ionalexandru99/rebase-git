@@ -7,6 +7,7 @@ import {
   type RepositoryRefTarget,
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import { requestEnvironmentJson } from "#web/features/environment-connection/http/environment-http-json";
 import {
   RepositoryRefsRejected,
@@ -15,7 +16,7 @@ import {
 
 export function readRepositoryRefsEffect(
   origin: string,
-  credential: string,
+  credential: EnvironmentCredential,
   repositoryId: string,
 ) {
   const url = new URL(RepositoryRefsHttpApi.read.path, normalizeOrigin(origin));
@@ -31,7 +32,7 @@ export function readRepositoryRefsEffect(
 
 export function checkoutRepositoryRefEffect(
   origin: string,
-  credential: string,
+  credential: EnvironmentCredential,
   command: {
     readonly repositoryId: string;
     readonly target: RepositoryRefTarget;
@@ -54,7 +55,7 @@ function requestRepositoryRefs<
 >(
   url: URL,
   method: string,
-  credential: string,
+  credential: EnvironmentCredential,
   successSchema: S,
   failureSchema: F,
   body?: string,

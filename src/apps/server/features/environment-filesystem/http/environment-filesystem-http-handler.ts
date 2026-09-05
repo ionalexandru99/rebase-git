@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import type { EnvironmentFilesystem } from "#server/domain/environment-filesystem.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
-  readBearerCredential,
+  readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
 import {
@@ -36,7 +36,7 @@ export function respondToEnvironmentFilesystemRequest(
     );
     yield* validateRequestOrigin(request, false);
     yield* authorization.authorize(
-      readBearerCredential(request),
+      readRequestCredential(request),
       "repository.write",
     );
     const requestedDirectory = yield* decodeRequestBody(

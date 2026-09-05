@@ -1,10 +1,13 @@
+import { Effect } from "effect";
+import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
 import {
-  connectCurrentEnvironmentEffect,
-  exchangeEnvironmentPairingEffect,
-} from "#web/features/environment-connection/index";
+  createEnvironmentBrowserSessionEffect,
+  readEnvironmentBrowserSessionEffect,
+} from "#web/features/environment-connection/http/environment-http-client";
+import { connectCurrentEnvironmentEffect } from "#web/features/environment-connection/index";
 import { listEnvironmentDirectoryEffect } from "#web/features/environment-filesystem/environment-filesystem-client";
 import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import type { EnvironmentBootstrap } from "#web/features/local-environment-session/environment-bootstrap.contract";
+import type { DesktopHostBridge } from "#web/features/local-environment-session/environment-bootstrap.contract";
 import { createLocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session";
 import type { LocalEnvironmentGateway } from "#web/features/local-environment-session/local-environment-session.contract";
 import {
@@ -21,11 +24,14 @@ import {
 import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 
 export function createBrowserLocalEnvironmentSession(productVersion: string) {
-  const bootstrap = resolveLocalEnvironmentBootstrap(
-    window.location,
-    window.rebaseHost,
-  );
+  const host = window.rebaseHost;
+  const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
   const gateway: LocalEnvironmentGateway = {
+    authorize: createLocalEnvironmentAuthorization(
+      bootstrap.environmentOrigin,
+      bootstrap.pairingMaterial,
+      host,
+    ),
     connect: (credential, lastObservedSequence) =>
       connectCurrentEnvironmentEffect(
         bootstrap.environmentOrigin,
@@ -37,11 +43,6 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
             : { lastObservedSequence }),
         },
       ),
-    exchangePairing: (material) =>
-      exchangeEnvironmentPairingEffect(bootstrap.environmentOrigin, {
-        label: "Rebase browser",
-        pairingMaterial: material,
-      }),
   };
   const repositoryCatalogGateway: RepositoryCatalogGateway = {
     list: (credential) =>
@@ -94,25 +95,47 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
   return createLocalEnvironmentSession({
     filesystemGateway,
     gateway,
-    pairingMaterial: bootstrap.pairingMaterial,
     repositoryCatalogGateway,
     repositoryRefsGateway,
-    ...(window.rebaseHost === undefined
-      ? { pairingSucceeded: clearPairingMaterial }
-      : {}),
   });
 }
 
 export function resolveLocalEnvironmentBootstrap(
   location: Pick<Location, "hash" | "origin" | "pathname">,
-  host: EnvironmentBootstrap | undefined,
+  host: Pick<DesktopHostBridge, "environmentOrigin"> | undefined,
 ) {
-  if (host !== undefined) return host;
-
   return {
-    environmentOrigin: location.origin,
-    pairingMaterial: readPairingMaterial(location),
+    environmentOrigin: host?.environmentOrigin ?? location.origin,
+    pairingMaterial:
+      host === undefined ? readPairingMaterial(location) : undefined,
   };
+}
+
+function createLocalEnvironmentAuthorization(
+  origin: string,
+  pairingMaterial: string | undefined,
+  host: DesktopHostBridge | undefined,
+): LocalEnvironmentGateway["authorize"] {
+  return () =>
+    Effect.gen(function* () {
+      if (host !== undefined) {
+        const value = yield* Effect.tryPromise({
+          try: () => host.getEnvironmentCredential(),
+          catch: () => environmentResponseError("Authorization"),
+        });
+        return { type: "bearer" as const, value };
+      }
+      if (pairingMaterial !== undefined) {
+        yield* createEnvironmentBrowserSessionEffect(origin, {
+          label: "Rebase browser",
+          pairingMaterial,
+        });
+        pairingMaterial = undefined;
+        clearPairingMaterial();
+      }
+      yield* readEnvironmentBrowserSessionEffect(origin);
+      return { type: "browser-session" as const };
+    });
 }
 
 function readPairingMaterial(location: Pick<Location, "hash" | "pathname">) {

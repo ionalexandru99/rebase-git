@@ -1,5 +1,7 @@
 import { currentClientReceiveLimits } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
+import { environmentCredentialRequest } from "#web/features/environment-connection/http/environment-credential-request";
 import {
   EnvironmentHttpRejected,
   EnvironmentHttpResponseError,
@@ -12,18 +14,20 @@ export function requestEnvironmentJson<
 >(
   url: URL,
   method: string,
-  credential: string,
+  credential: EnvironmentCredential,
   successSchema: S,
   failureSchema: F,
   body?: string,
 ) {
   return Effect.gen(function* () {
+    const authentication = environmentCredentialRequest(credential);
     const response = yield* Effect.tryPromise({
       try: (signal) =>
         fetch(url, {
+          credentials: authentication.credentials,
           ...(body === undefined ? {} : { body }),
           headers: {
-            authorization: `Bearer ${credential}`,
+            ...authentication.headers,
             ...(body === undefined
               ? {}
               : { "content-type": "application/json" }),

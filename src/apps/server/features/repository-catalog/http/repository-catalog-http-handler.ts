@@ -12,7 +12,7 @@ import { Effect } from "effect";
 import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
-  readBearerCredential,
+  readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
 import {
@@ -39,7 +39,7 @@ export function respondToRepositoryCatalogRequest(
       yield* validateRequestOrigin(request, false);
       yield* requireEmptyBody(body);
       yield* authorization.authorize(
-        readBearerCredential(request),
+        readRequestCredential(request),
         "repository.read",
       );
       writeJson(
@@ -59,7 +59,7 @@ export function respondToRepositoryCatalogRequest(
       );
       yield* validateRequestOrigin(request, false);
       yield* authorization.authorize(
-        readBearerCredential(request),
+        readRequestCredential(request),
         "repository.write",
       );
       const remembered = yield* catalog.remember(
@@ -82,7 +82,7 @@ export function respondToRepositoryCatalogRequest(
       );
       yield* validateRequestOrigin(request, false);
       yield* authorization.authorize(
-        readBearerCredential(request),
+        readRequestCredential(request),
         "repository.read",
       );
       const opened = yield* catalog.recordOpened(
@@ -105,7 +105,7 @@ export function respondToRepositoryCatalogRequest(
       );
       yield* validateRequestOrigin(request, false);
       yield* authorization.authorize(
-        readBearerCredential(request),
+        readRequestCredential(request),
         "repository.write",
       );
       const removed = yield* catalog.remove(

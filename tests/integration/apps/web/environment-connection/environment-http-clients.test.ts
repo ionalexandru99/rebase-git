@@ -23,7 +23,10 @@ const clients = [
   {
     name: "catalog",
     request: (origin: string) =>
-      listEnvironmentRepositoriesEffect(origin, "credential"),
+      listEnvironmentRepositoriesEffect(origin, {
+        type: "bearer",
+        value: "credential",
+      }),
     error: new RepositoryCatalogResponseError(),
   },
   {
@@ -31,7 +34,7 @@ const clients = [
     request: (origin: string) =>
       readRepositoryRefsEffect(
         origin,
-        "credential",
+        { type: "bearer", value: "credential" },
         "00000000-0000-4000-8000-000000000001",
       ),
     error: new RepositoryRefsResponseError(),
@@ -39,7 +42,10 @@ const clients = [
   {
     name: "filesystem",
     request: (origin: string) =>
-      listEnvironmentDirectoryEffect(origin, "credential"),
+      listEnvironmentDirectoryEffect(origin, {
+        type: "bearer",
+        value: "credential",
+      }),
     error: new EnvironmentFilesystemResponseError(),
   },
 ];
@@ -87,7 +93,10 @@ describe("feature HTTP clients", () => {
         async (origin) => {
           await expect(
             Effect.runPromise(
-              listEnvironmentRepositoriesEffect(origin, "credential"),
+              listEnvironmentRepositoriesEffect(origin, {
+                type: "bearer",
+                value: "credential",
+              }),
             ),
           ).rejects.toEqual(new RepositoryCatalogResponseError());
         },
@@ -112,7 +121,10 @@ describe("feature HTTP clients", () => {
         async (origin) => {
           const controller = new AbortController();
           const result = Effect.runPromiseExit(
-            listEnvironmentRepositoriesEffect(origin, "credential"),
+            listEnvironmentRepositoriesEffect(origin, {
+              type: "bearer",
+              value: "credential",
+            }),
             { signal: controller.signal },
           );
           await received.promise;

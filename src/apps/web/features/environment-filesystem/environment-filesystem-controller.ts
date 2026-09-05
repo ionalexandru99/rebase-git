@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import {
   EnvironmentFilesystemRejected,
   EnvironmentFilesystemResponseError,
@@ -12,10 +13,10 @@ import { EnvironmentFilesystemUnavailable } from "#web/features/environment-file
 export function createEnvironmentFilesystemController(
   gateway: EnvironmentFilesystemGateway,
 ) {
-  let credential: string | undefined;
+  let credential: EnvironmentCredential | undefined;
 
   return {
-    authorize: (nextCredential: string) => {
+    authorize: (nextCredential: EnvironmentCredential) => {
       credential = nextCredential;
     },
     controller: {

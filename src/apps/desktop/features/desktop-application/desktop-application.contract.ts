@@ -6,7 +6,7 @@ export type DesktopRenderer =
 
 export interface DesktopWindowOptions {
   readonly environmentOrigin: string;
-  readonly pairingMaterial: string;
+  readonly credential: string;
   readonly renderer: DesktopRenderer;
 }
 

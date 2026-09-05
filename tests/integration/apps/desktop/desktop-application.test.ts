@@ -50,7 +50,7 @@ describe("Electron application", () => {
       const firstWindow = host.windows[0];
 
       expect(firstWindow).toMatchObject({ renderer });
-      expect(firstWindow?.pairingMaterial).toMatch(/^\d{3}-\d{3}$/);
+      expect(firstWindow?.credential).toMatch(/^rebase\.v1\./);
       expect(serverStarts).toBe(1);
       await expect(
         fetch(`${firstWindow?.environmentOrigin}/health`),
@@ -65,9 +65,15 @@ describe("Electron application", () => {
       expect(host.windows[1]?.environmentOrigin).toBe(
         firstWindow?.environmentOrigin,
       );
-      expect(host.windows[1]?.pairingMaterial).toBe(
-        firstWindow?.pairingMaterial,
+      expect(host.windows[1]?.credential).toBe(firstWindow?.credential);
+      const snapshot = await fetch(
+        `${firstWindow?.environmentOrigin}/api/environment/snapshot`,
+        {
+          headers: { authorization: `Bearer ${host.windows[1]?.credential}` },
+        },
       );
+      expect(snapshot.status).toBe(200);
+      await snapshot.body?.cancel();
       expect(serverStarts).toBe(1);
 
       await application.windowAllClosed();

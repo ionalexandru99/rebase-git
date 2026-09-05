@@ -11,9 +11,10 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { respondToBrowserSessionRequest } from "#server/features/environment-authorization/http/environment-browser-session-handler";
 import {
   expectedRequestOrigin,
-  readBearerCredential,
+  readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
 import {
@@ -30,6 +31,17 @@ export function respondToEnvironmentAuthorizationRequest(
   authorization: EnvironmentAuthorization,
 ) {
   return Effect.gen(function* () {
+    if (
+      request.url === EnvironmentAuthorizationHttpApi.readBrowserSession.path
+    ) {
+      yield* respondToBrowserSessionRequest(
+        request,
+        response,
+        body,
+        authorization,
+      );
+      return true;
+    }
     if (request.url === EnvironmentAuthorizationHttpApi.exchangePairing.path) {
       yield* requireMethod(
         request,
@@ -57,7 +69,7 @@ export function respondToEnvironmentAuthorizationRequest(
       );
       yield* validateRequestOrigin(request, false);
       yield* authorization.authorize(
-        readBearerCredential(request),
+        readRequestCredential(request),
         "authorization.manage",
       );
       const pairing = yield* authorization.createPairing(
@@ -86,7 +98,7 @@ export function respondToEnvironmentAuthorizationRequest(
       yield* validateRequestOrigin(request, false);
       yield* requireEmptyBody(body);
       const ticket = yield* authorization.mintTicket(
-        readBearerCredential(request),
+        readRequestCredential(request),
       );
       writeJson(
         response,
@@ -111,7 +123,7 @@ export function respondToEnvironmentAuthorizationRequest(
         body,
       );
       const revoked = yield* authorization.revoke(
-        readBearerCredential(request),
+        readRequestCredential(request),
         revocation.authorizationId,
       );
       writeJson(

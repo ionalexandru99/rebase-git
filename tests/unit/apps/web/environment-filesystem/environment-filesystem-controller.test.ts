@@ -21,12 +21,12 @@ describe("Environment filesystem controller", () => {
       new EnvironmentFilesystemUnavailable(),
     );
 
-    session.authorize("device-credential");
+    session.authorize({ type: "bearer", value: "device-credential" });
     await expect(session.controller.listDirectory("/work")).resolves.toEqual(
       listing,
     );
     expect(gateway.listDirectory).toHaveBeenCalledWith(
-      "device-credential",
+      { type: "bearer", value: "device-credential" },
       "/work",
     );
   });

@@ -2,7 +2,6 @@ import type { DesktopHostBridge } from "@rebase/contracts";
 
 export type {
   DesktopHostBridge,
-  EnvironmentBootstrap,
   RepositoryFilesystemHost,
 } from "@rebase/contracts";
 

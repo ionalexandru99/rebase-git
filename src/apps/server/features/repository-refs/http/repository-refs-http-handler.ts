@@ -11,7 +11,7 @@ import type { RepositoryRefsService } from "#server/domain/repository-refs.contr
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   expectedRequestOrigin,
-  readBearerCredential,
+  readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
 import {
@@ -40,7 +40,7 @@ export function respondToRepositoryRefsRequest(
       yield* validateRequestOrigin(request, false);
       yield* requireEmptyBody(body);
       yield* authorization.authorize(
-        readBearerCredential(request),
+        readRequestCredential(request),
         "repository.read",
       );
       const query = yield* decodeRequestValue(
@@ -64,7 +64,7 @@ export function respondToRepositoryRefsRequest(
       );
       yield* validateRequestOrigin(request, false);
       yield* authorization.authorize(
-        readBearerCredential(request),
+        readRequestCredential(request),
         "repository.write",
       );
       const command = yield* decodeRequestBody(CheckoutRepositoryRef, body);
