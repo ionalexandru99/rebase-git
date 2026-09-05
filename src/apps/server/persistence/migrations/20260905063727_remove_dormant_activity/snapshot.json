@@ -1,0 +1,344 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "176424f5-97db-4f16-8a2c-d93349975455",
+  "prevIds": ["59d24981-b684-4426-96d9-78da05cd7adf"],
+  "ddl": [
+    {
+      "name": "authorization_capability",
+      "entityType": "tables"
+    },
+    {
+      "name": "authorization_metadata",
+      "entityType": "tables"
+    },
+    {
+      "name": "environment",
+      "entityType": "tables"
+    },
+    {
+      "name": "repository_catalog",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "authorization_id",
+      "entityType": "columns",
+      "table": "authorization_capability"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "capability",
+      "entityType": "columns",
+      "table": "authorization_capability"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "label",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_seen_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revoked_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "role",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "automatic_port",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "singleton",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "added_at",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "git_common_directory",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_opened_at",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "logical_repository_id",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "path",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "columns": ["authorization_id"],
+      "tableTo": "authorization_metadata",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_authorization_capability_authorization_id_authorization_metadata_id_fk",
+      "entityType": "fks",
+      "table": "authorization_capability"
+    },
+    {
+      "columns": ["authorization_id", "capability"],
+      "nameExplicit": false,
+      "name": "authorization_capability_pk",
+      "entityType": "pks",
+      "table": "authorization_capability"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "authorization_metadata_pk",
+      "table": "authorization_metadata",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["singleton"],
+      "nameExplicit": false,
+      "name": "environment_pk",
+      "table": "environment",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "repository_catalog_pk",
+      "table": "repository_catalog",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "\"last_opened_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "\"id\" DESC",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "repository_catalog_last_opened_at",
+      "entityType": "indexes",
+      "table": "repository_catalog"
+    },
+    {
+      "columns": [
+        {
+          "value": "logical_repository_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "repository_catalog_logical_repository_id",
+      "entityType": "indexes",
+      "table": "repository_catalog"
+    },
+    {
+      "columns": [
+        {
+          "value": "name",
+          "isExpression": false
+        },
+        {
+          "value": "path",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "repository_catalog_name",
+      "entityType": "indexes",
+      "table": "repository_catalog"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "environment_id_unique",
+      "entityType": "uniques",
+      "table": "environment"
+    },
+    {
+      "columns": ["path"],
+      "nameExplicit": false,
+      "name": "repository_catalog_path_unique",
+      "entityType": "uniques",
+      "table": "repository_catalog"
+    },
+    {
+      "value": "\"capability\" IN ('environment.read', 'repository.read', 'repository.write', 'history.rewrite', 'worktree.manage', 'authorization.manage', 'environment.manage')",
+      "name": "authorization_capability_value_check",
+      "entityType": "checks",
+      "table": "authorization_capability"
+    },
+    {
+      "value": "\"role\" IN ('viewer', 'contributor', 'maintainer', 'owner', 'custom')",
+      "name": "authorization_metadata_role_check",
+      "entityType": "checks",
+      "table": "authorization_metadata"
+    },
+    {
+      "value": "\"automatic_port\" BETWEEN 1 AND 65535",
+      "name": "environment_automatic_port_check",
+      "entityType": "checks",
+      "table": "environment"
+    },
+    {
+      "value": "\"singleton\" = 1",
+      "name": "environment_singleton_check",
+      "entityType": "checks",
+      "table": "environment"
+    },
+    {
+      "value": "length(\"name\") BETWEEN 1 AND 255",
+      "name": "repository_catalog_name_check",
+      "entityType": "checks",
+      "table": "repository_catalog"
+    },
+    {
+      "value": "length(\"path\") BETWEEN 1 AND 4096",
+      "name": "repository_catalog_path_check",
+      "entityType": "checks",
+      "table": "repository_catalog"
+    }
+  ],
+  "renames": []
+}

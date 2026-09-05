@@ -9,7 +9,6 @@ import { environmentTable } from "#server/persistence/environment-state.schema";
 import {
   closeEnvironmentDatabase,
   openEnvironmentDatabase,
-  readDatabaseSettings,
 } from "#server/persistence/sqlite/database";
 import {
   serializedPromise,
@@ -51,7 +50,6 @@ function createEnvironmentContext(
 
   return {
     database: drizzleDatabase,
-    databaseSettings: readDatabaseSettings(database),
     serverSecret,
     read: (message, operation) =>
       storagePromise(message, () => operation(drizzleDatabase)),

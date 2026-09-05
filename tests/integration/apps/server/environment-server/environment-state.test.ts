@@ -3,10 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { operationActivityLimit } from "@rebase/server/domain/environment-state.contract";
 import {
   hasNoAutomaticPort,
-  hasOperationStatus,
   isActiveAuthorization,
   isCurrentEnvironment,
 } from "@rebase/server/features/environment-server/environment-state.specifications";
@@ -15,10 +13,10 @@ import type { EnvironmentContext } from "@rebase/server/persistence/environment-
 import {
   authorizationMetadataTable,
   environmentTable,
-  operationActivityTable,
+  repositoryCatalogTable,
 } from "@rebase/server/persistence/environment-state.schema";
 import { environmentPaths } from "@rebase/server/persistence/storage/environment-paths";
-import { and, desc, notInArray } from "drizzle-orm";
+import { and, sql } from "drizzle-orm";
 import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -32,15 +30,17 @@ const createActivityMigration = generatedMigrations[1];
 const createAuthorizationCapabilitiesMigration = generatedMigrations[2];
 const createRepositoryCatalogMigration = generatedMigrations[3];
 const addLogicalRepositoryIdentityMigration = generatedMigrations[4];
+const removeDormantActivityMigration = generatedMigrations[5];
 
 if (
   createEnvironmentMigration === undefined ||
   createActivityMigration === undefined ||
   createAuthorizationCapabilitiesMigration === undefined ||
   createRepositoryCatalogMigration === undefined ||
-  addLogicalRepositoryIdentityMigration === undefined
+  addLogicalRepositoryIdentityMigration === undefined ||
+  removeDormantActivityMigration === undefined
 ) {
-  throw new Error("Expected five generated Environment state migrations.");
+  throw new Error("Expected six generated Environment state migrations.");
 }
 
 afterEach(async () => {
@@ -63,7 +63,7 @@ describe("Environment state", () => {
           const environment = yield* readCurrentEnvironment(context);
           return {
             automaticPort: environment.automaticPort,
-            databaseSettings: context.databaseSettings,
+            databaseSettings: readDatabaseSettings(context),
             environmentId: environment.id,
           };
         }),
@@ -78,7 +78,7 @@ describe("Environment state", () => {
           const environment = yield* readCurrentEnvironment(context);
           return {
             automaticPort: environment.automaticPort,
-            databaseSettings: context.databaseSettings,
+            databaseSettings: readDatabaseSettings(context),
             environmentId: environment.id,
           };
         }),
@@ -90,9 +90,9 @@ describe("Environment state", () => {
     );
     expect(second).toEqual(first);
     expect(first.databaseSettings).toEqual({
-      busyTimeout: 1_000,
-      foreignKeys: true,
-      journalMode: "wal",
+      busyTimeout: { timeout: 1_000 },
+      foreignKeys: { foreign_keys: 1 },
+      journalMode: { journal_mode: "wal" },
     });
     expect(await readFile(paths.serverSecret, "utf8")).toBe(firstSecret);
 
@@ -140,6 +140,11 @@ describe("Environment state", () => {
         name: addLogicalRepositoryIdentityMigration.name,
         version: 5,
       },
+      {
+        checksum_length: 64,
+        name: removeDormantActivityMigration.name,
+        version: 6,
+      },
     ]);
     database.close();
 
@@ -159,25 +164,17 @@ describe("Environment state", () => {
     }
   });
 
-  it("upgrades a version-two database", async () => {
+  it.each([2, 5])("upgrades a version-%i database", async (version) => {
     const paths = await createTemporaryPaths();
     await mkdir(paths.stateDirectory, { mode: 0o700, recursive: true });
     const database = new DatabaseSync(paths.stateDatabase);
-    for (const statement of createEnvironmentMigration.sql) {
-      database.exec(statement);
-    }
-    for (const statement of createActivityMigration.sql) {
-      database.exec(statement);
-    }
     createMigrationHistory(database);
-    recordMigration(
-      database,
-      generatedMigrationEntry(createEnvironmentMigration, 1),
-    );
-    recordMigration(
-      database,
-      generatedMigrationEntry(createActivityMigration, 2),
-    );
+    for (const [index, migration] of generatedMigrations
+      .slice(0, version)
+      .entries()) {
+      for (const statement of migration.sql) database.exec(statement);
+      recordMigration(database, generatedMigrationEntry(migration, index + 1));
+    }
     const environmentId = randomUUID();
     database
       .prepare(
@@ -186,9 +183,29 @@ describe("Environment state", () => {
       .run(environmentId);
     database
       .prepare(
-        "INSERT INTO authorization_metadata (id, label, role, created_at) VALUES (?, ?, 'reader', ?)",
+        "INSERT INTO authorization_metadata (id, label, role, created_at) VALUES (?, ?, ?, ?)",
       )
-      .run("legacy-device", "Legacy device", "2026-08-20T10:00:00.000Z");
+      .run(
+        "legacy-device",
+        "Legacy device",
+        version === 2 ? "reader" : "viewer",
+        "2026-08-20T10:00:00.000Z",
+      );
+    if (version === 5) {
+      database
+        .prepare(
+          "INSERT INTO repository_catalog (id, name, path, added_at, last_opened_at, logical_repository_id, git_common_directory) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .run(
+          "repo",
+          "Saved repo",
+          "/repo",
+          "2026-09-04",
+          "2026-09-05",
+          "logical-repo",
+          "/repo/.git",
+        );
+    }
     database.close();
 
     const state = await Effect.runPromise(
@@ -208,6 +225,19 @@ describe("Environment state", () => {
                   .orderBy(authorizationMetadataTable.createdAt),
             ),
             environmentId: environment.id,
+            repositories: yield* context.read(
+              "Could not read repositories",
+              (database) =>
+                database
+                  .select({
+                    id: repositoryCatalogTable.id,
+                    logicalRepositoryId:
+                      repositoryCatalogTable.logicalRepositoryId,
+                    gitCommonDirectory:
+                      repositoryCatalogTable.gitCommonDirectory,
+                  })
+                  .from(repositoryCatalogTable),
+            ),
           };
         }),
       ),
@@ -226,6 +256,16 @@ describe("Environment state", () => {
         },
       ],
       environmentId,
+      repositories:
+        version === 5
+          ? [
+              {
+                id: "repo",
+                logicalRepositoryId: "logical-repo",
+                gitCommonDirectory: "/repo/.git",
+              },
+            ]
+          : [],
     });
   });
 
@@ -251,16 +291,17 @@ describe("Environment state", () => {
       generatedMigrationEntry(createAuthorizationCapabilitiesMigration, 3),
       generatedMigrationEntry(createRepositoryCatalogMigration, 4),
       generatedMigrationEntry(addLogicalRepositoryIdentityMigration, 5),
+      generatedMigrationEntry(removeDormantActivityMigration, 6),
       {
         checksum: "future",
-        createdAt: addLogicalRepositoryIdentityMigration.folderMillis + 1,
+        createdAt: removeDormantActivityMigration.folderMillis + 1,
         name: "future",
-        version: 6,
+        version: 7,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 6, but this Rebase build supports version 5.",
+      "The state database is at version 7, but this Rebase build supports version 6.",
     );
   });
 
@@ -287,40 +328,45 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 5 });
+    ).toEqual({ version: 6 });
     database.close();
   });
 
-  it("serializes writers and bounds operation activity", async () => {
+  it("serializes concurrent read-modify-write operations", async () => {
     const paths = await createTemporaryPaths();
-    const result = await Effect.runPromise(
+    await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const context = yield* acquireEnvironmentContext(paths);
           yield* saveAutomaticPort(context);
-          yield* saveAuthorizationMetadata(context);
-          yield* saveConcurrentOperationActivity(context);
-          return yield* readActiveMetadata(context);
+          yield* Effect.all(
+            Array.from({ length: 5 }, () =>
+              context.write(
+                "Could not increment the port",
+                async (database) => {
+                  const environment = await database
+                    .select()
+                    .from(environmentTable)
+                    .where(isCurrentEnvironment())
+                    .get();
+                  if (environment?.automaticPort == null) {
+                    throw new Error("Expected the saved port.");
+                  }
+                  await database
+                    .update(environmentTable)
+                    .set({ automaticPort: environment.automaticPort + 1 })
+                    .where(isCurrentEnvironment());
+                },
+              ),
+            ),
+            { concurrency: "unbounded" },
+          );
         }),
       ),
     );
 
-    expect(result.authorizations).toEqual([
-      {
-        createdAt: "2026-08-20T10:00:00.000Z",
-        id: "device-one",
-        label: "Alex's laptop",
-        lastSeenAt: "2026-08-20T11:00:00.000Z",
-        revokedAt: null,
-        role: "owner",
-      },
-    ]);
-    expect(result.operations).toHaveLength(operationActivityLimit);
-    expect(result.operations[0]?.id).toBe("operation-249");
-    expect(result.operations.at(-1)?.id).toBe("operation-050");
-
     const reopenedPort = await readAutomaticPort(paths);
-    expect(reopenedPort).toBe(40123);
+    expect(reopenedPort).toBe(40128);
   });
 });
 
@@ -333,97 +379,12 @@ function saveAutomaticPort(context: EnvironmentContext) {
   );
 }
 
-function saveAuthorizationMetadata(context: EnvironmentContext) {
-  const authorizationChanges = {
-    createdAt: "2026-08-20T10:00:00.000Z",
-    label: "Alex's laptop",
-    lastSeenAt: "2026-08-20T11:00:00.000Z",
-    revokedAt: null,
-    role: "owner" as const,
+function readDatabaseSettings(context: EnvironmentContext) {
+  return {
+    busyTimeout: context.database.get(sql`PRAGMA busy_timeout`),
+    foreignKeys: context.database.get(sql`PRAGMA foreign_keys`),
+    journalMode: context.database.get(sql`PRAGMA journal_mode`),
   };
-  return context.write("Could not save authorization metadata", (database) =>
-    database
-      .insert(authorizationMetadataTable)
-      .values({ id: "device-one", ...authorizationChanges })
-      .onConflictDoUpdate({
-        set: authorizationChanges,
-        target: authorizationMetadataTable.id,
-      }),
-  );
-}
-
-function saveConcurrentOperationActivity(context: EnvironmentContext) {
-  return Effect.all(
-    Array.from({ length: operationActivityLimit + 50 }, (_, index) =>
-      saveOperationActivity(context, index),
-    ),
-    { concurrency: "unbounded" },
-  );
-}
-
-function saveOperationActivity(context: EnvironmentContext, index: number) {
-  return context.write("Could not save operation activity", (database) =>
-    database.transaction(
-      (transaction) => {
-        const activity = {
-          finishedAt: null,
-          id: `operation-${index.toString().padStart(3, "0")}`,
-          kind: "test",
-          startedAt: new Date(index * 1_000).toISOString(),
-          status: "running" as const,
-        };
-        transaction
-          .insert(operationActivityTable)
-          .values(activity)
-          .onConflictDoUpdate({
-            set: activity,
-            target: operationActivityTable.id,
-          })
-          .run();
-        const retainedActivity = transaction
-          .select({ id: operationActivityTable.id })
-          .from(operationActivityTable)
-          .orderBy(
-            desc(operationActivityTable.startedAt),
-            desc(operationActivityTable.id),
-          )
-          .limit(operationActivityLimit);
-        transaction
-          .delete(operationActivityTable)
-          .where(notInArray(operationActivityTable.id, retainedActivity))
-          .run();
-      },
-      { behavior: "immediate" },
-    ),
-  );
-}
-
-function readActiveMetadata(context: EnvironmentContext) {
-  return Effect.gen(function* () {
-    return {
-      authorizations: yield* context.read(
-        "Could not read authorization metadata",
-        (database) =>
-          database
-            .select()
-            .from(authorizationMetadataTable)
-            .where(isActiveAuthorization())
-            .orderBy(authorizationMetadataTable.createdAt),
-      ),
-      operations: yield* context.read(
-        "Could not read operation activity",
-        (database) =>
-          database
-            .select()
-            .from(operationActivityTable)
-            .where(hasOperationStatus("running"))
-            .orderBy(
-              desc(operationActivityTable.startedAt),
-              desc(operationActivityTable.id),
-            ),
-      ),
-    };
-  });
 }
 
 function readAutomaticPort(paths: ReturnType<typeof environmentPaths>) {

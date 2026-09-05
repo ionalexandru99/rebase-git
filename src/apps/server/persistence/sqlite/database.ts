@@ -40,21 +40,6 @@ export function closeEnvironmentDatabase(database: DatabaseSync) {
   return Effect.sync(() => database.close()).pipe(Effect.orDie);
 }
 
-export function readDatabaseSettings(database: DatabaseSync) {
-  const foreignKeys = database.prepare("PRAGMA foreign_keys").get() as {
-    foreign_keys: number;
-  };
-  const busyTimeout = database.prepare("PRAGMA busy_timeout").get() as {
-    timeout: number;
-  };
-
-  return {
-    busyTimeout: busyTimeout.timeout,
-    foreignKeys: foreignKeys.foreign_keys === 1,
-    journalMode: readJournalMode(database),
-  };
-}
-
 function configureDatabase(database: DatabaseSync) {
   database.exec(`
     PRAGMA busy_timeout = ${busyTimeoutMilliseconds};
