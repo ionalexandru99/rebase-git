@@ -101,7 +101,7 @@ describe("Environment protocol compatibility", () => {
         {
           introducedInMinor: 3,
           name: "repository-history",
-          version: 4,
+          version: 5,
         },
       ],
       protocol: { major: 1, minor: 3 },
@@ -118,7 +118,7 @@ describe("Environment protocol compatibility", () => {
       const hello = createCurrentEnvironmentHello("0.0.0");
       const older = (capability: (typeof discovery.capabilities)[number]) =>
         capability.name === "repository-history"
-          ? { ...capability, version: 3 }
+          ? { ...capability, version: 4 }
           : capability;
       const result = negotiateEnvironmentHello(
         side === "server"

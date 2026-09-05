@@ -294,6 +294,11 @@ function connectBrowserRepositoryHistoryReader(
           order: query.order,
           repositoryId: options.repositoryId,
           roots: query.roots,
+          ...(query.offset === undefined ? {} : { offset: query.offset }),
+          ...(query.ancestry === undefined ? {} : { ancestry: query.ancestry }),
+          ...(query.additionalParentEdges === undefined
+            ? {}
+            : { additionalParentEdges: query.additionalParentEdges }),
         },
         controller.signal,
       )

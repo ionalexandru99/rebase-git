@@ -81,14 +81,7 @@ export function storeRepositoryHistoryPage(
     repositories.put({
       ...emptyStoredRepository(environmentId, repositoryId, page.objectFormat),
       ...current,
-      cachedPage: {
-        exhausted: page.commits.length < query.limit,
-        scopeKey: historyOrderScopeKey(query),
-        oids: page.commits.map((commit) => commit.oid),
-        order: query.order,
-        requestedLimit: query.limit,
-        rootOids: normalizedOids(page.refTargets.map((ref) => ref.oid)),
-      },
+      ...cacheForegroundHistoryPage(current, page, query),
       objectFormat: page.objectFormat,
       refTargets:
         current?.completion !== undefined ||
@@ -98,6 +91,36 @@ export function storeRepositoryHistoryPage(
     } satisfies StoredRepository);
     await completed;
   });
+}
+
+function cacheForegroundHistoryPage(
+  current: StoredRepository | undefined,
+  page: RepositoryHistoryPage,
+  query: RepositoryHistoryQuery,
+): Pick<StoredRepository, "cachedPage" | "foregroundPages"> {
+  const cachedPage = {
+    offset: query.offset ?? 0,
+    exhausted: page.commits.length < query.limit,
+    scopeKey: historyOrderScopeKey(query),
+    oids: page.commits.map((commit) => commit.oid),
+    order: query.order,
+    requestedLimit: query.limit,
+    rootOids: normalizedOids(page.refTargets.map((ref) => ref.oid)),
+  };
+  return cachedPage.offset === 0
+    ? { cachedPage }
+    : {
+        foregroundPages: [
+          ...(current?.foregroundPages ?? []).filter(
+            (previous) =>
+              previous.offset !== cachedPage.offset ||
+              previous.scopeKey !== cachedPage.scopeKey ||
+              JSON.stringify(previous.rootOids) !==
+                JSON.stringify(cachedPage.rootOids),
+          ),
+          cachedPage,
+        ].slice(-15),
+      };
 }
 
 export function beginRepositoryHistorySynchronization(
@@ -290,6 +313,7 @@ export function completeStoredRepositoryHistory(
       pendingSnapshot: _,
       pendingTopologicalEpoch: __,
       pendingTopologicalOrder: ___,
+      foregroundPages: _foregroundPages,
       cachedPage,
       ...withoutPendingSynchronization
     } = current;

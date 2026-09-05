@@ -9,6 +9,7 @@ import {
   gitHistoryFormat,
   parseGitHistory,
 } from "#server/features/repository-history/git/parse-git-history";
+import { readSelectedHistory } from "#server/features/repository-history/git/read-selected-history";
 import {
   readShallowHistoryOids,
   restoreShallowCommitParents,
@@ -30,22 +31,25 @@ export function readRepositoryHistory(
     const objectFormat = yield* parseHistoryOutput(() =>
       parseObjectFormat(formatOutput),
     );
-    const historyOutput = yield* runGit(
-      git,
-      repositoryPath,
-      [
-        "log",
-        request.order === "topological" ? "--topo-order" : "--date-order",
-        "--no-show-signature",
-        `--max-count=${request.limit}`,
-        `--format=${gitHistoryFormat}`,
-        "-z",
-        "--end-of-options",
-        ...request.roots.map((root) => root.oid),
-        "--",
-      ],
-      maximumHistoryOutputBytes,
-    );
+    const historyOutput = yield* request.ancestry === "first-parent"
+      ? readSelectedHistory(git, repositoryPath, request)
+      : runGit(
+          git,
+          repositoryPath,
+          [
+            "log",
+            request.order === "topological" ? "--topo-order" : "--date-order",
+            "--no-show-signature",
+            `--skip=${request.offset ?? 0}`,
+            `--max-count=${request.limit}`,
+            `--format=${gitHistoryFormat}`,
+            "-z",
+            "--end-of-options",
+            ...request.roots.map((root) => root.oid),
+            "--",
+          ],
+          maximumHistoryOutputBytes,
+        );
     const parsed = yield* parseHistoryOutput(() =>
       parseGitHistory(historyOutput, objectFormat),
     );

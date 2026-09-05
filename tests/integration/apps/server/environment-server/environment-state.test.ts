@@ -133,7 +133,7 @@ describe("Environment state", () => {
       {
         checksum_length: 64,
         name: createRepositoryCatalogMigration.name,
-        version: 4,
+        version: 5,
       },
       {
         checksum_length: 64,

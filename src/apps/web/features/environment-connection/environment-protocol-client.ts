@@ -249,8 +249,8 @@ function runEnvironmentConnection(
     )?.version;
     const repositoryHistory = createRepositoryHistoryTransport(
       socket,
-      repositoryHistoryVersion !== undefined && supportsBinaryFragmentation,
-      (repositoryHistoryVersion ?? 0) >= 4 && supportsBinaryFragmentation,
+      (repositoryHistoryVersion ?? 0) >= 5 && supportsBinaryFragmentation,
+      (repositoryHistoryVersion ?? 0) >= 5 && supportsBinaryFragmentation,
       negotiated.capabilities.some(
         (capability) => capability.name === "repository-history-freshness",
       ),

@@ -27,6 +27,17 @@ export type RepositoryHistoryRefTarget = typeof RepositoryHistoryRefTarget.Type;
 export const ReadRepositoryHistory = Schema.TaggedStruct(
   "ReadRepositoryHistory",
   {
+    ancestry: Schema.optionalKey(Schema.Literals(["all", "first-parent"])),
+    offset: Schema.optionalKey(
+      Schema.Int.check(
+        Schema.isBetween({ minimum: 0, maximum: 2_147_482_647 }),
+      ),
+    ),
+    additionalParentEdges: Schema.optionalKey(
+      Schema.Array(
+        Schema.Struct({ childOid: ObjectId, parentOid: ObjectId }),
+      ).check(Schema.isMaxLength(1_000)),
+    ),
     limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000 })),
     order: Schema.Literals(["topological", "chronological"]),
     repositoryId: RepositoryId,
